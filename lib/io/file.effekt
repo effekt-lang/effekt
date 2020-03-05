@@ -1,0 +1,17 @@
+module io/file
+
+extern effect FileIO
+
+effect IoException[A](msg: String): A
+
+extern include "file_include.js"
+
+type Result[A] {
+  Error(msg: String);
+  Success(a: A)
+}
+
+// extern def readAsync[R](path: String) { callback: Result[String] => R }: R / FileIO
+
+extern def read(path: String): Result[String] / FileIO =
+  "$effekt.callcc(k => fs.readFile(path, (err, data) => k(err ? Error(err) : Success(data))))"
