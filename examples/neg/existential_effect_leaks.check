@@ -1,0 +1,9 @@
+examples/neg/existential_effect_leaks.effekt:24:1:error: Inferred effects {Console, GiveInt} are not a subset of allowed / annotated effects {Console}.
+def main(): Unit / { Console } = {
+^
+examples/neg/existential_effect_leaks.effekt:24:1:error: Inferred effects {Console, GiveInt} are not a subset of allowed / annotated effects {DivZero, Console, GiveInt, Flip}.
+def main(): Unit / { Console } = {
+^
+examples/neg/existential_effect_leaks.effekt:41:1:error: Inferred effects {GiveInt} are not a subset of allowed / annotated effects {DivZero, Console, GiveInt, Flip}.
+def foo() = {
+^

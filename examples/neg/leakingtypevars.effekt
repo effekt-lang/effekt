@@ -1,0 +1,15 @@
+module leakingtypevars
+
+def reader2[A] { p : A / {} } : A / {} =
+   yield p()
+
+// (() => Int / {}): Int
+def reader { p : Int / {} } : Int / {} =
+   yield p()
+
+def parse[R] { p : R / {} } =
+  reader {
+    yield p()
+  }
+
+def main() = ()

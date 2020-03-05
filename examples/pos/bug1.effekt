@@ -1,0 +1,27 @@
+module bug1
+
+// should succeed, but raises "n should be a value"
+effect Flip(): Boolean
+effect MyPrint(n: Int): Unit
+
+def flipTrue { prog: Unit / Flip }: Unit =
+  try { yield prog() } handle {
+    case Flip() => { resume(true); resume(false) }
+  }
+
+def main(): Unit / { Console } = {
+
+  try {
+
+    flipTrue {
+      if (do Flip()) {
+        do MyPrint(0)
+      } else {
+        println(1)
+      }
+    }
+
+  } handle {
+    case MyPrint(n: Int) => println(n)
+  }
+}

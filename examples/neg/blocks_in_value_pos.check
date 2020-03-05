@@ -1,0 +1,6 @@
+examples/neg/blocks_in_value_pos.effekt:8:14:error: Blocks have to be fully applied and can't be used as values.
+      resume(prog);
+             ^
+examples/neg/blocks_in_value_pos.effekt:8:14:error: Expected a value type
+      resume(prog);
+             ^

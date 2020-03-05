@@ -1,0 +1,3 @@
+examples/neg/leakingtypevars.effekt:11:3:error: Expected Int, but got R
+  reader {
+  ^

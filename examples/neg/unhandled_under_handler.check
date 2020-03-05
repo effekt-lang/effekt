@@ -1,0 +1,3 @@
+examples/neg/unhandled_under_handler.effekt:8:1:error: Inferred effects {Flip} are not a subset of allowed / annotated effects {Console}.
+def main(): Unit / { Console } = {
+^

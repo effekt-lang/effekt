@@ -1,0 +1,11 @@
+module localdefs
+
+def main(): Unit = {
+    def foo(): Unit / Console = { println(42) }
+    ()
+}
+
+def main(): Unit / Console = {
+    def foo(): Unit = println(42)
+    foo()
+}

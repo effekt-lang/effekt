@@ -1,0 +1,16 @@
+module unhandled_under_handler
+
+// should not type check
+// java.lang.RuntimeException: No value found for Flip2
+effect Flip(): Boolean
+effect MyPrint(n: Int): Unit
+
+def main(): Unit / { Console } = {
+
+  try {
+    do Flip();
+    ()
+  } handle {
+    case MyPrint(n: Int) => resume(())
+  }
+}

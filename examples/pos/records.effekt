@@ -1,0 +1,8 @@
+module records
+
+record Person(name: String, id: Int)
+
+def somePerson(): Person =
+  Person("Jonathan", 1334579)
+
+def main() = println(somePerson())

@@ -1,0 +1,7 @@
+module handler_without_annotations
+
+effect Emit(n: Int): Unit
+
+def main() = try { () } handle {
+  case Emit(n) => resume(())
+}

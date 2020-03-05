@@ -1,0 +1,11 @@
+module builtins
+
+type Color { Red(); Green(); Blue() }
+
+def main() = {
+    println(1);
+    println("foo");
+    println(true);
+    println(1 == 2);
+    println(Red())
+}

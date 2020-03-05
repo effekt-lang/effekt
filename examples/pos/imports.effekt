@@ -1,0 +1,9 @@
+module imports
+
+import examples/pos/lists
+
+def main() = {
+  val l = Cons(1, Cons(2, Nil[Int]()));
+  foreach(l) { el => println(el) };
+  ()
+}

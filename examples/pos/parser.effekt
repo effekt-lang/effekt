@@ -1,0 +1,118 @@
+module parser
+
+effect Flip(): Boolean
+effect Next(): String
+effect Fail[A](msg: String): A
+effect Error[A](msg: String): A
+
+type Stream {
+  Cons(el: String, rest: Stream);
+  EOS()
+}
+
+type Option[R] {
+  Some(n: R);
+  None()
+}
+
+type ParseResult[R] {
+  Success(t: R);
+  Failure(msg: String);
+  ParseError(msg: String)
+}
+
+def accept(exp: String) = {
+    val got = do Next();
+    if (got == exp) {
+        got
+    } else {
+        do Fail[String]("Expected " ++ exp ++ " but got " ++ got)
+    }
+}
+
+def or[R] { p: R } { q: R } =
+  if (do Flip()) { yield p() } else { yield q() }
+
+def asOrB(): Int / { Flip, Next, Fail } =
+  or { accept("a"); asOrB() + 1 } { accept("b"); 0 }
+
+// Int = Result
+def reader[R](s: Stream) { p : R / Next } : R / Fail = {
+    var inn = s;
+    try {
+      yield p()
+    } handle {
+      case Next() => inn match {
+        case EOS() => { do Fail[R]("Unexpected EOS") }
+        case Cons(el, rest) => {
+          inn = rest;
+          resume(el)
+        }
+      }
+    }
+}
+
+def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
+  Success(yield p())
+} handle {
+  case Flip() => resume(true) match {
+    case Failure(msg) => resume(false)
+    case Success(res) => Success(res)
+    case ParseError(msg) => ParseError[R](msg)
+  }
+  case Fail(msg) => Failure[R](msg)
+  case Error(msg) => ParseError[R](msg)
+}
+
+def commit[R] { p : R / Fail } : R / Error =
+  try { yield p() } handle {
+    case Fail(msg) => { do Error[R](msg) }
+  }
+
+def nocut[R] { p: R / Error } : R / Fail =
+  try { yield p() } handle {
+    case Error(msg) => { do Fail[R](msg) }
+  }
+
+def opt[R] { p: R }: Option[R] / Flip =
+   or { Some(yield p()) } { None[R]() }
+
+def parse[R](s: Stream) { p : R / { Flip, Next, Fail, Error } } =
+  eager {
+    reader(s) {
+      yield p()
+    }
+  }
+
+def ex() =
+  or {
+    accept("do");
+    commit { accept("foo"); 0 }
+  } {
+    accept("do");
+    accept("bar");
+    1
+  }
+
+def p1() = {
+  val inn = Cons("a", Cons("a", Cons("a", Cons("b", EOS()))));
+  parse(inn) { asOrB() } match {
+    case Success(n) => println(n)
+    case Failure(msg) => ()
+    case ParseError(msg) => ()
+  }
+}
+
+def p2() = {
+  val inn = Cons("do", Cons("foo", EOS()));
+  parse(inn) { ex() } match {
+    case Success(n) => println(n)
+    case Failure(msg) => ()
+    case ParseError(msg) => ()
+  }
+}
+
+def main() = {
+    p1();
+    p2()
+}

@@ -1,0 +1,3 @@
+examples/neg/coverage.effekt:9:21:error: Missing cases: Set(First, Third)
+def user(t: Test) = t match {
+                    ^

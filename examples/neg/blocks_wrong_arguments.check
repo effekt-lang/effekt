@@ -1,0 +1,9 @@
+examples/neg/blocks_wrong_arguments.effekt:7:3:error: Wrong number of arguments. Argument section of f requires 2, but 3 given.
+  yield f(2, true, 4)
+  ^
+examples/neg/blocks_wrong_arguments.effekt:10:11:error: Wrong number of arguments, given 2, but block expects 1.
+  val r = foo { (x: Int, y: Boolean) =>
+          ^
+examples/neg/blocks_wrong_arguments.effekt:15:3:error: Wrong number of arguments, given 1, but block expects 2.
+  bar { (x: Int) =>
+  ^

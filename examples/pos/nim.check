@@ -1,0 +1,11 @@
+Alice()
+Bob()
+Take(Alice(),Step(3,Winner(Alice()),Step(2,Take(Bob(),Step(1,Winner(Bob()),Done())),Step(1,Take(Bob(),Step(2,Winner(Bob()),Step(1,Take(Alice(),Step(1,Winner(Alice()),Done())),Done()))),Done()))))
+"result is "Alice()
+Bob()" cheated!"
+"result is "Bob()
+Cons(Bob(),Cons(Alice(),Nil()))
+true
+false
+true
+Board(3,7)

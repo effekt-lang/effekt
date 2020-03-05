@@ -1,0 +1,52 @@
+module adt
+
+effect NoSuchElement(): Int
+effect Done(): Unit
+
+type List {
+  Cons(n: Int, l: List);
+  Nil()
+}
+
+def first(l : List) = l match {
+  case Cons(m: Int, _) => m
+  case Nil() => do NoSuchElement()
+}
+
+def genlist { f: Int / Done } : List = {
+  var l = Nil();
+  try {
+    while (true) { l = Cons(yield f(), l) }
+  } handle {
+    case Done() => ()
+  };
+  l
+}
+
+
+def foreach(l : List) { f: Int => Unit } : Unit =
+  l match {
+    case Nil() => ()
+    case Cons(n, rest) => {
+        yield f(n);
+        foreach(rest) { n => yield f(n) }
+    }
+  }
+
+def main() = {
+
+    var n = 10;
+    val l1 = genlist { if (n > 0) { n = n - 1; n } else { do Done(); 0 } };
+
+    val l = Cons(1, Cons(2, Cons(3, Nil())));
+
+    foreach(l1) { n =>
+        println(n)
+    };
+
+    try {
+        println(first(Cons(42, Nil())))
+    } handle {
+        case NoSuchElement() => ()
+    }
+}

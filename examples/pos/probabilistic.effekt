@@ -1,0 +1,183 @@
+module probabilistic
+
+effect IndexOutOfBounds[A](): A
+
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
+  case Nil() => l2
+  case Cons(a, rest) => concat(rest, Cons(a, l2))
+}
+
+def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
+  case Nil() => do IndexOutOfBounds()
+  case Cons(n, rest) => if (idx == 0) n else lookup(rest, idx - 1)
+}
+
+def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l match {
+  case Nil() => do IndexOutOfBounds()
+  case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
+}
+
+def length[A](l: List[A]): Int = l match {
+  case Nil() => 0
+  case Cons(_, rest) => 1 + length(rest)
+}
+
+type Var {
+  Unobserved();
+  Observed(value: Boolean)
+}
+
+type Ref { MkRef(n: Int) }
+effect New(v: Var): Ref
+effect Get(r: Ref): Var
+effect Put(r: Ref, v: Var): Unit
+
+def heap[R] { prog: R / { New, Get, Put } } = {
+  var cells: List[Var] = Nil();
+  var n = 0;
+  try { yield prog() } handle {
+    case New(v) => { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
+    case Get(r) => r match {
+      case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
+    }
+    case Put(r, v) => r match {
+      case MkRef(idx) => { cells = updateAt(cells, (length(cells) - idx) - 1, v); resume(()) }
+    }
+  }
+}
+
+effect Flip(prob: Double): Ref
+effect Disj(x: Ref, y: Ref): Ref
+effect Prior(x: Ref, prob: Double): Unit
+
+effect Score(prob: Double): Unit
+effect Fork(): Boolean
+effect Fail[A](): A
+
+def obs(r: Ref, a: Boolean) =
+  do Get(r) match {
+    case Unobserved() => do Put(r, Observed(a))
+    case Observed(y) => if (a == y) { () } else { do Fail() }
+  }
+
+def choose3[R] { x: R } { y: R } { z: R } : R / Fork =
+  if (do Fork()) { yield x() } else if (do Fork()) { yield y() } else { yield z() }
+
+type Weighted[R] { MkWeighted(weight: Double, value: R) }
+
+def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
+  val empty: List[Weighted[R]] = Nil();
+  try {
+    var current = 1.0;
+    try {
+      val res = yield prog();
+      Cons(MkWeighted(current, res), empty)
+    } handle {
+      case Score(p) => { current = mulDouble(current, p); resume(()) }
+    }
+  } handle {
+    case Fork() => concat(resume(true), resume(false))
+    case Fail() => empty
+  }
+}
+
+def fresh(): Ref / New = do New(Unobserved())
+
+def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+  val input = fresh();
+  try { do Put(yield prog(input), Observed(expected)) } handle {
+    case Flip(p) => {
+      val res: Ref = fresh();
+      resume(res);
+      do Get(res) match {
+        case Unobserved() => ()
+        case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
+      }
+    }
+    case Disj(x, y) => {
+      val res: Ref = fresh();
+      resume(res);
+      do Get(res) match {
+        case Unobserved() => ()
+        case Observed(b) => if (b) { choose3 {
+          obs(x, false); obs(y, true)
+        } {
+          obs(x, true); obs(y, false)
+        } {
+          obs(x, true); obs(y, true)
+        } } else { obs(x, false); obs(y, false) }
+      }
+    }
+    case Prior(x, p) => {
+      resume(());
+      do Get(x) match {
+        case Unobserved() => ()
+        case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
+      }
+    }
+  };
+  do Get(input)
+}
+
+def test() = {
+  if (do Fork()) {
+    do Score(0.2);
+    false
+  } else {
+    do Score(0.8);
+    if (do Fork()) {
+      do Score(0.6);
+      true
+    } else {
+      do Score(0.4);
+      false
+    }
+  }
+}
+
+def heapTest() = heap {
+  val r1 = do New(Unobserved());
+  val r2 = do New(Unobserved());
+  val r3 = do New(Unobserved());
+  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)));
+
+  do Put(r2, Observed(true));
+  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)));
+
+  do Put(r3, Observed(false));
+  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)));
+
+  do Put(r2, Observed(false));
+  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)))
+}
+
+def catch[R] { p: R / IndexOutOfBounds }: Unit / Console = try {
+  yield p(); ()
+} handle {
+  case IndexOutOfBounds() => println("Index out of bounds!")
+}
+
+def main() = {
+  val res = handleProb {
+    test()
+  };
+  println(res);
+
+  catch {
+    heapTest()
+  };
+
+  catch {
+    val res = handleProb {
+      handleLang(true) { r =>
+        do Disj(do Flip(0.2), r)
+      }
+    };
+    println(res)
+  }
+
+}

@@ -1,0 +1,44 @@
+module existential_effect_leaks
+
+// should not type check since local GiveInt leaves the scope of its definition
+// No value found for GiveInt28
+effect Flip(): Boolean
+effect GiveInt(): Int
+
+def flipTrue { prog: Unit / { Flip, GiveInt } } : Unit / Console =
+  try {
+    try {
+      yield prog()
+    } handle {
+      case Flip() => {
+        println(do GiveInt());
+        resume(true);
+        resume(false)
+      }
+    }
+  // implementation detail!
+  } handle {
+    case GiveInt() => resume(42)
+  }
+
+def main(): Unit / { Console } = {
+
+  try {
+    flipTrue {
+      if (do Flip()) {
+        effect GiveInt(): Int
+
+        println(do GiveInt()) // unhandled
+      } else {
+        println(1)
+      }
+    }
+  } handle {
+    case GiveInt() => resume(100)
+  }
+}
+
+def foo() = {
+  effect GiveInt(): Int
+  do GiveInt()
+}

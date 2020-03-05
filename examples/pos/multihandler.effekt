@@ -1,0 +1,27 @@
+module multihandler
+
+effect Get(): Int
+effect Put(n: Int): Unit
+
+
+def withState(init: Int) { prog : Unit / { Get, Put } } = {
+
+    var s = init;
+
+    try { yield prog() } handle {
+        case Get() => resume(s)
+        case Put(n) => { s = n; resume(()) }
+    }
+}
+
+def main() = {
+    withState(0) {
+        println(do Get());
+        do Put(1);
+        println(do Get());
+        do Put(2);
+        println(do Get());
+        do Put(3);
+        println(do Get())
+    }
+}

@@ -1,0 +1,63 @@
+module stream_pull
+
+// effect Done() : Void
+effect Done() : Int
+// type alias PullStream = Int / Done
+// type alias PullStream = { R / Read } => R
+
+effect Read() : Int
+
+effect Get() : Int
+effect Put(n : Int) : Unit
+
+def sum() = {
+  while (true) {
+    do Put(do Get() + do Read())
+  }
+}
+
+def map { f : Int => Int } { prog : Unit / Read } : Unit / Read = { 
+  try {
+    yield prog()
+  } handle {
+    case Read() => resume(yield f(do Read()))
+  }
+}
+
+def range(from : Int, to : Int) { prog : Unit / Read } = {
+  var n = from;
+  try {
+    yield prog()
+  } handle {
+    case Read() => {
+      val x = n;
+      if (x < to) {
+        n = x + 1;
+        resume(x)
+      } else {
+        ()
+      }
+    }
+  }
+}
+
+def state { prog: Unit / {Get, Put} } = {
+  var s = 0;
+  try {
+    yield prog()
+  } handle {
+    case Get() => resume(s)
+    case Put(n) => {
+      s = n;
+      resume(())
+    }
+  };
+  s
+}
+
+def main() = {
+  val res = state { range(1, 10) { map { n => n + 1 } { sum() } } };
+  println(res)
+}
+
+

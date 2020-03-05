@@ -1,0 +1,27 @@
+module examples/pos/lists
+
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+
+
+def map[A, B](l: List[A]) { f: A => B } : List[B] =
+  l match {
+    case Nil() => Nil()
+    case Cons(a, rest) => Cons(yield f(a), map(rest) { a => yield f(a) })
+  }
+
+def foreach[A](l: List[A]) { f: A => Unit } : Unit =
+  l match {
+    case Nil() => ()
+    case Cons(a, rest) => { yield f(a); foreach(rest) { a => yield f(a) } }
+  }
+
+def main() = {
+  val l = map(Cons(1, Cons(2, Cons(3, Nil[Int]())))) { a => a + 1 };
+
+  foreach(l) { a =>
+    println(a)
+  }
+}
