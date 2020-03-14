@@ -26,7 +26,7 @@ def max(n: Int, m: Int): Int =
   if (n > m) n else m
 
 def perfect[R] { prog: R / Move } =
-  try { yield prog() } handle {
+  try { prog() } handle {
     case Move(p, n) => resume(max(1, mod(n, 4)))
   }
 
@@ -49,12 +49,12 @@ type GTree {
 def range(from: Int, to: Int) { block: Int => Unit } = {
   var i = from;
   while (i <= to) {
-    yield block(i);
+    block(i);
     i = i + 1
   }
 }
 
-def gametree { prog: Player / Move } = try { Winner(yield prog()) } handle {
+def gametree { prog: Player / Move } = try { Winner(prog()) } handle {
   case Move(p, n) => {
     var subtrees = Done[GTree]();
     range(1, n) { i =>
@@ -70,23 +70,23 @@ def gametree { prog: Player / Move } = try { Winner(yield prog()) } handle {
 effect Cheat[A](p: Player): A
 effect Error[A](msg: String): A
 
-def printError { prog: Unit / Error } = try { yield prog() } handle {
+def printError { prog: Unit / Error } = try { prog() } handle {
   case Error(msg) => println(msg)
 }
 
 def cheatReport[R] { prog: R / Cheat }: R / Error =
-  try { yield prog() } handle {
+  try { prog() } handle {
     case Cheat(p) => do Error[R](show(p) ++ " cheated!")
   }
 
-def check { prog: Player / Move } = try { yield prog() } handle {
+def check { prog: Player / Move } = try { prog() } handle {
   case Move(p, n) => {
     val m = do Move(p, n);
     if (m <= 3) { resume(m) } else { do Cheat[Player](p) }
   }
 }
 
-def pc  { prog: Player / Move } = try { yield prog() } handle {
+def pc  { prog: Player / Move } = try { prog() } handle {
   case Move(p, n) => p match {
     case Alice() => resume(max(1, mod(n, 4)))
     case Bob()   => resume(n)
@@ -106,23 +106,23 @@ def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
 
 def bobChooses { prog: Player / Move } =
   if (do Choose()) {
-    pc { yield prog() }
+    pc { prog() }
   } else {
-    perfect { yield prog() }
+    perfect { prog() }
   }
 
-def allResults[R] { prog: R / Choose } = try { Cons(yield prog(), Nil[R]()) } handle {
+def allResults[R] { prog: R / Choose } = try { Cons(prog(), Nil[R]()) } handle {
   case Choose() => concat(resume(true), resume(false))
 }
 
-def coin[R] { prog: R / Choose } = try { yield prog() } handle {
+def coin[R] { prog: R / Choose } = try { prog() } handle {
   case Choose() => resume(random() > 50)
 }
 
 def deterministic[R] { prog: R / Choose } = {
   val allFlips = Cons(true, Cons(false, Cons(true, Cons(true, Cons(false, Nil[Boolean]())))));
   var flips = allFlips;
-  try { yield prog() } handle {
+  try { prog() } handle {
     case Choose() => flips match {
       case Nil() => { flips = allFlips; resume(true) }
       case Cons(b, rest) => { flips = rest; resume(b) }
@@ -149,14 +149,14 @@ def updatedScore(p: Player, board: Scoreboard) = board match {
 
 def withScore[R] { prog: R / { GetScore, UpdateScore } }: R = {
   var s: Scoreboard = Board(0, 0);
-  try { yield prog() } handle {
+  try { prog() } handle {
     case GetScore() => resume(s)
     case UpdateScore(p) => { s = updatedScore(p, s); resume(()) }
   }
 }
 
 def replay(n: Int) { action: Unit }: Unit =
-  if (n > 0) { yield action(); replay(n - 1) { yield action() } } else { () }
+  if (n > 0) { action(); replay(n - 1) { action() } } else { () }
 
 def testPrint2() = {
   withScore {

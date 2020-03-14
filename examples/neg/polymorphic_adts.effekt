@@ -14,7 +14,7 @@ effect Raise[A](): A
 
 def f[A, B](a : A, b: B) { block: A / Console } : A / Console = {
   val b2: B = b;
-  yield block()
+  block()
 }
 
 def id[A](a : A) : A = a

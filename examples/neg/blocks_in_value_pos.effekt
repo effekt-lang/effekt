@@ -3,7 +3,7 @@ module blocks_in_value_pos
 effect MyPrint(n: Int): Unit
 
 def main { prog: Unit / MyPrint } =
-  try { yield prog(); yield prog() } handle {
+  try { prog(); prog() } handle {
     case MyPrint(n: Int) => {
       resume(prog);
       println(n)

@@ -281,7 +281,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
     `do` ~/> idRef ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
 
   lazy val yieldExpr: P[Expr] =
-    `yield` ~/> idRef ~ maybeTypeArgs ~ some(args) ^^ Call
+    idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val resumeExpr: P[Expr] =
     `resume` ~/> valueArgs ^^ { args => Call(IdRef("resume"), Nil, List(args)) }

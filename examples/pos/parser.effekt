@@ -31,7 +31,7 @@ def accept(exp: String) = {
 }
 
 def or[R] { p: R } { q: R } =
-  if (do Flip()) { yield p() } else { yield q() }
+  if (do Flip()) { p() } else { q() }
 
 def asOrB(): Int / { Flip, Next, Fail } =
   or { accept("a"); asOrB() + 1 } { accept("b"); 0 }
@@ -40,7 +40,7 @@ def asOrB(): Int / { Flip, Next, Fail } =
 def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     var inn = s;
     try {
-      yield p()
+      p()
     } handle {
       case Next() => inn match {
         case EOS() => { do Fail[R]("Unexpected EOS") }
@@ -53,7 +53,7 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
 }
 
 def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
-  Success(yield p())
+  Success(p())
 } handle {
   case Flip() => resume(true) match {
     case Failure(msg) => resume(false)
@@ -65,22 +65,22 @@ def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
 }
 
 def commit[R] { p : R / Fail } : R / Error =
-  try { yield p() } handle {
+  try { p() } handle {
     case Fail(msg) => { do Error[R](msg) }
   }
 
 def nocut[R] { p: R / Error } : R / Fail =
-  try { yield p() } handle {
+  try { p() } handle {
     case Error(msg) => { do Fail[R](msg) }
   }
 
 def opt[R] { p: R }: Option[R] / Flip =
-   or { Some(yield p()) } { None[R]() }
+   or { Some(p()) } { None[R]() }
 
 def parse[R](s: Stream) { p : R / { Flip, Next, Fail, Error } } =
   eager {
     reader(s) {
-      yield p()
+      p()
     }
   }
 

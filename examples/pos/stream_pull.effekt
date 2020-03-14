@@ -18,16 +18,16 @@ def sum() = {
 
 def map { f : Int => Int } { prog : Unit / Read } : Unit / Read = { 
   try {
-    yield prog()
+    prog()
   } handle {
-    case Read() => resume(yield f(do Read()))
+    case Read() => resume(f(do Read()))
   }
 }
 
 def range(from : Int, to : Int) { prog : Unit / Read } = {
   var n = from;
   try {
-    yield prog()
+    prog()
   } handle {
     case Read() => {
       val x = n;
@@ -44,7 +44,7 @@ def range(from : Int, to : Int) { prog : Unit / Read } = {
 def state { prog: Unit / {Get, Put} } = {
   var s = 0;
   try {
-    yield prog()
+    prog()
   } handle {
     case Get() => resume(s)
     case Put(n) => {

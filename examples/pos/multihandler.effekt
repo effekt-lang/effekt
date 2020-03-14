@@ -8,7 +8,7 @@ def withState(init: Int) { prog : Unit / { Get, Put } } = {
 
     var s = init;
 
-    try { yield prog() } handle {
+    try { prog() } handle {
         case Get() => resume(s)
         case Put(n) => { s = n; resume(()) }
     }

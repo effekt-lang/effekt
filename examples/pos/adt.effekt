@@ -16,7 +16,7 @@ def first(l : List) = l match {
 def genlist { f: Int / Done } : List = {
   var l = Nil();
   try {
-    while (true) { l = Cons(yield f(), l) }
+    while (true) { l = Cons(f(), l) }
   } handle {
     case Done() => ()
   };
@@ -28,8 +28,8 @@ def foreach(l : List) { f: Int => Unit } : Unit =
   l match {
     case Nil() => ()
     case Cons(n, rest) => {
-        yield f(n);
-        foreach(rest) { n => yield f(n) }
+        f(n);
+        foreach(rest) { n => f(n) }
     }
   }
 

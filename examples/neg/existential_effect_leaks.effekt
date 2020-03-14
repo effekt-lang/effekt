@@ -8,7 +8,7 @@ effect GiveInt(): Int
 def flipTrue { prog: Unit / { Flip, GiveInt } } : Unit / Console =
   try {
     try {
-      yield prog()
+      prog()
     } handle {
       case Flip() => {
         println(do GiveInt());

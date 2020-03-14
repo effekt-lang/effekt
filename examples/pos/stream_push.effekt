@@ -5,7 +5,7 @@ effect Emit(n: Int) : Unit
 
 def sum { stream: Unit / Emit } : Int = {
   var sum = 0;
-  try { yield stream() } handle {
+  try { stream() } handle {
     case Emit(n: Int) => { sum = sum + n; resume(()) }
   };
   sum
@@ -13,8 +13,8 @@ def sum { stream: Unit / Emit } : Int = {
 
 
 def map { stream: Unit / Emit } { f : Int => Int } : Unit / Emit =
-  try { yield stream() } handle {
-    case Emit(n: Int) => { do Emit(yield f(n)); resume(()) }
+  try { stream() } handle {
+    case Emit(n: Int) => { do Emit(f(n)); resume(()) }
   }
 
 def range(from: Int, to: Int): Unit / Emit = {

@@ -1,10 +1,10 @@
 module blocks_wrong_arguments
 
 def foo { f : Int => Int } =
-  yield f(2)
+  f(2)
 
 def bar { f : (Int, Boolean) => Unit } =
-  yield f(2, true, 4)
+  f(2, true, 4)
 
 def main() = {
   val r = foo { (x: Int, y: Boolean) =>

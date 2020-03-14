@@ -39,7 +39,7 @@ effect Put(r: Ref, v: Var): Unit
 def heap[R] { prog: R / { New, Get, Put } } = {
   var cells: List[Var] = Nil();
   var n = 0;
-  try { yield prog() } handle {
+  try { prog() } handle {
     case New(v) => { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
     case Get(r) => r match {
       case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
@@ -65,7 +65,7 @@ def obs(r: Ref, a: Boolean) =
   }
 
 def choose3[R] { x: R } { y: R } { z: R } : R / Fork =
-  if (do Fork()) { yield x() } else if (do Fork()) { yield y() } else { yield z() }
+  if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
@@ -74,7 +74,7 @@ def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
   try {
     var current = 1.0;
     try {
-      val res = yield prog();
+      val res = prog();
       Cons(MkWeighted(current, res), empty)
     } handle {
       case Score(p) => { current = mulDouble(current, p); resume(()) }
@@ -89,7 +89,7 @@ def fresh(): Ref / New = do New(Unobserved())
 
 def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
   val input = fresh();
-  try { do Put(yield prog(input), Observed(expected)) } handle {
+  try { do Put(prog(input), Observed(expected)) } handle {
     case Flip(p) => {
       val res: Ref = fresh();
       resume(res);
@@ -156,7 +156,7 @@ def heapTest() = heap {
 }
 
 def catch[R] { p: R / IndexOutOfBounds }: Unit / Console = try {
-  yield p(); ()
+  p(); ()
 } handle {
   case IndexOutOfBounds() => println("Index out of bounds!")
 }
