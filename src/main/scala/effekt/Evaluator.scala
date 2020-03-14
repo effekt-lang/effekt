@@ -4,23 +4,17 @@ package evaluator
 import effekt.typer.Typer
 import effekt.symbols._
 import effekt.symbols.builtins._
-
 import effekt.util.Thunk
 import effekt.util.control
 import effekt.util.control._
-
 import org.bitbucket.inkytonik.kiama.util.Emitter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
-
-import effekt.source.{
-  Expr, Stmt, If, While, ValueArgs, ArgSection, BlockArg,
-  Tree, BooleanLit, IntLit, UnitLit, StringLit, DoubleLit, Do, Id, Call, Def, Return, DefStmt, ExprStmt,
-  FunDef, ModuleDecl, TryHandle, Resume, Var, Yield, EffDef, ValDef, VarDef, DataDef, Assign, Clause, MatchExpr
-}
+import effekt.source.{ ArgSection, Assign, BlockArg, BooleanLit, Call, Clause, OpClause, DataDef, Def, DefStmt, DoubleLit, EffDef, Expr, ExprStmt, FunDef, Id, If, IntLit, MatchExpr, ModuleDecl, Return, Stmt, StringLit, Tree, TryHandle, UnitLit, ValDef, ValueArgs, Var, VarDef, While }
+import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 
 import scala.collection.mutable
 
-class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
+class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit]) {
 
   given Assertions
 
@@ -72,27 +66,30 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
   // Cache for evaluated modules. This avoids evaluating transitive dependencies multiple times
   val evaluatedModules: Memoiser[CompilationUnit, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
 
-  def run(cu: CompilationUnit, out: Emitter) = {
+  def run(cu: CompilationUnit, out: Emitter, buffer: MessageBuffer) = {
     val mainSym = cu.exports.terms.getOrElse(mainName, sys error "Cannot find main function")
+    val mainFun = mainSym.asUserFunction
+
+    val ctx = Context(mainFun.decl, buffer, cu, Map.empty)
 
     // TODO refactor and convert into checked error
-    val userEffects = cu.types(mainSym.asFun).effects.effs.filterNot { _.builtin }
+    val userEffects = types.blockType(mainSym)(given ctx).ret.effects.effs.filterNot { _.builtin }
     if (userEffects.nonEmpty) {
-      sys error s"Main has unhandled user effects: ${userEffects}!"
+      ctx.abort(s"Main has unhandled user effects: ${userEffects}!")
     }
 
-    eval(cu, out)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
+    eval(cu, out, buffer)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
   }
 
-  def eval(cu: CompilationUnit, out: Emitter): Map[Symbol, Thunk[Value]] =
+  def eval(cu: CompilationUnit, out: Emitter, buffer: MessageBuffer): Map[Symbol, Thunk[Value]] =
     evaluatedModules.getOrDefault(cu, {
       val env = cu.module.imports.foldLeft(builtins(out)) {
         case (env, source.Import(path)) =>
           val mod = modules(path)
-          val res = eval(mod, out)
+          val res = eval(mod, out, buffer)
           env ++ res
       }
-      val result = eval(cu.module.defs)(given Context(cu, env))
+      val result = eval(cu.module.defs)(given Context(cu.module, buffer, cu, env))
       evaluatedModules.put(cu, result)
       result
     })
@@ -128,47 +125,36 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
 
     case While(cond, block) => loop(cond, block)
 
-    case Do(op, _, args) =>
-      val effect = op.symbol.asEffectOp.effect
-      val handler = Context.handler(effect)
+    case Call(fun, _, args) => fun.symbol match {
 
-      evalExprs(args.args) flatMap { vs =>
-        use(handler.prompt) { k =>
-          // package the continuation as a block --
-          // it does not take additional arguments, since it does not have effects
-          val resume = Closure { args => k(args.head) }
-          handler.clauses(op.symbol)(vs :+ resume)
+      case op: EffectOp =>
+        val effect = op.effect
+        val handler = Context.handler(effect)
+        val BlockType(_, params, ret / effs) = op.blockType
+
+        evalArgSections(params, args).flatMap { argv =>
+          use(handler.prompt) { k =>
+            // package the continuation as a block --
+            // it does not take additional arguments, since it does not have effects
+            val resume = Closure { args => k(args.head) }
+            handler.clauses(op)(argv :+ resume)
+          }
         }
-      }
 
-    case Call(fun, _, args) => for {
-      sig <- pure(fun.symbol.asFun)
-      argv <- evalArgSections(sig.params, args)
-      clo = Context.closure(sig)
-      r <- supplyCapabilities(clo, argv, sig.effects)
-    } yield r
-
-    case Yield(block, args) => for {
-      argv <- evalExprs(args.args)
-      sym = block.symbol.asBlockParam
-      clo = Context.closure(sym)
-      r <- supplyCapabilities(clo, argv, sym.tpe.ret.effects)
-    } yield r
-
-    case Resume(args) => for {
-      argv <- evalExprs(args.args)
-      clo = Context.closure(ResumeParam)
-      r <- clo.f(argv)
-    } yield r
+      case sym =>
+        val BlockType(_, params, ret / effs) = sym.blockType
+        evalArgSections(params, args).flatMap { argv =>
+          supplyCapabilities(Context.closure(sym), argv, effs)
+        }
+    }
 
     case TryHandle(prog, clauses) =>
 
       val prompt = new Prompt
 
       val cs = clauses.map {
-        case Clause(op, params, body) =>
-          // copy and paste from typer
-          val ps = params.params.map(_.id.symbol.asValueParam) :+ ResumeParam
+        case OpClause(op, params, body, resume) =>
+          val ps = params.flatMap { _.params.map(_.id.symbol.asValueParam) } :+ resume.symbol
           val impl: List[Value] => control.Control[Value] = args =>
             Context.extendedWith(ps zip args) { evalStmt(body) }
           (op.symbol, impl)
@@ -177,7 +163,7 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
       val h = Handler(prompt, cs)
 
       // bind handler to every single effect it handles:
-      val bindings = clauses.map { case c => (c.op.symbol.asEffectOp.effect, h) }
+      val bindings = clauses.map { c => (c.op.symbol.asEffectOp.effect, h) }
 
       handle(prompt) {
         Context.extendedWith(bindings) {
@@ -191,7 +177,7 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
           val cl = clauses.find { cl =>
             cl.op.symbol == tag
           }.getOrElse(sys error s"Unmatched ${tag}")
-          val ps = cl.params.params.map(_.id.symbol.asValueParam)
+          val ps = cl.params.flatMap { _.params.map(_.id.symbol.asValueParam) }
           Context.extendedWith(ps zip args) { evalStmt(cl.body) }
       }
   }
@@ -216,7 +202,7 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
     case FunDef(name, _, params, ret, body) =>
       val sym = name.symbol.asFun
       val params = collectBinders(sym.params)
-      bindCapabilities(params, Context.unit.types(sym).effects, body)
+      bindCapabilities(params, types.blockType(sym).ret.effects, body)
   }
 
   val evalStmt: Eval[Stmt, Value] = {
@@ -250,18 +236,21 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
   def evalExprs(args: List[Expr])(given Context): Control[List[Value]] =
     traverse { args.map(e => evalExpr(e)) }
 
-  def evalArgSections(ps: Params, args: List[ArgSection])(given Context): Control[List[Value]] = args match {
-    case Nil => pure(Nil)
-    case arg :: args =>
-      for { v <- evalArgSection(ps.head, arg); vs <- evalArgSections(ps.tail, args) } yield v ++ vs
-  }
+  def evalArgSections(ps: List[List[ValueType] | BlockType], args: List[ArgSection])(given Context): Control[List[Value]] =
+    args match {
+      case Nil => pure(Nil)
+      case arg :: args => for {
+        v <- evalArgSection(ps.head, arg);
+        vs <- evalArgSections(ps.tail, args)
+      } yield v ++ vs
+    }
 
-  def evalArgSection(ps: List[ValueParam] | BlockParam, args: ArgSection)(given Context): Control[List[Value]] =
-    (ps, args) match {
+  def evalArgSection(sec: List[ValueType] | BlockType, args: ArgSection)(given Context): Control[List[Value]] =
+    (sec, args) match {
     case (_, ValueArgs(exprs)) => evalExprs(exprs)
-    case (BlockParam(_, tpe), BlockArg(ps, stmt)) =>
+    case (BlockType(_, _, tpe), BlockArg(ps, stmt)) =>
       val params = ps.map(_.id.symbol.asValueParam)
-      pure(List(bindCapabilities(params, tpe.ret.effects, stmt)))
+      pure(List(bindCapabilities(params, tpe.effects, stmt)))
   }
 
   def collectBinders(ps: Params)(given Context): List[Symbol] = ps match {
@@ -320,9 +309,14 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
 
   /**
    * The evaluation context of first AND second class values
-   * (for simplicity, we do not separate them)
+   * For simplicity, we do not separate them -- this is not a problem since symbols are unique.
    */
-  case class Context(unit: CompilationUnit, env: Map[Symbol, Thunk[Value]]) {
+  case class Context(
+    focus: Tree,
+    buffer: MessageBuffer,
+    unit: CompilationUnit,
+    env: Map[Symbol, Thunk[Value]]
+  ) extends ErrorReporter {
     def get(sym: Symbol): Value =
       env.getOrElse(sym, sys.error("No value found for " + sym)).value
 
@@ -346,12 +340,13 @@ class Evaluator(val modules: mutable.Map[String, CompilationUnit]) {
 
     def (v: Value) asBoolean: Boolean = v.asInstanceOf[BooleanValue].value
 
+    def (sym: Symbol) blockType: BlockType = types.blockType(sym)(given this)
+
     def (f: Fun) effects: Effects = f.returnType.effects
 
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => unit.types.getOrDefault(f,
-        sys.error(s"Result type of recursive function ${f.name} needs to be annotated"))
+      case None => types.blockType(f)(given this).ret
     }
   }
   def Context(given ctx: Context): Context = ctx

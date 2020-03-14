@@ -6,21 +6,22 @@ import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.util.control
 import effekt.util.control._
-import org.bitbucket.inkytonik.kiama.util.{ Memoiser }
+import effekt.util.messages.{ ErrorReporter, MessageBuffer }
+import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 object Wildcard extends Symbol { val name = LocalName("_") }
 
-class Transformer {
+class Transformer(types: TypesDB) {
 
   given Assertions
 
-  def run(unit: CompilationUnit): ModuleDecl = {
+  def run(unit: CompilationUnit, buffer: MessageBuffer): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = unit.module
     val exports: Stmt = Exports(path, unit.exports.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
     }.toList)
 
-    val ctx = Context(unit)
+    val ctx = Context(unit, buffer)
 
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) { case (d, r) =>
       transform(d, r)(given ctx)
@@ -104,22 +105,36 @@ class Transformer {
 
     case source.MatchExpr(sc, clauses) =>
       val cs = clauses.map {
-        case source.Clause(op, source.ValueParams(params), body) =>
-          val ps = params.map { v => core.ValueParam(v.id.symbol) }
+        case source.Clause(op, params, body) =>
+          val ps = params.flatMap {
+            case source.ValueParams(params) => params.map { v => core.ValueParam(v.id.symbol) }
+          }
+
           (op.symbol, BlockDef(ps, transform(body)))
       }
       transform(sc).flatMap { scrutinee => bind(Match(scrutinee, cs)) }
 
     case source.Call(fun, _, args) =>
-      val sym = fun.symbol.asInstanceOf[Fun]
-      val effs = sym.effects
-      val capabilities = effs.filterNot(_.builtin).map { BlockVar }
+      val sym = fun.termSymbol
 
-      val as: List[Control[List[Expr | Block]]] = (args zip sym.params) map {
+      // we do not want to provide capabilities for the effect itself
+      val ownEffect = sym match {
+        case e: EffectOp => Effects(List(e.effect))
+        case _ => Pure
+      }
+
+      val BlockType(tparams, params, ret / effs) = types.blockType(sym)
+
+      // Do not provide capabilities for builtin effects and also
+      // omit the capability for the effect itself (if it is an effect operation
+      val effects = (effs -- ownEffect).effs.filterNot { _.builtin }
+      val capabilities = effects.map { BlockVar }
+
+      val as: List[Control[List[Expr | Block]]] = (args zip params) map {
         case (source.ValueArgs(as), _) => traverse(as.map(transform))
-        case (source.BlockArg(ps, body), p: BlockParam) =>
+        case (source.BlockArg(ps, body), p: BlockType) =>
           val params = ps.map { v => core.ValueParam(v.id.symbol) }
-          val caps = p.tpe.ret.effects.effs.filterNot(_.builtin).map { core.BlockParam }
+          val caps = p.ret.effects.effs.filterNot(_.builtin).map { core.BlockParam }
           pure { List(BlockDef(params ++ caps, transform(body))) }
       }
 
@@ -133,24 +148,13 @@ class Transformer {
         as2.flatMap { args => bind(App(BlockVar(sym), args ++ capabilities)) }
       }
 
-    case source.Yield(id, source.ValueArgs(as)) =>
-      val sym = id.symbol.asInstanceOf[BlockParam]
-      val capabilities = sym.tpe.ret.effects.effs.filterNot(_.builtin).map { BlockVar }
-      traverse(as.map(transform)).flatMap { args => bind(App(BlockVar(id.symbol), args ++ capabilities)) }
-
-    case source.Do(op, _, source.ValueArgs(as)) =>
-      traverse(as.map(transform)).flatMap { args => bind(App(BlockVar(op.symbol), args)) }
-
-    case source.Resume(source.ValueArgs(as)) =>
-      traverse(as.map(transform)).flatMap { args => bind(App(BlockVar(ResumeParam), args)) }
-
     case source.TryHandle(prog, clauses) =>
       val capabilities = clauses.map { c => core.BlockParam(c.op.symbol) }
       val body = BlockDef(capabilities, transform(prog))
       val cs = clauses.map {
-        case source.Clause(op, source.ValueParams(params), body) =>
-          val ps = params.map { v => core.ValueParam(v.id.symbol) } :+ core.BlockParam(ResumeParam)
-          (op.symbol, BlockDef(ps, transform(body)))
+        case source.OpClause(op, params, body, resume) =>
+          val ps = params.flatMap { _.params.map { v => core.ValueParam(v.id.symbol) } }
+          (op.symbol, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
       }
       bind(Handle(body, cs))
   }
@@ -171,13 +175,17 @@ class Transformer {
     } yield ev :: rv
   }
 
-  case class Context(unit: CompilationUnit) {
+  case class Context(unit: CompilationUnit, buffer: MessageBuffer) extends ErrorReporter {
+    // TODO maybe improve positions
+    val focus = unit.module
+
     def (f: Fun) effects = (f.ret match {
       case Some(t) => t
-      case None => unit.types(f)
+      case None => types.blockType(f)(given this).ret
     }).effects.effs
 
     def (id: source.Id) symbol = unit.symbols(id)
+    def (id: source.Id) termSymbol = unit.symbols(id).asInstanceOf[TermSymbol]
   }
   def Context(given c: Context): Context = c
 

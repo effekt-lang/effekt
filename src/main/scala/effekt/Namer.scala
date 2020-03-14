@@ -37,8 +37,8 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
 
   def run(path: String, module: source.ModuleDecl, buffer: MessageBuffer): Environment = {
 
-    val topLevelTerms = toplevel(builtins.rootTerms)
-    val topLevelTypes = toplevel(builtins.rootTypes)
+    val topLevelTerms = toplevel[String, TermSymbol](builtins.rootTerms)
+    val topLevelTypes = toplevel[String, TypeSymbol](builtins.rootTypes)
 
     val (terms, types) = module.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
@@ -109,11 +109,28 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
     case source.ExternFun(pure, id, tparams, params, ret, body) => ()
     case source.ExternInclude(path) => ()
 
+    case source.TryHandle(body, clauses) =>
+      resolve(body)
+      Context scoped {
+        // we should introduce one ResumeParam for *each* of the clauses to
+        // have a separate symbol
+        resolveAll(clauses)
+      }
+
+    case source.OpClause(op, params, body, resumeId) =>
+      Context at op in { op.resolveTerm() }
+      val ps = params.map(resolveValueParams)
+      Context scoped {
+        bind(ps)
+        resumeId := ResumeParam()
+        resolve(body)
+      }
+
     case source.Clause(op, params, body) =>
       Context at op in { op.resolveTerm() }
-      val ps = resolveValueParams(params)
+      val ps = params.map(resolveValueParams)
       Context scoped {
-        bind(List(ps))
+        bind(ps)
         resolve(body)
       }
 
@@ -126,17 +143,13 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
 
     // (2) === Bound Occurrences ===
 
-    case source.Yield(id, args) =>
-      id.resolveTerm().asBlockParam
-      resolveAll(args)
-
     case source.Call(id, targs, args) =>
-      id.resolveTerm().asFun
-      targs foreach resolveValueType
-      resolveAll(args)
-
-    case source.Do(id, targs, args) =>
-      id.resolveTerm().asEffectOp
+      id.resolveTerm() match {
+        case b: BlockParam => ()
+        case ResumeParam() => ()
+        case f: Fun => ()
+        case _ => Context.error("Expected callable")
+      }
       targs foreach resolveValueType
       resolveAll(args)
 
@@ -194,7 +207,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
         val opSym = Context scoped {
           val tps = tparams map resolveTypeParam
           val tpe = Effectful(resolveValueType(ret), Effects(List(effectSym)))
-          EffectOp(id.localName, tps, List(resolveValueParams(params)), Some(tpe), effectSym)
+          EffectOp(id.localName, tps, params map resolveValueParams, Some(tpe), effectSym)
         }
         effectSym.ops = List(opSym)
         id := effectSym
@@ -210,7 +223,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
           case source.Constructor(id, ps) =>
             val sym = Context scoped {
               tps.foreach { Context.bind }
-              Constructor(name(id), List(resolveValueParams(ps)), typ)
+              Constructor(name(id), ps map resolveValueParams, typ)
             }
             id := sym
             sym
@@ -265,7 +278,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
   }
 
   def resolveBlockType(tpe: source.BlockType)(given Context): BlockType =
-    BlockType(tpe.params.map(resolveValueType), resolveEffectful(tpe.ret))
+    BlockType(Nil, List(tpe.params.map(resolveValueType)), resolveEffectful(tpe.ret))
 
   def resolveEffect(tpe: source.Effect)(given Context): Effect =
     tpe.id.resolveType().asEffect

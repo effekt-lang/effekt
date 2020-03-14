@@ -62,4 +62,9 @@ object messages {
      */
     def in[T](block: (given this.type) => T): T = block(given this)
   }
+
+  object NoErrorReporter extends ErrorReporter {
+    def focus = ???
+    def buffer = ???
+  }
 }

@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.symbols.{ Type, ValueType, TypeVar, BlockType, Effectful, TypeApp }
+import effekt.symbols.{ Type, ValueType, TypeVar, BlockType, Effectful, TypeApp, Sections }
 
 import effekt.util.messages.ErrorReporter
 
@@ -17,12 +17,20 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
 
       (args1 zip args2).foldLeft(this) { case (u, (a1, a2)) => u.merge(a1, a2) }
 
-    case (f1 @ BlockType(args1, ret1), f2 @ BlockType(args2, ret2)) =>
+    // TODO also consider type parameters here
+    case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
 
       if (args1.size != args2.size)
-        report.error(s"Argument count does not match $f1 vs. $f2")
+        report.error(s"Section count does not match $f1 vs. $f2")
 
-      (args1 zip args2).foldLeft(merge(ret1.tpe, ret2.tpe)) { case (u, (a1, a2)) => u.merge(a1, a2) }
+      (args1 zip args2).foldLeft(merge(ret1.tpe, ret2.tpe)) {
+        case (u, (b1: BlockType, b2: BlockType)) =>
+          u.merge(b1, b2)
+        case (u, (as1: List[ValueType], as2: List[ValueType])) =>
+          if (as1.size != as2.size)
+            report.error(s"Argument count does not match $f1 vs. $f2")
+          (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u.merge(a1, a2) }
+      }
 
     case (t, s) if t == s =>
       this
@@ -57,7 +65,13 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
   }
 
   def substitute(t: BlockType): BlockType = t match {
-    case BlockType(ps, ret) => BlockType(ps.map { substitute }, this substitute ret)
+    // TODO also respect bound type parameters here!
+    case BlockType(tps, ps, ret) => BlockType(tps, substitute(ps), this substitute ret)
+  }
+
+  def substitute(t: Sections): Sections = t map {
+    case ps: List[ValueType] => ps.map { substitute }
+    case b: BlockType => substitute(b)
   }
 
   def checkFullyDefined(given report: ErrorReporter) = admitted.foreach { tpe =>

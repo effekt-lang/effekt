@@ -56,7 +56,7 @@ object builtins {
     "DivZero" -> EDivZero
   )
 
-  val rootTerms: Map[String, TermSymbol] = Map(
+  val rootTerms: Map[String, BuiltinFunction] = Map(
     "infix_+" -> infixAdd,
     "infix_-" -> infixSub,
     "infix_*" -> infixMul,

@@ -4,14 +4,14 @@ package effekt
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
 import effekt.source.{ ModuleDecl, Tree }
-import effekt.namer.{ Namer, Environment }
+import effekt.namer.{ Environment, Namer }
 import effekt.typer.Typer
 import effekt.evaluator.Evaluator
 import effekt.source.Id
 import effekt.core.JavaScript
 import effekt.core.{ LiftInference, Transformer }
-import effekt.util.messages.{ FatalPhaseError, MessageBuffer }
-import effekt.symbols.{ Effectful, Fun, Symbol, moduleFile }
+import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
+import effekt.symbols.{ builtins, BlockSymbol, BlockType, Effectful, Fun, QualifiedName, Symbol, TermSymbol, TypesDB, moduleFile }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.parsing.ParseResult
@@ -19,7 +19,6 @@ import org.bitbucket.inkytonik.kiama.util._
 import org.rogach.scallop._
 
 import scala.collection.mutable
-
 import java.io.File
 
 class EffektConfig(args : Seq[String]) extends Config(args) {
@@ -52,7 +51,6 @@ class EffektConfig(args : Seq[String]) extends Config(args) {
 case class CompilationUnit(
   source: Source,
   module: ModuleDecl,
-  types: Memoiser[Fun, Effectful],
   symbols: Memoiser[Id, Symbol],
   exports: Environment,
   messages: Messages
@@ -88,7 +86,9 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
   // - tries to find a file in the workspace, that matches the import path
   // - if compile is enabled, it will use publishProduct to write the compiled js file
   // - CompilationUnits are cached by path
-  val compilationCache = mutable.Map.empty[String, CompilationUnit]
+  lazy val compilationCache = mutable.Map.empty[String, CompilationUnit]
+
+  lazy val typesDB = new TypesDB().populate(builtins.rootTerms.values)
 
   def resolveInclude(modulePath: String, path: String, config: EffektConfig): String = {
     val p = new File(modulePath).toPath.getParent.resolve(path).toFile
@@ -125,17 +125,25 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
      * The different phases
      */
     object namer extends Namer(this, config)
-    object typer extends Typer(namer.symbolTable)
+    object typer extends Typer(typesDB, namer.symbolTable)
     object messageBuffer extends MessageBuffer
 
     try {
       val env = namer.run(source.name, ast, messageBuffer)
       typer.run(ast, env, messageBuffer)
 
+      // DEBUG
+      object reporter extends ErrorReporter { val focus = ast; val buffer = messageBuffer }
+      val syms = namer.symbolTable.values
+      val types = syms.collect {
+        case b : BlockSymbol => (b, typesDB.blockType(b)(given reporter))
+      }
+      // println(types)
+
       if (messageBuffer.hasErrors) {
         Right(messageBuffer.get)
       } else {
-        Left(CompilationUnit(source, ast, typer.types, namer.symbolTable, env, messageBuffer.get))
+        Left(CompilationUnit(source, ast, namer.symbolTable, env, messageBuffer.get))
       }
     } catch {
       case FatalPhaseError(msg, reporter) =>
@@ -154,9 +162,11 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
   }
 
   def backend(unit: CompilationUnit, config: EffektConfig): Unit = {
-    object transformer extends Transformer
+    object transformer extends Transformer(typesDB)
     object js extends JavaScript
-    val translated = transformer.run(unit)
+    object messageBuffer extends MessageBuffer
+    val translated = transformer.run(unit, messageBuffer)
+    // TODO report errors here
 
     val out = config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
     println("Writing compiled Javascript to " + out)
@@ -170,8 +180,10 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
         copyPrelude(config)
         backend(unit, config)
       case Left(unit) =>
-        object evaluator extends Evaluator(compilationCache)
-        evaluator.run(unit, config.output())
+        object messageBuffer extends MessageBuffer
+        object evaluator extends Evaluator(typesDB, compilationCache)
+        evaluator.run(unit, config.output(), messageBuffer)
+        // TODO report runtime errors correctly
       case Right(msgs) =>
         messaging.report(source, msgs, config.output())
     }

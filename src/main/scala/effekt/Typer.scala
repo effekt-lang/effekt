@@ -13,19 +13,27 @@ import effekt.util.messages.{ MessageBuffer, ErrorReporter }
 
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
-class Typer(val symbols: Memoiser[Id, Symbol]) {
+// We add a dependency to driver to resolve types of symbols from other modules
+/**
+   * Output: the types we inferred for function like things are written into "types"
+   *   - Blocks
+   *   - Functions
+   *   - Resumptions
+   */
+class Typer(types: TypesDB, val symbols: Memoiser[Id, Symbol]) {
 
   given Assertions
-
-  /**
-   * Output: the types we inferred
-   */
-  lazy val types = Memoiser.makeIdMemoiser[Fun, Effectful]()
 
   def run(module: source.ModuleDecl, env: Environment, buffer: MessageBuffer): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ env.types.values.collect { case e: Effect => e })
     Context(module, buffer, toplevelEffects) in {
-      module.defs foreach { d => synthToplevelDef(d) }
+      // pre-check to allow mutually recursive defs
+      module.defs.foreach { d => precheckDef(d) }
+      module.defs.foreach { d =>
+        val (_ / effs) = synthDef(d)
+        if (effs.nonEmpty)
+          Context.at(d).error("Unhandled effects: " + effs)
+      }
     }
   }
 
@@ -54,39 +62,11 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
 
     case source.Assign(id, expr) =>
       id.symbol.asVarBinder // assert that it is a mutable variable
-      val (_ / eff) = expr checkAgainst Context.get(id.symbol)
+      val (_ / eff) = expr checkAgainst Context.getValueType(id.symbol)
       TUnit / eff
 
     case source.Call(fun, targs, args) =>
-      val targsResolved = targs map { resolveValueType }
-      fun.symbol.asFun match {
-        case f @ Fun(name, tparams, params, tpe) =>
-          val (retType / retEffs) = f.returnType
-          val (effs, unifier) = checkCall(expected)(f, tparams, params.map(extractTypes), f.returnType.tpe)(targsResolved, args)
-          (unifier substitute retType) / (retEffs ++ effs)
-      }
-
-    case source.Do(op, targs, args) =>
-      val targsResolved = targs map { resolveValueType }
-      op.symbol.asEffectOp match {
-        case f @ Fun(name, tparams, params, tpe) =>
-          val (retType / retEffs) = f.returnType
-          val (effs, unifier) = checkCall(expected)(f, tparams, params.map(extractTypes), f.returnType.tpe)(targsResolved, List(args))
-          (unifier substitute retType) / (retEffs ++ effs)
-      }
-
-    case source.Yield(block, as) =>
-      val blockTpe = block.symbol.asBlockParam.tpe
-      val (ret / blockEffs) = blockTpe.ret
-      val (argEffs, unifier) = checkCall(expected)(block.symbol, Nil, List(blockTpe.params), ret)(Nil, List(as))
-      (unifier substitute ret) / (blockEffs ++ argEffs)
-
-    // the same as for Yield
-    case source.Resume(as) =>
-      val blockTpe = Context.get(ResumeParam).asBlockType
-      val (ret / blockEffs) = blockTpe.ret
-      val (argEffs, unifier) = checkCall(expected)(ResumeParam, Nil, List(blockTpe.params), ret)(Nil, List(as))
-      (unifier substitute ret) / (blockEffs ++ argEffs)
+      checkCall(expected)(fun.symbol, targs map { resolveValueType }, args)
 
     case source.TryHandle(prog, clauses) =>
 
@@ -105,15 +85,17 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
       var handlerEffs = Pure
 
       clauses.map {
-        case source.Clause(op, params, body) =>
+        case source.OpClause(op, params, body, resume) =>
           val effectOp = op.symbol.asEffectOp
           val effect = effectOp.effect
-          // TODO right now effect ops only have one argument section
-          val ps = checkAgainstDeclaration(op.name, params.params.allSymbols, extractTypes(effectOp.params.head))
-          Context.define(ps).define(ResumeParam, BlockType(List(effectOp.ret.get.tpe), ret / Pure)) in {
-            val (_ / heffs) = body checkAgainst ret
-            handlerEffs = handlerEffs ++ heffs
-          }
+          val bt = Context.getBlockType(effectOp)
+          val ps = checkAgainstDeclaration(op.name, bt.params, params)
+          val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
+
+          Context.define(ps).define(resume.symbol, resumeType) in {
+              val (_ / heffs) = body checkAgainst ret
+              handlerEffs = handlerEffs ++ heffs
+            }
       }
       ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
@@ -142,9 +124,9 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
 
           // instantiate params: create unifier
           val u = Unifier(sym.tparams).merge(dataType, tpe)
-          val pms = extractTypes(sym.params.head).map { u substitute _ }
+          val pms = u substitute extractAllTypes(sym.params)
 
-          val ps = checkAgainstDeclaration(id.name, params.params.allSymbols, pms)
+          val ps = checkAgainstDeclaration(id.name, pms, params)
           Context.define(ps) in { checkStmt(expected)(body) }
       }
 
@@ -161,45 +143,13 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
   //<editor-fold desc="statements and definitions">
 
   def checkStmt(expected: Option[Type]): Checker[Stmt] = checkAgainst(expected) {
-    case source.DefStmt(d @ source.FunDef(id, tparams, params, ret, body), rest) =>
 
-      val sym = id.symbol.asUserFunction
-
-      // does not return all the effects the function has, but only the effects
-      // that are *not* annotated on the function
-      val (t / effBinding) = Context.define(sym.params) in {
-        sym.ret match {
-          case Some(annot @ (tpe / funEffs)) =>
-            types.put(sym, annot) // to type recursive functions
-            val (_ / effs) = body checkAgainst tpe
-            effs <:< Context.effects
-            tpe / (effs -- funEffs) // the declared effects are considered as bound
-
-          case None =>
-            // TODO check whether the inferred effects are in the lexical scope
-            val (tpe / effs) = checkStmt(None)(body)
-            effs <:< Context.effects
-
-            types.put(sym, tpe / effs)
-            tpe / Pure // all effects are handled by the function itself (since they are inferred)
-        }
-      }
-      val (r / effStmt) = Context.define(sym, t) in { checkStmt(expected)(rest) }
-      r / (effBinding ++ effStmt)
-
-    case source.DefStmt(source.EffDef(id, tps, ps, ret), rest) =>
-      Context.withEffect(id.symbol.asEffect) in {
-        checkStmt(expected)(rest)
-      }
-
-    case source.DefStmt(source.DataDef(id, tparams, ctors), rest) =>
-      checkStmt(expected)(rest)
-
-    case source.DefStmt(source.ExternType(id, tparams), rest) =>
-      checkStmt(expected)(rest)
+    case source.DefStmt(d @ source.EffDef(id, tps, ps, ret), rest) =>
+      precheckDef(d) // to bind types to the effect ops
+      Context.withEffect(id.symbol.asEffect) in { checkStmt(expected)(rest) }
 
     case source.DefStmt(b, rest) =>
-      val (t / effBinding) = synthBinderDef(b)
+      val (t / effBinding) = { precheckDef(b); synthDef(b) }
       val (r / effStmt)    = Context.define(b.id.symbol, t) in { checkStmt(expected)(rest) }
       r / (effBinding ++ effStmt)
 
@@ -212,7 +162,50 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
     case source.Return(e) => checkExpr(expected)(e)
   }
 
-  def synthBinderDef: Checker[Def] = checking {
+  // not really checking, only if defs are fully annotated, we add them to the typeDB
+  // this is necessary for mutually recursive definitions
+  def precheckDef(d: Def)(given Context): Unit = Context at d in { d match {
+    case source.FunDef(id, tparams, params, ret, body) =>
+      val sym = id.symbol.asFun
+      sym.ret.foreach { annot => types.put(sym, sym.toType) }
+
+    case source.ExternFun(pure, id, tparams, params, tpe, body) =>
+      val sym = id.symbol.asFun
+      types.put(sym, sym.toType)
+
+    case source.EffDef(id, tparams, params, ret) =>
+      val sym: UserEffect = id.symbol.asUserEffect
+      sym.ops.foreach { op => types.put(op, op.toType) }
+
+    case source.DataDef(id, tparams, ctors) =>
+      ctors.foreach { ctor =>
+        val sym = ctor.id.symbol.asFun
+        types.put(sym, sym.toType)
+      }
+
+    case d => ()
+  }}
+
+
+  def synthDef: Checker[Def] = checking {
+    case source.FunDef(id, tparams, params, ret, body) =>
+//      println("Checking " + id)
+      val sym = id.symbol.asUserFunction
+
+      Context.define(sym.params) in {
+        sym.ret match {
+          case Some(tpe / funEffs) =>
+            val (_ / effs) = body checkAgainst tpe
+            effs <:< Context.effects // check they are in scope
+            tpe / (effs -- funEffs) // the declared effects are considered as bound
+          case None =>
+            val (tpe / effs) = checkStmt(None)(body)
+            effs <:< Context.effects // check they are in scope
+            types.put(sym, sym.toType(tpe / effs))
+            tpe / Pure // all effects are handled by the function itself (since they are inferred)
+        }
+      }
+
     case source.ValDef(id, annot, binding) =>
       val sym = id.symbol.asValBinder
       sym.tpe match {
@@ -225,42 +218,9 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
-  }
 
-  def synthToplevelDef: Checker[Def] = checking {
-    // annotate the inferred return type to the function node, so it can be
-    // looked up at the call-site
-    case d @ source.FunDef(id, tparams, params, ret, body) =>
-      val sym = id.symbol.asUserFunction
-
-      Context.define(sym.params) in {
-        sym.ret match {
-          case Some(annot @ (tpe / funEffs)) =>
-            types.put(sym, annot) // to type recursive functions
-            val (_ / effs) = body checkAgainst tpe
-            effs <:< funEffs // this is too restrictive - it rules out local functions that close over capabilities
-            effs <:< Context.effects
-            annot
-          case None =>
-            val (tpe / effs) = checkStmt(None)(body)
-            effs <:< Context.effects
-            types.put(sym, tpe / effs)
-            (tpe / Pure)
-        }
-      }
-
-    case source.EffDef(id, tparams, params, ret) => TUnit / Pure
-
-    case source.DataDef(id, tparams, ctors) => TUnit / Pure
-
-    case source.ExternType(id, tparams) => TUnit / Pure
-
-    case source.ExternEffect(id, tparams) => TUnit / Pure
-
-    case source.ExternInclude(path) => TUnit / Pure
-
-    case source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      id.symbol.asFun.ret.get
+    // all other defintions have already been prechecked
+    case d => TUnit / Pure
   }
 
   //</editor-fold>
@@ -276,8 +236,10 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
   /**
    * Invariant: Only call this on declarations that are fully annotated
    */
-  def extractTypes(params: List[ValueParam] | BlockParam)(given Context): List[Type] = params match {
-    case BlockParam(_, tpe) => List(tpe)
+  def extractAllTypes(params: Params)(given Context): Sections = params map extractTypes
+
+  def extractTypes(params: List[ValueParam] | BlockParam)(given Context): List[ValueType] | BlockType = params match {
+    case BlockParam(_, tpe) => tpe
     case ps: List[ValueParam] => ps map {
       case ValueParam(_, Some(tpe)) => tpe
       case _ => Context.abort("Cannot extract type")
@@ -287,18 +249,35 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
   /**
    * Returns the binders that will be introduced to check the corresponding body
    */
-  def checkAgainstDeclaration(name: String, annotated: List[ValueParam], declared: List[Type])(given Context): Map[Symbol, Type] = {
-    if (annotated.size != declared.size)
-      Context.error(s"Wrong number of arguments, given ${annotated.size}, but ${name} expects ${declared.size}.")
+  def checkAgainstDeclaration(
+    name: String,
+    atCallee: List[List[ValueType] | BlockType],
+    // we ask for the source Params here, since it might not be annotated
+    atCaller: List[source.ParamSection])(given Context): Map[Symbol, Type] = {
 
-    (declared zip annotated).map[(Symbol, Type)] {
-      case (decl, p @ ValueParam(_, annot)) =>
-        annot.foreach { t => decl =!= t }
-        (p, annot.getOrElse(decl)) // use the annotation, if present.
+    if (atCallee.size != atCaller.size)
+      Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
+
+    // TODO add blockparams here!
+    (atCallee zip atCaller).flatMap[(Symbol, Type)] {
+      case (b1: BlockType, b2: source.BlockParam) =>
+        Context.abort("not yet supported")
+        ???
+
+      case (ps1: List[ValueType], source.ValueParams(ps2)) =>
+        (ps1 zip ps2).map[(Symbol, Type)] {
+          case (decl, p @ source.ValueParam(id, annot)) =>
+            val annotType = annot.map(resolveValueType)
+            annotType.foreach { t => decl =!= t }
+            (id.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
+        }.toMap
     }.toMap
   }
 
-  def checkCall(expected: Option[Type])(sym: Symbol, tparams: List[TypeVar], params: List[List[Type]], ret: Type)(targs: List[ValueType], args: List[source.ArgSection])(given Context): (Effects, Unifier) = {
+
+  def checkCall(expected: Option[Type])(sym: Symbol, targs: List[ValueType], args: List[source.ArgSection])(given Context): Effectful = {
+
+    val BlockType(tparams, params, ret / retEffs) = Context.getBlockType(sym)
 
     if (targs.nonEmpty && targs.size != tparams.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -307,14 +286,14 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
 
     expected.foreach { exp => unifier = unifier.merge(ret, exp) }
 
-    var effs = Pure
+    var effs = retEffs
 
     if (params.size != args.size)
       Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
     // TODO we can improve the error positions here
     (params zip args) foreach {
-      case (ps, source.ValueArgs(as)) =>
+      case (ps : List[ValueType], source.ValueArgs(as)) =>
         if (ps.size != as.size)
           Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
@@ -334,10 +313,11 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
       //   BlockArg: foo { n => println("hello" + n) }
       //     or
       //   BlockArg: foo { (n: Int) => println("hello" + n) }
-      case (List(bt: BlockType), source.BlockArg(params, stmt)) =>
+      case (bt: BlockType, source.BlockArg(params, stmt)) =>
 
         val blockType = unifier substitute bt
-        val bindings = checkAgainstDeclaration("block", params.allSymbols, blockType.params)
+        // TODO make blockargs also take multiple argument sections.
+        val bindings = checkAgainstDeclaration("block", blockType.params, List(source.ValueParams(params)))
 
         Context.define(bindings) in {
           val (tpe1 / handled) = blockType.ret
@@ -354,7 +334,7 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
     // check that unifier found a substitution for each tparam
     unifier.checkFullyDefined
 
-    (effs, unifier)
+    (unifier substitute ret) / effs
   }
 
   //</editor-fold>
@@ -404,10 +384,12 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
   // this requires splitting in context related and Ops-related methods
   // define one XXXAssertions for every phase that requires being mixed with ErrorReporter
   case class Context(
-    focus: Tree,                             // current type checking position
+    focus: Tree,                                // current type checking position
     buffer: MessageBuffer,
-    effects: Effects = Pure,                 // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
-    bindings: Map[Symbol, Type] = Map.empty // the types of variables in the current environment
+    effects: Effects = Pure,                    // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
+
+    // TODO also move to a global map from symbol to type (for IDE support)
+    values: Map[Symbol, ValueType] = Map.empty  // the types of value variables in the current environment
   ) extends TyperAssertions {
 
     // TODO does this correctly compare List[Int] with List[Int]?
@@ -419,19 +401,38 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
       }
     }
 
-    //  def get(id: Id): Type = bindings(id.symbol)
-    def get(sym: Symbol): Type = bindings(sym)
-    def getValueType(sym: Symbol): ValueType = bindings(sym).asValueType
+    def getValueType(sym: Symbol): ValueType =
+      values.getOrElse(sym, abort(s"Cannot find value binder for ${sym}."))
 
-    def define(bs: Map[Symbol, Type]) = copy(bindings = bindings ++ bs)
-    def define(ps: List[List[ValueParam] | BlockParam]) = copy(bindings = bindings ++ ps.flatMap {
+
+    def getBlockType(sym: Symbol): BlockType =
+      types.blockType(sym)(given this)
+//        // last resort: maybe it is annotated?
+//        .getOrElse {
+//          println("Trying annotated type for " + sym.name.qualified)
+//          sym.asFun.toType
+//        }
+
+
+    def define(s: Symbol, t: ValueType) = copy(values = values + (s -> t))
+
+    def define(s: Symbol, t: BlockType) = {
+      types.put(s, t)(given this)
+      this
+    }
+
+    def define(bs: Map[Symbol, Type]): Context = bs.foldLeft(this) {
+      case (ctx, (v: ValueSymbol, t: ValueType)) => ctx.define(v, t)
+      case (ctx, (v: BlockSymbol, t: BlockType)) => ctx.define(v, t)
+    }
+    def define(ps: List[List[ValueParam] | BlockParam]): Context = define(ps.flatMap {
       case ps : List[ValueParam] => ps map {
         case s @ ValueParam(name, Some(tpe)) => s -> tpe
         case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
       }
       case s @ BlockParam(name, tpe) => List(s -> tpe)
-    })
-    def define(s: Symbol, t: Type) = copy(bindings = bindings + (s -> t))
+    }.toMap)
+
     def at(node: Tree): Context = copy(focus = node)
 
     def withEffect(e: Effect): Context = this.copy(effects = effects + e)
@@ -441,8 +442,8 @@ class Typer(val symbols: Memoiser[Id, Symbol]) {
     // always first look at the annotated type, then look it up in the dictionary
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => types.getOrDefault(f,
-        abort(s"Result type of recursive function ${f.name} needs to be annotated"))
+      case None => types.blocks.getOrDefault(f,
+        abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
     }
   }
   def Context(given c: Context): Context = c

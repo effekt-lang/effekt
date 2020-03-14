@@ -137,7 +137,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
     `pure`.? ^^ { _.isDefined }
 
   lazy val effectDef: P[Def] =
-    `effect` ~/> idDef ~ maybeTypeParams ~ valueParams ~ (`:` ~> valueType) ^^ EffDef
+    `effect` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ~ (`:` ~> valueType) ^^ EffDef
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType
@@ -245,12 +245,12 @@ class Parser(positions: Positions) extends Parsers(positions) {
     `type` ~/> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef
 
   lazy val recordDef: P[DataDef] =
-    `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ {
+    `record` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ^^ {
       case id ~ tparams ~ params => DataDef(id, tparams, List(Constructor(id, params)))
     }
 
   lazy val constructor: P[Constructor] =
-    idDef ~ valueParams ^^ Constructor
+    idDef ~ some(valueParams) ^^ Constructor
 
   /**
    * Expressions
@@ -278,19 +278,25 @@ class Parser(positions: Positions) extends Parsers(positions) {
     (callExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
   lazy val doExpr: P[Expr] =
-    `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ Do
+    `do` ~/> idRef ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
 
   lazy val yieldExpr: P[Expr] =
-    `yield` ~/> idRef ~ valueArgs ^^ Yield
+    `yield` ~/> idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val resumeExpr: P[Expr] =
-    `resume` ~/> valueArgs ^^ Resume
+    `resume` ~/> valueArgs ^^ { args => Call(IdRef("resume"), Nil, List(args)) }
 
   lazy val handleExpr: P[Expr] =
-    (`try` ~/> stmt <~ `handle` ~ `{`) ~ (some(clause) <~ `}`) ^^ TryHandle
+    (`try` ~/> stmt <~ `handle` ~ `{`) ~ (some(opClause) <~ `}`) ^^ TryHandle
 
   lazy val clause: P[Clause] =
-    (`case` ~/> idRef) ~ valueParamsOpt ~ (`=>` ~/> stmt) ^^ Clause
+    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ Clause
+
+  lazy val opClause: P[OpClause] =
+    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ {
+      case id ~ params ~ body => OpClause(id, params, body)
+    }
+
 
   lazy val assignExpr: P[Expr] =
     idRef ~ (`=` ~> expr) ^^ Assign

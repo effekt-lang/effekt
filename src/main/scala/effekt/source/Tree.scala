@@ -46,12 +46,12 @@ sealed trait Def extends Tree {
   def id: Id
 }
 case class FunDef(id: Id, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def
-case class EffDef(id: Id, tparams: List[Id], params: ValueParams, ret: Type) extends Def
+case class EffDef(id: Id, tparams: List[Id], params: List[ValueParams], ret: Type) extends Def
 case class ValDef(id: Id, annot: Option[Type], binding: Stmt) extends Def
 case class VarDef(id: Id, annot: Option[Type], binding: Stmt) extends Def
 
 case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def
-case class Constructor(id: Id, params: ValueParams) extends Tree
+case class Constructor(id: Id, params: List[ValueParams]) extends Tree
 
 // only valid on the toplevel!
 case class ExternType(id: Id, tparams: List[Id]) extends Def
@@ -90,19 +90,26 @@ case class StringLit(value: String) extends Literal[String]
 
 sealed trait InvokeExpr extends Expr
 case class Call(fun: Id, targs: List[Type], args: List[ArgSection]) extends InvokeExpr
-case class Do(op: Id, targs: List[Type], args: ValueArgs) extends InvokeExpr
-case class Yield(block: Id, args: ValueArgs) extends InvokeExpr
-case class Resume(args: ValueArgs) extends InvokeExpr
+
+// for uniformity also pass targs here (maybe empty at first)
+//case class Yield(block: Id, args: List[ArgSection]) extends InvokeExpr
+
+// TODO remove special case for resume -- it is just a call
+//case class Resume(args: ArgSection) extends InvokeExpr
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
-case class TryHandle(prog: Stmt, clauses: List[Clause]) extends Expr
-case class MatchExpr(matchee: Expr, clauses: List[Clause]) extends Expr
 
-case class Clause(op: Id, params: ValueParams, body: Stmt) extends Tree
+case class TryHandle(prog: Stmt, clauses: List[OpClause]) extends Expr
+case class OpClause(op: Id, params: List[ValueParams], body: Stmt, resume: IdDef = IdDef("resume")) extends Tree
+
+case class MatchExpr(matchee: Expr, clauses: List[Clause]) extends Expr
+case class Clause(op: Id, params: List[ValueParams], body: Stmt) extends Tree
 
 /**
  * Types and Effects
+ *
+ * TODO generalize to blocks that can take blocks
  */
 sealed trait Type extends Tree
 case class TypeVar(id: Id) extends Type

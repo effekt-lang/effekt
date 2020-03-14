@@ -17,39 +17,59 @@ package object symbols {
   sealed trait TypeSymbol extends Symbol
   sealed trait TermSymbol extends Symbol
 
+  // the two universes of values and blocks
+  sealed trait ValueSymbol extends TermSymbol
+  sealed trait BlockSymbol extends TermSymbol
+
   def moduleName(path: String) = "$" + path.replace('/', '_')
   def moduleFile(path: String) = path.replace('/', '_') + ".js"
 
   sealed trait Param extends TermSymbol
-  case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param
-  case class BlockParam(name: Name, tpe: BlockType) extends Param
-  case object ResumeParam extends Param { val name = LocalName("resume") }
+  case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
+  case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
+  case class ResumeParam() extends Param with BlockSymbol { val name = LocalName("resume") }
   
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
    */
+  // TODO Introduce ParamSection also on symbol level and then use Params for types
   type Params = List[List[ValueParam] | BlockParam]
 
+  def paramsToTypes(ps: Params): Sections =
+    ps map {
+      case BlockParam(_, tpe) => tpe
+      case vps: List[ValueParam] => vps map { v => v.tpe.get }
+    }
 
-  trait Fun extends TermSymbol {
+
+  trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
     def params: Params
     def ret: Option[Effectful]
+
+    // invariant: only works if ret is defined!
+    def toType: BlockType = BlockType(tparams, paramsToTypes(params), ret.get)
+    def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
   }
 
   object Fun {
     def unapply(f: Fun): Option[(Name, List[TypeVar], Params, Option[Effectful])] = Some((f.name, f.tparams, f.params, f.ret))
   }
 
-  case class UserFunction(name: Name, tparams: List[TypeVar], params: Params, ret: Option[Effectful], decl: FunDef) extends Fun
+  case class UserFunction(
+    name: Name,
+    tparams: List[TypeVar],
+    params: Params,
+    ret: Option[Effectful],
+    decl: FunDef) extends Fun
 
   /**
    * Binders represent local value and variable binders
    *
    * They also store a reference to the original defition in the source code
    */
-  sealed trait Binder extends TermSymbol {
+  sealed trait Binder extends ValueSymbol {
     def tpe: Option[ValueType]
     def decl: Def
   }
@@ -60,13 +80,18 @@ package object symbols {
   /**
    * Types
    */
+
   sealed trait Type
+
+  // like Params but without name binders
+  type Sections = List[List[ValueType] | BlockType]
+
   sealed trait ValueType extends Type
 
   case class TypeVar(name: Name) extends ValueType with TypeSymbol
   case class TypeApp(tpe: DataType, args: List[ValueType]) extends ValueType
 
-  case class BlockType(params: List[ValueType], ret: Effectful) extends Type
+  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type
 
   case class DataType(name: Name, tparams: List[TypeVar], var ctors: List[Constructor] = Nil) extends ValueType with TypeSymbol
   case class Constructor(name: Name, params: List[List[ValueParam]], datatype: DataType) extends Fun {
@@ -93,6 +118,8 @@ package object symbols {
     def nonEmpty: Boolean = effs.nonEmpty
 
     def distinct = Effects(effs.distinct)
+
+    def contains(e: Effect): Boolean = effs.contains(e)
 
     override def toString: String = s"{${effs.mkString(", ")}}"
   }
