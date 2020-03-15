@@ -5,18 +5,23 @@ import effekt.util.messages.{ ErrorReporter, NoErrorReporter }
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 class TypesDB {
-  val values = Memoiser.makeIdMemoiser[ValueSymbol, ValueType]()
-  val blocks = Memoiser.makeIdMemoiser[BlockSymbol, BlockType]()
+  private val values = Memoiser.makeIdMemoiser[ValueSymbol, ValueType]()
+  private val blocks = Memoiser.makeIdMemoiser[BlockSymbol, BlockType]()
 
-  def blockType(s: Symbol)(given report: ErrorReporter): BlockType = s match {
-    case b: BlockSymbol => blocks.getOrDefault(b,
-      sys.error(s"Cannot find type for block '${s}'"))
-    case _ => report.abort(s"Trying to find a block type for non block '${s}'")
-  }
+  def blockType(s: Symbol)(given report: ErrorReporter): BlockType =
+    blockTypeOrDefault(s, sys.error(s"Cannot find type for block '${s}'"))
 
-  def valueType(s: Symbol)(given report: ErrorReporter): ValueType = s match {
-    case s: ValueSymbol => values.getOrDefault(s,
-      sys.error(s"Cannot find value binder for ${s}"))
+  def blockTypeOrDefault(s: Symbol, default: => BlockType)(given report: ErrorReporter): BlockType =
+    s match {
+      case b: BlockSymbol => blocks.getOrDefault(b, default)
+      case _ => report.abort(s"Trying to find a block type for non block '${s}'")
+    }
+
+  def valueType(s: Symbol)(given report: ErrorReporter): ValueType =
+    valueTypeOrDefault(s, report.abort(s"Cannot find value binder for ${s}"))
+
+  def valueTypeOrDefault(s: Symbol, default: => ValueType)(given report: ErrorReporter): ValueType = s match {
+    case s: ValueSymbol => values.getOrDefault(s, default)
     case _ => report.abort(s"Trying to find a value type for non-value '${s}'")
   }
 

@@ -453,8 +453,8 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     // always first look at the annotated type, then look it up in the dictionary
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => types.blocks.getOrDefault(f,
-        abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
+      case None => types.blockTypeOrDefault(f,
+        abort(s"Result type of recursive function ${f.name} needs to be annotated"))(given this).ret
     }
   }
   def Context(given c: Context): Context = c
