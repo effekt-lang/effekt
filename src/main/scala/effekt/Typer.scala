@@ -150,9 +150,25 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       precheckDef(d) // to bind types to the effect ops
       Context.withEffect(d.symbol) in { checkStmt(expected)(rest) }
 
+    case source.DefStmt(d @ source.ValDef(id, annot, binding), rest) =>
+      val (t / effBinding) = d.symbol.tpe match {
+        case Some(t) => binding checkAgainst t
+        case None    => checkStmt(None)(binding)
+      }
+      val (r / effStmt) = Context.define(d.symbol, t) in { checkStmt(expected)(rest) }
+      r / (effBinding ++ effStmt)
+
+    case source.DefStmt(d @ source.VarDef(id, annot, binding), rest) =>
+      val (t / effBinding) = d.symbol.tpe match {
+        case Some(t) => binding checkAgainst t
+        case None    => checkStmt(None)(binding)
+      }
+      val (r / effStmt) = Context.define(d.symbol, t) in { checkStmt(expected)(rest) }
+      r / (effBinding ++ effStmt)
+
     case source.DefStmt(b, rest) =>
       val (t / effBinding) = { precheckDef(b); synthDef(b) }
-      val (r / effStmt)    = Context.define(b.symbol, t) in { checkStmt(expected)(rest) }
+      val (r / effStmt)    = checkStmt(expected)(rest)
       r / (effBinding ++ effStmt)
 
     // <expr> ; <stmt>
@@ -168,18 +184,18 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(given Context): Unit = Context at d in { d match {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
-      d.symbol.ret.foreach { annot => types.put(d.symbol, d.symbol.toType) }
+      d.symbol.ret.foreach { annot => types.putBlock(d.symbol, d.symbol.toType) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      types.put(d.symbol, d.symbol.toType)
+      types.putBlock(d.symbol, d.symbol.toType)
 
     case d @ source.EffDef(id, tparams, params, ret) =>
-      d.symbol.ops.foreach { op => types.put(op, op.toType) }
+      d.symbol.ops.foreach { op => types.putBlock(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        types.put(sym, sym.toType)
+        types.putBlock(sym, sym.toType)
       }
 
     case d => ()
@@ -198,7 +214,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
           case None =>
             val (tpe / effs) = checkStmt(None)(body)
             effs <:< Context.effects // check they are in scope
-            types.put(sym, sym.toType(tpe / effs))
+            types.putBlock(sym, sym.toType(tpe / effs))
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
       }
@@ -376,11 +392,9 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
   // this requires splitting in context related and Ops-related methods
   // define one XXXAssertions for every phase that requires being mixed with ErrorReporter
   case class Context(
-    focus: Tree,                                // current type checking position
+    focus: Tree,              // current type checking position
     buffer: MessageBuffer,
-    effects: Effects = Pure,                    // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
-    // TODO also move to a global map from symbol to type (for IDE support)
-    values: Map[Symbol, ValueType] = Map.empty  // the types of value variables in the current environment
+    effects: Effects = Pure   // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
   ) extends ErrorReporter {
 
     // TODO does this correctly compare List[Int] with List[Int]?
@@ -403,15 +417,18 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     }
 
     def getValueType(sym: Symbol): ValueType =
-      values.getOrElse(sym, abort(s"Cannot find value binder for ${sym}."))
+      types.valueType(sym)(given this)
 
     def getBlockType(sym: Symbol): BlockType =
       types.blockType(sym)(given this)
 
-    def define(s: Symbol, t: ValueType) = copy(values = values + (s -> t))
+    def define(s: Symbol, t: ValueType) = {
+      types.putValue(s, t)(given this)
+      this
+    }
 
     def define(s: Symbol, t: BlockType) = {
-      types.put(s, t)(given this)
+      types.putBlock(s, t)(given this)
       this
     }
 
