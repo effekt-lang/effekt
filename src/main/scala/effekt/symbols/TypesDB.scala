@@ -5,8 +5,8 @@ import effekt.util.messages.{ ErrorReporter, NoErrorReporter }
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 class TypesDB {
-  lazy val values = Memoiser.makeIdMemoiser[ValueSymbol, ValueType]()
-  lazy val blocks = Memoiser.makeIdMemoiser[BlockSymbol, BlockType]()
+  val values = Memoiser.makeIdMemoiser[ValueSymbol, ValueType]()
+  val blocks = Memoiser.makeIdMemoiser[BlockSymbol, BlockType]()
 
   def blockType(s: Symbol)(given report: ErrorReporter): BlockType = s match {
     case b: BlockSymbol => blocks.getOrDefault(b,

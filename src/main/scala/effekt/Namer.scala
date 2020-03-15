@@ -30,7 +30,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
    *
    * It contains both, TermSymbols and TypeSymbols
    */
-  val symbolTable: Memoiser[Id, Symbol] = Memoiser.makeIdMemoiser[Id, Symbol]()
+  val symbolTable = new SymbolsDB()
 
   // Brings the extension methods of assertions into scope
   given Assertions

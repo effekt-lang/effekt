@@ -20,7 +20,7 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
    *   - Functions
    *   - Resumptions
    */
-class Typer(types: TypesDB, val symbols: Memoiser[Id, Symbol]) {
+class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
   given Assertions
 
@@ -189,7 +189,6 @@ class Typer(types: TypesDB, val symbols: Memoiser[Id, Symbol]) {
 
   def synthDef: Checker[Def] = checking {
     case source.FunDef(id, tparams, params, ret, body) =>
-//      println("Checking " + id)
       val sym = id.symbol.asUserFunction
 
       Context.define(sym.params) in {
@@ -372,12 +371,6 @@ class Typer(types: TypesDB, val symbols: Memoiser[Id, Symbol]) {
     def (tpe: ValueType) / (effs: Effects) : Effectful = Effectful(tpe, effs)
     def (expr: Expr) checkAgainst (tpe: Type) (given Context): Effectful = checkExpr(Some(tpe))(expr)
     def (stmt: Stmt) checkAgainst (tpe: Type) (given Context): Effectful = checkStmt(Some(tpe))(stmt)
-
-    def (id: Id) symbol: Symbol = symbols(id)
-
-    // looks up the symbols for a list of source value parameters
-    def (ps: List[source.ValueParam]) allSymbols: List[ValueParam] =
-      ps.map(_.id.symbol.asValueParam)
   }
   given TyperOps
 
@@ -404,15 +397,8 @@ class Typer(types: TypesDB, val symbols: Memoiser[Id, Symbol]) {
     def getValueType(sym: Symbol): ValueType =
       values.getOrElse(sym, abort(s"Cannot find value binder for ${sym}."))
 
-
     def getBlockType(sym: Symbol): BlockType =
       types.blockType(sym)(given this)
-//        // last resort: maybe it is annotated?
-//        .getOrElse {
-//          println("Trying annotated type for " + sym.name.qualified)
-//          sym.asFun.toType
-//        }
-
 
     def define(s: Symbol, t: ValueType) = copy(values = values + (s -> t))
 

@@ -11,7 +11,7 @@ import effekt.source.Id
 import effekt.core.JavaScript
 import effekt.core.{ LiftInference, Transformer }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
-import effekt.symbols.{ builtins, BlockSymbol, BlockType, Effectful, Fun, QualifiedName, Symbol, TermSymbol, TypesDB, moduleFile }
+import effekt.symbols.{ builtins, BlockSymbol, BlockType, Effectful, Fun, QualifiedName, Symbol, TermSymbol, TypesDB, SymbolsDB, moduleFile }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.parsing.ParseResult
@@ -51,7 +51,7 @@ class EffektConfig(args : Seq[String]) extends Config(args) {
 case class CompilationUnit(
   source: Source,
   module: ModuleDecl,
-  symbols: Memoiser[Id, Symbol],
+  symbols: SymbolsDB,
   exports: Environment,
   messages: Messages
 )
@@ -125,20 +125,12 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
      * The different phases
      */
     object namer extends Namer(this, config)
-    object typer extends Typer(typesDB, namer.symbolTable)
+    object typer extends Typer(given typesDB, namer.symbolTable)
     object messageBuffer extends MessageBuffer
 
     try {
       val env = namer.run(source.name, ast, messageBuffer)
       typer.run(ast, env, messageBuffer)
-
-      // DEBUG
-      object reporter extends ErrorReporter { val focus = ast; val buffer = messageBuffer }
-      val syms = namer.symbolTable.values
-      val types = syms.collect {
-        case b : BlockSymbol => (b, typesDB.blockType(b)(given reporter))
-      }
-      // println(types)
 
       if (messageBuffer.hasErrors) {
         Right(messageBuffer.get)
