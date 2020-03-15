@@ -29,37 +29,37 @@ class Transformer(types: TypesDB) {
   }
 
   def transform(d: source.Def, rest: Stmt)(given Context): Stmt = d match {
-    case source.FunDef(id, _, params, _, body) =>
-      val sym = id.symbol.asInstanceOf[Fun]
+    case f @ source.FunDef(id, _, params, _, body) =>
+      val sym = f.symbol
       val effs = sym.effects
 
       val ps = params.flatMap {
-        case source.BlockParam(id, _) => List(core.BlockParam(id.symbol))
-        case source.ValueParams(ps) => ps.map { p => core.ValueParam(p.id.symbol) }
+        case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
+        case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
       } ++ effs.filterNot(_.builtin).map { core.BlockParam }
 
       Def(sym, BlockDef(ps, transform(body)), rest)
 
-    case source.DataDef(id, _, ctors) =>
-      Data(id.symbol, ctors.map { c => c.id.symbol }, rest)
+    case d @ source.DataDef(id, _, ctors) =>
+      Data(d.symbol, ctors.map { c => c.symbol }, rest)
 
-    case source.ValDef(id, _, binding) =>
-      Val(id.symbol, transform(binding), rest)
+    case v @ source.ValDef(id, _, binding) =>
+      Val(v.symbol, transform(binding), rest)
 
-    case source.VarDef(id, _, binding) =>
-      Var(id.symbol, transform(binding), rest)
+    case v @ source.VarDef(id, _, binding) =>
+      Var(v.symbol, transform(binding), rest)
 
     case source.ExternType(id, tparams) =>
       rest
 
-    case source.ExternFun(pure, id, tparams, params, ret, body) =>
+    case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       // C&P from FunDef
-      val effs = id.symbol.asInstanceOf[Fun].effects
+      val effs = f.symbol.effects
       val ps = params.flatMap {
-        case source.BlockParam(id, _) => List(core.BlockParam(id.symbol))
-        case source.ValueParams(ps) => ps.map { p => core.ValueParam(p.id.symbol) }
+        case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
+        case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
       } ++ effs.filterNot(_.builtin).map { core.BlockParam }
-      Def(id.symbol, Extern(ps, body), rest)
+      Def(f.symbol, Extern(ps, body), rest)
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest)
@@ -83,13 +83,13 @@ class Transformer(types: TypesDB) {
   }
 
   def transform(tree: source.Expr)(given Context): Control[Expr] = tree match {
-    case source.Var(id) => id.symbol match {
+    case v : source.Var => v.definition match {
       case sym: VarBinder => pure { Deref(sym) }
       case sym => pure { ValueVar(sym) }
     }
 
-    case source.Assign(id, expr) =>
-      transform(expr).map { e => Assign(id.symbol, e) }
+    case a @ source.Assign(id, expr) =>
+      transform(expr).map { e => Assign(a.definition, e) }
 
     case source.UnitLit() => pure { UnitLit() }
     case source.IntLit(value) => pure { IntLit(value) }
@@ -105,12 +105,12 @@ class Transformer(types: TypesDB) {
 
     case source.MatchExpr(sc, clauses) =>
       val cs = clauses.map {
-        case source.Clause(op, params, body) =>
+        case cl @ source.Clause(id, params, body) =>
           val ps = params.flatMap {
-            case source.ValueParams(params) => params.map { v => core.ValueParam(v.id.symbol) }
+            case source.ValueParams(params) => params.map { v => core.ValueParam(v.symbol) }
           }
 
-          (op.symbol, BlockDef(ps, transform(body)))
+          (cl.definition, BlockDef(ps, transform(body)))
       }
       transform(sc).flatMap { scrutinee => bind(Match(scrutinee, cs)) }
 
@@ -133,7 +133,7 @@ class Transformer(types: TypesDB) {
       val as: List[Control[List[Expr | Block]]] = (args zip params) map {
         case (source.ValueArgs(as), _) => traverse(as.map(transform))
         case (source.BlockArg(ps, body), p: BlockType) =>
-          val params = ps.map { v => core.ValueParam(v.id.symbol) }
+          val params = ps.map { v => core.ValueParam(v.symbol) }
           val caps = p.ret.effects.effs.filterNot(_.builtin).map { core.BlockParam }
           pure { List(BlockDef(params ++ caps, transform(body))) }
       }
@@ -149,12 +149,12 @@ class Transformer(types: TypesDB) {
       }
 
     case source.TryHandle(prog, clauses) =>
-      val capabilities = clauses.map { c => core.BlockParam(c.op.symbol) }
+      val capabilities = clauses.map { c => core.BlockParam(c.definition) }
       val body = BlockDef(capabilities, transform(prog))
       val cs = clauses.map {
-        case source.OpClause(op, params, body, resume) =>
-          val ps = params.flatMap { _.params.map { v => core.ValueParam(v.id.symbol) } }
-          (op.symbol, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
+        case op @ source.OpClause(id, params, body, resume) =>
+          val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
+          (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
       }
       bind(Handle(body, cs))
   }
@@ -184,8 +184,11 @@ class Transformer(types: TypesDB) {
       case None => types.blockType(f)(given this).ret
     }).effects.effs
 
-    def (id: source.Id) symbol = unit.symbols(id)
-    def (id: source.Id) termSymbol = unit.symbols(id).asInstanceOf[TermSymbol]
+    def (id: source.Id) symbol = unit.symbols.lookup(id)
+    def (id: source.Id) termSymbol = unit.symbols.lookup(id).asInstanceOf[TermSymbol]
+
+    def (tree: source.Definition) symbol: tree.symbol = unit.symbols.get(tree)
+    def (tree: source.Reference) definition: tree.symbol = unit.symbols.get(tree)
   }
   def Context(given c: Context): Context = c
 

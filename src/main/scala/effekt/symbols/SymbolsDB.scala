@@ -5,19 +5,39 @@ import source.Id
 
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
+import scala.quoted.{ Type => TypeTag }
+
+/**
+ * The *global* symbol database (across modules)
+ */
 class SymbolsDB {
 
   given Assertions
 
   val symbols = Memoiser.makeIdMemoiser[Id, Symbol]
 
-  def (id: Id) symbol: Symbol = symbols(id)
-
-  // looks up the symbols for a list of source value parameters
-  def (ps: List[source.ValueParam]) allSymbols: List[ValueParam] =
-    ps.map(_.id.symbol.asValueParam)
-
   def put(id: Id, d: Symbol) = symbols.put(id, d)
 
-  def apply(id: Id) = symbols(id)
+  // Searching the defitions for a Reference
+  // =======================================
+  // these lookups might fail
+  def lookup(id: Id): Symbol = symbols(id)
+
+  // this one can fail!
+  def (tree: source.Reference) definition: tree.symbol =
+    symbols(tree.id).asInstanceOf[tree.symbol]
+
+  def get(tree: source.Reference): tree.symbol =
+    symbols(tree.id).asInstanceOf[tree.symbol]
+
+
+  // Searching the symbol for a definition
+  // =====================================
+  // these lookups should not fail (except there is a bug in the compiler)
+  def (tree: source.Definition) symbol: tree.symbol = get(tree)
+
+  def get(tree: source.Definition): tree.symbol =
+    symbols(tree.id).asInstanceOf[tree.symbol]
+
+  def getGeneric(d: source.Definition): Symbol = symbols(d.id)
 }

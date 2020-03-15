@@ -52,11 +52,11 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
       override def toString = "<closure>"
     }
 
-    case class Handler(prompt: Prompt, clauses: Map[Symbol, List[Value] => control.Control[Value]]) extends Value {
+    case class Handler(prompt: Prompt, clauses: Map[EffectOp, List[Value] => control.Control[Value]]) extends Value {
       override def toString = s"Handler(${clauses.keys}, $prompt)"
     }
 
-    case class DataValue(tag: Symbol, args: List[Value]) extends Value {
+    case class DataValue(tag: Constructor, args: List[Value]) extends Value {
       override def toString = s"${tag.name}(${ args.mkString(",") })"
     }
   }
@@ -105,17 +105,17 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
     case UnitLit()     => pure(UnitValue)
     case StringLit(s)  => pure(StringValue(s))
 
-    case Var(id) => id.symbol match {
+    case v : Var => v.definition match {
       // use dynamic lookup on the stack for mutable variables
       case b: VarBinder => control.lookup(b)
 
       // otherwise fetch the value from the context
-      case _ => pure { Context.get(id.symbol) }
+      case b => pure { Context.get(b) }
     }
 
-    case Assign(b, expr) => for {
+    case a @ Assign(b, expr) => for {
       v <- evalExpr(expr)
-      _ <- control.update(b.symbol, v)
+      _ <- control.update(a.definition, v)
     } yield UnitValue
 
     case If(cond, thn, els) => for {
@@ -125,7 +125,7 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
 
     case While(cond, block) => loop(cond, block)
 
-    case Call(fun, _, args) => fun.symbol match {
+    case c @ Call(fun, _, args) => c.definition match {
 
       case op: EffectOp =>
         val effect = op.effect
@@ -153,17 +153,17 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
       val prompt = new Prompt
 
       val cs = clauses.map {
-        case OpClause(op, params, body, resume) =>
-          val ps = params.flatMap { _.params.map(_.id.symbol.asValueParam) } :+ resume.symbol
+        case op @ OpClause(id, params, body, resume) =>
+          val ps = params.flatMap { _.params.map(_.symbol) } :+ resume.symbol
           val impl: List[Value] => control.Control[Value] = args =>
             Context.extendedWith(ps zip args) { evalStmt(body) }
-          (op.symbol, impl)
+          (op.definition, impl)
       }.toMap
 
       val h = Handler(prompt, cs)
 
       // bind handler to every single effect it handles:
-      val bindings = clauses.map { c => (c.op.symbol.asEffectOp.effect, h) }
+      val bindings = clauses.map { c => (c.definition.effect, h) }
 
       handle(prompt) {
         Context.extendedWith(bindings) {
@@ -175,9 +175,9 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
       evalExpr(sc) flatMap {
         case DataValue(tag, args) =>
           val cl = clauses.find { cl =>
-            cl.op.symbol == tag
+            cl.definition == tag
           }.getOrElse(sys error s"Unmatched ${tag}")
-          val ps = cl.params.flatMap { _.params.map(_.id.symbol.asValueParam) }
+          val ps = cl.params.flatMap { _.params.map(_.symbol) }
           Context.extendedWith(ps zip args) { evalStmt(cl.body) }
       }
   }
@@ -186,9 +186,9 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
     lazy val ctx: Context = Context bindAll bindings
     lazy val bindings: Map[Symbol, Thunk[Value]] = funs.flatMap {
       case (f: FunDef) =>
-        List(f.id.symbol -> Thunk { evalFunDef(f)(given ctx) })
+        List(f.symbol -> Thunk { evalFunDef(f)(given ctx) })
       case (d: DataDef) => d.ctors.map { ctor =>
-        ctor.id.symbol -> Thunk { evalConstructor(ctor) }
+        ctor.symbol -> Thunk { evalConstructor(ctor) }
       }
       case _ => Nil
     }.toMap
@@ -196,23 +196,23 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
   }
 
   def evalConstructor(c: source.Constructor)(given Context): Value =
-    Closure { args => pure(DataValue(c.id.symbol, args)) }
+    Closure { args => pure(DataValue(c.symbol, args)) }
 
   def evalFunDef(f: FunDef)(given Context): Value = f match {
     case FunDef(name, _, params, ret, body) =>
-      val sym = name.symbol.asFun
+      val sym = f.symbol
       val params = collectBinders(sym.params)
       bindCapabilities(params, types.blockType(sym).ret.effects, body)
   }
 
   val evalStmt: Eval[Stmt, Value] = {
-    case DefStmt(ValDef(id, _, binding), rest) => for {
+    case DefStmt(d @ ValDef(id, _, binding), rest) => for {
       v <- evalStmt(binding)
-      r <- Context.extendedWith(id.symbol, v) { evalStmt(rest) }
+      r <- Context.extendedWith(d.symbol, v) { evalStmt(rest) }
     } yield r
-    case DefStmt(VarDef(id, _, binding), rest) =>
+    case DefStmt(d @ VarDef(id, _, binding), rest) =>
       evalStmt(binding).flatMap { v =>
-        control.bind(id.symbol, v) { evalStmt(rest) }
+        control.bind(d.symbol, v) { evalStmt(rest) }
       }
     case DefStmt(d, rest) =>
       val ctx = Context.bindAll(eval(List(d)))
@@ -249,8 +249,7 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
     (sec, args) match {
     case (_, ValueArgs(exprs)) => evalExprs(exprs)
     case (BlockType(_, _, tpe), BlockArg(ps, stmt)) =>
-      val params = ps.map(_.id.symbol.asValueParam)
-      pure(List(bindCapabilities(params, tpe.effects, stmt)))
+      pure(List(bindCapabilities(ps.map(_.symbol), tpe.effects, stmt)))
   }
 
   def collectBinders(ps: Params)(given Context): List[Symbol] = ps match {
@@ -336,7 +335,10 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
     def extendedWith[T](bindings: List[(Symbol, Value)])(f: (given Context) => T): T =
       f(given copy(env = env ++ bindings.map { case (s, v) => (s, Thunk(v)) }))
 
-    def (id: Id) symbol: Symbol = unit.symbols(id)
+    def (tree: source.Definition) symbol: tree.symbol = unit.symbols.get(tree)
+    def (tree: source.Reference) definition: tree.symbol = unit.symbols.get(tree)
+
+    def (id: Id) symbol: Symbol = unit.symbols.lookup(id)
 
     def (v: Value) asBoolean: Boolean = v.asInstanceOf[BooleanValue].value
 

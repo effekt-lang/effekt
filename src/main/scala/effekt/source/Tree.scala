@@ -18,6 +18,17 @@ sealed trait Id extends Tree {
 case class IdDef(name: String) extends Id
 case class IdRef(name: String) extends Id
 
+// Something that later will be stored in the symbol table
+sealed trait Definition extends Tree {
+  def id: Id
+  type symbol <: symbols.Symbol
+}
+// Something that later can be looked up in the symbol table
+sealed trait Reference extends Tree {
+  def id: Id
+  type symbol <: symbols.Symbol
+}
+
 /**
  * The type of whole compilation units
  *
@@ -31,8 +42,8 @@ case class Import(path: String) extends Tree
  */
 sealed trait ParamSection extends Tree
 case class ValueParams(params: List[ValueParam]) extends ParamSection
-case class ValueParam(id: Id, tpe: Option[Type]) extends Tree
-case class BlockParam(id: Id, tpe: BlockType) extends ParamSection
+case class ValueParam(id: Id, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
+case class BlockParam(id: Id, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
@@ -42,21 +53,37 @@ case class BlockArg(params: List[ValueParam], body: Stmt) extends ArgSection
 /**
  * Global (and later, local) definitions
  */
-sealed trait Def extends Tree {
-  def id: Id
+sealed trait Def extends Definition
+case class FunDef(id: Id, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
+  type symbol = symbols.UserFunction
 }
-case class FunDef(id: Id, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def
-case class EffDef(id: Id, tparams: List[Id], params: List[ValueParams], ret: Type) extends Def
-case class ValDef(id: Id, annot: Option[Type], binding: Stmt) extends Def
-case class VarDef(id: Id, annot: Option[Type], binding: Stmt) extends Def
+case class EffDef(id: Id, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Def {
+  type symbol = symbols.UserEffect
+}
+case class ValDef(id: Id, annot: Option[ValueType], binding: Stmt) extends Def {
+  type symbol = symbols.ValBinder
+}
+case class VarDef(id: Id, annot: Option[ValueType], binding: Stmt) extends Def {
+  type symbol = symbols.VarBinder
+}
 
-case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def
-case class Constructor(id: Id, params: List[ValueParams]) extends Tree
+case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def {
+  type symbol = symbols.DataType
+}
+case class Constructor(id: Id, params: List[ValueParams]) extends Definition {
+  type symbol = symbols.Constructor
+}
 
 // only valid on the toplevel!
-case class ExternType(id: Id, tparams: List[Id]) extends Def
-case class ExternEffect(id: Id, tparams: List[Id]) extends Def
-case class ExternFun(pure: Boolean, id: Id, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def
+case class ExternType(id: Id, tparams: List[Id]) extends Def {
+  type symbol = symbols.BuiltinType
+}
+case class ExternEffect(id: Id, tparams: List[Id]) extends Def {
+  type symbol = symbols.BuiltinEffect
+}
+case class ExternFun(pure: Boolean, id: Id, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def {
+  type symbol = symbols.BuiltinFunction
+}
 case class ExternInclude(path: String) extends Def {
   def id = IdRef("includes don't have names")
   // Namer resolves the path and loads the contents
@@ -76,8 +103,12 @@ case class Return(d: Expr) extends Stmt
 sealed trait Expr extends Tree
 
 // Variable / Value use
-case class Var(id: Id) extends Expr
-case class Assign(id: Id, expr: Expr) extends Expr
+case class Var(id: Id) extends Expr with Reference {
+  type symbol = symbols.ValueSymbol & symbols.TermSymbol
+}
+case class Assign(id: Id, expr: Expr) extends Expr with Reference {
+  type symbol = symbols.VarBinder
+}
 
 sealed trait Literal[T] extends Expr {
   def value: T
@@ -88,36 +119,51 @@ case class BooleanLit(value: Boolean) extends Literal[Boolean]
 case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
-sealed trait InvokeExpr extends Expr
-case class Call(fun: Id, targs: List[Type], args: List[ArgSection]) extends InvokeExpr
-
-// for uniformity also pass targs here (maybe empty at first)
-//case class Yield(block: Id, args: List[ArgSection]) extends InvokeExpr
-
-// TODO remove special case for resume -- it is just a call
-//case class Resume(args: ArgSection) extends InvokeExpr
+// maybe replace `fun: Id` here with BlockVar
+case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+  type symbol = symbols.Fun | symbols.ResumeParam
+}
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
 case class TryHandle(prog: Stmt, clauses: List[OpClause]) extends Expr
-case class OpClause(op: Id, params: List[ValueParams], body: Stmt, resume: IdDef = IdDef("resume")) extends Tree
+case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef = IdDef("resume")) extends Reference {
+  type symbol = symbols.EffectOp
+}
 
 case class MatchExpr(matchee: Expr, clauses: List[Clause]) extends Expr
-case class Clause(op: Id, params: List[ValueParams], body: Stmt) extends Tree
+case class Clause(id: Id, params: List[ValueParams], body: Stmt) extends Reference {
+  type symbol = symbols.Constructor
+}
 
 /**
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
  */
-sealed trait Type extends Tree
-case class TypeVar(id: Id) extends Type
-case class TypeApp(id: Id, params: List[Type]) extends Type
-case class BlockType(params: List[Type], ret: Effectful) extends Type
+sealed trait Type extends Tree {
+  type symbol <: symbols.Type
+}
+sealed trait ValueType extends Type {
+  type symbol <: symbols.ValueType
+}
 
-case class Effect(id: Id) extends Tree
-case class Effectful(tpe: Type, eff: Effects) extends Tree
+// Used for both binding and bound vars
+case class TypeVar(id: Id) extends ValueType with Reference {
+  type symbol = symbols.Symbol & symbols.ValueType
+}
+case class TypeApp(id: Id, params: List[ValueType]) extends ValueType with Reference {
+  type symbol = symbols.DataType
+}
+case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
+  type symbol = symbols.BlockType
+}
+
+case class Effect(id: Id) extends Tree with Reference {
+  type symbol = symbols.Effect
+}
+case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
 case class Effects(effs: List[Effect]) extends Tree
 object Effects {

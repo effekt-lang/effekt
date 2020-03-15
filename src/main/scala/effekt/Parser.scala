@@ -201,10 +201,10 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val valueArgs: P[ValueArgs] =
     `(` ~/> manySep(expr, `,`) <~ `)` ^^ ValueArgs | failure("Expected a value argument list")
 
-  lazy val typeArgs: P[List[Type]] =
+  lazy val typeArgs: P[List[ValueType]] =
     `[` ~/> manySep(valueType, `,`) <~ `]`
 
-  lazy val maybeTypeArgs: P[List[Type]] =
+  lazy val maybeTypeArgs: P[List[ValueType]] =
     typeArgs.? ^^ { o => o.getOrElse(Nil) }
 
   lazy val stmt: P[Stmt] =
@@ -320,7 +320,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
    * Types and Effects
    */
 
-  lazy val valueType: P[Type] =
+  lazy val valueType: P[ValueType] =
     ( idRef ~ typeArgs ^^ TypeApp
     | idRef ^^ TypeVar
     | failure("Expected a type")

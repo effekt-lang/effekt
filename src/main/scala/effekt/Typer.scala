@@ -22,6 +22,8 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
    */
 class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
+  import symbols._
+
   given Assertions
 
   def run(module: source.ModuleDecl, env: Environment, buffer: MessageBuffer): Unit = {
@@ -57,22 +59,22 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       val (_ / blockEffs) = block checkAgainst TUnit
       TUnit / (condEffs ++ blockEffs)
 
-    case source.Var(id) =>
-      Context.getValueType(id.symbol) / Pure
+    case v : source.Var =>
+      Context.getValueType(v.definition) / Pure
 
-    case source.Assign(id, expr) =>
-      id.symbol.asVarBinder // assert that it is a mutable variable
-      val (_ / eff) = expr checkAgainst Context.getValueType(id.symbol)
+    case e @ source.Assign(id, expr) =>
+      e.definition.asVarBinder // assert that it is a mutable variable
+      val (_ / eff) = expr checkAgainst Context.getValueType(e.definition)
       TUnit / eff
 
-    case source.Call(fun, targs, args) =>
-      checkCall(expected)(fun.symbol, targs map { resolveValueType }, args)
+    case c @ source.Call(fun, targs, args) =>
+      checkCall(expected)(c.definition, targs map { resolveValueType }, args)
 
     case source.TryHandle(prog, clauses) =>
 
       val (ret / effs) = checkStmt(expected)(prog)
 
-      val effectOps = clauses.map { c => c.op.symbol.asEffectOp }
+      val effectOps = clauses.map { c => c.definition }
       val effects = effectOps.map { _.effect }
       val requiredOps = effects.flatMap { _.ops }
       val notCovered = requiredOps.toSet -- effectOps.toSet
@@ -85,14 +87,14 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       var handlerEffs = Pure
 
       clauses.map {
-        case source.OpClause(op, params, body, resume) =>
-          val effectOp = op.symbol.asEffectOp
+        case d @ source.OpClause(op, params, body, resume) =>
+          val effectOp = d.definition
           val effect = effectOp.effect
           val bt = Context.getBlockType(effectOp)
           val ps = checkAgainstDeclaration(op.name, bt.params, params)
           val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
 
-          Context.define(ps).define(resume.symbol, resumeType) in {
+          Context.define(ps).define(symbols.lookup(resume), resumeType) in {
               val (_ / heffs) = body checkAgainst ret
               handlerEffs = handlerEffs ++ heffs
             }
@@ -108,7 +110,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       }
 
       // check exhaustivity
-      val covered = clauses.map { c => c.op.symbol }.toSet
+      val covered = clauses.map { c => c.definition }.toSet
       val cases: Set[Symbol] = datatype.ctors.toSet
       val notCovered = cases -- covered
 
@@ -117,8 +119,8 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       }
 
       val tpes = clauses.map {
-        case source.Clause(id, params, body) =>
-          val sym = id.symbol.asConstructor
+        case c @ source.Clause(id, params, body) =>
+          val sym = c.definition
 
           val (dataType / _) = sym.ret.get
 
@@ -146,11 +148,11 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
     case source.DefStmt(d @ source.EffDef(id, tps, ps, ret), rest) =>
       precheckDef(d) // to bind types to the effect ops
-      Context.withEffect(id.symbol.asEffect) in { checkStmt(expected)(rest) }
+      Context.withEffect(d.symbol) in { checkStmt(expected)(rest) }
 
     case source.DefStmt(b, rest) =>
       val (t / effBinding) = { precheckDef(b); synthDef(b) }
-      val (r / effStmt)    = Context.define(b.id.symbol, t) in { checkStmt(expected)(rest) }
+      val (r / effStmt)    = Context.define(b.symbol, t) in { checkStmt(expected)(rest) }
       r / (effBinding ++ effStmt)
 
     // <expr> ; <stmt>
@@ -165,21 +167,18 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(given Context): Unit = Context at d in { d match {
-    case source.FunDef(id, tparams, params, ret, body) =>
-      val sym = id.symbol.asFun
-      sym.ret.foreach { annot => types.put(sym, sym.toType) }
+    case d @ source.FunDef(id, tparams, params, ret, body) =>
+      d.symbol.ret.foreach { annot => types.put(d.symbol, d.symbol.toType) }
 
-    case source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      val sym = id.symbol.asFun
-      types.put(sym, sym.toType)
+    case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
+      types.put(d.symbol, d.symbol.toType)
 
-    case source.EffDef(id, tparams, params, ret) =>
-      val sym: UserEffect = id.symbol.asUserEffect
-      sym.ops.foreach { op => types.put(op, op.toType) }
+    case d @ source.EffDef(id, tparams, params, ret) =>
+      d.symbol.ops.foreach { op => types.put(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
-        val sym = ctor.id.symbol.asFun
+        val sym = ctor.symbol
         types.put(sym, sym.toType)
       }
 
@@ -188,9 +187,8 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
 
   def synthDef: Checker[Def] = checking {
-    case source.FunDef(id, tparams, params, ret, body) =>
-      val sym = id.symbol.asUserFunction
-
+    case d @ source.FunDef(id, tparams, params, ret, body) =>
+      val sym = d.symbol
       Context.define(sym.params) in {
         sym.ret match {
           case Some(tpe / funEffs) =>
@@ -205,15 +203,13 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
         }
       }
 
-    case source.ValDef(id, annot, binding) =>
-      val sym = id.symbol.asValBinder
-      sym.tpe match {
+    case d @ source.ValDef(id, annot, binding) =>
+      d.symbol.tpe match {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
-    case source.VarDef(id, annot, binding) =>
-      val sym = id.symbol.asVarBinder
-      sym.tpe match {
+    case d @ source.VarDef(id, annot, binding) =>
+      d.symbol.tpe match {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
@@ -227,9 +223,12 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
   //<editor-fold desc="arguments and parameters">
 
+  // TODO we can remove this duplication, once every phase can write to every table.
+  // then the namer phase can already store the resolved type symbol for the param.
+
   def resolveValueType(tpe: source.Type)(given Context): ValueType = tpe match {
-    case source.TypeApp(id, args) => TypeApp(id.symbol.asDataType, args.map(resolveValueType))
-    case source.TypeVar(id) => id.symbol.asValueType
+    case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
+    case t @ source.TypeVar(id) => t.definition
   }
 
   /**
@@ -268,7 +267,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
             annotType.foreach { t => decl =!= t }
-            (id.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
+            (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
     }.toMap
   }
@@ -380,10 +379,9 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     focus: Tree,                                // current type checking position
     buffer: MessageBuffer,
     effects: Effects = Pure,                    // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
-
     // TODO also move to a global map from symbol to type (for IDE support)
     values: Map[Symbol, ValueType] = Map.empty  // the types of value variables in the current environment
-  ) extends TyperAssertions {
+  ) extends ErrorReporter {
 
     // TODO does this correctly compare List[Int] with List[Int]?
     def (got: Type) =!= (expected: Type): Unit = (got, expected) match {
@@ -391,6 +389,16 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
         (args1 zip args2) foreach { _ =!= _ }
       case (t1, t2) => if (t1 != t2) {
         error(s"Expected $expected, but got $got")
+      }
+    }
+
+    def (a: Effects) <:< (b: Effects): Effects = {
+      val forbidden = a -- b
+      if (forbidden.nonEmpty) {
+        error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
+        b
+      } else {
+        b
       }
     }
 
@@ -433,30 +441,4 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     }
   }
   def Context(given c: Context): Context = c
-}
-
-trait TyperAssertions extends ErrorReporter {
-
-  def (a: Effects) <:< (b: Effects): Effects = {
-    val forbidden = a -- b
-    if (forbidden.nonEmpty) {
-      error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
-      b
-    } else {
-      b
-    }
-  }
-
-  def (t: source.Type) asTypeVar: source.TypeVar = t match {
-    case t: source.TypeVar => t
-    case _ => abort("Expected a value type")
-  }
-  def (t: Type) asBlockType: BlockType = t match {
-    case t: BlockType => t
-    case _ => abort("Expected a block type")
-  }
-  def (t: Type) asValueType: ValueType = t match {
-    case t: ValueType => t
-    case _ => abort("Expected a value type")
-  }
 }

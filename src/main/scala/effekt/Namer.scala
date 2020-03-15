@@ -15,12 +15,9 @@ import effekt.util.messages.{ MessageBuffer, ErrorReporter }
 
 import org.bitbucket.inkytonik.kiama.util.{ Memoiser }
 
-// we could additionally store the scopes / Environments in a separate table
-
 case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol])
 
-// Maybe use kiama attributes later...
-// TODO make very clear that there is a distinction between:
+// There is an important distinction between:
 //   - resolving: that is looking up symbols (might include storing the result into the symbolTable)
 //   - binding: that is adding a binding to the environment (lexical.Scope)
 class Namer(driver: Driver, config: EffektConfig) { namer =>
@@ -64,22 +61,6 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
       decls foreach { resolveDef(true) }
       Context scoped { resolveAll(decls) }
 
-    case source.DefStmt(d @ source.ValDef(id, annot, binding), rest) =>
-      val tpe = annot.map(resolveValueType)
-      resolve(binding)
-      Context scoped {
-        id := ValBinder(id.localName, tpe, d)
-        resolve(rest)
-      }
-
-    case source.DefStmt(d @ source.VarDef(id, annot, binding), rest) =>
-      val tpe = annot.map(resolveValueType)
-      resolve(binding)
-      Context scoped {
-        id := VarBinder(id.localName, tpe, d)
-        resolve(rest)
-      }
-
     case source.DefStmt(d, rest) =>
       Context scoped {
         resolveDef(false)(d)
@@ -94,11 +75,11 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
       id := BlockParam(id.localName, resolveBlockType(tpe))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
-    case source.FunDef(id, tparams, params, ret, body) =>
-      val funSym = symbolTable(id).asFun
+    case f @ source.FunDef(id, tparams, params, ret, body) =>
+      val funSym = symbolTable.get(f)
       Context scoped {
         funSym.tparams.foreach { Context.bind }
-        bind(funSym.params)
+        Context.bind(funSym.params)
         resolve(body)
       }
 
@@ -110,18 +91,14 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
     case source.ExternInclude(path) => ()
 
     case source.TryHandle(body, clauses) =>
-      resolve(body)
-      Context scoped {
-        // we should introduce one ResumeParam for *each* of the clauses to
-        // have a separate symbol
-        resolveAll(clauses)
-      }
+      Context scoped { resolve(body) }
+      resolveAll(clauses)
 
     case source.OpClause(op, params, body, resumeId) =>
       Context at op in { op.resolveTerm() }
       val ps = params.map(resolveValueParams)
       Context scoped {
-        bind(ps)
+        Context.bind(ps)
         resumeId := ResumeParam()
         resolve(body)
       }
@@ -130,14 +107,14 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
       Context at op in { op.resolveTerm() }
       val ps = params.map(resolveValueParams)
       Context scoped {
-        bind(ps)
+        Context.bind(ps)
         resolve(body)
       }
 
     case source.BlockArg(params, stmt) =>
       val ps = resolveValueParams(source.ValueParams(params)) // TODO drop wrapping after refactoring
       Context scoped {
-        bind(List(ps))
+        Context.bind(List(ps))
         resolve(stmt)
       }
 
@@ -158,9 +135,11 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
       case other => other
     }
 
+    case tpe: source.ValueType => resolveValueType(tpe)
+    case tpe: source.BlockType => resolveBlockType(tpe)
+
     // THIS COULD ALSO BE A TYPE!
-    case id : IdRef => id.resolveTerm()
-    case id : IdDef => Context.abort(s"Compiler error: unresolve binder ${id}")
+    case id : Id => id.resolveTerm()
 
     case other => resolveAll(other)
   }
@@ -194,6 +173,17 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
   def resolveDef(qualify: Boolean): Traversal[Def, Context] = {
     def name(id: Id) = if (qualify) id.qualifiedName else id.localName
     focusing {
+
+      case d @ source.ValDef(id, annot, binding) =>
+        val tpe = annot.map(resolveValueType)
+        resolve(binding)
+        id := ValBinder(id.localName, tpe, d)
+
+      case d @ source.VarDef(id, annot, binding) =>
+        val tpe = annot.map(resolveValueType)
+        resolve(binding)
+        id := VarBinder(id.localName, tpe, d)
+
       case f @ source.FunDef(id, tparams, params, annot, body) =>
         val sym = Context scoped {
           // we create a new scope, since resolving type params introduces them in this scope
@@ -256,11 +246,6 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
     }
   }
 
-  def bind(params: List[List[ValueParam] | BlockParam])(given Context): Unit =
-    params flatMap {
-      case b : BlockParam => List(b)
-      case l : List[ValueParam] => l
-    } foreach { Context.bind }
 
   /**
    * Resolve Types
@@ -268,8 +253,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-
-  def resolveValueType(tpe: source.Type)(given Context): ValueType = tpe match {
+  def resolveValueType(tpe: source.ValueType)(given Context): ValueType = tpe match {
     case source.TypeApp(id, args) =>
       val data = id.resolveType().asDataType
       if (data.tparams.size != args.size) { Context.error("Wrong number of arguments to " + data) }
@@ -325,6 +309,14 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
     def bind(s: TypeSymbol): Unit =
       types.define(s.name.name, s)
 
+    def bind(params: List[List[ValueParam] | BlockParam]): Context = {
+      params flatMap {
+        case b : BlockParam => List(b)
+        case l : List[ValueParam] => l
+      } foreach { bind }
+      this
+    }
+
     // lookup and resolve the given id from the environment and
     // store a binding in the symbol table
     def (id: Id) resolveTerm(): TermSymbol = {
@@ -355,8 +347,6 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
    * Sets the given tree into focus for error reporting
    *
    * Also catches runtime exceptions and turns them into messages
-   *
-   * TODO drop aborting after refactoring Assertions
    */
   def focusing[T <: Tree, R](f: (given Context) => T => R)(given Context): T => R = t =>
     Context aborting { Context at t in { f(t) } }
