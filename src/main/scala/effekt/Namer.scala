@@ -27,18 +27,18 @@ class Namer { namer =>
   // Brings the extension methods of assertions into scope
   given Assertions
 
-  def run(path: String, module: source.ModuleDecl, context: CompilerContext): Environment = {
+  def run(path: String, module: source.ModuleDecl, compiler: CompilerContext): Environment = {
 
     val topLevelTerms = toplevel[String, TermSymbol](builtins.rootTerms)
     val topLevelTypes = toplevel[String, TypeSymbol](builtins.rootTypes)
 
     val (terms, types) = module.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
-        val Left(cu) = context.resolve(path)
+        val Left(cu) = compiler.resolve(path)
         (terms.enterWith(cu.exports.terms), types.enterWith(cu.exports.types))
     }
 
-    Context(path, module, terms.enter, types.enter, context) in {
+    Context(path, module, terms.enter, types.enter, compiler) in {
       resolve(module)
       Environment(Context.terms.bindings.toMap, Context.types.bindings.toMap)
     }
@@ -286,15 +286,15 @@ class Namer { namer =>
       module: source.ModuleDecl,
       terms: Scope[String, TermSymbol],
       types: Scope[String, TypeSymbol],
-      context: CompilerContext
+      compiler: CompilerContext
   ) {
     def (id: Id) := (s: TermSymbol): Unit = {
-      context.put(id, s)
+      compiler.put(id, s)
       terms.define(id.name, s)
     }
 
     def (id: Id) := (s: TypeSymbol): Unit = {
-      context.put(id, s)
+      compiler.put(id, s)
       types.define(id.name, s)
     }
 
@@ -315,14 +315,14 @@ class Namer { namer =>
     // lookup and resolve the given id from the environment and
     // store a binding in the symbol table
     def (id: Id) resolveTerm(): TermSymbol = {
-      val sym = terms.lookup(id.name, context.abort(s"Could not resolve term ${id.name}"))
-      context.put(id, sym)
+      val sym = terms.lookup(id.name, compiler.abort(s"Could not resolve term ${id.name}"))
+      compiler.put(id, sym)
       sym
     }
 
     def (id: Id) resolveType(): TypeSymbol = {
-      val sym = types.lookup(id.name, context.abort(s"Could not resolve type ${id.name}"))
-      context.put(id, sym)
+      val sym = types.lookup(id.name, compiler.abort(s"Could not resolve type ${id.name}"))
+      compiler.put(id, sym)
       sym
     }
 
@@ -335,7 +335,7 @@ class Namer { namer =>
     def in[T](block: (given this.type) => T): T = block(given this)
   }
   def Context(given ctx: Context): Context = ctx
-  def Compiler(given ctx: Context): CompilerContext = ctx.context
+  def Compiler(given ctx: Context): CompilerContext = ctx.compiler
 
   /**
    * Sets the given tree into focus for error reporting

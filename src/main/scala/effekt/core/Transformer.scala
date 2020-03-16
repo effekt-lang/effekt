@@ -15,13 +15,13 @@ class Transformer {
 
   given Assertions
 
-  def run(unit: CompilationUnit, context: CompilerContext): ModuleDecl = {
+  def run(unit: CompilationUnit, compiler: CompilerContext): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = unit.module
     val exports: Stmt = Exports(path, unit.exports.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
     }.toList)
 
-    val ctx = Context(context)
+    val ctx = Context(compiler)
 
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) { case (d, r) =>
       transform(d, r)(given ctx)
@@ -175,18 +175,18 @@ class Transformer {
     } yield ev :: rv
   }
 
-  case class Context(context: CompilerContext) {
+  case class Context(compiler: CompilerContext) {
 
     def (f: Fun) effects = (f.ret match {
       case Some(t) => t
-      case None => context.blockType(f).ret
+      case None => compiler.blockType(f).ret
     }).effects.effs
 
-    def (id: source.Id) symbol = context.lookup(id)
-    def (id: source.Id) termSymbol = context.lookup(id).asInstanceOf[TermSymbol]
+    def (id: source.Id) symbol = compiler.lookup(id)
+    def (id: source.Id) termSymbol = compiler.lookup(id).asInstanceOf[TermSymbol]
 
-    def (tree: source.Definition) symbol: tree.symbol = context.get(tree)
-    def (tree: source.Reference) definition: tree.symbol = context.get(tree)
+    def (tree: source.Definition) symbol: tree.symbol = compiler.get(tree)
+    def (tree: source.Reference) definition: tree.symbol = compiler.get(tree)
   }
   def Context(given c: Context): Context = c
 
@@ -200,5 +200,5 @@ class Transformer {
       case body => Val(x, e, body)
     }
   }
-  def Compiler(given c: Context): CompilerContext = c.context
+  def Compiler(given c: Context): CompilerContext = c.compiler
 }

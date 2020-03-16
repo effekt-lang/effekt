@@ -20,11 +20,9 @@ class Typer {
 
   given Assertions
 
-  given (given ctx: Context): CompilerContext = ctx.context
-
-  def run(module: source.ModuleDecl, env: Environment, context: CompilerContext): Unit = {
+  def run(module: source.ModuleDecl, env: Environment, compiler: CompilerContext): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ env.types.values.collect { case e: Effect => e })
-    Context(context, toplevelEffects) in {
+    Context(compiler, toplevelEffects) in {
       // pre-check to allow mutually recursive defs
       module.defs.foreach { d => precheckDef(d) }
       module.defs.foreach { d =>
@@ -240,7 +238,7 @@ class Typer {
   // TODO we can remove this duplication, once every phase can write to every table.
   // then the namer phase can already store the resolved type symbol for the param.
 
-  def resolveValueType(tpe: source.Type)(given Context): ValueType = tpe match {
+  def resolveValueType(tpe: source.ValueType)(given Context): ValueType = tpe match {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id) => t.definition
   }
@@ -390,7 +388,7 @@ class Typer {
   // this requires splitting in context related and Ops-related methods
   // define one XXXAssertions for every phase that requires being mixed with ErrorReporter
   case class Context(
-    context: CompilerContext,
+    compiler: CompilerContext,
     effects: Effects = Pure  // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
   ) {
 
@@ -399,14 +397,14 @@ class Typer {
       case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
         (args1 zip args2) foreach { _ =!= _ }
       case (t1, t2) => if (t1 != t2) {
-        context.error(s"Expected $expected, but got $got")
+        compiler.error(s"Expected $expected, but got $got")
       }
     }
 
     def (a: Effects) <:< (b: Effects): Effects = {
       val forbidden = a -- b
       if (forbidden.nonEmpty) {
-        context.error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
+        compiler.error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
         b
       } else {
         b
@@ -414,18 +412,18 @@ class Typer {
     }
 
     def getValueType(sym: Symbol): ValueType =
-      context.valueType(sym)
+      compiler.valueType(sym)
 
     def getBlockType(sym: Symbol): BlockType =
-      context.blockType(sym)
+      compiler.blockType(sym)
 
     def define(s: Symbol, t: ValueType) = {
-      context.putValue(s, t)
+      compiler.putValue(s, t)
       this
     }
 
     def define(s: Symbol, t: BlockType) = {
-      context.putBlock(s, t)
+      compiler.putBlock(s, t)
       this
     }
 
@@ -448,15 +446,15 @@ class Typer {
     // always first look at the annotated type, then look it up in the dictionary
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => context.blockTypeOrDefault(f,
-        context.abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
+      case None => compiler.blockTypeOrDefault(f,
+        compiler.abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
     }
 
     def in[T](block: (given this.type) => T): T = block(given this)
   }
   def Context(given c: Context): Context = c
-
-  def Compiler(given c: Context): CompilerContext = c.context
+  def Compiler(given c: Context): CompilerContext = c.compiler
+  given (given ctx: Context): CompilerContext = ctx.compiler
 
   // TODO I need to find a way to "delegate" all methods of CompilerContext to context
 }

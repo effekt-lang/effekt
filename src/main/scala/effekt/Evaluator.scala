@@ -69,28 +69,28 @@ class Evaluator {
   // Cache for evaluated modules. This avoids evaluating transitive dependencies multiple times
   val evaluatedModules: Memoiser[CompilationUnit, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
 
-  def run(cu: CompilationUnit, context: CompilerContext) = {
-    val mainSym = cu.exports.terms.getOrElse(mainName, context.abort("Cannot find main function"))
+  def run(cu: CompilationUnit, compiler: CompilerContext) = {
+    val mainSym = cu.exports.terms.getOrElse(mainName, compiler.abort("Cannot find main function"))
     val mainFun = mainSym.asUserFunction
 
     // TODO refactor and convert into checked error
-    val userEffects = context.blockType(mainSym).ret.effects.effs.filterNot { _.builtin }
+    val userEffects = compiler.blockType(mainSym).ret.effects.effs.filterNot { _.builtin }
     if (userEffects.nonEmpty) {
-      context.abort(s"Main has unhandled user effects: ${userEffects}!")
+      compiler.abort(s"Main has unhandled user effects: ${userEffects}!")
     }
 
-    eval(cu, context)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
+    eval(cu, compiler)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
   }
 
-  def eval(unit: CompilationUnit, context: CompilerContext): Map[Symbol, Thunk[Value]] =
+  def eval(unit: CompilationUnit, compiler: CompilerContext): Map[Symbol, Thunk[Value]] =
     evaluatedModules.getOrDefault(unit, {
-      val env = unit.module.imports.foldLeft(builtins(context.config.output())) {
+      val env = unit.module.imports.foldLeft(builtins(compiler.config.output())) {
         case (env, source.Import(path)) =>
-          val mod = context.units(path)
-          val res = eval(mod, context)
+          val mod = compiler.units(path)
+          val res = eval(mod, compiler)
           env ++ res
       }
-      val result = eval(unit.module.defs)(given Context(env, context))
+      val result = eval(unit.module.defs)(given Context(env, compiler))
       evaluatedModules.put(unit, result)
       result
     })
@@ -313,7 +313,7 @@ class Evaluator {
    */
   case class Context(
     env: Map[Symbol, Thunk[Value]],
-    context: CompilerContext
+    compiler: CompilerContext
   ) {
     def get(sym: Symbol): Value =
       env.getOrElse(sym, sys.error("No value found for " + sym)).value
@@ -334,22 +334,22 @@ class Evaluator {
     def extendedWith[T](bindings: List[(Symbol, Value)])(f: (given Context) => T): T =
       f(given copy(env = env ++ bindings.map { case (s, v) => (s, Thunk(v)) }))
 
-    def (tree: source.Definition) symbol: tree.symbol = context.get(tree)
-    def (tree: source.Reference) definition: tree.symbol = context.get(tree)
+    def (tree: source.Definition) symbol: tree.symbol = compiler.get(tree)
+    def (tree: source.Reference) definition: tree.symbol = compiler.get(tree)
 
-    def (id: Id) symbol: Symbol = context.lookup(id)
+    def (id: Id) symbol: Symbol = compiler.lookup(id)
 
     def (v: Value) asBoolean: Boolean = v.asInstanceOf[BooleanValue].value
 
-    def (sym: Symbol) blockType: BlockType = context.blockType(sym)
+    def (sym: Symbol) blockType: BlockType = compiler.blockType(sym)
 
     def (f: Fun) effects: Effects = f.returnType.effects
 
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => context.blockType(f).ret
+      case None => compiler.blockType(f).ret
     }
   }
   def Context(given ctx: Context): Context = ctx
-  def Compiler(given ctx: Context): CompilerContext = ctx.context
+  def Compiler(given ctx: Context): CompilerContext = ctx.compiler
 }
