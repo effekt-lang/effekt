@@ -1,7 +1,6 @@
 package effekt
 package util
 
-
 import scala.collection.mutable
 
 /**

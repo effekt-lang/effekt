@@ -4,46 +4,41 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.source
-import effekt.source.{ Id, IdRef, IdDef, Tree, Def }
+import effekt.source.{ Id, Tree, Def }
 import effekt.source.traversal._
 
 import effekt.symbols._
 
 import effekt.util.scopes._
-import effekt.util.messages.{ MessageBuffer, ErrorReporter }
-
-import org.bitbucket.inkytonik.kiama.util.{ Memoiser }
 
 case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol])
 
-// There is an important distinction between:
-//   - resolving: that is looking up symbols (might include storing the result into the symbolTable)
-//   - binding: that is adding a binding to the environment (lexical.Scope)
-class Namer(driver: Driver, config: EffektConfig) { namer =>
-
-  /**
-   * The output of this phase: a mapping from source identifier to symbol
-   *
-   * It contains both, TermSymbols and TypeSymbols
-   */
-  val symbolTable = new SymbolsDB()
+/**
+ * The output of this phase: a mapping from source identifier to symbol
+ *
+ * It contains both, TermSymbols and TypeSymbols
+ *
+ * There is an important distinction between:
+ *   - resolving: that is looking up symbols (might include storing the result into the symbolTable)
+ *   - binding: that is adding a binding to the environment (lexical.Scope)
+ */
+class Namer { namer =>
 
   // Brings the extension methods of assertions into scope
   given Assertions
 
-  def run(path: String, module: source.ModuleDecl, buffer: MessageBuffer): Environment = {
+  def run(path: String, module: source.ModuleDecl, context: CompilerContext): Environment = {
 
     val topLevelTerms = toplevel[String, TermSymbol](builtins.rootTerms)
     val topLevelTypes = toplevel[String, TypeSymbol](builtins.rootTypes)
 
     val (terms, types) = module.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
-        val Left(cu) = driver.resolve(path, config)
+        val Left(cu) = context.resolve(path)
         (terms.enterWith(cu.exports.terms), types.enterWith(cu.exports.types))
     }
 
-    Context(path, module, module, terms.enter, types.enter, buffer) in {
+    Context(path, module, terms.enter, types.enter, context) in {
       resolve(module)
       Environment(Context.terms.bindings.toMap, Context.types.bindings.toMap)
     }
@@ -76,9 +71,11 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
-      val funSym = symbolTable.get(f)
+      val funSym = Compiler.get(f)
       Context scoped {
-        funSym.tparams.foreach { Context.bind }
+        funSym.tparams.foreach { p =>
+          Context.bind(p)
+        }
         Context.bind(funSym.params)
         resolve(body)
       }
@@ -95,7 +92,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
       resolveAll(clauses)
 
     case source.OpClause(op, params, body, resumeId) =>
-      Context at op in { op.resolveTerm() }
+      Compiler.at(op) { op.resolveTerm() }
       val ps = params.map(resolveValueParams)
       Context scoped {
         Context.bind(ps)
@@ -104,7 +101,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
       }
 
     case source.Clause(op, params, body) =>
-      Context at op in { op.resolveTerm() }
+      Compiler.at(op) { op.resolveTerm() }
       val ps = params.map(resolveValueParams)
       Context scoped {
         Context.bind(ps)
@@ -125,13 +122,13 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
         case b: BlockParam => ()
         case ResumeParam() => ()
         case f: Fun => ()
-        case _ => Context.error("Expected callable")
+        case _ => Compiler.error("Expected callable")
       }
       targs foreach resolveValueType
       resolveAll(args)
 
     case source.Var(id) => id.resolveTerm() match {
-      case b : BlockParam => Context.error("Blocks have to be fully applied and can't be used as values.")
+      case b : BlockParam => Compiler.error("Blocks have to be fully applied and can't be used as values.")
       case other => other
     }
 
@@ -159,13 +156,13 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
     case ps : source.ValueParams => resolveValueParams(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(id.localName, resolveBlockType(tpe))
-      symbolTable.put(id, sym)
+      Compiler.put(id, sym)
       sym
   }
   def resolveValueParams(ps: source.ValueParams)(given Context): List[ValueParam] =
     ps.params map { p =>
       val sym = ValueParam(p.id.localName, p.tpe.map(resolveValueType))
-      symbolTable.put(p.id, sym)
+      Compiler.put(p.id, sym)
       sym
     }
 
@@ -241,7 +238,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
         }
 
       case d @ source.ExternInclude(path) =>
-        d.contents = driver.resolveInclude(Context.path, path, config)
+        d.contents = Compiler.resolveInclude(Context.path, path)
         ()
     }
   }
@@ -256,7 +253,7 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
   def resolveValueType(tpe: source.ValueType)(given Context): ValueType = tpe match {
     case source.TypeApp(id, args) =>
       val data = id.resolveType().asDataType
-      if (data.tparams.size != args.size) { Context.error("Wrong number of arguments to " + data) }
+      if (data.tparams.size != args.size) { Compiler.error("Wrong number of arguments to " + data) }
       TypeApp(data, args.map(resolveValueType))
     case source.TypeVar(id) => id.resolveType().asValueType
   }
@@ -287,19 +284,17 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
   case class Context(
       path: String,
       module: source.ModuleDecl,
-      focus: Tree,
       terms: Scope[String, TermSymbol],
       types: Scope[String, TypeSymbol],
-      buffer: MessageBuffer
-  ) extends ErrorReporter {
-
+      context: CompilerContext
+  ) {
     def (id: Id) := (s: TermSymbol): Unit = {
-      symbolTable.put(id, s)
+      context.put(id, s)
       terms.define(id.name, s)
     }
 
     def (id: Id) := (s: TypeSymbol): Unit = {
-      symbolTable.put(id, s)
+      context.put(id, s)
       types.define(id.name, s)
     }
 
@@ -320,28 +315,27 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
     // lookup and resolve the given id from the environment and
     // store a binding in the symbol table
     def (id: Id) resolveTerm(): TermSymbol = {
-      val sym = terms.lookup(id.name, abort(s"Could not resolve term ${id.name}"))
-      symbolTable.put(id, sym)
+      val sym = terms.lookup(id.name, context.abort(s"Could not resolve term ${id.name}"))
+      context.put(id, sym)
       sym
     }
 
     def (id: Id) resolveType(): TypeSymbol = {
-      val sym = types.lookup(id.name, abort(s"Could not resolve type ${id.name}"))
-      symbolTable.put(id, sym)
+      val sym = types.lookup(id.name, context.abort(s"Could not resolve type ${id.name}"))
+      context.put(id, sym)
       sym
     }
 
     def scoped[R](f: (given Context) => R): R =
       this.copy(terms = terms.enter, types = types.enter) in { f }
 
-    def focusOn(t: Tree) = copy(focus = t)
-
-    def at(node: Tree): Context = copy(focus = node)
-
     def (id: Id) qualifiedName: Name = QualifiedName(module.path, id.name)
     def (id: Id) localName: Name = LocalName(id.name)
+
+    def in[T](block: (given this.type) => T): T = block(given this)
   }
   def Context(given ctx: Context): Context = ctx
+  def Compiler(given ctx: Context): CompilerContext = ctx.context
 
   /**
    * Sets the given tree into focus for error reporting
@@ -349,5 +343,5 @@ class Namer(driver: Driver, config: EffektConfig) { namer =>
    * Also catches runtime exceptions and turns them into messages
    */
   def focusing[T <: Tree, R](f: (given Context) => T => R)(given Context): T => R = t =>
-    Context aborting { Context at t in { f(t) } }
+    Compiler.aborting { Compiler.at(t) { f(t) } }
 }

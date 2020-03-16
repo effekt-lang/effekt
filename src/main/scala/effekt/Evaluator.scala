@@ -1,20 +1,23 @@
 package effekt
 package evaluator
 
-import effekt.typer.Typer
 import effekt.symbols._
 import effekt.symbols.builtins._
+
 import effekt.util.Thunk
 import effekt.util.control
 import effekt.util.control._
+
 import org.bitbucket.inkytonik.kiama.util.Emitter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
-import effekt.source.{ ArgSection, Assign, BlockArg, BooleanLit, Call, Clause, OpClause, DataDef, Def, DefStmt, DoubleLit, EffDef, Expr, ExprStmt, FunDef, Id, If, IntLit, MatchExpr, ModuleDecl, Return, Stmt, StringLit, Tree, TryHandle, UnitLit, ValDef, ValueArgs, Var, VarDef, While }
-import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 
-import scala.collection.mutable
+import effekt.source.{
+  ArgSection, Assign, BlockArg, BooleanLit, Call, OpClause, DataDef, Def,
+  DefStmt, DoubleLit, Expr, ExprStmt, FunDef, Id, If, IntLit, MatchExpr,
+  Return, Stmt, StringLit, Tree, TryHandle, UnitLit, ValDef, ValueArgs, Var,
+  VarDef, While }
 
-class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit]) {
+class Evaluator {
 
   given Assertions
 
@@ -66,31 +69,29 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
   // Cache for evaluated modules. This avoids evaluating transitive dependencies multiple times
   val evaluatedModules: Memoiser[CompilationUnit, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
 
-  def run(cu: CompilationUnit, out: Emitter, buffer: MessageBuffer) = {
-    val mainSym = cu.exports.terms.getOrElse(mainName, sys error "Cannot find main function")
+  def run(cu: CompilationUnit, context: CompilerContext) = {
+    val mainSym = cu.exports.terms.getOrElse(mainName, context.abort("Cannot find main function"))
     val mainFun = mainSym.asUserFunction
 
-    val ctx = Context(mainFun.decl, buffer, cu, Map.empty)
-
     // TODO refactor and convert into checked error
-    val userEffects = types.blockType(mainSym)(given ctx).ret.effects.effs.filterNot { _.builtin }
+    val userEffects = context.blockType(mainSym).ret.effects.effs.filterNot { _.builtin }
     if (userEffects.nonEmpty) {
-      ctx.abort(s"Main has unhandled user effects: ${userEffects}!")
+      context.abort(s"Main has unhandled user effects: ${userEffects}!")
     }
 
-    eval(cu, out, buffer)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
+    eval(cu, context)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
   }
 
-  def eval(cu: CompilationUnit, out: Emitter, buffer: MessageBuffer): Map[Symbol, Thunk[Value]] =
-    evaluatedModules.getOrDefault(cu, {
-      val env = cu.module.imports.foldLeft(builtins(out)) {
+  def eval(unit: CompilationUnit, context: CompilerContext): Map[Symbol, Thunk[Value]] =
+    evaluatedModules.getOrDefault(unit, {
+      val env = unit.module.imports.foldLeft(builtins(context.config.output())) {
         case (env, source.Import(path)) =>
-          val mod = modules(path)
-          val res = eval(mod, out, buffer)
+          val mod = context.units(path)
+          val res = eval(mod, context)
           env ++ res
       }
-      val result = eval(cu.module.defs)(given Context(cu.module, buffer, cu, env))
-      evaluatedModules.put(cu, result)
+      val result = eval(unit.module.defs)(given Context(env, context))
+      evaluatedModules.put(unit, result)
       result
     })
 
@@ -202,7 +203,7 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
     case FunDef(name, _, params, ret, body) =>
       val sym = f.symbol
       val params = collectBinders(sym.params)
-      bindCapabilities(params, types.blockType(sym).ret.effects, body)
+      bindCapabilities(params, Compiler.blockType(sym).ret.effects, body)
   }
 
   val evalStmt: Eval[Stmt, Value] = {
@@ -311,11 +312,9 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
    * For simplicity, we do not separate them -- this is not a problem since symbols are unique.
    */
   case class Context(
-    focus: Tree,
-    buffer: MessageBuffer,
-    unit: CompilationUnit,
-    env: Map[Symbol, Thunk[Value]]
-  ) extends ErrorReporter {
+    env: Map[Symbol, Thunk[Value]],
+    context: CompilerContext
+  ) {
     def get(sym: Symbol): Value =
       env.getOrElse(sym, sys.error("No value found for " + sym)).value
 
@@ -335,21 +334,22 @@ class Evaluator(types: TypesDB, val modules: mutable.Map[String, CompilationUnit
     def extendedWith[T](bindings: List[(Symbol, Value)])(f: (given Context) => T): T =
       f(given copy(env = env ++ bindings.map { case (s, v) => (s, Thunk(v)) }))
 
-    def (tree: source.Definition) symbol: tree.symbol = unit.symbols.get(tree)
-    def (tree: source.Reference) definition: tree.symbol = unit.symbols.get(tree)
+    def (tree: source.Definition) symbol: tree.symbol = context.get(tree)
+    def (tree: source.Reference) definition: tree.symbol = context.get(tree)
 
-    def (id: Id) symbol: Symbol = unit.symbols.lookup(id)
+    def (id: Id) symbol: Symbol = context.lookup(id)
 
     def (v: Value) asBoolean: Boolean = v.asInstanceOf[BooleanValue].value
 
-    def (sym: Symbol) blockType: BlockType = types.blockType(sym)(given this)
+    def (sym: Symbol) blockType: BlockType = context.blockType(sym)
 
     def (f: Fun) effects: Effects = f.returnType.effects
 
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => types.blockType(f)(given this).ret
+      case None => context.blockType(f).ret
     }
   }
   def Context(given ctx: Context): Context = ctx
+  def Compiler(given ctx: Context): CompilerContext = ctx.context
 }

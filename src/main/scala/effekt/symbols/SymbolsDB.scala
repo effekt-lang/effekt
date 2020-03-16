@@ -5,12 +5,10 @@ import source.Id
 
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
-import scala.quoted.{ Type => TypeTag }
-
 /**
  * The *global* symbol database (across modules)
  */
-class SymbolsDB {
+trait SymbolsDB {
 
   given Assertions
 

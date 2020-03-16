@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.source.{ Def, ValDef, VarDef, FunDef, EffDef }
+import effekt.source.{ Def, ValDef, VarDef, FunDef }
 
 /**
  * The symbol table contains things that can be pointed to:

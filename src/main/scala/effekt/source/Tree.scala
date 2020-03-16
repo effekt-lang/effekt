@@ -185,7 +185,7 @@ object traversal {
       case t: Tree => traverse(t)
       case other => all(traverse)(other)
     }
-    case t: Traversable[t] => t.foreach(all(traverse))
+    case t: Iterable[t] => t.foreach(all(traverse))
     case leaf => ()
   }
 
@@ -196,7 +196,7 @@ object traversal {
       case (r, t: Tree) => f(t)(r)
       case (r, other) => foldAll(f)(other)(r)
     }
-    case t: Traversable[_] => r => t.foldLeft(r) { (r, t) => foldAll(f)(t)(r) }
+    case t: Iterable[_] => r => t.foldLeft(r) { (r, t) => foldAll(f)(t)(r) }
     case leaf => r => r
   }
 }

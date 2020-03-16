@@ -7,18 +7,15 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.namer.{ Environment, Namer }
 import effekt.typer.Typer
 import effekt.evaluator.Evaluator
-import effekt.source.Id
-import effekt.core.JavaScript
-import effekt.core.{ LiftInference, Transformer }
+import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
-import effekt.symbols.{ builtins, BlockSymbol, BlockType, Effectful, Fun, QualifiedName, Symbol, TermSymbol, TypesDB, SymbolsDB, moduleFile }
+import effekt.symbols.{ builtins, TypesDB, SymbolsDB, moduleFile }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.parsing.ParseResult
 import org.bitbucket.inkytonik.kiama.util._
 import org.rogach.scallop._
 
-import scala.collection.mutable
 import java.io.File
 
 class EffektConfig(args : Seq[String]) extends Config(args) {
@@ -48,16 +45,41 @@ class EffektConfig(args : Seq[String]) extends Config(args) {
   validateFilesIsDirectory(includes)
 }
 
+/**
+ * The result of running the frontend on a module.
+ * Symbols and types are stored globally in CompilerContext.
+ */
 case class CompilationUnit(
   source: Source,
   module: ModuleDecl,
-  symbols: SymbolsDB,
   exports: Environment,
   messages: Messages
 )
 
+/**
+ * The compiler context consists of
+ * - configuration (immutable)
+ * - symbols (mutable database)
+ * - types (mutable database)
+ * - error reporting (mutable focus)
+ */
+class CompilerContext(
+  var focus: Tree,
+  val config: EffektConfig,
+  val process: Source => Either[CompilationUnit, Messages]
+) extends ErrorReporter with TypesDB with SymbolsDB with ModuleDB {
+  val buffer: MessageBuffer = new MessageBuffer
 
-trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
+  def at[T](t: Tree)(block: => T): T = {
+    val before = focus
+    focus = t;
+    val res = block;
+    focus = before;
+    res
+  }
+}
+
+trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver =>
 
   val name = "effekt"
 
@@ -83,66 +105,80 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
     parsers.parseAll(parsers.program, source)
   }
 
-  // - tries to find a file in the workspace, that matches the import path
-  // - if compile is enabled, it will use publishProduct to write the compiled js file
-  // - CompilationUnits are cached by path
-  lazy val compilationCache = mutable.Map.empty[String, CompilationUnit]
-
-  lazy val typesDB = new TypesDB().populate(builtins.rootTerms.values)
-
-  def resolveInclude(modulePath: String, path: String, config: EffektConfig): String = {
-    val p = new File(modulePath).toPath.getParent.resolve(path).toFile
-
-    if (!p.exists()) { sys error s"Missing include: ${p}" }
-    FileSource(p.getCanonicalPath).content
-  }
-
-  def resolve(path: String, config: EffektConfig): Either[CompilationUnit, Messages] =
-    compilationCache.get(path).map(cu => Left(cu)).getOrElse {
-      val source = findSource(path, config).getOrElse { sys error s"Cannot find source for $path" }
-      makeast(source, config) match {
-        case Left(ast) => frontend(source, ast, config) match {
-          case Left(cu) =>
-            compilationCache.update(path, cu)
-            if (config.compile()) { backend(cu, config) }
-            Left(cu)
-          case Right(msgs) => Right(msgs)
-        }
-        case Right(msgs) => Right(msgs)
-      }
-    }
-
-  def findSource(path: String, config: EffektConfig): Option[Source] = {
-    val filename = path + ".effekt"
-    config.includes().map { p => p.toPath.resolve(filename).toFile }.collectFirst {
-      case file if file.exists => FileSource(file.getCanonicalPath)
-    }
-  }
-
-  def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Either[CompilationUnit, Messages] = {
+  def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[CompilationUnit, Messages] = {
 
     /**
      * The different phases
      */
-    object namer extends Namer(this, config)
-    object typer extends Typer(given typesDB, namer.symbolTable)
-    object messageBuffer extends MessageBuffer
+    object namer extends Namer
+    object typer extends Typer
+
+    val buffer = context.buffer
 
     try {
-      val env = namer.run(source.name, ast, messageBuffer)
-      typer.run(ast, env, messageBuffer)
+      val exports = namer.run(source.name, ast, context)
+      typer.run(ast, exports, context)
 
-      if (messageBuffer.hasErrors) {
-        Right(messageBuffer.get)
+      // TODO improve error reporting code
+      if (buffer.hasErrors) {
+        Right(buffer.get)
       } else {
-        Left(CompilationUnit(source, ast, namer.symbolTable, env, messageBuffer.get))
+        Left(CompilationUnit(source, ast, exports, buffer.get))
       }
     } catch {
       case FatalPhaseError(msg, reporter) =>
         reporter.error(msg)
-        Right(messageBuffer.get)
+        Right(buffer.get)
     }
   }
+
+  def backend(unit: CompilationUnit, context: CompilerContext): Unit = {
+    object transformer extends Transformer
+    object js extends JavaScript
+    object messageBuffer extends MessageBuffer
+
+    val translated = transformer.run(unit, context)
+    // TODO report errors here
+
+    val out = context.config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
+    println("Writing compiled Javascript to " + out)
+    IO.createFile(out.getCanonicalPath, js.format(translated).layout)
+  }
+
+
+  def process(source: Source, ast: ModuleDecl, config: EffektConfig) = {
+
+    lazy val context: CompilerContext = CompilerContext(ast, config, source => process(source, context))
+
+    context.populate(builtins.rootTerms.values)
+    process(source, ast, context) match {
+      case Left(unit) if config.compile() =>
+        copyPrelude(config)
+      case Left(unit) =>
+        object evaluator extends Evaluator
+        evaluator.run(unit, context)
+
+      case Right(msgs) =>
+        messaging.report(source, msgs, config.output())
+    }
+  }
+
+  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[CompilationUnit, Messages] = {
+    frontend(source, ast, context) match {
+      case Left(unit) if context.config.compile() =>
+        // TODO maybe this is a problem since the unit needs to be written to the compilation cache (units)
+        //      first, before running backend.
+        backend(unit, context)
+        Left(unit)
+      case result => result
+    }
+  }
+
+  def process(source: Source, context: CompilerContext): Either[CompilationUnit, Messages] =
+    makeast(source, context.config) match {
+      case Left(ast) => process(source, ast, context)
+      case Right(msgs) => Right(msgs)
+    }
 
   def copyPrelude(config: EffektConfig): Unit = {
     val preludeFile = config.outputPath().toPath.resolve("effekt.js").toFile
@@ -152,33 +188,6 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] {
       IO.createFile(preludeFile.getCanonicalPath, prelude)
     }
   }
-
-  def backend(unit: CompilationUnit, config: EffektConfig): Unit = {
-    object transformer extends Transformer(typesDB)
-    object js extends JavaScript
-    object messageBuffer extends MessageBuffer
-    val translated = transformer.run(unit, messageBuffer)
-    // TODO report errors here
-
-    val out = config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
-    println("Writing compiled Javascript to " + out)
-    IO.createFile(out.getCanonicalPath, js.format(translated).layout)
-  }
-
-
-  def process(source: Source, ast: ModuleDecl, config: EffektConfig) =
-    frontend(source, ast, config) match {
-      case Left(unit) if config.compile() =>
-        copyPrelude(config)
-        backend(unit, config)
-      case Left(unit) =>
-        object messageBuffer extends MessageBuffer
-        object evaluator extends Evaluator(typesDB, compilationCache)
-        evaluator.run(unit, config.output(), messageBuffer)
-        // TODO report runtime errors correctly
-      case Right(msgs) =>
-        messaging.report(source, msgs, config.output())
-    }
 
   def format(m: ModuleDecl) : Document = ???
 }

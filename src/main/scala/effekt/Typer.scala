@@ -4,14 +4,10 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.source.{ Tree, Expr, Id, Stmt, Def, FunDef }
+import effekt.source.{ Tree, Expr, Stmt, Def }
 import effekt.namer.Environment
 import effekt.symbols._
 import effekt.symbols.builtins._
-
-import effekt.util.messages.{ MessageBuffer, ErrorReporter }
-
-import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 // We add a dependency to driver to resolve types of symbols from other modules
 /**
@@ -20,21 +16,23 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
    *   - Functions
    *   - Resumptions
    */
-class Typer(given types: TypesDB, symbols: SymbolsDB) {
-
-  import symbols._
+class Typer {
 
   given Assertions
 
-  def run(module: source.ModuleDecl, env: Environment, buffer: MessageBuffer): Unit = {
+  given (given ctx: Context): CompilerContext = ctx.context
+
+  def run(module: source.ModuleDecl, env: Environment, context: CompilerContext): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ env.types.values.collect { case e: Effect => e })
-    Context(module, buffer, toplevelEffects) in {
+    Context(context, toplevelEffects) in {
       // pre-check to allow mutually recursive defs
       module.defs.foreach { d => precheckDef(d) }
       module.defs.foreach { d =>
         val (_ / effs) = synthDef(d)
         if (effs.nonEmpty)
-          Context.at(d).error("Unhandled effects: " + effs)
+          Compiler.at(d) {
+            Compiler.error("Unhandled effects: " + effs)
+          }
       }
     }
   }
@@ -60,11 +58,11 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       TUnit / (condEffs ++ blockEffs)
 
     case v : source.Var =>
-      Context.getValueType(v.definition) / Pure
+      Compiler.valueType(v.definition) / Pure
 
     case e @ source.Assign(id, expr) =>
       e.definition.asVarBinder // assert that it is a mutable variable
-      val (_ / eff) = expr checkAgainst Context.getValueType(e.definition)
+      val (_ / eff) = expr checkAgainst Compiler.valueType(e.definition)
       TUnit / eff
 
     case c @ source.Call(fun, targs, args) =>
@@ -81,7 +79,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
       if (notCovered.nonEmpty) {
         val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-        Context.error(s"Missing definitions for effect operations: ${explanation}")
+        Compiler.error(s"Missing definitions for effect operations: ${explanation}")
       }
 
       var handlerEffs = Pure
@@ -90,11 +88,11 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
         case d @ source.OpClause(op, params, body, resume) =>
           val effectOp = d.definition
           val effect = effectOp.effect
-          val bt = Context.getBlockType(effectOp)
+          val bt = Compiler.blockType(effectOp)
           val ps = checkAgainstDeclaration(op.name, bt.params, params)
           val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
 
-          Context.define(ps).define(symbols.lookup(resume), resumeType) in {
+          Context.define(ps).define(Compiler.lookup(resume), resumeType) in {
               val (_ / heffs) = body checkAgainst ret
               handlerEffs = handlerEffs ++ heffs
             }
@@ -115,7 +113,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       val notCovered = cases -- covered
 
       if (notCovered.nonEmpty) {
-        Context.error(s"Missing cases: ${notCovered}")
+        Compiler.error(s"Missing cases: ${notCovered}")
       }
 
       val tpes = clauses.map {
@@ -182,20 +180,20 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
-  def precheckDef(d: Def)(given Context): Unit = Context at d in { d match {
+  def precheckDef(d: Def)(given Context): Unit = Compiler.at(d) { d match {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
-      d.symbol.ret.foreach { annot => types.putBlock(d.symbol, d.symbol.toType) }
+      d.symbol.ret.foreach { annot => Compiler.putBlock(d.symbol, d.symbol.toType) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      types.putBlock(d.symbol, d.symbol.toType)
+      Compiler.putBlock(d.symbol, d.symbol.toType)
 
     case d @ source.EffDef(id, tparams, params, ret) =>
-      d.symbol.ops.foreach { op => types.putBlock(op, op.toType) }
+      d.symbol.ops.foreach { op => Compiler.putBlock(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        types.putBlock(sym, sym.toType)
+        Compiler.putBlock(sym, sym.toType)
       }
 
     case d => ()
@@ -214,7 +212,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
           case None =>
             val (tpe / effs) = checkStmt(None)(body)
             effs <:< Context.effects // check they are in scope
-            types.putBlock(sym, sym.toType(tpe / effs))
+            Compiler.putBlock(sym, sym.toType(tpe / effs))
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
       }
@@ -256,7 +254,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     case BlockParam(_, tpe) => tpe
     case ps: List[ValueParam] => ps map {
       case ValueParam(_, Some(tpe)) => tpe
-      case _ => Context.abort("Cannot extract type")
+      case _ => Compiler.abort("Cannot extract type")
     }
   }
 
@@ -270,12 +268,12 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     atCaller: List[source.ParamSection])(given Context): Map[Symbol, Type] = {
 
     if (atCallee.size != atCaller.size)
-      Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
+      Compiler.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
 
     // TODO add blockparams here!
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
       case (b1: BlockType, b2: source.BlockParam) =>
-        Context.abort("not yet supported")
+        Compiler.abort("not yet supported")
         ???
 
       case (ps1: List[ValueType], source.ValueParams(ps2)) =>
@@ -291,10 +289,10 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
 
   def checkCall(expected: Option[Type])(sym: Symbol, targs: List[ValueType], args: List[source.ArgSection])(given Context): Effectful = {
 
-    val BlockType(tparams, params, ret / retEffs) = Context.getBlockType(sym)
+    val BlockType(tparams, params, ret / retEffs) = Compiler.blockType(sym)
 
     if (targs.nonEmpty && targs.size != tparams.size)
-      Context.abort(s"Wrong number of type arguments ${targs.size}")
+      Compiler.abort(s"Wrong number of type arguments ${targs.size}")
 
     var unifier: Unifier = Unifier(tparams, if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty })
 
@@ -303,13 +301,13 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     var effs = retEffs
 
     if (params.size != args.size)
-      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
+      Compiler.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
     // TODO we can improve the error positions here
     (params zip args) foreach {
       case (ps : List[ValueType], source.ValueArgs(as)) =>
         if (ps.size != as.size)
-          Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
+          Compiler.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
         (ps zip as) foreach {
           case (tpe, expr) =>
@@ -342,7 +340,7 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
         }
 
       case (_, _) =>
-        Context.error("Wrong type of argument section")
+        Compiler.error("Wrong type of argument section")
     }
 
     // check that unifier found a substitution for each tparam
@@ -362,8 +360,8 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
   type Checker[T <: Tree] = T => (given Context) => Effectful
 
   def checkAgainst[T <: Tree](expected: Option[Type])(f: Checker[T]): Checker[T] = t => {
-    Context at t in {
-      Context.aborting {
+    Compiler.at(t) {
+      Compiler.aborting {
         val (got / effs) = f(t)
         expected map { got =!= _ }
         got / effs
@@ -372,8 +370,8 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
   }
 
   def checking[T <: Tree](f: Checker[T]): Checker[T] = t => {
-    Context at t in {
-      Context.aborting {
+    Compiler.at(t) {
+      Compiler.aborting {
         f(t)
       }
     }
@@ -392,24 +390,23 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
   // this requires splitting in context related and Ops-related methods
   // define one XXXAssertions for every phase that requires being mixed with ErrorReporter
   case class Context(
-    focus: Tree,              // current type checking position
-    buffer: MessageBuffer,
-    effects: Effects = Pure   // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
-  ) extends ErrorReporter {
+    context: CompilerContext,
+    effects: Effects = Pure  // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
+  ) {
 
     // TODO does this correctly compare List[Int] with List[Int]?
     def (got: Type) =!= (expected: Type): Unit = (got, expected) match {
       case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
         (args1 zip args2) foreach { _ =!= _ }
       case (t1, t2) => if (t1 != t2) {
-        error(s"Expected $expected, but got $got")
+        context.error(s"Expected $expected, but got $got")
       }
     }
 
     def (a: Effects) <:< (b: Effects): Effects = {
       val forbidden = a -- b
       if (forbidden.nonEmpty) {
-        error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
+        context.error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
         b
       } else {
         b
@@ -417,18 +414,18 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     }
 
     def getValueType(sym: Symbol): ValueType =
-      types.valueType(sym)(given this)
+      context.valueType(sym)
 
     def getBlockType(sym: Symbol): BlockType =
-      types.blockType(sym)(given this)
+      context.blockType(sym)
 
     def define(s: Symbol, t: ValueType) = {
-      types.putValue(s, t)(given this)
+      context.putValue(s, t)
       this
     }
 
     def define(s: Symbol, t: BlockType) = {
-      types.putBlock(s, t)(given this)
+      context.putBlock(s, t)
       this
     }
 
@@ -444,8 +441,6 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
       case s @ BlockParam(name, tpe) => List(s -> tpe)
     }.toMap)
 
-    def at(node: Tree): Context = copy(focus = node)
-
     def withEffect(e: Effect): Context = this.copy(effects = effects + e)
 
     def current: Context = this
@@ -453,9 +448,15 @@ class Typer(given types: TypesDB, symbols: SymbolsDB) {
     // always first look at the annotated type, then look it up in the dictionary
     def (f: Fun) returnType: Effectful = f.ret match {
       case Some(t) => t
-      case None => types.blockTypeOrDefault(f,
-        abort(s"Result type of recursive function ${f.name} needs to be annotated"))(given this).ret
+      case None => context.blockTypeOrDefault(f,
+        context.abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
     }
+
+    def in[T](block: (given this.type) => T): T = block(given this)
   }
   def Context(given c: Context): Context = c
+
+  def Compiler(given c: Context): CompilerContext = c.context
+
+  // TODO I need to find a way to "delegate" all methods of CompilerContext to context
 }

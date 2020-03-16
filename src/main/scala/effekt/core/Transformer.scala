@@ -11,17 +11,17 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 object Wildcard extends Symbol { val name = LocalName("_") }
 
-class Transformer(types: TypesDB) {
+class Transformer {
 
   given Assertions
 
-  def run(unit: CompilationUnit, buffer: MessageBuffer): ModuleDecl = {
+  def run(unit: CompilationUnit, context: CompilerContext): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = unit.module
     val exports: Stmt = Exports(path, unit.exports.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
     }.toList)
 
-    val ctx = Context(unit, buffer)
+    val ctx = Context(context)
 
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) { case (d, r) =>
       transform(d, r)(given ctx)
@@ -123,7 +123,7 @@ class Transformer(types: TypesDB) {
         case _ => Pure
       }
 
-      val BlockType(tparams, params, ret / effs) = types.blockType(sym)
+      val BlockType(tparams, params, ret / effs) = Compiler.blockType(sym)
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation
@@ -175,20 +175,18 @@ class Transformer(types: TypesDB) {
     } yield ev :: rv
   }
 
-  case class Context(unit: CompilationUnit, buffer: MessageBuffer) extends ErrorReporter {
-    // TODO maybe improve positions
-    val focus = unit.module
+  case class Context(context: CompilerContext) {
 
     def (f: Fun) effects = (f.ret match {
       case Some(t) => t
-      case None => types.blockType(f)(given this).ret
+      case None => context.blockType(f).ret
     }).effects.effs
 
-    def (id: source.Id) symbol = unit.symbols.lookup(id)
-    def (id: source.Id) termSymbol = unit.symbols.lookup(id).asInstanceOf[TermSymbol]
+    def (id: source.Id) symbol = context.lookup(id)
+    def (id: source.Id) termSymbol = context.lookup(id).asInstanceOf[TermSymbol]
 
-    def (tree: source.Definition) symbol: tree.symbol = unit.symbols.get(tree)
-    def (tree: source.Reference) definition: tree.symbol = unit.symbols.get(tree)
+    def (tree: source.Definition) symbol: tree.symbol = context.get(tree)
+    def (tree: source.Reference) definition: tree.symbol = context.get(tree)
   }
   def Context(given c: Context): Context = c
 
@@ -202,4 +200,5 @@ class Transformer(types: TypesDB) {
       case body => Val(x, e, body)
     }
   }
+  def Compiler(given c: Context): CompilerContext = c.context
 }
