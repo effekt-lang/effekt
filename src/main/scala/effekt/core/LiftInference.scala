@@ -1,9 +1,6 @@
 package effekt
 package core
 
-import effekt.typer.Typer
-import effekt.util.control
-import effekt.util.control._
 import effekt.symbols.Symbol
 
 class LiftInference {

@@ -42,10 +42,10 @@ def handledTriple(n : Int, s : Int) =
     // but how can we tell functions like `triple` apart from capabilities?
     // what if a local function closes over some capabilities and receives a few others?
     // what if that function is used under a handler?
-    try { Cons(triple(n, s), Nil[Triple]()) } handle {
+    try { Cons(triple(n, s), Nil[Triple]()) } with {
       case Fail() => Nil[Triple]()
     }
-  } handle {
+  } with {
     case Flip() => concat(resume(true), resume(false))
   }
 def main() = println(show(handledTriple(10, 15)))

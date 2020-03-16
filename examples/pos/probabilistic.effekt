@@ -39,7 +39,7 @@ effect Put(r: Ref, v: Var): Unit
 def heap[R] { prog: R / { New, Get, Put } } = {
   var cells: List[Var] = Nil();
   var n = 0;
-  try { prog() } handle {
+  try { prog() } with {
     case New(v) => { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
     case Get(r) => r match {
       case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
@@ -76,10 +76,10 @@ def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
     try {
       val res = prog();
       Cons(MkWeighted(current, res), empty)
-    } handle {
+    } with {
       case Score(p) => { current = mulDouble(current, p); resume(()) }
     }
-  } handle {
+  } with {
     case Fork() => concat(resume(true), resume(false))
     case Fail() => empty
   }
@@ -89,7 +89,7 @@ def fresh(): Ref / New = do New(Unobserved())
 
 def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
   val input = fresh();
-  try { do Put(prog(input), Observed(expected)) } handle {
+  try { do Put(prog(input), Observed(expected)) } with {
     case Flip(p) => {
       val res: Ref = fresh();
       resume(res);
@@ -157,7 +157,7 @@ def heapTest() = heap {
 
 def catch[R] { p: R / IndexOutOfBounds }: Unit / Console = try {
   p(); ()
-} handle {
+} with {
   case IndexOutOfBounds() => println("Index out of bounds!")
 }
 

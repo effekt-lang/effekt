@@ -5,7 +5,7 @@ effect Flip(): Boolean
 effect MyPrint(n: Int): Unit
 
 def flipTrue { prog: Unit / Flip }: Unit =
-  try { prog() } handle {
+  try { prog() } with {
     case Flip() => { resume(true); resume(false) }
   }
 
@@ -21,7 +21,7 @@ def main(): Unit / { Console } = {
       }
     }
 
-  } handle {
+  } with {
     case MyPrint(n: Int) => println(n)
   }
 }

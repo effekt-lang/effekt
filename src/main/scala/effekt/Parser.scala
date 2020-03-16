@@ -47,6 +47,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val `type` = keyword("type")
   lazy val `effect` = keyword("effect")
   lazy val `try` = keyword("try")
+  lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
   lazy val `yield` = keyword("yield")
@@ -62,7 +63,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
 
   def keywordStrings : List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "case", "do", "yield", "if", "while", "match", "module", "import", "extern")
+    "effect", "try", "with", "case", "do", "yield", "if", "while", "match", "module", "import", "extern")
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
@@ -287,7 +288,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
     `resume` ~/> valueArgs ^^ { args => Call(IdRef("resume"), Nil, List(args)) }
 
   lazy val handleExpr: P[Expr] =
-    (`try` ~/> stmt <~ `handle` ~ `{`) ~ (some(opClause) <~ `}`) ^^ TryHandle
+    (`try` ~/> stmt <~ `with` ~ `{`) ~ (some(opClause) <~ `}`) ^^ TryHandle
 
   lazy val clause: P[Clause] =
     (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ Clause

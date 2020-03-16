@@ -41,7 +41,7 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     var inn = s;
     try {
       p()
-    } handle {
+    } with {
       case Next() => inn match {
         case EOS() => { do Fail[R]("Unexpected EOS") }
         case Cons(el, rest) => {
@@ -54,7 +54,7 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
 
 def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
   Success(p())
-} handle {
+} with {
   case Flip() => resume(true) match {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
@@ -65,12 +65,12 @@ def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
 }
 
 def commit[R] { p : R / Fail } : R / Error =
-  try { p() } handle {
+  try { p() } with {
     case Fail(msg) => { do Error[R](msg) }
   }
 
 def nocut[R] { p: R / Error } : R / Fail =
-  try { p() } handle {
+  try { p() } with {
     case Error(msg) => { do Fail[R](msg) }
   }
 

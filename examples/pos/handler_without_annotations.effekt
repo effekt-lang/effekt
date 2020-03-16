@@ -2,6 +2,6 @@ module handler_without_annotations
 
 effect Emit(n: Int): Unit
 
-def main() = try { () } handle {
+def main() = try { () } with {
   case Emit(n) => resume(())
 }

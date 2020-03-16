@@ -17,7 +17,7 @@ def genlist { f: Int / Done } : List = {
   var l = Nil();
   try {
     while (true) { l = Cons(f(), l) }
-  } handle {
+  } with {
     case Done() => ()
   };
   l
@@ -46,7 +46,7 @@ def main() = {
 
     try {
         println(first(Cons(42, Nil())))
-    } handle {
+    } with {
         case NoSuchElement() => ()
     }
 }

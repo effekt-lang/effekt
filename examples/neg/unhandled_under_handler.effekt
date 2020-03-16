@@ -10,7 +10,7 @@ def main(): Unit / { Console } = {
   try {
     do Flip();
     ()
-  } handle {
+  } with {
     case MyPrint(n: Int) => resume(())
   }
 }
