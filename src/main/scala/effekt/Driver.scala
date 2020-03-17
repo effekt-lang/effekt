@@ -3,20 +3,18 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.{ Expr, ModuleDecl, Tree }
 import effekt.namer.{ Environment, Namer }
 import effekt.typer.Typer
 import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
 import effekt.symbols.{ builtins, moduleFile }
-
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.Messages
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util._
-
 import org.rogach.scallop._
 import java.io.File
 
@@ -185,7 +183,8 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 trait LSPServer extends Driver {
 
   import effekt.symbols._
-  import effekt.source.{ Reference, Definition }
+  import effekt.source.{ Reference, Definition, Id }
+
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
   def getInfoAt(position: Position): Option[(Vector[Tree], CompilationUnit)] = for {
@@ -195,7 +194,14 @@ trait LSPServer extends Driver {
       (t1, t2) =>
         val p1 = positions.getStart(t1).get
         val p2 = positions.getStart(t2).get
-        p2 < p1
+
+        if (p2 == p1) {
+          val p1end = positions.getFinish(t1).get
+          val p2end = positions.getFinish(t2).get
+          p2end < p1end
+        } else {
+          p2 < p1
+        }
     }
   } yield (nodes, unit)
 
@@ -211,15 +217,33 @@ trait LSPServer extends Driver {
 
   override def getHover(position : Position): Option[String] = for {
     (trees, unit) <- getInfoAt(position)
-    sym <- trees.collectFirst {
-      case d: Definition => context.get(d)
-      case r: Reference => context.get(r)
-    }
-    tpe = sym match {
-      case b: BuiltinFunction => b.toType
-      case s: ValueSymbol => context.valueType(s)
-      case b: BlockSymbol => context.blockType(b)
-      case other => sys error other.toString
+
+    tpe <- trees.collectFirst {
+      // TODO the symbols should be attached to the Id, not the parent Call(id, ...) or Clause(id, ...)
+      // as it is at the moment
+//      case id: Id if context.get(id).isDefined =>
+//        context.get(id).get match {
+//          case b: BuiltinFunction => b.toType
+//          case s: ValueSymbol => context.valueType(s)
+//          case b: BlockSymbol => context.blockType(b)
+//          case other => sys error other.toString
+//        }
+      case d: Definition =>
+        context.get(d) match {
+          case b: BuiltinFunction => b.toType
+          case s: ValueSymbol => context.valueType(s)
+          case b: BlockSymbol => context.blockType(b)
+          case other => sys error other.toString
+        }
+      case d: Reference =>
+        context.get(d) match {
+          case b: BuiltinFunction => b.toType
+          case s: ValueSymbol => context.valueType(s)
+          case b: BlockSymbol => context.blockType(b)
+          case other => sys error other.toString
+        }
+      case e: Expr if context.annotation(e).isDefined =>
+        context.annotation(e).get
     }
   } yield tpe.toString
 

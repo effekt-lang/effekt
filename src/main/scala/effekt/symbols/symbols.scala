@@ -101,8 +101,8 @@ package object symbols {
       }.mkString("")
 
       tparams match {
-        case Nil => s"$ps => $ret"
-        case tps => s"[${ tps.map { _.toString }.mkString(", ") }] $ps => $ret"
+        case Nil => s"$ps ⟹ $ret"
+        case tps => s"[${ tps.map { _.toString }.mkString(", ") }] $ps ⟹ $ret"
       }
     }
   }
@@ -135,7 +135,10 @@ package object symbols {
 
     def contains(e: Effect): Boolean = effs.contains(e)
 
-    override def toString: String = s"{${effs.mkString(", ")}}"
+    override def toString: String = effs match {
+      case eff :: Nil => eff.toString
+      case effs => s"{ ${effs.mkString(", ")} }"
+    }
   }
 
   object / {
@@ -143,7 +146,7 @@ package object symbols {
   }
   val Pure = Effects(Nil)
   case class Effectful(tpe: ValueType, effects: Effects) {
-    override def toString = s"$tpe / $effects"
+    override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
   }
 
 

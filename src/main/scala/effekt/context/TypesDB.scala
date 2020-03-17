@@ -1,11 +1,16 @@
 package effekt
 package context
 
+import effekt.source.Tree
 import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, Effectful, Fun, Symbol, ValueSymbol, ValueType }
 import effekt.util.messages.ErrorReporter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 trait TypesDB { self: ErrorReporter =>
+
+  // used by LSP server
+  private val types  = Memoiser.makeIdMemoiser[Tree, Effectful]()
+
   private val values = Memoiser.makeIdMemoiser[ValueSymbol, ValueType]()
   private val blocks = Memoiser.makeIdMemoiser[BlockSymbol, BlockType]()
 
@@ -35,6 +40,9 @@ trait TypesDB { self: ErrorReporter =>
     case b: ValueSymbol => values.put(b, tpe)
     case _ => abort(s"Trying to store a value type for non value '${s}'")
   }
+
+  def annotate(t: Tree, eff: Effectful) = types.put(t, eff)
+  def annotation(t: Tree): Option[Effectful] = types.get(t)
 
   def (f: Fun) returnType: Effectful = f.ret match {
     case Some(t) => t

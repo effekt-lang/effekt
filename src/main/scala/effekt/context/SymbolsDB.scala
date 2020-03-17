@@ -18,6 +18,7 @@ trait SymbolsDB {
   // =======================================
   // these lookups might fail
   def lookup(id: Id): Symbol = symbols(id)
+  def get(id: Id): Option[Symbol] = symbols.get(id)
 
   // this one can fail!
   def (tree: source.Reference) definition: tree.symbol =

@@ -374,6 +374,7 @@ class Typer extends Phase { typer =>
     Compiler.at(t) {
       val (got / effs) = f(t)
       expected map { got =!= _ }
+      Compiler.annotate(t, got / effs)
       got / effs
     }
   }
