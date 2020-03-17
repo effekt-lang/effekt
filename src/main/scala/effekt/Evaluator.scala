@@ -129,7 +129,7 @@ class Evaluator {
       case op: EffectOp =>
         val effect = op.effect
         val handler = Context.handler(effect)
-        val BlockType(_, params, ret / effs) = op.blockType
+        val BlockType(_, params, ret / effs) = Compiler.blockType(op)
 
         evalArgSections(params, args).flatMap { argv =>
           use(handler.prompt) { k =>
@@ -141,7 +141,7 @@ class Evaluator {
         }
 
       case sym =>
-        val BlockType(_, params, ret / effs) = sym.blockType
+        val BlockType(_, params, ret / effs) = Compiler.blockType(sym)
         evalArgSections(params, args).flatMap { argv =>
           supplyCapabilities(Context.closure(sym), argv, effs)
         }
@@ -153,7 +153,7 @@ class Evaluator {
 
       val cs = clauses.map {
         case op @ OpClause(id, params, body, resume) =>
-          val ps = params.flatMap { _.params.map(_.symbol) } :+ resume.symbol
+          val ps = params.flatMap { _.params.map(_.symbol) } :+ Compiler.lookup(resume)
           val impl: List[Value] => control.Control[Value] = args =>
             Context.extendedWith(ps zip args) { evalStmt(body) }
           (op.definition, impl)
@@ -314,17 +314,10 @@ class Evaluator {
     compiler: CompilerContext
   ) {
     def get(sym: Symbol): Value =
-      env.getOrElse(sym, sys.error("No value found for " + sym)).value
+      env.getOrElse(sym, compiler.abort("No value found for " + sym)).value
 
     def bindAll(bindings: Map[Symbol, Thunk[Value]]): Context =
       copy(env = env ++ bindings)
-
-    def closure(name: Symbol) = get(name).asInstanceOf[Closure]
-
-    def handler(name: Symbol) = get(name).asInstanceOf[Handler]
-
-    def extendedWith[T](sym: Symbol, value: Thunk[Value])(f: (given Context) => T): T =
-      f(given copy(env = env + (sym -> value)))
 
     def extendedWith[T](sym: Symbol, value: Value)(f: (given Context) => T): T =
       extendedWith(List(sym -> value))(f)
@@ -332,21 +325,14 @@ class Evaluator {
     def extendedWith[T](bindings: List[(Symbol, Value)])(f: (given Context) => T): T =
       f(given copy(env = env ++ bindings.map { case (s, v) => (s, Thunk(v)) }))
 
-    def (tree: source.Definition) symbol: tree.symbol = compiler.get(tree)
-    def (tree: source.Reference) definition: tree.symbol = compiler.get(tree)
+    def closure(name: Symbol) = get(name).asInstanceOf[Closure]
 
-    def (id: Id) symbol: Symbol = compiler.lookup(id)
+    def handler(name: Symbol) = get(name).asInstanceOf[Handler]
 
     def (v: Value) asBoolean: Boolean = v.asInstanceOf[BooleanValue].value
 
-    def (sym: Symbol) blockType: BlockType = compiler.blockType(sym)
+    def (f: Fun) effects: Effects = compiler.returnType(f).effects
 
-    def (f: Fun) effects: Effects = f.returnType.effects
-
-    def (f: Fun) returnType: Effectful = f.ret match {
-      case Some(t) => t
-      case None => compiler.blockType(f).ret
-    }
   }
   def Context(given ctx: Context): Context = ctx
   def Compiler(given ctx: Context): CompilerContext = ctx.compiler

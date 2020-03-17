@@ -35,6 +35,12 @@ trait TypesDB { self: ErrorReporter =>
     case _ => abort(s"Trying to store a value type for non value '${s}'")
   }
 
+  def (f: Fun) returnType: Effectful = f.ret match {
+    case Some(t) => t
+    case None => blockTypeOrDefault(f,
+      abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
+  }
+
   def populate(builtins: Iterable[BuiltinFunction]): TypesDB = {
     builtins.foreach { b => putBlock(b, b.toType) }
     this

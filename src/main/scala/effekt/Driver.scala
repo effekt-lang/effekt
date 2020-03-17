@@ -55,28 +55,6 @@ case class CompilationUnit(
   messages: Messages
 )
 
-/**
- * The compiler context consists of
- * - configuration (immutable)
- * - symbols (mutable database)
- * - types (mutable database)
- * - error reporting (mutable focus)
- */
-class CompilerContext(
-  var focus: Tree,
-  val config: EffektConfig,
-  val process: Source => Either[CompilationUnit, Messages]
-) extends TypesDB with SymbolsDB with ModuleDB with ErrorReporter with Assertions {
-  val buffer: MessageBuffer = new MessageBuffer
-
-  def at[T](t: Tree)(block: => T): T = {
-    val before = focus
-    focus = t;
-    val res = block;
-    focus = before;
-    res
-  }
-}
 
 trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver =>
 

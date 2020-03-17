@@ -16,11 +16,21 @@ import effekt.symbols.builtins._
    *   - Functions
    *   - Resumptions
    */
-class Typer {
+class Typer extends Phase { typer =>
+
+  val name = "typer"
+
+  case class State(
+    effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
+  )
+
+  given (given C: CompilerContext): TyperOps = new TyperOps {}
 
   def run(module: source.ModuleDecl, env: Environment, compiler: CompilerContext): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ env.types.values.collect { case e: Effect => e })
-    Context(compiler, toplevelEffects) in {
+    compiler.phases.init(typer)(State(toplevelEffects))
+
+    compiler in {
       // pre-check to allow mutually recursive defs
       module.defs.foreach { d => precheckDef(d) }
       module.defs.foreach { d =>
@@ -35,7 +45,7 @@ class Typer {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expected: Option[Type])(given Context): Checker[Expr] = checkAgainst(expected) {
+  def checkExpr(expected: Option[Type])(given CompilerContext): Checker[Expr] = checkAgainst(expected) {
     case source.IntLit(n) => TInt / Pure
     case source.BooleanLit(n) => TBoolean / Pure
     case source.UnitLit() => TUnit / Pure
@@ -88,7 +98,7 @@ class Typer {
           val ps = checkAgainstDeclaration(op.name, bt.params, params)
           val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
 
-          Context.define(ps).define(Compiler.lookup(resume), resumeType) in {
+          Compiler.define(ps).define(Compiler.lookup(resume), resumeType) in {
               val (_ / heffs) = body checkAgainst ret
               handlerEffs = handlerEffs ++ heffs
             }
@@ -123,7 +133,7 @@ class Typer {
           val pms = u substitute extractAllTypes(sym.params)
 
           val ps = checkAgainstDeclaration(id.name, pms, params)
-          Context.define(ps) in { checkStmt(expected)(body) }
+          Compiler.define(ps) in { checkStmt(expected)(body) }
       }
 
       val (tpeCases / effsCases) = tpes.reduce { case (tpe1 / effs1, tpe2 / effs2) =>
@@ -138,18 +148,22 @@ class Typer {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(expected: Option[Type])(given Context): Checker[Stmt] = checkAgainst(expected) {
+  def checkStmt(expected: Option[Type])(given CompilerContext): Checker[Stmt] = checkAgainst(expected) {
 
     case source.DefStmt(d @ source.EffDef(id, tps, ps, ret), rest) =>
       precheckDef(d) // to bind types to the effect ops
-      Context.withEffect(d.symbol) in { checkStmt(expected)(rest) }
+      Compiler in { // establish lexical scope here
+        Compiler.withEffect(d.symbol)
+        checkStmt(expected)(rest)
+      }
 
     case source.DefStmt(d @ source.ValDef(id, annot, binding), rest) =>
       val (t / effBinding) = d.symbol.tpe match {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
-      val (r / effStmt) = Context.define(d.symbol, t) in { checkStmt(expected)(rest) }
+      Compiler.define(d.symbol, t)
+      val (r / effStmt) =  checkStmt(expected)(rest)
       r / (effBinding ++ effStmt)
 
     case source.DefStmt(d @ source.VarDef(id, annot, binding), rest) =>
@@ -157,7 +171,8 @@ class Typer {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
-      val (r / effStmt) = Context.define(d.symbol, t) in { checkStmt(expected)(rest) }
+      Compiler.define(d.symbol, t)
+      val (r / effStmt) = checkStmt(expected)(rest)
       r / (effBinding ++ effStmt)
 
     case source.DefStmt(b, rest) =>
@@ -176,7 +191,7 @@ class Typer {
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
-  def precheckDef(d: Def)(given Context): Unit = Compiler.at(d) { d match {
+  def precheckDef(d: Def)(given CompilerContext): Unit = Compiler.at(d) { d match {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       d.symbol.ret.foreach { annot => Compiler.putBlock(d.symbol, d.symbol.toType) }
 
@@ -196,21 +211,20 @@ class Typer {
   }}
 
 
-  def synthDef(given Context): Checker[Def] = checking {
+  def synthDef(given CompilerContext): Checker[Def] = checking {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = d.symbol
-      Context.define(sym.params) in {
-        sym.ret match {
-          case Some(tpe / funEffs) =>
-            val (_ / effs) = body checkAgainst tpe
-            effs <:< Context.effects // check they are in scope
-            tpe / (effs -- funEffs) // the declared effects are considered as bound
-          case None =>
-            val (tpe / effs) = checkStmt(None)(body)
-            effs <:< Context.effects // check they are in scope
-            Compiler.putBlock(sym, sym.toType(tpe / effs))
-            tpe / Pure // all effects are handled by the function itself (since they are inferred)
-        }
+      Compiler.define(sym.params)
+      sym.ret match {
+        case Some(tpe / funEffs) =>
+          val (_ / effs) = body checkAgainst tpe
+          effs <:< Compiler.effects // check they are in scope
+          tpe / (effs -- funEffs) // the declared effects are considered as bound
+        case None =>
+          val (tpe / effs) = checkStmt(None)(body)
+          effs <:< Compiler.effects // check they are in scope
+          Compiler.putBlock(sym, sym.toType(tpe / effs))
+          tpe / Pure // all effects are handled by the function itself (since they are inferred)
       }
 
     case d @ source.ValDef(id, annot, binding) =>
@@ -236,7 +250,7 @@ class Typer {
   // TODO we can remove this duplication, once every phase can write to every table.
   // then the namer phase can already store the resolved type symbol for the param.
 
-  def resolveValueType(tpe: source.ValueType)(given Context): ValueType = tpe match {
+  def resolveValueType(tpe: source.ValueType)(given CompilerContext): ValueType = tpe match {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id) => t.definition
   }
@@ -244,9 +258,9 @@ class Typer {
   /**
    * Invariant: Only call this on declarations that are fully annotated
    */
-  def extractAllTypes(params: Params)(given Context): Sections = params map extractTypes
+  def extractAllTypes(params: Params)(given CompilerContext): Sections = params map extractTypes
 
-  def extractTypes(params: List[ValueParam] | BlockParam)(given Context): List[ValueType] | BlockType = params match {
+  def extractTypes(params: List[ValueParam] | BlockParam)(given CompilerContext): List[ValueType] | BlockType = params match {
     case BlockParam(_, tpe) => tpe
     case ps: List[ValueParam] => ps map {
       case ValueParam(_, Some(tpe)) => tpe
@@ -261,7 +275,7 @@ class Typer {
     name: String,
     atCallee: List[List[ValueType] | BlockType],
     // we ask for the source Params here, since it might not be annotated
-    atCaller: List[source.ParamSection])(given Context): Map[Symbol, Type] = {
+    atCaller: List[source.ParamSection])(given CompilerContext): Map[Symbol, Type] = {
 
     if (atCallee.size != atCaller.size)
       Compiler.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
@@ -283,7 +297,7 @@ class Typer {
   }
 
 
-  def checkCall(expected: Option[Type])(sym: Symbol, targs: List[ValueType], args: List[source.ArgSection])(given Context): Effectful = {
+  def checkCall(expected: Option[Type])(sym: Symbol, targs: List[ValueType], args: List[source.ArgSection])(given CompilerContext): Effectful = {
 
     val BlockType(tparams, params, ret / retEffs) = Compiler.blockType(sym)
 
@@ -327,13 +341,13 @@ class Typer {
         // TODO make blockargs also take multiple argument sections.
         val bindings = checkAgainstDeclaration("block", blockType.params, List(source.ValueParams(params)))
 
-        Context.define(bindings) in {
-          val (tpe1 / handled) = blockType.ret
-          val (tpe2 / stmtEffs)  = checkStmt(None)(stmt)
+        Compiler.define(bindings)
 
-          unifier = unifier.merge(tpe1, tpe2)
-          effs = (effs ++ (stmtEffs -- handled))
-        }
+        val (tpe1 / handled) = blockType.ret
+        val (tpe2 / stmtEffs)  = checkStmt(None)(stmt)
+
+        unifier = unifier.merge(tpe1, tpe2)
+        effs = (effs ++ (stmtEffs -- handled))
 
       case (_, _) =>
         Compiler.error("Wrong type of argument section")
@@ -355,7 +369,7 @@ class Typer {
    */
   type Checker[T <: Tree] = T => Effectful
 
-  def checkAgainst[T <: Tree](expected: Option[Type])(f: Checker[T])(given Context): Checker[T] = t => {
+  def checkAgainst[T <: Tree](expected: Option[Type])(f: Checker[T])(given CompilerContext): Checker[T] = t => {
     Compiler.at(t) {
       val (got / effs) = f(t)
       expected map { got =!= _ }
@@ -363,7 +377,7 @@ class Typer {
     }
   }
 
-  def checking[T <: Tree](f: Checker[T])(given Context): Checker[T] = t => {
+  def checking[T <: Tree](f: Checker[T])(given CompilerContext): Checker[T] = t => {
     Compiler.at(t) {
       f(t)
     }
@@ -372,83 +386,71 @@ class Typer {
   /**
    * Extension methods to improve readability of Typer
    */
-  trait TyperOps {
-    def (tpe: ValueType) / (effs: Effects) : Effectful = Effectful(tpe, effs)
-    def (expr: Expr) checkAgainst (tpe: Type) (given Context): Effectful = checkExpr(Some(tpe))(expr)
-    def (stmt: Stmt) checkAgainst (tpe: Type) (given Context): Effectful = checkStmt(Some(tpe))(stmt)
-  }
-  given TyperOps
+  trait TyperOps(given C: CompilerContext) {
 
-  // this requires splitting in context related and Ops-related methods
-  // define one XXXAssertions for every phase that requires being mixed with ErrorReporter
-  case class Context(
-    compiler: CompilerContext,
-    effects: Effects = Pure  // the effects, whose declarations are lexically in scope (i.e. a conservative approximation of possible capabilities
-  ) {
+    // State Access
+    // ============
+    def (C: CompilerContext) effects: Effects =
+      C.phases.get(typer).effects
 
-    // TODO does this correctly compare List[Int] with List[Int]?
     def (got: Type) =!= (expected: Type): Unit = (got, expected) match {
       case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
         (args1 zip args2) foreach { _ =!= _ }
       case (t1, t2) => if (t1 != t2) {
-        compiler.error(s"Expected $expected, but got $got")
+        C.error(s"Expected $expected, but got $got")
       }
     }
 
     def (a: Effects) <:< (b: Effects): Effects = {
       val forbidden = a -- b
       if (forbidden.nonEmpty) {
-        compiler.error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
+        C.error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
         b
       } else {
         b
       }
     }
 
-    def getValueType(sym: Symbol): ValueType =
-      compiler.valueType(sym)
+    def (C: CompilerContext) getValueType(sym: Symbol): ValueType =
+      C.valueType(sym)
 
-    def getBlockType(sym: Symbol): BlockType =
-      compiler.blockType(sym)
+    def (C: CompilerContext) getBlockType(sym: Symbol): BlockType =
+      C.blockType(sym)
 
-    def define(s: Symbol, t: ValueType) = {
-      compiler.putValue(s, t)
-      this
+    def (C: CompilerContext) define(s: Symbol, t: ValueType) = {
+      C.putValue(s, t); C
     }
 
-    def define(s: Symbol, t: BlockType) = {
-      compiler.putBlock(s, t)
-      this
+    def (C: CompilerContext) define(s: Symbol, t: BlockType) = {
+      C.putBlock(s, t); C
     }
 
-    def define(bs: Map[Symbol, Type]): Context = bs.foldLeft(this) {
-      case (ctx, (v: ValueSymbol, t: ValueType)) => ctx.define(v, t)
-      case (ctx, (v: BlockSymbol, t: BlockType)) => ctx.define(v, t)
+    def (C: CompilerContext) define(bs: Map[Symbol, Type]): CompilerContext = bs.foldLeft(C) {
+      case (C, (v: ValueSymbol, t: ValueType)) => C.define(v, t)
+      case (C, (v: BlockSymbol, t: BlockType)) => C.define(v, t)
     }
-    def define(ps: List[List[ValueParam] | BlockParam]): Context = define(ps.flatMap {
-      case ps : List[ValueParam] => ps map {
-        case s @ ValueParam(name, Some(tpe)) => s -> tpe
-        case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
-      }
-      case s @ BlockParam(name, tpe) => List(s -> tpe)
-    }.toMap)
+    def (C: CompilerContext) define(ps: List[List[ValueParam] | BlockParam]): CompilerContext =
+      C.define(ps.flatMap {
+        case ps : List[ValueParam] => ps map {
+          case s @ ValueParam(name, Some(tpe)) => s -> tpe
+          case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
+        }
+        case s @ BlockParam(name, tpe) => List(s -> tpe)
+      }.toMap)
 
-    def withEffect(e: Effect): Context = this.copy(effects = effects + e)
+    // TODO we need to correctly scope the phase state, again...!!!
+    def (C: CompilerContext) withEffect(e: Effect): CompilerContext =
+      C.phases.update(typer) { state => state.copy(effects = state.effects + e) }
 
-    def current: Context = this
+    def current: CompilerContext = C
 
-    // always first look at the annotated type, then look it up in the dictionary
-    def (f: Fun) returnType: Effectful = f.ret match {
-      case Some(t) => t
-      case None => compiler.blockTypeOrDefault(f,
-        compiler.abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret
-    }
 
-    def in[T](block: (given this.type) => T): T = block(given this)
+    // Extension methods to improve readability of Typer
+    // =================
+    def (tpe: ValueType) / (effs: Effects): Effectful = Effectful(tpe, effs)
+    def (expr: Expr) checkAgainst (tpe: Type): Effectful = checkExpr(Some(tpe))(expr)
+    def (stmt: Stmt) checkAgainst (tpe: Type): Effectful = checkStmt(Some(tpe))(stmt)
   }
-  def Context(given c: Context): Context = c
-  def Compiler(given c: Context): CompilerContext = c.compiler
-  given (given ctx: Context): CompilerContext = ctx.compiler
 
-  // TODO I need to find a way to "delegate" all methods of CompilerContext to context
+  def Compiler(given c: CompilerContext): CompilerContext = c
 }

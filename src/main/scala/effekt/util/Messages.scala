@@ -31,7 +31,7 @@ object messages {
    */
   trait ErrorReporter {
 
-    def focus: Tree           // the current focus of the compiler
+    var focus: Tree           // the current focus of the compiler
     def buffer: MessageBuffer
 
     def error(msg: String) = buffer append Messaging.error(focus, msg)
@@ -42,14 +42,23 @@ object messages {
       throw FatalPhaseError(msg, this)
     }
 
+    def at[T](t: Tree)(block: => T): T = {
+      val before = focus
+      focus = t;
+      val res = block;
+      focus = before;
+      res
+    }
+
     /**
-     * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
+     * Sets the given tree into focus for error reporting
      */
-    def in[T](block: (given this.type) => T): T = block(given this)
+    def focusing[T <: Tree, R](f: T => R): T => R = t =>
+      at(t) { f(t) }
   }
 
   object NoErrorReporter extends ErrorReporter {
-    def focus = ???
+    var focus = null
     def buffer = ???
   }
 }
