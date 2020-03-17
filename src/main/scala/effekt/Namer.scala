@@ -42,7 +42,7 @@ class Namer extends Phase { namer =>
 
     val (terms, types) = module.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
-        val Left(cu) = compiler.resolve(path)
+        val Right(cu) = compiler.resolve(path)
         (terms.enterWith(cu.exports.terms), types.enterWith(cu.exports.types))
     }
 

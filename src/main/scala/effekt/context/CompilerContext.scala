@@ -26,7 +26,7 @@ object NoPhase extends Phase {
 class CompilerContext(
   var focus: Tree,
   val config: EffektConfig,
-  val process: Source => Either[CompilationUnit, Messages]
+  val process: Source => Either[Messages, CompilationUnit]
 ) extends TypesDB with SymbolsDB with ModuleDB with ErrorReporter with Assertions { context =>
 
   val buffer: MessageBuffer = new MessageBuffer

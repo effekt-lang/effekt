@@ -78,7 +78,7 @@ class Evaluator {
     evaluatedModules.getOrDefault(unit, {
       val env = unit.module.imports.foldLeft(builtins(compiler.config.output())) {
         case (env, source.Import(path)) =>
-          val mod = compiler.units(path)
+          val Right(mod) = compiler.resolve(path)
           val res = eval(mod, compiler)
           env ++ res
       }

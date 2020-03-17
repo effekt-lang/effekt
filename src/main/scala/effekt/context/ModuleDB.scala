@@ -11,10 +11,10 @@ import scala.collection.mutable
 
 trait ModuleDB { self: CompilerContext =>
 
-  // Cache containing processed units -- compilationUnits are cached by path
-  val units = mutable.Map.empty[String, CompilationUnit]
+  // Cache containing processed units -- compilationUnits are cached by source
+  val units = mutable.Map.empty[Source, CompilationUnit]
 
-  val process: Source => Either[CompilationUnit, Messages]
+  val process: Source => Either[Messages, CompilationUnit]
 
   // - tries to find a file in the workspace, that matches the import path
   def resolveInclude(modulePath: String, path: String): String = {
@@ -24,16 +24,13 @@ trait ModuleDB { self: CompilerContext =>
     FileSource(p.getCanonicalPath).content
   }
 
-  def resolve(path: String): Either[CompilationUnit, Messages] =
-    units.get(path).map(cu => Left(cu)).getOrElse {
-      val source = findSource(path).getOrElse { sys error s"Cannot find source for $path" }
-      process(source)  match {
-        case Left(cu) =>
-          units.update(path, cu)
-          Left(cu)
-        case Right(msgs) => Right(msgs)
-      }
+  def resolve(source: Source): Either[Messages, CompilationUnit] =
+    units.get(source).map(cu => Right(cu)).getOrElse {
+      process(source).map { cu => units.update(source, cu); cu }
     }
+
+  def resolve(path: String): Either[Messages, CompilationUnit] =
+    resolve(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
 
   def findSource(path: String): Option[Source] = {
     val filename = path + ".effekt"

@@ -10,10 +10,13 @@ import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
 import effekt.symbols.{ builtins, moduleFile }
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-import org.bitbucket.inkytonik.kiama.parsing.ParseResult
-import org.bitbucket.inkytonik.kiama.util._
+
+import org.bitbucket.inkytonik.kiama
+import kiama.util.Messaging.Messages
+import kiama.output.PrettyPrinterTypes.Document
+import kiama.parsing.ParseResult
+import kiama.util._
+
 import org.rogach.scallop._
 import java.io.File
 
@@ -80,11 +83,13 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   }
 
   def parse(source: Source): ParseResult[ModuleDecl] = {
+
+
     val parsers = new Parser(positions)
     parsers.parseAll(parsers.program, source)
   }
 
-  def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[CompilationUnit, Messages] = {
+  def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
 
     /**
      * The different phases
@@ -100,21 +105,20 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
       // TODO improve error reporting code
       if (buffer.hasErrors) {
-        Right(buffer.get)
+        Left(buffer.get)
       } else {
-        Left(CompilationUnit(source, ast, exports, buffer.get))
+        Right(CompilationUnit(source, ast, exports, buffer.get))
       }
     } catch {
       case FatalPhaseError(msg, reporter) =>
         reporter.error(msg)
-        Right(buffer.get)
+        Left(buffer.get)
     }
   }
 
   def backend(unit: CompilationUnit, context: CompilerContext): Unit = {
     object transformer extends Transformer
     object js extends JavaScript
-    object messageBuffer extends MessageBuffer
 
     val translated = transformer.run(unit, context)
     // TODO report errors here
@@ -124,39 +128,45 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     IO.createFile(out.getCanonicalPath, js.format(translated).layout)
   }
 
+  // this is a hack to experiment with server mode
+  var context: CompilerContext = null
 
-  def process(source: Source, ast: ModuleDecl, config: EffektConfig) = {
+  def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
 
-    lazy val context: CompilerContext = CompilerContext(ast, config, source => process(source, context))
+    context = CompilerContext(ast, config, source => process(source, context))
 
     context.populate(builtins.rootTerms.values)
     process(source, ast, context) match {
-      case Left(unit) if config.compile() =>
-        copyPrelude(config)
-      case Left(unit) =>
-        object evaluator extends Evaluator
-        evaluator.run(unit, context)
+      case Right(unit) =>
+        if (config.compile()) {
+          copyPrelude(config)
+        }
 
-      case Right(msgs) =>
-        messaging.report(source, msgs, config.output())
+        if (!config.server()) {
+          object evaluator extends Evaluator
+          evaluator.run(unit, context)
+        }
+      case Left(msgs) =>
+        clearSyntacticMessages(source, config)
+        clearSemanticMessages(source, config)
+        report(source, msgs, config)
     }
   }
 
-  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[CompilationUnit, Messages] = {
+  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
     frontend(source, ast, context) match {
-      case Left(unit) if context.config.compile() =>
-        // TODO maybe this is a problem since the unit needs to be written to the compilation cache (units)
-        //      first, before running backend.
+      case Right(unit) if context.config.compile() =>
         backend(unit, context)
-        Left(unit)
+        Right(unit)
       case result => result
     }
   }
 
-  def process(source: Source, context: CompilerContext): Either[CompilationUnit, Messages] =
+  def process(source: Source, context: CompilerContext): Either[Messages, CompilationUnit] =
+    // for some reason Kiama uses the Either the other way around.
     makeast(source, context.config) match {
       case Left(ast) => process(source, ast, context)
-      case Right(msgs) => Right(msgs)
+      case Right(msgs) => Left(msgs)
     }
 
   def copyPrelude(config: EffektConfig): Unit = {
@@ -169,6 +179,43 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   }
 
   def format(m: ModuleDecl) : Document = ???
+
 }
 
-object MyDriver extends Driver
+trait LSPServer extends Driver {
+
+  import effekt.symbols._
+  import effekt.source.{ Reference, Definition }
+  type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
+
+  def getInfoAt(position: Position): Option[(Vector[Tree], CompilationUnit)] = for {
+    unit <- context.resolve(position.source).toOption
+    tree = new EffektTree(unit.module)
+    nodes = positions.findNodesContaining(tree.nodes, position)
+  } yield (nodes, unit)
+
+  override def getDefinition(position: Position): Option[Tree] = for {
+    (trees, unit) <- getInfoAt(position)
+    id <- trees.collectFirst { case id: source.Id => id  }
+    decl <- context.lookup(id) match {
+      case u: UserFunction => Some(u.decl)
+      case u: Binder => Some(u.decl)
+      case _ => None
+    }
+  } yield decl
+
+  override def getHover(position : Position): Option[String] = for {
+    (trees, unit) <- getInfoAt(position)
+    sym <- trees.collectFirst {
+      case d: Definition => context.get(d)
+      case r: Reference => context.get(r)
+    }
+    tpe = sym match {
+      case s: ValueSymbol => context.valueType(s)
+      case b: BlockSymbol => context.blockType(b)
+    }
+  } yield tpe.toString
+
+}
+
+object Server extends LSPServer

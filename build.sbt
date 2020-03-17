@@ -13,5 +13,8 @@ lazy val root = project
         ("org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0").withDottyCompat(scalaVersion.value),
         ("com.novocode" % "junit-interface" % "0.11" % "test").withDottyCompat(scalaVersion.value),
         ("org.scala-sbt" %% "io" % "1.3.1" % "test").withDottyCompat(scalaVersion.value)
-    )
+    ),
+
+    mainClass in assembly := Some("effekt.Server"),
+    assemblyJarName in assembly := "effekt.jar"
   )
