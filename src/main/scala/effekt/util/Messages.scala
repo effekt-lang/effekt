@@ -42,20 +42,6 @@ object messages {
       throw FatalPhaseError(msg, this)
     }
 
-    def aborting[T](block: => T): T =
-      try {
-        block
-      }
-      catch {
-        // TODO refactor!
-        case t if !t.isInstanceOf[FatalPhaseError] =>
-          // TODO pass original exception, instead of just the message
-          // TODO add a debug flag to show the stack trace
-          throw FatalPhaseError(t.getMessage, this)
-      }
-
-    // TODO move to a separate Context type, once factored out into a superclass Phase
-
     /**
      * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
      */

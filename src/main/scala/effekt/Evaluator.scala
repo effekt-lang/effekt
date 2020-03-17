@@ -19,8 +19,6 @@ import effekt.source.{
 
 class Evaluator {
 
-  given Assertions
-
   val mainName = "main"
 
   /**
@@ -71,7 +69,7 @@ class Evaluator {
 
   def run(cu: CompilationUnit, compiler: CompilerContext) = {
     val mainSym = cu.exports.terms.getOrElse(mainName, compiler.abort("Cannot find main function"))
-    val mainFun = mainSym.asUserFunction
+    val mainFun = compiler.asUserFunction(mainSym)
 
     // TODO refactor and convert into checked error
     val userEffects = compiler.blockType(mainSym).ret.effects.effs.filterNot { _.builtin }
@@ -352,4 +350,5 @@ class Evaluator {
   }
   def Context(given ctx: Context): Context = ctx
   def Compiler(given ctx: Context): CompilerContext = ctx.compiler
+  given (given ctx: Context): CompilerContext = ctx.compiler
 }

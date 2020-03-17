@@ -9,13 +9,12 @@ import effekt.typer.Typer
 import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
-import effekt.symbols.{ builtins, TypesDB, SymbolsDB, moduleFile }
+import effekt.symbols.{ Assertions, SymbolsDB, TypesDB, builtins, moduleFile }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.parsing.ParseResult
 import org.bitbucket.inkytonik.kiama.util._
 import org.rogach.scallop._
-
 import java.io.File
 
 class EffektConfig(args : Seq[String]) extends Config(args) {
@@ -67,7 +66,7 @@ class CompilerContext(
   var focus: Tree,
   val config: EffektConfig,
   val process: Source => Either[CompilationUnit, Messages]
-) extends ErrorReporter with TypesDB with SymbolsDB with ModuleDB {
+) extends TypesDB with SymbolsDB with ModuleDB with ErrorReporter with Assertions {
   val buffer: MessageBuffer = new MessageBuffer
 
   def at[T](t: Tree)(block: => T): T = {

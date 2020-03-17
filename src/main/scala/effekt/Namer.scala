@@ -24,9 +24,6 @@ case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSy
  */
 class Namer { namer =>
 
-  // Brings the extension methods of assertions into scope
-  given Assertions
-
   def run(path: String, module: source.ModuleDecl, compiler: CompilerContext): Environment = {
 
     val topLevelTerms = toplevel[String, TermSymbol](builtins.rootTerms)
@@ -336,6 +333,7 @@ class Namer { namer =>
   }
   def Context(given ctx: Context): Context = ctx
   def Compiler(given ctx: Context): CompilerContext = ctx.compiler
+  given (given ctx: Context): CompilerContext = ctx.compiler
 
   /**
    * Sets the given tree into focus for error reporting
@@ -343,5 +341,5 @@ class Namer { namer =>
    * Also catches runtime exceptions and turns them into messages
    */
   def focusing[T <: Tree, R](f: (given Context) => T => R)(given Context): T => R = t =>
-    Compiler.aborting { Compiler.at(t) { f(t) } }
+    Compiler.at(t) { f(t) }
 }

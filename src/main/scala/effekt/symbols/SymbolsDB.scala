@@ -10,8 +10,6 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
  */
 trait SymbolsDB {
 
-  given Assertions
-
   private val symbols = Memoiser.makeIdMemoiser[Id, Symbol]
 
   def put(id: Id, d: Symbol) = symbols.put(id, d)

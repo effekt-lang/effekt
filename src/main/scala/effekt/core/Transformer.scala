@@ -13,8 +13,6 @@ object Wildcard extends Symbol { val name = LocalName("_") }
 
 class Transformer {
 
-  given Assertions
-
   def run(unit: CompilationUnit, compiler: CompilerContext): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = unit.module
     val exports: Stmt = Exports(path, unit.exports.terms.collect {
@@ -201,4 +199,5 @@ class Transformer {
     }
   }
   def Compiler(given c: Context): CompilerContext = c.compiler
+  given (given ctx: Context): CompilerContext = ctx.compiler
 }

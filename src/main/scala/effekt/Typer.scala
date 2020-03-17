@@ -18,8 +18,6 @@ import effekt.symbols.builtins._
    */
 class Typer {
 
-  given Assertions
-
   def run(module: source.ModuleDecl, env: Environment, compiler: CompilerContext): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ env.types.values.collect { case e: Effect => e })
     Context(compiler, toplevelEffects) in {
@@ -37,7 +35,7 @@ class Typer {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expected: Option[Type]): Checker[Expr] = checkAgainst(expected) {
+  def checkExpr(expected: Option[Type])(given Context): Checker[Expr] = checkAgainst(expected) {
     case source.IntLit(n) => TInt / Pure
     case source.BooleanLit(n) => TBoolean / Pure
     case source.UnitLit() => TUnit / Pure
@@ -140,7 +138,7 @@ class Typer {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(expected: Option[Type]): Checker[Stmt] = checkAgainst(expected) {
+  def checkStmt(expected: Option[Type])(given Context): Checker[Stmt] = checkAgainst(expected) {
 
     case source.DefStmt(d @ source.EffDef(id, tps, ps, ret), rest) =>
       precheckDef(d) // to bind types to the effect ops
@@ -198,7 +196,7 @@ class Typer {
   }}
 
 
-  def synthDef: Checker[Def] = checking {
+  def synthDef(given Context): Checker[Def] = checking {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = d.symbol
       Context.define(sym.params) in {
@@ -355,23 +353,19 @@ class Typer {
    *
    * @tparam T the type of trees, this checker operates on
    */
-  type Checker[T <: Tree] = T => (given Context) => Effectful
+  type Checker[T <: Tree] = T => Effectful
 
-  def checkAgainst[T <: Tree](expected: Option[Type])(f: Checker[T]): Checker[T] = t => {
+  def checkAgainst[T <: Tree](expected: Option[Type])(f: Checker[T])(given Context): Checker[T] = t => {
     Compiler.at(t) {
-      Compiler.aborting {
-        val (got / effs) = f(t)
-        expected map { got =!= _ }
-        got / effs
-      }
+      val (got / effs) = f(t)
+      expected map { got =!= _ }
+      got / effs
     }
   }
 
-  def checking[T <: Tree](f: Checker[T]): Checker[T] = t => {
+  def checking[T <: Tree](f: Checker[T])(given Context): Checker[T] = t => {
     Compiler.at(t) {
-      Compiler.aborting {
-        f(t)
-      }
+      f(t)
     }
   }
 
