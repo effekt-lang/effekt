@@ -56,9 +56,4 @@ object messages {
     def focusing[T <: Tree, R](f: T => R): T => R = t =>
       at(t) { f(t) }
   }
-
-  object NoErrorReporter extends ErrorReporter {
-    var focus = null
-    def buffer = ???
-  }
 }

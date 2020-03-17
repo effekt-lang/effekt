@@ -1,7 +1,9 @@
 package effekt
+package context
 
 import java.io.File
 
+import effekt.context.CompilerContext
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source }
 

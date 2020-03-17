@@ -1,6 +1,7 @@
 package effekt
 package core
 
+import context.CompilerContext
 import effekt.typer.Typer
 import effekt.symbols._
 import effekt.symbols.builtins._

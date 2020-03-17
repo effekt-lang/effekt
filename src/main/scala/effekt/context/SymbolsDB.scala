@@ -1,8 +1,8 @@
 package effekt
-package symbols
+package context
 
-import source.Id
-
+import effekt.source.Id
+import effekt.symbols.Symbol
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 /**

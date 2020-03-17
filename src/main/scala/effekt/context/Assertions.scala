@@ -1,6 +1,7 @@
 package effekt
-package symbols
+package context
 
+import effekt.symbols._
 import effekt.util.messages.ErrorReporter
 
 /**

@@ -4,7 +4,8 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.source.{ Tree, Expr, Stmt, Def }
+import context.{ CompilerContext, Phase }
+import effekt.source.{ Def, Expr, Stmt, Tree }
 import effekt.namer.Environment
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -383,15 +384,16 @@ class Typer extends Phase { typer =>
     }
   }
 
-  /**
-   * Extension methods to improve readability of Typer
-   */
+
   trait TyperOps(given C: CompilerContext) {
 
     // State Access
     // ============
     def (C: CompilerContext) effects: Effects =
       C.phases.get(typer).effects
+
+    def (C: CompilerContext) withEffect(e: Effect): CompilerContext =
+      C.phases.update(typer) { state => state.copy(effects = state.effects + e) }
 
     def (got: Type) =!= (expected: Type): Unit = (got, expected) match {
       case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
@@ -410,12 +412,6 @@ class Typer extends Phase { typer =>
         b
       }
     }
-
-    def (C: CompilerContext) getValueType(sym: Symbol): ValueType =
-      C.valueType(sym)
-
-    def (C: CompilerContext) getBlockType(sym: Symbol): BlockType =
-      C.blockType(sym)
 
     def (C: CompilerContext) define(s: Symbol, t: ValueType) = {
       C.putValue(s, t); C
@@ -437,12 +433,6 @@ class Typer extends Phase { typer =>
         }
         case s @ BlockParam(name, tpe) => List(s -> tpe)
       }.toMap)
-
-    // TODO we need to correctly scope the phase state, again...!!!
-    def (C: CompilerContext) withEffect(e: Effect): CompilerContext =
-      C.phases.update(typer) { state => state.copy(effects = state.effects + e) }
-
-    def current: CompilerContext = C
 
 
     // Extension methods to improve readability of Typer

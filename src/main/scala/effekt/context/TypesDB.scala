@@ -1,7 +1,8 @@
 package effekt
-package symbols
+package context
 
-import effekt.util.messages.{ ErrorReporter }
+import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, Effectful, Fun, Symbol, ValueSymbol, ValueType }
+import effekt.util.messages.ErrorReporter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 trait TypesDB { self: ErrorReporter =>

@@ -1,21 +1,15 @@
 package effekt
 package evaluator
 
+import context.CompilerContext
 import effekt.symbols._
 import effekt.symbols.builtins._
-
 import effekt.util.Thunk
 import effekt.util.control
 import effekt.util.control._
-
 import org.bitbucket.inkytonik.kiama.util.Emitter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
-
-import effekt.source.{
-  ArgSection, Assign, BlockArg, BooleanLit, Call, OpClause, DataDef, Def,
-  DefStmt, DoubleLit, Expr, ExprStmt, FunDef, Id, If, IntLit, MatchExpr,
-  Return, Stmt, StringLit, Tree, TryHandle, UnitLit, ValDef, ValueArgs, Var,
-  VarDef, While }
+import effekt.source.{ ArgSection, Assign, BlockArg, BooleanLit, Call, DataDef, Def, DefStmt, DoubleLit, Expr, ExprStmt, FunDef, Id, If, IntLit, MatchExpr, OpClause, Return, Stmt, StringLit, Tree, TryHandle, UnitLit, ValDef, ValueArgs, Var, VarDef, While }
 
 class Evaluator {
 

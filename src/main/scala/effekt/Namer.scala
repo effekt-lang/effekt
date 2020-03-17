@@ -4,11 +4,10 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.source.{ Id, Tree, Def }
+import context.{ CompilerContext, Phase }
+import effekt.source.{ Def, Id, Tree }
 import effekt.source.traversal._
-
 import effekt.symbols._
-
 import effekt.util.scopes._
 
 case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol])

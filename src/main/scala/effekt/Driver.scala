@@ -9,13 +9,15 @@ import effekt.typer.Typer
 import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
-import effekt.symbols.{ Assertions, SymbolsDB, TypesDB, builtins, moduleFile }
+import effekt.symbols.{ builtins, moduleFile }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.parsing.ParseResult
 import org.bitbucket.inkytonik.kiama.util._
 import org.rogach.scallop._
 import java.io.File
+
+import context.CompilerContext
 
 class EffektConfig(args : Seq[String]) extends Config(args) {
   lazy val compile = toggle(

@@ -1,8 +1,8 @@
 package effekt
+package context
 
-import effekt.{ CompilationUnit, EffektConfig, ModuleDB }
+import context.{ Assertions, ModuleDB, SymbolsDB, TypesDB }
 import effekt.source.Tree
-import effekt.symbols.{ Assertions, SymbolsDB, TypesDB }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Source
