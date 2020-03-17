@@ -89,9 +89,23 @@ package object symbols {
   sealed trait ValueType extends Type
 
   case class TypeVar(name: Name) extends ValueType with TypeSymbol
-  case class TypeApp(tpe: DataType, args: List[ValueType]) extends ValueType
+  case class TypeApp(tpe: DataType, args: List[ValueType]) extends ValueType {
+    override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
+  }
 
-  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type
+  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
+    override def toString: String = {
+      val ps = params.map {
+        case b: BlockType => s"{${ b.toString }}"
+        case ps: List[ValueType] => s"(${ ps.map { _.toString }.mkString(", ") })"
+      }.mkString("")
+
+      tparams match {
+        case Nil => s"$ps => $ret"
+        case tps => s"[${ tps.map { _.toString }.mkString(", ") }] $ps => $ret"
+      }
+    }
+  }
 
   case class DataType(name: Name, tparams: List[TypeVar], var ctors: List[Constructor] = Nil) extends ValueType with TypeSymbol
   case class Constructor(name: Name, params: List[List[ValueParam]], datatype: DataType) extends Fun {
@@ -128,7 +142,9 @@ package object symbols {
     def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
   }
   val Pure = Effects(Nil)
-  case class Effectful(tpe: ValueType, effects: Effects) // TODO change tpe to ValueType
+  case class Effectful(tpe: ValueType, effects: Effects) {
+    override def toString = s"$tpe / $effects"
+  }
 
 
   /**
@@ -138,7 +154,7 @@ package object symbols {
     override def builtin = true
   }
 
-  case class BuiltinFunction(name: Name, tparams: List[TypeVar], params: Params, ret: Option[Effectful], pure: Boolean = true, body: String = "") extends Fun with Builtin
+  case class BuiltinFunction(name: Name, tparams: List[TypeVar], params: Params, ret: Option[Effectful], pure: Boolean = true, body: String = "") extends Fun with BlockSymbol with Builtin
   case class BuiltinType(name: Name, tparams: List[TypeVar]) extends ValueType with TypeSymbol with Builtin
   case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends Effect with TypeSymbol with Builtin
 

@@ -219,11 +219,11 @@ class Typer extends Phase { typer =>
       sym.ret match {
         case Some(tpe / funEffs) =>
           val (_ / effs) = body checkAgainst tpe
-          effs <:< Compiler.effects // check they are in scope
+          Compiler.wellscoped(effs)
           tpe / (effs -- funEffs) // the declared effects are considered as bound
         case None =>
           val (tpe / effs) = checkStmt(None)(body)
-          effs <:< Compiler.effects // check they are in scope
+          Compiler.wellscoped(effs) // check they are in scope
           Compiler.putBlock(sym, sym.toType(tpe / effs))
           tpe / Pure // all effects are handled by the function itself (since they are inferred)
       }
@@ -406,10 +406,17 @@ class Typer extends Phase { typer =>
     def (a: Effects) <:< (b: Effects): Effects = {
       val forbidden = a -- b
       if (forbidden.nonEmpty) {
-        C.error(s"Inferred effects ${a.distinct} are not a subset of allowed / annotated effects ${b.distinct}.")
+        C.error(s"Effects ${forbidden} leave their defining scope.")
         b
       } else {
         b
+      }
+    }
+
+    def (C: CompilerContext) wellscoped(a: Effects) = {
+      val forbidden = a -- C.effects
+      if (forbidden.nonEmpty) {
+        C.error(s"Effects ${forbidden} leave their defining scope.")
       }
     }
 

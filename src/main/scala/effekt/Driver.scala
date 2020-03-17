@@ -191,7 +191,12 @@ trait LSPServer extends Driver {
   def getInfoAt(position: Position): Option[(Vector[Tree], CompilationUnit)] = for {
     unit <- context.resolve(position.source).toOption
     tree = new EffektTree(unit.module)
-    nodes = positions.findNodesContaining(tree.nodes, position)
+    nodes = positions.findNodesContaining(tree.nodes, position).sortWith {
+      (t1, t2) =>
+        val p1 = positions.getStart(t1).get
+        val p2 = positions.getStart(t2).get
+        p2 < p1
+    }
   } yield (nodes, unit)
 
   override def getDefinition(position: Position): Option[Tree] = for {
@@ -211,8 +216,10 @@ trait LSPServer extends Driver {
       case r: Reference => context.get(r)
     }
     tpe = sym match {
+      case b: BuiltinFunction => b.toType
       case s: ValueSymbol => context.valueType(s)
       case b: BlockSymbol => context.blockType(b)
+      case other => sys error other.toString
     }
   } yield tpe.toString
 
