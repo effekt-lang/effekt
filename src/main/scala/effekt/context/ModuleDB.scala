@@ -12,9 +12,9 @@ import scala.collection.mutable
 trait ModuleDB { self: CompilerContext =>
 
   // Cache containing processed units -- compilationUnits are cached by source
-  val units = mutable.Map.empty[Source, CompilationUnit]
+  private val units: mutable.Map[Source, CompilationUnit] = mutable.Map.empty
 
-  val process: Source => Either[Messages, CompilationUnit]
+  def process(source: Source): Either[Messages, CompilationUnit]
 
   // - tries to find a file in the workspace, that matches the import path
   def resolveInclude(modulePath: String, path: String): String = {

@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.source.Id
+import effekt.source.{ Id, IdDef }
 import effekt.symbols.Symbol
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
@@ -10,9 +10,18 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
  */
 trait SymbolsDB {
 
-  private val symbols = Memoiser.makeIdMemoiser[Id, Symbol]
+  private val symbols: Memoiser[Id, Symbol] = Memoiser.makeIdMemoiser
 
-  def put(id: Id, d: Symbol) = symbols.put(id, d)
+  // for reverse lookup in LSP server
+  private val sources: Memoiser[Symbol, IdDef] = Memoiser.makeIdMemoiser
+
+  def put(id: Id, d: Symbol) = id match {
+    case id: IdDef =>
+      sources.put(d, id)
+      symbols.put(id, d)
+    case _ =>
+      symbols.put(id, d)
+  }
 
   // Searching the defitions for a Reference
   // =======================================
@@ -37,4 +46,8 @@ trait SymbolsDB {
     symbols(tree.id).asInstanceOf[tree.symbol]
 
   def getGeneric(d: source.Definition): Symbol = symbols(d.id)
+
+  // Searching the definition for a symbol
+  // =====================================
+  def getDefinitionTree(s: Symbol): Option[IdDef] = sources.get(s)
 }

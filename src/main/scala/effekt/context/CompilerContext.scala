@@ -2,7 +2,7 @@ package effekt
 package context
 
 import context.{ Assertions, ModuleDB, SymbolsDB, TypesDB }
-import effekt.source.Tree
+import effekt.source.{ ModuleDecl, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Source
@@ -23,13 +23,18 @@ object NoPhase extends Phase {
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-class CompilerContext(
-  var focus: Tree,
-  val config: EffektConfig,
-  val process: Source => Either[Messages, CompilationUnit]
-) extends TypesDB with SymbolsDB with ModuleDB with ErrorReporter with Assertions { context =>
+abstract class CompilerContext extends TypesDB with SymbolsDB with ModuleDB with ErrorReporter with Assertions { context =>
+
+  var focus: Tree = _
+
+  var config: EffektConfig = _
 
   val buffer: MessageBuffer = new MessageBuffer
+
+  def setup(ast: ModuleDecl, cfg: EffektConfig) = {
+    config = cfg
+    focus  = ast
+  }
 
   /**
    * This is useful to write code like: reporter in { ... implicitly uses reporter ... }

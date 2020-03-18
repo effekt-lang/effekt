@@ -296,10 +296,13 @@ class Namer extends Phase { namer =>
     // ============
     def (C: CompilerContext) path: String =
       C.phases.get(namer).path
+
     def (C: CompilerContext) module: source.ModuleDecl =
       C.phases.get(namer).module
+
     def (C: CompilerContext) terms: Scope[String, TermSymbol] =
       C.phases.get(namer).terms
+
     def (C: CompilerContext) types: Scope[String, TypeSymbol] =
       C.phases.get(namer).types
 

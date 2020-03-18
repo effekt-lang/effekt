@@ -127,16 +127,16 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   }
 
   // this is a hack to experiment with server mode
-  var context: CompilerContext = null
+  object context extends CompilerContext {
+    override def process(source: Source): Either[Messages, CompilationUnit] = driver.process(source, this)
+
+    populate(builtins.rootTerms.values)
+  }
 
   def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
 
-    if (context != null) {
-      sys error s"Already have a context: ${context}"
-    }
-    context = CompilerContext(ast, config, source => process(source, context))
+    context.setup(ast, config)
 
-    context.populate(builtins.rootTerms.values)
     process(source, ast, context) match {
       case Right(unit) =>
         if (config.compile()) {
@@ -217,7 +217,7 @@ trait LSPServer extends Driver {
       case u: UserFunction =>
         Some(u.decl)
       case u: Binder => Some(u.decl)
-      case u => None
+      case u => context.getDefinitionTree(u)
     }
   } yield decl
 

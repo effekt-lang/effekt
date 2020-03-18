@@ -9,10 +9,9 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
 trait TypesDB { self: ErrorReporter =>
 
   // used by LSP server
-  private val types  = Memoiser.makeIdMemoiser[Tree, Effectful]()
-
-  private val values = Memoiser.makeIdMemoiser[ValueSymbol, ValueType]()
-  private val blocks = Memoiser.makeIdMemoiser[BlockSymbol, BlockType]()
+  private val types: Memoiser[Tree, Effectful] = Memoiser.makeIdMemoiser()
+  private val values: Memoiser[ValueSymbol, ValueType] = Memoiser.makeIdMemoiser()
+  private val blocks: Memoiser[BlockSymbol, BlockType] = Memoiser.makeIdMemoiser()
 
   def blockType(s: Symbol): BlockType =
     blockTypeOrDefault(s, abort(s"Cannot find type for block '${s}'"))

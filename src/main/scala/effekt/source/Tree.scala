@@ -7,6 +7,10 @@ package source
 sealed trait Tree extends Product
 
 /**
+ * Used for builtin and synthesized trees
+ */
+case object NoSource extends Tree
+/**
  * We distinguish between identifiers corresponding to
  * - binding sites (IdDef)
  * - use site (IdRef)

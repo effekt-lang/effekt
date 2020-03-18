@@ -48,8 +48,6 @@ trait Symbol {
   }
 
   override def toString = name.toString
-
-  // we need `val decl: Tree` for reverse lookup in server-mode
 }
 object Symbol {
   val fresh = new Counter(0)
