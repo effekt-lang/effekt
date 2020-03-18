@@ -6,6 +6,7 @@ type List[A] {
   Nil();
   Cons(head: A, tail: List[A])
 }
+
 def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
   case Nil() => l2
   case Cons(a, rest) => concat(rest, Cons(a, l2))

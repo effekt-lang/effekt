@@ -117,13 +117,26 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   def backend(unit: CompilationUnit, context: CompilerContext): Unit = {
     object transformer extends Transformer
     object js extends JavaScript
+    object prettyCore extends core.PrettyPrinter
+
+    val config = context.config
 
     val translated = transformer.run(unit, context)
-    // TODO report errors here
+    val javaScript = js.format(translated)
 
-    val out = context.config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
-    println("Writing compiled Javascript to " + out)
-    IO.createFile(out.getCanonicalPath, js.format(translated).layout)
+    if (config.server() && settingBool("showTarget")) {
+      publishProduct(unit.source, "target", "js", javaScript)
+    }
+
+    if (config.server() && settingBool("showCore")) {
+      publishProduct(unit.source, "target", "effekt", prettyCore.format(translated))
+    }
+
+    if (config.compile()) {
+      val out = config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
+      println("Writing compiled Javascript to " + out)
+      IO.createFile(out.getCanonicalPath, javaScript.layout)
+    }
   }
 
   // this is a hack to experiment with server mode
@@ -158,7 +171,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
   def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
     frontend(source, ast, context) match {
-      case Right(unit) if context.config.compile() =>
+      case Right(unit) if context.config.compile() || context.config.server() =>
         backend(unit, context)
         Right(unit)
       case result => result
@@ -228,9 +241,6 @@ trait LSPServer extends Driver {
     (trees, unit) <- getInfoAt(position)
 
     (tree, tpe) <- trees.collectFirst {
-
-      // TODO the symbols should be attached to the Id, not the parent Call(id, ...) or Clause(id, ...)
-      // as it is at the moment
       case id: Id if context.get(id).isDefined =>
         (id, context.get(id).get match {
           case b: BuiltinFunction => b.toType
@@ -239,24 +249,10 @@ trait LSPServer extends Driver {
           case t: TypeSymbol => t
           case other => sys error s"unknown symbol kind ${other}"
         })
-//      case d: Definition =>
-//        (d, context.get(d) match {
-//          case b: BuiltinFunction => b.toType
-//          case s: ValueSymbol => context.valueType(s)
-//          case b: BlockSymbol => context.blockType(b)
-//          case other => sys error other.toString
-//        })
-//      case d: Reference =>
-//        (d, context.get(d) match {
-//          case b: BuiltinFunction => b.toType
-//          case s: ValueSymbol => context.valueType(s)
-//          case b: BlockSymbol => context.blockType(b)
-//          case other => sys error other.toString
-//        })
       case e: Literal[t] if context.annotation(e).isDefined =>
         (e, context.annotation(e).get)
     }
-  } yield tpe.toString // + "\n\n" + trees.mkString("\n\n")
+  } yield tpe.toString
 
   // The implementation in kiama.Server does not support file sources
   override def locationOfNode(node : Tree) : Location = {
