@@ -219,6 +219,7 @@ trait LSPServer extends Driver {
       case u: UserFunction =>
         Some(u.decl)
       case u: Binder => Some(u.decl)
+      case d: EffectOp => context.getDefinitionTree(d.effect)
       case u => context.getDefinitionTree(u)
     }
   } yield decl

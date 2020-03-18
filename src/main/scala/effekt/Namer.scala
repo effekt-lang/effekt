@@ -206,6 +206,7 @@ class Namer extends Phase { namer =>
           EffectOp(id.localName, tps, params map resolveValueParams, Some(tpe), effectSym)
         }
         effectSym.ops = List(opSym)
+        // we would need a second id that is the definition of the operation
         id := effectSym
         Compiler.bind(opSym)
 

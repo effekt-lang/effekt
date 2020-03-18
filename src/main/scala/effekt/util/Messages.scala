@@ -24,6 +24,8 @@ object messages {
     def hasErrors: Boolean = messages.exists {
       m => m.severity == Error
     }
+
+    def clear() = { messages = noMessages }
   }
 
   /**

@@ -39,7 +39,7 @@ def asOrB(): Int / { Flip, Next, Fail } =
 // Int = Result
 def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     var inn = s;
-    try {
+    try{
       p()
     } with {
       case Next() => inn match {

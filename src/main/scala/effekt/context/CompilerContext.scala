@@ -34,6 +34,7 @@ abstract class CompilerContext extends TypesDB with SymbolsDB with ModuleDB with
   def setup(ast: ModuleDecl, cfg: EffektConfig) = {
     config = cfg
     focus  = ast
+    buffer.clear()
   }
 
   /**
