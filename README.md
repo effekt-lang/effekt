@@ -31,3 +31,20 @@ Are they really necessary? Do they work with the second class notion of blocks?
 - multi arity returns
 - ~built in "show" and "equality"~ (implemented)
 - type classes? Ad hoc polymorphism? overloading?
+
+## Usage
+
+### Compiling
+
+To compile Effekt sources to JavaScript, provide the `--compile` flag.
+This will generate JavaScript files in `./out`.
+
+The generated files currently use the `amdefine` module format.
+To execute them you need to install `amdefine` and run it with nodeJS:
+
+```
+cd out
+npm install amdefine
+node
+> require("./MY_FILE.js").main().run()
+```
