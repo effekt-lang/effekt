@@ -83,8 +83,8 @@ class Parser(positions: Positions) extends Parsers(positions) {
     | failure("Expected an identifier")
     )
 
-  lazy val idDef = ident ^^ IdDef
-  lazy val idRef = ident ^^ IdRef
+  lazy val idDef: P[IdDef] = ident ^^ IdDef
+  lazy val idRef: P[IdRef] = ident ^^ IdRef
 
   lazy val path = someSep(ident, `/`)
 
@@ -268,12 +268,15 @@ class Parser(positions: Positions) extends Parsers(positions) {
     ( ifExpr
     | whileExpr
     | resumeExpr
-    | idRef ~ maybeTypeArgs ~ some(args) ^^ Call
+    | funCall
     | doExpr
     | yieldExpr
     | handleExpr
     | primExpr
     )
+
+  lazy val funCall: P[Expr] =
+    idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val matchExpr: P[Expr] =
     (callExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
@@ -285,7 +288,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
     idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val resumeExpr: P[Expr] =
-    `resume` ~/> valueArgs ^^ { args => Call(IdRef("resume"), Nil, List(args)) }
+    (`resume` ^^^ IdRef("resume")) ~ valueArgs ^^ { case r ~ args => Call(r, Nil, List(args)) }
 
   lazy val handleExpr: P[Expr] =
     (`try` ~/> stmt <~ `with` ~ `{`) ~ (some(opClause) <~ `}`) ^^ TryHandle

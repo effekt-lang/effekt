@@ -183,7 +183,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 trait LSPServer extends Driver {
 
   import effekt.symbols._
-  import effekt.source.{ Reference, Definition, Id }
+  import effekt.source.{ Reference, Definition, Id, Literal }
 
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
@@ -192,15 +192,15 @@ trait LSPServer extends Driver {
     tree = new EffektTree(unit.module)
     nodes = positions.findNodesContaining(tree.nodes, position).sortWith {
       (t1, t2) =>
-        val p1 = positions.getStart(t1).get
-        val p2 = positions.getStart(t2).get
+        val p1s = positions.getStart(t1).get
+        val p2s = positions.getStart(t2).get
 
-        if (p2 == p1) {
-          val p1end = positions.getFinish(t1).get
-          val p2end = positions.getFinish(t2).get
-          p2end < p1end
+        if (p2s == p1s) {
+          val p1e = positions.getFinish(t1).get
+          val p2e = positions.getFinish(t2).get
+          p1e < p2e
         } else {
-          p2 < p1
+          p2s < p1s
         }
     }
   } yield (nodes, unit)
@@ -218,34 +218,36 @@ trait LSPServer extends Driver {
   override def getHover(position : Position): Option[String] = for {
     (trees, unit) <- getInfoAt(position)
 
-    tpe <- trees.collectFirst {
+    (tree, tpe) <- trees.collectFirst {
+
       // TODO the symbols should be attached to the Id, not the parent Call(id, ...) or Clause(id, ...)
       // as it is at the moment
-//      case id: Id if context.get(id).isDefined =>
-//        context.get(id).get match {
+      case id: Id if context.get(id).isDefined =>
+        (id, context.get(id).get match {
+          case b: BuiltinFunction => b.toType
+          case s: ValueSymbol => context.valueType(s)
+          case b: BlockSymbol => context.blockType(b)
+          case other => sys error other.toString
+        })
+//      case d: Definition =>
+//        (d, context.get(d) match {
 //          case b: BuiltinFunction => b.toType
 //          case s: ValueSymbol => context.valueType(s)
 //          case b: BlockSymbol => context.blockType(b)
 //          case other => sys error other.toString
-//        }
-      case d: Definition =>
-        context.get(d) match {
-          case b: BuiltinFunction => b.toType
-          case s: ValueSymbol => context.valueType(s)
-          case b: BlockSymbol => context.blockType(b)
-          case other => sys error other.toString
-        }
-      case d: Reference =>
-        context.get(d) match {
-          case b: BuiltinFunction => b.toType
-          case s: ValueSymbol => context.valueType(s)
-          case b: BlockSymbol => context.blockType(b)
-          case other => sys error other.toString
-        }
-      case e: Expr if context.annotation(e).isDefined =>
-        context.annotation(e).get
+//        })
+//      case d: Reference =>
+//        (d, context.get(d) match {
+//          case b: BuiltinFunction => b.toType
+//          case s: ValueSymbol => context.valueType(s)
+//          case b: BlockSymbol => context.blockType(b)
+//          case other => sys error other.toString
+//        })
+      case e: Literal[t] if context.annotation(e).isDefined =>
+        (e, context.annotation(e).get)
     }
-  } yield tpe.toString
+  } yield tpe.toString // + "\n\n" + trees.mkString("\n\n")
+
 
 }
 
