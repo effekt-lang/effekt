@@ -40,7 +40,7 @@ class EffektConfig(args : Seq[String]) extends Config(args) {
   lazy val includes = opt[List[File]](
     "includes",
     descr = "Path to consider for includes (can be set multiple times)",
-    default = Some(List(new File("."), new File("./lib"))),
+    default = Some(List(new File("."))),
     noshort = true
   )
 
@@ -147,7 +147,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   }
 
   def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
-    
+
 //    if (config.compile()) {
 //      copyPrelude(config)
 //    }
