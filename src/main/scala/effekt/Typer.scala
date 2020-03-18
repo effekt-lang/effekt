@@ -104,6 +104,12 @@ class Typer extends Phase { typer =>
               handlerEffs = handlerEffs ++ heffs
             }
       }
+
+      val unusedEffects = Effects(effects) -- effs
+
+      if (unusedEffects.nonEmpty)
+        Compiler.warning("Handling effects that are not used: " + unusedEffects)
+
       ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
     case source.MatchExpr(sc, clauses) =>

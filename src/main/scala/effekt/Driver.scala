@@ -147,6 +147,8 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
           object evaluator extends Evaluator
           evaluator.run(unit, context)
         }
+
+        report(source, unit.messages, config)
       case Left(msgs) =>
         clearSyntacticMessages(source, config)
         clearSemanticMessages(source, config)

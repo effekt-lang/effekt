@@ -8,6 +8,7 @@ effect MyPrint(n: Int): Unit
 def main(): Unit / { Console } = {
 
   try {
+    do MyPrint(4);
     do Flip();
     ()
   } with {
