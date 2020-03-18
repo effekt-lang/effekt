@@ -131,6 +131,9 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
   def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
 
+    if (context != null) {
+      sys error s"Already have a context: ${context}"
+    }
     context = CompilerContext(ast, config, source => process(source, context))
 
     context.populate(builtins.rootTerms.values)
@@ -185,6 +188,8 @@ trait LSPServer extends Driver {
   import effekt.symbols._
   import effekt.source.{ Reference, Definition, Id, Literal }
 
+  import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
   def getInfoAt(position: Position): Option[(Vector[Tree], CompilationUnit)] = for {
@@ -209,9 +214,10 @@ trait LSPServer extends Driver {
     (trees, unit) <- getInfoAt(position)
     id <- trees.collectFirst { case id: source.Id => id  }
     decl <- context.lookup(id) match {
-      case u: UserFunction => Some(u.decl)
+      case u: UserFunction =>
+        Some(u.decl)
       case u: Binder => Some(u.decl)
-      case _ => None
+      case u => None
     }
   } yield decl
 
@@ -227,7 +233,8 @@ trait LSPServer extends Driver {
           case b: BuiltinFunction => b.toType
           case s: ValueSymbol => context.valueType(s)
           case b: BlockSymbol => context.blockType(b)
-          case other => sys error other.toString
+          case t: TypeSymbol => t
+          case other => sys error s"unknown symbol kind ${other}"
         })
 //      case d: Definition =>
 //        (d, context.get(d) match {
@@ -248,7 +255,17 @@ trait LSPServer extends Driver {
     }
   } yield tpe.toString // + "\n\n" + trees.mkString("\n\n")
 
-
+  // The implementation in kiama.Server does not support file sources
+  override def locationOfNode(node : Tree) : Location = {
+    (positions.getStart(node), positions.getFinish(node)) match {
+      case (start @ Some(st), finish @ Some(_)) =>
+        val s = convertPosition(start)
+        val f = convertPosition(finish)
+        new Location(st.source.name, new LSPRange(s, f))
+      case _ =>
+          null
+    }
+  }
 }
 
 object Server extends LSPServer
