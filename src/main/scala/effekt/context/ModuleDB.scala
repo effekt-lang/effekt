@@ -58,19 +58,18 @@ trait ModuleDB { self: CompilerContext =>
  */
 case class JarSource(name: String) extends Source {
 
-    def reader: Reader = ScalaSource.fromResource(name).bufferedReader
+  def reader: Reader = ScalaSource.fromResource(name).bufferedReader
 
-    // Dotty forbids overriding vals with lazy vals...
-    val content = ScalaSource.fromResource(name).mkString
+  // Dotty forbids overriding vals with lazy vals...
+  val content = ScalaSource.fromResource(name).mkString
 
-    def useAsFile[T](fn : String => T) : T = {
-        val filename = Filenames.makeTempFilename(name)
-        try {
-          IO.createFile(filename, content)
-          fn(filename)
-        } finally {
-          IO.deleteFile(filename)
-        }
+  def useAsFile[T](fn : String => T) : T = {
+    val filename = Filenames.makeTempFilename(name)
+    try {
+      IO.createFile(filename, content)
+      fn(filename)
+    } finally {
+      IO.deleteFile(filename)
     }
-
+  }
 }

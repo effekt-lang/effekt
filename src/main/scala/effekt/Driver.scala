@@ -147,7 +147,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   }
 
   def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
-
+    
 //    if (config.compile()) {
 //      copyPrelude(config)
 //    }
