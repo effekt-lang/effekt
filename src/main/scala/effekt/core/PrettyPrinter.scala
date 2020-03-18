@@ -33,7 +33,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit() => "null"
+    case UnitLit() => "()"
     case l: Literal[t] => l.value.toString
     case ValueVar(id) => id.name.toString
 

@@ -10,6 +10,8 @@ import effekt.source.traversal._
 import effekt.symbols._
 import effekt.util.scopes._
 
+import org.bitbucket.inkytonik.kiama.util.Source
+
 case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol])
 
 /**
@@ -26,8 +28,8 @@ class Namer extends Phase { namer =>
   val name = "Namer"
 
   case class State(
-    path: String,
-    module: source.ModuleDecl,
+    source: Source,
+    module: effekt.source.ModuleDecl,
     terms: Scope[String, TermSymbol],
     types: Scope[String, TypeSymbol]
   )
@@ -35,7 +37,7 @@ class Namer extends Phase { namer =>
   given (given C: CompilerContext): NamerOps = new NamerOps {}
 
 
-  def run(path: String, module: source.ModuleDecl, compiler: CompilerContext): Environment = {
+  def run(src: Source, module: source.ModuleDecl, compiler: CompilerContext): Environment = {
 
     val topLevelTerms = toplevel[String, TermSymbol](builtins.rootTerms)
     val topLevelTypes = toplevel[String, TypeSymbol](builtins.rootTypes)
@@ -46,7 +48,7 @@ class Namer extends Phase { namer =>
         (terms.enterWith(cu.exports.terms), types.enterWith(cu.exports.types))
     }
 
-    val state = State(path, module, terms.enter, types.enter)
+    val state = State(src, module, terms.enter, types.enter)
     compiler.phases.init(this)(state)
     resolve(given compiler)(module)
 
@@ -248,7 +250,7 @@ class Namer extends Phase { namer =>
         }
 
       case d @ source.ExternInclude(path) =>
-        d.contents = Compiler.resolveInclude(Compiler.path, path)
+        d.contents = Compiler.resolveInclude(Compiler.source, path)
         ()
     }
   }
@@ -295,10 +297,10 @@ class Namer extends Phase { namer =>
 
     // State Access
     // ============
-    def (C: CompilerContext) path: String =
-      C.phases.get(namer).path
+    def (C: CompilerContext) source: Source =
+      C.phases.get(namer).source
 
-    def (C: CompilerContext) module: source.ModuleDecl =
+    def (C: CompilerContext) module: effekt.source.ModuleDecl =
       C.phases.get(namer).module
 
     def (C: CompilerContext) terms: Scope[String, TermSymbol] =

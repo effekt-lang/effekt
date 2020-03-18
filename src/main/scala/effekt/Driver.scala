@@ -98,7 +98,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     val buffer = context.buffer
 
     try {
-      val exports = namer.run(source.name, ast, context)
+      val exports = namer.run(source, ast, context)
       typer.run(ast, exports, context)
 
       // TODO improve error reporting code
@@ -148,14 +148,14 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
   def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
 
+//    if (config.compile()) {
+//      copyPrelude(config)
+//    }
+
     context.setup(ast, config)
 
     process(source, ast, context) match {
       case Right(unit) =>
-        if (config.compile()) {
-          copyPrelude(config)
-        }
-
         if (!config.server()) {
           object evaluator extends Evaluator
           evaluator.run(unit, context)
@@ -185,7 +185,10 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
       case Right(msgs) => Left(msgs)
     }
 
+  // TODO create temp folder, copy files from JAR/lib to the temp folder and
+  //      add folder to the config
   def copyPrelude(config: EffektConfig): Unit = {
+
     val preludeFile = config.outputPath().toPath.resolve("effekt.js").toFile
     if (!preludeFile.exists()) {
       println("Copying prelude to " + preludeFile.getCanonicalPath)
