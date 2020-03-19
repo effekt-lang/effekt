@@ -131,8 +131,8 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     }
 
     if (config.compile()) {
-      val out = config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
-      if (!out.exists()) out.mkdir()
+      val outDir = config.outputPath().toPath
+      val out = outDir.resolve(moduleFile(unit.module.path)).toFile
       println("Writing compiled Javascript to " + out)
       IO.createFile(out.getCanonicalPath, javaScript.layout)
     }

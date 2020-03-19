@@ -3,7 +3,7 @@ package context
 
 import java.io.{ File, Reader }
 
-import scala.io.{ Source => ScalaSource }
+import scala.io.{ BufferedSource, Source => ScalaSource }
 import effekt.context.CompilerContext
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source, StringSource }
@@ -22,12 +22,19 @@ trait ModuleDB { self: CompilerContext =>
   def resolveInclude(moduleSource: Source, path: String): String = moduleSource match {
     case JarSource(name) =>
       val p = new File(name).toPath.getParent.resolve(path).toString
-      JarSource(p).content
+      if (!JarSource.exists(p)) {
+        abort(s"Missing include in: ${p}")
+      } else {
+        JarSource(p).content
+      }
     case _ =>
       val modulePath = moduleSource.name
       val p = new File(modulePath).toPath.getParent.resolve(path).toFile
-      if (!p.exists()) { sys error s"Missing include: ${p}" }
-      FileSource(p.getCanonicalPath).content
+      if (!p.exists()) {
+        abort(s"Missing include: ${p}")
+      } else {
+        FileSource(p.getCanonicalPath).content
+      }
   }
 
   def resolve(source: Source): Either[Messages, CompilationUnit] =
@@ -45,23 +52,28 @@ trait ModuleDB { self: CompilerContext =>
     config.includes().map { p => p.toPath.resolve(filename).toFile } collectFirst {
       case file if file.exists => FileSource(file.getCanonicalPath)
     } orElse {
-//      val cl = Thread.currentThread().getContextClassLoader()
-//      val url = cl.getResource("lib/" + filename)
-//      val source = ScalaSource.fromResource("lib/" + filename)
-      Some(JarSource("lib/" + filename))
+      val jarPath = "lib/" + filename
+      if (JarSource.exists(jarPath)) {
+        Some(JarSource(jarPath))
+      } else {
+        None
+      }
     }
   }
 }
 
 /**
  * A source that is a string.
+ *
+ * TODO open a PR and make content a def in Kiama
  */
 case class JarSource(name: String) extends Source {
 
-  def reader: Reader = ScalaSource.fromResource(name).bufferedReader
+  val resource = ScalaSource.fromResource(name)
 
-  // Dotty forbids overriding vals with lazy vals...
-  val content = ScalaSource.fromResource(name).mkString
+  def reader: Reader = resource.bufferedReader
+
+  val content: String = resource.mkString
 
   def useAsFile[T](fn : String => T) : T = {
     val filename = Filenames.makeTempFilename(name)
@@ -71,5 +83,13 @@ case class JarSource(name: String) extends Source {
     } finally {
       IO.deleteFile(filename)
     }
+  }
+}
+
+object JarSource {
+  def exists(name: String): Boolean = {
+    val cl = Thread.currentThread().getContextClassLoader()
+    val stream = cl.getResourceAsStream(name)
+    stream != null
   }
 }
