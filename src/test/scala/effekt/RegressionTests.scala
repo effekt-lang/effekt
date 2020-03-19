@@ -2,12 +2,10 @@ package effekt
 
 import java.io.File
 
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import sbt.io._
 import sbt.io.syntax._
 import org.junit.Test
 import org.junit.Assert._
-//import org.bitbucket.inkytonik.kiama.util._
 
 import scala.language.implicitConversions
 
@@ -23,7 +21,7 @@ class RegressionTests {
       val baseName = file.getName.stripSuffix(".effekt")
       val checkfile = path / (baseName + ".check")
 
-      val out = compile(file.getPath)
+      val out = interpret(file.getPath)
 
       val expected = if (checkfile.exists()) { IO.read(checkfile).toString } else { "" }
 
@@ -36,7 +34,7 @@ class RegressionTests {
       val baseName = file.getName.stripSuffix(".effekt")
       val checkfile = path / (baseName + ".check")
 
-      val out = compile(file.getPath)
+      val out = interpret(file.getPath)
 
       if (checkfile.exists()) {
         val expected = IO.read(checkfile).toString
@@ -48,7 +46,7 @@ class RegressionTests {
     }
 
 
-  def compile(filename: String): String = {
+  def interpret(filename: String): String = {
     object compiler extends effekt.Driver
     val configs = compiler.createConfig(Seq("--Koutput", "string"))
     configs.verify()
