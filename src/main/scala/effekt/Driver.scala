@@ -73,23 +73,14 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     new EffektConfig(args)
   }
 
-  override def compileFile(filename: String, config: EffektConfig, encoding : String = "UTF-8"): Unit = {
-    val output = config.output()
-    val source = FileSource(filename, encoding)
-
-    makeast(source, config) match {
-        case Left(ast) =>
-            process(source, ast, config)
-        case Right(msgs) =>
-            output.emit(messaging.formatMessages(msgs))
-    }
-  }
-
   override def parse(source: Source): ParseResult[ModuleDecl] = {
     val parsers = new Parser(positions)
     parsers.parseAll(parsers.program, source)
   }
 
+  /**
+   * Main entry to the compiler, invoked by Kiama after parsing with `parse`
+   */
   override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
 
     context.setup(ast, config)
@@ -116,40 +107,37 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
       case Right(msgs) => Left(msgs)
     }
 
-  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
-    frontend(source, ast, context) match {
-      case Right(unit) if context.config.compile() || context.config.server() =>
-        backend(unit, context)
-        Right(unit)
-      case result => result
+  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] =
+    try {
+      frontend(source, ast, context) match {
+        case Right(unit) if context.config.compile() || context.config.server() =>
+          backend(unit, context)
+          Right(unit)
+        case result => result
+      }
+    } catch {
+      case FatalPhaseError(msg, reporter) =>
+        reporter.error(msg)
+        Left(context.buffer.get)
     }
-  }
 
   /**
    * The compiler frontend
    */
   def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
 
-
     object namer extends Namer
     object typer extends Typer
 
     val buffer = context.buffer
 
-    try {
-      val exports = namer.run(source, ast, context)
-      typer.run(ast, exports, context)
+    val exports = namer.run(source, ast, context)
+    typer.run(ast, exports, context)
 
-      // TODO improve error reporting code
-      if (buffer.hasErrors) {
-        Left(buffer.get)
-      } else {
-        Right(CompilationUnit(source, ast, exports, buffer.get))
-      }
-    } catch {
-      case FatalPhaseError(msg, reporter) =>
-        reporter.error(msg)
-        Left(buffer.get)
+    if (buffer.hasErrors) {
+      Left(buffer.get)
+    } else {
+      Right(CompilationUnit(source, ast, exports, buffer.get))
     }
   }
 
