@@ -8,14 +8,16 @@ lazy val root = project
 
     scalaVersion := dottyVersion,
 
-    libraryDependencies ++= Seq(
-        ("org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0").withDottyCompat(scalaVersion.value),
-        ("org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0").withDottyCompat(scalaVersion.value),
-        ("com.novocode" % "junit-interface" % "0.11" % "test").withDottyCompat(scalaVersion.value),
-        ("org.scala-sbt" %% "io" % "1.3.1" % "test").withDottyCompat(scalaVersion.value)
-    ),
+    libraryDependencies ++= dependencies.map(d => d.withDottyCompat(scalaVersion.value)),
 
     mainClass in assembly := Some("effekt.Server"),
     assemblyJarName in assembly := "effekt.jar",
     Test / parallelExecution := false
   )
+
+lazy val dependencies = Seq(
+  "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0",
+  "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
+  "com.novocode" % "junit-interface" % "0.11" % "test",
+  "org.scala-sbt" %% "io" % "1.3.1" % "test"
+)
