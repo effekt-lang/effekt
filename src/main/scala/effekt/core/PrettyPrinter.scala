@@ -25,7 +25,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case BlockDef(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
     case Lift(b) => parens(toDoc(b))
-    case Extern(ps, body) => sys error "Externs should only be used as toplevel declarations"
+    case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString

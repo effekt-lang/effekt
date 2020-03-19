@@ -2,16 +2,41 @@ module io/file
 
 extern effect FileIO
 
-effect IoException[A](msg: String): A
+effect IOException[A](msg: String): A
 
 extern include "file_include.js"
+
+extern type FileDescriptor
+
+extern type Buffer
 
 type Result[A] {
   Error(msg: String);
   Success(a: A)
 }
 
-// extern def readAsync[R](path: String) { callback: Result[String] => R }: R / FileIO
+extern type Promise[T]
 
-extern def read(path: String): Result[String] / FileIO =
-  "$effekt.callcc(k => fs.readFile(path, (err, data) => k(err ? Error(err) : Success(data))))"
+extern def readPromise(path: String): Promise[String] / FileIO =
+  "$effekt.delayed(() => fsPromises.readFile(path, 'utf8'))"
+
+extern def await[T](p: Promise[T]): T / { FileIO, IOException } =
+  "$effekt.callcc(k => p.then(res => k($effekt.pure(res)), err => k(IOException(err.message)))).then(c => c)"
+
+extern def open(path: String, mode: String): FileDescriptor / { FileIO, IOException } =
+  "$effekt.delayed(() => { try { return $effekt.pure(fs.openSync(path, mode)); } catch (err) { return IOException(err.message); }}).then(c => c)"
+
+extern def close(fd: FileDescriptor): Unit / { FileIO } =
+  "$effekt.delayed(() => fs.closeSync(fd))"
+
+// uses the asynchronous API of node
+extern def readFile(path: String): Result[String] / FileIO =
+  "$effekt.callcc(k => fs.readFile(path, 'utf8', (err, data) => k(err ? Error(err.message) : Success(data))))"
+
+def read(path: String): String / { FileIO, IOException } =
+  getResult(readFile(path))
+
+def getResult[R](r: Result[R]): R / { IOException } = r match {
+  case Error(msg) => do IOException(msg)
+  case Success(r) => r
+}

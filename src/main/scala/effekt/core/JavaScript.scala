@@ -30,7 +30,8 @@ class JavaScript extends ParenPrettyPrinter {
     case BlockDef(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> toDoc(body)
     case Lift(b) => "$effekt.lift" <> parens(toDoc(b))
-    case Extern(ps, body) => sys error "Externs should only be used as toplevel declarations"
+    case Extern(ps, body) =>
+      parens(hsep(ps map toDoc, comma)) <+> "=>" <+> body
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString

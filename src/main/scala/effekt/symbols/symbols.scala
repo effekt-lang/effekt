@@ -89,7 +89,7 @@ package object symbols {
   sealed trait ValueType extends Type
 
   case class TypeVar(name: Name) extends ValueType with TypeSymbol
-  case class TypeApp(tpe: DataType, args: List[ValueType]) extends ValueType {
+  case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
   }
 

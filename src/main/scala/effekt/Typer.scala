@@ -117,7 +117,7 @@ class Typer extends Phase { typer =>
 
       val datatype = tpe match {
         case d: DataType => d
-        case TypeApp(d, _) => d
+        case TypeApp(d: DataType, _) => d
       }
 
       // check exhaustivity
@@ -421,7 +421,7 @@ class Typer extends Phase { typer =>
     }
 
     def (C: CompilerContext) wellscoped(a: Effects) = {
-      val forbidden = a -- C.effects
+      val forbidden = Effects(a.effs.filterNot { e => e.builtin }) -- C.effects
       if (forbidden.nonEmpty) {
         C.error(s"Effects ${forbidden} leave their defining scope.")
       }

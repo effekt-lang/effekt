@@ -44,6 +44,7 @@ class Namer extends Phase { namer =>
 
     val (terms, types) = module.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
+        // TODO if Left, report the errors here!
         val Right(cu) = compiler.resolve(path)
         (terms.enterWith(cu.exports.terms), types.enterWith(cu.exports.types))
     }
@@ -264,8 +265,7 @@ class Namer extends Phase { namer =>
    */
   def resolveValueType(tpe: source.ValueType)(given CompilerContext): ValueType = tpe match {
     case source.TypeApp(id, args) =>
-      val data = id.resolveType().asDataType
-      if (data.tparams.size != args.size) { Compiler.error("Wrong number of arguments to " + data) }
+      val data = id.resolveType().asValueType
       TypeApp(data, args.map(resolveValueType))
     case source.TypeVar(id) => id.resolveType().asValueType
   }
