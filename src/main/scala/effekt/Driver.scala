@@ -35,8 +35,6 @@ class EffektConfig(args : Seq[String]) extends Config(args) {
     required = false
   )
 
-  validateFileIsDirectory(outputPath)
-
   lazy val includes = opt[List[File]](
     "includes",
     descr = "Path to consider for includes (can be set multiple times)",
@@ -134,6 +132,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
     if (config.compile()) {
       val out = config.outputPath().toPath.resolve(moduleFile(unit.module.path)).toFile
+      if (!out.exists()) out.mkdir()
       println("Writing compiled Javascript to " + out)
       IO.createFile(out.getCanonicalPath, javaScript.layout)
     }
@@ -147,10 +146,6 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   }
 
   def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
-
-//    if (config.compile()) {
-//      copyPrelude(config)
-//    }
 
     context.setup(ast, config)
 
