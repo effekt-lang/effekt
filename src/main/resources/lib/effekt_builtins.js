@@ -20,10 +20,14 @@ const $builtins = (function() {
     }
   }
 
+  function print(obj) {
+    console.log(show(obj))
+  }
+
   return {
     show: show,
     equals: equals,
-    println: value => console.log(show(value)),
+    println: print,
     concat: (s1, s2) => s1 + s2,
     mod: (n1, n2) => n1 % n2,
     mulDouble: (d1, d2) => d1 * d2,

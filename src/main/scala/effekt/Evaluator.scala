@@ -52,7 +52,7 @@ class Evaluator {
     }
 
     case class DataValue(tag: Constructor, args: List[Value]) extends Value {
-      override def toString = s"${tag.name}(${ args.mkString(",") })"
+        override def toString = s"${tag.name}(${ args.map { _.toString }.mkString(", ") })"
     }
   }
 
@@ -277,7 +277,7 @@ class Evaluator {
     infixOr  -> logical(_ || _),
     infixAnd -> logical(_ && _),
     not      -> Thunk { Closure { case BooleanValue(b) :: _ => pure(BooleanValue(!b)) } },
-    printInt -> Thunk { Closure { case x :: _ => out.emitln(x); pure(UnitValue) } },
+    printInt -> Thunk { Closure { case x :: _ => out.emitln(x.toString); pure(UnitValue) } },
     show     -> Thunk { Closure { case x :: _ => pure(StringValue(x.toString)) } },
     infixConcat -> Thunk { Closure { case StringValue(l) :: StringValue(r) :: _ => pure(StringValue(l + r)) } },
 

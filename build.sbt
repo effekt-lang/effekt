@@ -16,5 +16,6 @@ lazy val root = project
     ),
 
     mainClass in assembly := Some("effekt.Server"),
-    assemblyJarName in assembly := "effekt.jar"
+    assemblyJarName in assembly := "effekt.jar",
+    Test / parallelExecution := false
   )

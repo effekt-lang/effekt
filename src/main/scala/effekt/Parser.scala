@@ -108,7 +108,9 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val bool = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit = literal("()") ^^^ UnitLit()
   lazy val double = regex("(0|[1-9][0-9]*)[.]([0-9]+)".r) ^^ { n => DoubleLit(n.toDouble) }
-  lazy val string = """\"([^\"]*)\"""".r ^^ StringLit // TODO strip quotations from string
+  lazy val string = """\"([^\"]*)\"""".r ^^ {
+    s => StringLit(s.substring(1, s.size - 1))
+  }
 
 
   // === Parsing ===

@@ -48,4 +48,4 @@ def handledTriple(n : Int, s : Int) =
   } with {
     case Flip() => concat(resume(true), resume(false))
   }
-def main() = println(show(handledTriple(10, 15)))
+def main() = println(handledTriple(10, 15))

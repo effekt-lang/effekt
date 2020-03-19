@@ -16,7 +16,7 @@ def sum() = {
   }
 }
 
-def map { f : Int => Int } { prog : Unit / Read } : Unit / Read = {
+def map { f : Int => Int } { prog : Unit / Read } : Unit / {Read} = {
   try {
     prog()
   } with {
