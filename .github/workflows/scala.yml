@@ -13,5 +13,10 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 1.8
-    - name: Run tests
-      run: sbt clean test
+    - name: Run tests and assemble jar file
+      run: sbt clean assembly
+    - name: Upload jar file
+      uses: actions/upload-artifact@v1
+      with:
+        name: effekt
+        path: target/scala-0.21/effekt.jar
