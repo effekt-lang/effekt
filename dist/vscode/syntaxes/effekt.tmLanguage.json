@@ -58,7 +58,7 @@
         "match": "\\b(module|import|def|val|var|effect|type|match|case)\\b",
         "name": "keyword.syntax"
       }, {
-        "match": "\\b(resume|while|try|with|if|else|do)\\b",
+        "match": "\\b(resume|while|try|with|if|else|do|handle)\\b",
         "name": "keyword.control"
       }]
     },
