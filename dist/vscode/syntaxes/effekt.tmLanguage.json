@@ -55,7 +55,7 @@
     },
     "keywords": {
       "patterns": [{
-        "match": "\\b(module|import|def|val|var|effect|type|match|case)\\b",
+        "match": "\\b(module|import|def|val|var|effect|type|match|case|record)\\b",
         "name": "keyword.syntax"
       }, {
         "match": "\\b(resume|while|try|with|if|else|do|handle)\\b",
