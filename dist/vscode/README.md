@@ -1,4 +1,4 @@
-# minijava README
+# Effekt Visual Studio Code
 
 VSCode Language Server Client for Effekt
 
