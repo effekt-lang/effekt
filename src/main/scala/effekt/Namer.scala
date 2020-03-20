@@ -104,11 +104,11 @@ class Namer extends Phase { namer =>
       resolveAll(clauses)
 
     case source.OpClause(op, params, body, resumeId) =>
-      Compiler.at(op) { op.resolveTerm() }
+      val opSym = Compiler.at(op) { op.resolveTerm() }.asEffectOp
       val ps = params.map(resolveValueParams)
       Compiler scoped {
         Compiler.bind(ps)
-        resumeId := ResumeParam()
+        resumeId := ResumeParam(opSym)
         resolve(body)
       }
 
@@ -132,7 +132,7 @@ class Namer extends Phase { namer =>
     case source.Call(id, targs, args) =>
       id.resolveTerm() match {
         case b: BlockParam => ()
-        case ResumeParam() => ()
+        case ResumeParam(op) => ()
         case f: Fun => ()
         case _ => Compiler.error("Expected callable")
       }

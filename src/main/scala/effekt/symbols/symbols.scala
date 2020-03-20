@@ -27,7 +27,7 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
-  case class ResumeParam() extends Param with BlockSymbol { val name = LocalName("resume") }
+  case class ResumeParam(op: EffectOp) extends Param with BlockSymbol { val name = LocalName("resume") }
   
 
   /**
