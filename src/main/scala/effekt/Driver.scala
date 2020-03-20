@@ -20,7 +20,7 @@ import java.io.File
 
 import context.CompilerContext
 
-class EffektConfig(args : Seq[String]) extends Config(args) {
+class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
   lazy val compile = toggle(
     "compile",
     descrYes = "Compile the Effekt program to JavaScript",
