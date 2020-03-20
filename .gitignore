@@ -3,4 +3,6 @@ build/
 out/
 project/target/
 target/
-
+drafts/
+node_modules/
+package-lock.json
