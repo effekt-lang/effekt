@@ -26,3 +26,9 @@ jobs:
     - name: Package VSCode extension into .vsix file
       run: vsce package
       working-directory: dist/vscode
+
+    - name: Upload vsix file
+      uses: actions/upload-artifact@v1
+      with:
+        name: effekt-vscode
+        path: dist/vscode/effekt-0.1.0.vsix
