@@ -1,0 +1,108 @@
+{
+    "name": "effekt",
+    "displayName": "effekt",
+    "description": "The Effekt language",
+    "version": "0.1.0",
+    "publisher": "b-studios",
+    "engines": {
+        "vscode": "^1.30.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onLanguage:effekt"
+    ],
+    "main": "./out/extension",
+    "contributes": {
+        "languages": [
+            {
+                "id": "effekt",
+                "extensions": [
+                    ".eff",
+                    ".effekt"
+                ],
+                "aliases": [
+                    "Effekt",
+                    "effekt"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "effekt",
+                "scopeName": "source.effekt",
+                "path": "./syntaxes/effekt.tmLanguage.json"
+            }
+        ],
+        "configuration": {
+            "type": "object",
+            "title": "Effekt",
+            "properties": {
+                "effekt.compiler": {
+                    "type": "string",
+                    "default": "/Users/jonathan/Desktop/github/effekt/target/scala-0.21/effekt.jar",
+                    "description": "Path to the effekt compiler jar (you need to restart vscode after changing this setting)."
+                },
+                "effekt.showExplanations": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Display additional information when hovering over identifier."
+                },
+                "effekt.showOutline": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show a source form outline."
+                },
+                "effekt.showTarget": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show the generated JavaScript."
+                },
+                "effekt.showCore": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Show the translated Core (System Ξ)."
+                },
+                "effekt.updateOnChange": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "By default, updates are processed when a relevant file is opened or saved. If this setting is true, they are also updated after each change."
+                }
+            }
+        },
+        "commands": [
+            {
+                "category": "Effekt",
+                "command": "effekt.selectLinkedEditors",
+                "title": "Focus Product Editors"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "effekt.selectLinkedEditors",
+                "key": "ctrl+alt+p",
+                "mac": "cmd+alt+p",
+                "when": "editorTextFocus && editorLangId == 'effekt'"
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "postinstall": "node ./node_modules/vscode/bin/install",
+        "test": "npm run compile && node ./node_modules/vscode/bin/test"
+    },
+    "dependencies": {
+        "vscode-languageclient": "^5.2.1"
+    },
+    "devDependencies": {
+        "typescript": "^2.6.1",
+        "vscode": "^1.1.26",
+        "tslint": "^5.8.0",
+        "@types/node": "^7.0.43",
+        "@types/mocha": "^2.2.42"
+    }
+}
