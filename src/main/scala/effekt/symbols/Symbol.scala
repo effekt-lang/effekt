@@ -2,24 +2,6 @@ package effekt.symbols
 
 import org.bitbucket.inkytonik.kiama.util.Counter
 
-sealed trait Name {
-  def name: String
-  def qualified: String
-
-  override def toString: String = name
-}
-case class LocalName(name: String) extends Name { def qualified = name }
-case class QualifiedName(path: String, name: String) extends Name {
-  def qualified: String = moduleName(path) + "." + name
-}
-object Name {
-  // constructs a name form a path
-  def apply(path: String): Name = path.split('/') match {
-    case Array(name) => LocalName(name)
-    case segs => QualifiedName(segs.init.mkString("/"), segs.last)
-  }
-}
-
 /**
  * A symbol uniquely represents a code entity
  *
@@ -35,32 +17,25 @@ object Name {
 trait Symbol {
 
   /**
-   * The name of the symbol as it appears in the source program
+   * The name of this symbol
    */
   val name: Name
 
   /**
-   * The unique name of this symbol
+   * The unique id of this symbol
    */
-  lazy val uniqueName: String = name.toString + Symbol.fresh.next()
+  private lazy val id: Int = Symbol.fresh.next()
 
   /**
    * Does this symbol denote a builtin?
    */
   def builtin = false
 
-  override def hashCode: Int = uniqueName.hashCode
+  override def hashCode: Int = id
   override def equals(other: Any): Boolean = other match {
-    case other: Symbol => this.uniqueName == other.uniqueName
+    case other: Symbol => this.id == other.id
     case _ => false
   }
-
-  /**
-   * The owner of this symbol, that is, the scope in which it is defined.
-   *
-   * written during the namer phase, then should never be changed again
-   */
-  var owner: Option[Symbol] = None
 
   override def toString = name.toString
 }

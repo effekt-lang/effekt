@@ -31,12 +31,12 @@ package object symbols {
    * Symbols and types are stored globally in CompilerContext.
    */
   case class Module(
-    name: Name,
+    decl: ModuleDecl,
     source: Source,
     terms: Map[String, TermSymbol], // exported (toplevel) terms
-    types: Map[String, TypeSymbol], // exported (toplevel) types
-    decl: ModuleDecl
+    types: Map[String, TypeSymbol]  // exported (toplevel) types
   ) extends Symbol {
+    val name = LocalName(moduleName(decl.path))
     def outputName = moduleFile(decl.path)
   }
 

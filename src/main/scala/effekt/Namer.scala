@@ -50,13 +50,15 @@ class Namer extends Phase { namer =>
 
     val state = State(src, decl, terms.enter, types.enter)
     compiler.phases.init(this)(state)
+
+
     resolve(given compiler)(decl)
 
     Module(
-      LocalName(moduleName(decl.path)),
+      decl,
       src,
       state.terms.bindings.toMap,
-      state.types.bindings.toMap, decl)
+      state.types.bindings.toMap)
   }
 
   /**
