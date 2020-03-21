@@ -10,9 +10,8 @@ import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 
 // for now we only take expressions
-trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
+class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
-  object driver extends Driver
   object evaluator extends Evaluator
 
   var module: ReplModule = emptyModule
@@ -32,6 +31,19 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
        |""".stripMargin
 
   def createConfig(args: Seq[String]) = driver.createConfig(args)
+
+  // Adapting Kiama REPL's driver to work with an already processed config
+  def run(config: EffektConfig): Unit = {
+    val out = config.output()
+    out.emitln(banner)
+
+    if (config.time())
+      profiler.time(processlines(config))
+    else
+      processlines(config)
+
+    config.output().emitln
+  }
 
   def parse(source: Source): ParseResult[Tree] = {
     val parsers = new Parser(positions)
@@ -252,4 +264,3 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }
-object Repl extends EffektRepl

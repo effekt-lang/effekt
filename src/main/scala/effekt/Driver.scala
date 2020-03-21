@@ -80,6 +80,13 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     populate(builtins.rootTerms.values)
   }
 
+  // no file names are given, run REPL
+  override def run(config: EffektConfig): Unit =
+    if (config.filenames().isEmpty) {
+      new EffektRepl(this).run(config)
+    } else {
+      super.run(config)
+    }
 
   override def createConfig(args : Seq[String]) =
     new EffektConfig(args)
