@@ -183,7 +183,11 @@ class Evaluator {
       case (d: DataDef) => d.ctors.map { ctor =>
         ctor.symbol -> Thunk { evalConstructor(ctor) }
       }
-      case _ => Nil
+      // top level values -- they do not have effects
+      case (v: ValDef) =>
+        List(v.symbol -> Thunk { evalStmt(v.binding).run() })
+      case _ =>
+        Nil
     }.toMap
     bindings
   }

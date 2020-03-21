@@ -156,34 +156,8 @@ class Typer extends Phase { typer =>
   //<editor-fold desc="statements and definitions">
 
   def checkStmt(expected: Option[Type])(given CompilerContext): Checker[Stmt] = checkAgainst(expected) {
-
-    case source.DefStmt(d @ source.EffDef(id, tps, ps, ret), rest) =>
-      precheckDef(d) // to bind types to the effect ops
-      Compiler in { // establish lexical scope here
-        Compiler.withEffect(d.symbol)
-        checkStmt(expected)(rest)
-      }
-
-    case source.DefStmt(d @ source.ValDef(id, annot, binding), rest) =>
-      val (t / effBinding) = d.symbol.tpe match {
-        case Some(t) => binding checkAgainst t
-        case None    => checkStmt(None)(binding)
-      }
-      Compiler.define(d.symbol, t)
-      val (r / effStmt) =  checkStmt(expected)(rest)
-      r / (effBinding ++ effStmt)
-
-    case source.DefStmt(d @ source.VarDef(id, annot, binding), rest) =>
-      val (t / effBinding) = d.symbol.tpe match {
-        case Some(t) => binding checkAgainst t
-        case None    => checkStmt(None)(binding)
-      }
-      Compiler.define(d.symbol, t)
-      val (r / effStmt) = checkStmt(expected)(rest)
-      r / (effBinding ++ effStmt)
-
     case source.DefStmt(b, rest) =>
-      val (t / effBinding) = { precheckDef(b); synthDef(b) }
+      val (t / effBinding) = Compiler in { precheckDef(b); synthDef(b) }
       val (r / effStmt)    = checkStmt(expected)(rest)
       r / (effBinding ++ effStmt)
 
@@ -234,16 +208,25 @@ class Typer extends Phase { typer =>
           tpe / Pure // all effects are handled by the function itself (since they are inferred)
       }
 
+    case d @ source.EffDef(id, tps, ps, ret) =>
+      Compiler.withEffect(d.symbol)
+      TUnit / Pure
+
     case d @ source.ValDef(id, annot, binding) =>
-      d.symbol.tpe match {
+      val (t / effBinding) = d.symbol.tpe match {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
+      Compiler.define(d.symbol, t)
+      t / effBinding
+
     case d @ source.VarDef(id, annot, binding) =>
-      d.symbol.tpe match {
+      val (t / effBinding) = d.symbol.tpe match {
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(None)(binding)
       }
+      Compiler.define(d.symbol, t)
+      t / effBinding
 
     // all other defintions have already been prechecked
     case d => TUnit / Pure

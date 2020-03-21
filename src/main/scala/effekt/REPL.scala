@@ -1,14 +1,13 @@
 package effekt
 
 import effekt.evaluator.Evaluator
-import org.bitbucket.inkytonik.kiama.parsing.ParseResult
-import org.bitbucket.inkytonik.kiama.util.{ ParsingREPLWithConfig, Source }
+import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, ParseResult, Success }
 import effekt.source._
 import effekt.util.messages.FatalPhaseError
 import effekt.symbols.{ BlockSymbol, TypeSymbol, ValueSymbol }
 import org.bitbucket.inkytonik.kiama
-import kiama.util.Messaging.Messages
-import kiama.util.Console
+import kiama.util.Messaging.{ Messages, message }
+import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 
 // for now we only take expressions
 trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
@@ -16,8 +15,7 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
   object driver extends Driver
   object evaluator extends Evaluator
 
-  var definitions: List[Def] = Nil
-  var imports: List[Import] = Nil
+  var module: ReplModule = emptyModule
 
   val banner =
     """|  _____     ______  __  __     _    _
@@ -29,6 +27,8 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
        |
        | Welcome to the Effekt interpreter. Enter a top-level definition, or
        | an expression to evaluate.
+       |
+       | To print the available commands, enter :help
        |""".stripMargin
 
   def createConfig(args: Seq[String]) = driver.createConfig(args)
@@ -38,10 +38,7 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
     parsers.parseAll(parsers.repl, source)
   }
 
-  def reset() = {
-    definitions = Nil
-    imports = Nil
-  }
+  def reset() = { module = emptyModule }
 
 
   /**
@@ -61,24 +58,30 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
      */
     def printHelp() : Unit = {
         output.emitln(
-          """|<expression>         print the result of evaluating exp
-             |<definition>         add a definition to the REPL context
-             |import <path>        add an import to the REPL context
+          """|<expression>              print the result of evaluating exp
+             |<definition>              add a definition to the REPL context
+             |import <path>             add an import to the REPL context
              |
-             |:imports             list all current imports
-             |:reset               reset the REPL state
-             |:help                print this help message
-             |:quit                quit this REPL""".stripMargin)
+             |:status                   show the current REPL environment
+             |:type (:t) <expression>   show the type of an expression
+             |:imports                  list all current imports
+             |:reset                    reset the REPL state
+             |:help (:h)                print this help message
+             |:quit (:q)                quit this REPL""".stripMargin)
     }
 
     source.content match {
+
+      case Command(List(":status")) =>
+        status(config)
+        Some(config)
 
       case Command(List(":reset")) =>
         reset()
         Some(config)
 
       case Command(List(":imports")) =>
-        output.emitln(imports.map { i => i.path }.mkString("\n"))
+        output.emitln(module.imports.map { i => i.path }.mkString("\n"))
         Some(config)
 
       case Command(List(":help")) | Command(List(":h")) =>
@@ -88,11 +91,73 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
       case Command(List(":quit")) | Command(List(":q")) =>
         None
 
+      case Command(":type" :: _) =>
+        val exprSource = StringSource(source.content.stripPrefix(":type "), source.name)
+        typecheck(exprSource, config)
+        Some(config)
+
+      case Command(":t" :: _) =>
+        val exprSource = StringSource(source.content.stripPrefix(":t "), source.name)
+        typecheck(exprSource, config)
+        Some(config)
+
       // Otherwise it's an expression for evaluation
       case _ =>
         super.processline(source, console, config)
     }
   }
+
+
+  def status(config: EffektConfig): Unit = {
+    val source = StringSource("")
+    val out = config.output()
+
+    module.imports.foreach { im =>
+      out.emitln(s"import ${im.path}")
+    }
+    out.emitln("")
+
+    // TODO use the pretty printer from the LSP server
+    reportOrElse(source, frontend(source, module.make(UnitLit()), config)) { cu =>
+      cu.exports.terms foreach {
+        case (name, sym: BlockSymbol) =>
+          val tpe = driver.context.blockType(sym)
+          out.emitln(s"$name : $tpe")
+
+        case (name, sym: ValueSymbol) =>
+          val tpe = driver.context.valueType(sym)
+          out.emitln(s"$name : $tpe")
+
+        // we currenty only show function and value definitions
+        // TODO add printing of other definitions, once we reuse the LSP server printer
+        case (name, sym) =>
+          ()
+      }
+    }
+  }
+
+
+  // TODO refactor and clean this up
+  def typecheck(source: Source, config: EffektConfig): Unit =
+    parse(source) match {
+      case Success(e: Expr, _) =>
+        reportOrElse(source, frontend(source, module.make(e), config)) { cu =>
+          val mainSym = cu.exports.terms("main")
+          val mainTpe = driver.context.blockType(mainSym)
+          config.output().emitln(mainTpe.ret)
+        }
+
+      case Success(other, _) =>
+        config.output().emitln("Can only show type of expressions")
+
+      // this is usually encapsulated in REPL.processline
+      case res : NoSuccess =>
+        val pos = res.next.position
+        positions.setStart(res, pos)
+        positions.setFinish(res, pos)
+        val messages = message(res, res.message)
+        report(source, messages, config)
+    }
 
 
   /**
@@ -101,37 +166,34 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
-      val decl = makeModule(e, imports, definitions)
 
-      reportOrElse(source, frontend(source, decl, config)) { cu =>
+      reportOrElse(source, frontend(source, module.make(e), config)) { cu =>
         val value = evaluator.run(cu, driver.context)
-
-        val mainSym = cu.exports.terms("main")
-        val mainTpe = driver.context.blockType(mainSym)
-        val out = s"${value} : ${mainTpe.ret}"
-
-        config.output().emitln(out)
+        config.output().emitln(value)
       }
 
-    case i: Import if imports.forall { other => other.path != i.path } =>
-      val extendedImports = imports :+ i
-      val decl = makeModule(UnitLit(), extendedImports, definitions)
+    case i: Import if !module.contains(i) =>
+      val extendedImports = module + i
+      val decl = extendedImports.make(UnitLit())
 
       reportOrElse(source, frontend(source, decl, config)) { cu =>
-        imports = extendedImports
+        module = extendedImports
       }
 
     case d: Def =>
-      val extendedDefs = definitions :+ d
-      val decl = makeModule(UnitLit(), imports, extendedDefs)
+      val extendedDefs = module + d
+      val decl = extendedDefs.make(UnitLit())
       reportOrElse(source, frontend(source, decl, config)) { cu =>
-        definitions = extendedDefs
+        module = extendedDefs
 
         // try to find the symbol for the def to print the type
         driver.context.get(d) match {
-          case v: ValueSymbol => Some(driver.context.valueType(v))
-          case b: BlockSymbol => Some(driver.context.blockType(b))
-          case t => None
+          case v: ValueSymbol =>
+            Some(driver.context.valueType(v))
+          case b: BlockSymbol =>
+            Some(driver.context.blockType(b))
+          case t =>
+            None
         } map { tpe =>
           config.output().emitln(tpe)
         }
@@ -150,12 +212,12 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case Right(cu) =>
       val buffer = driver.context.buffer
       if (buffer.hasErrors) {
-        driver.report(source, buffer.get, driver.context.config)
+        report(source, buffer.get, driver.context.config)
       } else {
         f(cu)
       }
     case Left(msgs) =>
-      driver.report(source, msgs, driver.context.config)
+      report(source, msgs, driver.context.config)
   }
 
   def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Either[Messages, CompilationUnit] = {
@@ -163,16 +225,32 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
     driver.frontend(source, ast, driver.context)
   }
 
-  private def makeModule(expr: Expr, imports: List[Import], definitions: List[Def]): ModuleDecl =
-    ModuleDecl("lib/interactive", imports,
-      definitions :+ FunDef(IdDef("main"), Nil, Nil, None,
-        Return(expr)))
-
-
   object Command {
     def unapply(str: String): Option[List[String]] =
       if (str.startsWith(":")) Some(str.split(' ').toList) else None
 
   }
+
+  /**
+   * A virtual module to which we add by using the REPL
+   */
+  case class ReplModule(
+    definitions: List[Def],
+    imports: List[Import]
+  ) {
+    def +(d: Def) = copy(definitions = definitions :+ d)
+    def +(i: Import) = copy(imports = imports :+ i)
+
+    def contains(im: Import) = imports.exists { other => im.path == other.path }
+
+    /**
+     * Create a module declaration using the given expression as body of main
+     */
+    def make(expr: Expr): ModuleDecl =
+      ModuleDecl("lib/interactive", imports,
+        definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+          Return(expr)))
+  }
+  lazy val emptyModule = ReplModule(Nil, Nil)
 }
 object Repl extends EffektRepl
