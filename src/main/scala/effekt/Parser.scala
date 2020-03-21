@@ -33,6 +33,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val `[` = literal("[")
   lazy val `]` = literal("]")
   lazy val `,` = literal(",")
+  lazy val `.` = literal(".")
   lazy val `/` = literal("/")
   lazy val `=>` = literal("=>")
   lazy val `handle` = keyword("handle")
@@ -269,7 +270,13 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val eqExpr:  P[Expr] = relExpr  ~ oneof("==", "!=") ~/ eqExpr ^^ binaryOp | relExpr
   lazy val relExpr: P[Expr] = addExpr  ~ oneof("<=", ">=", "<", ">") ~/ relExpr ^^ binaryOp | addExpr
   lazy val addExpr: P[Expr] = mulExpr  ~ oneof("++", "+", "-") ~/ addExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Expr] = callExpr ~ oneof("*", "/") ~/ callExpr ^^ binaryOp | callExpr
+  lazy val mulExpr: P[Expr] = callExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
+
+  lazy val accessExpr: P[Expr] =
+    ((accessExpr <~ `.`) ~ idRef ~ maybeTypeArgs ~ many(args) ^^ {
+      case firstArg ~ name ~ targs ~ otherArgs =>
+        Call(name, targs, ValueArgs(List(firstArg)) :: otherArgs)
+    }) | callExpr
 
   lazy val callExpr: P[Expr] =
     ( ifExpr

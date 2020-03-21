@@ -177,7 +177,6 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
-
       reportOrElse(source, frontend(source, module.make(e), config)) { cu =>
         val value = evaluator.run(cu, driver.context)
         config.output().emitln(value)
