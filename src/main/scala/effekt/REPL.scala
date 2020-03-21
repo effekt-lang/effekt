@@ -4,7 +4,7 @@ import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, ParseResult, Success }
 import effekt.source._
 import effekt.util.messages.FatalPhaseError
-import effekt.symbols.{ BlockSymbol, TypeSymbol, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, TypeSymbol, ValueSymbol }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
@@ -80,6 +80,11 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
         reset()
         Some(config)
 
+      case Command(List(":l", path)) =>
+        val src = StringSource(s"import $path", source.name)
+        super.processline(src, console, config)
+        Some(config)
+
       case Command(List(":imports")) =>
         output.emitln(module.imports.map { i => i.path }.mkString("\n"))
         Some(config)
@@ -109,6 +114,8 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
 
   def status(config: EffektConfig): Unit = {
+    import symbols._
+
     val source = StringSource("")
     val out = config.output()
 
@@ -117,21 +124,13 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
     out.emitln("")
 
-    // TODO use the pretty printer from the LSP server
     reportOrElse(source, frontend(source, module.make(UnitLit()), config)) { cu =>
-      cu.exports.terms foreach {
-        case (name, sym: BlockSymbol) =>
-          val tpe = driver.context.blockType(sym)
-          out.emitln(s"$name : $tpe")
+      val ctx = driver.context
 
-        case (name, sym: ValueSymbol) =>
-          val tpe = driver.context.valueType(sym)
-          out.emitln(s"$name : $tpe")
-
-        // we currenty only show function and value definitions
-        // TODO add printing of other definitions, once we reuse the LSP server printer
-        case (name, sym) =>
-          ()
+      module.definitions.foreach {
+        case u: Def =>
+          val sym = ctx.get(u)
+          out.emitln(DeclPrinter(sym, driver.context))
       }
     }
   }

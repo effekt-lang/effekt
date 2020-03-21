@@ -54,18 +54,6 @@ trait LSPServer extends Driver {
   } yield (id, sym)
 
 
-  // TODO move to a separate pretty printer
-  def printFun(kw: String, f: Fun, ret: Effectful): String = {
-    val tps = if (f.tparams.isEmpty) "" else s"[${ f.tparams.mkString(", ") }]"
-    val ps  = f.params.map {
-      case b: BlockParam => s"{ ${b.name}: ${b.tpe} }"
-      case l: List[ValueParam] =>
-        val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
-        s"($vps)"
-    }.mkString
-    s"$kw ${f.name}$tps$ps: ${ret}"
-  }
-
   def showInfo(header: String, sig: String = "", ex: String = ""): String =
     s"""|#### $header
         |${ if (sig != "") s"```effekt\n${sig}\n```" else ""}
@@ -74,11 +62,11 @@ trait LSPServer extends Driver {
 
   def getInfoOf(sym: Symbol): String = sym match {
     case b: BuiltinFunction =>
-      showInfo("Builtin function", printFun("def", b, b.ret.get))
+      showInfo("Builtin function", DeclPrinter(sym, context))
 
     case f: UserFunction =>
       val tpe = context.blockType(f)
-      showInfo("Function", printFun("def", f, tpe.ret))
+      showInfo("Function", DeclPrinter(sym, context))
 
     case f: BuiltinEffect =>
       val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
@@ -109,7 +97,7 @@ trait LSPServer extends Driver {
             |does not mention the effect `${f.effect.name}`, then this effect will not be
             |handled by the handler. This is important when considering higher-order functions.
             |"""
-      showInfo("Effect operation", printFun("effect", f, tpe.ret), ex)
+      showInfo("Effect operation", DeclPrinter(sym, context), ex)
 
     case c: Constructor =>
       val tpe = context.blockType(c)
@@ -119,7 +107,7 @@ trait LSPServer extends Driver {
                    |value parameter lists, not block parameters.
                    |"""
 
-      showInfo(s"Constructor of data type `${c.datatype.name}`", printFun("def", c, tpe.ret), ex)
+      showInfo(s"Constructor of data type `${c.datatype.name}`", DeclPrinter(sym, context), ex)
 
     case c: BlockParam =>
       val tpe = context.blockType(c)
