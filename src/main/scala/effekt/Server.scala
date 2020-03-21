@@ -15,7 +15,7 @@ trait LSPServer extends Driver {
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
   def getInfoAt(position: Position): Option[(Vector[Tree], CompilationUnit)] = for {
-    unit <- context.tryResolve(position.source)
+    unit <- context.frontend(position.source)
     tree = new EffektTree(unit.module)
     nodes = positions.findNodesContaining(tree.nodes, position).sortWith {
       (t1, t2) =>

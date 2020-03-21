@@ -66,13 +66,15 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
     override def process(source: Source): CompilationUnit =
       driver.frontend(source, this) match {
-        case Right(res) => res
+        case Right(res) =>
+          driver.backend(res, this)
+          res
         case Left(msgs) =>
           report(source, msgs, config)
           abort(s"Error processing dependency: ${source.name}")
       }
 
-    override def tryProcess(source: Source): Option[CompilationUnit] =
+    override def frontend(source: Source): Option[CompilationUnit] =
       driver.frontend(source, this).toOption
 
     populate(builtins.rootTerms.values)

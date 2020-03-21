@@ -17,11 +17,13 @@ trait ModuleDB { self: CompilerContext =>
   private val units: mutable.Map[Source, CompilationUnit] = mutable.Map.empty
 
   /**
-   * In case of an error, this variant will just return None
+   * Just runs the frontend (no code generation)
+   * When there are errors in processing `source` it returns None
    */
-  def tryProcess(source: Source): Option[CompilationUnit]
+  def frontend(source: Source): Option[CompilationUnit]
 
   /**
+   * Runs both frontend and backend.
    * In case of an error, this variant will abort and report any errors
    */
   def process(source: Source): CompilationUnit
@@ -44,12 +46,6 @@ trait ModuleDB { self: CompilerContext =>
         FileSource(p.getCanonicalPath).content
       }
   }
-
-  def tryResolve(source: Source): Option[CompilationUnit] =
-    units.updateWith(source) {
-      case Some(v) => Some(v)
-      case None    => tryProcess(source)
-    }
 
   def resolve(source: Source): CompilationUnit =
     units.getOrElseUpdate(source, process(source))
