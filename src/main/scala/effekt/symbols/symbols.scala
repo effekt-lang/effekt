@@ -13,7 +13,7 @@ import effekt.source.{ Def, ValDef, VarDef, FunDef }
  */
 package object symbols {
 
-  // reflecting the two name spaces
+  // reflecting the two namespaces
   sealed trait TypeSymbol extends Symbol
   sealed trait TermSymbol extends Symbol
 
@@ -27,7 +27,7 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
-  case class ResumeParam(op: EffectOp) extends Param with BlockSymbol { val name = LocalName("resume") }
+  case class ResumeParam() extends Param with BlockSymbol { val name = LocalName("resume") }
   
 
   /**

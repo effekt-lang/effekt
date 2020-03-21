@@ -12,7 +12,7 @@ object scopes {
 
   sealed trait Scope[K, V] {
     def bindings: mutable.HashMap[K, V]
-    def lookup(key: K, err: => V): V = bindings.getOrElse(key, err)
+    def lookup(key: K): Option[V] = bindings.get(key)
     def define(key: K, value: V): Unit = bindings.update(key, value)
     def enter: Scope[K, V] = BlockScope[K, V](mutable.HashMap.empty, this)
     def enterWith(bs: Map[K, V]) = BlockScope[K, V](mutable.HashMap.empty ++ bs, this)
@@ -20,7 +20,7 @@ object scopes {
   }
   case class Toplevel[K, V](bindings: mutable.HashMap[K, V]) extends Scope[K, V]
   case class BlockScope[K, V](bindings: mutable.HashMap[K, V], parent: Scope[K, V]) extends Scope[K, V] {
-    override def lookup(key: K, err: => V): V = super.lookup(key, parent.lookup(key, err))
+    override def lookup(key: K): Option[V] = super.lookup(key).orElse(parent.lookup(key))
     override def leave: Scope[K, V] = parent
   }
 

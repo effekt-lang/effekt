@@ -103,16 +103,16 @@ class Namer extends Phase { namer =>
       resolveAll(clauses)
 
     case source.OpClause(op, params, body, resumeId) =>
-      val opSym = Compiler.at(op) { op.resolveTerm() }.asEffectOp
+      Compiler.at(op) { op.resolveTerms() }
       val ps = params.map(resolveValueParams)
       Compiler scoped {
         Compiler.bind(ps)
-        resumeId := ResumeParam(opSym)
+        resumeId := ResumeParam()
         resolve(body)
       }
 
     case source.Clause(op, params, body) =>
-      Compiler.at(op) { op.resolveTerm() }
+      Compiler.at(op) { op.resolveTerms() }
       val ps = params.map(resolveValueParams)
       Compiler scoped {
         Compiler.bind(ps)
@@ -129,16 +129,14 @@ class Namer extends Phase { namer =>
     // (2) === Bound Occurrences ===
 
     case source.Call(id, targs, args) =>
-      id.resolveTerm() match {
-        case b: BlockParam => ()
-        case ResumeParam(op) => ()
-        case f: Fun => ()
+      id.resolveTerms {
+        case b : (BlockParam | ResumeParam | Fun) => b
         case _ => Compiler.error("Expected callable")
       }
       targs foreach resolveValueType
       resolveAll(args)
 
-    case source.Var(id) => id.resolveTerm() match {
+    case source.Var(id) => id.resolveTerms {
       case b : BlockParam => Compiler.error("Blocks have to be fully applied and can't be used as values.")
       case other => other
     }
@@ -147,7 +145,7 @@ class Namer extends Phase { namer =>
     case tpe: source.BlockType => resolveBlockType(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id : Id => id.resolveTerm()
+    case id : Id => id.resolveTerms()
 
     case other => resolveAll(other)
   }
@@ -339,19 +337,27 @@ class Namer extends Phase { namer =>
 
     // lookup and resolve the given id from the environment and
     // store a binding in the symbol table
-    def (id: Id) resolveTerm(): TermSymbol = {
-      val sym = C.terms.lookup(id.name, C.abort(s"Could not resolve term ${id.name}"))
+    def (id: Id) resolveTerms(): List[TermSymbol] = {
+      val sym = C.terms.lookup(id.name).getOrElse { C.abort(s"Could not resolve term ${id.name}") }
       C.put(id, sym)
-      sym
+      List(sym)
+    }
+
+    // for positions that do not allow overloading (for now)
+    def [A](id: Id) resolveTerms(filter: PartialFunction[TermSymbol, A]): List[A] = {
+      val sym = C.terms.lookup(id.name).getOrElse { C.abort(s"Could not resolve term ${id.name}") }
+      C.put(id, sym)
+
+      List(sym).collect(filter)
     }
 
     def (id: Id) resolveType(): TypeSymbol = {
-      val sym = C.types.lookup(id.name, C.abort(s"Could not resolve type ${id.name}"))
+      val sym = C.types.lookup(id.name).getOrElse { C.abort(s"Could not resolve type ${id.name}") }
       C.put(id, sym)
       sym
     }
 
-    def (C: CompilerContext) scoped[R](block: => R): R = {
+    def [R](C: CompilerContext) scoped(block: => R): R = {
       val before = C.phases.get(namer)
       C.phases.put(namer)(before.copy(terms = before.terms.enter, types = before.types.enter))
       val result = block

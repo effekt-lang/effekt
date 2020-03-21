@@ -129,10 +129,10 @@ trait LSPServer extends Driver {
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound
-            |when handling effect operations (like `${c.op.name}` in this case).
+            |when handling effect operations.
             |
             |The following three types have to be the same (i.e., `${tpe.ret.tpe}`):
-            |- the return type of the operation clause for ${c.op.name}
+            |- the return type of the operation clause
             |- the type of the handled expression enclosed by `try { EXPR } with { ... }`, and
             |- the return type of the resumption.
             |"""
