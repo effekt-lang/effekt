@@ -1,10 +1,11 @@
 package effekt
 
+import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama.parsing.ParseResult
 import org.bitbucket.inkytonik.kiama.util.{ ParsingREPLWithConfig, Source }
 import effekt.source._
 import effekt.util.messages.FatalPhaseError
-
+import effekt.symbols.{ BlockSymbol, TypeSymbol, ValueSymbol }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.Messages
 import kiama.util.Console
@@ -13,6 +14,7 @@ import kiama.util.Console
 trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   object driver extends Driver
+  object evaluator extends Evaluator
 
   var definitions: List[Def] = Nil
   var imports: List[Import] = Nil
@@ -99,14 +101,18 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
-      val decl = makeModule(
-        Call(IdRef("println"), Nil, List(ValueArgs(List(e)))),
-        imports,
-        definitions)
+      val decl = makeModule(e, imports, definitions)
 
-      driver.process(source, decl, config)
+      reportOrElse(source, frontend(source, decl, config)) { cu =>
+        val value = evaluator.run(cu, driver.context)
 
-    // TODO see whether this path has already been imported
+        val mainSym = cu.exports.terms("main")
+        val mainTpe = driver.context.blockType(mainSym)
+        val out = s"${value} : ${mainTpe.ret}"
+
+        config.output().emitln(out)
+      }
+
     case i: Import if imports.forall { other => other.path != i.path } =>
       val extendedImports = imports :+ i
       val decl = makeModule(UnitLit(), extendedImports, definitions)
@@ -120,6 +126,15 @@ trait EffektRepl extends ParsingREPLWithConfig[Tree, EffektConfig] {
       val decl = makeModule(UnitLit(), imports, extendedDefs)
       reportOrElse(source, frontend(source, decl, config)) { cu =>
         definitions = extendedDefs
+
+        // try to find the symbol for the def to print the type
+        driver.context.get(d) match {
+          case v: ValueSymbol => Some(driver.context.valueType(v))
+          case b: BlockSymbol => Some(driver.context.blockType(b))
+          case t => None
+        } map { tpe =>
+          config.output().emitln(tpe)
+        }
       }
 
     case _ => ()

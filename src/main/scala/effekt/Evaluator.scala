@@ -61,7 +61,7 @@ class Evaluator {
   // Cache for evaluated modules. This avoids evaluating transitive dependencies multiple times
   val evaluatedModules: Memoiser[CompilationUnit, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
 
-  def run(cu: CompilationUnit, compiler: CompilerContext) = {
+  def run(cu: CompilationUnit, compiler: CompilerContext): Value = {
     val mainSym = cu.exports.terms.getOrElse(mainName, compiler.abort("Cannot find main function"))
     val mainFun = compiler.asUserFunction(mainSym)
 
