@@ -63,15 +63,24 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
   // We always only have one global instance of CompilerContext
   object context extends CompilerContext {
-    override def process(source: Source): Either[Messages, CompilationUnit] = driver.process(source, this)
+
+    override def process(source: Source): CompilationUnit =
+      driver.frontend(source, this) match {
+        case Right(res) => res
+        case Left(msgs) =>
+          report(source, msgs, config)
+          abort(s"Error processing dependency: ${source.name}")
+      }
+
+    override def tryProcess(source: Source): Option[CompilationUnit] =
+      driver.frontend(source, this).toOption
 
     populate(builtins.rootTerms.values)
   }
 
 
-  override def createConfig(args : Seq[String]) = {
+  override def createConfig(args : Seq[String]) =
     new EffektConfig(args)
-  }
 
   override def parse(source: Source): ParseResult[ModuleDecl] = {
     val parsers = new Parser(positions)
@@ -108,21 +117,24 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     }
 
   def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] =
-    try {
-      frontend(source, ast, context) match {
-        case Right(unit) if context.config.compile() || context.config.server() =>
-          backend(unit, context)
-          Right(unit)
-        case result => result
-      }
-    } catch {
-      case FatalPhaseError(msg, reporter) =>
-        reporter.error(msg)
-        Left(context.buffer.get)
+    frontend(source, ast, context) match {
+      case Right(unit) if context.config.compile() || context.config.server() =>
+        backend(unit, context)
+        Right(unit)
+      case result => result
     }
 
   /**
-   * The compiler frontend
+   * Frontend: Parser -> Namer -> Typer
+   */
+  def frontend(source: Source, context: CompilerContext): Either[Messages, CompilationUnit] =
+    makeast(source, context.config) match {
+      case Left(ast) => frontend(source, ast, context)
+      case Right(msgs) => Left(msgs)
+    }
+
+  /**
+   * Frontend: Namer -> Typer
    */
   def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
 
@@ -131,20 +143,26 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
     val buffer = context.buffer
 
-    val exports = namer.run(source, ast, context)
-    typer.run(ast, exports, context)
+    try {
+      val exports = namer.run(source, ast, context)
+      typer.run(ast, exports, context)
 
-    if (buffer.hasErrors) {
-      Left(buffer.get)
-    } else {
-      Right(CompilationUnit(source, ast, exports, buffer.get))
+      if (buffer.hasErrors) {
+        Left(buffer.get)
+      } else {
+        Right(CompilationUnit(source, ast, exports, buffer.get))
+      }
+    } catch {
+      case FatalPhaseError(msg, reporter) =>
+        reporter.error(msg)
+        Left(context.buffer.get)
     }
   }
 
   /**
-   * The compiler backend
+   * Backend: Evaluator or Translator
    */
-  def backend(unit: CompilationUnit, context: CompilerContext): Unit = {
+  def backend(unit: CompilationUnit, context: CompilerContext): Unit = try {
     object transformer extends Transformer
     object js extends JavaScript
     object prettyCore extends core.PrettyPrinter
@@ -170,19 +188,10 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
       println("Writing compiled Javascript to " + out)
       IO.createFile(out.getCanonicalPath, javaScript.layout)
     }
-  }
-
-
-  // TODO create temp folder, copy files from JAR/lib to the temp folder and
-  //      add folder to the config
-  def copyPrelude(config: EffektConfig): Unit = {
-
-    val preludeFile = config.outputPath().toPath.resolve("effekt.js").toFile
-    if (!preludeFile.exists()) {
-      println("Copying prelude to " + preludeFile.getCanonicalPath)
-      val prelude = scala.io.Source.fromResource("effekt.js").getLines.mkString("\n")
-      IO.createFile(preludeFile.getCanonicalPath, prelude)
-    }
+  } catch {
+    case FatalPhaseError(msg, reporter) =>
+      reporter.error(msg)
+      report(unit.source, context.buffer.get, context.config)
   }
 
   def format(m: ModuleDecl) : Document = ???

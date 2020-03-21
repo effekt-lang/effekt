@@ -130,7 +130,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
   /**
    * For the REPL
    */
-  lazy val definitionOrExpression: P[Tree] = definition | expr
+  lazy val repl: P[Tree] = definition | valDef  | expr | importDecl
 
   /**
    * Definitions
