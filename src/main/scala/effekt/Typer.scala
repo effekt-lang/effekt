@@ -27,8 +27,8 @@ class Typer extends Phase { typer =>
 
   given (given C: CompilerContext): TyperOps = new TyperOps {}
 
-  def run(module: source.ModuleDecl, env: Environment, compiler: CompilerContext): Unit = {
-    val toplevelEffects = Effects(List(EDivZero, EConsole) ++ env.types.values.collect { case e: Effect => e })
+  def run(module: source.ModuleDecl, mod: Module, compiler: CompilerContext): Unit = {
+    val toplevelEffects = Effects(List(EDivZero, EConsole) ++ mod.types.values.collect { case e: Effect => e })
     compiler.phases.init(typer)(State(toplevelEffects))
 
     compiler in {

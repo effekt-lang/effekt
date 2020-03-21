@@ -3,13 +3,13 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ Expr, ModuleDecl, Tree }
+import effekt.source.{ ModuleDecl, Tree }
 import effekt.namer.{ Environment, Namer }
 import effekt.typer.Typer
 import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
-import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
-import effekt.symbols.{ builtins, moduleFile }
+import effekt.util.messages.{ FatalPhaseError }
+import effekt.symbols.{ builtins, moduleFile, Module }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.Messages
 import kiama.output.PrettyPrinterTypes.Document
@@ -45,17 +45,6 @@ class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
   validateFilesIsDirectory(includes)
 }
 
-/**
- * The result of running the frontend on a module.
- * Symbols and types are stored globally in CompilerContext.
- */
-case class CompilationUnit(
-  source: Source,
-  module: ModuleDecl,
-  exports: Environment,
-  messages: Messages
-)
-
 
 trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver =>
 
@@ -64,7 +53,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   // We always only have one global instance of CompilerContext
   object context extends CompilerContext {
 
-    override def process(source: Source): CompilationUnit =
+    override def process(source: Source): Module =
       driver.frontend(source, this) match {
         case Right(res) =>
           driver.backend(res, this)
@@ -74,7 +63,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
           abort(s"Error processing dependency: ${source.name}")
       }
 
-    override def frontend(source: Source): Option[CompilationUnit] =
+    override def frontend(source: Source): Option[Module] =
       driver.frontend(source, this).toOption
 
     populate(builtins.rootTerms.values)
@@ -110,7 +99,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
           evaluator.run(unit, context)
         }
 
-        report(source, unit.messages, config)
+        report(source, context.buffer.get, config)
       case Left(msgs) =>
         clearSyntacticMessages(source, config)
         clearSemanticMessages(source, config)
@@ -118,14 +107,14 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     }
   }
 
-  def process(source: Source, context: CompilerContext): Either[Messages, CompilationUnit] =
+  def process(source: Source, context: CompilerContext): Either[Messages, Module] =
     // for some reason Kiama uses the Either the other way around.
     makeast(source, context.config) match {
       case Left(ast) => process(source, ast, context)
       case Right(msgs) => Left(msgs)
     }
 
-  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] =
+  def process(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, Module] =
     frontend(source, ast, context) match {
       case Right(unit) if context.config.compile() || context.config.server() =>
         backend(unit, context)
@@ -136,7 +125,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   /**
    * Frontend: Parser -> Namer -> Typer
    */
-  def frontend(source: Source, context: CompilerContext): Either[Messages, CompilationUnit] =
+  def frontend(source: Source, context: CompilerContext): Either[Messages, Module] =
     makeast(source, context.config) match {
       case Left(ast) => frontend(source, ast, context)
       case Right(msgs) => Left(msgs)
@@ -145,7 +134,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   /**
    * Frontend: Namer -> Typer
    */
-  def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, CompilationUnit] = {
+  def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, Module] = {
 
     object namer extends Namer
     object typer extends Typer
@@ -153,13 +142,13 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     val buffer = context.buffer
 
     try {
-      val exports = namer.run(source, ast, context)
-      typer.run(ast, exports, context)
+      val mod = namer.run(source, ast, context)
+      typer.run(ast, mod, context)
 
       if (buffer.hasErrors) {
         Left(buffer.get)
       } else {
-        Right(CompilationUnit(source, ast, exports, buffer.get))
+        Right(mod)
       }
     } catch {
       case FatalPhaseError(msg, reporter) =>
@@ -171,7 +160,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   /**
    * Backend: Evaluator or Translator
    */
-  def backend(unit: CompilationUnit, context: CompilerContext): Unit = try {
+  def backend(unit: Module, context: CompilerContext): Unit = try {
     object transformer extends Transformer
     object js extends JavaScript
     object prettyCore extends core.PrettyPrinter
@@ -192,7 +181,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     if (config.compile()) {
       val outDir = config.outputPath().toPath
       outDir.toFile.mkdirs
-      val out = outDir.resolve(moduleFile(unit.module.path)).toFile
+      val out = outDir.resolve(unit.outputName).toFile
 
       println("Writing compiled Javascript to " + out)
       IO.createFile(out.getCanonicalPath, javaScript.layout)

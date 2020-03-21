@@ -4,7 +4,7 @@ import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, ParseResult, Success }
 import effekt.source._
 import effekt.util.messages.FatalPhaseError
-import effekt.symbols.{ BlockSymbol, DeclPrinter, TypeSymbol, ValueSymbol }
+import effekt.symbols.{ Module, BlockSymbol, DeclPrinter, TypeSymbol, ValueSymbol }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
@@ -152,8 +152,8 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
   def typecheck(source: Source, config: EffektConfig): Unit =
     parse(source) match {
       case Success(e: Expr, _) =>
-        reportOrElse(source, frontend(source, module.make(e), config)) { cu =>
-          val mainSym = cu.exports.terms("main")
+        reportOrElse(source, frontend(source, module.make(e), config)) { mod =>
+          val mainSym = mod.terms("main")
           val mainTpe = driver.context.blockType(mainSym)
           config.output().emitln(mainTpe.ret)
         }
@@ -218,7 +218,7 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
    *
    * TODO move into driver
    */
-  def reportOrElse(source: Source, res: Either[Messages, CompilationUnit])(f: CompilationUnit => Unit): Unit = res match {
+  def reportOrElse(source: Source, res: Either[Messages, Module])(f: Module => Unit): Unit = res match {
     case Right(cu) =>
       val buffer = driver.context.buffer
       if (buffer.hasErrors) {
@@ -230,7 +230,7 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
       report(source, msgs, driver.context.config)
   }
 
-  def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Either[Messages, CompilationUnit] = {
+  def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Either[Messages, Module] = {
     driver.context.setup(ast, config)
     driver.frontend(source, ast, driver.context)
   }

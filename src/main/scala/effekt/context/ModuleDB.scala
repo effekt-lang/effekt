@@ -5,6 +5,8 @@ import java.io.{ File, Reader }
 
 import scala.io.{ BufferedSource, Source => ScalaSource }
 import effekt.context.CompilerContext
+import effekt.symbols.Module
+
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source, StringSource }
 
@@ -14,19 +16,19 @@ import java.net.URL
 trait ModuleDB { self: CompilerContext =>
 
   // Cache containing processed units -- compilationUnits are cached by source
-  private val units: mutable.Map[Source, CompilationUnit] = mutable.Map.empty
+  private val units: mutable.Map[Source, Module] = mutable.Map.empty
 
   /**
    * Just runs the frontend (no code generation)
    * When there are errors in processing `source` it returns None
    */
-  def frontend(source: Source): Option[CompilationUnit]
+  def frontend(source: Source): Option[Module]
 
   /**
    * Runs both frontend and backend.
    * In case of an error, this variant will abort and report any errors
    */
-  def process(source: Source): CompilationUnit
+  def process(source: Source): Module
 
   // - tries to find a file in the workspace, that matches the import path
   def resolveInclude(moduleSource: Source, path: String): String = moduleSource match {
@@ -47,10 +49,10 @@ trait ModuleDB { self: CompilerContext =>
       }
   }
 
-  def resolve(source: Source): CompilationUnit =
+  def resolve(source: Source): Module =
     units.getOrElseUpdate(source, process(source))
 
-  def resolve(path: String): CompilationUnit =
+  def resolve(path: String): Module =
     resolve(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
 
 

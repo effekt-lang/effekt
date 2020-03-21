@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.{ CompilationUnit, Driver, source }
+import effekt.{ Driver, source }
 import effekt.source.{ ModuleDecl, Tree }
 import org.bitbucket.inkytonik.kiama
 import org.bitbucket.inkytonik.kiama.util.Position
@@ -14,9 +14,9 @@ trait LSPServer extends Driver {
 
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
-  def getInfoAt(position: Position): Option[(Vector[Tree], CompilationUnit)] = for {
-    unit <- context.frontend(position.source)
-    tree = new EffektTree(unit.module)
+  def getInfoAt(position: Position): Option[(Vector[Tree], Module)] = for {
+    mod <- context.frontend(position.source)
+    tree = new EffektTree(mod.decl)
     nodes = positions.findNodesContaining(tree.nodes, position).sortWith {
       (t1, t2) =>
         val p1s = positions.getStart(t1).get
@@ -30,7 +30,7 @@ trait LSPServer extends Driver {
           p2s < p1s
         }
     }
-  } yield (nodes, unit)
+  } yield (nodes, mod)
 
   override def getDefinition(position: Position): Option[Tree] = for {
     id <- getIdTreeAt(position)

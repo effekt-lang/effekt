@@ -5,11 +5,19 @@ import org.bitbucket.inkytonik.kiama.util.Counter
 sealed trait Name {
   def name: String
   def qualified: String
+
   override def toString: String = name
 }
 case class LocalName(name: String) extends Name { def qualified = name }
 case class QualifiedName(path: String, name: String) extends Name {
   def qualified: String = moduleName(path) + "." + name
+}
+object Name {
+  // constructs a name form a path
+  def apply(path: String): Name = path.split('/') match {
+    case Array(name) => LocalName(name)
+    case segs => QualifiedName(segs.init.mkString("/"), segs.last)
+  }
 }
 
 /**
@@ -46,6 +54,13 @@ trait Symbol {
     case other: Symbol => this.uniqueName == other.uniqueName
     case _ => false
   }
+
+  /**
+   * The owner of this symbol, that is, the scope in which it is defined.
+   *
+   * written during the namer phase, then should never be changed again
+   */
+  var owner: Option[Symbol] = None
 
   override def toString = name.toString
 }

@@ -14,9 +14,9 @@ object Wildcard extends Symbol { val name = LocalName("_") }
 
 class Transformer {
 
-  def run(unit: CompilationUnit, compiler: CompilerContext): ModuleDecl = {
-    val source.ModuleDecl(path, imports, defs) = unit.module
-    val exports: Stmt = Exports(path, unit.exports.terms.collect {
+  def run(mod: Module, compiler: CompilerContext): ModuleDecl = {
+    val source.ModuleDecl(path, imports, defs) = mod.decl
+    val exports: Stmt = Exports(path, mod.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
     }.toList)
 

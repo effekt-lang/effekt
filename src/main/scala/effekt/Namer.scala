@@ -30,29 +30,33 @@ class Namer extends Phase { namer =>
   case class State(
     source: Source,
     module: effekt.source.ModuleDecl,
-    terms: Scope[String, TermSymbol],
-    types: Scope[String, TypeSymbol]
+    terms: Scope[TermSymbol],
+    types: Scope[TypeSymbol]
   )
 
   given (given C: CompilerContext): NamerOps = new NamerOps {}
 
 
-  def run(src: Source, module: source.ModuleDecl, compiler: CompilerContext): Environment = {
+  def run(src: Source, decl: source.ModuleDecl, compiler: CompilerContext): Module = {
 
-    val topLevelTerms = toplevel[String, TermSymbol](builtins.rootTerms)
-    val topLevelTypes = toplevel[String, TypeSymbol](builtins.rootTypes)
+    val topLevelTerms = toplevel[TermSymbol](builtins.rootTerms)
+    val topLevelTypes = toplevel[TypeSymbol](builtins.rootTypes)
 
-    val (terms, types) = module.imports.foldLeft((topLevelTerms, topLevelTypes)) {
+    val (terms, types) = decl.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
-        val cu = compiler.resolve(path)
-        (terms.enterWith(cu.exports.terms), types.enterWith(cu.exports.types))
+        val mod = compiler.resolve(path)
+        (terms.enterWith(mod.terms), types.enterWith(mod.types))
     }
 
-    val state = State(src, module, terms.enter, types.enter)
+    val state = State(src, decl, terms.enter, types.enter)
     compiler.phases.init(this)(state)
-    resolve(given compiler)(module)
+    resolve(given compiler)(decl)
 
-    Environment(state.terms.bindings.toMap, state.types.bindings.toMap)
+    Module(
+      LocalName(moduleName(decl.path)),
+      src,
+      state.terms.bindings.toMap,
+      state.types.bindings.toMap, decl)
   }
 
   /**
@@ -177,7 +181,13 @@ class Namer extends Phase { namer =>
 
   // TODO consider setting owner, instead of this qualify hack
   def resolveDef(qualify: Boolean): Traversal[Def, CompilerContext] = {
-    def name(id: Id) = if (qualify) id.qualifiedName else id.localName
+
+    def name(id: Id) = if (qualify) {
+      id.qualifiedName
+    } else {
+      id.localName
+    }
+
     Compiler.focusing {
 
       case d @ source.ValDef(id, annot, binding) =>
@@ -193,7 +203,7 @@ class Namer extends Phase { namer =>
       case f @ source.FunDef(id, tparams, params, annot, body) =>
         val sym = Compiler scoped {
           // we create a new scope, since resolving type params introduces them in this scope
-          UserFunction(name(id), tparams map resolveTypeParam, params map resolveParamSection, annot map resolveEffectful, f)
+          UserFunction(id.freshTermName(qualify), tparams map resolveTypeParam, params map resolveParamSection, annot map resolveEffectful, f)
         }
         id := sym
 
@@ -300,14 +310,30 @@ class Namer extends Phase { namer =>
     def (C: CompilerContext) module: effekt.source.ModuleDecl =
       C.phases.get(namer).module
 
-    def (C: CompilerContext) terms: Scope[String, TermSymbol] =
+    def (C: CompilerContext) terms: Scope[TermSymbol] =
       C.phases.get(namer).terms
 
-    def (C: CompilerContext) types: Scope[String, TypeSymbol] =
+    def (C: CompilerContext) types: Scope[TypeSymbol] =
       C.phases.get(namer).types
 
     def (id: Id) qualifiedName: Name = QualifiedName(C.module.path, id.name)
     def (id: Id) localName: Name = LocalName(id.name)
+
+    // TODO we only want to add a seed to a name under the following conditions:
+    // - there is already another instance of that name in the same
+    //   namespace.
+    // - if it is not already fully qualified
+    def (id: Id) freshTermName(qualified: Boolean = false) = {
+      // how many terms of the same name are already in scope?
+      val alreadyBound = C.terms.lookup(id.name).toList.size
+      val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
+
+      if (qualified) {
+        QualifiedName(C.module.path, id.name + seed)
+      } else {
+        LocalName(id.name + seed)
+      }
+    }
 
     // Name Binding and Resolution
     // ===========================

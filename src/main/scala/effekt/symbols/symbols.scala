@@ -1,6 +1,7 @@
 package effekt
 
-import effekt.source.{ Def, ValDef, VarDef, FunDef }
+import effekt.source.{ ModuleDecl, Def, FunDef, ValDef, VarDef }
+import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -21,8 +22,23 @@ package object symbols {
   sealed trait ValueSymbol extends TermSymbol
   sealed trait BlockSymbol extends TermSymbol
 
+  // TODO move this to Name
   def moduleName(path: String) = "$" + path.replace('/', '_')
   def moduleFile(path: String) = path.replace('/', '_') + ".js"
+
+  /**
+   * The result of running the frontend on a module.
+   * Symbols and types are stored globally in CompilerContext.
+   */
+  case class Module(
+    name: Name,
+    source: Source,
+    terms: Map[String, TermSymbol], // exported (toplevel) terms
+    types: Map[String, TypeSymbol], // exported (toplevel) types
+    decl: ModuleDecl
+  ) extends Symbol {
+    def outputName = moduleFile(decl.path)
+  }
 
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol

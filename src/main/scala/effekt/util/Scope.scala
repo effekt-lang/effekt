@@ -2,6 +2,7 @@ package effekt
 package util
 
 import scala.collection.mutable
+import effekt.symbols.Symbol
 
 /**
  * Something modeling a scope -- drop-in replacement for Kiama.Environments
@@ -10,19 +11,21 @@ import scala.collection.mutable
  */
 object scopes {
 
-  sealed trait Scope[K, V] {
-    def bindings: mutable.HashMap[K, V]
-    def lookup(key: K): Option[V] = bindings.get(key)
-    def define(key: K, value: V): Unit = bindings.update(key, value)
-    def enter: Scope[K, V] = BlockScope[K, V](mutable.HashMap.empty, this)
-    def enterWith(bs: Map[K, V]) = BlockScope[K, V](mutable.HashMap.empty ++ bs, this)
-    def leave: Scope[K, V] = sys error "Leaving top level scope"
+  sealed trait Scope[V] {
+
+    def bindings: mutable.HashMap[String, V]
+
+    def lookup(key: String): Option[V] = bindings.get(key)
+    def define(key: String, value: V): Unit = bindings.update(key, value)
+    def enter: Scope[V] = BlockScope[V](mutable.HashMap.empty, this)
+    def enterWith(bs: Map[String, V]) = BlockScope[V](mutable.HashMap.empty ++ bs, this)
+    def leave: Scope[V] = sys error "Leaving top level scope"
   }
-  case class Toplevel[K, V](bindings: mutable.HashMap[K, V]) extends Scope[K, V]
-  case class BlockScope[K, V](bindings: mutable.HashMap[K, V], parent: Scope[K, V]) extends Scope[K, V] {
-    override def lookup(key: K): Option[V] = super.lookup(key).orElse(parent.lookup(key))
-    override def leave: Scope[K, V] = parent
+  case class Toplevel[V](bindings: mutable.HashMap[String, V]) extends Scope[V]
+  case class BlockScope[V](bindings: mutable.HashMap[String, V], parent: Scope[V]) extends Scope[V] {
+    override def lookup(key: String): Option[V] = super.lookup(key).orElse(parent.lookup(key))
+    override def leave: Scope[V] = parent
   }
 
-  def toplevel[K, V](bindings: Map[K, V]): Scope[K, V] = Toplevel(mutable.HashMap(bindings.toSeq: _*) )
+  def toplevel[V](bindings: Map[String, V]): Scope[V] = Toplevel(mutable.HashMap(bindings.toSeq: _*) )
 }

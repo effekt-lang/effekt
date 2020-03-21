@@ -59,10 +59,10 @@ class Evaluator {
   import values._
 
   // Cache for evaluated modules. This avoids evaluating transitive dependencies multiple times
-  val evaluatedModules: Memoiser[CompilationUnit, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
+  val evaluatedModules: Memoiser[Module, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
 
-  def run(cu: CompilationUnit, compiler: CompilerContext): Value = {
-    val mainSym = cu.exports.terms.getOrElse(mainName, compiler.abort("Cannot find main function"))
+  def run(mod: symbols.Module, compiler: CompilerContext): Value = {
+    val mainSym = mod.terms.getOrElse(mainName, compiler.abort("Cannot find main function"))
     val mainFun = compiler.asUserFunction(mainSym)
 
     // TODO refactor and convert into checked error
@@ -71,19 +71,19 @@ class Evaluator {
       compiler.abort(s"Main has unhandled user effects: ${userEffects}!")
     }
 
-    eval(cu, compiler)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
+    eval(mod, compiler)(mainSym).value.asInstanceOf[Closure].f(Nil).run()
   }
 
-  def eval(unit: CompilationUnit, compiler: CompilerContext): Map[Symbol, Thunk[Value]] =
-    evaluatedModules.getOrDefault(unit, {
-      val env = unit.module.imports.foldLeft(builtins(compiler.config.output())) {
+  def eval(mod: Module, compiler: CompilerContext): Map[Symbol, Thunk[Value]] =
+    evaluatedModules.getOrDefault(mod, {
+      val env = mod.decl.imports.foldLeft(builtins(compiler.config.output())) {
         case (env, source.Import(path)) =>
           val mod = compiler.resolve(path)
           val res = eval(mod, compiler)
           env ++ res
       }
-      val result = eval(unit.module.defs)(given Context(env, compiler))
-      evaluatedModules.put(unit, result)
+      val result = eval(mod.decl.defs)(given Context(env, compiler))
+      evaluatedModules.put(mod, result)
       result
     })
 
