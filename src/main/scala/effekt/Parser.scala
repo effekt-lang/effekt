@@ -255,7 +255,8 @@ class Parser(positions: Positions) extends Parsers(positions) {
 
   lazy val recordDef: P[DataDef] =
     `record` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ^^ {
-      case id ~ tparams ~ params => DataDef(id, tparams, List(Constructor(id, params)))
+      case id ~ tparams ~ params =>
+        DataDef(id, tparams, List(Constructor(id, params)))
     }
 
   lazy val constructor: P[Constructor] =

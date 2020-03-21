@@ -1,0 +1,24 @@
+module data/list
+
+type Option[A] {
+  None();
+  Some(value: A)
+}
+
+def isDefined[A](this: Option[A]): Boolean = this match {
+  case None()  => false
+  case Some(v) => true
+}
+
+def isEmpty[A](this: Option[A]): Boolean =
+  this.isEmpty.not
+
+def orElse[A](this: Option[A]) { that: Option[A] }: Option[A] = this match {
+  case None()  => that()
+  case Some(v) => Some(v)
+}
+
+def map[A, B](this: Option[A]) { f: A => B }: Option[B] = this match {
+  case None()  => None()
+  case Some(v) => Some(f(v))
+}
