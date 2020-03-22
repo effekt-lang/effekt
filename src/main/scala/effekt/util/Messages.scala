@@ -25,7 +25,7 @@ object messages {
       m => m.severity == Error
     }
 
-    def clear() = { messages = noMessages }
+    def clear(): Unit = { messages = noMessages }
   }
 
   /**
@@ -36,10 +36,10 @@ object messages {
     var focus: Tree           // the current focus of the compiler
     def buffer: MessageBuffer
 
-    def error(msg: String) = buffer append Messaging.error(focus, msg)
-    def warning(msg: String) = buffer append Messaging.warning(focus, msg)
-    def info(msg: String) = buffer append Messaging.info(focus, msg)
-    def hint(msg: String) = buffer append Messaging.hint(focus, msg)
+    def error(msg: String): Unit = buffer append Messaging.error(focus, msg)
+    def warning(msg: String): Unit = buffer append Messaging.warning(focus, msg)
+    def info(msg: String): Unit = buffer append Messaging.info(focus, msg)
+    def hint(msg: String): Unit = buffer append Messaging.hint(focus, msg)
     def abort(msg: String): Nothing = {
       throw FatalPhaseError(msg, this)
     }

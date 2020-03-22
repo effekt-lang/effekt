@@ -4,7 +4,7 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ CompilerContext, Phase }
+import effekt.context.{ Context, Phase }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
 import effekt.source.traversal._
@@ -33,7 +33,7 @@ class Namer extends Phase { namer =>
 
   val name = "Namer"
 
-  def run(src: Source, decl: source.ModuleDecl)(implicit compiler: CompilerContext): Module = {
+  def run(src: Source, decl: source.ModuleDecl)(implicit compiler: Context): Module = {
 
     val topLevelTerms = toplevel[TermSymbol](builtins.rootTerms)
     val topLevelTypes = toplevel[TypeSymbol](builtins.rootTypes)
@@ -63,7 +63,7 @@ class Namer extends Phase { namer =>
    * 1) the passed environment is enriched with definitions
    * 2) names are resolved using the environment and written to the table
    */
-  def resolve(tree: Tree)(implicit C: CompilerContext): Unit = Compiler.focusing(tree) {
+  def resolve(tree: Tree)(implicit C: Context): Unit = Compiler.focusing(tree) {
 
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, imports, decls) =>
@@ -155,8 +155,8 @@ class Namer extends Phase { namer =>
     case other => resolveAll(other)
   }
 
-  def resolveAll(obj: Any)(implicit C: CompilerContext): Unit =
-    all[CompilerContext](c => t => resolve(t)(c))(obj)
+  def resolveAll(obj: Any)(implicit C: Context): Unit =
+    all[Context](c => t => resolve(t)(c))(obj)
 
   /**
    * Resolve Parameters as part of resolving function signatures
@@ -167,14 +167,14 @@ class Namer extends Phase { namer =>
    * Importantly, resolving them will *not* add the parameters as binding occurence in the current scope.
    * This is done separately by means of `bind`
    */
-  def resolveParamSection(params: source.ParamSection)(implicit C: CompilerContext): List[Param] = params match {
+  def resolveParamSection(params: source.ParamSection)(implicit C: Context): List[Param] = params match {
     case ps : source.ValueParams => resolveValueParams(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(C.localName(id), resolveBlockType(tpe))
       Compiler.put(id, sym)
       List(sym)
   }
-  def resolveValueParams(ps: source.ValueParams)(implicit C: CompilerContext): List[ValueParam] =
+  def resolveValueParams(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
       val sym = ValueParam(C.localName(p.id), p.tpe.map(resolveValueType))
       Compiler.put(p.id, sym)
@@ -182,7 +182,7 @@ class Namer extends Phase { namer =>
     }
 
   // TODO consider setting owner, instead of this qualify hack
-  def resolveDef(d: Def, qualify: Boolean)(implicit C: CompilerContext): Unit = {
+  def resolveDef(d: Def, qualify: Boolean)(implicit C: Context): Unit = {
 
     def name(id: Id) = if (qualify) {
       C.qualifiedName(id)
@@ -272,26 +272,26 @@ class Namer extends Phase { namer =>
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-  def resolveValueType(tpe: source.ValueType)(implicit C: CompilerContext): ValueType = tpe match {
+  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case source.TypeApp(id, args) =>
       val data = C.resolveType(id).asValueType
       TypeApp(data, args.map(resolveValueType))
     case source.TypeVar(id) => C.resolveType(id).asValueType
   }
 
-  def resolveBlockType(tpe: source.BlockType)(implicit C: CompilerContext): BlockType =
+  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType =
     BlockType(Nil, List(tpe.params.map(resolveValueType)), resolveEffectful(tpe.ret))
 
-  def resolveEffect(tpe: source.Effect)(implicit C: CompilerContext): Effect =
+  def resolveEffect(tpe: source.Effect)(implicit C: Context): Effect =
     C.resolveType(tpe.id).asEffect
 
-  def resolveEffects(tpe: source.Effects)(implicit C: CompilerContext): Effects =
+  def resolveEffects(tpe: source.Effects)(implicit C: Context): Effects =
     Effects(tpe.effs.map(resolveEffect))
 
-  def resolveEffectful(e: source.Effectful)(implicit C: CompilerContext): Effectful =
+  def resolveEffectful(e: source.Effectful)(implicit C: Context): Effectful =
     Effectful(resolveValueType(e.tpe), resolveEffects(e.eff))
 
-  def resolveTypeParam(id: Id)(implicit C: CompilerContext): TypeVar = {
+  def resolveTypeParam(id: Id)(implicit C: Context): TypeVar = {
     val sym = TypeVar(C.localName(id))
     C.define(id, sym)
     sym
@@ -304,7 +304,7 @@ class Namer extends Phase { namer =>
  * The kiama environment uses immutable binding since they thread the environment through
  * their attributes.
  */
-trait NamerOps { self: CompilerContext =>
+trait NamerOps { self: Context =>
 
   // State Access
   // ============
@@ -348,7 +348,7 @@ trait NamerOps { self: CompilerContext =>
 
   def bind(s: TypeSymbol): Unit = types.define(s.name.name, s)
 
-  def bind(params: List[List[Param]]): CompilerContext = {
+  def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
     this
   }

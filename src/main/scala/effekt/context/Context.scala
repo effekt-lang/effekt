@@ -9,7 +9,7 @@ import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 trait Phase {
   def name: String
 
-  def Compiler(implicit ctx: CompilerContext): CompilerContext = ctx
+  def Compiler(implicit ctx: Context): Context = ctx
 }
 object NoPhase extends Phase {
   def name = "no-phase"
@@ -22,7 +22,7 @@ object NoPhase extends Phase {
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-abstract class CompilerContext
+abstract class Context
     // Namer
     extends SymbolsDB
     with NamerOps
@@ -39,7 +39,7 @@ abstract class CompilerContext
 
   val buffer: MessageBuffer = new MessageBuffer
 
-  def setup(ast: ModuleDecl, cfg: EffektConfig) = {
+  def setup(ast: ModuleDecl, cfg: EffektConfig): Unit = {
     config = cfg
     focus  = ast
     buffer.clear()

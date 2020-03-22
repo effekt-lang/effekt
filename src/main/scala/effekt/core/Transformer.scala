@@ -1,8 +1,8 @@
 package effekt
 package core
 
-import effekt.context.CompilerContext
-import effekt.context.assertions.{ SymbolAssertions }
+import effekt.context.Context
+import effekt.context.assertions.SymbolAssertions
 import effekt.symbols._
 
 import effekt.util.control
@@ -12,7 +12,7 @@ object Wildcard extends Symbol { val name = LocalName("_") }
 
 class Transformer {
 
-  def run(mod: Module)(implicit compiler: CompilerContext): ModuleDecl = {
+  def run(mod: Module)(implicit compiler: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
@@ -24,7 +24,7 @@ class Transformer {
     })
   }
 
-  def transform(d: source.Def, rest: Stmt)(implicit C: CompilerContext): Stmt = d match {
+  def transform(d: source.Def, rest: Stmt)(implicit C: Context): Stmt = d match {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val effs = sym.effects.effs
@@ -67,7 +67,7 @@ class Transformer {
       rest
   }
 
-  def transform(tree: source.Stmt)(implicit C: CompilerContext): Stmt = tree match {
+  def transform(tree: source.Stmt)(implicit C: Context): Stmt = tree match {
     case source.DefStmt(d, rest) =>
       transform(d, transform(rest))
 
@@ -78,7 +78,7 @@ class Transformer {
       ANF { transform(e).map(Ret) }
   }
 
-  def transform(tree: source.Expr)(implicit C: CompilerContext): Control[Expr] = tree match {
+  def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = tree match {
     case v : source.Var => v.definition match {
       case sym: VarBinder => pure { Deref(sym) }
       case sym => pure { ValueVar(sym) }
@@ -134,7 +134,7 @@ class Transformer {
           pure { List(BlockDef(params ++ caps, transform(body))) }
       }
 
-      val as2: Control[List[Argument]] = traverse(as).map { ls => ls.flatMap(identity) }
+      val as2: Control[List[Argument]] = traverse(as).map { ls => ls.flatten }
 
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
@@ -155,7 +155,7 @@ class Transformer {
       bind(Handle(body, cs))
   }
 
-  def traverse[R](ar: List[Control[R]])(implicit C: CompilerContext): Control[List[R]] = ar match {
+  def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {
     case Nil => pure { Nil }
     case (r :: rs) => for {
       rv <- r
@@ -163,7 +163,7 @@ class Transformer {
     } yield rv :: rsv
   }
 
-  def transform(exprs: List[source.Expr])(implicit C: CompilerContext): Control[List[Expr]] = exprs match {
+  def transform(exprs: List[source.Expr])(implicit C: Context): Control[List[Expr]] = exprs match {
     case Nil => pure { Nil }
     case (e :: rest) => for {
       ev <- transform(e)

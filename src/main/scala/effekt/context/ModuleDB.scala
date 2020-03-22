@@ -3,17 +3,14 @@ package context
 
 import java.io.{ File, Reader }
 
-import scala.io.{ BufferedSource, Source => ScalaSource }
-import effekt.context.CompilerContext
+import scala.io.{ Source => ScalaSource }
 import effekt.symbols.Module
 
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source, StringSource }
 
 import scala.collection.mutable
-import java.net.URL
 
-trait ModuleDB { self: CompilerContext =>
+trait ModuleDB { self: Context =>
 
   // Cache containing processed units -- compilationUnits are cached by source
   private val units: mutable.Map[Source, Module] = mutable.Map.empty
@@ -81,7 +78,7 @@ trait ModuleDB { self: CompilerContext =>
  */
 case class JarSource(name: String) extends Source {
 
-  val resource = ScalaSource.fromResource(name)
+  private val resource = ScalaSource.fromResource(name)
 
   def reader: Reader = resource.bufferedReader
 
@@ -100,7 +97,7 @@ case class JarSource(name: String) extends Source {
 
 object JarSource {
   def exists(name: String): Boolean = {
-    val cl = Thread.currentThread().getContextClassLoader()
+    val cl = Thread.currentThread().getContextClassLoader
     val stream = cl.getResourceAsStream(name)
     stream != null
   }

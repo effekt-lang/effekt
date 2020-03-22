@@ -38,7 +38,7 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
       this
   }
 
-  def add(k: TypeVar, v: ValueType)(implicit report: ErrorReporter) = {
+  def add(k: TypeVar, v: ValueType)(implicit report: ErrorReporter): Unifier = {
     subst.get(k).foreach { v2 => if (v != v2) {
       report.error(s"${k} cannot be instantiated with ${v} and with ${v2} at the same time.")
     } }
@@ -52,7 +52,7 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
 
   def substitute(t: ValueType): ValueType = t match {
     case x: TypeVar =>
-      subst.get(x).getOrElse(x)
+      subst.getOrElse(x, x)
     case TypeApp(t, args) =>
       TypeApp(t, args.map { substitute })
     case other => other
@@ -72,7 +72,7 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
     case b: BlockType => substitute(b)
   }}
 
-  def checkFullyDefined(implicit report: ErrorReporter) = admitted.foreach { tpe =>
+  def checkFullyDefined(implicit report: ErrorReporter): Unit = admitted.foreach { tpe =>
     if (!subst.isDefinedAt(tpe))
       report.error(s"Couldn't infer type for ${tpe}")
   }

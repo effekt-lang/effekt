@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.context.CompilerContext
+import effekt.context.Context
 import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
@@ -10,10 +10,10 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  def apply(t: Symbol, context: CompilerContext): String =
+  def apply(t: Symbol, context: Context): String =
     pretty(toDoc(t, context)).layout
 
-  def toDoc(t: Symbol, context: CompilerContext): Doc = t match {
+  def toDoc(t: Symbol, context: Context): Doc = t match {
     case e @ UserEffect(name, tparams, List(op)) =>
       format("effect", op, op.ret.get)
 

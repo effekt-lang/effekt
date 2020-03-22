@@ -37,7 +37,7 @@ trait Symbol {
     case _ => false
   }
 
-  override def toString = name.toString
+  override def toString: String = name.toString
 }
 object Symbol {
   val fresh = new Counter(0)

@@ -1,7 +1,7 @@
 package effekt
 package source
 
-import effekt.context.{ SymbolsDB, TypesDB }
+import effekt.context.SymbolsDB
 import effekt.symbols.Symbol
 
 /**

@@ -15,7 +15,7 @@ trait SymbolsDB {
   // for reverse lookup in LSP server
   private val sources: Memoiser[Symbol, IdDef] = Memoiser.makeIdMemoiser
 
-  def put(id: Id, d: Symbol) = id match {
+  def put(id: Id, d: Symbol): Unit = id match {
     case id: IdDef =>
       sources.put(d, id)
       symbols.put(id, d)

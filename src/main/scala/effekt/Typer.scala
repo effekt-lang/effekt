@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ CompilerContext, Phase }
+import effekt.context.{ Context, Phase }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Expr, Stmt, Tree }
 import effekt.symbols._
@@ -26,7 +26,7 @@ class Typer extends Phase { typer =>
 
   val name = "typer"
 
-  def run(module: source.ModuleDecl, mod: Module)(implicit C: CompilerContext): Unit = {
+  def run(module: source.ModuleDecl, mod: Module)(implicit C: Context): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ mod.types.values.collect {
       case e: Effect => e
     })
@@ -49,7 +49,7 @@ class Typer extends Phase { typer =>
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[Type])(implicit C: CompilerContext): Effectful =
+  def checkExpr(expr: Expr, expected: Option[Type])(implicit C: Context): Effectful =
     checkAgainst(expr, expected) {
       case source.IntLit(n) => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
@@ -95,7 +95,7 @@ class Typer extends Phase { typer =>
 
         var handlerEffs = Pure
 
-        clauses.map {
+        clauses foreach {
           case d @ source.OpClause(op, params, body, resume) =>
             val effectOp = d.definition
             val effect = effectOp.effect
@@ -159,7 +159,7 @@ class Typer extends Phase { typer =>
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[Type])(implicit C: CompilerContext): Effectful =
+  def checkStmt(stmt: Stmt, expected: Option[Type])(implicit C: Context): Effectful =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val (t / effBinding) = Compiler in { precheckDef(b); synthDef(b) }
@@ -177,7 +177,7 @@ class Typer extends Phase { typer =>
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
-  def precheckDef(d: Def)(implicit C: CompilerContext): Unit = C.at(d) { d match {
+  def precheckDef(d: Def)(implicit C: Context): Unit = C.at(d) { d match {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       d.symbol.ret.foreach { annot => C.putBlock(d.symbol, d.symbol.toType) }
 
@@ -197,7 +197,7 @@ class Typer extends Phase { typer =>
   }}
 
 
-  def synthDef(d: Def)(implicit C: CompilerContext): Effectful = C.focusing(d) {
+  def synthDef(d: Def)(implicit C: Context): Effectful = C.focusing(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = d.symbol
       C.define(sym.params)
@@ -245,7 +245,7 @@ class Typer extends Phase { typer =>
   // TODO we can remove this duplication, once every phase can write to every table.
   // then the namer phase can already store the resolved type symbol for the param.
 
-  def resolveValueType(tpe: source.ValueType)(implicit C: CompilerContext): ValueType = tpe match {
+  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id) => t.definition
   }
@@ -253,9 +253,9 @@ class Typer extends Phase { typer =>
   /**
    * Invariant: Only call this on declarations that are fully annotated
    */
-  def extractAllTypes(params: Params)(implicit C: CompilerContext): Sections = params map extractTypes
+  def extractAllTypes(params: Params)(implicit C: Context): Sections = params map extractTypes
 
-  def extractTypes(params: List[Param])(implicit C: CompilerContext): List[Type] = params map {
+  def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
     case BlockParam(_, tpe) => tpe
     case ValueParam(_, Some(tpe)) => tpe
     case _ => C.abort("Cannot extract type")
@@ -268,7 +268,7 @@ class Typer extends Phase { typer =>
     name: String,
     atCallee: List[List[Type]],
     // we ask for the source Params here, since it might not be annotated
-    atCaller: List[source.ParamSection])(implicit C: CompilerContext): Map[Symbol, Type] = {
+    atCaller: List[source.ParamSection])(implicit C: Context): Map[Symbol, Type] = {
 
     if (atCallee.size != atCaller.size)
       C.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
@@ -295,7 +295,7 @@ class Typer extends Phase { typer =>
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
-  )(implicit C: CompilerContext): Effectful = {
+  )(implicit C: Context): Effectful = {
 
     val BlockType(tparams, params, ret / retEffs) = C.blockType(sym)
 
@@ -361,35 +361,35 @@ class Typer extends Phase { typer =>
 
 
   private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: Type)(implicit C: CompilerContext): Effectful =
+    def checkAgainst(tpe: Type)(implicit C: Context): Effectful =
       checkExpr(expr, Some(tpe))
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: Type)(implicit C: CompilerContext): Effectful =
+    def checkAgainst(tpe: Type)(implicit C: Context): Effectful =
       checkStmt(stmt, Some(tpe))
   }
 
   /**
    * @tparam T the type of trees, this checker operates on
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: CompilerContext): Effectful =
+  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Compiler.at(t) {
       val (got / effs) = f(t)
-      expected map { Compiler.assertEqual(got, _) }
+      expected foreach { Compiler.assertEqual(got, _) }
       Compiler.annotate(t, got / effs)
       got / effs
     }
 }
 
 
-trait TyperOps { self: CompilerContext =>
+trait TyperOps { self: Context =>
 
   // State Access
   // ============
   def effects: Effects = typerState.effects
 
-  def withEffect(e: Effect): CompilerContext = {
+  def withEffect(e: Effect): Context = {
     typerState = typerState.copy(effects = typerState.effects + e);
     this
   }
@@ -403,37 +403,27 @@ trait TyperOps { self: CompilerContext =>
     }
   }
 
-//  def (a: Effects) <:< (b: Effects): Effects = {
-//    val forbidden = a -- b
-//    if (forbidden.nonEmpty) {
-//      error(s"Effects ${forbidden} leave their defining scope.")
-//      b
-//    } else {
-//      b
-//    }
-//  }
-
-  def wellscoped(a: Effects) = {
+  def wellscoped(a: Effects): Unit = {
     val forbidden = Effects(a.effs.filterNot { e => e.builtin }) -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }
   }
 
-  def define(s: Symbol, t: ValueType) = {
+  def define(s: Symbol, t: ValueType): Context = {
     putValue(s, t); this
   }
 
-  def define(s: Symbol, t: BlockType) = {
+  def define(s: Symbol, t: BlockType): Context = {
     putBlock(s, t); this
   }
 
-  def define(bs: Map[Symbol, Type]): CompilerContext = { bs foreach {
+  def define(bs: Map[Symbol, Type]): Context = { bs foreach {
     case (v: ValueSymbol, t: ValueType) => define(v, t)
     case (v: BlockSymbol, t: BlockType) => define(v, t)
   }; this }
 
-  def define(ps: List[List[Param]]): CompilerContext = {
+  def define(ps: List[List[Param]]): Context = {
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
       case s @ ValueParam(name, None) => ??? // non annotated handler, or block param

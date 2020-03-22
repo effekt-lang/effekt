@@ -25,8 +25,8 @@ package object symbols {
   sealed trait BlockSymbol extends TermSymbol
 
   // TODO move this to Name
-  def moduleName(path: String) = "$" + path.replace('/', '_')
-  def moduleFile(path: String) = path.replace('/', '_') + ".js"
+  def moduleName(path: String): String = "$" + path.replace('/', '_')
+  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
   /**
    * The result of running the frontend on a module.
@@ -154,7 +154,7 @@ package object symbols {
     def isEmpty: Boolean = effs.isEmpty
     def nonEmpty: Boolean = effs.nonEmpty
 
-    def distinct = Effects(effs.distinct)
+    def distinct: Effects = Effects(effs.distinct)
 
     def contains(e: Effect): Boolean = effs.contains(e)
 
@@ -167,7 +167,7 @@ package object symbols {
   object / {
     def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
   }
-  val Pure = Effects(Nil)
+  val Pure: Effects = Effects(Nil)
   case class Effectful(tpe: ValueType, effects: Effects) {
     override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
   }

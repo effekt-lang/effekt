@@ -30,17 +30,17 @@ trait TypesDB { self: ErrorReporter =>
     case _ => abort(s"Trying to find a value type for non-value '${s}'")
   }
 
-  def putBlock(s: Symbol, tpe: BlockType) = s match {
+  def putBlock(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => blocks.put(b, tpe)
     case _ => abort(s"Trying to store a block type for non block '${s}'")
   }
 
-  def putValue(s: Symbol, tpe: ValueType) = s match {
+  def putValue(s: Symbol, tpe: ValueType): Unit = s match {
     case b: ValueSymbol => values.put(b, tpe)
     case _ => abort(s"Trying to store a value type for non value '${s}'")
   }
 
-  def annotate(t: Tree, eff: Effectful) = types.put(t, eff)
+  def annotate(t: Tree, eff: Effectful): Unit = types.put(t, eff)
   def annotation(t: Tree): Option[Effectful] = types.get(t)
 
   def returnType(f: Fun): Effectful = f.ret match {
