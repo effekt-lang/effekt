@@ -1,13 +1,13 @@
 package effekt
 
 import effekt.evaluator.Evaluator
-import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, ParseResult, Success }
 import effekt.source._
-import effekt.util.messages.FatalPhaseError
-import effekt.symbols.{ Module, BlockSymbol, DeclPrinter, TypeSymbol, ValueSymbol }
+import effekt.symbols.{ Module, BlockSymbol, ValueSymbol }
+
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
+import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 // for now we only take expressions
 class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {

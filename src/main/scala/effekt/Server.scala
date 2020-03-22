@@ -1,14 +1,12 @@
 package effekt
 
-import effekt.{ Driver, source }
 import effekt.source.{ ModuleDecl, Tree }
 import org.bitbucket.inkytonik.kiama
-import org.bitbucket.inkytonik.kiama.util.Position
+import kiama.util.Position
 
 trait LSPServer extends Driver {
 
   import effekt.symbols._
-  import effekt.source.{ Reference, Definition, Id, Literal }
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
 

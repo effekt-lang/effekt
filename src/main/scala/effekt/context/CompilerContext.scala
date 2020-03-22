@@ -1,16 +1,15 @@
 package effekt
 package context
 
-import context.{ Assertions, ModuleDB, SymbolsDB, TypesDB }
+import effekt.namer.{ Namer, NamerState, NamerOps }
+import effekt.typer.{ Typer, TyperState, TyperOps }
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
-import org.bitbucket.inkytonik.kiama.util.Source
 
 trait Phase {
   def name: String
 
-  type State <: Product
+  def Compiler(given ctx: CompilerContext): CompilerContext = ctx
 }
 object NoPhase extends Phase {
   def name = "no-phase"
@@ -23,7 +22,17 @@ object NoPhase extends Phase {
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-abstract class CompilerContext extends TypesDB with SymbolsDB with ModuleDB with ErrorReporter with Assertions { context =>
+abstract class CompilerContext
+    // Namer
+    extends SymbolsDB
+    with NamerOps
+    with ModuleDB
+    // Typer
+    with TypesDB
+    with TyperOps
+    // Util
+    with Assertions
+    with ErrorReporter { context =>
 
   var focus: Tree = _
 
@@ -38,35 +47,44 @@ abstract class CompilerContext extends TypesDB with SymbolsDB with ModuleDB with
   }
 
   /**
+   * The different phases of the frontend
+   */
+  object namer extends Namer
+  object typer extends Typer
+
+
+  /**
+   * The state of the namer phase
+   */
+  var _namerState: NamerState = _
+  def namerState: NamerState = _namerState
+  def namerState_=(st: NamerState): Unit = _namerState = st
+
+  /**
+   * The state of the typer phase
+   */
+  var _typerState: TyperState = _
+  def typerState: TyperState = _typerState
+  def typerState_=(st: TyperState): Unit = _typerState = st
+
+  /**
    * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
    */
   def in[T](block: (given this.type) => T): T = {
-    val before = phases._state
+    val namerBefore = namerState
+    val typerBefore = typerState
     val result = block(given this)
-    phases._state = before
+    namerState = namerBefore
+    typerState = typerBefore
     result
   }
 
   object phases {
 
     var _current: Phase = NoPhase
-    var _state: Product = _
 
-    def init(p: Phase)(state: p.State): Unit = {
+    def init(p: Phase): Unit = {
       _current = p
-      _state = state
     }
-
-    def get(p: Phase): p.State =
-      if (_current == p) { _state.asInstanceOf[p.State] }
-      else sys.error(s"Trying to access state of a different phase (${_current})")
-
-    def put(p: Phase)(state: p.State): CompilerContext = {
-      _state = state
-      context
-    }
-
-    def update(p: Phase)(f: p.State => p.State): CompilerContext =
-      put(p)(f(get(p)))
   }
 }

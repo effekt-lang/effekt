@@ -6,7 +6,6 @@ package typer
  */
 import context.{ CompilerContext, Phase }
 import effekt.source.{ Def, Expr, Stmt, Tree }
-import effekt.namer.Environment
 import effekt.symbols._
 import effekt.symbols.builtins._
 
@@ -17,19 +16,20 @@ import effekt.symbols.builtins._
    *   - Functions
    *   - Resumptions
    */
+
+case class TyperState(
+  effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
+)
+
 class Typer extends Phase { typer =>
 
   val name = "typer"
 
-  case class State(
-    effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
-  )
-
-  given (given C: CompilerContext): TyperOps = new TyperOps {}
-
   def run(module: source.ModuleDecl, mod: Module, compiler: CompilerContext): Unit = {
     val toplevelEffects = Effects(List(EDivZero, EConsole) ++ mod.types.values.collect { case e: Effect => e })
-    compiler.phases.init(typer)(State(toplevelEffects))
+
+    compiler.typerState = TyperState(toplevelEffects)
+    compiler.phases.init(typer)
 
     compiler in {
       // pre-check to allow mutually recursive defs
@@ -371,69 +371,69 @@ class Typer extends Phase { typer =>
       f(t)
     }
   }
+}
 
 
-  trait TyperOps(given C: CompilerContext) {
+trait TyperOps { self: CompilerContext =>
 
-    // State Access
-    // ============
-    def (C: CompilerContext) effects: Effects =
-      C.phases.get(typer).effects
+  // State Access
+  // ============
+  def effects: Effects = typerState.effects
 
-    def (C: CompilerContext) withEffect(e: Effect): CompilerContext =
-      C.phases.update(typer) { state => state.copy(effects = state.effects + e) }
-
-    def (got: Type) =!= (expected: Type): Unit = (got, expected) match {
-      case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
-        (args1 zip args2) foreach { _ =!= _ }
-      case (t1, t2) => if (t1 != t2) {
-        C.error(s"Expected $expected, but got $got")
-      }
-    }
-
-    def (a: Effects) <:< (b: Effects): Effects = {
-      val forbidden = a -- b
-      if (forbidden.nonEmpty) {
-        C.error(s"Effects ${forbidden} leave their defining scope.")
-        b
-      } else {
-        b
-      }
-    }
-
-    def (C: CompilerContext) wellscoped(a: Effects) = {
-      val forbidden = Effects(a.effs.filterNot { e => e.builtin }) -- C.effects
-      if (forbidden.nonEmpty) {
-        C.error(s"Effects ${forbidden} leave their defining scope.")
-      }
-    }
-
-    def (C: CompilerContext) define(s: Symbol, t: ValueType) = {
-      C.putValue(s, t); C
-    }
-
-    def (C: CompilerContext) define(s: Symbol, t: BlockType) = {
-      C.putBlock(s, t); C
-    }
-
-    def (C: CompilerContext) define(bs: Map[Symbol, Type]): CompilerContext = bs.foldLeft(C) {
-      case (C, (v: ValueSymbol, t: ValueType)) => C.define(v, t)
-      case (C, (v: BlockSymbol, t: BlockType)) => C.define(v, t)
-    }
-    def (C: CompilerContext) define(ps: List[List[Param]]): CompilerContext =
-      C.define(ps.flatten.map {
-        case s @ ValueParam(name, Some(tpe)) => s -> tpe
-        case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
-        case s @ BlockParam(name, tpe) => s -> tpe
-      }.toMap)
-
-
-    // Extension methods to improve readability of Typer
-    // =================
-    def (tpe: ValueType) / (effs: Effects): Effectful = Effectful(tpe, effs)
-    def (expr: Expr) checkAgainst (tpe: Type): Effectful = checkExpr(Some(tpe))(expr)
-    def (stmt: Stmt) checkAgainst (tpe: Type): Effectful = checkStmt(Some(tpe))(stmt)
+  def withEffect(e: Effect): CompilerContext = {
+    typerState = typerState.copy(effects = typerState.effects + e);
+    this
   }
 
-  def Compiler(given c: CompilerContext): CompilerContext = c
+  def (got: Type) =!= (expected: Type): Unit = (got, expected) match {
+    case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
+      (args1 zip args2) foreach { _ =!= _ }
+    case (t1, t2) => if (t1 != t2) {
+      error(s"Expected $expected, but got $got")
+    }
+  }
+
+  def (a: Effects) <:< (b: Effects): Effects = {
+    val forbidden = a -- b
+    if (forbidden.nonEmpty) {
+      error(s"Effects ${forbidden} leave their defining scope.")
+      b
+    } else {
+      b
+    }
+  }
+
+  def wellscoped(a: Effects) = {
+    val forbidden = Effects(a.effs.filterNot { e => e.builtin }) -- effects
+    if (forbidden.nonEmpty) {
+      error(s"Effects ${forbidden} leave their defining scope.")
+    }
+  }
+
+  def define(s: Symbol, t: ValueType) = {
+    putValue(s, t); this
+  }
+
+  def define(s: Symbol, t: BlockType) = {
+    putBlock(s, t); this
+  }
+
+  def define(bs: Map[Symbol, Type]): CompilerContext = { bs foreach {
+    case (v: ValueSymbol, t: ValueType) => define(v, t)
+    case (v: BlockSymbol, t: BlockType) => define(v, t)
+  }; this }
+
+  def define(ps: List[List[Param]]): CompilerContext =
+    define(ps.flatten.map {
+      case s @ ValueParam(name, Some(tpe)) => s -> tpe
+      case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
+      case s @ BlockParam(name, tpe) => s -> tpe
+    }.toMap)
+
+
+  // Extension methods to improve readability of Typer
+  // =================
+  def (tpe: ValueType) / (effs: Effects): Effectful = Effectful(tpe, effs)
+  def (expr: Expr) checkAgainst (tpe: Type): Effectful = typer.checkExpr(Some(tpe))(given this)(expr)
+  def (stmt: Stmt) checkAgainst (tpe: Type): Effectful = typer.checkStmt(Some(tpe))(given this)(stmt)
 }

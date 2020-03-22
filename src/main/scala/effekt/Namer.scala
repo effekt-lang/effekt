@@ -12,8 +12,6 @@ import effekt.util.scopes._
 
 import org.bitbucket.inkytonik.kiama.util.Source
 
-case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol])
-
 /**
  * The output of this phase: a mapping from source identifier to symbol
  *
@@ -23,19 +21,16 @@ case class Environment(terms: Map[String, TermSymbol], types: Map[String, TypeSy
  *   - resolving: that is looking up symbols (might include storing the result into the symbolTable)
  *   - binding: that is adding a binding to the environment (lexical.Scope)
  */
+case class NamerState(
+  source: Source,
+  module: effekt.source.ModuleDecl,
+  terms: Scope[TermSymbol],
+  types: Scope[TypeSymbol]
+)
+
 class Namer extends Phase { namer =>
 
   val name = "Namer"
-
-  case class State(
-    source: Source,
-    module: effekt.source.ModuleDecl,
-    terms: Scope[TermSymbol],
-    types: Scope[TypeSymbol]
-  )
-
-  given (given C: CompilerContext): NamerOps = new NamerOps {}
-
 
   def run(src: Source, decl: source.ModuleDecl, compiler: CompilerContext): Module = {
 
@@ -48,8 +43,9 @@ class Namer extends Phase { namer =>
         (terms.enterWith(mod.terms), types.enterWith(mod.types))
     }
 
-    val state = State(src, decl, terms.enter, types.enter)
-    compiler.phases.init(this)(state)
+    val state = NamerState(src, decl, terms.enter, types.enter)
+    compiler.namerState = state
+    compiler.phases.init(this)
 
 
     resolve(given compiler)(decl)
@@ -296,100 +292,90 @@ class Namer extends Phase { namer =>
     t := sym
     sym
   }
+}
 
-  /**
-   * Environment Utils -- we use a mutable cell to express adding definitions more easily
-   * The kiama environment uses immutable binding since they thread the environment through
-   * their attributes.
-   */
-  trait NamerOps(given C: CompilerContext) {
 
-    // State Access
-    // ============
-    def (C: CompilerContext) source: Source =
-      C.phases.get(namer).source
+/**
+ * Environment Utils -- we use a mutable cell to express adding definitions more easily
+ * The kiama environment uses immutable binding since they thread the environment through
+ * their attributes.
+ */
+trait NamerOps { self: CompilerContext =>
 
-    def (C: CompilerContext) module: effekt.source.ModuleDecl =
-      C.phases.get(namer).module
+  // State Access
+  // ============
+  def source: Source = namerState.source
+  def module: effekt.source.ModuleDecl = namerState.module
+  def terms: Scope[TermSymbol] = namerState.terms
+  def types: Scope[TypeSymbol] = namerState.types
 
-    def (C: CompilerContext) terms: Scope[TermSymbol] =
-      C.phases.get(namer).terms
+  def (id: Id) qualifiedName: Name = QualifiedName(module.path, id.name)
+  def (id: Id) localName: Name = LocalName(id.name)
 
-    def (C: CompilerContext) types: Scope[TypeSymbol] =
-      C.phases.get(namer).types
+  // TODO we only want to add a seed to a name under the following conditions:
+  // - there is already another instance of that name in the same
+  //   namespace.
+  // - if it is not already fully qualified
+  def (id: Id) freshTermName(qualified: Boolean = false) = {
+    // how many terms of the same name are already in scope?
+    val alreadyBound = terms.lookup(id.name).toList.size
+    val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
 
-    def (id: Id) qualifiedName: Name = QualifiedName(C.module.path, id.name)
-    def (id: Id) localName: Name = LocalName(id.name)
-
-    // TODO we only want to add a seed to a name under the following conditions:
-    // - there is already another instance of that name in the same
-    //   namespace.
-    // - if it is not already fully qualified
-    def (id: Id) freshTermName(qualified: Boolean = false) = {
-      // how many terms of the same name are already in scope?
-      val alreadyBound = C.terms.lookup(id.name).toList.size
-      val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
-
-      if (qualified) {
-        QualifiedName(C.module.path, id.name + seed)
-      } else {
-        LocalName(id.name + seed)
-      }
-    }
-
-    // Name Binding and Resolution
-    // ===========================
-    def (id: Id) := (s: TermSymbol): Unit = {
-      C.put(id, s)
-      C.terms.define(id.name, s)
-    }
-
-    def (id: Id) := (s: TypeSymbol): Unit = {
-      C.put(id, s)
-      C.types.define(id.name, s)
-    }
-
-    def (C: CompilerContext) bind(s: TermSymbol): Unit =
-      C.terms.define(s.name.name, s)
-
-    def (C: CompilerContext) bind(s: TypeSymbol): Unit =
-      C.types.define(s.name.name, s)
-
-    def (C: CompilerContext) bind(params: List[List[Param]]): CompilerContext = {
-      params.flatten.foreach { p => C.bind(p) }
-      C
-    }
-
-    // lookup and resolve the given id from the environment and
-    // store a binding in the symbol table
-    def (id: Id) resolveTerms(): List[TermSymbol] = {
-      val sym = C.terms.lookup(id.name).getOrElse { C.abort(s"Could not resolve term ${id.name}") }
-      C.put(id, sym)
-      List(sym)
-    }
-
-    // for positions that do not allow overloading (for now)
-    def [A](id: Id) resolveTerms(filter: PartialFunction[TermSymbol, A]): List[A] = {
-      val sym = C.terms.lookup(id.name).getOrElse { C.abort(s"Could not resolve term ${id.name}") }
-      C.put(id, sym)
-
-      List(sym).collect(filter)
-    }
-
-    def (id: Id) resolveType(): TypeSymbol = {
-      val sym = C.types.lookup(id.name).getOrElse { C.abort(s"Could not resolve type ${id.name}") }
-      C.put(id, sym)
-      sym
-    }
-
-    def [R](C: CompilerContext) scoped(block: => R): R = {
-      val before = C.phases.get(namer)
-      C.phases.put(namer)(before.copy(terms = before.terms.enter, types = before.types.enter))
-      val result = block
-      C.phases.put(namer)(before)
-      result
+    if (qualified) {
+      QualifiedName(module.path, id.name + seed)
+    } else {
+      LocalName(id.name + seed)
     }
   }
 
-  def Compiler(given ctx: CompilerContext): CompilerContext = ctx
+  // Name Binding and Resolution
+  // ===========================
+  def (id: Id) := (s: TermSymbol): Unit = {
+    put(id, s)
+    terms.define(id.name, s)
+  }
+
+  def (id: Id) := (s: TypeSymbol): Unit = {
+    put(id, s)
+    types.define(id.name, s)
+  }
+
+  def bind(s: TermSymbol): Unit = terms.define(s.name.name, s)
+
+  def bind(s: TypeSymbol): Unit = types.define(s.name.name, s)
+
+  def bind(params: List[List[Param]]): CompilerContext = {
+    params.flatten.foreach { p => bind(p) }
+    this
+  }
+
+  // lookup and resolve the given id from the environment and
+  // store a binding in the symbol table
+  def (id: Id) resolveTerms(): List[TermSymbol] = {
+    val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
+    put(id, sym)
+    List(sym)
+  }
+
+  // for positions that do not allow overloading (for now)
+  def [A](id: Id) resolveTerms(filter: PartialFunction[TermSymbol, A]): List[A] = {
+    val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
+    put(id, sym)
+
+    List(sym).collect(filter)
+  }
+
+  def (id: Id) resolveType(): TypeSymbol = {
+    val sym = types.lookup(id.name).getOrElse { abort(s"Could not resolve type ${id.name}") }
+    put(id, sym)
+    sym
+  }
+
+  def scoped[R](block: => R): R = {
+    val before = namerState
+    namerState = before.copy(terms = before.terms.enter, types = before.types.enter)
+    val result = block
+    namerState = before
+    result
+  }
 }

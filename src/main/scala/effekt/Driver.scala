@@ -4,17 +4,17 @@ package effekt
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
 import effekt.source.{ ModuleDecl, Tree }
-import effekt.namer.{ Environment, Namer }
-import effekt.typer.Typer
 import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ FatalPhaseError }
-import effekt.symbols.{ builtins, moduleFile, Module }
+import effekt.symbols.{ builtins, Module }
+
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.Messages
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util._
+
 import org.rogach.scallop._
 import java.io.File
 
@@ -136,14 +136,11 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
    */
   def frontend(source: Source, ast: ModuleDecl, context: CompilerContext): Either[Messages, Module] = {
 
-    object namer extends Namer
-    object typer extends Typer
-
     val buffer = context.buffer
 
     try {
-      val mod = namer.run(source, ast, context)
-      typer.run(ast, mod, context)
+      val mod = context.namer.run(source, ast, context)
+      context.typer.run(ast, mod, context)
 
       if (buffer.hasErrors) {
         Left(buffer.get)
