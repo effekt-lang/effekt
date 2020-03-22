@@ -129,7 +129,7 @@ class Transformer {
       val as: List[Control[List[Argument]]] = (args zip params) map {
         case (source.ValueArgs(as), _) => traverse(as.map(transform))
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
-          val params = ps.map { v => core.ValueParam(v.symbol) }
+          val params = ps.params.map { v => core.ValueParam(v.symbol) }
           val caps = p.ret.effects.effs.filterNot(_.builtin).map { core.BlockParam }
           pure { List(BlockDef(params ++ caps, transform(body))) }
       }

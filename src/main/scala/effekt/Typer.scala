@@ -337,7 +337,7 @@ class Typer extends Phase { typer =>
 
         val blockType = unifier substitute bt
         // TODO make blockargs also take multiple argument sections.
-        val bindings = checkAgainstDeclaration("block", blockType.params, List(source.ValueParams(params)))
+        val bindings = checkAgainstDeclaration("block", blockType.params, List(params))
 
         C.define(bindings)
 

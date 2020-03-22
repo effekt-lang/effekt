@@ -248,7 +248,7 @@ class Evaluator {
     (sec, args) match {
     case (_, ValueArgs(exprs)) => evalExprs(exprs)
     case (List(BlockType(_, _, tpe)), BlockArg(ps, stmt)) =>
-      pure(List(bindCapabilities(ps.map(_.symbol), tpe.effects, stmt)))
+      pure(List(bindCapabilities(ps.params.map(_.symbol), tpe.effects, stmt)))
   }
 
   def collectBinders(ps: Params)(implicit C: EvalContext): List[Symbol] = ps.flatten

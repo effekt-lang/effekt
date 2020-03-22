@@ -66,12 +66,12 @@ class Namer extends Phase { namer =>
 
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { d => resolve(d, true) }
+      decls foreach { d => resolve(d, qualify = true) }
       Compiler scoped { resolveAll(decls) }
 
     case source.DefStmt(d, rest) =>
       Compiler scoped {
-        resolve(d, false)
+        resolve(d, qualify = false)
         resolve(d)
         resolve(rest)
       }
@@ -122,7 +122,7 @@ class Namer extends Phase { namer =>
       }
 
     case source.BlockArg(params, stmt) =>
-      val ps = resolve(source.ValueParams(params)) // TODO drop wrapping after refactoring
+      val ps = resolve(params)
       Compiler scoped {
         Compiler.bind(List(ps))
         resolve(stmt)
@@ -327,7 +327,7 @@ trait NamerOps { self: Context =>
   // - there is already another instance of that name in the same
   //   namespace.
   // - if it is not already fully qualified
-  def freshTermName(id: Id, qualified: Boolean = false) = {
+  def freshTermName(id: Id, qualified: Boolean = false): Name = {
     // how many terms of the same name are already in scope?
     val alreadyBound = terms.lookup(id.name).toList.size
     val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""

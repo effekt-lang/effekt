@@ -61,7 +61,7 @@ case class BlockParam(id: Id, tpe: BlockType) extends ParamSection with Definiti
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
-case class BlockArg(params: List[ValueParam], body: Stmt) extends ArgSection
+case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
 
 
 /**

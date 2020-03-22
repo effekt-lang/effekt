@@ -199,13 +199,12 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val args: P[ArgSection] =
     ( valueArgs
     | `{` ~/> ( (lambdaArgs <~ `=>`) ~ stmts <~ `}` ^^ BlockArg
-              | stmts <~ `}` ^^ { s => BlockArg(Nil, s) })
+              | stmts <~ `}` ^^ { s => BlockArg(ValueParams(Nil), s) })
     | failure("Expected at an argument list")
     )
 
-  // TODO factor to ValueParams
-  lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParamsOpt ^^ { ps => ps.params } | (idDef ^^ { id => List(ValueParam(id, None)) })
+  lazy val lambdaArgs: P[ValueParams] =
+    valueParamsOpt | (idDef ^^ { id => ValueParams(List(ValueParam(id, None))) })
 
   lazy val valueArgs: P[ValueArgs] =
     `(` ~/> manySep(expr, `,`) <~ `)` ^^ ValueArgs | failure("Expected a value argument list")
