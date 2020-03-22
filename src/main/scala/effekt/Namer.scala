@@ -283,7 +283,8 @@ class Namer extends Phase { namer =>
     case source.TypeApp(id, args) =>
       val data = C.resolveType(id).asValueType
       TypeApp(data, args.map(resolve))
-    case source.TypeVar(id) => C.resolveType(id).asValueType
+    case source.TypeVar(id) =>
+      C.resolveType(id).asValueType
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
@@ -298,6 +299,9 @@ class Namer extends Phase { namer =>
   def resolve(e: source.Effectful)(implicit C: Context): Effectful =
     Effectful(resolve(e.tpe), resolve(e.eff))
 
+  /**
+   * Term vars are resolved as part of resolve(tree: Tree)
+   */
   def resolve(id: Id)(implicit C: Context): TypeVar = {
     val sym = TypeVar(C.localName(id))
     C.define(id, sym)

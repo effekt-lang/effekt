@@ -177,7 +177,7 @@ class Typer extends Phase { typer =>
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
-  def precheckDef(d: Def)(implicit C: Context): Unit = C.at(d) { d match {
+  def precheckDef(d: Def)(implicit C: Context): Unit = C.focusing(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       d.symbol.ret.foreach { annot => C.putBlock(d.symbol, d.symbol.toType) }
 
@@ -194,7 +194,7 @@ class Typer extends Phase { typer =>
       }
 
     case d => ()
-  }}
+  }
 
 
   def synthDef(d: Def)(implicit C: Context): Effectful = C.focusing(d) {
