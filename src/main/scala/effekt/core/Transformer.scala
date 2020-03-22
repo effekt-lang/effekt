@@ -129,15 +129,15 @@ class Transformer {
       val effects = (effs -- ownEffect).effs.filterNot { _.builtin }
       val capabilities = effects.map { BlockVar }
 
-      val as: List[Control[List[Expr | Block]]] = (args zip params) map {
+      val as: List[Control[List[Argument]]] = (args zip params) map {
         case (source.ValueArgs(as), _) => traverse(as.map(transform))
-        case (source.BlockArg(ps, body), p: BlockType) =>
+        case (source.BlockArg(ps, body), List(p: BlockType)) =>
           val params = ps.map { v => core.ValueParam(v.symbol) }
           val caps = p.ret.effects.effs.filterNot(_.builtin).map { core.BlockParam }
           pure { List(BlockDef(params ++ caps, transform(body))) }
       }
 
-      val as2: Control[List[Expr | Block]] = traverse(as).map { ls => ls.flatMap(identity) }
+      val as2: Control[List[Argument]] = traverse(as).map { ls => ls.flatMap(identity) }
 
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.

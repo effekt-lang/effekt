@@ -233,7 +233,7 @@ class Evaluator {
   def evalExprs(args: List[Expr])(given Context): Control[List[Value]] =
     traverse { args.map(e => evalExpr(e)) }
 
-  def evalArgSections(ps: List[List[ValueType] | BlockType], args: List[ArgSection])(given Context): Control[List[Value]] =
+  def evalArgSections(ps: List[List[Type]], args: List[ArgSection])(given Context): Control[List[Value]] =
     args match {
       case Nil => pure(Nil)
       case arg :: args => for {
@@ -242,18 +242,14 @@ class Evaluator {
       } yield v ++ vs
     }
 
-  def evalArgSection(sec: List[ValueType] | BlockType, args: ArgSection)(given Context): Control[List[Value]] =
+  def evalArgSection(sec: List[Type], args: ArgSection)(given Context): Control[List[Value]] =
     (sec, args) match {
     case (_, ValueArgs(exprs)) => evalExprs(exprs)
-    case (BlockType(_, _, tpe), BlockArg(ps, stmt)) =>
+    case (List(BlockType(_, _, tpe)), BlockArg(ps, stmt)) =>
       pure(List(bindCapabilities(ps.map(_.symbol), tpe.effects, stmt)))
   }
 
-  def collectBinders(ps: Params)(given Context): List[Symbol] = ps match {
-    case Nil => Nil
-    case (b : BlockParam) :: ps => b :: collectBinders(ps)
-    case (l : List[ValueParam]) :: ps => l ++ collectBinders(ps)
-  }
+  def collectBinders(ps: Params)(given Context): List[Symbol] = ps.flatten
 
   // convention: we bind capabilities AFTER normal params
   def bindCapabilities(params: List[Symbol], effs: Effects, s: Stmt)(given Context) = Closure { args =>

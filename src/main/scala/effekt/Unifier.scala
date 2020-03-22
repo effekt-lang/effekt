@@ -24,9 +24,7 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
         report.error(s"Section count does not match $f1 vs. $f2")
 
       (args1 zip args2).foldLeft(merge(ret1.tpe, ret2.tpe)) {
-        case (u, (b1: BlockType, b2: BlockType)) =>
-          u.merge(b1, b2)
-        case (u, (as1: List[ValueType], as2: List[ValueType])) =>
+        case (u, (as1, as2)) =>
           if (as1.size != as2.size)
             report.error(s"Argument count does not match $f1 vs. $f2")
           (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u.merge(a1, a2) }
@@ -69,10 +67,10 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
     case BlockType(tps, ps, ret) => BlockType(tps, substitute(ps), this substitute ret)
   }
 
-  def substitute(t: Sections): Sections = t map {
-    case ps: List[ValueType] => ps.map { substitute }
+  def substitute(t: Sections): Sections = t map { _ map {
+    case v: ValueType => substitute(v)
     case b: BlockType => substitute(b)
-  }
+  }}
 
   def checkFullyDefined(given report: ErrorReporter) = admitted.foreach { tpe =>
     if (!subst.isDefinedAt(tpe))

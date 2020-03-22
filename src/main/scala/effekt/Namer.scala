@@ -167,12 +167,12 @@ class Namer extends Phase { namer =>
    * Importantly, resolving them will *not* add the parameters as binding occurence in the current scope.
    * This is done separately by means of `bind`
    */
-  def resolveParamSection(params: source.ParamSection)(given CompilerContext): List[ValueParam] | BlockParam = params match {
+  def resolveParamSection(params: source.ParamSection)(given CompilerContext): List[Param] = params match {
     case ps : source.ValueParams => resolveValueParams(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(id.localName, resolveBlockType(tpe))
       Compiler.put(id, sym)
-      sym
+      List(sym)
   }
   def resolveValueParams(ps: source.ValueParams)(given CompilerContext): List[ValueParam] =
     ps.params map { p =>
@@ -355,11 +355,8 @@ class Namer extends Phase { namer =>
     def (C: CompilerContext) bind(s: TypeSymbol): Unit =
       C.types.define(s.name.name, s)
 
-    def (C: CompilerContext) bind(params: List[List[ValueParam] | BlockParam]): CompilerContext = {
-      params flatMap {
-        case b : BlockParam => List(b)
-        case l : List[ValueParam] => l
-      } foreach { p => C.bind(p) }
+    def (C: CompilerContext) bind(params: List[List[Param]]): CompilerContext = {
+      params.flatten.foreach { p => C.bind(p) }
       C
     }
 

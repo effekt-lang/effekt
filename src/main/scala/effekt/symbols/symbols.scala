@@ -50,13 +50,13 @@ package object symbols {
    * Right now, parameters are a union type of a list of value params and one block param.
    */
   // TODO Introduce ParamSection also on symbol level and then use Params for types
-  type Params = List[List[ValueParam] | BlockParam]
+  type Params = List[List[Param]]
 
   def paramsToTypes(ps: Params): Sections =
-    ps map {
+    ps map { _ map {
       case BlockParam(_, tpe) => tpe
-      case vps: List[ValueParam] => vps map { v => v.tpe.get }
-    }
+      case v : ValueParam => v.tpe.get
+    }}
 
 
   trait Fun extends BlockSymbol {
@@ -100,7 +100,7 @@ package object symbols {
   sealed trait Type
 
   // like Params but without name binders
-  type Sections = List[List[ValueType] | BlockType]
+  type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type
 
@@ -112,7 +112,7 @@ package object symbols {
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
     override def toString: String = {
       val ps = params.map {
-        case b: BlockType => s"{${ b.toString }}"
+        case List(b: BlockType) => s"{${ b.toString }}"
         case ps: List[ValueType] => s"(${ ps.map { _.toString }.mkString(", ") })"
       }.mkString("")
 

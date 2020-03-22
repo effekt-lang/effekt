@@ -124,9 +124,7 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
-case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
-  type symbol = symbols.Fun | symbols.ResumeParam
-}
+case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr

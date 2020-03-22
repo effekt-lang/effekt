@@ -53,7 +53,7 @@ object DeclPrinter extends ParenPrettyPrinter {
   def format(kw: String, f: Fun, ret: Effectful): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${ f.tparams.mkString(", ") }]"
     val ps  = f.params.map {
-      case b: BlockParam => s"{ ${b.name}: ${b.tpe} }"
+      case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
       case l: List[ValueParam] =>
         val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
         s"($vps)"

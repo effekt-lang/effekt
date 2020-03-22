@@ -80,7 +80,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     }, comma))
   }
 
-  def argToDoc(e: Expr | Block): Doc = e match {
+  def argToDoc(e: Argument): Doc = e match {
     case e: Expr => toDoc(e)
     case b: Block => toDoc(b)
   }

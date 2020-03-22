@@ -250,12 +250,10 @@ class Typer extends Phase { typer =>
    */
   def extractAllTypes(params: Params)(given CompilerContext): Sections = params map extractTypes
 
-  def extractTypes(params: List[ValueParam] | BlockParam)(given CompilerContext): List[ValueType] | BlockType = params match {
+  def extractTypes(params: List[Param])(given CompilerContext): List[Type] = params map {
     case BlockParam(_, tpe) => tpe
-    case ps: List[ValueParam] => ps map {
-      case ValueParam(_, Some(tpe)) => tpe
-      case _ => Compiler.abort("Cannot extract type")
-    }
+    case ValueParam(_, Some(tpe)) => tpe
+    case _ => Compiler.abort("Cannot extract type")
   }
 
   /**
@@ -263,7 +261,7 @@ class Typer extends Phase { typer =>
    */
   def checkAgainstDeclaration(
     name: String,
-    atCallee: List[List[ValueType] | BlockType],
+    atCallee: List[List[Type]],
     // we ask for the source Params here, since it might not be annotated
     atCaller: List[source.ParamSection])(given CompilerContext): Map[Symbol, Type] = {
 
@@ -272,7 +270,7 @@ class Typer extends Phase { typer =>
 
     // TODO add blockparams here!
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
-      case (b1: BlockType, b2: source.BlockParam) =>
+      case (List(b1: BlockType), b2: source.BlockParam) =>
         Compiler.abort("not yet supported")
         ???
 
@@ -325,7 +323,7 @@ class Typer extends Phase { typer =>
       //   BlockArg: foo { n => println("hello" + n) }
       //     or
       //   BlockArg: foo { (n: Int) => println("hello" + n) }
-      case (bt: BlockType, source.BlockArg(params, stmt)) =>
+      case (List(bt: BlockType), source.BlockArg(params, stmt)) =>
 
         val blockType = unifier substitute bt
         // TODO make blockargs also take multiple argument sections.
@@ -422,13 +420,11 @@ class Typer extends Phase { typer =>
       case (C, (v: ValueSymbol, t: ValueType)) => C.define(v, t)
       case (C, (v: BlockSymbol, t: BlockType)) => C.define(v, t)
     }
-    def (C: CompilerContext) define(ps: List[List[ValueParam] | BlockParam]): CompilerContext =
-      C.define(ps.flatMap {
-        case ps : List[ValueParam] => ps map {
-          case s @ ValueParam(name, Some(tpe)) => s -> tpe
-          case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
-        }
-        case s @ BlockParam(name, tpe) => List(s -> tpe)
+    def (C: CompilerContext) define(ps: List[List[Param]]): CompilerContext =
+      C.define(ps.flatten.map {
+        case s @ ValueParam(name, Some(tpe)) => s -> tpe
+        case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
+        case s @ BlockParam(name, tpe) => s -> tpe
       }.toMap)
 
 
