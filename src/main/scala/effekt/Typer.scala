@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import context.{ CompilerContext, Phase }
+import effekt.context.{ CompilerContext, Phase }
 import effekt.source.{ Def, Expr, Stmt, Tree }
 import effekt.symbols._
 import effekt.symbols.builtins._

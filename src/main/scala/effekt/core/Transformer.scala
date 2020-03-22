@@ -1,14 +1,10 @@
 package effekt
 package core
 
-import context.CompilerContext
-import effekt.typer.Typer
+import effekt.context.CompilerContext
 import effekt.symbols._
-import effekt.symbols.builtins._
 import effekt.util.control
 import effekt.util.control._
-import effekt.util.messages.{ ErrorReporter, MessageBuffer }
-import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 object Wildcard extends Symbol { val name = LocalName("_") }
 

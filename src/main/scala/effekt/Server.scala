@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.source.{ ModuleDecl, Tree }
+
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Position
 

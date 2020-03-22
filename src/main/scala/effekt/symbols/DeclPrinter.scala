@@ -10,8 +10,6 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-
   def apply(t: Symbol, context: CompilerContext): String =
     pretty(toDoc(t, context)).layout
 

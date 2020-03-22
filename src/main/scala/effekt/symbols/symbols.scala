@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.source.{ ModuleDecl, Def, FunDef, ValDef, VarDef }
+
 import org.bitbucket.inkytonik.kiama.util.Source
 
 /**

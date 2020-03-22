@@ -4,7 +4,7 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import context.{ CompilerContext, Phase }
+import effekt.context.{ CompilerContext, Phase }
 import effekt.source.{ Def, Id, Tree }
 import effekt.source.traversal._
 import effekt.symbols._

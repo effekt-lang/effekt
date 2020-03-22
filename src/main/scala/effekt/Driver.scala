@@ -8,6 +8,7 @@ import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.{ FatalPhaseError }
 import effekt.symbols.{ builtins, Module }
+import effekt.context.CompilerContext
 
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.Messages
@@ -18,7 +19,7 @@ import kiama.util._
 import org.rogach.scallop._
 import java.io.File
 
-import context.CompilerContext
+
 
 class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
   lazy val compile = toggle(
