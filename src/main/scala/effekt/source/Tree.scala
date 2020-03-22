@@ -109,7 +109,7 @@ sealed trait Expr extends Tree
 
 // Variable / Value use
 case class Var(id: Id) extends Expr with Reference {
-  type symbol = symbols.ValueSymbol & symbols.TermSymbol
+  type symbol = symbols.ValueSymbol with symbols.TermSymbol
 }
 case class Assign(id: Id, expr: Expr) extends Expr with Reference {
   type symbol = symbols.VarBinder
@@ -154,7 +154,7 @@ sealed trait ValueType extends Type {
 
 // Used for both binding and bound vars
 case class TypeVar(id: Id) extends ValueType with Reference {
-  type symbol = symbols.Symbol & symbols.ValueType
+  type symbol = symbols.Symbol with symbols.ValueType
 }
 case class TypeApp(id: Id, params: List[ValueType]) extends ValueType with Reference {
   type symbol = symbols.DataType
