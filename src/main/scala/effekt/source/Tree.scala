@@ -183,21 +183,3 @@ object Effects {
   def apply(effs: Effect*): Effects = Effects(effs.toSet)
   def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
 }
-
-/**
- * Traversal Utils
- */
-
-object traversal {
-
-  type Traversal[T, Ctx] = Ctx => T => Unit
-
-  def all[Ctx](traverse: Traversal[Tree, Ctx])(t: Any)(implicit C: Ctx): Unit = t match {
-    case p: Product => p.productIterator.foreach {
-      case t: Tree => traverse(C)(t)
-      case other => all(traverse)(other)
-    }
-    case t: Iterable[t] => t.foreach(t => all(traverse)(t))
-    case leaf => ()
-  }
-}

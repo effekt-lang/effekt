@@ -7,7 +7,6 @@ package namer
 import effekt.context.{ Context, Phase }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
-import effekt.source.traversal._
 import effekt.symbols._
 import effekt.util.scopes._
 
@@ -67,21 +66,21 @@ class Namer extends Phase { namer =>
 
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { d => resolveDef(d, true) }
+      decls foreach { d => resolve(d, true) }
       Compiler scoped { resolveAll(decls) }
 
     case source.DefStmt(d, rest) =>
       Compiler scoped {
-        resolveDef(d, false)
+        resolve(d, false)
         resolve(d)
         resolve(rest)
       }
 
     case source.ValueParam(id, tpe) =>
-      C.define(id, ValueParam(C.localName(id), tpe.map(resolveValueType)))
+      C.define(id, ValueParam(C.localName(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      C.define(id, BlockParam(C.localName(id), resolveBlockType(tpe)))
+      C.define(id, BlockParam(C.localName(id), resolve(tpe)))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
@@ -107,7 +106,7 @@ class Namer extends Phase { namer =>
 
     case source.OpClause(op, params, body, resumeId) =>
       Compiler.at(op) { Compiler.resolveTerms(op) }
-      val ps = params.map(resolveValueParams)
+      val ps = params.map(resolve)
       Compiler scoped {
         Compiler.bind(ps)
         C.define(resumeId, ResumeParam())
@@ -116,14 +115,14 @@ class Namer extends Phase { namer =>
 
     case source.Clause(op, params, body) =>
       Compiler.at(op) { Compiler.resolveTerms(op) }
-      val ps = params.map(resolveValueParams)
+      val ps = params.map(resolve)
       Compiler scoped {
         Compiler.bind(ps)
         resolve(body)
       }
 
     case source.BlockArg(params, stmt) =>
-      val ps = resolveValueParams(source.ValueParams(params)) // TODO drop wrapping after refactoring
+      val ps = resolve(source.ValueParams(params)) // TODO drop wrapping after refactoring
       Compiler scoped {
         Compiler.bind(List(ps))
         resolve(stmt)
@@ -138,7 +137,7 @@ class Namer extends Phase { namer =>
         case b : Fun => b
         case _ => Compiler.error("Expected callable")
       }
-      targs foreach resolveValueType
+      targs foreach resolve
       resolveAll(args)
 
     case source.Var(id) => Compiler.resolveFilter(id) {
@@ -146,8 +145,8 @@ class Namer extends Phase { namer =>
       case other => other
     }
 
-    case tpe: source.ValueType => resolveValueType(tpe)
-    case tpe: source.BlockType => resolveBlockType(tpe)
+    case tpe: source.ValueType => resolve(tpe)
+    case tpe: source.BlockType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
     case id : Id => Compiler.resolveTerms(id)
@@ -155,8 +154,16 @@ class Namer extends Phase { namer =>
     case other => resolveAll(other)
   }
 
-  def resolveAll(obj: Any)(implicit C: Context): Unit =
-    all[Context](c => t => resolve(t)(c))(obj)
+  def resolveAll(obj: Any)(implicit C: Context): Unit = obj match {
+    case p: Product => p.productIterator.foreach {
+      case t: Tree => resolve(t)
+      case other => resolveAll(other)
+    }
+    case t: Iterable[t] => t.foreach { t => resolveAll(t) }
+    case leaf => ()
+  }
+
+
 
   /**
    * Resolve Parameters as part of resolving function signatures
@@ -167,22 +174,22 @@ class Namer extends Phase { namer =>
    * Importantly, resolving them will *not* add the parameters as binding occurence in the current scope.
    * This is done separately by means of `bind`
    */
-  def resolveParamSection(params: source.ParamSection)(implicit C: Context): List[Param] = params match {
-    case ps : source.ValueParams => resolveValueParams(ps)
+  def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = params match {
+    case ps : source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
-      val sym = BlockParam(C.localName(id), resolveBlockType(tpe))
+      val sym = BlockParam(C.localName(id), resolve(tpe))
       Compiler.put(id, sym)
       List(sym)
   }
-  def resolveValueParams(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
+  def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
-      val sym = ValueParam(C.localName(p.id), p.tpe.map(resolveValueType))
+      val sym = ValueParam(C.localName(p.id), p.tpe.map(resolve))
       Compiler.put(p.id, sym)
       sym
     }
 
   // TODO consider setting owner, instead of this qualify hack
-  def resolveDef(d: Def, qualify: Boolean)(implicit C: Context): Unit = {
+  def resolve(d: Def, qualify: Boolean)(implicit C: Context): Unit = {
 
     def name(id: Id) = if (qualify) {
       C.qualifiedName(id)
@@ -193,19 +200,19 @@ class Namer extends Phase { namer =>
     Compiler.focusing(d) {
 
       case d @ source.ValDef(id, annot, binding) =>
-        val tpe = annot.map(resolveValueType)
+        val tpe = annot.map(resolve)
         resolve(binding)
         C.define(id, ValBinder(C.localName(id), tpe, d))
 
       case d @ source.VarDef(id, annot, binding) =>
-        val tpe = annot.map(resolveValueType)
+        val tpe = annot.map(resolve)
         resolve(binding)
         C.define(id, VarBinder(C.localName(id), tpe, d))
 
       case f @ source.FunDef(id, tparams, params, annot, body) =>
         val sym = Compiler scoped {
           // we create a new scope, since resolving type params introduces them in this scope
-          UserFunction(C.freshTermName(id, qualify), tparams map resolveTypeParam, params map resolveParamSection, annot map resolveEffectful, f)
+          UserFunction(C.freshTermName(id, qualify), tparams map resolve, params map resolve, annot map resolve, f)
         }
         C.define(id, sym)
 
@@ -213,9 +220,9 @@ class Namer extends Phase { namer =>
         // we use the localName for effects, since they will be bound as capabilities
         val effectSym = UserEffect(C.localName(id), Nil)
         val opSym = Compiler scoped {
-          val tps = tparams map resolveTypeParam
-          val tpe = Effectful(resolveValueType(ret), Effects(List(effectSym)))
-          EffectOp(C.localName(id), tps, params map resolveValueParams, Some(tpe), effectSym)
+          val tps = tparams map resolve
+          val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
+          EffectOp(C.localName(id), tps, params map resolve, Some(tpe), effectSym)
         }
         effectSym.ops = List(opSym)
         // we would need a second id that is the definition of the operation
@@ -224,7 +231,7 @@ class Namer extends Phase { namer =>
 
       case d @ source.DataDef(id, tparams, ctors) =>
         val (typ, tps) = Compiler scoped {
-          val tps = tparams map resolveTypeParam
+          val tps = tparams map resolve
           (DataType(name(id), tps), tps)
         }
         C.define(id, typ)
@@ -232,7 +239,7 @@ class Namer extends Phase { namer =>
           case source.Constructor(id, ps) =>
             val sym = Compiler scoped {
               tps.foreach { t => Compiler.bind(t) }
-              Constructor(name(id), ps map resolveValueParams, typ)
+              Constructor(name(id), ps map resolve, typ)
             }
             C.define(id, sym)
             sym
@@ -241,21 +248,21 @@ class Namer extends Phase { namer =>
 
       case d @ source.ExternType(id, tparams) =>
         C.define(id, Compiler scoped {
-          val tps = tparams map resolveTypeParam
+          val tps = tparams map resolve
           BuiltinType(name(id), tps)
         })
 
       case d @ source.ExternEffect(id, tparams) =>
         C.define(id, Compiler scoped {
-          val tps = tparams map resolveTypeParam
+          val tps = tparams map resolve
           BuiltinEffect(name(id), tps)
         })
 
       case d @ source.ExternFun(pure, id, tparams, params, ret, body) =>
         C.define(id, Compiler scoped {
-          val tps = tparams map resolveTypeParam
-          val ps: Params = params map resolveParamSection
-          val tpe = resolveEffectful(ret)
+          val tps = tparams map resolve
+          val ps: Params = params map resolve
+          val tpe = resolve(ret)
           BuiltinFunction(name(id), tps, ps, Some(tpe), pure, body)
         })
 
@@ -272,26 +279,26 @@ class Namer extends Phase { namer =>
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
+  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case source.TypeApp(id, args) =>
       val data = C.resolveType(id).asValueType
-      TypeApp(data, args.map(resolveValueType))
+      TypeApp(data, args.map(resolve))
     case source.TypeVar(id) => C.resolveType(id).asValueType
   }
 
-  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType =
-    BlockType(Nil, List(tpe.params.map(resolveValueType)), resolveEffectful(tpe.ret))
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
+    BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
 
-  def resolveEffect(tpe: source.Effect)(implicit C: Context): Effect =
+  def resolve(tpe: source.Effect)(implicit C: Context): Effect =
     C.resolveType(tpe.id).asEffect
 
-  def resolveEffects(tpe: source.Effects)(implicit C: Context): Effects =
-    Effects(tpe.effs.map(resolveEffect))
+  def resolve(tpe: source.Effects)(implicit C: Context): Effects =
+    Effects(tpe.effs.map(resolve))
 
-  def resolveEffectful(e: source.Effectful)(implicit C: Context): Effectful =
-    Effectful(resolveValueType(e.tpe), resolveEffects(e.eff))
+  def resolve(e: source.Effectful)(implicit C: Context): Effectful =
+    Effectful(resolve(e.tpe), resolve(e.eff))
 
-  def resolveTypeParam(id: Id)(implicit C: Context): TypeVar = {
+  def resolve(id: Id)(implicit C: Context): TypeVar = {
     val sym = TypeVar(C.localName(id))
     C.define(id, sym)
     sym
