@@ -2,7 +2,9 @@ package effekt
 package core
 
 import effekt.context.CompilerContext
+import effekt.context.assertions.{ SymbolAssertions }
 import effekt.symbols._
+
 import effekt.util.control
 import effekt.util.control._
 
@@ -10,23 +12,22 @@ object Wildcard extends Symbol { val name = LocalName("_") }
 
 class Transformer {
 
-  def run(mod: Module, compiler: CompilerContext): ModuleDecl = {
+  def run(mod: Module)(implicit compiler: CompilerContext): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
     }.toList)
 
-    val ctx = Context(compiler)
 
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) { case (d, r) =>
-      transform(d, r)(given ctx)
+      transform(d, r)(compiler)
     })
   }
 
-  def transform(d: source.Def, rest: Stmt)(given Context): Stmt = d match {
+  def transform(d: source.Def, rest: Stmt)(implicit C: CompilerContext): Stmt = d match {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
-      val effs = sym.effects
+      val effs = sym.effects.effs
 
       val ps = params.flatMap {
         case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
@@ -49,7 +50,7 @@ class Transformer {
 
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       // C&P from FunDef
-      val effs = f.symbol.effects
+      val effs = f.symbol.effects.effs
       val ps = params.flatMap {
         case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
         case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
@@ -66,7 +67,7 @@ class Transformer {
       rest
   }
 
-  def transform(tree: source.Stmt)(given Context): Stmt = tree match {
+  def transform(tree: source.Stmt)(implicit C: CompilerContext): Stmt = tree match {
     case source.DefStmt(d, rest) =>
       transform(d, transform(rest))
 
@@ -77,7 +78,7 @@ class Transformer {
       ANF { transform(e).map(Ret) }
   }
 
-  def transform(tree: source.Expr)(given Context): Control[Expr] = tree match {
+  def transform(tree: source.Expr)(implicit C: CompilerContext): Control[Expr] = tree match {
     case v : source.Var => v.definition match {
       case sym: VarBinder => pure { Deref(sym) }
       case sym => pure { ValueVar(sym) }
@@ -110,7 +111,7 @@ class Transformer {
       transform(sc).flatMap { scrutinee => bind(Match(scrutinee, cs)) }
 
     case source.Call(fun, _, args) =>
-      val sym = fun.termSymbol
+      val sym: Symbol = fun.symbol.asInstanceOf[TermSymbol]
 
       // we do not want to provide capabilities for the effect itself
       val ownEffect = sym match {
@@ -118,7 +119,7 @@ class Transformer {
         case _ => Pure
       }
 
-      val BlockType(tparams, params, ret / effs) = Compiler.blockType(sym)
+      val BlockType(tparams, params, ret / effs) = C.blockType(sym)
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation
@@ -154,7 +155,7 @@ class Transformer {
       bind(Handle(body, cs))
   }
 
-  def traverse[R](ar: List[Control[R]])(given Context): Control[List[R]] = ar match {
+  def traverse[R](ar: List[Control[R]])(implicit C: CompilerContext): Control[List[R]] = ar match {
     case Nil => pure { Nil }
     case (r :: rs) => for {
       rv <- r
@@ -162,28 +163,13 @@ class Transformer {
     } yield rv :: rsv
   }
 
-  def transform(exprs: List[source.Expr])(given Context): Control[List[Expr]] = exprs match {
+  def transform(exprs: List[source.Expr])(implicit C: CompilerContext): Control[List[Expr]] = exprs match {
     case Nil => pure { Nil }
     case (e :: rest) => for {
       ev <- transform(e)
       rv <- transform(rest)
     } yield ev :: rv
   }
-
-  case class Context(compiler: CompilerContext) {
-
-    def (f: Fun) effects = (f.ret match {
-      case Some(t) => t
-      case None => compiler.blockType(f).ret
-    }).effects.effs
-
-    def (id: source.Id) symbol = compiler.lookup(id)
-    def (id: source.Id) termSymbol = compiler.lookup(id).asInstanceOf[TermSymbol]
-
-    def (tree: source.Definition) symbol: tree.symbol = compiler.get(tree)
-    def (tree: source.Reference) definition: tree.symbol = compiler.get(tree)
-  }
-  def Context(given c: Context): Context = c
 
   private val delimiter: Cap[Stmt] = new Capability { type Res = Stmt }
   case class Tmp() extends Symbol { val name = LocalName("tmp" + Symbol.fresh.next()) }
@@ -195,6 +181,4 @@ class Transformer {
       case body => Val(x, e, body)
     }
   }
-  def Compiler(given c: Context): CompilerContext = c.compiler
-  given (given ctx: Context): CompilerContext = ctx.compiler
 }

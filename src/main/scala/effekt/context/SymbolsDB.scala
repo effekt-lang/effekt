@@ -30,7 +30,7 @@ trait SymbolsDB {
   def get(id: Id): Option[Symbol] = symbols.get(id)
 
   // this one can fail!
-  def (tree: source.Reference) definition: tree.symbol =
+  def definition(tree: source.Reference): tree.symbol =
     symbols(tree.id).asInstanceOf[tree.symbol]
 
   def get(tree: source.Reference): tree.symbol =
@@ -40,7 +40,7 @@ trait SymbolsDB {
   // Searching the symbol for a definition
   // =====================================
   // these lookups should not fail (except there is a bug in the compiler)
-  def (tree: source.Definition) symbol: tree.symbol = get(tree)
+  def symbol(tree: source.Definition): tree.symbol = get(tree)
 
   def get(tree: source.Definition): tree.symbol =
     symbols(tree.id).asInstanceOf[tree.symbol]

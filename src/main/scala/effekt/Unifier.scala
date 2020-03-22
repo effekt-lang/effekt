@@ -6,7 +6,7 @@ import effekt.util.messages.ErrorReporter
 
 case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map.empty) {
 
-  def merge(t1: Type, t2: Type)(given report: ErrorReporter): Unifier = (t1, t2) match {
+  def merge(t1: Type, t2: Type)(implicit report: ErrorReporter): Unifier = (t1, t2) match {
 
     case (s: TypeVar, t: ValueType) if admitted.contains(s) =>
       add(s, t)
@@ -38,7 +38,7 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
       this
   }
 
-  def add(k: TypeVar, v: ValueType)(given report: ErrorReporter) = {
+  def add(k: TypeVar, v: ValueType)(implicit report: ErrorReporter) = {
     subst.get(k).foreach { v2 => if (v != v2) {
       report.error(s"${k} cannot be instantiated with ${v} and with ${v2} at the same time.")
     } }
@@ -72,7 +72,7 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
     case b: BlockType => substitute(b)
   }}
 
-  def checkFullyDefined(given report: ErrorReporter) = admitted.foreach { tpe =>
+  def checkFullyDefined(implicit report: ErrorReporter) = admitted.foreach { tpe =>
     if (!subst.isDefinedAt(tpe))
       report.error(s"Couldn't infer type for ${tpe}")
   }

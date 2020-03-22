@@ -1,7 +1,8 @@
 package effekt
 package evaluator
 
-import context.CompilerContext
+import effekt.context.CompilerContext
+import effekt.context.assertions.{ SymbolAssertions }
 import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.util.Thunk
@@ -61,9 +62,9 @@ class Evaluator {
   // Cache for evaluated modules. This avoids evaluating transitive dependencies multiple times
   val evaluatedModules: Memoiser[Module, Map[Symbol, Thunk[Value]]] = Memoiser.makeIdMemoiser()
 
-  def run(mod: symbols.Module, compiler: CompilerContext): Value = {
+  def run(mod: symbols.Module)(implicit compiler: CompilerContext): Value = {
     val mainSym = mod.terms.getOrElse(mainName, compiler.abort("Cannot find main function"))
-    val mainFun = compiler.asUserFunction(mainSym)
+    val mainFun = mainSym.asUserFunction
 
     // TODO refactor and convert into checked error
     val userEffects = compiler.blockType(mainSym).ret.effects.effs.filterNot { _.builtin }
@@ -82,16 +83,14 @@ class Evaluator {
           val res = eval(mod, compiler)
           env ++ res
       }
-      val result = eval(mod.decl.defs)(given Context(env, compiler))
+      val result = eval(mod.decl.defs)(Context(env, compiler))
       evaluatedModules.put(mod, result)
       result
     })
 
   class Prompt extends Capability { type Res = Value }
 
-  type Eval[E <: Tree, R] = E => (given Context) => Control[R]
-
-  val evalExpr: Eval[Expr, Value] = {
+  def evalExpr(expr: Expr)(implicit C: Context): Control[Value] = expr match {
     case IntLit(n)     => pure(IntValue(n))
     case DoubleLit(n)  => pure(DoubleValue(n))
     case BooleanLit(b) => pure(BooleanValue(b))
@@ -103,7 +102,7 @@ class Evaluator {
       case b: VarBinder => control.lookup(b)
 
       // otherwise fetch the value from the context
-      case b => pure { Context.get(b) }
+      case b => pure { C.get(b) }
     }
 
     case a @ Assign(b, expr) => for {
@@ -113,7 +112,7 @@ class Evaluator {
 
     case If(cond, thn, els) => for {
       c <- evalExpr(cond)
-      r <- if (c.asBoolean) evalStmt(thn) else evalStmt(els)
+      r <- if (C.asBoolean(c)) evalStmt(thn) else evalStmt(els)
     } yield r
 
     case While(cond, block) => loop(cond, block)
@@ -122,7 +121,7 @@ class Evaluator {
 
       case op: EffectOp =>
         val effect = op.effect
-        val handler = Context.handler(effect)
+        val handler = C.handler(effect)
         val BlockType(_, params, ret / effs) = Compiler.blockType(op)
 
         evalArgSections(params, args).flatMap { argv =>
@@ -137,7 +136,7 @@ class Evaluator {
       case sym =>
         val BlockType(_, params, ret / effs) = Compiler.blockType(sym)
         evalArgSections(params, args).flatMap { argv =>
-          supplyCapabilities(Context.closure(sym), argv, effs)
+          supplyCapabilities(C.closure(sym), argv, effs)
         }
     }
 
@@ -149,7 +148,7 @@ class Evaluator {
         case op @ OpClause(id, params, body, resume) =>
           val ps = params.flatMap { _.params.map(_.symbol) } :+ Compiler.lookup(resume)
           val impl: List[Value] => control.Control[Value] = args =>
-            Context.extendedWith(ps zip args) { evalStmt(body) }
+            C.extendedWith(ps zip args) { implicit C => evalStmt(body) }
           (op.definition, impl)
       }.toMap
 
@@ -159,7 +158,7 @@ class Evaluator {
       val bindings = clauses.map { c => (c.definition.effect, h) }
 
       handle(prompt) {
-        Context.extendedWith(bindings) {
+        C.extendedWith(bindings) { implicit C =>
           evalStmt(prog)
         }
       }
@@ -171,15 +170,15 @@ class Evaluator {
             cl.definition == tag
           }.getOrElse(sys error s"Unmatched ${tag}")
           val ps = cl.params.flatMap { _.params.map(_.symbol) }
-          Context.extendedWith(ps zip args) { evalStmt(cl.body) }
+          C.extendedWith(ps zip args) {implicit C => evalStmt(cl.body) }
       }
   }
 
-  def eval(funs: List[Def])(given Context): Map[Symbol, Thunk[Value]] = {
-    lazy val ctx: Context = Context bindAll bindings
+  def eval(funs: List[Def])(implicit C: Context): Map[Symbol, Thunk[Value]] = {
+    lazy val ctx: Context = C bindAll bindings
     lazy val bindings: Map[Symbol, Thunk[Value]] = funs.flatMap {
       case (f: FunDef) =>
-        List(f.symbol -> Thunk { evalFunDef(f)(given ctx) })
+        List(f.symbol -> Thunk { evalFunDef(f)(ctx) })
       case (d: DataDef) => d.ctors.map { ctor =>
         ctor.symbol -> Thunk { evalConstructor(ctor) }
       }
@@ -192,28 +191,28 @@ class Evaluator {
     bindings
   }
 
-  def evalConstructor(c: source.Constructor)(given Context): Value =
+  def evalConstructor(c: source.Constructor)(implicit C: Context): Value =
     Closure { args => pure(DataValue(c.symbol, args)) }
 
-  def evalFunDef(f: FunDef)(given Context): Value = f match {
+  def evalFunDef(f: FunDef)(implicit C: Context): Value = f match {
     case FunDef(name, _, params, ret, body) =>
       val sym = f.symbol
       val params = collectBinders(sym.params)
       bindCapabilities(params, Compiler.blockType(sym).ret.effects, body)
   }
 
-  val evalStmt: Eval[Stmt, Value] = {
+  def evalStmt(stmt: Stmt)(implicit C: Context): Control[Value] = stmt match {
     case DefStmt(d @ ValDef(id, _, binding), rest) => for {
       v <- evalStmt(binding)
-      r <- Context.extendedWith(d.symbol, v) { evalStmt(rest) }
+      r <- C.extendedWith(d.symbol, v) { implicit C => evalStmt(rest) }
     } yield r
     case DefStmt(d @ VarDef(id, _, binding), rest) =>
       evalStmt(binding).flatMap { v =>
         control.bind(d.symbol, v) { evalStmt(rest) }
       }
     case DefStmt(d, rest) =>
-      val ctx = Context.bindAll(eval(List(d)))
-      evalStmt(rest)(given ctx)
+      val ctx = C.bindAll(eval(List(d)))
+      evalStmt(rest)(ctx)
     case ExprStmt(d, rest) =>
       evalExpr(d) andThen evalStmt(rest)
     case Return(d) =>
@@ -225,15 +224,15 @@ class Evaluator {
     case t :: ts => for { v <- t; vs <- traverse(ts) } yield v :: vs
   }
 
-  def loop(cond: Expr, block: Stmt)(given Context): Control[Value] = for {
+  def loop(cond: Expr, block: Stmt)(implicit C: Context): Control[Value] = for {
     c <- evalExpr(cond)
-    r <- if (c.asBoolean) evalStmt(block).flatMap { _ => loop(cond, block) } else pure(UnitValue)
+    r <- if (C.asBoolean(c)) evalStmt(block).flatMap { _ => loop(cond, block) } else pure(UnitValue)
   } yield r
 
-  def evalExprs(args: List[Expr])(given Context): Control[List[Value]] =
+  def evalExprs(args: List[Expr])(implicit C: Context): Control[List[Value]] =
     traverse { args.map(e => evalExpr(e)) }
 
-  def evalArgSections(ps: List[List[Type]], args: List[ArgSection])(given Context): Control[List[Value]] =
+  def evalArgSections(ps: List[List[Type]], args: List[ArgSection])(implicit C: Context): Control[List[Value]] =
     args match {
       case Nil => pure(Nil)
       case arg :: args => for {
@@ -242,23 +241,25 @@ class Evaluator {
       } yield v ++ vs
     }
 
-  def evalArgSection(sec: List[Type], args: ArgSection)(given Context): Control[List[Value]] =
+  def evalArgSection(sec: List[Type], args: ArgSection)(implicit C: Context): Control[List[Value]] =
     (sec, args) match {
     case (_, ValueArgs(exprs)) => evalExprs(exprs)
     case (List(BlockType(_, _, tpe)), BlockArg(ps, stmt)) =>
       pure(List(bindCapabilities(ps.map(_.symbol), tpe.effects, stmt)))
   }
 
-  def collectBinders(ps: Params)(given Context): List[Symbol] = ps.flatten
+  def collectBinders(ps: Params)(implicit C: Context): List[Symbol] = ps.flatten
 
   // convention: we bind capabilities AFTER normal params
-  def bindCapabilities(params: List[Symbol], effs: Effects, s: Stmt)(given Context) = Closure { args =>
-    Context.extendedWith((params ++ effs.effs.filterNot(_.builtin)) zip args) { evalStmt(s) }
+  def bindCapabilities(params: List[Symbol], effs: Effects, s: Stmt)(implicit C: Context) = Closure { args =>
+    C.extendedWith((params ++ effs.effs.filterNot(_.builtin)) zip args) { implicit C =>
+      evalStmt(s)
+    }
   }
 
   // looks up capabilities and provides them as additional arguments to f
-  def supplyCapabilities(fun: Closure, args: List[Value], effs: Effects)(given Context) = {
-    val caps = effs.effs.filterNot(_.builtin).map(s => Context.get(s))
+  def supplyCapabilities(fun: Closure, args: List[Value], effs: Effects)(implicit C: Context) = {
+    val caps = effs.effs.filterNot(_.builtin).map(s => C.get(s))
     fun.f(args ++ caps)
   }
 
@@ -313,22 +314,19 @@ class Evaluator {
     def bindAll(bindings: Map[Symbol, Thunk[Value]]): Context =
       copy(env = env ++ bindings)
 
-    def extendedWith[T](sym: Symbol, value: Value)(f: (given Context) => T): T =
+    def extendedWith[T](sym: Symbol, value: Value)(f: Context => T): T =
       extendedWith(List(sym -> value))(f)
 
-    def extendedWith[T](bindings: List[(Symbol, Value)])(f: (given Context) => T): T =
-      f(given copy(env = env ++ bindings.map { case (s, v) => (s, Thunk(v)) }))
+    def extendedWith[T](bindings: List[(Symbol, Value)])(f: Context => T): T =
+      f(copy(env = env ++ bindings.map { case (s, v) => (s, Thunk(v)) }))
 
     def closure(name: Symbol) = get(name).asInstanceOf[Closure]
 
     def handler(name: Symbol) = get(name).asInstanceOf[Handler]
 
-    def (v: Value) asBoolean: Boolean = v.asInstanceOf[BooleanValue].value
-
-    def (f: Fun) effects: Effects = compiler.returnType(f).effects
-
+    def asBoolean(v: Value): Boolean = v.asInstanceOf[BooleanValue].value
   }
-  def Context(given ctx: Context): Context = ctx
-  def Compiler(given ctx: Context): CompilerContext = ctx.compiler
-  given (given ctx: Context): CompilerContext = ctx.compiler
+  def Context(implicit C: Context): Context = C
+  def Compiler(implicit ctx: Context): CompilerContext = ctx.compiler
+  implicit def currentContext(implicit ctx: Context): CompilerContext = ctx.compiler
 }

@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.source.{ ModuleDecl, Def, FunDef, ValDef, VarDef }
+import effekt.context.{ TypesDB }
 
 import org.bitbucket.inkytonik.kiama.util.Source
 
@@ -68,6 +69,9 @@ package object symbols {
     // invariant: only works if ret is defined!
     def toType: BlockType = BlockType(tparams, paramsToTypes(params), ret.get)
     def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
+
+    def effects(implicit db: TypesDB): Effects =
+      ret.getOrElse(db.blockType(this).ret).effects
   }
 
   object Fun {
@@ -103,7 +107,9 @@ package object symbols {
   // like Params but without name binders
   type Sections = List[List[Type]]
 
-  sealed trait ValueType extends Type
+  sealed trait ValueType extends Type {
+    def / (effs: Effects): Effectful = Effectful(this, effs)
+  }
 
   case class TypeVar(name: Name) extends ValueType with TypeSymbol
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {

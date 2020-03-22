@@ -55,7 +55,7 @@ object messages {
     /**
      * Sets the given tree into focus for error reporting
      */
-    def focusing[T <: Tree, R](f: T => R): T => R = t =>
+    def focusing[T <: Tree, R](t: T)(f: T => R): R =
       at(t) { f(t) }
   }
 }

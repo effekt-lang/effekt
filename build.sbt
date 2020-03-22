@@ -1,4 +1,4 @@
-val dottyVersion = "0.21.0"
+val dottyVersion = "2.13.1"
 
 lazy val root = project
   .in(file("."))
@@ -8,7 +8,7 @@ lazy val root = project
 
     scalaVersion := dottyVersion,
 
-    libraryDependencies ++= dependencies.map(d => d.withDottyCompat(scalaVersion.value)),
+    libraryDependencies ++= dependencies, //.map(d => d.withDottyCompat(scalaVersion.value)),
 
     mainClass in assembly := Some("effekt.Server"),
     assemblyJarName in assembly := "effekt.jar",

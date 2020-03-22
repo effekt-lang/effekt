@@ -5,6 +5,7 @@ package namer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ CompilerContext, Phase }
+import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
 import effekt.source.traversal._
 import effekt.symbols._
@@ -32,7 +33,7 @@ class Namer extends Phase { namer =>
 
   val name = "Namer"
 
-  def run(src: Source, decl: source.ModuleDecl, compiler: CompilerContext): Module = {
+  def run(src: Source, decl: source.ModuleDecl)(implicit compiler: CompilerContext): Module = {
 
     val topLevelTerms = toplevel[TermSymbol](builtins.rootTerms)
     val topLevelTypes = toplevel[TypeSymbol](builtins.rootTypes)
@@ -48,7 +49,7 @@ class Namer extends Phase { namer =>
     compiler.phases.init(this)
 
 
-    resolve(given compiler)(decl)
+    resolve(decl)
 
     Module(
       decl,
@@ -62,25 +63,25 @@ class Namer extends Phase { namer =>
    * 1) the passed environment is enriched with definitions
    * 2) names are resolved using the environment and written to the table
    */
-  val resolve: Traversal[Tree, CompilerContext] = Compiler.focusing {
+  def resolve(tree: Tree)(implicit C: CompilerContext): Unit = Compiler.focusing(tree) {
 
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { resolveDef(true) }
+      decls foreach { d => resolveDef(d, true) }
       Compiler scoped { resolveAll(decls) }
 
     case source.DefStmt(d, rest) =>
       Compiler scoped {
-        resolveDef(false)(d)
+        resolveDef(d, false)
         resolve(d)
         resolve(rest)
       }
 
     case source.ValueParam(id, tpe) =>
-      id := ValueParam(id.localName, tpe.map(resolveValueType))
+      C.define(id, ValueParam(C.localName(id), tpe.map(resolveValueType)))
 
     case source.BlockParam(id, tpe) =>
-      id := BlockParam(id.localName, resolveBlockType(tpe))
+      C.define(id, BlockParam(C.localName(id), resolveBlockType(tpe)))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
@@ -105,16 +106,16 @@ class Namer extends Phase { namer =>
       resolveAll(clauses)
 
     case source.OpClause(op, params, body, resumeId) =>
-      Compiler.at(op) { op.resolveTerms() }
+      Compiler.at(op) { Compiler.resolveTerms(op) }
       val ps = params.map(resolveValueParams)
       Compiler scoped {
         Compiler.bind(ps)
-        resumeId := ResumeParam()
+        C.define(resumeId, ResumeParam())
         resolve(body)
       }
 
     case source.Clause(op, params, body) =>
-      Compiler.at(op) { op.resolveTerms() }
+      Compiler.at(op) { Compiler.resolveTerms(op) }
       val ps = params.map(resolveValueParams)
       Compiler scoped {
         Compiler.bind(ps)
@@ -131,14 +132,16 @@ class Namer extends Phase { namer =>
     // (2) === Bound Occurrences ===
 
     case source.Call(id, targs, args) =>
-      id.resolveTerms {
-        case b : (BlockParam | ResumeParam | Fun) => b
+      Compiler.resolveFilter(id) {
+        case b : BlockParam => b
+        case b : ResumeParam => b
+        case b : Fun => b
         case _ => Compiler.error("Expected callable")
       }
       targs foreach resolveValueType
       resolveAll(args)
 
-    case source.Var(id) => id.resolveTerms {
+    case source.Var(id) => Compiler.resolveFilter(id) {
       case b : BlockParam => Compiler.error("Blocks have to be fully applied and can't be used as values.")
       case other => other
     }
@@ -147,12 +150,13 @@ class Namer extends Phase { namer =>
     case tpe: source.BlockType => resolveBlockType(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id : Id => id.resolveTerms()
+    case id : Id => Compiler.resolveTerms(id)
 
     case other => resolveAll(other)
   }
 
-  val resolveAll: Traversal[Any, CompilerContext] = all(resolve)
+  def resolveAll(obj: Any)(implicit C: CompilerContext): Unit =
+    all[CompilerContext](c => t => resolve(t)(c))(obj)
 
   /**
    * Resolve Parameters as part of resolving function signatures
@@ -163,59 +167,59 @@ class Namer extends Phase { namer =>
    * Importantly, resolving them will *not* add the parameters as binding occurence in the current scope.
    * This is done separately by means of `bind`
    */
-  def resolveParamSection(params: source.ParamSection)(given CompilerContext): List[Param] = params match {
+  def resolveParamSection(params: source.ParamSection)(implicit C: CompilerContext): List[Param] = params match {
     case ps : source.ValueParams => resolveValueParams(ps)
     case source.BlockParam(id, tpe) =>
-      val sym = BlockParam(id.localName, resolveBlockType(tpe))
+      val sym = BlockParam(C.localName(id), resolveBlockType(tpe))
       Compiler.put(id, sym)
       List(sym)
   }
-  def resolveValueParams(ps: source.ValueParams)(given CompilerContext): List[ValueParam] =
+  def resolveValueParams(ps: source.ValueParams)(implicit C: CompilerContext): List[ValueParam] =
     ps.params map { p =>
-      val sym = ValueParam(p.id.localName, p.tpe.map(resolveValueType))
+      val sym = ValueParam(C.localName(p.id), p.tpe.map(resolveValueType))
       Compiler.put(p.id, sym)
       sym
     }
 
   // TODO consider setting owner, instead of this qualify hack
-  def resolveDef(qualify: Boolean): Traversal[Def, CompilerContext] = {
+  def resolveDef(d: Def, qualify: Boolean)(implicit C: CompilerContext): Unit = {
 
     def name(id: Id) = if (qualify) {
-      id.qualifiedName
+      C.qualifiedName(id)
     } else {
-      id.localName
+      C.localName(id)
     }
 
-    Compiler.focusing {
+    Compiler.focusing(d) {
 
       case d @ source.ValDef(id, annot, binding) =>
         val tpe = annot.map(resolveValueType)
         resolve(binding)
-        id := ValBinder(id.localName, tpe, d)
+        C.define(id, ValBinder(C.localName(id), tpe, d))
 
       case d @ source.VarDef(id, annot, binding) =>
         val tpe = annot.map(resolveValueType)
         resolve(binding)
-        id := VarBinder(id.localName, tpe, d)
+        C.define(id, VarBinder(C.localName(id), tpe, d))
 
       case f @ source.FunDef(id, tparams, params, annot, body) =>
         val sym = Compiler scoped {
           // we create a new scope, since resolving type params introduces them in this scope
-          UserFunction(id.freshTermName(qualify), tparams map resolveTypeParam, params map resolveParamSection, annot map resolveEffectful, f)
+          UserFunction(C.freshTermName(id, qualify), tparams map resolveTypeParam, params map resolveParamSection, annot map resolveEffectful, f)
         }
-        id := sym
+        C.define(id, sym)
 
       case e @ source.EffDef(id, tparams, params, ret) =>
         // we use the localName for effects, since they will be bound as capabilities
-        val effectSym = UserEffect(id.localName, Nil)
+        val effectSym = UserEffect(C.localName(id), Nil)
         val opSym = Compiler scoped {
           val tps = tparams map resolveTypeParam
           val tpe = Effectful(resolveValueType(ret), Effects(List(effectSym)))
-          EffectOp(id.localName, tps, params map resolveValueParams, Some(tpe), effectSym)
+          EffectOp(C.localName(id), tps, params map resolveValueParams, Some(tpe), effectSym)
         }
         effectSym.ops = List(opSym)
         // we would need a second id that is the definition of the operation
-        id := effectSym
+        C.define(id, effectSym)
         Compiler.bind(opSym)
 
       case d @ source.DataDef(id, tparams, ctors) =>
@@ -223,37 +227,37 @@ class Namer extends Phase { namer =>
           val tps = tparams map resolveTypeParam
           (DataType(name(id), tps), tps)
         }
-        id := typ
+        C.define(id, typ)
         val cs = ctors map {
           case source.Constructor(id, ps) =>
             val sym = Compiler scoped {
               tps.foreach { t => Compiler.bind(t) }
               Constructor(name(id), ps map resolveValueParams, typ)
             }
-            id := sym
+            C.define(id, sym)
             sym
         }
         typ.ctors = cs
 
       case d @ source.ExternType(id, tparams) =>
-        id := Compiler scoped {
+        C.define(id, Compiler scoped {
           val tps = tparams map resolveTypeParam
           BuiltinType(name(id), tps)
-        }
+        })
 
       case d @ source.ExternEffect(id, tparams) =>
-        id := Compiler scoped {
+        C.define(id, Compiler scoped {
           val tps = tparams map resolveTypeParam
           BuiltinEffect(name(id), tps)
-        }
+        })
 
       case d @ source.ExternFun(pure, id, tparams, params, ret, body) =>
-        id := Compiler scoped {
+        C.define(id, Compiler scoped {
           val tps = tparams map resolveTypeParam
           val ps: Params = params map resolveParamSection
           val tpe = resolveEffectful(ret)
           BuiltinFunction(name(id), tps, ps, Some(tpe), pure, body)
-        }
+        })
 
       case d @ source.ExternInclude(path) =>
         d.contents = Compiler.resolveInclude(Compiler.source, path)
@@ -268,28 +272,28 @@ class Namer extends Phase { namer =>
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-  def resolveValueType(tpe: source.ValueType)(given CompilerContext): ValueType = tpe match {
+  def resolveValueType(tpe: source.ValueType)(implicit C: CompilerContext): ValueType = tpe match {
     case source.TypeApp(id, args) =>
-      val data = id.resolveType().asValueType
+      val data = C.resolveType(id).asValueType
       TypeApp(data, args.map(resolveValueType))
-    case source.TypeVar(id) => id.resolveType().asValueType
+    case source.TypeVar(id) => C.resolveType(id).asValueType
   }
 
-  def resolveBlockType(tpe: source.BlockType)(given CompilerContext): BlockType =
+  def resolveBlockType(tpe: source.BlockType)(implicit C: CompilerContext): BlockType =
     BlockType(Nil, List(tpe.params.map(resolveValueType)), resolveEffectful(tpe.ret))
 
-  def resolveEffect(tpe: source.Effect)(given CompilerContext): Effect =
-    tpe.id.resolveType().asEffect
+  def resolveEffect(tpe: source.Effect)(implicit C: CompilerContext): Effect =
+    C.resolveType(tpe.id).asEffect
 
-  def resolveEffects(tpe: source.Effects)(given CompilerContext): Effects =
+  def resolveEffects(tpe: source.Effects)(implicit C: CompilerContext): Effects =
     Effects(tpe.effs.map(resolveEffect))
 
-  def resolveEffectful(e: source.Effectful)(given CompilerContext): Effectful =
+  def resolveEffectful(e: source.Effectful)(implicit C: CompilerContext): Effectful =
     Effectful(resolveValueType(e.tpe), resolveEffects(e.eff))
 
-  def resolveTypeParam(t: Id)(given CompilerContext): TypeVar = {
-    val sym = TypeVar(t.localName)
-    t := sym
+  def resolveTypeParam(id: Id)(implicit C: CompilerContext): TypeVar = {
+    val sym = TypeVar(C.localName(id))
+    C.define(id, sym)
     sym
   }
 }
@@ -309,14 +313,14 @@ trait NamerOps { self: CompilerContext =>
   def terms: Scope[TermSymbol] = namerState.terms
   def types: Scope[TypeSymbol] = namerState.types
 
-  def (id: Id) qualifiedName: Name = QualifiedName(module.path, id.name)
-  def (id: Id) localName: Name = LocalName(id.name)
+  def qualifiedName(id: Id): Name = QualifiedName(module.path, id.name)
+  def localName(id: Id): Name = LocalName(id.name)
 
   // TODO we only want to add a seed to a name under the following conditions:
   // - there is already another instance of that name in the same
   //   namespace.
   // - if it is not already fully qualified
-  def (id: Id) freshTermName(qualified: Boolean = false) = {
+  def freshTermName(id: Id, qualified: Boolean = false) = {
     // how many terms of the same name are already in scope?
     val alreadyBound = terms.lookup(id.name).toList.size
     val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
@@ -330,12 +334,12 @@ trait NamerOps { self: CompilerContext =>
 
   // Name Binding and Resolution
   // ===========================
-  def (id: Id) := (s: TermSymbol): Unit = {
+  def define(id: Id, s: TermSymbol): Unit = {
     put(id, s)
     terms.define(id.name, s)
   }
 
-  def (id: Id) := (s: TypeSymbol): Unit = {
+  def define(id: Id, s: TypeSymbol): Unit = {
     put(id, s)
     types.define(id.name, s)
   }
@@ -351,21 +355,21 @@ trait NamerOps { self: CompilerContext =>
 
   // lookup and resolve the given id from the environment and
   // store a binding in the symbol table
-  def (id: Id) resolveTerms(): List[TermSymbol] = {
+  def resolveTerms(id: Id): List[TermSymbol] = {
     val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
     put(id, sym)
     List(sym)
   }
 
   // for positions that do not allow overloading (for now)
-  def [A](id: Id) resolveTerms(filter: PartialFunction[TermSymbol, A]): List[A] = {
+  def resolveFilter[A](id: Id)(filter: PartialFunction[TermSymbol, A]): List[A] = {
     val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
     put(id, sym)
 
     List(sym).collect(filter)
   }
 
-  def (id: Id) resolveType(): TypeSymbol = {
+  def resolveType(id: Id): TypeSymbol = {
     val sym = types.lookup(id.name).getOrElse { abort(s"Could not resolve type ${id.name}") }
     put(id, sym)
     sym

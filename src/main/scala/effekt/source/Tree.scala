@@ -1,6 +1,9 @@
 package effekt
 package source
 
+import effekt.context.{ SymbolsDB, TypesDB }
+import effekt.symbols.Symbol
+
 /**
  * We extend product to allow reflective copying by Kiama.
  */
@@ -19,6 +22,7 @@ case object NoSource extends Tree
  */
 sealed trait Id extends Tree {
   def name: String
+  def symbol(implicit db: SymbolsDB): Symbol = db.lookup(this)
 }
 case class IdDef(name: String) extends Id
 case class IdRef(name: String) extends Id
@@ -26,12 +30,17 @@ case class IdRef(name: String) extends Id
 // Something that later will be stored in the symbol table
 sealed trait Definition extends Tree {
   def id: Id
-  type symbol <: symbols.Symbol
+  type symbol <: Symbol
+
+  def symbol(implicit db: SymbolsDB): symbol = db.get(this)
 }
+
 // Something that later can be looked up in the symbol table
 sealed trait Reference extends Tree {
   def id: Id
-  type symbol <: symbols.Symbol
+  type symbol <: Symbol
+
+  def definition(implicit db: SymbolsDB): symbol = db.get(this)
 }
 
 /**
@@ -181,25 +190,14 @@ object Effects {
 
 object traversal {
 
-  type Traversal[T, Ctx] = (given Ctx) => T => Unit
+  type Traversal[T, Ctx] = Ctx => T => Unit
 
-  def all[Ctx](traverse: Traversal[Tree, Ctx]): Traversal[Any, Ctx] = {
+  def all[Ctx](traverse: Traversal[Tree, Ctx])(t: Any)(implicit C: Ctx): Unit = t match {
     case p: Product => p.productIterator.foreach {
-      case t: Tree => traverse(t)
+      case t: Tree => traverse(C)(t)
       case other => all(traverse)(other)
     }
-    case t: Iterable[t] => t.foreach(all(traverse))
+    case t: Iterable[t] => t.foreach(t => all(traverse)(t))
     case leaf => ()
-  }
-
-  type Fold[T, R, Ctx] = (given Ctx) => T => R => R
-
-  def foldAll[R, Ctx](f: Fold[Tree, R, Ctx]): Fold[Any, R, Ctx] = {
-    case p: Product => r => p.productIterator.foldLeft(r) {
-      case (r, t: Tree) => f(t)(r)
-      case (r, other) => foldAll(f)(other)(r)
-    }
-    case t: Iterable[_] => r => t.foldLeft(r) { (r, t) => foldAll(f)(t)(r) }
-    case leaf => r => r
   }
 }

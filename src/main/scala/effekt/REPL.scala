@@ -178,7 +178,7 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
       reportOrElse(source, frontend(source, module.make(e), config)) { cu =>
-        val value = evaluator.run(cu, driver.context)
+        val value = evaluator.run(cu)(driver.context)
         config.output().emitln(value)
       }
 
@@ -197,14 +197,14 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        driver.context.get(d) match {
+        (driver.context.get(d) match {
           case v: ValueSymbol =>
             Some(driver.context.valueType(v))
           case b: BlockSymbol =>
             Some(driver.context.blockType(b))
           case t =>
             None
-        } map { tpe =>
+        }) map { tpe =>
           config.output().emitln(tpe)
         }
       }

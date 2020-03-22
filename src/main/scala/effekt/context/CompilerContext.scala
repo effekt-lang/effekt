@@ -9,7 +9,7 @@ import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 trait Phase {
   def name: String
 
-  def Compiler(given ctx: CompilerContext): CompilerContext = ctx
+  def Compiler(implicit ctx: CompilerContext): CompilerContext = ctx
 }
 object NoPhase extends Phase {
   def name = "no-phase"
@@ -31,7 +31,6 @@ abstract class CompilerContext
     with TypesDB
     with TyperOps
     // Util
-    with Assertions
     with ErrorReporter { context =>
 
   var focus: Tree = _
@@ -70,10 +69,10 @@ abstract class CompilerContext
   /**
    * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
    */
-  def in[T](block: (given this.type) => T): T = {
+  def in[T](block: => T): T = {
     val namerBefore = namerState
     val typerBefore = typerState
-    val result = block(given this)
+    val result = block
     namerState = namerBefore
     typerState = typerBefore
     result

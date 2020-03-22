@@ -43,7 +43,7 @@ trait TypesDB { self: ErrorReporter =>
   def annotate(t: Tree, eff: Effectful) = types.put(t, eff)
   def annotation(t: Tree): Option[Effectful] = types.get(t)
 
-  def (f: Fun) returnType: Effectful = f.ret match {
+  def returnType(f: Fun): Effectful = f.ret match {
     case Some(t) => t
     case None => blockTypeOrDefault(f,
       abort(s"Result type of recursive function ${f.name} needs to be annotated")).ret

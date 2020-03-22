@@ -97,7 +97,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
       case Right(unit) =>
         if (!config.server() && !config.compile()) {
           object evaluator extends Evaluator
-          evaluator.run(unit, context)
+          evaluator.run(unit)(context)
         }
 
         report(source, context.buffer.get, config)
@@ -140,8 +140,8 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     val buffer = context.buffer
 
     try {
-      val mod = context.namer.run(source, ast, context)
-      context.typer.run(ast, mod, context)
+      val mod = context.namer.run(source, ast)(context)
+      context.typer.run(ast, mod)(context)
 
       if (buffer.hasErrors) {
         Left(buffer.get)
@@ -165,7 +165,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
     val config = context.config
 
-    val translated = transformer.run(unit, context)
+    val translated = transformer.run(unit)(context)
     val javaScript = js.format(translated)
 
     if (config.server() && settingBool("showTarget")) {
