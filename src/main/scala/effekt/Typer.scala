@@ -328,9 +328,9 @@ class Typer extends Phase { typer =>
         Context.error("Wrong type of argument section")
     }
 
-    def checkValueArgument(tpe: ValueType, expr: source.Expr): Unit = {
+    def checkValueArgument(tpe: ValueType, arg: source.Expr): Unit = Context.at(arg) {
       val tpe1 = unifier substitute tpe // apply what we already know.
-      val (tpe2 / exprEffs) = checkExpr(expr, None)
+      val (tpe2 / exprEffs) = checkExpr(arg, None)
 
       unifier = unifier.merge(tpe1, tpe2)
 
@@ -342,7 +342,7 @@ class Typer extends Phase { typer =>
     //   BlockArg: foo { n => println("hello" + n) }
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = {
+    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
         val blockType = unifier substitute tpe
 
         // TODO make blockargs also take multiple argument sections.
