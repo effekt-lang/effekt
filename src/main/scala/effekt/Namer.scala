@@ -32,24 +32,25 @@ class Namer extends Phase { namer =>
 
   val name = "Namer"
 
-  def run(src: Source, decl: source.ModuleDecl)(implicit compiler: Context): Module = {
+  def run(src: Source, decl: source.ModuleDecl)(implicit C: Context): Module = {
 
     var terms: Scope[TermSymbol] = toplevel(builtins.rootTerms)
     var types: Scope[TypeSymbol] = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
     decl.imports foreach {
-      case source.Import(path) =>
-        val mod = compiler.moduleOf(path)
+      case im @ source.Import(path) => Context.at(im) {
+        val mod = Context.moduleOf(path)
         terms = terms.enterWith(mod.terms)
         types = types.enterWith(mod.types)
+      }
     }
 
     // create new scope for the current module
     terms = terms.enter
     types = types.enter
 
-    compiler.namerState = NamerState(src, decl, terms, types)
+    Context.namerState = NamerState(src, decl, terms, types)
 
     resolve(decl)
 
@@ -173,7 +174,7 @@ class Namer extends Phase { namer =>
    * Importantly, resolving them will *not* add the parameters as binding occurence in the current scope.
    * This is done separately by means of `bind`
    */
-  def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = params match {
+  def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = Context.focusing(params) {
     case ps : source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(Context.localName(id), resolve(tpe))
