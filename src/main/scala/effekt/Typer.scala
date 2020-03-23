@@ -393,14 +393,17 @@ trait TyperOps { self: Context =>
 
   // State Access
   // ============
+  private[typer]
   def effects: Effects = typerState.effects
 
+  private[typer]
   def withEffect(e: Effect): Context = {
     typerState = typerState.copy(effects = typerState.effects + e);
     this
   }
 
   // was =!=
+  private[typer]
   def assertEqual(got: Type, expected: Type): Unit = (got, expected) match {
     case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
       (args1 zip args2) foreach { case (t1, t2) => assertEqual(t1, t2) }
@@ -409,6 +412,7 @@ trait TyperOps { self: Context =>
     }
   }
 
+  private[typer]
   def wellscoped(a: Effects): Unit = {
     val forbidden = Effects(a.effs.filterNot { e => e.builtin }) -- effects
     if (forbidden.nonEmpty) {
@@ -416,19 +420,23 @@ trait TyperOps { self: Context =>
     }
   }
 
+  private[typer]
   def define(s: Symbol, t: ValueType): Context = {
     assignType(s, t); this
   }
 
+  private[typer]
   def define(s: Symbol, t: BlockType): Context = {
     assignType(s, t); this
   }
 
+  private[typer]
   def define(bs: Map[Symbol, Type]): Context = { bs foreach {
     case (v: ValueSymbol, t: ValueType) => define(v, t)
     case (v: BlockSymbol, t: BlockType) => define(v, t)
   }; this }
 
+  private[typer]
   def define(ps: List[List[Param]]): Context = {
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
