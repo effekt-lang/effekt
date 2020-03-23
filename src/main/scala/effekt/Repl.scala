@@ -10,7 +10,7 @@ import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 // for now we only take expressions
-class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
+class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   object evaluator extends Evaluator
 

@@ -88,7 +88,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   // no file names are given, run REPL
   override def run(config: EffektConfig): Unit =
     if (config.filenames().isEmpty && !config.server()) {
-      new EffektRepl(this).run(config)
+      new Repl(this).run(config)
     } else {
       super.run(config)
     }
