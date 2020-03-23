@@ -39,8 +39,8 @@ class Typer extends Phase { typer =>
       module.defs.foreach { d =>
         val (_ / effs) = synthDef(d)
         if (effs.nonEmpty)
-          Compiler.at(d) {
-            Compiler.error("Unhandled effects: " + effs)
+          Context.at(d) {
+            Context.error("Unhandled effects: " + effs)
           }
       }
     }
@@ -68,11 +68,11 @@ class Typer extends Phase { typer =>
         TUnit / (condEffs ++ blockEffs)
 
       case v : source.Var =>
-        Compiler.valueTypeOf(v.definition) / Pure
+        Context.valueTypeOf(v.definition) / Pure
 
       case e @ source.Assign(id, expr) =>
         e.definition.asVarBinder // assert that it is a mutable variable
-        val (_ / eff) = expr checkAgainst Compiler.valueTypeOf(e.definition)
+        val (_ / eff) = expr checkAgainst Context.valueTypeOf(e.definition)
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
@@ -89,7 +89,7 @@ class Typer extends Phase { typer =>
 
         if (notCovered.nonEmpty) {
           val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-          Compiler.error(s"Missing definitions for effect operations: ${explanation}")
+          Context.error(s"Missing definitions for effect operations: ${explanation}")
         }
 
         var handlerEffs = Pure
@@ -98,11 +98,11 @@ class Typer extends Phase { typer =>
           case d @ source.OpClause(op, params, body, resume) =>
             val effectOp = d.definition
             val effect = effectOp.effect
-            val bt = Compiler.blockTypeOf(effectOp)
+            val bt = Context.blockTypeOf(effectOp)
             val ps = checkAgainstDeclaration(op.name, bt.params, params)
             val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
 
-            Compiler.define(ps).define(Compiler.symbolOf(resume), resumeType) in {
+            Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
               }
@@ -111,7 +111,7 @@ class Typer extends Phase { typer =>
         val unusedEffects = Effects(effects) -- effs
 
         if (unusedEffects.nonEmpty)
-          Compiler.warning("Handling effects that are not used: " + unusedEffects)
+          Context.warning("Handling effects that are not used: " + unusedEffects)
 
         ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
@@ -129,7 +129,7 @@ class Typer extends Phase { typer =>
         val notCovered = cases -- covered
 
         if (notCovered.nonEmpty) {
-          Compiler.error(s"Missing cases: ${notCovered}")
+          Context.error(s"Missing cases: ${notCovered}")
         }
 
         val tpes = clauses.map {
@@ -143,11 +143,11 @@ class Typer extends Phase { typer =>
             val pms = u substitute extractAllTypes(sym.params)
 
             val ps = checkAgainstDeclaration(id.name, pms, params)
-            Compiler.define(ps) in { checkStmt(body, expected) }
+            Context.define(ps) in { checkStmt(body, expected) }
         }
 
         val (tpeCases / effsCases) = tpes.reduce[Effectful] { case (tpe1 / effs1, tpe2 / effs2) =>
-          Compiler.assertEqual(tpe1, tpe2)
+          Context.assertEqual(tpe1, tpe2)
           tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
@@ -161,7 +161,7 @@ class Typer extends Phase { typer =>
   def checkStmt(stmt: Stmt, expected: Option[Type])(implicit C: Context): Effectful =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
-        val (t / effBinding) = Compiler in { precheckDef(b); synthDef(b) }
+        val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
         val (r / effStmt)    = checkStmt(rest, expected)
         r / (effBinding ++ effStmt)
 
@@ -373,17 +373,17 @@ class Typer extends Phase { typer =>
    * Combinators that also store the computed type for a tree in the TypesDB
    */
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
-    Compiler.at(t) {
+    Context.at(t) {
       val (got / effs) = f(t)
-      expected foreach { Compiler.assertEqual(got, _) }
-      Compiler.assignType(t, got / effs)
+      expected foreach { Context.assertEqual(got, _) }
+      Context.assignType(t, got / effs)
       got / effs
     }
 
   def check[T <: Tree](t: T)(f: T => Effectful)(implicit C: Context): Effectful =
-    Compiler.at(t) {
+    Context.at(t) {
       val (got / effs) = f(t)
-      Compiler.assignType(t, got / effs)
+      Context.assignType(t, got / effs)
       got / effs
     }
 }

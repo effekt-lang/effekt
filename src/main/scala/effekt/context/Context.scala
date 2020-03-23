@@ -9,7 +9,7 @@ import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 trait Phase {
   def name: String
 
-  def Compiler(implicit ctx: Context): Context = ctx
+  def Context(implicit ctx: Context): Context = ctx
 }
 object NoPhase extends Phase {
   def name = "no-phase"
