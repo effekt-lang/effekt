@@ -31,9 +31,9 @@ class Typer extends Phase { typer =>
       case e: Effect => e
     })
 
-    C.typerState = TyperState(toplevelEffects)
+    Context.typerState = TyperState(toplevelEffects)
 
-    C in {
+    Context in {
       // pre-check to allow mutually recursive defs
       module.defs.foreach { d => precheckDef(d) }
       module.defs.foreach { d =>
@@ -176,20 +176,20 @@ class Typer extends Phase { typer =>
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
-  def precheckDef(d: Def)(implicit C: Context): Unit = C.focusing(d) {
+  def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
-      d.symbol.ret.foreach { annot => C.assignType(d.symbol, d.symbol.toType) }
+      d.symbol.ret.foreach { annot => Context.assignType(d.symbol, d.symbol.toType) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      C.assignType(d.symbol, d.symbol.toType)
+      Context.assignType(d.symbol, d.symbol.toType)
 
     case d @ source.EffDef(id, tparams, params, ret) =>
-      d.symbol.ops.foreach { op => C.assignType(op, op.toType) }
+      d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        C.assignType(sym, sym.toType)
+        Context.assignType(sym, sym.toType)
       }
 
     case d => ()
@@ -199,21 +199,21 @@ class Typer extends Phase { typer =>
   def synthDef(d: Def)(implicit C: Context): Effectful = check(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = d.symbol
-      C.define(sym.params)
+      Context.define(sym.params)
       sym.ret match {
         case Some(tpe / funEffs) =>
           val (_ / effs) = body checkAgainst tpe
-          C.wellscoped(effs)
+          Context.wellscoped(effs)
           tpe / (effs -- funEffs) // the declared effects are considered as bound
         case None =>
           val (tpe / effs) = checkStmt(body, None)
-          C.wellscoped(effs) // check they are in scope
-          C.assignType(sym, sym.toType(tpe / effs))
+          Context.wellscoped(effs) // check they are in scope
+          Context.assignType(sym, sym.toType(tpe / effs))
           tpe / Pure // all effects are handled by the function itself (since they are inferred)
       }
 
     case d @ source.EffDef(id, tps, ps, ret) =>
-      C.withEffect(d.symbol)
+      Context.withEffect(d.symbol)
       TUnit / Pure
 
     case d @ source.ValDef(id, annot, binding) =>
@@ -221,7 +221,7 @@ class Typer extends Phase { typer =>
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(binding, None)
       }
-      C.define(d.symbol, t)
+      Context.define(d.symbol, t)
       t / effBinding
 
     case d @ source.VarDef(id, annot, binding) =>
@@ -229,7 +229,7 @@ class Typer extends Phase { typer =>
         case Some(t) => binding checkAgainst t
         case None    => checkStmt(binding, None)
       }
-      C.define(d.symbol, t)
+      Context.define(d.symbol, t)
       t / effBinding
 
     // all other defintions have already been prechecked
@@ -257,7 +257,7 @@ class Typer extends Phase { typer =>
   def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
     case BlockParam(_, tpe) => tpe
     case ValueParam(_, Some(tpe)) => tpe
-    case _ => C.abort("Cannot extract type")
+    case _ => Context.abort("Cannot extract type")
   }
 
   /**
@@ -270,19 +270,19 @@ class Typer extends Phase { typer =>
     atCaller: List[source.ParamSection])(implicit C: Context): Map[Symbol, Type] = {
 
     if (atCallee.size != atCaller.size)
-      C.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
+      Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
 
     // TODO add blockparams here!
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
       case (List(b1: BlockType), b2: source.BlockParam) =>
-        C.abort("not yet supported")
+        Context.abort("not yet supported")
         ???
 
       case (ps1: List[ValueType], source.ValueParams(ps2)) =>
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
-            annotType.foreach { t => C.assertEqual(decl, t) }
+            annotType.foreach { t => Context.assertEqual(decl, t) }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
     }.toMap
@@ -296,10 +296,10 @@ class Typer extends Phase { typer =>
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val BlockType(tparams, params, ret / retEffs) = C.blockTypeOf(sym)
+    val BlockType(tparams, params, ret / retEffs) = Context.blockTypeOf(sym)
 
     if (targs.nonEmpty && targs.size != tparams.size)
-      C.abort(s"Wrong number of type arguments ${targs.size}")
+      Context.abort(s"Wrong number of type arguments ${targs.size}")
 
     var unifier: Unifier = Unifier(tparams, if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty })
 
@@ -308,13 +308,13 @@ class Typer extends Phase { typer =>
     var effs = retEffs
 
     if (params.size != args.size)
-      C.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
+      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
     // TODO we can improve the error positions here
     (params zip args) foreach {
       case (ps : List[ValueType], source.ValueArgs(as)) =>
         if (ps.size != as.size)
-          C.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
+          Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
         (ps zip as) foreach {
           case (tpe, expr) =>
@@ -338,7 +338,7 @@ class Typer extends Phase { typer =>
         // TODO make blockargs also take multiple argument sections.
         val bindings = checkAgainstDeclaration("block", blockType.params, List(params))
 
-        C.define(bindings)
+        Context.define(bindings)
 
         val (tpe1 / handled) = blockType.ret
         val (tpe2 / stmtEffs)  = checkStmt(stmt, None)
@@ -347,7 +347,7 @@ class Typer extends Phase { typer =>
         effs = (effs ++ (stmtEffs -- handled))
 
       case (_, _) =>
-        C.error("Wrong type of argument section")
+        Context.error("Wrong type of argument section")
     }
 
     // check that unifier found a substitution for each tparam

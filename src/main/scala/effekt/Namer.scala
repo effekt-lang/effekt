@@ -76,10 +76,10 @@ class Namer extends Phase { namer =>
       }
 
     case source.ValueParam(id, tpe) =>
-      C.define(id, ValueParam(C.localName(id), tpe.map(resolve)))
+      Context.define(id, ValueParam(Context.localName(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      C.define(id, BlockParam(C.localName(id), resolve(tpe)))
+      Context.define(id, BlockParam(Context.localName(id), resolve(tpe)))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
@@ -108,7 +108,7 @@ class Namer extends Phase { namer =>
       val ps = params.map(resolve)
       Context scoped {
         Context.bind(ps)
-        C.define(resumeId, ResumeParam())
+        Context.define(resumeId, ResumeParam())
         resolve(body)
       }
 
@@ -176,13 +176,13 @@ class Namer extends Phase { namer =>
   def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = params match {
     case ps : source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
-      val sym = BlockParam(C.localName(id), resolve(tpe))
+      val sym = BlockParam(Context.localName(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
-      val sym = ValueParam(C.localName(p.id), p.tpe.map(resolve))
+      val sym = ValueParam(Context.localName(p.id), p.tpe.map(resolve))
       Context.assignSymbol(p.id, sym)
       sym
     }
@@ -191,9 +191,9 @@ class Namer extends Phase { namer =>
   def resolve(d: Def, qualify: Boolean)(implicit C: Context): Unit = {
 
     def name(id: Id) = if (qualify) {
-      C.qualifiedName(id)
+      Context.qualifiedName(id)
     } else {
-      C.localName(id)
+      Context.localName(id)
     }
 
     Context.focusing(d) {
@@ -201,31 +201,36 @@ class Namer extends Phase { namer =>
       case d @ source.ValDef(id, annot, binding) =>
         val tpe = annot.map(resolve)
         resolve(binding)
-        C.define(id, ValBinder(C.localName(id), tpe, d))
+        Context.define(id, ValBinder(Context.localName(id), tpe, d))
 
       case d @ source.VarDef(id, annot, binding) =>
         val tpe = annot.map(resolve)
         resolve(binding)
-        C.define(id, VarBinder(C.localName(id), tpe, d))
+        Context.define(id, VarBinder(Context.localName(id), tpe, d))
 
       case f @ source.FunDef(id, tparams, params, annot, body) =>
         val sym = Context scoped {
           // we create a new scope, since resolving type params introduces them in this scope
-          UserFunction(C.freshTermName(id, qualify), tparams map resolve, params map resolve, annot map resolve, f)
+          UserFunction(
+            Context.freshTermName(id, qualify),
+            tparams map resolve,
+            params map resolve,
+            annot map resolve,
+            f)
         }
-        C.define(id, sym)
+        Context.define(id, sym)
 
       case e @ source.EffDef(id, tparams, params, ret) =>
         // we use the localName for effects, since they will be bound as capabilities
-        val effectSym = UserEffect(C.localName(id), Nil)
+        val effectSym = UserEffect(Context.localName(id), Nil)
         val opSym = Context scoped {
           val tps = tparams map resolve
           val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
-          EffectOp(C.localName(id), tps, params map resolve, Some(tpe), effectSym)
+          EffectOp(Context.localName(id), tps, params map resolve, Some(tpe), effectSym)
         }
         effectSym.ops = List(opSym)
         // we would need a second id that is the definition of the operation
-        C.define(id, effectSym)
+        Context.define(id, effectSym)
         Context.bind(opSym)
 
       case d @ source.DataDef(id, tparams, ctors) =>
@@ -233,32 +238,32 @@ class Namer extends Phase { namer =>
           val tps = tparams map resolve
           (DataType(name(id), tps), tps)
         }
-        C.define(id, typ)
+        Context.define(id, typ)
         val cs = ctors map {
           case source.Constructor(id, ps) =>
             val sym = Context scoped {
               tps.foreach { t => Context.bind(t) }
               Constructor(name(id), ps map resolve, typ)
             }
-            C.define(id, sym)
+            Context.define(id, sym)
             sym
         }
         typ.ctors = cs
 
       case d @ source.ExternType(id, tparams) =>
-        C.define(id, Context scoped {
+        Context.define(id, Context scoped {
           val tps = tparams map resolve
           BuiltinType(name(id), tps)
         })
 
       case d @ source.ExternEffect(id, tparams) =>
-        C.define(id, Context scoped {
+        Context.define(id, Context scoped {
           val tps = tparams map resolve
           BuiltinEffect(name(id), tps)
         })
 
       case d @ source.ExternFun(pure, id, tparams, params, ret, body) =>
-        C.define(id, Context scoped {
+        Context.define(id, Context scoped {
           val tps = tparams map resolve
           val ps: Params = params map resolve
           val tpe = resolve(ret)
@@ -280,17 +285,17 @@ class Namer extends Phase { namer =>
    */
   def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case source.TypeApp(id, args) =>
-      val data = C.resolveType(id).asValueType
+      val data = Context.resolveType(id).asValueType
       TypeApp(data, args.map(resolve))
     case source.TypeVar(id) =>
-      C.resolveType(id).asValueType
+      Context.resolveType(id).asValueType
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
     BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
 
   def resolve(tpe: source.Effect)(implicit C: Context): Effect =
-    C.resolveType(tpe.id).asEffect
+    Context.resolveType(tpe.id).asEffect
 
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
     Effects(tpe.effs.map(resolve))
@@ -302,8 +307,8 @@ class Namer extends Phase { namer =>
    * Term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(implicit C: Context): TypeVar = {
-    val sym = TypeVar(C.localName(id))
-    C.define(id, sym)
+    val sym = TypeVar(Context.localName(id))
+    Context.define(id, sym)
     sym
   }
 }
