@@ -414,7 +414,7 @@ trait TyperOps { self: Context =>
 
   private[typer]
   def wellscoped(a: Effects): Unit = {
-    val forbidden = Effects(a.effs.filterNot { e => e.builtin }) -- effects
+    val forbidden = a.userDefined -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }

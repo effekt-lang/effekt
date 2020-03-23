@@ -147,20 +147,28 @@ package object symbols {
    *
    * Effect sets and effectful computations are themselves *not* symbols, they are just aggregates
    */
-  case class Effects(effs: List[Effect]) {
-    def +(eff: Effect): Effects = Effects(eff :: effs).distinct
-    def -(eff: Effect): Effects =  Effects((effs.toSet - eff).toList).distinct
-    def ++(other: Effects): Effects = Effects(effs ++ other.effs).distinct
-    def --(other: Effects): Effects = Effects((effs.toSet -- other.effs.toSet).toList)
+  case class Effects(effects: List[Effect]) {
+    def +(eff: Effect): Effects = Effects(eff :: effects).distinct
+    def -(eff: Effect): Effects =  Effects((effects.toSet - eff).toList).distinct
+    def ++(other: Effects): Effects = Effects(effects ++ other.effects).distinct
+    def --(other: Effects): Effects = Effects((effects.toSet -- other.effects.toSet).toList)
 
-    def isEmpty: Boolean = effs.isEmpty
-    def nonEmpty: Boolean = effs.nonEmpty
+    def isEmpty: Boolean = effects.isEmpty
+    def nonEmpty: Boolean = effects.nonEmpty
 
-    def distinct: Effects = Effects(effs.distinct)
+    def distinct: Effects = Effects(effects.distinct)
 
-    def contains(e: Effect): Boolean = effs.contains(e)
+    def contains(e: Effect): Boolean = effects.contains(e)
 
-    override def toString: String = effs match {
+    def filterNot(p: Effect => Boolean): Effects =
+      Effects(effects.filterNot(p))
+
+    def userDefined: Effects =
+      filterNot(_.builtin)
+
+    def toList: List[Effect] = effects
+
+    override def toString: String = effects match {
       case eff :: Nil => eff.toString
       case effs => s"{ ${effs.mkString(", ")} }"
     }

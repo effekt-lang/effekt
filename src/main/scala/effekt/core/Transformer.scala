@@ -27,12 +27,12 @@ class Transformer {
   def transform(d: source.Def, rest: Stmt)(implicit C: Context): Stmt = d match {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
-      val effs = sym.effects.effs
+      val effs = sym.effects.userDefined
 
       val ps = params.flatMap {
         case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
         case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
-      } ++ effs.filterNot(_.builtin).map { core.BlockParam }
+      } ++ effs.toList.map { core.BlockParam }
 
       Def(sym, BlockDef(ps, transform(body)), rest)
 
@@ -50,11 +50,11 @@ class Transformer {
 
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       // C&P from FunDef
-      val effs = f.symbol.effects.effs
+      val effs = f.symbol.effects.userDefined
       val ps = params.flatMap {
         case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
         case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
-      } ++ effs.filterNot(_.builtin).map { core.BlockParam }
+      } ++ effs.toList.map { core.BlockParam }
       Def(f.symbol, Extern(ps, body), rest)
 
     case e @ source.ExternInclude(path) =>
@@ -123,14 +123,14 @@ class Transformer {
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation
-      val effects = (effs -- ownEffect).effs.filterNot { _.builtin }
-      val capabilities = effects.map { BlockVar }
+      val effects = (effs -- ownEffect).userDefined
+      val capabilities = effects.toList.map { BlockVar }
 
       val as: List[Control[List[Argument]]] = (args zip params) map {
         case (source.ValueArgs(as), _) => traverse(as.map(transform))
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
           val params = ps.params.map { v => core.ValueParam(v.symbol) }
-          val caps = p.ret.effects.effs.filterNot(_.builtin).map { core.BlockParam }
+          val caps = p.ret.effects.userDefined.toList.map { core.BlockParam }
           pure { List(BlockDef(params ++ caps, transform(body))) }
       }
 

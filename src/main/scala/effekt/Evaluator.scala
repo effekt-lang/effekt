@@ -70,7 +70,7 @@ class Evaluator {
     val mainFun = mainSym.asUserFunction
 
     // TODO refactor and convert into checked error
-    val userEffects = compiler.blockTypeOf(mainSym).ret.effects.effs.filterNot { _.builtin }
+    val userEffects = compiler.blockTypeOf(mainSym).ret.effects.userDefined
     if (userEffects.nonEmpty) {
       compiler.abort(s"Main has unhandled user effects: ${userEffects}!")
     }
@@ -255,14 +255,14 @@ class Evaluator {
 
   // convention: we bind capabilities AFTER normal params
   def bindCapabilities(params: List[Symbol], effs: Effects, s: Stmt)(implicit C: EvalContext) = Closure { args =>
-    C.extendedWith((params ++ effs.effs.filterNot(_.builtin)) zip args) { implicit C =>
+    C.extendedWith((params ++ effs.userDefined.toList) zip args) { implicit C =>
       evalStmt(s)
     }
   }
 
   // looks up capabilities and provides them as additional arguments to f
   def supplyCapabilities(fun: Closure, args: List[Value], effs: Effects)(implicit C: EvalContext) = {
-    val caps = effs.effs.filterNot(_.builtin).map(s => C.get(s))
+    val caps = effs.userDefined.toList.map(s => C.get(s))
     fun.f(args ++ caps)
   }
 
