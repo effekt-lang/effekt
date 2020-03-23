@@ -27,4 +27,4 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: effekt
-        path: target/scala-0.21/effekt.jar
+        path: target/scala-2.13/effekt.jar
