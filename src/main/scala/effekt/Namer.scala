@@ -34,25 +34,26 @@ class Namer extends Phase { namer =>
 
   def run(src: Source, decl: source.ModuleDecl)(implicit compiler: Context): Module = {
 
-    val topLevelTerms = toplevel[TermSymbol](builtins.rootTerms)
-    val topLevelTypes = toplevel[TypeSymbol](builtins.rootTypes)
+    var terms: Scope[TermSymbol] = toplevel(builtins.rootTerms)
+    var types: Scope[TypeSymbol] = toplevel(builtins.rootTypes)
 
-    val (terms, types) = decl.imports.foldLeft((topLevelTerms, topLevelTypes)) {
-      case ((terms, types), source.Import(path)) =>
+    // process all imports, updating the terms and types in scope
+    decl.imports foreach {
+      case source.Import(path) =>
         val mod = compiler.moduleOf(path)
-        (terms.enterWith(mod.terms), types.enterWith(mod.types))
+        terms = terms.enterWith(mod.terms)
+        types = types.enterWith(mod.types)
     }
 
-    val state = NamerState(src, decl, terms.enter, types.enter)
-    compiler.namerState = state
+    // create new scope for the current module
+    terms = terms.enter
+    types = types.enter
+
+    compiler.namerState = NamerState(src, decl, terms, types)
 
     resolve(decl)
 
-    Module(
-      decl,
-      src,
-      state.terms.bindings.toMap,
-      state.types.bindings.toMap)
+    Module(decl, src, terms.bindings.toMap, types.bindings.toMap)
   }
 
   /**
