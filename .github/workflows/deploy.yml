@@ -78,7 +78,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          release_name: Release ${{ github.ref }}
+          release_name: Prerelease
+          tag_name: prerelease
           body: Automatic Release
           draft: false
           prerelease: true
