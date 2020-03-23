@@ -33,12 +33,12 @@ trait LSPServer extends Driver {
 
   override def getDefinition(position: Position): Option[Tree] = for {
     id <- getIdTreeAt(position)
-    decl <- context.lookup(id) match {
+    decl <- context.symbolOf(id) match {
       case u: UserFunction =>
         Some(u.decl)
       case u: Binder => Some(u.decl)
-      case d: EffectOp => context.getDefinitionTree(d.effect)
-      case u => context.getDefinitionTree(u)
+      case d: EffectOp => context.definitionTreeOf(d.effect)
+      case u => context.definitionTreeOf(u)
     }
   } yield decl
 
@@ -49,7 +49,7 @@ trait LSPServer extends Driver {
 
   def getSymbolAt(position: Position): Option[(Tree, Symbol)] = for {
     id <- getIdTreeAt(position)
-    sym <- context.get(id)
+    sym <- context.symbolOption(id)
   } yield (id, sym)
 
 
@@ -64,7 +64,7 @@ trait LSPServer extends Driver {
       showInfo("Builtin function", DeclPrinter(sym, context))
 
     case f: UserFunction =>
-      val tpe = context.blockType(f)
+      val tpe = context.blockTypeOf(f)
       showInfo("Function", DeclPrinter(sym, context))
 
     case f: BuiltinEffect =>
@@ -76,7 +76,7 @@ trait LSPServer extends Driver {
       showInfo("Builtin Effect", ex = ex)
 
     case f: EffectOp =>
-      val tpe = context.blockType(f)
+      val tpe = context.blockTypeOf(f)
 
       val ex =
         s"""|Effect operations, like `${f.name}` allow to express non-local control flow.
@@ -99,7 +99,7 @@ trait LSPServer extends Driver {
       showInfo("Effect operation", DeclPrinter(sym, context), ex)
 
     case c: Constructor =>
-      val tpe = context.blockType(c)
+      val tpe = context.blockTypeOf(c)
 
       val ex = s"""|Instances of data types like `${c.datatype.name}` can only store
                    |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
@@ -109,7 +109,7 @@ trait LSPServer extends Driver {
       showInfo(s"Constructor of data type `${c.datatype.name}`", DeclPrinter(sym, context), ex)
 
     case c: BlockParam =>
-      val tpe = context.blockType(c)
+      val tpe = context.blockTypeOf(c)
 
       val ex =
         s"""|Blocks, like `${c.name}`, are similar to functions in other languages.
@@ -124,7 +124,7 @@ trait LSPServer extends Driver {
       showInfo("Block parameter", s"{ ${c.name}: ${tpe} }", ex)
 
     case c: ResumeParam =>
-      val tpe = context.blockType(c)
+      val tpe = context.blockTypeOf(c)
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound
@@ -139,11 +139,11 @@ trait LSPServer extends Driver {
       showInfo("Resumption", s"{ ${c.name}: ${tpe} }", ex)
 
     case c: ValueParam =>
-      val tpe = context.valueTypeOrDefault(c, c.tpe.get)
+      val tpe = context.valueTypeOption(c).getOrElse { c.tpe.get }
       showInfo("Value parameter", s"${c.name}: ${tpe}")
 
     case c: VarBinder =>
-      val tpe = context.valueTypeOrDefault(c, c.tpe.get)
+      val tpe = context.valueTypeOption(c).getOrElse { c.tpe.get }
 
       val ex =
         s"""|Like in other languages, mutable variable binders like `${c.name}`

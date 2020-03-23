@@ -32,7 +32,6 @@ class Typer extends Phase { typer =>
     })
 
     C.typerState = TyperState(toplevelEffects)
-    C.phases.init(typer)
 
     C in {
       // pre-check to allow mutually recursive defs
@@ -69,11 +68,11 @@ class Typer extends Phase { typer =>
         TUnit / (condEffs ++ blockEffs)
 
       case v : source.Var =>
-        Compiler.valueType(v.definition) / Pure
+        Compiler.valueTypeOf(v.definition) / Pure
 
       case e @ source.Assign(id, expr) =>
         e.definition.asVarBinder // assert that it is a mutable variable
-        val (_ / eff) = expr checkAgainst Compiler.valueType(e.definition)
+        val (_ / eff) = expr checkAgainst Compiler.valueTypeOf(e.definition)
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
@@ -99,11 +98,11 @@ class Typer extends Phase { typer =>
           case d @ source.OpClause(op, params, body, resume) =>
             val effectOp = d.definition
             val effect = effectOp.effect
-            val bt = Compiler.blockType(effectOp)
+            val bt = Compiler.blockTypeOf(effectOp)
             val ps = checkAgainstDeclaration(op.name, bt.params, params)
             val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
 
-            Compiler.define(ps).define(Compiler.lookup(resume), resumeType) in {
+            Compiler.define(ps).define(Compiler.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
               }
@@ -179,25 +178,25 @@ class Typer extends Phase { typer =>
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(implicit C: Context): Unit = C.focusing(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
-      d.symbol.ret.foreach { annot => C.putBlock(d.symbol, d.symbol.toType) }
+      d.symbol.ret.foreach { annot => C.assignType(d.symbol, d.symbol.toType) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      C.putBlock(d.symbol, d.symbol.toType)
+      C.assignType(d.symbol, d.symbol.toType)
 
     case d @ source.EffDef(id, tparams, params, ret) =>
-      d.symbol.ops.foreach { op => C.putBlock(op, op.toType) }
+      d.symbol.ops.foreach { op => C.assignType(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        C.putBlock(sym, sym.toType)
+        C.assignType(sym, sym.toType)
       }
 
     case d => ()
   }
 
 
-  def synthDef(d: Def)(implicit C: Context): Effectful = C.focusing(d) {
+  def synthDef(d: Def)(implicit C: Context): Effectful = check(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = d.symbol
       C.define(sym.params)
@@ -209,7 +208,7 @@ class Typer extends Phase { typer =>
         case None =>
           val (tpe / effs) = checkStmt(body, None)
           C.wellscoped(effs) // check they are in scope
-          C.putBlock(sym, sym.toType(tpe / effs))
+          C.assignType(sym, sym.toType(tpe / effs))
           tpe / Pure // all effects are handled by the function itself (since they are inferred)
       }
 
@@ -297,7 +296,7 @@ class Typer extends Phase { typer =>
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val BlockType(tparams, params, ret / retEffs) = C.blockType(sym)
+    val BlockType(tparams, params, ret / retEffs) = C.blockTypeOf(sym)
 
     if (targs.nonEmpty && targs.size != tparams.size)
       C.abort(s"Wrong number of type arguments ${targs.size}")
@@ -371,13 +370,20 @@ class Typer extends Phase { typer =>
   }
 
   /**
-   * @tparam T the type of trees, this checker operates on
+   * Combinators that also store the computed type for a tree in the TypesDB
    */
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Compiler.at(t) {
       val (got / effs) = f(t)
       expected foreach { Compiler.assertEqual(got, _) }
-      Compiler.annotate(t, got / effs)
+      Compiler.assignType(t, got / effs)
+      got / effs
+    }
+
+  def check[T <: Tree](t: T)(f: T => Effectful)(implicit C: Context): Effectful =
+    Compiler.at(t) {
+      val (got / effs) = f(t)
+      Compiler.assignType(t, got / effs)
       got / effs
     }
 }
@@ -411,11 +417,11 @@ trait TyperOps { self: Context =>
   }
 
   def define(s: Symbol, t: ValueType): Context = {
-    putValue(s, t); this
+    assignType(s, t); this
   }
 
   def define(s: Symbol, t: BlockType): Context = {
-    putBlock(s, t); this
+    assignType(s, t); this
   }
 
   def define(bs: Map[Symbol, Type]): Context = { bs foreach {

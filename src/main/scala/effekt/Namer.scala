@@ -39,14 +39,12 @@ class Namer extends Phase { namer =>
 
     val (terms, types) = decl.imports.foldLeft((topLevelTerms, topLevelTypes)) {
       case ((terms, types), source.Import(path)) =>
-        val mod = compiler.resolve(path)
+        val mod = compiler.moduleOf(path)
         (terms.enterWith(mod.terms), types.enterWith(mod.types))
     }
 
     val state = NamerState(src, decl, terms.enter, types.enter)
     compiler.namerState = state
-    compiler.phases.init(this)
-
 
     resolve(decl)
 
@@ -84,7 +82,7 @@ class Namer extends Phase { namer =>
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
-      val funSym = Compiler.get(f)
+      val funSym = Compiler.symbolOf(f)
       Compiler scoped {
         funSym.tparams.foreach { p =>
           Compiler.bind(p)
@@ -178,13 +176,13 @@ class Namer extends Phase { namer =>
     case ps : source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(C.localName(id), resolve(tpe))
-      Compiler.put(id, sym)
+      Compiler.assignSymbol(id, sym)
       List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
       val sym = ValueParam(C.localName(p.id), p.tpe.map(resolve))
-      Compiler.put(p.id, sym)
+      Compiler.assignSymbol(p.id, sym)
       sym
     }
 
@@ -267,7 +265,7 @@ class Namer extends Phase { namer =>
         })
 
       case d @ source.ExternInclude(path) =>
-        d.contents = Compiler.resolveInclude(Compiler.source, path)
+        d.contents = Compiler.contentsOf(Compiler.source, path)
         ()
     }
   }
@@ -346,12 +344,12 @@ trait NamerOps { self: Context =>
   // Name Binding and Resolution
   // ===========================
   def define(id: Id, s: TermSymbol): Unit = {
-    put(id, s)
+    assignSymbol(id, s)
     terms.define(id.name, s)
   }
 
   def define(id: Id, s: TypeSymbol): Unit = {
-    put(id, s)
+    assignSymbol(id, s)
     types.define(id.name, s)
   }
 
@@ -368,21 +366,21 @@ trait NamerOps { self: Context =>
   // store a binding in the symbol table
   def resolveTerms(id: Id): List[TermSymbol] = {
     val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
-    put(id, sym)
+    assignSymbol(id, sym)
     List(sym)
   }
 
   // for positions that do not allow overloading (for now)
   def resolveFilter[A](id: Id)(filter: PartialFunction[TermSymbol, A]): List[A] = {
     val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
-    put(id, sym)
+    assignSymbol(id, sym)
 
     List(sym).collect(filter)
   }
 
   def resolveType(id: Id): TypeSymbol = {
     val sym = types.lookup(id.name).getOrElse { abort(s"Could not resolve type ${id.name}") }
-    put(id, sym)
+    assignSymbol(id, sym)
     sym
   }
 

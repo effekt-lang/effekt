@@ -27,8 +27,9 @@ trait ModuleDB { self: Context =>
    */
   def process(source: Source): Module
 
-  // - tries to find a file in the workspace, that matches the import path
-  def resolveInclude(moduleSource: Source, path: String): String = moduleSource match {
+
+  // tries to find a file in the workspace, that matches the import path
+  def contentsOf(moduleSource: Source, path: String): String = moduleSource match {
     case JarSource(name) =>
       val p = new File(name).toPath.getParent.resolve(path).toString
       if (!JarSource.exists(p)) {
@@ -46,16 +47,15 @@ trait ModuleDB { self: Context =>
       }
   }
 
-  def resolve(source: Source): Module =
+  def moduleOf(source: Source): Module =
     units.getOrElseUpdate(source, process(source))
 
-  def resolve(path: String): Module =
-    resolve(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
-
+  def moduleOf(path: String): Module =
+    moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
 
 
   // first try to find it in the includes paths, then in the bundled resources
-  def findSource(path: String): Option[Source] = {
+  private def findSource(path: String): Option[Source] = {
     val filename = path + ".effekt"
 
     config.includes().map { p => p.toPath.resolve(filename).toFile } collectFirst {
@@ -74,7 +74,7 @@ trait ModuleDB { self: Context =>
 /**
  * A source that is a string.
  *
- * TODO open a PR and make content a def in Kiama
+ * TODO open a PR and make `content`` a def in Kiama
  */
 case class JarSource(name: String) extends Source {
 

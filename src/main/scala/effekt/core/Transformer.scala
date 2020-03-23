@@ -119,7 +119,7 @@ class Transformer {
         case _ => Pure
       }
 
-      val BlockType(tparams, params, ret / effs) = C.blockType(sym)
+      val BlockType(tparams, params, ret / effs) = C.blockTypeOf(sym)
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation

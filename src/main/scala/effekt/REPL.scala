@@ -141,7 +141,7 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
 
       module.definitions.foreach {
         case u: Def =>
-          val sym = ctx.get(u)
+          val sym = ctx.symbolOf(u)
           out.emitln(DeclPrinter(sym, driver.context))
       }
     }
@@ -154,7 +154,7 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
       case Success(e: Expr, _) =>
         reportOrElse(source, frontend(source, module.make(e), config)) { mod =>
           val mainSym = mod.terms("main")
-          val mainTpe = driver.context.blockType(mainSym)
+          val mainTpe = driver.context.blockTypeOf(mainSym)
           config.output().emitln(mainTpe.ret)
         }
 
@@ -197,11 +197,11 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        (driver.context.get(d) match {
+        (driver.context.symbolOf(d) match {
           case v: ValueSymbol =>
-            Some(driver.context.valueType(v))
+            Some(driver.context.valueTypeOf(v))
           case b: BlockSymbol =>
-            Some(driver.context.blockType(b))
+            Some(driver.context.blockTypeOf(b))
           case t =>
             None
         }) map { tpe =>
@@ -232,7 +232,7 @@ class EffektRepl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfi
 
   def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Either[Messages, Module] = {
     driver.context.setup(ast, config)
-    driver.frontend(source, ast, driver.context)
+    driver.frontend(source, ast)(driver.context)
   }
 
   object Command {

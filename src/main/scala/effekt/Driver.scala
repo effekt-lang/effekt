@@ -7,17 +7,18 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.evaluator.Evaluator
 import effekt.core.{ JavaScript, Transformer }
 import effekt.util.messages.FatalPhaseError
-import effekt.symbols.{ builtins, Module }
+import effekt.symbols.{ Module, builtins }
 import effekt.context.Context
-
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.Messages
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util._
-
 import org.rogach.scallop._
 import java.io.File
+
+import effekt.namer.Namer
+import effekt.typer.Typer
 
 
 
@@ -51,21 +52,35 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
   val name = "effekt"
 
+  // Frontend phases
+  // ===============
+  object parser extends Parser(positions)
+  object namer extends Namer
+  object typer extends Typer
+
+  // Compiler context
+  // ================
   // We always only have one global instance of CompilerContext
   object context extends Context {
 
+    /**
+     * This is used to resolve imports
+     */
     override def process(source: Source): Module =
-      driver.frontend(source, this) match {
+      driver.frontend(source)(this) match {
         case Right(res) =>
-          driver.backend(res, this)
+          driver.backend(res)(this)
           res
         case Left(msgs) =>
           report(source, msgs, config)
           abort(s"Error processing dependency: ${source.name}")
       }
 
+    /**
+     * This is used by the LSP Server to perform type checking.
+     */
     override def frontend(source: Source): Option[Module] =
-      driver.frontend(source, this).toOption
+      driver.frontend(source)(this).toOption
 
     populate(builtins.rootTerms.values)
   }
@@ -81,26 +96,26 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   override def createConfig(args : Seq[String]) =
     new EffektConfig(args)
 
-  override def parse(source: Source): ParseResult[ModuleDecl] = {
-    val parsers = new Parser(positions)
-    parsers.parseAll(parsers.program, source)
-  }
+  override def parse(source: Source): ParseResult[ModuleDecl] =
+    parser.parseAll(parser.program, source)
 
   /**
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`
    */
   override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
 
+    implicit val C = context
+
     context.setup(ast, config)
 
-    process(source, ast, context) match {
+    process(source, ast) match {
       case Right(unit) =>
         if (!config.server() && !config.compile()) {
           object evaluator extends Evaluator
-          evaluator.run(unit)(context)
+          evaluator.run(unit)
         }
+        report(source)
 
-        report(source, context.buffer.get, config)
       case Left(msgs) =>
         clearSyntacticMessages(source, config)
         clearSemanticMessages(source, config)
@@ -108,17 +123,17 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     }
   }
 
-  def process(source: Source, context: Context): Either[Messages, Module] =
+  def process(source: Source)(implicit C: Context): Either[Messages, Module] =
     // for some reason Kiama uses the Either the other way around.
-    makeast(source, context.config) match {
-      case Left(ast) => process(source, ast, context)
+    makeast(source, C.config) match {
+      case Left(ast) => process(source, ast)
       case Right(msgs) => Left(msgs)
     }
 
-  def process(source: Source, ast: ModuleDecl, context: Context): Either[Messages, Module] =
-    frontend(source, ast, context) match {
-      case Right(unit) if context.config.compile() || context.config.server() =>
-        backend(unit, context)
+  def process(source: Source, ast: ModuleDecl)(implicit C: Context): Either[Messages, Module] =
+    frontend(source, ast) match {
+      case Right(unit) if C.config.compile() || C.config.server() =>
+        backend(unit)
         Right(unit)
       case result => result
     }
@@ -126,22 +141,22 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   /**
    * Frontend: Parser -> Namer -> Typer
    */
-  def frontend(source: Source, context: Context): Either[Messages, Module] =
-    makeast(source, context.config) match {
-      case Left(ast) => frontend(source, ast, context)
+  def frontend(source: Source)(implicit C: Context): Either[Messages, Module] =
+    makeast(source, C.config) match {
+      case Left(ast) => frontend(source, ast)
       case Right(msgs) => Left(msgs)
     }
 
   /**
    * Frontend: Namer -> Typer
    */
-  def frontend(source: Source, ast: ModuleDecl, context: Context): Either[Messages, Module] = {
+  def frontend(source: Source, ast: ModuleDecl)(implicit C: Context): Either[Messages, Module] = {
 
-    val buffer = context.buffer
+    val buffer = C.buffer
 
     try {
-      val mod = context.namer.run(source, ast)(context)
-      context.typer.run(ast, mod)(context)
+      val mod = namer.run(source, ast)
+      typer.run(ast, mod)
 
       if (buffer.hasErrors) {
         Left(buffer.get)
@@ -151,33 +166,32 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
     } catch {
       case FatalPhaseError(msg, reporter) =>
         reporter.error(msg)
-        Left(context.buffer.get)
+        Left(C.buffer.get)
     }
   }
 
   /**
-   * Backend: Evaluator or Translator
+   * Backend: Effekt -> Core -> JavaScript
    */
-  def backend(unit: Module, context: Context): Unit = try {
+  def backend(unit: Module)(implicit C: Context): Unit = try {
+
     object transformer extends Transformer
     object js extends JavaScript
     object prettyCore extends core.PrettyPrinter
 
-    val config = context.config
-
-    val translated = transformer.run(unit)(context)
+    val translated = transformer.run(unit)
     val javaScript = js.format(translated)
 
-    if (config.server() && settingBool("showTarget")) {
+    if (C.config.server() && settingBool("showTarget")) {
       publishProduct(unit.source, "target", "js", javaScript)
     }
 
-    if (config.server() && settingBool("showCore")) {
+    if (C.config.server() && settingBool("showCore")) {
       publishProduct(unit.source, "target", "effekt", prettyCore.format(translated))
     }
 
-    if (config.compile()) {
-      val outDir = config.outputPath().toPath
+    if (C.config.compile()) {
+      val outDir = C.config.outputPath().toPath
       outDir.toFile.mkdirs
       val out = outDir.resolve(unit.outputName).toFile
 
@@ -187,8 +201,11 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
   } catch {
     case FatalPhaseError(msg, reporter) =>
       reporter.error(msg)
-      report(unit.source, context.buffer.get, context.config)
+      report(unit.source)
   }
+
+  def report(in: Source)(implicit C: Context): Unit =
+    report(in, C.buffer.get, C.config)
 
   def format(m: ModuleDecl) : Document = ???
 }

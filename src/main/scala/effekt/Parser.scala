@@ -36,6 +36,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val `.` = literal(".")
   lazy val `/` = literal("/")
   lazy val `=>` = literal("=>")
+
   lazy val `handle` = keyword("handle")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
@@ -112,6 +113,9 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val string = """\"([^\"]*)\"""".r ^^ {
     s => StringLit(s.substring(1, s.size - 1))
   }
+
+
+  // === Lexing ===
 
 
   // === Parsing ===

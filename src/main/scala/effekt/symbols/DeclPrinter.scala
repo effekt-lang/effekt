@@ -18,11 +18,11 @@ object DeclPrinter extends ParenPrettyPrinter {
       format("effect", op, op.ret.get)
 
     case b @ ValBinder(name, tps, decl) =>
-      val tpe = context.valueTypeOrDefault(b, b.tpe.get)
+      val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       s"val ${name}: ${tpe}"
 
     case b: VarBinder =>
-      val tpe = context.valueTypeOrDefault(b, b.tpe.get)
+      val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       s"var ${b.name}: ${tpe}"
 
     case DataType(name, tparams, ctors) =>
@@ -44,7 +44,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"extern type ${name}$tps"
 
     case c: Fun =>
-      val tpe = context.blockType(c)
+      val tpe = context.blockTypeOf(c)
       format("def", c, tpe.ret)
   }
 

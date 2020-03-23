@@ -46,13 +46,6 @@ abstract class Context
   }
 
   /**
-   * The different phases of the frontend
-   */
-  object namer extends Namer
-  object typer extends Typer
-
-
-  /**
    * The state of the namer phase
    */
   var _namerState: NamerState = _
@@ -76,14 +69,5 @@ abstract class Context
     namerState = namerBefore
     typerState = typerBefore
     result
-  }
-
-  object phases {
-
-    var _current: Phase = NoPhase
-
-    def init(p: Phase): Unit = {
-      _current = p
-    }
   }
 }

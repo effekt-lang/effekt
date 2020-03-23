@@ -14,6 +14,9 @@ sealed trait Tree extends Product
  */
 case object NoSource extends Tree
 
+// only used by the lexer
+case class Comment() extends Tree
+
 /**
  * We distinguish between identifiers corresponding to
  * - binding sites (IdDef)
@@ -22,7 +25,7 @@ case object NoSource extends Tree
  */
 sealed trait Id extends Tree {
   def name: String
-  def symbol(implicit db: SymbolsDB): Symbol = db.lookup(this)
+  def symbol(implicit db: SymbolsDB): Symbol = db.symbolOf(this)
 }
 case class IdDef(name: String) extends Id
 case class IdRef(name: String) extends Id
@@ -32,7 +35,7 @@ sealed trait Definition extends Tree {
   def id: Id
   type symbol <: Symbol
 
-  def symbol(implicit db: SymbolsDB): symbol = db.get(this)
+  def symbol(implicit db: SymbolsDB): symbol = db.symbolOf(this)
 }
 
 // Something that later can be looked up in the symbol table
@@ -40,7 +43,7 @@ sealed trait Reference extends Tree {
   def id: Id
   type symbol <: Symbol
 
-  def definition(implicit db: SymbolsDB): symbol = db.get(this)
+  def definition(implicit db: SymbolsDB): symbol = db.symbolOf(this)
 }
 
 /**

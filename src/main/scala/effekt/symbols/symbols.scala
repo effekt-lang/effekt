@@ -1,8 +1,8 @@
 package effekt
 
-import effekt.source.{ ModuleDecl, Def, FunDef, ValDef, VarDef }
-import effekt.context.{ TypesDB }
-
+import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.context.TypesDB
+import effekt.util.messages.ErrorReporter
 import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
@@ -70,8 +70,10 @@ package object symbols {
     def toType: BlockType = BlockType(tparams, paramsToTypes(params), ret.get)
     def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
 
-    def effects(implicit db: TypesDB): Effects =
-      ret.getOrElse(db.blockType(this).ret).effects
+    def effects(implicit db: TypesDB with ErrorReporter): Effects =
+      ret.orElse { db.blockTypeOption(this).map { _.ret } }.getOrElse {
+        db.abort(s"Result type of recursive function ${name} needs to be annotated")
+      }.effects
   }
 
   object Fun {

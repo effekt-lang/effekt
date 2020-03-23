@@ -70,7 +70,7 @@ class Evaluator {
     val mainFun = mainSym.asUserFunction
 
     // TODO refactor and convert into checked error
-    val userEffects = compiler.blockType(mainSym).ret.effects.effs.filterNot { _.builtin }
+    val userEffects = compiler.blockTypeOf(mainSym).ret.effects.effs.filterNot { _.builtin }
     if (userEffects.nonEmpty) {
       compiler.abort(s"Main has unhandled user effects: ${userEffects}!")
     }
@@ -82,7 +82,7 @@ class Evaluator {
     evaluatedModules.getOrDefault(mod, {
       val env = mod.decl.imports.foldLeft(builtins(compiler.config.output())) {
         case (env, source.Import(path)) =>
-          val mod = compiler.resolve(path)
+          val mod = compiler.moduleOf(path)
           val res = eval(mod, compiler)
           env ++ res
       }
@@ -125,7 +125,7 @@ class Evaluator {
       case op: EffectOp =>
         val effect = op.effect
         val handler = C.handler(effect)
-        val BlockType(_, params, ret / effs) = Compiler.blockType(op)
+        val BlockType(_, params, ret / effs) = Compiler.blockTypeOf(op)
 
         evalArgSections(params, args).flatMap { argv =>
           use(handler.prompt) { k =>
@@ -137,7 +137,7 @@ class Evaluator {
         }
 
       case sym =>
-        val BlockType(_, params, ret / effs) = Compiler.blockType(sym)
+        val BlockType(_, params, ret / effs) = Compiler.blockTypeOf(sym)
         evalArgSections(params, args).flatMap { argv =>
           supplyCapabilities(C.closure(sym), argv, effs)
         }
@@ -149,7 +149,7 @@ class Evaluator {
 
       val cs = clauses.map {
         case op @ OpClause(id, params, body, resume) =>
-          val ps = params.flatMap { _.params.map(_.symbol) } :+ Compiler.lookup(resume)
+          val ps = params.flatMap { _.params.map(_.symbol) } :+ Compiler.symbolOf(resume)
           val impl: List[Value] => control.Control[Value] = args =>
             C.extendedWith(ps zip args) { implicit C => evalStmt(body) }
           (op.definition, impl)
@@ -201,7 +201,7 @@ class Evaluator {
     case FunDef(name, _, params, ret, body) =>
       val sym = f.symbol
       val params = collectBinders(sym.params)
-      bindCapabilities(params, Compiler.blockType(sym).ret.effects, body)
+      bindCapabilities(params, Compiler.blockTypeOf(sym).ret.effects, body)
   }
 
   def evalStmt(stmt: Stmt)(implicit C: EvalContext): Control[Value] = stmt match {
