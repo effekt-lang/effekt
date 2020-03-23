@@ -27,14 +27,16 @@ class Typer extends Phase { typer =>
   val name = "typer"
 
   def run(module: source.ModuleDecl, mod: Module)(implicit C: Context): Unit = {
-    val toplevelEffects = Effects(List(EDivZero, EConsole) ++ mod.types.values.collect {
+
+    // Effects that are lexically in scope at the top level
+    val toplevelEffects = rootEffects ++ Effects(mod.types.values.collect {
       case e: Effect => e
     })
-
     Context.typerState = TyperState(toplevelEffects)
 
     Context in {
-      // pre-check to allow mutually recursive defs
+      // We split the type-checking of definitions into "pre-check" and "check"
+      // to allow mutually recursive defs
       module.defs.foreach { d => precheckDef(d) }
       module.defs.foreach { d =>
         val (_ / effs) = synthDef(d)
@@ -71,8 +73,9 @@ class Typer extends Phase { typer =>
         Context.valueTypeOf(v.definition) / Pure
 
       case e @ source.Assign(id, expr) =>
-        e.definition.asVarBinder // assert that it is a mutable variable
-        val (_ / eff) = expr checkAgainst Context.valueTypeOf(e.definition)
+        // assert that it is a mutable variable
+        val sym = e.definition.asVarBinder
+        val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
@@ -301,7 +304,8 @@ class Typer extends Phase { typer =>
     if (targs.nonEmpty && targs.size != tparams.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
 
-    var unifier: Unifier = Unifier(tparams, if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty })
+    var unifier: Unifier = Unifier(tparams,
+      if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty })
 
     expected.foreach { exp => unifier = unifier.merge(ret, exp) }
 
@@ -310,44 +314,51 @@ class Typer extends Phase { typer =>
     if (params.size != args.size)
       Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
-    // TODO we can improve the error positions here
-    (params zip args) foreach {
+    def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
       case (ps : List[ValueType], source.ValueArgs(as)) =>
         if (ps.size != as.size)
           Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
-        (ps zip as) foreach {
-          case (tpe, expr) =>
-            val tpe1 = unifier substitute tpe // apply what we already know.
-            val (tpe2 / exprEffs) = checkExpr(expr, None)
+        (ps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
-            unifier = unifier.merge(tpe1, tpe2)
-            // println(s"From comparing ${tpe} and ${tpe2}, we just learnt that ${unifier}")
-
-            effs = effs ++ exprEffs
-        }
-
-      // Example.
-      //   BlockParam: def foo { f: Int => String / Print }
-      //   BlockArg: foo { n => println("hello" + n) }
-      //     or
-      //   BlockArg: foo { (n: Int) => println("hello" + n) }
-      case (List(bt: BlockType), source.BlockArg(params, stmt)) =>
-
-        val blockType = unifier substitute bt
-        // TODO make blockargs also take multiple argument sections.
-        val bindings = checkAgainstDeclaration("block", blockType.params, List(params))
-
-        Context.define(bindings)
-
-        val (tpe1 / handled) = blockType.ret
-        val (tpe2 / stmtEffs)  = checkStmt(stmt, None)
-
-        unifier = unifier.merge(tpe1, tpe2)
-        effs = (effs ++ (stmtEffs -- handled))
+      case (List(bt: BlockType), arg: source.BlockArg) =>
+        checkBlockArgument(bt, arg)
 
       case (_, _) =>
         Context.error("Wrong type of argument section")
+    }
+
+    def checkValueArgument(tpe: ValueType, expr: source.Expr): Unit = {
+      val tpe1 = unifier substitute tpe // apply what we already know.
+      val (tpe2 / exprEffs) = checkExpr(expr, None)
+
+      unifier = unifier.merge(tpe1, tpe2)
+
+      effs = effs ++ exprEffs
+    }
+
+    // Example.
+    //   BlockParam: def foo { f: Int => String / Print }
+    //   BlockArg: foo { n => println("hello" + n) }
+    //     or
+    //   BlockArg: foo { (n: Int) => println("hello" + n) }
+    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = {
+        val blockType = unifier substitute tpe
+
+        // TODO make blockargs also take multiple argument sections.
+        Context.define {
+          checkAgainstDeclaration("block", blockType.params, List(arg.params))
+        }
+
+        val (tpe1 / handled) = blockType.ret
+        val (tpe2 / stmtEffs) = checkStmt(arg.body, None)
+
+        unifier = unifier.merge(tpe1, tpe2)
+        effs = (effs ++ (stmtEffs -- handled))
+    }
+
+    (params zip args) foreach { case (ps, as) =>
+        checkArgumentSection(ps, as)
     }
 
     // check that unifier found a substitution for each tparam

@@ -65,9 +65,13 @@ abstract class Context
   def in[T](block: => T): T = {
     val namerBefore = namerState
     val typerBefore = typerState
+    val focusBefore = focus
     val result = block
+    // we purposefully do not include the reset into `finally` to preserve the
+    // state at the error position
     namerState = namerBefore
     typerState = typerBefore
+    focus = focusBefore
     result
   }
 }

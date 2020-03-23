@@ -173,13 +173,18 @@ package object symbols {
       case effs => s"{ ${effs.mkString(", ")} }"
     }
   }
-
-  object / {
-    def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
+  object Effects {
+    def apply(effs: Effect*): Effects = Effects(effs.toList)
+    def apply(effs: Iterable[Effect]): Effects = Effects(effs.toList)
   }
+
   val Pure: Effects = Effects(Nil)
   case class Effectful(tpe: ValueType, effects: Effects) {
     override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
+  }
+
+  object / {
+    def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
   }
 
 

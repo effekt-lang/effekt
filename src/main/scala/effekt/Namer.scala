@@ -84,12 +84,12 @@ class Namer extends Phase { namer =>
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
-      val funSym = Context.symbolOf(f)
+      val sym = Context.symbolOf(f)
       Context scoped {
-        funSym.tparams.foreach { p =>
+        sym.tparams.foreach { p =>
           Context.bind(p)
         }
-        Context.bind(funSym.params)
+        Context.bind(sym.params)
         resolve(body)
       }
 
@@ -305,7 +305,7 @@ class Namer extends Phase { namer =>
     Effectful(resolve(e.tpe), resolve(e.eff))
 
   /**
-   * Term vars are resolved as part of resolve(tree: Tree)
+   * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(implicit C: Context): TypeVar = {
     val sym = TypeVar(Context.localName(id))

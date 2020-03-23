@@ -84,4 +84,6 @@ object builtins {
     "println"  -> printInt,
     "show"     -> show
   )
+
+  val rootEffects: Effects = Effects(List(EDivZero, EConsole))
 }
