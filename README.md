@@ -34,11 +34,18 @@ Are they really necessary? Do they work with the second class notion of blocks?
 
 ## Usage
 
-### Compiling
+### REPL
+To start the REPL just clone the repository and enter `sbt run`. Checkout the `examples/` folder for a examples demonstrating features of the Effekt language.
 
-To compile Effekt sources to JavaScript, provide the `--compile` flag.
+### Compiling
+To compile Effekt sources to JavaScript, provide the `--compile` flag. For example:
+
+```
+sbt run --compile myfile.effekt
+```
 This will generate JavaScript files in `./out`.
 
+To run the generated JavaScript files you need to have a recent (> 10.0) version of Node.
 The generated files currently use the `amdefine` module format.
 To execute them you need to install `amdefine` and run it with nodeJS:
 
@@ -48,3 +55,46 @@ npm install amdefine
 node
 > require("./MY_FILE.js").main().run()
 ```
+
+### Language Server
+Effekt comes with a basic language server implementation (LSP). The `dist/vscode` folder contains a VSCode extension. 
+There are at least two ways to setup VSCode. You can either download the `.vsix` file as Artifact from the latest commit, or build the VSCode editor extension yourself.
+Both ways, however rely on a jar file that contains the Effekt implementation. Again, you can either download the `jar` file as Artifact, or build it yourself.
+
+#### Downloading or Building the Jar File
+Either download the `effekt.jar` or build it by running `sbt assembly`. The latter will generate the jar in the folder `target/scala-*/effekt.jar`. Remember the absolute path to the jar file, we need it later.
+
+#### Downloading the VSCode Extension
+Download the VSCode extension as Artifact from the latest commit. It should include a `vsix` file. In VSCode select "extensions / From VSIX ...".
+
+#### Building the VSCode Extension
+You first install the dependencies:
+```
+cd dist/vscode
+npm install   
+```
+To build the `vsix` file, you also need to install `vsce`:
+```
+npm install -g vsce
+```
+Building the extension then amounts to running
+```
+vsce package
+```
+This will generate a `vsix` file that you can install as described above. You need to repeat this step everytime the extension changes.
+
+#### Starting VSCode in Developer Mode
+To automatically get latest updates (at the moment), you need to pretend you are a extension developer.
+Again, first install the dependencies:
+```
+cd dist/vscode
+npm install   
+```
+Then open VSCode from the `dist/vscode` folder.
+
+Pressing `F5` will start a new VSCode instance with the extension loaded.
+
+#### Configuring VSCode
+To get the full language server support, you need to point the extension to the `jar` path you remembered above.
+
+Open `settings` and search for `Effekt`. Under the setting `compiler` provide the absolute path to the `jar` file.
