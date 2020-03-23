@@ -84,7 +84,7 @@ jobs:
           prerelease: true
 
       - name: Upload jar file
-        id: upload-jar
+        id: upload_jar
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -95,7 +95,7 @@ jobs:
           asset_content_type: application/java-archive
 
       - name: Upload vsix file
-        id: upload-vsix
+        id: upload_vsix
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
