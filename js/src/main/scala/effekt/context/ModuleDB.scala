@@ -25,7 +25,11 @@ trait ModuleDB { self: Context =>
   def process(source: Source): Module
 
 
-  // tries to find a file in the workspace, that matches the import path
+  /**
+   * tries to find a file in the workspace, that matches the import path
+   *
+   * used by Namer to resolve FFI includes
+   */
   def contentsOf(moduleSource: Source, path: String): String = ""
 
   def moduleOf(source: Source): Module =

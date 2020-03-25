@@ -28,24 +28,29 @@ trait ModuleDB { self: Context =>
   def process(source: Source): Module
 
 
-  // tries to find a file in the workspace, that matches the import path
-  def contentsOf(moduleSource: Source, path: String): String = moduleSource match {
-    case JarSource(name) =>
-      val p = new File(name).toPath.getParent.resolve(path).toString
-      if (!JarSource.exists(p)) {
-        abort(s"Missing include in: ${p}")
-      } else {
-        JarSource(p).content
-      }
-    case _ =>
-      val modulePath = moduleSource.name
-      val p = new File(modulePath).toPath.getParent.resolve(path).toFile
-      if (!p.exists()) {
-        abort(s"Missing include: ${p}")
-      } else {
-        FileSource(p.getCanonicalPath).content
-      }
-  }
+  /**
+   * Tries to find a file in the workspace, that matches the import path
+   *
+   * used by Namer to resolve FFI includes
+   */
+  def contentsOf(moduleSource: Source, path: String): String =
+    moduleSource match {
+      case JarSource(name) =>
+        val p = new File(name).toPath.getParent.resolve(path).toString
+        if (!JarSource.exists(p)) {
+          abort(s"Missing include in: ${p}")
+        } else {
+          JarSource(p).content
+        }
+      case _ =>
+        val modulePath = moduleSource.name
+        val p = new File(modulePath).toPath.getParent.resolve(path).toFile
+        if (!p.exists()) {
+          abort(s"Missing include: ${p}")
+        } else {
+          FileSource(p.getCanonicalPath).content
+        }
+    }
 
   def moduleOf(source: Source): Module =
     units.getOrElseUpdate(source, process(source))
