@@ -38,7 +38,7 @@ trait Compiler {
 
   // Backend phases
   // ==============
-  object js extends JavaScript
+  object codegen extends JavaScript
 
 
   /**
@@ -121,7 +121,7 @@ trait Compiler {
    * Backend: Effekt -> Core -> JavaScript
    */
   def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = try {
-    Some(js.format(mod))
+    Some(codegen.format(mod))
   } catch {
     case FatalPhaseError(msg, reporter) =>
       reporter.error(msg)
