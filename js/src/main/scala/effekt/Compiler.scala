@@ -1,18 +1,16 @@
 package effekt
 
 import effekt.context.{ Context, VirtualModuleDB }
-import effekt.core.{ JavaScript, Transformer }
-import effekt.namer.Namer
-import effekt.typer.Typer
-import org.bitbucket.inkytonik.kiama.parsing.Success
+import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.util.{ Positions, Source, StringSource }
 
 import scala.scalajs.js.annotation._
 
 
-@JSExportTopLevel("Compiler")
-object Compiler {
+@JSExportTopLevel("compiler")
+object CompilerJS extends Compiler {
 
+  val positions: Positions = new Positions
 
   implicit val context = new Context with VirtualModuleDB {
     /**
@@ -28,26 +26,17 @@ object Compiler {
     override def process(source: Source): symbols.Module = ???
   }
 
-  object parser extends Parser(new Positions)
-  object namer extends Namer
-  object typer extends Typer
-  object transformer extends Transformer
-  object codegen extends JavaScript
 
   @JSExport
-  def compile(s: String) = {
-    val src = StringSource(s)
+  def compile(s: String) = (for {
+    src <- Some(StringSource(s))
+    ast <- parse(src)
+    mod <- frontend(src, ast)
+    cor <- middleend(src, mod)
+    js  <- backend(src, cor)
+  } yield js).getOrElse("")
 
-    parser.parseAll(parser.program, src) match {
-      case Success(result, next) =>
-        println("run namer")
-        val mod = namer.run(src, result)
-        typer.run(result, mod)
-        val core = transformer.run(mod)
-        codegen.format(core).layout.toString
-      case _ => ""
-    }
-  }
+  override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = ???
 }
 
 object Main extends App {
@@ -61,5 +50,5 @@ object Main extends App {
       |def baz() = do Print("hello world")
       |""".stripMargin
 
-  Compiler.compile(input)
+  println(CompilerJS.compile(input))
 }

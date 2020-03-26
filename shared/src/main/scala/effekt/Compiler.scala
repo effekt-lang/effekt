@@ -64,7 +64,7 @@ trait Compiler {
    *
    * adapted from: kiama.util.compiler.makeast
    */
-  def parse(source: Source)(implicit C: Context): Option[ModuleDecl] = try {
+  def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parser.parseAll(parser.program, source) match {
       case Success(ast, _) =>
         Some(ast)
@@ -76,11 +76,7 @@ trait Compiler {
         C.error(res.message)
         None
     }
-  } catch {
-    case e : java.io.FileNotFoundException =>
-      C.error(e.getMessage)
-      None
-  }
+
 
 
   /**
