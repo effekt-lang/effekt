@@ -31,5 +31,6 @@ lazy val effekt = crossProject(JSPlatform, JVMPlatform).in(file(".")).
     libraryDependencies ++= Seq(
       "org.bitbucket.inkytonik.kiama" %%% "kiama" % "2.4.0-SNAPSHOT"
     ),
-    scalaJSUseMainModuleInitializer := true
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) }
+//    scalaJSUseMainModuleInitializer := true
   )

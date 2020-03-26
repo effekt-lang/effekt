@@ -7,18 +7,12 @@ import effekt.typer.Typer
 import org.bitbucket.inkytonik.kiama.parsing.Success
 import org.bitbucket.inkytonik.kiama.util.{ Positions, Source, StringSource }
 
-object Main extends App {
+import scala.scalajs.js.annotation._
 
-  object parsers extends Parser(new Positions)
 
-  val input =
-    """module foo
-      |
-      |effect Print[A](msg: A): Unit
-      |
-      |def bar() = 42
-      |def baz() = do Print("hello world")
-      |""".stripMargin
+@JSExportTopLevel("Compiler")
+object Compiler {
+
 
   implicit val context = new Context {
     /**
@@ -34,20 +28,38 @@ object Main extends App {
     override def process(source: Source): symbols.Module = ???
   }
 
+  object parser extends Parser(new Positions)
   object namer extends Namer
   object typer extends Typer
   object transformer extends Transformer
   object codegen extends JavaScript
 
-  val src = StringSource(input)
+  @JSExport
+  def compile(s: String) = {
+    val src = StringSource(s)
 
-  parsers.parseAll(parsers.program, src) match {
-    case Success(result, next) =>
-      println("run namer")
-      val mod = namer.run(src, result)
-      typer.run(result, mod)
-      val core = transformer.run(mod)
-      println(codegen.format(core).layout)
-    case _ => ()
+    parser.parseAll(parser.program, src) match {
+      case Success(result, next) =>
+        println("run namer")
+        val mod = namer.run(src, result)
+        typer.run(result, mod)
+        val core = transformer.run(mod)
+        codegen.format(core).layout.toString
+      case _ => ""
+    }
   }
+}
+
+object Main extends App {
+
+  val input =
+    """module foo
+      |
+      |effect Print[A](msg: A): Unit
+      |
+      |def bar() = 42
+      |def baz() = do Print("hello world")
+      |""".stripMargin
+
+  Compiler.compile(input)
 }
