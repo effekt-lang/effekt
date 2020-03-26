@@ -122,7 +122,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
 
   lazy val program: P[ModuleDecl] =
     ( `module` ~/> moduleName ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, imports, defs)
+      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
       case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
