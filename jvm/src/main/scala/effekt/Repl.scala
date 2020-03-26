@@ -218,19 +218,19 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    *
    * TODO move into driver
    */
-  def reportOrElse(source: Source, res: Either[Messages, Module])(f: Module => Unit): Unit = res match {
-    case Right(cu) =>
+  def reportOrElse(source: Source, res: Option[Module])(f: Module => Unit): Unit = res match {
+    case Some(cu) =>
       val buffer = driver.context.buffer
       if (buffer.hasErrors) {
         report(source, buffer.get, driver.context.config)
       } else {
         f(cu)
       }
-    case Left(msgs) =>
-      report(source, msgs, driver.context.config)
+    case None =>
+      report(source, driver.context.buffer.get, driver.context.config)
   }
 
-  def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Either[Messages, Module] = {
+  def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Option[Module] = {
     driver.context.setup(ast, config)
     driver.frontend(source, ast)(driver.context)
   }

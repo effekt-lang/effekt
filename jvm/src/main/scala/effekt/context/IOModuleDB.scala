@@ -10,23 +10,10 @@ import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source, S
 
 import scala.collection.mutable
 
-trait ModuleDB { self: Context =>
+trait IOModuleDB extends ModuleDB { self: Context =>
 
   // Cache containing processed units -- compilationUnits are cached by source
   private val units: mutable.Map[Source, Module] = mutable.Map.empty
-
-  /**
-   * Just runs the frontend (no code generation)
-   * When there are errors in processing `source` it returns None
-   */
-  def frontend(source: Source): Option[Module]
-
-  /**
-   * Runs both frontend and backend.
-   * In case of an error, this variant will abort and report any errors
-   */
-  def process(source: Source): Module
-
 
   /**
    * Tries to find a file in the workspace, that matches the import path

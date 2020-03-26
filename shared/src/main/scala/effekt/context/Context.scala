@@ -1,10 +1,12 @@
 package effekt
 package context
 
-import effekt.namer.{ Namer, NamerState, NamerOps }
-import effekt.typer.{ Typer, TyperState, TyperOps }
+import effekt.namer.{ Namer, NamerOps, NamerState }
+import effekt.typer.{ Typer, TyperOps, TyperState }
 import effekt.source.{ ModuleDecl, Tree }
+import effekt.symbols.Module
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
+import org.bitbucket.inkytonik.kiama.util.Source
 
 trait Phase {
   def name: String
@@ -33,6 +35,7 @@ abstract class Context
     // Util
     with ErrorReporter { context =>
 
+
   var focus: Tree = _
 
   var config: EffektConfig = _
@@ -44,6 +47,19 @@ abstract class Context
     focus  = ast
     buffer.clear()
   }
+
+  /**
+   * Just runs the frontend (no code generation)
+   * When there are errors in processing `source` it returns None
+   */
+  def frontend(source: Source): Option[Module]
+
+  /**
+   * Runs both frontend and backend.
+   * In case of an error, this variant will abort and report any errors
+   */
+  def process(source: Source): Module
+
 
   /**
    * The state of the namer phase

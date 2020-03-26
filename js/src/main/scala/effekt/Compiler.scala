@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.context.Context
+import effekt.context.{ Context, VirtualModuleDB }
 import effekt.core.{ JavaScript, Transformer }
 import effekt.namer.Namer
 import effekt.typer.Typer
@@ -14,7 +14,7 @@ import scala.scalajs.js.annotation._
 object Compiler {
 
 
-  implicit val context = new Context {
+  implicit val context = new Context with VirtualModuleDB {
     /**
      * Just runs the frontend (no code generation)
      * When there are errors in processing `source` it returns None

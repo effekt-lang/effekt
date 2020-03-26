@@ -29,7 +29,7 @@ jobs:
       uses: actions/upload-artifact@v1
       with:
         name: effekt
-        path: target/scala-2.13/effekt.jar
+        path: jvm/target/scala-2.13/effekt.jar
 
   build-vscode:
     name: Build the VSCode extension

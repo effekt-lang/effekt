@@ -1,9 +1,10 @@
 package effekt
 
+import effekt.context.Context
 import effekt.source.{ ModuleDecl, Tree }
-
 import org.bitbucket.inkytonik.kiama
-import kiama.util.Position
+import kiama.util.{ Position, Source }
+import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 trait LSPServer extends Driver {
 
@@ -162,6 +163,23 @@ trait LSPServer extends Driver {
 
   def maybeExplain(explanation: String): String =
     if (!settingBool("showExplanations")) "" else explanation.stripMargin('|')
+
+
+  /**
+   * Overriding backend to also publish core and target for LSP server
+   */
+  override def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = {
+    if (C.config.server() && settingBool("showCore")) {
+      publishProduct(source, "target", "effekt", prettyCore.format(mod))
+    }
+
+    super.backend(source, mod) map { js =>
+      if (C.config.server() && settingBool("showTarget")) {
+        publishProduct(source, "target", "js", js)
+      }
+      js
+    }
+  }
 
   override def getHover(position: Position): Option[String] = for {
     (tree, sym) <- getSymbolAt(position)

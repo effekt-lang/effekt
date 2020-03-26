@@ -4,22 +4,17 @@ package effekt
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
 import effekt.source.{ ModuleDecl, Tree }
-import effekt.evaluator.Evaluator
-import effekt.core.{ JavaScript, Transformer }
-import effekt.util.messages.FatalPhaseError
 import effekt.symbols.{ Module, builtins }
-import effekt.context.Context
+import effekt.context.{ Context, IOModuleDB }
+
 import org.bitbucket.inkytonik.kiama
-import kiama.util.Messaging.Messages
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util._
+import kiama.util.{ Source, REPLConfig, CompilerWithConfig, IO }
+
 import org.rogach.scallop._
+
 import java.io.File
-
-import effekt.namer.Namer
-import effekt.typer.Typer
-
 
 
 class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
@@ -48,44 +43,39 @@ class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
 }
 
 
-trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver =>
+trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver =>
+
+  import effekt.evaluator.Evaluator
 
   val name = "effekt"
 
-  // Frontend phases
-  // ===============
-  object parser extends Parser(positions)
-  object namer extends Namer
-  object typer extends Typer
+  object evaluator extends Evaluator
 
   // Compiler context
   // ================
   // We always only have one global instance of CompilerContext
-  object context extends Context {
+  object context extends Context with IOModuleDB {
 
     /**
      * This is used to resolve imports
      */
-    override def process(source: Source): Module =
-      driver.frontend(source)(this) match {
-        case Right(res) =>
-          driver.backend(res)(this)
-          res
-        case Left(msgs) =>
-          report(source, msgs, config)
-          abort(s"Error processing dependency: ${source.name}")
+    def process(source: Source): Module =
+      compile(source)(this) getOrElse {
+        abort(s"Error processing dependency: ${source.name}")
       }
 
     /**
      * This is used by the LSP Server to perform type checking.
      */
-    override def frontend(source: Source): Option[Module] =
-      driver.frontend(source)(this).toOption
+    def frontend(source: Source): Option[Module] =
+      driver.frontend(source)(this)
 
     populate(builtins.rootTerms.values)
   }
 
-  // no file names are given, run REPL
+  /**
+   * If no file names are given, run the REPL
+   */
   override def run(config: EffektConfig): Unit =
     if (config.filenames().isEmpty && !config.server()) {
       new Repl(this).run(config)
@@ -108,101 +98,30 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver
 
     context.setup(ast, config)
 
-    process(source, ast) match {
-      case Right(unit) =>
-        if (!config.server() && !config.compile()) {
-          object evaluator extends Evaluator
-          evaluator.run(unit)
-        }
-        report(source)
+    for {
+      mod <- pipeline(source, ast)
+      if !config.server() && !config.compile()
+    } evaluator.run(mod)
 
-      case Left(msgs) =>
-        clearSyntacticMessages(source, config)
-        clearSemanticMessages(source, config)
-        report(source, msgs, config)
-    }
+    // report messages
+    clearSyntacticMessages(source, config)
+    clearSemanticMessages(source, config)
+    report(source, C.buffer.get, config)
   }
 
-  def process(source: Source)(implicit C: Context): Either[Messages, Module] =
-    // for some reason Kiama uses the Either the other way around.
-    makeast(source, C.config) match {
-      case Left(ast) => process(source, ast)
-      case Right(msgs) => Left(msgs)
-    }
-
-  def process(source: Source, ast: ModuleDecl)(implicit C: Context): Either[Messages, Module] =
-    frontend(source, ast) match {
-      case Right(unit) if C.config.compile() || C.config.server() =>
-        backend(unit)
-        Right(unit)
-      case result => result
-    }
 
   /**
-   * Frontend: Parser -> Namer -> Typer
+   * Output: JavaScript -> File
    */
-  def frontend(source: Source)(implicit C: Context): Either[Messages, Module] =
-    makeast(source, C.config) match {
-      case Left(ast) => frontend(source, ast)
-      case Right(msgs) => Left(msgs)
-    }
-
-  /**
-   * Frontend: Namer -> Typer
-   */
-  def frontend(source: Source, ast: ModuleDecl)(implicit C: Context): Either[Messages, Module] = {
-
-    val buffer = C.buffer
-
-    try {
-      val mod = namer.run(source, ast)
-      typer.run(ast, mod)
-
-      if (buffer.hasErrors) {
-        Left(buffer.get)
-      } else {
-        Right(mod)
-      }
-    } catch {
-      case FatalPhaseError(msg, reporter) =>
-        reporter.error(msg)
-        Left(C.buffer.get)
-    }
-  }
-
-  /**
-   * Backend: Effekt -> Core -> JavaScript
-   */
-  def backend(unit: Module)(implicit C: Context): Unit = try {
-
-    object transformer extends Transformer
-    object js extends JavaScript
-    object prettyCore extends core.PrettyPrinter
-
-    val translated = transformer.run(unit)
-    val javaScript = js.format(translated)
-
-    if (C.config.server() && settingBool("showTarget")) {
-      publishProduct(unit.source, "target", "js", javaScript)
-    }
-
-    if (C.config.server() && settingBool("showCore")) {
-      publishProduct(unit.source, "target", "effekt", prettyCore.format(translated))
-    }
-
+  override def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit =
     if (C.config.compile()) {
       val outDir = C.config.outputPath().toPath
       outDir.toFile.mkdirs
       val out = outDir.resolve(unit.outputName).toFile
 
       println("Writing compiled Javascript to " + out)
-      IO.createFile(out.getCanonicalPath, javaScript.layout)
+      IO.createFile(out.getCanonicalPath, js.layout)
     }
-  } catch {
-    case FatalPhaseError(msg, reporter) =>
-      reporter.error(msg)
-      report(unit.source)
-  }
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)
