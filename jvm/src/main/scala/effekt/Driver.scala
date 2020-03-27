@@ -43,7 +43,7 @@ class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
 }
 
 
-trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { driver =>
+trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
   import effekt.evaluator.Evaluator
 
@@ -54,24 +54,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   // Compiler context
   // ================
   // We always only have one global instance of CompilerContext
-  object context extends Context with IOModuleDB {
-
-    /**
-     * This is used to resolve imports
-     */
-    def process(source: Source): Module =
-      compile(source)(this) getOrElse {
-        abort(s"Error processing dependency: ${source.name}")
-      }
-
-    /**
-     * This is used by the LSP Server to perform type checking.
-     */
-    def frontend(source: Source): Option[Module] =
-      driver.frontend(source)(this)
-
-    populate(builtins.rootTerms.values)
-  }
+  object context extends Context(outer) with IOModuleDB
 
   /**
    * If no file names are given, run the REPL

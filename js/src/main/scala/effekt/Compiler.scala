@@ -2,41 +2,45 @@ package effekt
 
 import effekt.context.{ Context, VirtualModuleDB }
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-import org.bitbucket.inkytonik.kiama.util.{ Positions, Source, StringSource }
+import org.bitbucket.inkytonik.kiama.util.{ Positions, StringSource }
 
 import scala.scalajs.js.annotation._
 
 
-@JSExportTopLevel("compiler")
-object CompilerJS extends Compiler {
+class CompilerJS extends Compiler {
 
   val positions: Positions = new Positions
 
-  implicit val context = new Context with VirtualModuleDB {
-    /**
-     * Just runs the frontend (no code generation)
-     * When there are errors in processing `source` it returns None
-     */
-    override def frontend(source: Source): Option[symbols.Module] = ???
+  implicit object context extends Context(this) with VirtualModuleDB
 
-    /**
-     * Runs both frontend and backend.
-     * In case of an error, this variant will abort and report any errors
-     */
-    override def process(source: Source): symbols.Module = ???
+  var output: StringBuilder = _
+
+  def compile(s: String): String = {
+    output = new StringBuilder
+    context.buffer.clear()
+    compile(StringSource(s)) match {
+      case None =>
+        println(context.buffer.get.mkString("\n\n"))
+        sys error "Error"
+      case Some(_) =>
+        println(context.buffer.get.mkString("\n\n"))
+        output.toString
+    }
   }
 
+  override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = {
+    output.append(s"\n// Result of compiling module: ${unit.name}\n")
+    output.append(js.layout)
+    output.append("\n\n")
+  }
+}
+
+@JSExportTopLevel("compiler")
+object CompilerJS {
 
   @JSExport
-  def compile(s: String) = (for {
-    src <- Some(StringSource(s))
-    ast <- parse(src)
-    mod <- frontend(src, ast)
-    cor <- middleend(src, mod)
-    js  <- backend(src, cor)
-  } yield js).getOrElse("")
-
-  override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = ???
+  def compile(s: String): String =
+    new CompilerJS().compile(s)
 }
 
 object Main extends App {
@@ -46,8 +50,12 @@ object Main extends App {
       |
       |effect Print[A](msg: A): Unit
       |
-      |def bar() = 42
-      |def baz() = do Print("hello world")
+      |def bar() = "hello world"
+      |def baz() = try {
+      |  do Print(bar())
+      |} with {
+      |  case Print(s) => println(s)
+      |}
       |""".stripMargin
 
   println(CompilerJS.compile(input))

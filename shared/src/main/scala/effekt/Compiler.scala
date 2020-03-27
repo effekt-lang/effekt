@@ -78,7 +78,6 @@ trait Compiler {
     }
 
 
-
   /**
    * Frontend: Parser -> Namer -> Typer
    */

@@ -4,23 +4,17 @@ package context
 import java.io.{ File, Reader }
 
 import scala.io.{ Source => ScalaSource }
-import effekt.symbols.Module
 
-import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source, StringSource }
-
-import scala.collection.mutable
+import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source }
 
 trait IOModuleDB extends ModuleDB { self: Context =>
-
-  // Cache containing processed units -- compilationUnits are cached by source
-  private val units: mutable.Map[Source, Module] = mutable.Map.empty
 
   /**
    * Tries to find a file in the workspace, that matches the import path
    *
    * used by Namer to resolve FFI includes
    */
-  def contentsOf(moduleSource: Source, path: String): String =
+  override def contentsOf(moduleSource: Source, path: String): String =
     moduleSource match {
       case JarSource(name) =>
         val p = new File(name).toPath.getParent.resolve(path).toString
@@ -39,15 +33,10 @@ trait IOModuleDB extends ModuleDB { self: Context =>
         }
     }
 
-  def moduleOf(source: Source): Module =
-    units.getOrElseUpdate(source, process(source))
-
-  def moduleOf(path: String): Module =
-    moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
-
-
-  // first try to find it in the includes paths, then in the bundled resources
-  private def findSource(path: String): Option[Source] = {
+  /**
+   * First try to find it in the includes paths, then in the bundled resources
+   */
+  override def findSource(path: String): Option[Source] = {
     val filename = path + ".effekt"
 
     config.includes().map { p => p.toPath.resolve(filename).toFile } collectFirst {

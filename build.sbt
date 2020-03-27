@@ -1,3 +1,5 @@
+import sbtcrossproject.CrossProject
+
 enablePlugins(ScalaJSPlugin)
 
 lazy val root = project.in(file(".")).
@@ -7,7 +9,7 @@ lazy val root = project.in(file(".")).
     publishLocal := {},
   )
 
-lazy val effekt = crossProject(JSPlatform, JVMPlatform).in(file(".")).
+lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".")).
   settings(
     name := "effekt",
     version := "0.1.1",
@@ -31,6 +33,41 @@ lazy val effekt = crossProject(JSPlatform, JVMPlatform).in(file(".")).
     libraryDependencies ++= Seq(
       "org.bitbucket.inkytonik.kiama" %%% "kiama" % "2.4.0-SNAPSHOT"
     ),
-    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) }
-//    scalaJSUseMainModuleInitializer := true
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+
+    // include all resource files in the virtual file system
+    sourceGenerators in Compile += Def.task {
+
+      val baseDir = effekt.jvm.base / "src" / "main" / "resources" / "lib"
+      val resources = baseDir ** "*.*"
+
+      val sourceDir = (sourceManaged in Compile).value
+      val sourceFile = sourceDir / "Resources.scala"
+
+      if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
+
+        val virtuals = resources.get.map { file =>
+          val filename = file.relativeTo(baseDir).get
+          val content = IO.read(file).replaceAllLiterally("$", "$$")
+          s"""VirtualFS.write(\"$filename\", raw\"\"\"$content\"\"\")"""
+        }
+
+        val scalaCode =
+          s"""
+package effekt.util
+object Resources {
+
+  def load() = {
+${virtuals.mkString("\n\n")}
+  }
+}
+"""
+
+        IO.write(sourceFile, scalaCode)
+      }
+
+      Seq(sourceFile)
+    }.taskValue,
+
+    scalaJSUseMainModuleInitializer := true
   )

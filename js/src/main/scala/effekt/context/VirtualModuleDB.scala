@@ -2,30 +2,31 @@ package effekt
 package context
 
 import effekt.symbols.Module
-
-import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source, StringSource }
+import effekt.util.{ Resources, VirtualFS }
+import org.bitbucket.inkytonik.kiama.util.{ Filenames, Source, StringSource }
 
 import scala.collection.mutable
 
 trait VirtualModuleDB extends ModuleDB { self: Context =>
 
-  // Cache containing processed units -- compilationUnits are cached by source
-  private val units: mutable.Map[Source, Module] = mutable.Map.empty
+  // initialize resources, which are copied by sbt
+  Resources.load()
 
   /**
    * tries to find a file in the workspace, that matches the import path
    *
    * used by Namer to resolve FFI includes
    */
-  def contentsOf(moduleSource: Source, path: String): String = ""
+  override def contentsOf(moduleSource: Source, path: String): String = {
+    val fullPath = Filenames.directory(moduleSource.name) + path
+    VirtualFS.tryRead(fullPath).getOrElse {
+      error(s"Cannot find include: ${path}")
+      "" // continue nonetheless
+    }
+  }
 
-  def moduleOf(source: Source): Module =
-    units.getOrElseUpdate(source, process(source))
-
-  def moduleOf(path: String): Module =
-    moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
-
-
-  // first try to find it in the includes paths, then in the bundled resources
-  private def findSource(path: String): Option[Source] = None
+  override def findSource(path: String): Option[Source] = {
+    val filename = path + ".effekt"
+    VirtualFS.tryRead(filename).map { content => StringSource(content, filename) }
+  }
 }
