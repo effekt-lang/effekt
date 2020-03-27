@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.context.{ Context, VirtualModuleDB }
+import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.util.{ Positions, StringSource }
 
@@ -11,7 +12,10 @@ class CompilerJS extends Compiler {
 
   val positions: Positions = new Positions
 
-  implicit object context extends Context(this) with VirtualModuleDB
+  implicit object context extends Context(this) with VirtualModuleDB {
+    // TODO call setup instead of manually setting up everything here
+    config = new EffektConfig {}
+  }
 
   var output: StringBuilder = _
 
@@ -28,6 +32,22 @@ class CompilerJS extends Compiler {
     }
   }
 
+  object evaluator extends Evaluator
+
+  def eval(s: String): Unit = {
+    output = new StringBuilder
+    context.buffer.clear()
+    compile(StringSource(s)) match {
+      case None =>
+        println(context.buffer.get.mkString("\n\n"))
+        sys error "Error"
+      case Some(mod) =>
+        println(context.buffer.get.mkString("\n\n"))
+        val result = evaluator.run(mod)
+        println(result)
+    }
+  }
+
   override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = {
     output.append(s"\n// Result of compiling module: ${unit.name}\n")
     output.append(js.layout)
@@ -35,12 +55,16 @@ class CompilerJS extends Compiler {
   }
 }
 
-@JSExportTopLevel("compiler")
+@JSExportTopLevel("effekt")
 object CompilerJS {
 
   @JSExport
   def compile(s: String): String =
     new CompilerJS().compile(s)
+
+  @JSExport
+  def eval(s: String): Unit =
+    new CompilerJS().eval(s)
 }
 
 object Main extends App {
