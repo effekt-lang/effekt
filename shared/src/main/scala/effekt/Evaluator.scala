@@ -170,9 +170,11 @@ class Evaluator {
         case DataValue(tag, args) =>
           val cl = clauses.find { cl =>
             cl.definition == tag
-          }.getOrElse(sys error s"Unmatched ${tag}")
+          }.getOrElse { C.compiler.abort(s"Unmatched ${tag}") }
           val ps = cl.params.flatMap { _.params.map(_.symbol) }
           C.extendedWith(ps zip args) { implicit C => evalStmt(cl.body) }
+        case other =>
+          C.compiler.abort(s"Wrong type at runtime. Expected DataValue, but got ${other}")
       }
   }
 
@@ -271,41 +273,42 @@ class Evaluator {
     infixMul -> arithmetic(_ * _),
     infixDiv -> arithmetic(_ / _),
     mod -> arithmetic(_ % _),
-    rand -> Thunk { Closure { _ => pure(IntValue((math.random() * 100).toInt)) } },
-    infixEq -> Thunk { Closure { case x :: y :: _ => pure(BooleanValue(x == y)) } },
+    rand -> closure { case _ => pure(IntValue((math.random() * 100).toInt)) },
+    infixEq -> closure { case x :: y :: _ => pure(BooleanValue(x == y)) },
     infixLte -> compare(_ <= _),
     infixGte -> compare(_ >= _),
     infixLt -> compare(_ < _),
     infixGt -> compare(_ > _),
     infixOr -> logical(_ || _),
     infixAnd -> logical(_ && _),
-    not -> Thunk { Closure { case BooleanValue(b) :: _ => pure(BooleanValue(!b)) } },
-    printInt -> Thunk { Closure { case x :: _ => out.emitln(x.toString); pure(UnitValue) } },
-    show -> Thunk { Closure { case x :: _ => pure(StringValue(x.toString)) } },
-    infixConcat -> Thunk { Closure { case StringValue(l) :: StringValue(r) :: _ => pure(StringValue(l + r)) } },
+    not -> closure { case BooleanValue(b) :: _ => pure(BooleanValue(!b)) },
+    printInt -> closure { case x :: _ => out.emitln(x.toString); pure(UnitValue) },
+    show -> closure { case x :: _ => pure(StringValue(x.toString)) },
+    infixConcat -> closure { case StringValue(l) :: StringValue(r) :: _ => pure(StringValue(l + r)) },
 
-    addDouble -> Thunk { Closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l + r)) } },
-    mulDouble -> Thunk { Closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l * r)) } },
-    subDouble -> Thunk { Closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l - r)) } }
+    addDouble -> closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l + r)) },
+    mulDouble -> closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l * r)) },
+    subDouble -> closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l - r)) }
   )
 
-  private def arithmetic(f: (Int, Int) => Int): Thunk[Value] = Thunk {
-    Closure {
+  def closure(impl: PartialFunction[List[Value], Control[Value]]): Thunk[Closure] = Thunk {
+    Closure(args => impl.applyOrElse(args, sys error "Wrong arguments"))
+  }
+
+  private def arithmetic(f: (Int, Int) => Int): Thunk[Value] =
+    closure {
       case IntValue(x) :: IntValue(y) :: Nil => pure(IntValue(f(x, y)))
     }
-  }
 
-  private def compare(f: (Int, Int) => Boolean): Thunk[Value] = Thunk {
-    Closure {
+  private def compare(f: (Int, Int) => Boolean): Thunk[Value] =
+    closure {
       case IntValue(x) :: IntValue(y) :: Nil => pure(BooleanValue(f(x, y)))
     }
-  }
 
-  private def logical(f: (Boolean, Boolean) => Boolean): Thunk[Value] = Thunk {
-    Closure {
+  private def logical(f: (Boolean, Boolean) => Boolean): Thunk[Value] =
+    closure {
       case BooleanValue(x) :: BooleanValue(y) :: Nil => pure(BooleanValue(f(x, y)))
     }
-  }
 
   /**
    * The evaluation context of first AND second class values

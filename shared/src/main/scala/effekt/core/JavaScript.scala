@@ -134,6 +134,8 @@ class JavaScript extends ParenPrettyPrinter {
       // TODO using the unqualified name here might lead to wrong operational behavior
       val cs = braces(nest(line <> vsep(clauses map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
       "$effekt.match" <> parens(toDoc(sc) <> comma <+> cs)
+    case other =>
+      sys error s"Cannot print ${other} in expression position"
   }
 
   def toDocStmt(s: Stmt): Doc = s match {
@@ -154,7 +156,7 @@ class JavaScript extends ParenPrettyPrinter {
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
 
     case Include(contents, rest) =>
-      line <> vsep(contents.split('\n').map(text)) <> emptyline <> toDocStmt(rest)
+      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
 
     case other => "return" <+> toDocExpr(other)
   }

@@ -1,7 +1,7 @@
 package effekt
 package util
 
-case class Thunk[T](private val compute: () => T, private var _forced: Boolean) {
+case class Thunk[+T](private val compute: () => T, private var _forced: Boolean) {
   lazy val value: T = { _forced = true; compute() }
   def forced = _forced
   override def toString =

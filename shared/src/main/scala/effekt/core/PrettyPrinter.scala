@@ -117,15 +117,17 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Match(sc, clauses) =>
       val cs = braces(nest(line <> vsep(clauses map { case (id, b) => "case" <+> toDoc(id.name) <> toDoc(b) })) <> line)
       toDoc(sc) <+> "match" <+> cs
+    case other =>
+      sys error s"Cannot pretty print $other in expression position"
   }
 
   def toDocStmt(s: Stmt): Doc = s match {
-    case Def(id, b, rest) =>
-      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <> toDocStmt(rest)
-
     case Def(id, Extern(ps, body), rest) =>
       "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+>
         braces(nest(body) <> line) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, b, rest) =>
+      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id => toDoc(id.name) }

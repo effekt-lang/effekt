@@ -16,6 +16,17 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     name := "effekt",
     version := "0.1.1",
     scalaVersion := "2.13.1",
+    scalacOptions ++= Seq(
+      "-encoding", "utf8",
+      "-deprecation",
+      "-unchecked",
+      // "-Xlint",
+      "-Xfatal-warnings",
+      "-feature",
+      "-language:existentials",
+      "-language:higherKinds",
+      "-language:implicitConversions",
+    ),
     scalariformPreferences := scalariformPreferences.value
       .setPreference(AlignSingleLineCaseStatements, true)
       .setPreference(DoubleIndentClassDeclaration, true)

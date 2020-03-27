@@ -124,6 +124,7 @@ class Typer extends Phase { typer =>
         val datatype = tpe match {
           case d: DataType             => d
           case TypeApp(d: DataType, _) => d
+          case other                   => Context.abort(s"Cannot pattern match on value of type ${other}")
         }
 
         // check exhaustivity
@@ -280,7 +281,7 @@ class Typer extends Phase { typer =>
         Context.abort("not yet supported")
         ???
 
-      case (ps1: List[ValueType], source.ValueParams(ps2)) =>
+      case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
@@ -315,7 +316,7 @@ class Typer extends Phase { typer =>
       Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
     def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
-      case (ps: List[ValueType], source.ValueArgs(as)) =>
+      case (ps: List[ValueType @unchecked], source.ValueArgs(as)) =>
         if (ps.size != as.size)
           Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
@@ -438,14 +439,15 @@ trait TyperOps { self: Context =>
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => define(v, t)
       case (v: BlockSymbol, t: BlockType) => define(v, t)
+      case other => abort(s"Internal Error: wrong combination of symbols and types: ${other}")
     }; this
   }
 
   private[typer] def define(ps: List[List[Param]]): Context = {
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
-      case s @ ValueParam(name, None)      => ??? // non annotated handler, or block param
-      case s @ BlockParam(name, tpe)       => define(s, tpe)
+      case s @ BlockParam(name, tpe) => define(s, tpe)
+      case s => abort(s"Internal Error: Cannot add $s to context.")
     }
     this
   }

@@ -58,6 +58,7 @@ package object symbols {
       _ map {
         case BlockParam(_, tpe) => tpe
         case v: ValueParam      => v.tpe.get
+        case r: ResumeParam     => sys error "Internal Error: No type annotated on resumption parameter"
       }
     }
 
@@ -121,8 +122,8 @@ package object symbols {
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
     override def toString: String = {
       val ps = params.map {
-        case List(b: BlockType)  => s"{${b.toString}}"
-        case ps: List[ValueType] => s"(${ps.map { _.toString }.mkString(", ")})"
+        case List(b: BlockType)             => s"{${b.toString}}"
+        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
       }.mkString("")
 
       tparams match {

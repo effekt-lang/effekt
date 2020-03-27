@@ -52,7 +52,7 @@ object DeclPrinter extends ParenPrettyPrinter {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
     val ps = f.params.map {
       case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
-      case l: List[ValueParam] =>
+      case l: List[ValueParam @unchecked] =>
         val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
         s"($vps)"
     }.mkString
