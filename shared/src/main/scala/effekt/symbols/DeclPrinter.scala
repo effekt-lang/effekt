@@ -10,7 +10,7 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  def apply(t: Symbol, context: Context): String =
+  def apply(t: Symbol)(implicit context: Context): String =
     pretty(toDoc(t, context)).layout
 
   def toDoc(t: Symbol, context: Context): Doc = t match {

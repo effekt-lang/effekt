@@ -141,7 +141,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       module.definitions.foreach {
         case u: Def =>
           val sym = ctx.symbolOf(u)
-          out.emitln(DeclPrinter(sym, driver.context))
+          out.emitln(DeclPrinter(sym)(driver.context))
       }
     }
   }
