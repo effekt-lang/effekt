@@ -38,7 +38,10 @@ jobs:
 
     - name: Run tests and assemble jar file
       run: sbt clean assembly
-
+      
+    - name: Assemble fully optimized js file
+      run: sbt effektJS/fullOptJS
+      
     - name: Upload jar file
       uses: actions/upload-artifact@v1
       with:
@@ -82,6 +85,12 @@ jobs:
           name: effekt
           path: distribution/
 
+      - name: Download JS artifact
+        uses: actions/download-artifact@v1
+        with:
+          name: effekt-js
+          path: distribution/
+          
       - name: Download VSCode artifact
         uses: actions/download-artifact@v1
         with:
@@ -110,6 +119,17 @@ jobs:
           asset_path: ./distribution/effekt.jar
           asset_name: effekt.jar
           asset_content_type: application/java-archive
+
+      - name: Upload js file
+        id: upload_js
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./distribution/effekt-opt.js
+          asset_name: effekt.js
+          asset_content_type: text/javascript
 
       - name: Upload vsix file
         id: upload_vsix
