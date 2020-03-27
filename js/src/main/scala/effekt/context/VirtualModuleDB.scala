@@ -1,11 +1,9 @@
 package effekt
 package context
 
-import effekt.symbols.Module
 import effekt.util.{ Resources, VirtualFS }
 import org.bitbucket.inkytonik.kiama.util.{ Filenames, Source, StringSource }
 
-import scala.collection.mutable
 
 trait VirtualModuleDB extends ModuleDB { self: Context =>
 
