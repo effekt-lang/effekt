@@ -36,7 +36,7 @@ package object symbols {
     decl: ModuleDecl,
     source: Source,
     terms: Map[String, TermSymbol], // exported (toplevel) terms
-    types: Map[String, TypeSymbol]  // exported (toplevel) types
+    types: Map[String, TypeSymbol] // exported (toplevel) types
   ) extends Symbol {
     val name = LocalName(moduleName(decl.path))
     def outputName = moduleFile(decl.path)
@@ -46,7 +46,6 @@ package object symbols {
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
   case class ResumeParam() extends Param with BlockSymbol { val name = LocalName("resume") }
-  
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -55,11 +54,12 @@ package object symbols {
   type Params = List[List[Param]]
 
   def paramsToTypes(ps: Params): Sections =
-    ps map { _ map {
-      case BlockParam(_, tpe) => tpe
-      case v : ValueParam => v.tpe.get
-    }}
-
+    ps map {
+      _ map {
+        case BlockParam(_, tpe) => tpe
+        case v: ValueParam      => v.tpe.get
+      }
+    }
 
   trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
@@ -85,7 +85,8 @@ package object symbols {
     tparams: List[TypeVar],
     params: Params,
     ret: Option[Effectful],
-    decl: FunDef) extends Fun
+    decl: FunDef
+  ) extends Fun
 
   /**
    * Binders represent local value and variable binders
@@ -99,7 +100,6 @@ package object symbols {
   case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder
   case class VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder
 
-
   /**
    * Types
    */
@@ -110,7 +110,7 @@ package object symbols {
   type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type {
-    def / (effs: Effects): Effectful = Effectful(this, effs)
+    def /(effs: Effects): Effectful = Effectful(this, effs)
   }
 
   case class TypeVar(name: Name) extends ValueType with TypeSymbol
@@ -121,13 +121,13 @@ package object symbols {
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
     override def toString: String = {
       val ps = params.map {
-        case List(b: BlockType) => s"{${ b.toString }}"
-        case ps: List[ValueType] => s"(${ ps.map { _.toString }.mkString(", ") })"
+        case List(b: BlockType)  => s"{${b.toString}}"
+        case ps: List[ValueType] => s"(${ps.map { _.toString }.mkString(", ")})"
       }.mkString("")
 
       tparams match {
         case Nil => s"$ps ⟹ $ret"
-        case tps => s"[${ tps.map { _.toString }.mkString(", ") }] $ps ⟹ $ret"
+        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $ret"
       }
     }
   }
@@ -149,7 +149,7 @@ package object symbols {
    */
   case class Effects(effects: List[Effect]) {
     def +(eff: Effect): Effects = Effects(eff :: effects).distinct
-    def -(eff: Effect): Effects =  Effects((effects.toSet - eff).toList).distinct
+    def -(eff: Effect): Effects = Effects((effects.toSet - eff).toList).distinct
     def ++(other: Effects): Effects = Effects(effects ++ other.effects).distinct
     def --(other: Effects): Effects = Effects((effects.toSet -- other.effects.toSet).toList)
 
@@ -170,7 +170,7 @@ package object symbols {
 
     override def toString: String = effects match {
       case eff :: Nil => eff.toString
-      case effs => s"{ ${effs.mkString(", ")} }"
+      case effs       => s"{ ${effs.mkString(", ")} }"
     }
   }
   object Effects {
@@ -186,7 +186,6 @@ package object symbols {
   object / {
     def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
   }
-
 
   /**
    * Builtins

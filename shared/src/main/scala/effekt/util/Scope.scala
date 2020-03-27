@@ -27,5 +27,5 @@ object scopes {
     override def leave: Scope[V] = parent
   }
 
-  def toplevel[V](bindings: Map[String, V]): Scope[V] = Toplevel(mutable.HashMap(bindings.toSeq: _*) )
+  def toplevel[V](bindings: Map[String, V]): Scope[V] = Toplevel(mutable.HashMap(bindings.toSeq: _*))
 }

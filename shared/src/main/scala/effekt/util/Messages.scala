@@ -33,7 +33,7 @@ object messages {
    */
   trait ErrorReporter {
 
-    var focus: Tree           // the current focus of the compiler
+    var focus: Tree // the current focus of the compiler
     def buffer: MessageBuffer
 
     def error(msg: String): Unit = buffer append Messaging.error(focus, msg)

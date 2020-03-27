@@ -4,7 +4,6 @@ package context
 import effekt.util.{ Resources, VirtualFS }
 import org.bitbucket.inkytonik.kiama.util.{ Filenames, Source, StringSource }
 
-
 trait VirtualModuleDB extends ModuleDB { self: Context =>
 
   // initialize resources, which are copied by sbt

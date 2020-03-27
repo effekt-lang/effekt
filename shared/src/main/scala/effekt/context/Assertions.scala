@@ -6,11 +6,13 @@ import effekt.util.messages.ErrorReporter
 
 object assertions {
 
+  // format: -alignSingleLineCaseStatements
+
   /**
    * The Assertions trait is designed to keep all error messages
    * in one place
    */
-   implicit class SymbolAssertions(s: Symbol)(implicit reporter: ErrorReporter) {
+  implicit class SymbolAssertions(s: Symbol)(implicit reporter: ErrorReporter) {
 
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t

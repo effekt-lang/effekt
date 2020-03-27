@@ -15,18 +15,18 @@ trait TypesDB { self: ErrorReporter =>
 
   def assignType(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => blocks.put(b, tpe)
-    case _ => abort(s"Trying to store a block type for non block '${s}'")
+    case _              => abort(s"Trying to store a block type for non block '${s}'")
   }
 
   def assignType(s: Symbol, tpe: ValueType): Unit = s match {
     case b: ValueSymbol => values.put(b, tpe)
-    case _ => abort(s"Trying to store a value type for non value '${s}'")
+    case _              => abort(s"Trying to store a value type for non value '${s}'")
   }
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
     case s: BlockSymbol => blockTypeOf(s)
-    case _ => abort(s"Cannot find a type for symbol '${s}'")
+    case _              => abort(s"Cannot find a type for symbol '${s}'")
   }
 
   def blockTypeOf(s: Symbol): BlockType =
@@ -35,7 +35,7 @@ trait TypesDB { self: ErrorReporter =>
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => blocks.get(b)
-      case _ => abort(s"Trying to find a block type for non block '${s}'")
+      case _              => abort(s"Trying to find a block type for non block '${s}'")
     }
 
   def valueTypeOf(s: Symbol): ValueType =
@@ -43,14 +43,13 @@ trait TypesDB { self: ErrorReporter =>
 
   def valueTypeOption(s: Symbol): Option[ValueType] = s match {
     case s: ValueSymbol => values.get(s)
-    case _ => abort(s"Trying to find a value type for non-value '${s}'")
+    case _              => abort(s"Trying to find a value type for non-value '${s}'")
   }
 
   def populate(builtins: Iterable[BuiltinFunction]): TypesDB = {
     builtins.foreach { b => assignType(b, b.toType) }
     this
   }
-
 
   // Assignment of Types to Trees
   // ============================

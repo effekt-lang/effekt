@@ -132,38 +132,36 @@ class Namer extends Phase { namer =>
 
     case source.Call(id, targs, args) =>
       Context.resolveFilter(id) {
-        case b : BlockParam => b
-        case b : ResumeParam => b
-        case b : Fun => b
-        case _ => Context.error("Expected callable")
+        case b: BlockParam  => b
+        case b: ResumeParam => b
+        case b: Fun         => b
+        case _              => Context.error("Expected callable")
       }
       targs foreach resolve
       resolveAll(args)
 
     case source.Var(id) => Context.resolveFilter(id) {
-      case b : BlockParam => Context.error("Blocks have to be fully applied and can't be used as values.")
-      case other => other
+      case b: BlockParam => Context.error("Blocks have to be fully applied and can't be used as values.")
+      case other         => other
     }
 
     case tpe: source.ValueType => resolve(tpe)
     case tpe: source.BlockType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id : Id => Context.resolveTerms(id)
+    case id: Id                => Context.resolveTerms(id)
 
-    case other => resolveAll(other)
+    case other                 => resolveAll(other)
   }
 
   def resolveAll(obj: Any)(implicit C: Context): Unit = obj match {
     case p: Product => p.productIterator.foreach {
       case t: Tree => resolve(t)
-      case other => resolveAll(other)
+      case other   => resolveAll(other)
     }
     case t: Iterable[t] => t.foreach { t => resolveAll(t) }
-    case leaf => ()
+    case leaf           => ()
   }
-
-
 
   /**
    * Resolve Parameters as part of resolving function signatures
@@ -175,7 +173,7 @@ class Namer extends Phase { namer =>
    * This is done separately by means of `bind`
    */
   def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = Context.focusing(params) {
-    case ps : source.ValueParams => resolve(ps)
+    case ps: source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(Context.localName(id), resolve(tpe))
       Context.assignSymbol(id, sym)
@@ -217,7 +215,8 @@ class Namer extends Phase { namer =>
             tparams map resolve,
             params map resolve,
             annot map resolve,
-            f)
+            f
+          )
         }
         Context.define(id, sym)
 
@@ -277,7 +276,6 @@ class Namer extends Phase { namer =>
     }
   }
 
-
   /**
    * Resolve Types
    *
@@ -314,7 +312,6 @@ class Namer extends Phase { namer =>
   }
 }
 
-
 /**
  * Environment Utils -- we use a mutable cell to express adding definitions more easily
  * The kiama environment uses immutable binding since they thread the environment through
@@ -329,18 +326,15 @@ trait NamerOps { self: Context =>
   private[namer] def terms: Scope[TermSymbol] = namerState.terms
   private[namer] def types: Scope[TypeSymbol] = namerState.types
 
-  private[namer]
-  def qualifiedName(id: Id): Name = QualifiedName(module.path, id.name)
+  private[namer] def qualifiedName(id: Id): Name = QualifiedName(module.path, id.name)
 
-  private[namer]
-  def localName(id: Id): Name = LocalName(id.name)
+  private[namer] def localName(id: Id): Name = LocalName(id.name)
 
   // TODO we only want to add a seed to a name under the following conditions:
   // - there is already another instance of that name in the same
   //   namespace.
   // - if it is not already fully qualified
-  private[namer]
-  def freshTermName(id: Id, qualified: Boolean = false): Name = {
+  private[namer] def freshTermName(id: Id, qualified: Boolean = false): Name = {
     // how many terms of the same name are already in scope?
     val alreadyBound = terms.lookup(id.name).toList.size
     val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
@@ -354,57 +348,48 @@ trait NamerOps { self: Context =>
 
   // Name Binding and Resolution
   // ===========================
-  private[namer]
-  def define(id: Id, s: TermSymbol): Unit = {
+  private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
     terms.define(id.name, s)
   }
 
-  private[namer]
-  def define(id: Id, s: TypeSymbol): Unit = {
+  private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
     types.define(id.name, s)
   }
 
-  private[namer]
-  def bind(s: TermSymbol): Unit = terms.define(s.name.name, s)
+  private[namer] def bind(s: TermSymbol): Unit = terms.define(s.name.name, s)
 
-  private[namer]
-  def bind(s: TypeSymbol): Unit = types.define(s.name.name, s)
+  private[namer] def bind(s: TypeSymbol): Unit = types.define(s.name.name, s)
 
-  private[namer]
-  def bind(params: List[List[Param]]): Context = {
+  private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
     this
   }
 
   // lookup and resolve the given id from the environment and
   // store a binding in the symbol table
-  private[namer]
-  def resolveTerms(id: Id): List[TermSymbol] = {
+  private[namer] def resolveTerms(id: Id): List[TermSymbol] = {
     val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
     assignSymbol(id, sym)
     List(sym)
   }
 
   // for positions that do not allow overloading (for now)
-  private[namer]
-  def resolveFilter[A](id: Id)(filter: PartialFunction[TermSymbol, A]): List[A] = {
+  private[namer] def resolveFilter[A](id: Id)(filter: PartialFunction[TermSymbol, A]): List[A] = {
     val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
     assignSymbol(id, sym)
 
     List(sym).collect(filter)
   }
 
-  private[namer]
-  def resolveType(id: Id): TypeSymbol = {
+  private[namer] def resolveType(id: Id): TypeSymbol = {
     val sym = types.lookup(id.name).getOrElse { abort(s"Could not resolve type ${id.name}") }
     assignSymbol(id, sym)
     sym
   }
 
-  private[namer]
-  def scoped[R](block: => R): R = {
+  private[namer] def scoped[R](block: => R): R = {
     val before = namerState
     namerState = before.copy(terms = before.terms.enter, types = before.types.enter)
     val result = block

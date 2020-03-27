@@ -24,12 +24,10 @@ trait ModuleDB { self: Context =>
    */
   def contentsOf(moduleSource: Source, path: String): String
 
-
   /**
    * Find the source for a given module name / path
    */
   private[context] def findSource(path: String): Option[Source]
-
 
   /**
    * Tries to find a module for the given path, will run compiler on demand
@@ -38,7 +36,6 @@ trait ModuleDB { self: Context =>
    */
   def moduleOf(path: String): Module =
     moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
-
 
   /**
    * Tries to find a module for the given source, will run compiler on demand

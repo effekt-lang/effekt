@@ -12,13 +12,12 @@ package object control {
 
   type Cap[R] = Capability { type Res = R }
 
-  private[control]
-  type Frame[-A, +B] = A => Control[B]
+  private[control] type Frame[-A, +B] = A => Control[B]
 
   trait Control[+A] { outer =>
 
     // alias for flatMap since it is used the most
-//    def apply[B](f: A => Control[B]): Control[B] = flatMap(f)
+    //    def apply[B](f: A => Control[B]): Control[B] = flatMap(f)
 
     def run(): A = Result.trampoline(Impure(this, ReturnCont(identity[A])))
     def map[B](f: A => B): Control[B] = flatMap { a => pure(f(a)) }
@@ -30,19 +29,16 @@ package object control {
   }
   def pure[A](v: A): Control[A] = new Trivial(v)
 
-  private[control]
-  final class Trivial[+A](a: A) extends Control[A] {
+  private[control] final class Trivial[+A](a: A) extends Control[A] {
     def apply[R](k: MetaCont[A, R]): Result[R] = k(a)
 
     override def run(): A = a
     override def toString = s"Trivial($a)"
   }
 
-  private[control]
-  sealed trait ω
+  private[control] sealed trait ω
 
-  private[control]
-  final case class Computation[+A](body: MetaCont[A, ω] => Result[ω]) extends Control[A] {
+  private[control] final case class Computation[+A](body: MetaCont[A, ω] => Result[ω]) extends Control[A] {
     def apply[R](k: MetaCont[A, R]): Result[R] =
       body(k.asInstanceOf[MetaCont[A, ω]]).asInstanceOf[Result[R]]
   }
@@ -80,11 +76,9 @@ package object control {
 
   sealed trait Result[+A] { def isPure: Boolean }
 
-  private[control]
-  case class Pure[A](value: A) extends Result[A] { val isPure = true }
+  private[control] case class Pure[A](value: A) extends Result[A] { val isPure = true }
 
-  private[control]
-  case class Impure[A, R](c: Control[R], k: MetaCont[R, A]) extends Result[A] {
+  private[control] case class Impure[A, R](c: Control[R], k: MetaCont[R, A]) extends Result[A] {
     val isPure = false
   }
 
@@ -100,8 +94,7 @@ package object control {
     }
   }
 
-  private[control]
-  sealed trait MetaCont[-A, +B] extends Serializable {
+  private[control] sealed trait MetaCont[-A, +B] extends Serializable {
     def apply(a: A): Result[B]
 
     def append[C](s: MetaCont[B, C]): MetaCont[A, C]
@@ -119,8 +112,7 @@ package object control {
     def bind(key: AnyRef, value: Any): MetaCont[A, B] = StateCont(mutable.Map(key -> value), this)
   }
 
-  private[control]
-  case class ReturnCont[-A, +B](f: A => B) extends MetaCont[A, B] {
+  private[control] case class ReturnCont[-A, +B](f: A => B) extends MetaCont[A, B] {
     final def apply(a: A): Result[B] = Pure(f(a))
 
     final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = s map f
@@ -136,8 +128,7 @@ package object control {
     override def toString = "[]"
   }
 
-  private[control]
-  case class CastCont[-A, +B]() extends MetaCont[A, B] {
+  private[control] case class CastCont[-A, +B]() extends MetaCont[A, B] {
 
     final def apply(a: A): Result[B] = Pure(a.asInstanceOf[B])
 
@@ -153,8 +144,7 @@ package object control {
     override def toString = "{}"
   }
 
-  private[control]
-  case class FramesCont[-A, B, +C](frames: List[Frame[Any, Any]], tail: MetaCont[B, C]) extends MetaCont[A, C] {
+  private[control] case class FramesCont[-A, B, +C](frames: List[Frame[Any, Any]], tail: MetaCont[B, C]) extends MetaCont[A, C] {
 
     final def apply(a: A): Result[C] = {
       val first :: rest = frames
@@ -176,13 +166,10 @@ package object control {
     override def toString = s"fs(${frames.size}) :: ${tail}"
   }
 
-
-
   // dynamically allocated state
   // TODO change to mutable state, so that setting does not require the continuation
   //   otherwise the object lang. programs have to be written in CPS
-  private[control]
-  case class StateCont[-A, +B](bindings: mutable.Map[AnyRef, Any], tail: MetaCont[A, B]) extends MetaCont[A, B] {
+  private[control] case class StateCont[-A, +B](bindings: mutable.Map[AnyRef, Any], tail: MetaCont[A, B]) extends MetaCont[A, B] {
     final def apply(a: A): Result[B] = tail(a)
     final def append[C](s: MetaCont[B, C]): MetaCont[A, C] = StateCont(bindings.clone(), tail append s)
     final def splitAt(c: Capability) = tail.splitAt(c) match {
@@ -200,11 +187,10 @@ package object control {
 
     // Also: Stateconts can be commuted if they don't shadow each other
     final override def bind(key: AnyRef, value: Any): MetaCont[A, B] =
-        StateCont(bindings concat Map(key -> value), tail)
+      StateCont(bindings concat Map(key -> value), tail)
   }
 
-  private[effekt]
-  case class HandlerCont[R, A](h: Capability { type Res = R }, tail: MetaCont[R, A]) extends MetaCont[R, A] {
+  private[effekt] case class HandlerCont[R, A](h: Capability { type Res = R }, tail: MetaCont[R, A]) extends MetaCont[R, A] {
     final def apply(r: R): Result[A] = tail(r)
 
     final def append[C](s: MetaCont[A, C]): MetaCont[R, C] = HandlerCont(h, tail append s)

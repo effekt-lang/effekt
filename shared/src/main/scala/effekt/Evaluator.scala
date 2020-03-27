@@ -14,7 +14,6 @@ import effekt.util.control._
 import org.bitbucket.inkytonik.kiama.util.Emitter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
-
 class Evaluator {
 
   val mainName = "main"
@@ -56,7 +55,7 @@ class Evaluator {
     }
 
     case class DataValue(tag: Constructor, args: List[Value]) extends Value {
-        override def toString = s"${tag.name}(${ args.map { _.toString }.mkString(", ") })"
+      override def toString = s"${tag.name}(${args.map { _.toString }.mkString(", ")})"
     }
   }
 
@@ -100,12 +99,12 @@ class Evaluator {
     case UnitLit()     => pure(UnitValue)
     case StringLit(s)  => pure(StringValue(s))
 
-    case v : Var => v.definition match {
+    case v: Var => v.definition match {
       // use dynamic lookup on the stack for mutable variables
       case b: VarBinder => control.lookup(b)
 
       // otherwise fetch the value from the context
-      case b => pure { C.get(b) }
+      case b            => pure { C.get(b) }
     }
 
     case a @ Assign(b, expr) => for {
@@ -173,7 +172,7 @@ class Evaluator {
             cl.definition == tag
           }.getOrElse(sys error s"Unmatched ${tag}")
           val ps = cl.params.flatMap { _.params.map(_.symbol) }
-          C.extendedWith(ps zip args) {implicit C => evalStmt(cl.body) }
+          C.extendedWith(ps zip args) { implicit C => evalStmt(cl.body) }
       }
   }
 
@@ -223,7 +222,7 @@ class Evaluator {
   }
 
   def traverse[T](c: List[Control[T]]): Control[List[T]] = c match {
-    case Nil => pure(Nil)
+    case Nil     => pure(Nil)
     case t :: ts => for { v <- t; vs <- traverse(ts) } yield v :: vs
   }
 
@@ -246,10 +245,10 @@ class Evaluator {
 
   def evalArgSection(sec: List[Type], args: ArgSection)(implicit C: EvalContext): Control[List[Value]] =
     (sec, args) match {
-    case (_, ValueArgs(exprs)) => evalExprs(exprs)
-    case (List(BlockType(_, _, tpe)), BlockArg(ps, stmt)) =>
-      pure(List(bindCapabilities(ps.params.map(_.symbol), tpe.effects, stmt)))
-  }
+      case (_, ValueArgs(exprs)) => evalExprs(exprs)
+      case (List(BlockType(_, _, tpe)), BlockArg(ps, stmt)) =>
+        pure(List(bindCapabilities(ps.params.map(_.symbol), tpe.effects, stmt)))
+    }
 
   def collectBinders(ps: Params)(implicit C: EvalContext): List[Symbol] = ps.flatten
 
@@ -271,18 +270,18 @@ class Evaluator {
     infixSub -> arithmetic(_ - _),
     infixMul -> arithmetic(_ * _),
     infixDiv -> arithmetic(_ / _),
-    mod      -> arithmetic(_ % _),
-    rand     -> Thunk { Closure { _ => pure(IntValue((math.random() * 100).toInt)) }},
-    infixEq  -> Thunk { Closure { case x :: y :: _ => pure(BooleanValue(x == y)) }},
+    mod -> arithmetic(_ % _),
+    rand -> Thunk { Closure { _ => pure(IntValue((math.random() * 100).toInt)) } },
+    infixEq -> Thunk { Closure { case x :: y :: _ => pure(BooleanValue(x == y)) } },
     infixLte -> compare(_ <= _),
     infixGte -> compare(_ >= _),
-    infixLt  -> compare(_ < _),
-    infixGt  -> compare(_ > _),
-    infixOr  -> logical(_ || _),
+    infixLt -> compare(_ < _),
+    infixGt -> compare(_ > _),
+    infixOr -> logical(_ || _),
     infixAnd -> logical(_ && _),
-    not      -> Thunk { Closure { case BooleanValue(b) :: _ => pure(BooleanValue(!b)) } },
+    not -> Thunk { Closure { case BooleanValue(b) :: _ => pure(BooleanValue(!b)) } },
     printInt -> Thunk { Closure { case x :: _ => out.emitln(x.toString); pure(UnitValue) } },
-    show     -> Thunk { Closure { case x :: _ => pure(StringValue(x.toString)) } },
+    show -> Thunk { Closure { case x :: _ => pure(StringValue(x.toString)) } },
     infixConcat -> Thunk { Closure { case StringValue(l) :: StringValue(r) :: _ => pure(StringValue(l + r)) } },
 
     addDouble -> Thunk { Closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l + r)) } },
@@ -290,18 +289,23 @@ class Evaluator {
     subDouble -> Thunk { Closure { case DoubleValue(l) :: DoubleValue(r) :: _ => pure(DoubleValue(l - r)) } }
   )
 
-  private def arithmetic(f: (Int, Int) => Int): Thunk[Value] = Thunk { Closure {
-    case IntValue(x) :: IntValue(y) :: Nil => pure(IntValue(f(x, y)))
-  } }
+  private def arithmetic(f: (Int, Int) => Int): Thunk[Value] = Thunk {
+    Closure {
+      case IntValue(x) :: IntValue(y) :: Nil => pure(IntValue(f(x, y)))
+    }
+  }
 
-  private def compare(f: (Int, Int) => Boolean): Thunk[Value] = Thunk { Closure {
-    case IntValue(x) :: IntValue(y) :: Nil => pure(BooleanValue(f(x, y)))
-  } }
+  private def compare(f: (Int, Int) => Boolean): Thunk[Value] = Thunk {
+    Closure {
+      case IntValue(x) :: IntValue(y) :: Nil => pure(BooleanValue(f(x, y)))
+    }
+  }
 
-  private def logical(f: (Boolean, Boolean) => Boolean): Thunk[Value] = Thunk { Closure {
-    case BooleanValue(x) :: BooleanValue(y) :: Nil => pure(BooleanValue(f(x, y)))
-  } }
-
+  private def logical(f: (Boolean, Boolean) => Boolean): Thunk[Value] = Thunk {
+    Closure {
+      case BooleanValue(x) :: BooleanValue(y) :: Nil => pure(BooleanValue(f(x, y)))
+    }
+  }
 
   /**
    * The evaluation context of first AND second class values

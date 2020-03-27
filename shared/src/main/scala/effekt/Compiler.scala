@@ -24,7 +24,6 @@ trait Compiler {
 
   def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit
 
-
   // Frontend phases
   // ===============
   object parser extends Parser(positions)
@@ -40,24 +39,21 @@ trait Compiler {
   // ==============
   object codegen extends JavaScript
 
-
   /**
    * The full compiler pipeline from source to output
    */
   def compile(source: Source)(implicit C: Context): Option[Module] =
     parse(source) flatMap { ast => pipeline(source, ast) }
 
-
   /**
    * The pipeline from ast to output
    */
   def pipeline(source: Source, ast: ModuleDecl)(implicit C: Context): Option[Module] = for {
-    mod  <- frontend(source, ast)
+    mod <- frontend(source, ast)
     core <- middleend(source, mod)
-    js   <- backend(source, core)
-    _    = saveOutput(js, mod)
+    js <- backend(source, core)
+    _ = saveOutput(js, mod)
   } yield mod
-
 
   /**
    * Parser: Source -> AST
@@ -69,7 +65,7 @@ trait Compiler {
       case Success(ast, _) =>
         Some(ast)
 
-      case res : NoSuccess =>
+      case res: NoSuccess =>
         val input = res.next
         positions.setStart(res, input.position)
         positions.setFinish(res, input.nextPosition)
@@ -77,13 +73,11 @@ trait Compiler {
         None
     }
 
-
   /**
    * Frontend: Parser -> Namer -> Typer
    */
   def frontend(source: Source)(implicit C: Context): Option[Module] =
     parse(source) flatMap { mod => frontend(source, mod) }
-
 
   /**
    * Frontend: Namer -> Typer
@@ -103,7 +97,6 @@ trait Compiler {
       None
   }
 
-
   /**
    * Middleend: Effekt -> Core
    */
@@ -114,7 +107,6 @@ trait Compiler {
       reporter.error(msg)
       None
   }
-
 
   /**
    * Backend: Effekt -> Core -> JavaScript

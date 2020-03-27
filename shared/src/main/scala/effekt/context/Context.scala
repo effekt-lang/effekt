@@ -45,7 +45,7 @@ abstract class Context(val compiler: Compiler)
 
   def setup(ast: ModuleDecl, cfg: EffektConfig): Unit = {
     config = cfg
-    focus  = ast
+    focus = ast
     buffer.clear()
   }
 

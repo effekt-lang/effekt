@@ -26,7 +26,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"var ${b.name}: ${tpe}"
 
     case DataType(name, tparams, ctors) =>
-      val tps  = if (tparams.isEmpty) "" else s"[${ tparams.mkString(", ") }]"
+      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       val ctrs = ctors map { ctor =>
         format("def", ctor, ctor.ret.get)
       }
@@ -36,11 +36,11 @@ object DeclPrinter extends ParenPrettyPrinter {
       format("extern def", f, f.ret.get)
 
     case BuiltinEffect(name, tparams) =>
-      val tps = if (tparams.isEmpty) "" else s"[${ tparams.mkString(", ") }]"
+      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       s"extern effect ${name}$tps"
 
     case BuiltinType(name, tparams) =>
-      val tps = if (tparams.isEmpty) "" else s"[${ tparams.mkString(", ") }]"
+      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       s"extern type ${name}$tps"
 
     case c: Fun =>
@@ -49,8 +49,8 @@ object DeclPrinter extends ParenPrettyPrinter {
   }
 
   def format(kw: String, f: Fun, ret: Effectful): Doc = {
-    val tps = if (f.tparams.isEmpty) "" else s"[${ f.tparams.mkString(", ") }]"
-    val ps  = f.params.map {
+    val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
+    val ps = f.params.map {
       case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
       case l: List[ValueParam] =>
         val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")

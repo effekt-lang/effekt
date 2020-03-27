@@ -1,6 +1,5 @@
 package effekt.symbols
 
-
 sealed trait Name {
   def name: String
   def qualified: String
@@ -15,6 +14,6 @@ object Name {
   // constructs a name form a path
   def apply(path: String): Name = path.split('/') match {
     case Array(name) => LocalName(name)
-    case segs => QualifiedName(segs.init.mkString("/"), segs.last)
+    case segs        => QualifiedName(segs.init.mkString("/"), segs.last)
   }
 }

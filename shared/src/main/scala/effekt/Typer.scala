@@ -12,11 +12,11 @@ import effekt.symbols.builtins._
 
 // We add a dependency to driver to resolve types of symbols from other modules
 /**
-   * Output: the types we inferred for function like things are written into "types"
-   *   - Blocks
-   *   - Functions
-   *   - Resumptions
-   */
+ * Output: the types we inferred for function like things are written into "types"
+ *   - Blocks
+ *   - Functions
+ *   - Resumptions
+ */
 
 case class TyperState(
   effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
@@ -52,11 +52,11 @@ class Typer extends Phase { typer =>
 
   def checkExpr(expr: Expr, expected: Option[Type])(implicit C: Context): Effectful =
     checkAgainst(expr, expected) {
-      case source.IntLit(n) => TInt / Pure
+      case source.IntLit(n)     => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
-      case source.UnitLit() => TUnit / Pure
-      case source.DoubleLit(n) => TDouble / Pure
-      case source.StringLit(s) => TString / Pure
+      case source.UnitLit()     => TUnit / Pure
+      case source.DoubleLit(n)  => TDouble / Pure
+      case source.StringLit(s)  => TString / Pure
 
       case source.If(cond, thn, els) =>
         val (cndTpe / cndEffs) = cond checkAgainst TBoolean
@@ -69,7 +69,7 @@ class Typer extends Phase { typer =>
         val (_ / blockEffs) = block checkAgainst TUnit
         TUnit / (condEffs ++ blockEffs)
 
-      case v : source.Var =>
+      case v: source.Var =>
         Context.valueTypeOf(v.definition) / Pure
 
       case e @ source.Assign(id, expr) =>
@@ -106,9 +106,9 @@ class Typer extends Phase { typer =>
             val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
 
             Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
-                val (_ / heffs) = body checkAgainst ret
-                handlerEffs = handlerEffs ++ heffs
-              }
+              val (_ / heffs) = body checkAgainst ret
+              handlerEffs = handlerEffs ++ heffs
+            }
         }
 
         val unusedEffects = Effects(effects) -- effs
@@ -122,7 +122,7 @@ class Typer extends Phase { typer =>
         val (tpe / effs) = checkExpr(sc, None)
 
         val datatype = tpe match {
-          case d: DataType => d
+          case d: DataType             => d
           case TypeApp(d: DataType, _) => d
         }
 
@@ -149,15 +149,15 @@ class Typer extends Phase { typer =>
             Context.define(ps) in { checkStmt(body, expected) }
         }
 
-        val (tpeCases / effsCases) = tpes.reduce[Effectful] { case (tpe1 / effs1, tpe2 / effs2) =>
-          Context.assertEqual(tpe1, tpe2)
-          tpe1 / (effs1 ++ effs2)
+        val (tpeCases / effsCases) = tpes.reduce[Effectful] {
+          case (tpe1 / effs1, tpe2 / effs2) =>
+            Context.assertEqual(tpe1, tpe2)
+            tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
     }
 
   //</editor-fold>
-
 
   //<editor-fold desc="statements and definitions">
 
@@ -165,7 +165,7 @@ class Typer extends Phase { typer =>
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
-        val (r / effStmt)    = checkStmt(rest, expected)
+        val (r / effStmt) = checkStmt(rest, expected)
         r / (effBinding ++ effStmt)
 
       // <expr> ; <stmt>
@@ -197,7 +197,6 @@ class Typer extends Phase { typer =>
 
     case d => ()
   }
-
 
   def synthDef(d: Def)(implicit C: Context): Effectful = check(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
@@ -241,7 +240,6 @@ class Typer extends Phase { typer =>
 
   //</editor-fold>
 
-
   //<editor-fold desc="arguments and parameters">
 
   // TODO we can remove this duplication, once every phase can write to every table.
@@ -249,7 +247,7 @@ class Typer extends Phase { typer =>
 
   def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
-    case t @ source.TypeVar(id) => t.definition
+    case t @ source.TypeVar(id)       => t.definition
   }
 
   /**
@@ -270,7 +268,8 @@ class Typer extends Phase { typer =>
     name: String,
     atCallee: List[List[Type]],
     // we ask for the source Params here, since it might not be annotated
-    atCaller: List[source.ParamSection])(implicit C: Context): Map[Symbol, Type] = {
+    atCaller: List[source.ParamSection]
+  )(implicit C: Context): Map[Symbol, Type] = {
 
     if (atCallee.size != atCaller.size)
       Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
@@ -291,7 +290,6 @@ class Typer extends Phase { typer =>
     }.toMap
   }
 
-
   def checkCall(
     sym: Symbol,
     targs: List[ValueType],
@@ -304,8 +302,10 @@ class Typer extends Phase { typer =>
     if (targs.nonEmpty && targs.size != tparams.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
 
-    var unifier: Unifier = Unifier(tparams,
-      if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty })
+    var unifier: Unifier = Unifier(
+      tparams,
+      if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty }
+    )
 
     expected.foreach { exp => unifier = unifier.merge(ret, exp) }
 
@@ -315,7 +315,7 @@ class Typer extends Phase { typer =>
       Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
     def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
-      case (ps : List[ValueType], source.ValueArgs(as)) =>
+      case (ps: List[ValueType], source.ValueArgs(as)) =>
         if (ps.size != as.size)
           Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
@@ -343,21 +343,22 @@ class Typer extends Phase { typer =>
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-        val blockType = unifier substitute tpe
+      val blockType = unifier substitute tpe
 
-        // TODO make blockargs also take multiple argument sections.
-        Context.define {
-          checkAgainstDeclaration("block", blockType.params, List(arg.params))
-        }
+      // TODO make blockargs also take multiple argument sections.
+      Context.define {
+        checkAgainstDeclaration("block", blockType.params, List(arg.params))
+      }
 
-        val (tpe1 / handled) = blockType.ret
-        val (tpe2 / stmtEffs) = checkStmt(arg.body, None)
+      val (tpe1 / handled) = blockType.ret
+      val (tpe2 / stmtEffs) = checkStmt(arg.body, None)
 
-        unifier = unifier.merge(tpe1, tpe2)
-        effs = (effs ++ (stmtEffs -- handled))
+      unifier = unifier.merge(tpe1, tpe2)
+      effs = (effs ++ (stmtEffs -- handled))
     }
 
-    (params zip args) foreach { case (ps, as) =>
+    (params zip args) foreach {
+      case (ps, as) =>
         checkArgumentSection(ps, as)
     }
 
@@ -368,7 +369,6 @@ class Typer extends Phase { typer =>
   }
 
   //</editor-fold>
-
 
   private implicit class ExprOps(expr: Expr) {
     def checkAgainst(tpe: Type)(implicit C: Context): Effectful =
@@ -399,23 +399,19 @@ class Typer extends Phase { typer =>
     }
 }
 
-
 trait TyperOps { self: Context =>
 
   // State Access
   // ============
-  private[typer]
-  def effects: Effects = typerState.effects
+  private[typer] def effects: Effects = typerState.effects
 
-  private[typer]
-  def withEffect(e: Effect): Context = {
+  private[typer] def withEffect(e: Effect): Context = {
     typerState = typerState.copy(effects = typerState.effects + e);
     this
   }
 
   // was =!=
-  private[typer]
-  def assertEqual(got: Type, expected: Type): Unit = (got, expected) match {
+  private[typer] def assertEqual(got: Type, expected: Type): Unit = (got, expected) match {
     case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
       (args1 zip args2) foreach { case (t1, t2) => assertEqual(t1, t2) }
     case (t1, t2) => if (t1 != t2) {
@@ -423,36 +419,33 @@ trait TyperOps { self: Context =>
     }
   }
 
-  private[typer]
-  def wellscoped(a: Effects): Unit = {
+  private[typer] def wellscoped(a: Effects): Unit = {
     val forbidden = a.userDefined -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }
   }
 
-  private[typer]
-  def define(s: Symbol, t: ValueType): Context = {
+  private[typer] def define(s: Symbol, t: ValueType): Context = {
     assignType(s, t); this
   }
 
-  private[typer]
-  def define(s: Symbol, t: BlockType): Context = {
+  private[typer] def define(s: Symbol, t: BlockType): Context = {
     assignType(s, t); this
   }
 
-  private[typer]
-  def define(bs: Map[Symbol, Type]): Context = { bs foreach {
-    case (v: ValueSymbol, t: ValueType) => define(v, t)
-    case (v: BlockSymbol, t: BlockType) => define(v, t)
-  }; this }
+  private[typer] def define(bs: Map[Symbol, Type]): Context = {
+    bs foreach {
+      case (v: ValueSymbol, t: ValueType) => define(v, t)
+      case (v: BlockSymbol, t: BlockType) => define(v, t)
+    }; this
+  }
 
-  private[typer]
-  def define(ps: List[List[Param]]): Context = {
+  private[typer] def define(ps: List[List[Param]]): Context = {
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
-      case s @ ValueParam(name, None) => ??? // non annotated handler, or block param
-      case s @ BlockParam(name, tpe) => define(s, tpe)
+      case s @ ValueParam(name, None)      => ??? // non annotated handler, or block param
+      case s @ BlockParam(name, tpe)       => define(s, tpe)
     }
     this
   }

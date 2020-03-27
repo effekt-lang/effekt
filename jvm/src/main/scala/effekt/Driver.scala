@@ -12,7 +12,6 @@ import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ Source, CompilerWithConfig, IO }
 
-
 trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
   import effekt.evaluator.Evaluator
@@ -36,7 +35,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
       super.run(config)
     }
 
-  override def createConfig(args : Seq[String]) =
+  override def createConfig(args: Seq[String]) =
     new EffektConfig(args)
 
   override def parse(source: Source): ParseResult[ModuleDecl] =
@@ -62,7 +61,6 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     report(source, C.buffer.get, config)
   }
 
-
   /**
    * Output: JavaScript -> File
    */
@@ -79,5 +77,5 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)
 
-  def format(m: ModuleDecl) : Document = ???
+  def format(m: ModuleDecl): Document = ???
 }

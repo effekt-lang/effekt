@@ -52,7 +52,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   def reset() = { module = emptyModule }
 
-
   /**
    * Adapted from the kiama/lambda2/Lambda example
    *
@@ -68,18 +67,19 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     /*
      * Print help about the available commands.
      */
-    def printHelp() : Unit = {
-        output.emitln(
-          """|<expression>              print the result of evaluating exp
-             |<definition>              add a definition to the REPL context
-             |import <path>             add an import to the REPL context
-             |
-             |:status                   show the current REPL environment
-             |:type (:t) <expression>   show the type of an expression
-             |:imports                  list all current imports
-             |:reset                    reset the REPL state
-             |:help (:h)                print this help message
-             |:quit (:q)                quit this REPL""".stripMargin)
+    def printHelp(): Unit = {
+      output.emitln(
+        """|<expression>              print the result of evaluating exp
+           |<definition>              add a definition to the REPL context
+           |import <path>             add an import to the REPL context
+           |
+           |:status                   show the current REPL environment
+           |:type (:t) <expression>   show the type of an expression
+           |:imports                  list all current imports
+           |:reset                    reset the REPL state
+           |:help (:h)                print this help message
+           |:quit (:q)                quit this REPL""".stripMargin
+      )
     }
 
     source.content match {
@@ -124,7 +124,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
   }
 
-
   def status(config: EffektConfig): Unit = {
     import symbols._
 
@@ -147,7 +146,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
   }
 
-
   // TODO refactor and clean this up
   def typecheck(source: Source, config: EffektConfig): Unit =
     parse(source) match {
@@ -162,14 +160,13 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         config.output().emitln("Can only show type of expressions")
 
       // this is usually encapsulated in REPL.processline
-      case res : NoSuccess =>
+      case res: NoSuccess =>
         val pos = res.next.position
         positions.setStart(res, pos)
         positions.setFinish(res, pos)
         val messages = message(res, res.message)
         report(source, messages, config)
     }
-
 
   /**
    * Processes the given tree, but only commits changes to definitions and
@@ -211,7 +208,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
     case _ => ()
   }
-
 
   /**
    * Only executes the block f, if there are no errors

@@ -10,8 +10,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-  def format(t : ModuleDecl): Document =
-        pretty(toDoc(t), 4)
+  def format(t: ModuleDecl): Document =
+    pretty(toDoc(t), 4)
 
   val emptyline: Doc = line <> line
 
@@ -24,7 +24,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(v) => v.name.toString
     case BlockDef(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
-    case Lift(b) => parens(toDoc(b))
+    case Lift(b)          => parens(toDoc(b))
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
   }
 
@@ -33,12 +33,12 @@ class PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit() => "()"
-    case StringLit(s) => "\"" + s + "\""
+    case UnitLit()     => "()"
+    case StringLit(s)  => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
-    case ValueVar(id) => id.name.toString
+    case ValueVar(id)  => id.name.toString
 
-    case Deref(id) => "!" <> toDoc(id.name)
+    case Deref(id)     => "!" <> toDoc(id.name)
     case Assign(id, e) => toDoc(id.name) <+> ":=" <+> toDoc(e)
 
     case PureApp(BlockVar(builtins.infixAdd), List(left: Expr, right: Expr)) =>
@@ -75,13 +75,13 @@ class PrettyPrinter extends ParenPrettyPrinter {
       "not" <+> parens(toDoc(expr))
 
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr => toDoc(e)
+      case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
   }
 
   def argToDoc(e: Argument): Doc = e match {
-    case e: Expr => toDoc(e)
+    case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
   }
 
@@ -99,7 +99,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Val(id, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
     case Var(id, binding, body) =>
-      "var"  <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+      "var" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>

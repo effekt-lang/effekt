@@ -1,4 +1,6 @@
 import sbtcrossproject.CrossProject
+import scalariform.formatter.preferences.AlignSingleLineCaseStatements.MaxArrowIndent
+import scalariform.formatter.preferences._
 
 enablePlugins(ScalaJSPlugin)
 
@@ -13,7 +15,13 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
   settings(
     name := "effekt",
     version := "0.1.1",
-    scalaVersion := "2.13.1"
+    scalaVersion := "2.13.1",
+    scalariformPreferences := scalariformPreferences.value
+      .setPreference(AlignSingleLineCaseStatements, true)
+      .setPreference(DoubleIndentClassDeclaration, true)
+      .setPreference(DanglingCloseParenthesis, Force)
+      .setPreference(NewlineAtEndOfFile, true)
+      .setPreference(MaxArrowIndent, 20)
   ).
   jvmSettings(
     mainClass in assembly := Some("effekt.Server"),

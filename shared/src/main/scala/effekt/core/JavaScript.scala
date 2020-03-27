@@ -10,8 +10,8 @@ class JavaScript extends ParenPrettyPrinter {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-  def format(t : ModuleDecl): Document =
-        pretty(toDoc(t), 4)
+  def format(t: ModuleDecl): Document =
+    pretty(toDoc(t), 4)
 
   val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
 
@@ -39,12 +39,12 @@ class JavaScript extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit() => "null"
-    case StringLit(s) => "\"" + s + "\""
+    case UnitLit()     => "null"
+    case StringLit(s)  => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
-    case ValueVar(id) => id.name.qualified
+    case ValueVar(id)  => id.name.qualified
 
-    case Deref(id) => toDoc(id.name) <> ".value()"
+    case Deref(id)     => toDoc(id.name) <> ".value()"
     case Assign(id, e) => toDoc(id.name) <> ".value" <> parens(toDoc(e))
 
     case PureApp(BlockVar(builtins.infixAdd), List(left: Expr, right: Expr)) =>
@@ -81,13 +81,13 @@ class JavaScript extends ParenPrettyPrinter {
       "!" <+> parens(toDoc(expr))
 
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr => toDoc(e)
+      case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
   }
 
   def argToDoc(e: Argument): Doc = e match {
-    case e: Expr => toDoc(e)
+    case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
   }
 
@@ -119,7 +119,8 @@ class JavaScript extends ParenPrettyPrinter {
     case While(cond, body) =>
       "$effekt._while" <> parens(
         "() =>" <+> toDoc(cond) <> comma <+>
-        "() =>" <+> toDoc(body))
+          "() =>" <+> toDoc(body)
+      )
     case Ret(e) =>
       "$effekt.pure" <> parens(toDoc(e))
     case Exports(path, exports) =>
@@ -138,7 +139,7 @@ class JavaScript extends ParenPrettyPrinter {
   def toDocStmt(s: Stmt): Doc = s match {
     case Def(id, BlockDef(ps, body), rest) =>
       "function" <+> toDoc(id.name) <> parens(hsep(ps map toDoc, comma)) <+>
-        braces(nest(line <> toDocStmt(body)) <> line) <> emptyline<> toDocStmt(rest)
+        braces(nest(line <> toDocStmt(body)) <> line) <> emptyline <> toDocStmt(rest)
 
     case Def(id, Extern(ps, body), rest) =>
       "function" <+> toDoc(id.name) <> parens(hsep(ps map toDoc, comma)) <+>

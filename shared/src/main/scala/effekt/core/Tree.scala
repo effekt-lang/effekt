@@ -5,7 +5,6 @@ import effekt.symbols.Symbol
 
 sealed trait Tree extends Product
 
-
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
 
 /**

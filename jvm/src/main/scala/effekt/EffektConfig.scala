@@ -5,7 +5,7 @@ import java.io.File
 import org.bitbucket.inkytonik.kiama.util.REPLConfig
 import org.rogach.scallop.ScallopOption
 
-class EffektConfig(args : Seq[String]) extends REPLConfig(args) {
+class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   lazy val compile: ScallopOption[Boolean] = toggle(
     "compile",
     descrYes = "Compile the Effekt program to JavaScript",

@@ -6,7 +6,6 @@ import org.bitbucket.inkytonik.kiama.util.Positions
 
 import scala.language.implicitConversions
 
-
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
@@ -18,8 +17,8 @@ class Parser(positions: Positions) extends Parsers(positions) {
 
   // === Lexing ===
 
-  lazy val nameFirst  = """[a-zA-Z$_]""".r
-  lazy val nameRest   = """[a-zA-Z0-9$_]""".r
+  lazy val nameFirst = """[a-zA-Z$_]""".r
+  lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*".format(nameFirst, nameRest).r
   lazy val moduleName = "%s([/]%s)*".format(name, name).r
 
@@ -63,9 +62,10 @@ class Parser(positions: Positions) extends Parsers(positions) {
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
 
-  def keywordStrings : List[String] = List(
+  def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "with", "case", "do", "yield", "if", "while", "match", "module", "import", "extern")
+    "effect", "try", "with", "case", "do", "yield", "if", "while", "match", "module", "import", "extern"
+  )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
@@ -79,11 +79,10 @@ class Parser(positions: Positions) extends Parsers(positions) {
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
 
   lazy val ident =
-    ( not(anyKeyword) ~> name ^^ { n =>
-        if (additionalKeywords.contains(n)) { "_" + n } else { n }
-      }
-    | failure("Expected an identifier")
-    )
+    (not(anyKeyword) ~> name ^^ { n =>
+      if (additionalKeywords.contains(n)) { "_" + n } else { n }
+    }
+      | failure("Expected an identifier"))
 
   lazy val idDef: P[IdDef] = ident ^^ IdDef
   lazy val idRef: P[IdRef] = ident ^^ IdRef
@@ -96,17 +95,17 @@ class Parser(positions: Positions) extends Parsers(positions) {
   /**
    * Whitespace Handling
    */
-  lazy val linebreak      = """(\r\n|\n)""".r
-  lazy val singleline     = """//[^\n]*(\n|\z)""".r
+  lazy val linebreak = """(\r\n|\n)""".r
+  lazy val singleline = """//[^\n]*(\n|\z)""".r
   override val whitespace = rep("""\s+""".r | singleline)
 
   /**
    * Numbers
    */
-  lazy val digit      = regex("[0-9]".r)
+  lazy val digit = regex("[0-9]".r)
   lazy val decimalInt = regex("(0|[1-9][0-9]*)".r)
 
-  lazy val int  = decimalInt ^^ { n => IntLit(n.toInt) }
+  lazy val int = decimalInt ^^ { n => IntLit(n.toInt) }
   lazy val bool = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit = literal("()") ^^^ UnitLit()
   lazy val double = regex("(0|[1-9][0-9]*)[.]([0-9]+)".r) ^^ { n => DoubleLit(n.toDouble) }
@@ -119,6 +118,9 @@ class Parser(positions: Positions) extends Parsers(positions) {
 
 
   // === Parsing ===
+  
+  // turn scalariform formatting off!
+  // format: OFF
 
   lazy val program: P[ModuleDecl] =
     ( `module` ~/> moduleName ~ many(importDecl) ~ many(definition) ^^ {

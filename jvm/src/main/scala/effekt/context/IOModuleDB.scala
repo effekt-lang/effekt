@@ -65,7 +65,7 @@ case class JarSource(name: String) extends Source {
 
   val content: String = resource.mkString
 
-  def useAsFile[T](fn : String => T) : T = {
+  def useAsFile[T](fn: String => T): T = {
     val filename = Filenames.makeTempFilename(name)
     try {
       IO.createFile(filename, content)

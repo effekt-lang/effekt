@@ -18,9 +18,9 @@ class Transformer {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
     }.toList)
 
-
-    ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) { case (d, r) =>
-      transform(d, r)(compiler)
+    ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {
+      case (d, r) =>
+        transform(d, r)(compiler)
     })
   }
 
@@ -31,7 +31,7 @@ class Transformer {
 
       val ps = params.flatMap {
         case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
-        case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
+        case v @ source.ValueParams(ps)   => ps.map { p => core.ValueParam(p.symbol) }
       } ++ effs.toList.map { core.BlockParam }
 
       Def(sym, BlockDef(ps, transform(body)), rest)
@@ -53,7 +53,7 @@ class Transformer {
       val effs = f.symbol.effects.userDefined
       val ps = params.flatMap {
         case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
-        case v @ source.ValueParams(ps) => ps.map { p => core.ValueParam(p.symbol) }
+        case v @ source.ValueParams(ps)   => ps.map { p => core.ValueParam(p.symbol) }
       } ++ effs.toList.map { core.BlockParam }
       Def(f.symbol, Extern(ps, body), rest)
 
@@ -79,19 +79,19 @@ class Transformer {
   }
 
   def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = tree match {
-    case v : source.Var => v.definition match {
+    case v: source.Var => v.definition match {
       case sym: VarBinder => pure { Deref(sym) }
-      case sym => pure { ValueVar(sym) }
+      case sym            => pure { ValueVar(sym) }
     }
 
     case a @ source.Assign(id, expr) =>
       transform(expr).map { e => Assign(a.definition, e) }
 
-    case source.UnitLit() => pure { UnitLit() }
-    case source.IntLit(value) => pure { IntLit(value) }
+    case source.UnitLit()         => pure { UnitLit() }
+    case source.IntLit(value)     => pure { IntLit(value) }
     case source.BooleanLit(value) => pure { BooleanLit(value) }
-    case source.DoubleLit(value) => pure { DoubleLit(value) }
-    case source.StringLit(value) => pure { StringLit(value) }
+    case source.DoubleLit(value)  => pure { DoubleLit(value) }
+    case source.StringLit(value)  => pure { StringLit(value) }
 
     case source.If(cond, thn, els) =>
       transform(cond).flatMap { c => bind(If(c, transform(thn), transform(els))) }
@@ -116,7 +116,7 @@ class Transformer {
       // we do not want to provide capabilities for the effect itself
       val ownEffect = sym match {
         case e: EffectOp => Effects(List(e.effect))
-        case _ => Pure
+        case _           => Pure
       }
 
       val BlockType(tparams, params, ret / effs) = C.blockTypeOf(sym)

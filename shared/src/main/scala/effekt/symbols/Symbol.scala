@@ -34,7 +34,7 @@ trait Symbol {
   override def hashCode: Int = id
   override def equals(other: Any): Boolean = other match {
     case other: Symbol => this.id == other.id
-    case _ => false
+    case _             => false
   }
 
   override def toString: String = name.toString

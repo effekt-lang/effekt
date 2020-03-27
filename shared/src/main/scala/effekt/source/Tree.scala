@@ -66,7 +66,6 @@ sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
 
-
 /**
  * Global (and later, local) definitions
  */
@@ -111,7 +110,6 @@ sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
 case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
 case class Return(d: Expr) extends Stmt
-
 
 /**
  * In our source language, almost everything is an expression.

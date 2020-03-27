@@ -37,15 +37,15 @@ trait LSPServer extends Driver {
     decl <- context.symbolOf(id) match {
       case u: UserFunction =>
         Some(u.decl)
-      case u: Binder => Some(u.decl)
+      case u: Binder   => Some(u.decl)
       case d: EffectOp => context.definitionTreeOf(d.effect)
-      case u => context.definitionTreeOf(u)
+      case u           => context.definitionTreeOf(u)
     }
   } yield decl
 
   def getIdTreeAt(position: Position): Option[source.Id] = for {
     (trees, unit) <- getInfoAt(position)
-    id <- trees.collectFirst { case id: source.Id => id  }
+    id <- trees.collectFirst { case id: source.Id => id }
   } yield id
 
   def getSymbolAt(position: Position): Option[(Tree, Symbol)] = for {
@@ -53,11 +53,10 @@ trait LSPServer extends Driver {
     sym <- context.symbolOption(id)
   } yield (id, sym)
 
-
   def showInfo(header: String, sig: String = "", ex: String = ""): String =
     s"""|#### $header
-        |${ if (sig != "") s"```effekt\n${sig}\n```" else ""}
-        |${ if (!settingBool("showExplanations")) "" else "---\n" + ex.stripMargin('|') }
+        |${if (sig != "") s"```effekt\n${sig}\n```" else ""}
+        |${if (!settingBool("showExplanations")) "" else "---\n" + ex.stripMargin('|')}
         |""".stripMargin('|')
 
   def getInfoOf(sym: Symbol): String = sym match {
@@ -97,6 +96,7 @@ trait LSPServer extends Driver {
             |does not mention the effect `${f.effect.name}`, then this effect will not be
             |handled by the handler. This is important when considering higher-order functions.
             |"""
+
       showInfo("Effect operation", DeclPrinter(sym, context), ex)
 
     case c: Constructor =>
@@ -164,7 +164,6 @@ trait LSPServer extends Driver {
   def maybeExplain(explanation: String): String =
     if (!settingBool("showExplanations")) "" else explanation.stripMargin('|')
 
-
   /**
    * Overriding backend to also publish core and target for LSP server
    */
@@ -185,16 +184,15 @@ trait LSPServer extends Driver {
     (tree, sym) <- getSymbolAt(position)
   } yield getInfoOf(sym)
 
-
   // The implementation in kiama.Server does not support file sources
-  override def locationOfNode(node : Tree) : Location = {
+  override def locationOfNode(node: Tree): Location = {
     (positions.getStart(node), positions.getFinish(node)) match {
       case (start @ Some(st), finish @ Some(_)) =>
         val s = convertPosition(start)
         val f = convertPosition(finish)
         new Location(st.source.name, new LSPRange(s, f))
       case _ =>
-          null
+        null
     }
   }
 }

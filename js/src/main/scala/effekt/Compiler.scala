@@ -7,7 +7,6 @@ import org.bitbucket.inkytonik.kiama.util.{ Positions, StringSource }
 
 import scala.scalajs.js.annotation._
 
-
 class CompilerJS extends Compiler {
 
   val positions: Positions = new Positions

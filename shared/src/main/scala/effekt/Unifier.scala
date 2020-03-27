@@ -39,9 +39,11 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
   }
 
   def add(k: TypeVar, v: ValueType)(implicit report: ErrorReporter): Unifier = {
-    subst.get(k).foreach { v2 => if (v != v2) {
-      report.error(s"${k} cannot be instantiated with ${v} and with ${v2} at the same time.")
-    } }
+    subst.get(k).foreach { v2 =>
+      if (v != v2) {
+        report.error(s"${k} cannot be instantiated with ${v} and with ${v2} at the same time.")
+      }
+    }
     copy(subst = subst + (k -> v))
   }
 
@@ -67,10 +69,12 @@ case class Unifier(admitted: List[TypeVar], subst: Map[TypeVar, ValueType] = Map
     case BlockType(tps, ps, ret) => BlockType(tps, substitute(ps), this substitute ret)
   }
 
-  def substitute(t: Sections): Sections = t map { _ map {
-    case v: ValueType => substitute(v)
-    case b: BlockType => substitute(b)
-  }}
+  def substitute(t: Sections): Sections = t map {
+    _ map {
+      case v: ValueType => substitute(v)
+      case b: BlockType => substitute(b)
+    }
+  }
 
   def checkFullyDefined(implicit report: ErrorReporter): Unit = admitted.foreach { tpe =>
     if (!subst.isDefinedAt(tpe))
