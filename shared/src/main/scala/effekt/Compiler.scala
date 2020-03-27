@@ -20,7 +20,7 @@ import kiama.util.{ Positions, Source }
  */
 trait Compiler {
 
-  def positions: Positions
+  val positions: Positions
 
   def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit
 

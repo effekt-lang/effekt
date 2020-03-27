@@ -41,9 +41,20 @@ trait ModuleDB { self: Context =>
    * Tries to find a module for the given source, will run compiler on demand
    */
   def moduleOf(source: Source): Module = {
-    units.getOrElseUpdate(source, compiler.compile(source)(this).getOrElse {
+    tryModuleOf(source).getOrElse {
       abort(s"Cannot compile dependency: ${source.name}")
-    })
+    }
+  }
+
+  /**
+   * Tries to find a module for the given source, will run compiler on demand
+   */
+  def tryModuleOf(source: Source): Option[Module] = {
+    units.get(source).orElse {
+      val mod = compiler.compile(source)(this)
+      mod.foreach { units.put(source, _) }
+      mod
+    }
   }
 
 }

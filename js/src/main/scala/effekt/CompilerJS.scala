@@ -3,7 +3,7 @@ package effekt
 import effekt.context.{ Context, VirtualModuleDB }
 import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-import org.bitbucket.inkytonik.kiama.util.{ Positions, StringSource }
+import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, StringSource }
 
 import scala.scalajs.js.annotation._
 
@@ -23,10 +23,8 @@ class CompilerJS extends Compiler {
     context.buffer.clear()
     compile(StringSource(s)) match {
       case None =>
-        println(context.buffer.get.mkString("\n\n"))
         sys error "Error"
       case Some(_) =>
-        println(context.buffer.get.mkString("\n\n"))
         output.toString
     }
   }
@@ -38,10 +36,8 @@ class CompilerJS extends Compiler {
     context.buffer.clear()
     compile(StringSource(s)) match {
       case None =>
-        println(context.buffer.get.mkString("\n\n"))
         sys error "Error"
       case Some(mod) =>
-        println(context.buffer.get.mkString("\n\n"))
         val result = evaluator.run(mod)
         println(result)
     }
@@ -54,6 +50,34 @@ class CompilerJS extends Compiler {
   }
 }
 
+class CodeInfoJS(input: String, val positions: Positions) extends Compiler with Intelligence {
+
+  implicit object context extends Context(this) with VirtualModuleDB {
+    config = new EffektConfig {}
+  }
+
+  val source = StringSource(input)
+
+  val mod = frontend(source) getOrElse {
+    sys error context.buffer.get.mkString("\n\n")
+  }
+  context.setup(mod.decl, context.config)
+
+  @JSExport
+  def definitionAt(line: Int, col: Int): Option[effekt.source.Tree] = {
+    val p = Position(line, col, source)
+    getDefinitionAt(p)(context)
+  }
+
+  @JSExport
+  def infoAt(line: Int, col: Int): Option[String] = {
+    val p = Position(line, col, source)
+    getSymbolAt(p) flatMap { case (tree, sym) => getInfoOf(sym).map { _.fullDescription } }
+  }
+
+  override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = ()
+}
+
 @JSExportTopLevel("effekt")
 object CompilerJS {
 
@@ -64,6 +88,9 @@ object CompilerJS {
   @JSExport
   def eval(s: String): Unit =
     new CompilerJS().eval(s)
+
+  @JSExport
+  def IDE(s: String): CodeInfoJS = new CodeInfoJS(s, new Positions)
 }
 
 object Main extends App {
@@ -81,5 +108,8 @@ object Main extends App {
       |}
       |""".stripMargin
 
-  println(CompilerJS.compile(input))
+  // println(CompilerJS.compile(input))
+
+  val ide = CompilerJS.IDE(input)
+  println(ide.infoAt(9, 11))
 }

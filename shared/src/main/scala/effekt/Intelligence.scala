@@ -38,9 +38,10 @@ trait Intelligence extends Compiler {
   }
 
   def getTreesAt(position: Position)(implicit C: Context): Option[(Vector[Tree], Module)] = for {
-    mod <- frontend(position.source)
+    mod <- C.tryModuleOf(position.source)
     tree = new EffektTree(mod.decl)
-    nodes = positions.findNodesContaining(tree.nodes, position).sortWith {
+    trees = positions.findNodesContaining(tree.nodes, position)
+    nodes = trees.sortWith {
       (t1, t2) =>
         val p1s = positions.getStart(t1).get
         val p2s = positions.getStart(t2).get
