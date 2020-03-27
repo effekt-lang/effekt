@@ -41,13 +41,12 @@ class RegressionTests {
         assertEquals(s"Wrong result: ${file.getPath}\n\n", expected, out)
       } else {
         ??? // TODO check output for messages.. for now that would be good enough for
-            // a neg test
+        // a neg test
       }
     }
 
-
   def interpret(filename: String): String = {
-    object compiler extends effekt.Driver
+    val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq("--Koutput", "string"))
     configs.verify()
     compiler.compileFile(filename, configs)

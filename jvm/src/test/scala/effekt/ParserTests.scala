@@ -14,6 +14,6 @@ class ParserTests extends Parser(new Positions) {
   def shouldParse[T](p: PackratParser[T], str: String) =
     parseAll(p, StringSource(str)) match {
       case Success(result, rest) => assert(true)
-      case f => fail(f.toMessage)
+      case f                     => fail(f.toMessage)
     }
 }

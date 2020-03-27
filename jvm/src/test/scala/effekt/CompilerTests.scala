@@ -32,7 +32,7 @@ class CompilerTests {
       // currently examples in `pos` are either examples_pos_EX.js or EX.js
       val jsFile = {
         val unqualified = baseName.replace('/', '_') + ".js"
-        val qualified   = "examples_pos_" + unqualified
+        val qualified = "examples_pos_" + unqualified
 
         if ((outFolder / unqualified).exists()) { unqualified } else { qualified }
       }
@@ -45,7 +45,7 @@ class CompilerTests {
     }
 
   def compile(filename: String): String = {
-    object compiler extends effekt.Driver
+    val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq("--compile", "--Koutput", "string"))
     configs.verify()
     compiler.compileFile(filename, configs)

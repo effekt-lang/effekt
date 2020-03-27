@@ -292,22 +292,22 @@ class Evaluator {
   )
 
   def closure(impl: PartialFunction[List[Value], Control[Value]]): Thunk[Closure] = Thunk {
-    Closure(args => impl.applyOrElse(args, sys error "Wrong arguments"))
+    Closure(args => impl.applyOrElse(args, (args: List[Value]) => sys error s"Wrong arguments: ${args}"))
   }
 
   private def arithmetic(f: (Int, Int) => Int): Thunk[Value] =
     closure {
-      case IntValue(x) :: IntValue(y) :: Nil => pure(IntValue(f(x, y)))
+      case IntValue(x) :: IntValue(y) :: _ => pure(IntValue(f(x, y)))
     }
 
   private def compare(f: (Int, Int) => Boolean): Thunk[Value] =
     closure {
-      case IntValue(x) :: IntValue(y) :: Nil => pure(BooleanValue(f(x, y)))
+      case IntValue(x) :: IntValue(y) :: _ => pure(BooleanValue(f(x, y)))
     }
 
   private def logical(f: (Boolean, Boolean) => Boolean): Thunk[Value] =
     closure {
-      case BooleanValue(x) :: BooleanValue(y) :: Nil => pure(BooleanValue(f(x, y)))
+      case BooleanValue(x) :: BooleanValue(y) :: _ => pure(BooleanValue(f(x, y)))
     }
 
   /**
