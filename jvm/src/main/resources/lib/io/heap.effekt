@@ -6,11 +6,11 @@ extern include "heap_include.js"
 
 extern type Ref[T]
 
-extern def fresh[T](init: T): Ref[T] =
+extern def fresh[T](init: T): Ref[T] / Heap =
     "fresh$impl(init)"
 
-extern def put[T](ref: Ref[T])(value: T): Unit =
+extern def put[T](ref: Ref[T])(value: T): Unit / Heap =
     "put$impl(ref, value)"
 
-extern def get[T](ref: Ref[T]): T =
+extern def get[T](ref: Ref[T]): T / Heap =
     "get$impl(ref)"
