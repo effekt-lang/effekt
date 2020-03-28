@@ -338,7 +338,16 @@ class Parser(positions: Positions) extends Parsers(positions) {
     idRef ^^ Var
 
   lazy val literals: P[Expr] =
-    double | int | bool | unit | variable | string
+    double | int | bool | unit | variable | string | listLiteral
+
+  lazy val listLiteral: P[Expr] =
+    `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } }
+
+  private def NilTree: Expr =
+    Call(IdRef("Nil"), Nil, List(ValueArgs(Nil)))
+
+  private def ConsTree(el: Expr, rest: Expr): Expr =
+    Call(IdRef("Cons"), Nil, List(ValueArgs(List(el, rest))))
 
   /**
    * Types and Effects
