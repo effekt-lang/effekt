@@ -114,7 +114,20 @@ package object symbols {
     def /(effs: Effects): Effectful = Effectful(this, effs)
   }
 
-  case class TypeVar(name: Name) extends ValueType with TypeSymbol
+  class TypeVar(val name: Name) extends ValueType with TypeSymbol
+  object TypeVar {
+    def apply(name: Name): TypeVar = new TypeVar(name)
+  }
+
+  /**
+   * Introduced when instantiating type schemes
+   *
+   * Should neither occur in source programs, nor in infered types
+   */
+  case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
+    override def toString = "?" + underlying.name + id
+  }
+
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
   }

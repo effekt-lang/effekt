@@ -4,3 +4,6 @@ examples/neg/polymorphic_adts.effekt:36:33:error: Expected Boolean, but got Int
 examples/neg/polymorphic_adts.effekt:36:38:error: Expected Int, but got Boolean
         case Pair2(n, t) => if (t) { n + 1 } else { 0 }
                                      ^
+examples/neg/polymorphic_adts.effekt:36:38:error: Expected Int, but got Boolean
+        case Pair2(n, t) => if (t) { n + 1 } else { 0 }
+                                     ^

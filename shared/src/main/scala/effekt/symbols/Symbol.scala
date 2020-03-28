@@ -1,4 +1,5 @@
-package effekt.symbols
+package effekt
+package symbols
 
 import org.bitbucket.inkytonik.kiama.util.Counter
 
@@ -24,7 +25,7 @@ trait Symbol {
   /**
    * The unique id of this symbol
    */
-  private lazy val id: Int = Symbol.fresh.next()
+  private[symbols] lazy val id: Int = Symbol.fresh.next()
 
   /**
    * Does this symbol denote a builtin?

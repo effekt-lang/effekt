@@ -7,6 +7,7 @@ package typer
 import effekt.context.{ Context, Phase }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Expr, Stmt, Tree }
+import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
 
@@ -100,7 +101,6 @@ class Typer extends Phase { typer =>
         clauses foreach {
           case d @ source.OpClause(op, params, body, resume) =>
             val effectOp = d.definition
-            val effect = effectOp.effect
             val bt = Context.blockTypeOf(effectOp)
             val ps = checkAgainstDeclaration(op.name, bt.params, params)
             val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
@@ -119,15 +119,20 @@ class Typer extends Phase { typer =>
         ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
       case source.MatchExpr(sc, clauses) =>
+
+        // (1) Check scrutinee
+        // for example. tpe = List[Int]
         val (tpe / effs) = checkExpr(sc, None)
 
+        // (2) Extract datatype to pattern match on
+        // i.e. List
         val datatype = tpe match {
           case d: DataType             => d
           case TypeApp(d: DataType, _) => d
           case other                   => Context.abort(s"Cannot pattern match on value of type ${other}")
         }
 
-        // check exhaustivity
+        // (3) check exhaustivity
         val covered = clauses.map { c => c.definition }.toSet
         val cases: Set[Symbol] = datatype.ctors.toSet
         val notCovered = cases -- covered
@@ -137,22 +142,39 @@ class Typer extends Phase { typer =>
         }
 
         val tpes = clauses.map {
-          case c @ source.Clause(id, params, body) =>
+          case c @ source.Clause(id, annotatedParams, body) =>
             val sym = c.definition
 
-            val (dataType / _) = sym.ret.get
+            // (4) Compute blocktype of this constructor with rigid type vars
+            // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
+            val (rigids, BlockType(_, pms, ret / _)) = Substitution.instantiate(sym.toType)
 
-            // instantiate params: create unifier
-            val u = Unifier(sym.tparams).merge(dataType, tpe)
-            val pms = u substitute extractAllTypes(sym.params)
+            // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
+            val subst = Substitution.unify(ret, tpe)
 
-            val ps = checkAgainstDeclaration(id.name, pms, params)
-            Context.define(ps) in { checkStmt(body, expected) }
+            // (6) check for existential type variables
+            // at the moment we do not allow existential type parameters on constructors.
+            val skolems = rigids.filterNot { subst.isDefinedAt }
+            if (skolems.nonEmpty) {
+              Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
+            }
+
+            // (7) refine parameter types of constructor
+            // i.e. `(Int, List[Int])`
+            val constructorParams = subst substitute pms
+
+            // (8) check against parameters (potentially) annotated clause
+            val paramBindings = checkAgainstDeclaration(id.name, constructorParams, annotatedParams)
+
+            // (9) check body with bindings in place
+            Context.define(paramBindings) in {
+              checkStmt(body, expected)
+            }
         }
 
         val (tpeCases / effsCases) = tpes.reduce[Effectful] {
           case (tpe1 / effs1, tpe2 / effs2) =>
-            Context.assertEqual(tpe1, tpe2)
+            Substitution.unify(tpe1, tpe2)
             tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
@@ -275,17 +297,18 @@ class Typer extends Phase { typer =>
     if (atCallee.size != atCaller.size)
       Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
 
-    // TODO add blockparams here!
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
       case (List(b1: BlockType), b2: source.BlockParam) =>
-        Context.abort("not yet supported")
+        Context.at(b2) { Context.abort("Internal Compiler Error: Not yet supported") }
         ???
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
-            val annotType = annot.map(resolveValueType)
-            annotType.foreach { t => Context.assertEqual(decl, t) }
+            val annotType = annot.map(resolveValueType) // TODO check whether resolving here suffices when the annotation is a TypeVar
+            annotType.foreach { t =>
+              Context.at(p) { Substitution.unify(decl, t) }
+            }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
     }.toMap
@@ -298,17 +321,23 @@ class Typer extends Phase { typer =>
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val BlockType(tparams, params, ret / retEffs) = Context.blockTypeOf(sym)
+    // (1) Instantiate blocktype
+    // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(Context.blockTypeOf(sym))
 
-    if (targs.nonEmpty && targs.size != tparams.size)
+    if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
 
-    var unifier: Unifier = Unifier(
-      tparams,
-      if (targs.nonEmpty) { (tparams zip targs).toMap } else { Map.empty }
-    )
+    // (2) Compute substitutions from provided type arguments (if any)
+    var subst: Substitutions = if (targs.nonEmpty) { (rigids zip targs).toMap } else { Map.empty }
 
-    expected.foreach { exp => unifier = unifier.merge(ret, exp) }
+    // (3) refine substitutions by matching return type against expected type
+    expected.foreach { exp =>
+      val refinedReturn = subst substitute ret
+      subst = subst union Substitution.unify(refinedReturn, exp)
+    }
+
+    val substBefore = subst
 
     var effs = retEffs
 
@@ -330,10 +359,13 @@ class Typer extends Phase { typer =>
     }
 
     def checkValueArgument(tpe: ValueType, arg: source.Expr): Unit = Context.at(arg) {
-      val tpe1 = unifier substitute tpe // apply what we already know.
-      val (tpe2 / exprEffs) = checkExpr(arg, None)
+      val tpe1 = subst substitute tpe // apply what we already know.
+      val (tpe2 / exprEffs) = arg checkAgainst tpe1
 
-      unifier = unifier.merge(tpe1, tpe2)
+      // Update substitution with new information
+      // TODO Trying to unify here yields the same type error as the previous line, again.
+      // For now we have to live with this duplicated messages
+      subst = subst union Substitution.unify(tpe1, tpe2)
 
       effs = effs ++ exprEffs
     }
@@ -344,29 +376,35 @@ class Typer extends Phase { typer =>
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val blockType = unifier substitute tpe
+      val BlockType(Nil, params, tpe1 / handled) = subst substitute tpe
 
       // TODO make blockargs also take multiple argument sections.
       Context.define {
-        checkAgainstDeclaration("block", blockType.params, List(arg.params))
+        checkAgainstDeclaration("block", params, List(arg.params))
       }
 
-      val (tpe1 / handled) = blockType.ret
       val (tpe2 / stmtEffs) = checkStmt(arg.body, None)
 
-      unifier = unifier.merge(tpe1, tpe2)
+      subst = subst union Substitution.unify(tpe1, tpe2)
       effs = (effs ++ (stmtEffs -- handled))
     }
 
-    (params zip args) foreach {
-      case (ps, as) =>
-        checkArgumentSection(ps, as)
-    }
+    (params zip args) foreach { case (ps, as) => checkArgumentSection(ps, as) }
 
-    // check that unifier found a substitution for each tparam
-    unifier.checkFullyDefined
+    //    println(
+    //      s"""|Results of checking application of ${sym.name}
+    //              |    to args ${args}
+    //              |Substitution before checking arguments: $substBefore
+    //              |Substitution after checking arguments: $subst
+    //              |Rigids: $rigids
+    //              |Return type before substitution: $ret
+    //              |Return type after substitution: ${subst substitute ret}
+    //              |""".stripMargin
+    //    )
 
-    (unifier substitute ret) / effs
+    subst.checkFullyDefined(rigids)
+
+    (subst substitute ret) / effs
   }
 
   //</editor-fold>
@@ -387,7 +425,7 @@ class Typer extends Phase { typer =>
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
-      expected foreach { Context.assertEqual(got, _) }
+      expected foreach { Substitution.unify(_, got) }
       Context.assignType(t, got / effs)
       got / effs
     }
@@ -409,15 +447,6 @@ trait TyperOps { self: Context =>
   private[typer] def withEffect(e: Effect): Context = {
     typerState = typerState.copy(effects = typerState.effects + e);
     this
-  }
-
-  // was =!=
-  private[typer] def assertEqual(got: Type, expected: Type): Unit = (got, expected) match {
-    case (TypeApp(c1, args1), TypeApp(c2, args2)) if c1 == c2 =>
-      (args1 zip args2) foreach { case (t1, t2) => assertEqual(t1, t2) }
-    case (t1, t2) => if (t1 != t2) {
-      error(s"Expected $expected, but got $got")
-    }
   }
 
   private[typer] def wellscoped(a: Effects): Unit = {

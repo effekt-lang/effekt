@@ -1,3 +1,6 @@
 examples/neg/typevars.effekt:5:13:error: Expected R, but got Int
   g[String](4) // should not typecheck
             ^
+examples/neg/typevars.effekt:5:13:error: Expected R, but got Int
+  g[String](4) // should not typecheck
+            ^
