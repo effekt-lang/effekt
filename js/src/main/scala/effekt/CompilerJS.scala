@@ -2,8 +2,9 @@ package effekt
 
 import effekt.context.{ Context, VirtualModuleDB }
 import effekt.evaluator.Evaluator
+import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, StringSource }
+import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source, StringSource }
 
 import scala.scalajs.js.annotation._
 
@@ -41,6 +42,17 @@ class CompilerJS extends Compiler {
         val result = evaluator.run(mod)
         println(result)
     }
+  }
+
+  /**
+   * Don't output module declarations
+   */
+  override def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = try {
+    Some(codegen.pretty(codegen.global(mod)))
+  } catch {
+    case FatalPhaseError(msg, reporter) =>
+      reporter.error(msg)
+      None
   }
 
   override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = {

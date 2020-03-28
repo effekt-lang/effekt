@@ -11,19 +11,33 @@ class JavaScript extends ParenPrettyPrinter {
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
   def format(t: ModuleDecl): Document =
-    pretty(toDoc(t), 4)
+    pretty(amdefine(t))
 
   val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
 
   val emptyline: Doc = line <> line
 
-  def toDoc(m: ModuleDecl): Doc = {
+  def amdefine(m: ModuleDecl): Doc = {
     val deps = m.imports
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
-    val moduleDecl = "var" <+> moduleName(m.path) <+> "=" <+> "{};"
-    prelude <> line <> "define" <> parens(imports <> comma <+> "function" <> parens(hsep(deps.map { d => moduleName(d) }, comma)) <+>
-      braces(nest(line <> moduleDecl <> emptyline <> toDocStmt(m.defs)) <> line))
+    prelude <> line <> "define" <>
+      parens(imports <> comma <+> "function" <> parens(hsep(deps.map { d => moduleName(d) }, comma)) <+>
+        braces(nest(line <> toDoc(m))))
   }
+
+  /**
+   * No JS module system.
+   *
+   * Defines the given module as top level global variable.
+   */
+  def global(m: ModuleDecl): Doc = {
+    "var" <+> moduleName(m.path) <+> "=" <+> parens("function()" <+> braces(
+      nest(line <> toDoc(m)) <> line
+    )) <> ".apply(this)"
+  }
+
+  def toDoc(m: ModuleDecl): Doc =
+    "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocStmt(m.defs)
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v) => v.name.qualified
