@@ -27,5 +27,11 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true
   )
 
+  def requiresCompilation(): Boolean = {
+    val compilerMode = compile()
+    val interpreterMode = filenames().isEmpty && !server()
+    compilerMode || interpreterMode
+  }
+
   validateFilesIsDirectory(includes)
 }

@@ -1,6 +1,5 @@
 package effekt
 
-import effekt.evaluator.Evaluator
 import effekt.source._
 import effekt.symbols.{ Module, BlockSymbol, ValueSymbol }
 
@@ -11,8 +10,6 @@ import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 // for now we only take expressions
 class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
-
-  object evaluator extends Evaluator
 
   var module: ReplModule = emptyModule
 
@@ -174,9 +171,13 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
-      reportOrElse(source, frontend(source, module.make(e), config)) { cu =>
-        val value = evaluator.run(cu)(driver.context)
-        config.output().emitln(value)
+      reportOrElse(source, frontend(source, module.makeEval(e), config)) { cu =>
+        driver.middleend(source, cu)(driver.context).foreach { core =>
+          driver.backend(source, core)(driver.context).foreach { js =>
+            driver.saveOutput(js, cu)(driver.context)
+            driver.eval(cu)(driver.context)
+          }
+        }
       }
 
     case i: Import if !module.contains(i) =>
@@ -253,9 +254,12 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
      * Create a module declaration using the given expression as body of main
      */
     def make(expr: Expr): ModuleDecl =
-      ModuleDecl("lib/interactive", imports,
+      ModuleDecl("lib/interactive", Import("effekt") :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
           Return(expr)))
+
+    def makeEval(expr: Expr): ModuleDecl =
+      make(Call(IdRef("println"), Nil, List(ValueArgs(List(expr)))))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

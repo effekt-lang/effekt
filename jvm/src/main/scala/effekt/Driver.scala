@@ -6,19 +6,17 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-
+import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util.{ Source, CompilerWithConfig, IO }
+import kiama.util.{ CompilerWithConfig, Emitter, IO, Source }
+
+import scala.sys.process.Process
 
 trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
-  import effekt.evaluator.Evaluator
-
   val name = "effekt"
-
-  object evaluator extends Evaluator
 
   // Compiler context
   // ================
@@ -53,7 +51,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     for {
       mod <- pipeline(source, ast)
       if !config.server() && !config.compile()
-    } evaluator.run(mod)
+    } eval(mod)
 
     // report messages
     clearSyntacticMessages(source, config)
@@ -65,14 +63,23 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
    * Output: JavaScript -> File
    */
   override def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit =
-    if (C.config.compile()) {
-      val outDir = C.config.outputPath().toPath
-      outDir.toFile.mkdirs
-      val out = outDir.resolve(unit.outputName).toFile
-
-      println("Writing compiled Javascript to " + out)
-      IO.createFile(out.getCanonicalPath, js.layout)
+    if (C.config.requiresCompilation()) {
+      C.config.outputPath().mkdirs
+      val jsFile = jsPath(unit)
+      IO.createFile(jsFile, js.layout)
     }
+
+  def eval(mod: Module)(implicit C: Context): Unit = {
+    val jsFile = jsPath(mod)
+    val jsScript = s"require('${jsFile}').main().run()"
+    val command = Process(Seq("node", "--eval", jsScript))
+    C.config.output().emit(command.!!)
+  }
+
+  def jsPath(mod: Module)(implicit C: Context): String = {
+    val outDir = C.config.outputPath().toPath
+    outDir.resolve(mod.outputName).toFile.getCanonicalPath
+  }
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)
