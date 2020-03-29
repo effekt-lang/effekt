@@ -94,6 +94,7 @@ class Namer extends Phase { namer =>
       }
 
     case source.EffDef(id, tparams, params, ret) => ()
+    case source.TypeDef(id, tparams, tpe) => ()
     case source.DataDef(id, tparams, ctors) => ()
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
@@ -220,7 +221,7 @@ class Namer extends Phase { namer =>
         }
         Context.define(id, sym)
 
-      case e @ source.EffDef(id, tparams, params, ret) =>
+      case source.EffDef(id, tparams, params, ret) =>
         // we use the localName for effects, since they will be bound as capabilities
         val effectSym = UserEffect(Context.localName(id), Nil)
         val opSym = Context scoped {
@@ -233,7 +234,15 @@ class Namer extends Phase { namer =>
         Context.define(id, effectSym)
         Context.bind(opSym)
 
-      case d @ source.DataDef(id, tparams, ctors) =>
+      case source.TypeDef(id, tparams, tpe) =>
+        val tps = Context scoped { tparams map resolve }
+        val alias = Context scoped {
+          tps.foreach { t => Context.bind(t) }
+          TypeAlias(name(id), tps, resolve(tpe))
+        }
+        Context.define(id, alias)
+
+      case source.DataDef(id, tparams, ctors) =>
         val (typ, tps) = Context scoped {
           val tps = tparams map resolve
           (DataType(name(id), tps), tps)
@@ -250,19 +259,19 @@ class Namer extends Phase { namer =>
         }
         typ.ctors = cs
 
-      case d @ source.ExternType(id, tparams) =>
+      case source.ExternType(id, tparams) =>
         Context.define(id, Context scoped {
           val tps = tparams map resolve
           BuiltinType(name(id), tps)
         })
 
-      case d @ source.ExternEffect(id, tparams) =>
+      case source.ExternEffect(id, tparams) =>
         Context.define(id, Context scoped {
           val tps = tparams map resolve
           BuiltinEffect(name(id), tps)
         })
 
-      case d @ source.ExternFun(pure, id, tparams, params, ret, body) =>
+      case source.ExternFun(pure, id, tparams, params, ret, body) =>
         Context.define(id, Context scoped {
           val tps = tparams map resolve
           val ps: Params = params map resolve

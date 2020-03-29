@@ -25,6 +25,10 @@ object DeclPrinter extends ParenPrettyPrinter {
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       s"var ${b.name}: ${tpe}"
 
+    case TypeAlias(name, tparams, tpe) =>
+      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
+      "type" <+> name.toString <> tps <+> "=" <+> tpe.toString
+
     case DataType(name, tparams, ctors) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       val ctrs = ctors map { ctor =>

@@ -115,6 +115,9 @@ trait Intelligence extends Compiler {
 
       SymbolInfo(sym, "Effect operation", Some(DeclPrinter(sym)), Some(ex))
 
+    case t: TypeAlias =>
+      SymbolInfo(sym, "Type alias", Some(DeclPrinter(sym)), None)
+
     case c: Constructor =>
       val ex = s"""|Instances of data types like `${c.datatype.name}` can only store
                    |_values_, not _blocks_. Hence, constructors like `${c.name}` only have

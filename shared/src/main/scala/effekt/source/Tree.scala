@@ -83,6 +83,13 @@ case class VarDef(id: Id, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
 
+/**
+ * Type aliases like `type Matrix[T] = List[List[T]]`
+ */
+case class TypeDef(id: Id, tparams: List[Id], tpe: ValueType) extends Def {
+  type symbol = symbols.TypeAlias
+}
+
 case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }

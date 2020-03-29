@@ -4,6 +4,7 @@ import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.TypesDB
 import effekt.util.messages.ErrorReporter
 import org.bitbucket.inkytonik.kiama.util.Source
+import effekt.subtitutions._
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -105,13 +106,15 @@ package object symbols {
    * Types
    */
 
-  sealed trait Type
+  sealed trait Type {
+  }
 
   // like Params but without name binders
   type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type {
     def /(effs: Effects): Effectful = Effectful(this, effs)
+    def dealias: ValueType = this
   }
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
@@ -130,6 +133,12 @@ package object symbols {
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
+
+    override def dealias: ValueType = tpe match {
+      case TypeAlias(name, tparams, tpe) =>
+        (tparams zip args).toMap.substitute(tpe).dealias
+      case other => TypeApp(other.dealias, args.map { _.dealias })
+    }
   }
 
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
@@ -144,6 +153,11 @@ package object symbols {
         case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $ret"
       }
     }
+  }
+
+  case class TypeAlias(name: Name, tparams: List[TypeVar], tpe: ValueType) extends ValueType with TypeSymbol {
+    override def dealias: ValueType =
+      if (tparams.isEmpty) { tpe } else { sys error "Cannot delias unapplied type constructor" }
   }
 
   case class DataType(name: Name, tparams: List[TypeVar], var ctors: List[Constructor] = Nil) extends ValueType with TypeSymbol

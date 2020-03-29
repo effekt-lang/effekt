@@ -73,24 +73,8 @@ object subtitutions {
     def unify(tpe1: Type, tpe2: Type)(implicit report: ErrorReporter): Substitutions =
       (tpe1, tpe2) match {
 
-        case (t, s) if t == s =>
-          Substitution.empty
-
-        case (s: RigidVar, t: ValueType) =>
-          Map(s -> t)
-
-        // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
-        // type `?R` (since `==: [R] (R, R) => Boolean`)
-        case (s: ValueType, t: RigidVar) =>
-          Map(t -> s)
-
-        case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
-          if (args1.size != args2.size)
-            report.error(s"Argument count does not match $t1 vs. $t2")
-
-          (args1 zip args2).foldLeft(Substitution.empty) {
-            case (u, (a1, a2)) => u union unify(a1, a2)
-          }
+        case (t: ValueType, s: ValueType) =>
+          unifyValueTypes(t, s)
 
         // TODO also consider type parameters here
         case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
@@ -107,6 +91,33 @@ object subtitutions {
 
         case (t, s) =>
           report.error(s"Expected ${t}, but got ${s}")
+          Substitution.empty
+      }
+
+    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit report: ErrorReporter): Substitutions =
+      (tpe1.dealias, tpe2.dealias) match {
+
+        case (t, s) if t == s =>
+          Substitution.empty
+
+        case (s: RigidVar, t: ValueType) =>
+          Map(s -> t)
+
+        // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
+        // type `?R` (since `==: [R] (R, R) => Boolean`)
+        case (s: ValueType, t: RigidVar) =>
+          Map(t -> s)
+
+        case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
+          if (args1.size != args2.size)
+            report.error(s"Argument count does not match $t1 vs. $t2")
+
+          (args1 zip args2).foldLeft(Substitution.empty) {
+            case (u, (a1, a2)) => u union unifyValueTypes(a1, a2)
+          }
+
+        case (t, s) =>
+          report.error(s"Expected ${tpe1}, but got ${tpe2}")
           Substitution.empty
       }
 
