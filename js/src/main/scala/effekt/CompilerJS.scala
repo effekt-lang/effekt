@@ -29,17 +29,18 @@ class CompilerJS extends Compiler {
     }
   }
 
-  //  def eval(s: String): Unit = {
-  //    output = new StringBuilder
-  //    context.buffer.clear()
-  //    compile(StringSource(s)) match {
-  //      case None =>
-  //        sys error "Error"
-  //      case Some(mod) =>
-  //        val result = evaluator.run(mod)
-  //        println(result)
-  //    }
-  //  }
+  def eval(s: String): Unit = {
+    output = new StringBuilder
+    context.buffer.clear()
+    compile(StringSource(s)) match {
+      case None =>
+        sys error "Error"
+      case Some(mod) =>
+        val program = output.toString
+        val command = s"${mod.name.qualified}.main().run()"
+        scalajs.js.eval(s"$program\n\n$command")
+    }
+  }
 
   /**
    * Don't output module declarations
@@ -94,9 +95,9 @@ object CompilerJS {
   def compile(s: String): String =
     new CompilerJS().compile(s)
 
-  //  @JSExport
-  //  def eval(s: String): Unit =
-  //    new CompilerJS().eval(s)
+  @JSExport
+  def eval(s: String): Unit =
+    new CompilerJS().eval(s)
 
   @JSExport
   def IDE(s: String): CodeInfoJS = new CodeInfoJS(s, new Positions)
@@ -115,10 +116,13 @@ object Main extends App {
       |} with {
       |  case Print(s) => println(s)
       |}
+      |
+      |def main() = println(bar())
       |""".stripMargin
 
-  println(CompilerJS.compile(input))
+  // println(CompilerJS.compile(input))
+  println(CompilerJS.eval(input))
 
-  //  val ide = CompilerJS.IDE(input)
-  //  println(ide.infoAt(9, 11))
+  // val ide = CompilerJS.IDE(input)
+  // println(ide.infoAt(9, 11))
 }
