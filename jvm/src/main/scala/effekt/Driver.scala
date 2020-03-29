@@ -6,11 +6,10 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.evaluator.Evaluator
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util.{ CompilerWithConfig, Emitter, IO, Source }
+import kiama.util.{ CompilerWithConfig, IO, Source }
 
 import scala.sys.process.Process
 

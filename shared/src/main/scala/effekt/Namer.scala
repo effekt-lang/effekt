@@ -34,7 +34,7 @@ class Namer extends Phase { namer =>
 
   def run(src: Source, decl: source.ModuleDecl)(implicit C: Context): Module = {
 
-    var terms: Scope[TermSymbol] = toplevel(builtins.rootTerms)
+    var terms: Scope[TermSymbol] = toplevel(Map.empty)
     var types: Scope[TypeSymbol] = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope

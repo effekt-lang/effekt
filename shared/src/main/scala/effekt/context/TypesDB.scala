@@ -46,11 +46,6 @@ trait TypesDB { self: ErrorReporter =>
     case _              => abort(s"Trying to find a value type for non-value '${s}'")
   }
 
-  def populate(builtins: Iterable[BuiltinFunction]): TypesDB = {
-    builtins.foreach { b => assignType(b, b.toType) }
-    this
-  }
-
   // Assignment of Types to Trees
   // ============================
   // Can be used by LSP server to display type information for type-checked trees

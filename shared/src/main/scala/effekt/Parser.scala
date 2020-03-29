@@ -384,7 +384,23 @@ class Parser(positions: Positions) extends Parsers(positions) {
   // === AST Helpers ===
 
   def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
-    Call(IdRef(s"infix_$op"), Nil, List(ValueArgs(List(lhs, rhs))))
+     Call(IdRef(opName(op)), Nil, List(ValueArgs(List(lhs, rhs))))
+
+  def opName(op: String): String = op match {
+    case "||" => "infixOr"
+    case "&&" => "infixAnd"
+    case "==" => "infixEq"
+    case "!=" => "infixNeq"
+    case "<"  => "infixLt"
+    case ">"  => "infixGt"
+    case "<=" => "infixLte"
+    case ">=" => "infixGte"
+    case "+"  => "infixAdd"
+    case "-"  => "infixSub"
+    case "*"  => "infixMul"
+    case "/"  => "infixDiv"
+    case "++" => "infixConcat"
+  }
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

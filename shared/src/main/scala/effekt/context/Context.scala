@@ -35,8 +35,6 @@ abstract class Context(val compiler: Compiler)
     // Util
     with ErrorReporter { context =>
 
-  populate(builtins.rootTerms.values)
-
   var focus: Tree = _
 
   var config: EffektConfig = _

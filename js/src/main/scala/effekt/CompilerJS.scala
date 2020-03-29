@@ -120,8 +120,8 @@ object Main extends App {
       |}
       |""".stripMargin
 
-  // println(CompilerJS.compile(input))
+  println(CompilerJS.compile(input))
 
-  val ide = CompilerJS.IDE(input)
-  println(ide.infoAt(9, 11))
+  //  val ide = CompilerJS.IDE(input)
+  //  println(ide.infoAt(9, 11))
 }

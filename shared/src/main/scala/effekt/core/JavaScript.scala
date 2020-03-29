@@ -61,39 +61,6 @@ class JavaScript extends ParenPrettyPrinter {
     case Deref(id)     => toDoc(id.name) <> ".value()"
     case Assign(id, e) => toDoc(id.name) <> ".value" <> parens(toDoc(e))
 
-    case PureApp(BlockVar(builtins.infixAdd), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "+" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixMul), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "*" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixSub), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "-" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixDiv), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "-" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixLte), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "<=" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixLt), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "<" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixGte), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> ">=" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixGt), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> ">" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixOr), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "||" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.infixAnd), List(left: Expr, right: Expr)) =>
-      parens(toDoc(left)) <+> "&&" <+> parens(toDoc(right))
-
-    case PureApp(BlockVar(builtins.not), List(expr: Expr)) =>
-      "!" <+> parens(toDoc(expr))
-
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
