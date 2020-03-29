@@ -37,8 +37,15 @@ class CompilerJS extends Compiler {
         sys error "Error"
       case Some(mod) =>
         val program = output.toString
-        val command = s"${mod.name.qualified}.main().run()"
-        scalajs.js.eval(s"$program\n\n$command")
+        val command =
+          s"""(function() {
+              |
+              |$program
+              |
+              |return ${mod.name.qualified}.main().run();
+              |})()
+              |""".stripMargin
+        scalajs.js.eval(command)
     }
   }
 
