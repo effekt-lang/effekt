@@ -383,7 +383,7 @@ class Typer extends Phase { typer =>
         checkAgainstDeclaration("block", params, List(arg.params))
       }
 
-      val (tpe2 / stmtEffs) = checkStmt(arg.body, None)
+      val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
       subst = subst union Substitution.unify(tpe1, tpe2)
       effs = (effs ++ (stmtEffs -- handled))
@@ -393,13 +393,13 @@ class Typer extends Phase { typer =>
 
     //    println(
     //      s"""|Results of checking application of ${sym.name}
-    //              |    to args ${args}
-    //              |Substitution before checking arguments: $substBefore
-    //              |Substitution after checking arguments: $subst
-    //              |Rigids: $rigids
-    //              |Return type before substitution: $ret
-    //              |Return type after substitution: ${subst substitute ret}
-    //              |""".stripMargin
+    //                  |    to args ${args}
+    //                  |Substitution before checking arguments: $substBefore
+    //                  |Substitution after checking arguments: $subst
+    //                  |Rigids: $rigids
+    //                  |Return type before substitution: $ret
+    //                  |Return type after substitution: ${subst substitute ret}
+    //                  |""".stripMargin
     //    )
 
     subst.checkFullyDefined(rigids)

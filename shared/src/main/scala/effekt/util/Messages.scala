@@ -9,13 +9,15 @@ import org.bitbucket.inkytonik.kiama.util.Severities.Error
 
 object messages {
 
-  case class FatalPhaseError(msg: String, reporter: ErrorReporter) extends Exception
+  case class FatalPhaseError(msg: String) extends Exception
 
   /**
    * Stores messages in a mutable field
    */
   class MessageBuffer {
     private var messages: Messages = noMessages
+
+    // TODO filter duplicate messages for overlapping positions. If there are multiple ones, pick the most specific location
     def append(msg: Messages): Unit = {
       messages = messages ++ msg
     }
@@ -41,7 +43,7 @@ object messages {
     def info(msg: String): Unit = buffer append Messaging.info(focus, msg)
     def hint(msg: String): Unit = buffer append Messaging.hint(focus, msg)
     def abort(msg: String): Nothing = {
-      throw FatalPhaseError(msg, this)
+      throw FatalPhaseError(msg)
     }
 
     def at[T](t: Tree)(block: => T): T = {

@@ -1,3 +1,12 @@
 examples/neg/leakingtypevars.effekt:12:5:error: Expected Int, but got R
     p()
     ^
+examples/neg/leakingtypevars.effekt:12:5:error: Expected Int, but got R
+    p()
+    ^
+examples/neg/leakingtypevars.effekt:12:5:error: Expected Int, but got R
+    p()
+    ^
+examples/neg/leakingtypevars.effekt:12:5:error: Expected R, but got Int
+    p()
+    ^

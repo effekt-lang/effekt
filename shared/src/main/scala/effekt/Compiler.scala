@@ -92,8 +92,8 @@ trait Compiler {
       Some(mod)
     }
   } catch {
-    case FatalPhaseError(msg, reporter) =>
-      reporter.error(msg)
+    case FatalPhaseError(msg) =>
+      C.error(msg)
       None
   }
 
@@ -103,8 +103,8 @@ trait Compiler {
   def middleend(source: Source, unit: Module)(implicit C: Context): Option[core.ModuleDecl] = try {
     Some(transformer.run(unit))
   } catch {
-    case FatalPhaseError(msg, reporter) =>
-      reporter.error(msg)
+    case FatalPhaseError(msg) =>
+      C.error(msg)
       None
   }
 
@@ -114,8 +114,8 @@ trait Compiler {
   def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = try {
     Some(codegen.format(mod))
   } catch {
-    case FatalPhaseError(msg, reporter) =>
-      reporter.error(msg)
+    case FatalPhaseError(msg) =>
+      C.error(msg)
       None
   }
 }
