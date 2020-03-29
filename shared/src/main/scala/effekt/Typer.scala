@@ -305,7 +305,7 @@ class Typer extends Phase { typer =>
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
-            val annotType = annot.map(resolveValueType) // TODO check whether resolving here suffices when the annotation is a TypeVar
+            val annotType = annot.map(resolveValueType)
             annotType.foreach { t =>
               Context.at(p) { Substitution.unify(decl, t) }
             }
