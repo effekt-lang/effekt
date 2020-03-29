@@ -47,8 +47,8 @@ class CompilerJS extends Compiler {
   override def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = try {
     Some(codegen.pretty(codegen.global(mod)))
   } catch {
-    case FatalPhaseError(msg, reporter) =>
-      reporter.error(msg)
+    case FatalPhaseError(msg) =>
+      C.error(msg)
       None
   }
 
