@@ -37,9 +37,9 @@ trait Intelligence extends Compiler {
     }
   }
 
-  def getTreesAt(position: Position)(implicit C: Context): Option[(Vector[Tree], Module)] = for {
-    mod <- C.tryModuleOf(position.source)
-    tree = new EffektTree(mod.decl)
+  def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
+    decl <- C.compiler.trees.get(position.source)
+    tree = new EffektTree(decl)
     trees = positions.findNodesContaining(tree.nodes, position)
     nodes = trees.sortWith {
       (t1, t2) =>
@@ -54,10 +54,10 @@ trait Intelligence extends Compiler {
           p2s < p1s
         }
     }
-  } yield (nodes, mod)
+  } yield nodes
 
   def getIdTreeAt(position: Position)(implicit C: Context): Option[source.Id] = for {
-    (trees, unit) <- getTreesAt(position)
+    trees <- getTreesAt(position)
     id <- trees.collectFirst { case id: source.Id => id }
   } yield id
 

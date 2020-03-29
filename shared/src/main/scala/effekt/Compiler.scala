@@ -7,11 +7,12 @@ import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.typer.Typer
 import effekt.util.messages.FatalPhaseError
-
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.{ NoSuccess, Success }
 import kiama.util.{ Positions, Source }
+
+import scala.collection.mutable
 
 /**
  * "Pure" compiler without reading or writing to files
@@ -39,6 +40,10 @@ trait Compiler {
   // ==============
   object codegen extends JavaScript
 
+  // Cache containing parsed trees
+  // TODO move to separate DB trait
+  val trees: mutable.Map[Source, source.ModuleDecl] = mutable.Map.empty
+
   /**
    * The full compiler pipeline from source to output
    */
@@ -61,8 +66,9 @@ trait Compiler {
    * adapted from: kiama.util.compiler.makeast
    */
   def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
-    parser.parseAll(parser.program, source) match {
+    trees.get(source) orElse (parser.parseAll(parser.program, source) match {
       case Success(ast, _) =>
+        trees.put(source, ast)
         Some(ast)
 
       case res: NoSuccess =>
@@ -71,7 +77,7 @@ trait Compiler {
         positions.setFinish(res, input.nextPosition)
         C.error(res.message)
         None
-    }
+    })
 
   /**
    * Frontend: Parser -> Namer -> Typer

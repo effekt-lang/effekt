@@ -14,8 +14,8 @@ import scala.collection.mutable
  */
 trait ModuleDB { self: Context =>
 
-  // Cache containing processed units -- compilationUnits are cached by source
-  private val units: mutable.Map[Source, Module] = mutable.Map.empty
+  // Cache containing processed modules -- compilationUnits are cached by source
+  private val modules: mutable.Map[Source, Module] = mutable.Map.empty
 
   /**
    * Tries to find a file in the workspace, that matches the import path
@@ -50,9 +50,9 @@ trait ModuleDB { self: Context =>
    * Tries to find a module for the given source, will run compiler on demand
    */
   def tryModuleOf(source: Source): Option[Module] = {
-    units.get(source).orElse {
+    modules.get(source).orElse {
       val mod = compiler.compile(source)(this)
-      mod.foreach { units.put(source, _) }
+      mod.foreach { modules.put(source, _) }
       mod
     }
   }

@@ -35,8 +35,12 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   override def createConfig(args: Seq[String]) =
     new EffektConfig(args)
 
+  // Unfortunatly this callback is called by Kiama instead of Compiler.parse
   override def parse(source: Source): ParseResult[ModuleDecl] =
-    parser.parseAll(parser.program, source)
+    parser.parseAll(parser.program, source) map { decl =>
+      trees.put(source, decl)
+      decl
+    }
 
   /**
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`
