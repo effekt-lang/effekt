@@ -49,7 +49,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
 
     for {
       mod <- pipeline(source, ast)
-      if !config.server() && !config.compile()
+      if config.interpret()
     } eval(mod)
 
     // report messages
