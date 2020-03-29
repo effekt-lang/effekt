@@ -21,10 +21,10 @@ class Transformer {
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {
       case (d, r) =>
         transform(d, r)(compiler)
-    })
+    }).inheritPosition(mod.decl)
   }
 
-  def transform(d: source.Def, rest: Stmt)(implicit C: Context): Stmt = d match {
+  def transform(d: source.Def, rest: Stmt)(implicit C: Context): Stmt = (d match {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val effs = sym.effects.userDefined
@@ -65,9 +65,9 @@ class Transformer {
 
     case e: source.EffDef =>
       rest
-  }
+  }).inheritPosition(d)
 
-  def transform(tree: source.Stmt)(implicit C: Context): Stmt = tree match {
+  def transform(tree: source.Stmt)(implicit C: Context): Stmt = (tree match {
     case source.DefStmt(d, rest) =>
       transform(d, transform(rest))
 
@@ -76,9 +76,9 @@ class Transformer {
 
     case source.Return(e) =>
       ANF { transform(e).map(Ret) }
-  }
+  }).inheritPosition(tree)
 
-  def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = tree match {
+  def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = (tree match {
     case v: source.Var => v.definition match {
       case sym: VarBinder => pure { Deref(sym) }
       case sym            => pure { ValueVar(sym) }
@@ -153,7 +153,7 @@ class Transformer {
           (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
       }
       bind(Handle(body, cs))
-  }
+  }).map { _.inheritPosition(tree) }
 
   def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {
     case Nil => pure { Nil }

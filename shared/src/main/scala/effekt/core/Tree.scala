@@ -1,9 +1,16 @@
 package effekt
 package core
 
+import effekt.context.Context
+
 import effekt.symbols.Symbol
 
-sealed trait Tree extends Product
+sealed trait Tree extends Product {
+  def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
+    C.compiler.positions.dupPos(from, this);
+    this
+  }
+}
 
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
 

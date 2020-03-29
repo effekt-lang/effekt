@@ -39,20 +39,20 @@ class JavaScript extends ParenPrettyPrinter {
   def toDoc(m: ModuleDecl): Doc =
     "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocStmt(m.defs)
 
-  def toDoc(b: Block): Doc = b match {
+  def toDoc(b: Block): Doc = link(b, b match {
     case BlockVar(v) => v.name.qualified
     case BlockDef(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> toDoc(body)
     case Lift(b) => "$effekt.lift" <> parens(toDoc(b))
     case Extern(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> body
-  }
+  })
 
-  def toDoc(p: Param): Doc = p.id.name.toString
+  def toDoc(p: Param): Doc = link(p, p.id.name.toString)
 
-  def toDoc(n: Name): Doc = n.toString
+  def toDoc(n: Name): Doc = link(n, n.toString)
 
-  def toDoc(e: Expr): Doc = e match {
+  def toDoc(e: Expr): Doc = link(e, e match {
     case UnitLit()     => "null"
     case StringLit(s)  => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
@@ -65,7 +65,7 @@ class JavaScript extends ParenPrettyPrinter {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
-  }
+  })
 
   def argToDoc(e: Argument): Doc = e match {
     case e: Expr  => toDoc(e)
@@ -74,9 +74,9 @@ class JavaScript extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc =
     if (requiresBlock(s))
-      braces(nest(line <> toDocStmt(s)) <> line)
+      link(s, braces(nest(line <> toDocStmt(s)) <> line))
     else
-      toDocExpr(s)
+      link(s, toDocExpr(s))
 
   def toDocDelayed(s: Stmt): Doc =
     if (requiresBlock(s))
