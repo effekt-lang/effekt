@@ -1,7 +1,6 @@
 package effekt
 
 import effekt.context.{ Context, VirtualModuleDB }
-import effekt.evaluator.Evaluator
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source, StringSource }
@@ -30,19 +29,17 @@ class CompilerJS extends Compiler {
     }
   }
 
-  object evaluator extends Evaluator
-
-  def eval(s: String): Unit = {
-    output = new StringBuilder
-    context.buffer.clear()
-    compile(StringSource(s)) match {
-      case None =>
-        sys error "Error"
-      case Some(mod) =>
-        val result = evaluator.run(mod)
-        println(result)
-    }
-  }
+  //  def eval(s: String): Unit = {
+  //    output = new StringBuilder
+  //    context.buffer.clear()
+  //    compile(StringSource(s)) match {
+  //      case None =>
+  //        sys error "Error"
+  //      case Some(mod) =>
+  //        val result = evaluator.run(mod)
+  //        println(result)
+  //    }
+  //  }
 
   /**
    * Don't output module declarations
@@ -97,9 +94,9 @@ object CompilerJS {
   def compile(s: String): String =
     new CompilerJS().compile(s)
 
-  @JSExport
-  def eval(s: String): Unit =
-    new CompilerJS().eval(s)
+  //  @JSExport
+  //  def eval(s: String): Unit =
+  //    new CompilerJS().eval(s)
 
   @JSExport
   def IDE(s: String): CodeInfoJS = new CodeInfoJS(s, new Positions)
