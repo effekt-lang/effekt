@@ -76,13 +76,13 @@ def printError { prog: Unit / Error } = try { prog() } with {
 
 def cheatReport[R] { prog: R / Cheat }: R / Error =
   try { prog() } with {
-    case Cheat(p) => do Error[R](show(p) ++ " cheated!")
+    case Cheat(p) => do Error(show(p) ++ " cheated!")
   }
 
 def check { prog: Player / Move } = try { prog() } with {
   case Move(p, n) => {
     val m = do Move(p, n);
-    if (m <= 3) { resume(m) } else { do Cheat[Player](p) }
+    if (m <= 3) { resume(m) } else { do Cheat(p) }
   }
 }
 
@@ -111,7 +111,7 @@ def bobChooses { prog: Player / Move } =
     perfect { prog() }
   }
 
-def allResults[R] { prog: R / Choose } = try { Cons(prog(), Nil[R]()) } with {
+def allResults[R] { prog: R / Choose } = try { [prog()] } with {
   case Choose() => concat(resume(true), resume(false))
 }
 
@@ -120,7 +120,7 @@ def coin[R] { prog: R / Choose } = try { prog() } with {
 }
 
 def deterministic[R] { prog: R / Choose } = {
-  val allFlips = Cons(true, Cons(false, Cons(true, Cons(true, Cons(false, Nil[Boolean]())))));
+  val allFlips = [true, false, true, true, false];
   var flips = allFlips;
   try { prog() } with {
     case Choose() => flips match {

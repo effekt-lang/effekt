@@ -19,7 +19,7 @@ def foreach[A](l: List[A]) { f: A => Unit } : Unit =
   }
 
 def main() = {
-  val l = Cons(1, Cons(2, Cons(3, Nil[Int]()))).map { a => a + 1 };
+  val l = [1, 2, 3].map { a => a + 1 };
 
  l.foreach { a =>
     println(a)

@@ -1,8 +1,0 @@
-module effekt
-
-// Runtime
-extern include "effekt_runtime.js"
-
-// Builtins
-extern include "effekt_builtins.js"
-

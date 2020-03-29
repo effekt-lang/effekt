@@ -1,0 +1,82 @@
+module effekt
+
+// Runtime
+extern include "effekt_runtime.js"
+
+// Builtins
+extern include "effekt_builtins.js"
+
+
+// Side effecting ops
+// ==================
+extern pure def println[R](value: R): Unit / Console =
+  "println$impl(value)"
+
+extern pure def random(): Int =
+  "Math.random() * 100"
+
+
+// String ops
+// ==========
+extern pure def show[R](value: R): String =
+  "show$impl(value)"
+
+extern pure def infixConcat(s1: String, s2: String): String =
+  "s1 + s2"
+
+// Math ops
+// ========
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "(x + y)"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  "(x * y)"
+
+extern pure def infixDiv(x: Int, y: Int): Int =
+  "(x / y)"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  "(x - y)"
+
+extern pure def mod(x: Int, y: Int): Int =
+  "(x % y)"
+
+extern pure def addDouble(x: Double, y: Double): Double =
+  "(x + y)"
+
+extern pure def mulDouble(x: Double, y: Double): Double =
+  "(x * y)"
+
+extern pure def subDouble(x: Double, y: Double): Double =
+  "(x - y)"
+
+
+// Comparison ops
+// ==============
+extern pure def infixEq[R](x: R, y: R): Boolean =
+  "equals$impl(x, y)"
+
+extern pure def infixLt(x: Int, y: Int): Boolean =
+  "x < y"
+
+extern pure def infixLte(x: Int, y: Int): Boolean =
+  "x <= y"
+
+extern pure def infixGt(x: Int, y: Int): Boolean =
+  "x > y"
+
+extern pure def infixGte(x: Int, y: Int): Boolean =
+  "x >= y"
+
+
+// Boolean ops
+// ===========
+// for now those are considered eager
+extern pure def not(b: Boolean): Boolean =
+  "!b"
+
+extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+  "x || y"
+
+extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+  "x && y"

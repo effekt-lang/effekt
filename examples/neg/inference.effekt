@@ -1,0 +1,53 @@
+module inference
+
+def triple(n: Int, s: Int) = {
+  val i = 1;
+  val j = 2;
+  if ((i + j) == s) {
+    ()
+  } else {
+    ()
+  }
+}
+
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+
+def test1(l1: List[Int]): Int = l1 match {
+  case Nil() => 4
+  case Cons(a, rest) => a
+}
+
+def test2(l1: List[Int]): Int = l1 match {
+  case Nil() => 4
+  case Cons(a: String, rest) => a
+}
+
+
+def test3[A](l1: List[A], l2: List[A]): List[A] = l1 match {
+  case Nil() => Nil[A]()
+  case Cons(a, rest) => Nil()
+}
+
+def test4[A](l1: List[A], l2: List[A]): List[A] = l1 match {
+  case Nil() => Nil()
+  case Cons(a, rest) => Cons(a, test4(rest, l2))
+}
+
+def test5[A] { l1: List[A] } { l2: List[A] }: List[A] = l1() match {
+  case Nil() => Nil()
+  case Cons(a, rest) => l2()
+}
+
+def test5a[R] { p: R }: List[R] =
+   test3([ p() ], Nil())
+
+def test5b[R] { p: R }: List[R] =
+   test5 { [ p() ] } { Nil[R]() }
+
+def test5c[R] { p: R }: List[R] =
+   test5 { [ p() ] } { Nil() }
+
+def main() = println(triple(10, 15))

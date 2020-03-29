@@ -8,6 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+
+    - name: Checkout Kiama fork for ScalaJS
+      uses: actions/checkout@v2
+      with:
+        repository: b-studios/kiama
+        ref: scala-js
+        path: kiama
+
     - name: Set up JDK 1.8
       uses: actions/setup-java@v1
       with:
@@ -17,16 +25,18 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: '10.x'
+
     - run: npm install amdefine
+
+    - name: Install Kiama fork
+      run: sbt publishLocal
+      working-directory: kiama
 
     - name: Run tests and assemble jar file
       run: sbt clean assembly
-
-    - name: Upload jar file
-      uses: actions/upload-artifact@v1
-      with:
-        name: effekt
-        path: target/scala-2.13/effekt.jar
+      
+    - name: Assemble fully optimized js file
+      run: sbt effektJS/fullOptJS
 
   build-vscode:
     name: Build the VSCode extension
@@ -44,9 +54,3 @@ jobs:
     - name: Package VSCode extension into .vsix file
       run: vsce package
       working-directory: dist/vscode
-
-    - name: Upload vsix file
-      uses: actions/upload-artifact@v1
-      with:
-        name: effekt-vscode
-        path: dist/vscode/effekt-0.1.0.vsix
