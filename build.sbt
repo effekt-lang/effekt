@@ -50,7 +50,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
   jsSettings(
     // Add JS-specific settings here
     libraryDependencies ++= Seq(
-      "org.bitbucket.inkytonik.kiama" %%% "kiama" % "2.4.0-SNAPSHOT"
+      "org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
     ),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
