@@ -30,7 +30,7 @@ class Typer extends Phase { typer =>
   def run(module: source.ModuleDecl, mod: Module)(implicit C: Context): Unit = {
 
     // Effects that are lexically in scope at the top level
-    val toplevelEffects = rootEffects ++ Effects(mod.types.values.collect {
+    val toplevelEffects = Effects(mod.types.values.collect {
       case e: Effect => e
     })
     Context.typerState = TyperState(toplevelEffects)

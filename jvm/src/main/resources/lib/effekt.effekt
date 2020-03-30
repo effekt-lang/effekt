@@ -1,5 +1,7 @@
 module effekt
 
+extern effect Console
+
 // Runtime
 extern include "effekt_runtime.js"
 

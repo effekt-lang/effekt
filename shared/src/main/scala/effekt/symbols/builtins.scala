@@ -13,15 +13,11 @@ object builtins {
   val TString = BuiltinType(name("String"), Nil)
   val TDouble = BuiltinType(name("Double"), Nil)
 
-  val EConsole = BuiltinEffect(name("Console"))
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
     "Boolean" -> TBoolean,
     "Unit" -> TUnit,
     "String" -> TString,
-    "Double" -> TDouble,
-    "Console" -> EConsole
+    "Double" -> TDouble
   )
-
-  val rootEffects: Effects = Effects(List(EConsole))
 }
