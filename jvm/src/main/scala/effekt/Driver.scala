@@ -46,7 +46,9 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     for {
       ast <- parser(source)
       _ = context.setup(ast, config)
-      mod <- pipeline(source, ast)
+      mod <- frontend(source, ast)
+      js <- backend(mod)
+      _ = saveOutput(js, mod)
       if config.interpret()
     } eval(mod)
 

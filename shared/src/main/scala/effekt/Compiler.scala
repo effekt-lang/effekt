@@ -41,13 +41,8 @@ trait Compiler {
    * The full compiler pipeline from source to output
    */
   def compile(source: Source)(implicit C: Context): Option[Module] =
-    parser(source) flatMap { ast => pipeline(source, ast) }
-
-  /**
-   * The pipeline from ast to output
-   */
-  def pipeline(source: Source, ast: ModuleDecl)(implicit C: Context): Option[Module] =
     for {
+      ast <- parser(source)
       mod <- frontend(source, ast)
       js <- backend(mod)
       _ = saveOutput(js, mod)
