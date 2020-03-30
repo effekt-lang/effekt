@@ -1,12 +1,12 @@
-examples/neg/existential_effect_leaks.effekt:24:1:error: Effects GiveInt leave their defining scope.
+[error] examples/neg/existential_effect_leaks.effekt:24:1: Effects GiveInt leave their defining scope.
 def main(): Unit / { Console } = {
 ^
-examples/neg/existential_effect_leaks.effekt:24:1:error: Unhandled effects: GiveInt
+[error] examples/neg/existential_effect_leaks.effekt:24:1: Unhandled effects: GiveInt
 def main(): Unit / { Console } = {
 ^
-examples/neg/existential_effect_leaks.effekt:26:3:warning: Handling effects that are not used: GiveInt
+[warning] examples/neg/existential_effect_leaks.effekt:26:3: Handling effects that are not used: GiveInt
   try {
   ^
-examples/neg/existential_effect_leaks.effekt:41:1:error: Effects GiveInt leave their defining scope.
+[error] examples/neg/existential_effect_leaks.effekt:41:1: Effects GiveInt leave their defining scope.
 def foo() = {
 ^

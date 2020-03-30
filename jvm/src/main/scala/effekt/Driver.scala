@@ -6,6 +6,7 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
+import effekt.util.ColoredMessaging
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
@@ -16,6 +17,8 @@ import scala.sys.process.Process
 trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
+
+  override val messaging = new ColoredMessaging(positions)
 
   // Compiler context
   // ================

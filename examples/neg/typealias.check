@@ -1,9 +1,9 @@
-examples/neg/typealias.effekt:35:32:error: Expected Bar, but got Int
+[error] examples/neg/typealias.effekt:35:32: Expected Bar, but got Int
 def add(x: Foo, y: Foo): Bar = x + y
                                ^
-examples/neg/typealias.effekt:35:32:error: Expected Bar, but got Int
+[error] examples/neg/typealias.effekt:35:32: Expected Bar, but got Int
 def add(x: Foo, y: Foo): Bar = x + y
                                ^
-examples/neg/typealias.effekt:35:32:error: Expected Int, but got Bar
+[error] examples/neg/typealias.effekt:35:32: Expected Int, but got Bar
 def add(x: Foo, y: Foo): Bar = x + y
                                ^

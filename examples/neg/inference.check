@@ -1,12 +1,12 @@
-examples/neg/inference.effekt:23:33:error: Expected Int, but got String
+[error] examples/neg/inference.effekt:23:33: Expected Int, but got String
 def test2(l1: List[Int]): Int = l1 match {
                                 ^
-examples/neg/inference.effekt:25:13:error: Expected Int, but got String
+[error] examples/neg/inference.effekt:25:13: Expected Int, but got String
   case Cons(a: String, rest) => a
             ^
-examples/neg/inference.effekt:25:33:error: Expected Int, but got String
+[error] examples/neg/inference.effekt:25:33: Expected Int, but got String
   case Cons(a: String, rest) => a
                                 ^
-examples/neg/inference.effekt:25:33:error: Expected Int, but got String
+[error] examples/neg/inference.effekt:25:33: Expected Int, but got String
   case Cons(a: String, rest) => a
                                 ^

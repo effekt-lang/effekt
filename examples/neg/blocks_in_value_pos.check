@@ -1,6 +1,6 @@
-examples/neg/blocks_in_value_pos.effekt:8:14:error: Blocks have to be fully applied and can't be used as values.
+[error] examples/neg/blocks_in_value_pos.effekt:8:14: Blocks have to be fully applied and can't be used as values.
       resume(prog);
              ^
-examples/neg/blocks_in_value_pos.effekt:8:14:error: Trying to find a value type for non-value 'prog'
+[error] examples/neg/blocks_in_value_pos.effekt:8:14: Trying to find a value type for non-value 'prog'
       resume(prog);
              ^

@@ -50,6 +50,6 @@ class RegressionTests {
     val configs = compiler.createConfig(Seq("--Koutput", "string"))
     configs.verify()
     compiler.compileFile(filename, configs)
-    configs.stringEmitter.result()
+    configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "")
   }
 }

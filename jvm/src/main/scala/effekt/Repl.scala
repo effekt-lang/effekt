@@ -1,8 +1,8 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ Module, BlockSymbol, ValueSymbol }
-
+import effekt.symbols.{ BlockSymbol, Module, ValueSymbol }
+import effekt.util.ColoredMessaging
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
@@ -12,6 +12,8 @@ import kiama.parsing.{ NoSuccess, ParseResult, Success }
 class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   var module: ReplModule = emptyModule
+
+  override val messaging = new ColoredMessaging(positions)
 
   val banner =
     """|  _____     ______  __  __     _    _
