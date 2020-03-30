@@ -27,101 +27,42 @@ trait Compiler {
 
   // Frontend phases
   // ===============
-  object parser extends Parser(positions)
-  object namer extends Namer
-  object typer extends Typer
-
-  // Middleend phases
-  // ================
-  object transformer extends Transformer
-  object prettyCore extends core.PrettyPrinter
+  lazy val parser = new Parser(positions).cached
+  lazy val namer = new Namer()
+  lazy val typer = new Typer
+  lazy val frontend = (namer andThen typer).cached
 
   // Backend phases
   // ==============
-  object codegen extends JavaScript
-
-  // Cache containing parsed trees
-  // TODO move to separate DB trait
-  val trees: mutable.Map[Source, source.ModuleDecl] = mutable.Map.empty
+  lazy val transformer = new Transformer
+  lazy val codegen = new JavaScript
 
   /**
    * The full compiler pipeline from source to output
    */
   def compile(source: Source)(implicit C: Context): Option[Module] =
-    parse(source) flatMap { ast => pipeline(source, ast) }
+    parser(source) flatMap { ast => pipeline(source, ast) }
 
   /**
    * The pipeline from ast to output
    */
-  def pipeline(source: Source, ast: ModuleDecl)(implicit C: Context): Option[Module] = for {
-    mod <- frontend(source, ast)
-    core <- middleend(source, mod)
-    js <- backend(source, core)
-    _ = saveOutput(js, mod)
-  } yield mod
-
-  /**
-   * Parser: Source -> AST
-   *
-   * adapted from: kiama.util.compiler.makeast
-   */
-  def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
-    trees.get(source) orElse (parser.parseAll(parser.program, source) match {
-      case Success(ast, _) =>
-        trees.put(source, ast)
-        Some(ast)
-
-      case res: NoSuccess =>
-        val input = res.next
-        positions.setStart(res, input.position)
-        positions.setFinish(res, input.nextPosition)
-        C.error(res.message)
-        None
-    })
+  def pipeline(source: Source, ast: ModuleDecl)(implicit C: Context): Option[Module] =
+    for {
+      mod <- frontend(source, ast)
+      js <- backend(mod)
+      _ = saveOutput(js, mod)
+    } yield mod
 
   /**
    * Frontend: Parser -> Namer -> Typer
    */
   def frontend(source: Source)(implicit C: Context): Option[Module] =
-    parse(source) flatMap { mod => frontend(source, mod) }
+    parser(source) flatMap { mod => frontend(source, mod) }
 
   /**
-   * Frontend: Namer -> Typer
+   * Backend: Module -> Document
    */
-  def frontend(source: Source, ast: ModuleDecl)(implicit C: Context): Option[Module] = try {
-    val mod = namer.run(source, ast)
-    typer.run(ast, mod)
+  def backend(mod: Module)(implicit C: Context): Option[Document] =
+    (transformer andThen codegen)(mod)
 
-    if (C.buffer.hasErrors) {
-      None
-    } else {
-      Some(mod)
-    }
-  } catch {
-    case FatalPhaseError(msg) =>
-      C.error(msg)
-      None
-  }
-
-  /**
-   * Middleend: Effekt -> Core
-   */
-  def middleend(source: Source, unit: Module)(implicit C: Context): Option[core.ModuleDecl] = try {
-    Some(transformer.run(unit))
-  } catch {
-    case FatalPhaseError(msg) =>
-      C.error(msg)
-      None
-  }
-
-  /**
-   * Backend: Effekt -> Core -> JavaScript
-   */
-  def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = try {
-    Some(codegen.format(mod))
-  } catch {
-    case FatalPhaseError(msg) =>
-      C.error(msg)
-      None
-  }
 }

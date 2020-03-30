@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.context.Context
+import effekt.core.PrettyPrinter
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama
@@ -8,6 +9,8 @@ import kiama.util.{ Position, Source }
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 trait LSPServer extends Driver with Intelligence {
+
+  object prettyCore extends PrettyPrinter
 
   import effekt.symbols._
 
@@ -22,14 +25,15 @@ trait LSPServer extends Driver with Intelligence {
   /**
    * Overriding backend to also publish core and target for LSP server
    */
-  override def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = {
+  override def backend(mod: Module)(implicit C: Context): Option[Document] = transformer(mod) flatMap { core =>
+
     if (C.config.server() && settingBool("showCore")) {
-      publishProduct(source, "target", "effekt", prettyCore.format(mod))
+      publishProduct(mod.source, "target", "effekt", prettyCore.format(core))
     }
 
-    super.backend(source, mod) map { js =>
+    codegen(core) map { js =>
       if (C.config.server() && settingBool("showTarget")) {
-        publishProduct(source, "target", "js", js)
+        publishProduct(mod.source, "target", "js", js)
       }
       js
     }

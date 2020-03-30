@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context, Phase }
+import effekt.context.{ Context }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Expr, Stmt, Tree }
 import effekt.subtitutions._
@@ -23,11 +23,13 @@ case class TyperState(
   effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
 )
 
-class Typer extends Phase { typer =>
+class Typer extends Phase[Module, Module] { typer =>
 
-  val name = "typer"
+  val phaseName = "typer"
 
-  def run(module: source.ModuleDecl, mod: Module)(implicit C: Context): Unit = {
+  def run(mod: Module)(implicit C: Context): Option[Module] = {
+
+    val module = mod.decl
 
     // Effects that are lexically in scope at the top level
     val toplevelEffects = Effects(mod.types.values.collect {
@@ -46,6 +48,12 @@ class Typer extends Phase { typer =>
             Context.error("Unhandled effects: " + effs)
           }
       }
+    }
+
+    if (C.buffer.hasErrors) {
+      None
+    } else {
+      Some(mod)
     }
   }
 

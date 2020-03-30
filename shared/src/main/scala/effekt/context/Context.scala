@@ -1,21 +1,10 @@
 package effekt
 package context
 
-import effekt.namer.{ Namer, NamerOps, NamerState }
-import effekt.typer.{ Typer, TyperOps, TyperState }
+import effekt.namer.{ NamerOps, NamerState }
+import effekt.typer.{ TyperOps, TyperState }
 import effekt.source.{ ModuleDecl, Tree }
-import effekt.symbols.{ Module, builtins }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
-import org.bitbucket.inkytonik.kiama.util.Source
-
-trait Phase {
-  def name: String
-
-  def Context(implicit ctx: Context): Context = ctx
-}
-object NoPhase extends Phase {
-  def name = "no-phase"
-}
 
 /**
  * The compiler context consists of

@@ -60,7 +60,7 @@ object subtitutions {
     def checkFullyDefined(rigids: List[RigidVar])(implicit report: ErrorReporter): Unit =
       rigids.foreach { tpe =>
         if (!subst.isDefinedAt(tpe))
-          report.error(s"Couldn't infer type for ${tpe}")
+          report.error(s"Couldn't infer type for ${tpe.underlying}")
       }
   }
 

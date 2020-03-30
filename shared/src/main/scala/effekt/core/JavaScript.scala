@@ -3,10 +3,17 @@ package core
 
 import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 
+import effekt.context.Context
 import scala.language.implicitConversions
-import effekt.symbols.{ builtins, moduleName, moduleFile, Name }
+import effekt.symbols.{ Name, builtins, moduleFile, moduleName }
+import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-class JavaScript extends ParenPrettyPrinter {
+class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
+
+  val phaseName = "code-generator"
+
+  def run(t: ModuleDecl)(implicit C: Context): Option[Document] =
+    Some(format(t))
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
@@ -22,18 +29,7 @@ class JavaScript extends ParenPrettyPrinter {
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
       parens(imports <> comma <+> "function" <> parens(hsep(deps.map { d => moduleName(d) }, comma)) <+>
-        braces(nest(line <> toDoc(m))))
-  }
-
-  /**
-   * No JS module system.
-   *
-   * Defines the given module as top level global variable.
-   */
-  def global(m: ModuleDecl): Doc = {
-    "var" <+> moduleName(m.path) <+> "=" <+> parens("function()" <+> braces(
-      nest(line <> toDoc(m)) <> line
-    )) <> ".apply(this)"
+        braces(nest(line <> toDoc(m)) <> line))
   }
 
   def toDoc(m: ModuleDecl): Doc =

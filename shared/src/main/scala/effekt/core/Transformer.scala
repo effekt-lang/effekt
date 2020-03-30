@@ -10,9 +10,14 @@ import effekt.util.control._
 
 object Wildcard extends Symbol { val name = LocalName("_") }
 
-class Transformer {
+class Transformer extends Phase[Module, core.ModuleDecl] {
 
-  def run(mod: Module)(implicit compiler: Context): ModuleDecl = {
+  val phaseName = "transformer"
+
+  def run(mod: Module)(implicit compiler: Context): Option[ModuleDecl] =
+    Some(transform(mod))
+
+  def transform(mod: Module)(implicit compiler: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.collect {
       case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym

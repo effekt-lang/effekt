@@ -35,23 +35,17 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   override def createConfig(args: Seq[String]) =
     new EffektConfig(args)
 
-  // Unfortunatly this callback is called by Kiama instead of Compiler.parse
-  override def parse(source: Source): ParseResult[ModuleDecl] =
-    parser.parseAll(parser.program, source) map { decl =>
-      trees.put(source, decl)
-      decl
-    }
-
   /**
-   * Main entry to the compiler, invoked by Kiama after parsing with `parse`
+   * Main entry to the compiler, invoked by Kiama after creating the config
    */
-  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
+  override def compileSource(source: Source, config: EffektConfig): Unit = {
+    sources(source.name) = source
 
     implicit val C = context
 
-    context.setup(ast, config)
-
     for {
+      ast <- parser(source)
+      _ = context.setup(ast, config)
       mod <- pipeline(source, ast)
       if config.interpret()
     } eval(mod)
@@ -98,6 +92,17 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)
+
+  /**
+   * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
+   * Not used anymore
+   */
+  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
+
+  /**
+   * Originally called by kiama, not used anymore.
+   */
+  override def parse(source: Source): ParseResult[ModuleDecl] = ???
 
   def format(m: ModuleDecl): Document = ???
 }

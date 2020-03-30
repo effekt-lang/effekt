@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.context.{ Context, VirtualModuleDB }
+import effekt.core.JavaScriptGlobal
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source, StringSource }
@@ -15,6 +16,11 @@ class CompilerJS extends Compiler {
     // TODO call setup instead of manually setting up everything here
     config = new EffektConfig {}
   }
+
+  /**
+   * Don't output amdefine module declarations
+   */
+  override lazy val codegen = new JavaScriptGlobal
 
   var output: StringBuilder = _
 
@@ -49,17 +55,6 @@ class CompilerJS extends Compiler {
     }
   }
 
-  /**
-   * Don't output module declarations
-   */
-  override def backend(source: Source, mod: core.ModuleDecl)(implicit C: Context): Option[Document] = try {
-    Some(codegen.pretty(codegen.global(mod)))
-  } catch {
-    case FatalPhaseError(msg) =>
-      C.error(msg)
-      None
-  }
-
   override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = {
     output.append(s"\n// Result of compiling module: ${unit.name}\n")
     output.append(js.layout)
@@ -89,7 +84,11 @@ class CodeInfoJS(input: String, val positions: Positions) extends Compiler with 
   @JSExport
   def infoAt(line: Int, col: Int): Option[String] = {
     val p = Position(line, col, source)
-    getSymbolAt(p) flatMap { case (tree, sym) => getInfoOf(sym).map { _.fullDescription } }
+    getSymbolAt(p) flatMap {
+      case (tree, sym) =>
+        println(sym);
+        getInfoOf(sym).map { _.fullDescription }
+    }
   }
 
   override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = ()
@@ -127,9 +126,13 @@ object Main extends App {
       |def main() = println(bar())
       |""".stripMargin
 
-  // println(CompilerJS.compile(input))
+  println("Result of compiling input:")
+  println(CompilerJS.compile(input))
+
+  println("\n\nResult of evaluating input:")
   println(CompilerJS.eval(input))
 
-  // val ide = CompilerJS.IDE(input)
-  // println(ide.infoAt(9, 11))
+  println("\n\nInformation at line 7, column 8:")
+  val ide = CompilerJS.IDE(input)
+  println(ide.infoAt(7, 8))
 }

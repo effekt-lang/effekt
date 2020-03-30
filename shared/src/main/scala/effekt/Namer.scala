@@ -4,7 +4,7 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context, Phase }
+import effekt.context.{ Context }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
 import effekt.symbols._
@@ -28,11 +28,14 @@ case class NamerState(
   types: Scope[TypeSymbol]
 )
 
-class Namer extends Phase { namer =>
+class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
 
-  val name = "Namer"
+  val phaseName = "Namer"
 
-  def run(src: Source, decl: source.ModuleDecl)(implicit C: Context): Module = {
+  def run(input: (Source, source.ModuleDecl))(implicit C: Context): Option[Module] =
+    Some(resolve(input._1, input._2))
+
+  def resolve(src: Source, decl: source.ModuleDecl)(implicit C: Context): Module = {
 
     var terms: Scope[TermSymbol] = toplevel(Map.empty)
     var types: Scope[TypeSymbol] = toplevel(builtins.rootTypes)

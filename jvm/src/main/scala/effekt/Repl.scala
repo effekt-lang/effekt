@@ -171,12 +171,14 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
-      reportOrElse(source, frontend(source, module.makeEval(e), config)) { cu =>
-        driver.middleend(source, cu)(driver.context).foreach { core =>
-          driver.backend(source, core)(driver.context).foreach { js =>
-            driver.saveOutput(js, cu)(driver.context)
-            driver.eval(cu)(driver.context)
-          }
+      val decl = module.makeEval(e)
+      implicit val context = driver.context
+      context.setup(decl, config)
+
+      reportOrElse(source, driver.frontend(source, decl)) { mod =>
+        driver.backend(mod).foreach { js =>
+          driver.saveOutput(js, mod)
+          driver.eval(mod)
         }
       }
 

@@ -1,8 +1,9 @@
 package effekt
 
+import effekt.context.Context
 import effekt.source._
-import org.bitbucket.inkytonik.kiama.parsing.Parsers
-import org.bitbucket.inkytonik.kiama.util.Positions
+import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, Parsers, Success }
+import org.bitbucket.inkytonik.kiama.util.{ Positions, Source }
 
 import scala.language.implicitConversions
 
@@ -11,7 +12,22 @@ import scala.language.implicitConversions
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) {
+class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
+
+  val phaseName = "parser"
+
+  def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
+    parseAll(program, source) match {
+      case Success(ast, _) =>
+        Some(ast)
+
+      case res: NoSuccess =>
+        val input = res.next
+        positions.setStart(res, input.position)
+        positions.setFinish(res, input.nextPosition)
+        C.error(res.message)
+        None
+    }
 
   type P[T] = PackratParser[T]
 
