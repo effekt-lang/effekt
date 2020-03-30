@@ -90,6 +90,13 @@ case class TypeDef(id: Id, tparams: List[Id], tpe: ValueType) extends Def {
   type symbol = symbols.TypeAlias
 }
 
+/**
+ * Effect aliases like `effect Set = { Get, Put }`
+ */
+case class EffectDef(id: Id, effs: Effects) extends Def {
+  type symbol = symbols.EffectAlias
+}
+
 case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }

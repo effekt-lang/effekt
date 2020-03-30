@@ -95,6 +95,7 @@ class Namer extends Phase { namer =>
 
     case source.EffDef(id, tparams, params, ret) => ()
     case source.TypeDef(id, tparams, tpe) => ()
+    case source.EffectDef(id, effs) => ()
     case source.DataDef(id, tparams, ctors) => ()
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
@@ -242,6 +243,12 @@ class Namer extends Phase { namer =>
         }
         Context.define(id, alias)
 
+      case source.EffectDef(id, effs) =>
+        val alias = Context scoped {
+          EffectAlias(name(id), resolve(effs))
+        }
+        Context.define(id, alias)
+
       case source.DataDef(id, tparams, ctors) =>
         val (typ, tps) = Context scoped {
           val tps = tparams map resolve
@@ -306,7 +313,7 @@ class Namer extends Phase { namer =>
     Context.resolveType(tpe.id).asEffect
 
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
-    Effects(tpe.effs.map(resolve))
+    Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(implicit C: Context): Effectful =
     Effectful(resolve(e.tpe), resolve(e.eff))

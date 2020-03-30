@@ -143,7 +143,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
    * Definitions
    */
   lazy val definition: P[Def] =
-    funDef | effectDef | typeDef | dataDef | recordDef | externType | externEffect | externFun | externInclude | failure("Expected a definition")
+    funDef | effectDef | typeDef | effectAliasDef | dataDef | recordDef | externType | externEffect | externFun | externInclude | failure("Expected a definition")
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
@@ -152,7 +152,7 @@ class Parser(positions: Positions) extends Parsers(positions) {
     `pure`.? ^^ { _.isDefined }
 
   lazy val effectDef: P[Def] =
-    `effect` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ~ (`:` ~> valueType) ^^ EffDef
+    `effect` ~> idDef ~ maybeTypeParams ~ some(valueParams) ~ (`:` ~/> valueType) ^^ EffDef
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType
@@ -257,6 +257,9 @@ class Parser(positions: Positions) extends Parsers(positions) {
 
   lazy val typeDef: P[TypeDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef
+
+  lazy val effectAliasDef: P[EffectDef] =
+    `effect` ~> idDef ~ (`=` ~/> effects) ^^ EffectDef
 
   lazy val dataDef: P[DataDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef

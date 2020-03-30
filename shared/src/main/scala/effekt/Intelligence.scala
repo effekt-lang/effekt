@@ -115,6 +115,9 @@ trait Intelligence extends Compiler {
 
       SymbolInfo(sym, "Effect operation", Some(DeclPrinter(sym)), Some(ex))
 
+    case f: EffectAlias =>
+      SymbolInfo(sym, "Effect alias", Some(DeclPrinter(sym)), None)
+
     case t: TypeAlias =>
       SymbolInfo(sym, "Type alias", Some(DeclPrinter(sym)), None)
 

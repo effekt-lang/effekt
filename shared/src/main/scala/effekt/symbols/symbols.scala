@@ -166,7 +166,15 @@ package object symbols {
     def ret = if (tparams.size > 0) Some(Effectful(TypeApp(datatype, tparams), Pure)) else Some(Effectful(datatype, Pure))
   }
 
-  sealed trait Effect extends TypeSymbol
+  sealed trait Effect extends TypeSymbol {
+    // invariant: no EffectAlias in this list
+    def dealias: List[Effect] = List(this)
+  }
+
+  case class EffectAlias(name: Name, effs: Effects) extends Effect {
+    override def dealias: List[Effect] = effs.dealias
+  }
+
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun
 
@@ -174,19 +182,28 @@ package object symbols {
    * symbols.Effects is like source.Effects, but with resolved effects
    *
    * Effect sets and effectful computations are themselves *not* symbols, they are just aggregates
+   *
+   * `effects` is dealiased by the smart constructors
    */
-  case class Effects(effects: List[Effect]) {
-    def +(eff: Effect): Effects = Effects(eff :: effects).distinct
-    def -(eff: Effect): Effects = Effects((effects.toSet - eff).toList).distinct
-    def ++(other: Effects): Effects = Effects(effects ++ other.effects).distinct
-    def --(other: Effects): Effects = Effects((effects.toSet -- other.effects.toSet).toList)
+  class Effects private[symbols] (effects: List[Effect]) {
+
+    lazy val toList: List[Effect] = effects.distinct
+
+    def +(eff: Effect): Effects = this ++ Effects(eff)
+    def -(eff: Effect): Effects = this -- Effects(eff)
+
+    def ++(other: Effects): Effects = Effects((other.toList ++ this.toList).distinct)
+    def --(other: Effects): Effects = Effects(this.toList.toSet -- other.toList.toSet)
 
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
 
-    def distinct: Effects = Effects(effects.distinct)
+    def distinct: Effects = new Effects(toList)
 
-    def contains(e: Effect): Boolean = effects.contains(e)
+    def contains(e: Effect): Boolean = contains(e.dealias)
+    def contains(other: List[Effect]): Boolean = other.toList.forall {
+      e => this.toList.contains(e)
+    }
 
     def filterNot(p: Effect => Boolean): Effects =
       Effects(effects.filterNot(p))
@@ -194,19 +211,24 @@ package object symbols {
     def userDefined: Effects =
       filterNot(_.builtin)
 
-    def toList: List[Effect] = effects
+    def dealias: List[Effect] = effects.flatMap { _.dealias }
 
     override def toString: String = effects match {
+      case Nil        => "{}"
       case eff :: Nil => eff.toString
       case effs       => s"{ ${effs.mkString(", ")} }"
     }
   }
   object Effects {
-    def apply(effs: Effect*): Effects = Effects(effs.toList)
-    def apply(effs: Iterable[Effect]): Effects = Effects(effs.toList)
+
+    def apply(effs: Effect*): Effects =
+      new Effects(effs.flatMap(_.dealias).toList)
+
+    def apply(effs: Iterable[Effect]): Effects =
+      new Effects(effs.flatMap(_.dealias).toList)
   }
 
-  val Pure: Effects = Effects(Nil)
+  lazy val Pure = new Effects(Nil)
   case class Effectful(tpe: ValueType, effects: Effects) {
     override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
   }

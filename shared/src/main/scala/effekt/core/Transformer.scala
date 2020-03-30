@@ -51,6 +51,9 @@ class Transformer {
     case source.TypeDef(id, tparams, tpe) =>
       rest
 
+    case source.EffectDef(id, effs) =>
+      rest
+
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       // C&P from FunDef
       val effs = f.symbol.effects.userDefined

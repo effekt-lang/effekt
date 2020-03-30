@@ -1,0 +1,19 @@
+module effectalias
+
+effect Pure = {}
+
+effect Foo = Console
+
+effect Bar = { Foo, Foo }
+
+def foo(): Unit / Foo = {
+  println("hello")
+}
+
+def bar(): Unit / { Foo, Bar, Pure } = {
+  println("hello")
+}
+
+def main(): Unit / Foo = {
+  foo()
+}
