@@ -1,0 +1,3 @@
+examples/neg/mainnoargs.effekt:1:1:error: Main does not take arguments
+module mainnoargs
+^

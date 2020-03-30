@@ -73,6 +73,18 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     }
 
   def eval(mod: Module)(implicit C: Context): Unit = {
+
+    val main = mod.terms.getOrElse("main", {
+      C.error("No main function defined")
+      return
+    })
+
+    val mainParams = C.blockTypeOf(main).params
+    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
+      C.error("Main does not take arguments")
+      return
+    }
+
     val jsFile = jsPath(mod)
     val jsScript = s"require('${jsFile}').main().run()"
     val command = Process(Seq("node", "--eval", jsScript))

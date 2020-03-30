@@ -1,0 +1,3 @@
+module mainnoargs
+
+def main(n: Int) = println(n)

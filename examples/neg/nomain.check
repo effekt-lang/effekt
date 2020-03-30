@@ -1,0 +1,3 @@
+examples/neg/nomain.effekt:1:1:error: No main function defined
+module nomain
+^
