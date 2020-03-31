@@ -14,8 +14,8 @@ trait VirtualModuleDB extends ModuleDB { self: Context =>
    *
    * used by Namer to resolve FFI includes
    */
-  override def contentsOf(moduleSource: Source, path: String): String = {
-    val fullPath = Filenames.directory(moduleSource.name) + path
+  override def contentsOf(path: String): String = {
+    val fullPath = Filenames.directory(module.source.name) + path
     VirtualFS.tryRead(fullPath).getOrElse {
       error(s"Cannot find include: ${path}")
       "" // continue nonetheless

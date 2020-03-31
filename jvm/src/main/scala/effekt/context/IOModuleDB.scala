@@ -14,8 +14,8 @@ trait IOModuleDB extends ModuleDB { self: Context =>
    *
    * used by Namer to resolve FFI includes
    */
-  override def contentsOf(moduleSource: Source, path: String): String =
-    moduleSource match {
+  override def contentsOf(path: String): String =
+    module.source match {
       case JarSource(name) =>
         val p = new File(name).toPath.getParent.resolve(path).toString
         if (!JarSource.exists(p)) {
@@ -24,7 +24,7 @@ trait IOModuleDB extends ModuleDB { self: Context =>
           JarSource(p).content
         }
       case _ =>
-        val modulePath = moduleSource.name
+        val modulePath = module.source.name
         val p = new File(modulePath).toPath.getParent.resolve(path).toFile
         if (!p.exists()) {
           abort(s"Missing include: ${p}")

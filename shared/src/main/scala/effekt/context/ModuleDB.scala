@@ -19,7 +19,7 @@ trait ModuleDB { self: Context =>
    *
    * Used by Namer to resolve FFI includes
    */
-  def contentsOf(moduleSource: Source, path: String): String
+  def contentsOf(path: String): String
 
   /**
    * Find the source for a given module name / path

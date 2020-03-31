@@ -22,8 +22,6 @@ import org.bitbucket.inkytonik.kiama.util.Source
  *   - binding: that is adding a binding to the environment (lexical.Scope)
  */
 case class NamerState(
-  source: Source,
-  module: effekt.source.ModuleDecl,
   terms: Scope[TermSymbol],
   types: Scope[TypeSymbol]
 )
@@ -32,16 +30,22 @@ class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
 
   val phaseName = "Namer"
 
-  def run(input: (Source, source.ModuleDecl))(implicit C: Context): Option[Module] =
-    Some(resolve(input._1, input._2))
+  def run(input: (Source, source.ModuleDecl))(implicit C: Context): Option[Module] = {
+    // TODO eventually this could be done at the call-site?
+    val mod = Module(input._2, input._1)
+    Context in {
+      Context.module = mod
+      Some(resolve(mod))
+    }
+  }
 
-  def resolve(src: Source, decl: source.ModuleDecl)(implicit C: Context): Module = {
+  def resolve(mod: Module)(implicit C: Context): Module = {
 
     var terms: Scope[TermSymbol] = toplevel(Map.empty)
     var types: Scope[TypeSymbol] = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
-    decl.imports foreach {
+    mod.decl.imports foreach {
       case im @ source.Import(path) => Context.at(im) {
         val mod = Context.moduleOf(path)
         terms = terms.enterWith(mod.terms)
@@ -53,11 +57,11 @@ class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
     terms = terms.enter
     types = types.enter
 
-    Context.namerState = NamerState(src, decl, terms, types)
+    Context.namerState = NamerState(terms, types)
 
-    resolve(decl)
+    resolve(mod.decl)
 
-    Module(decl, src).export(terms.bindings.toMap, types.bindings.toMap)
+    mod.export(terms.bindings.toMap, types.bindings.toMap)
   }
 
   /**
@@ -290,7 +294,7 @@ class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
         })
 
       case d @ source.ExternInclude(path) =>
-        d.contents = Context.contentsOf(Context.source, path)
+        d.contents = Context.contentsOf(path)
         ()
     }
   }
@@ -340,12 +344,10 @@ trait NamerOps { self: Context =>
 
   // State Access
   // ============
-  private[namer] def source: Source = namerState.source
-  private[namer] def decl: effekt.source.ModuleDecl = namerState.module
   private[namer] def terms: Scope[TermSymbol] = namerState.terms
   private[namer] def types: Scope[TypeSymbol] = namerState.types
 
-  private[namer] def qualifiedName(id: Id): Name = QualifiedName(decl.path, id.name)
+  private[namer] def qualifiedName(id: Id): Name = QualifiedName(module.decl.path, id.name)
 
   private[namer] def localName(id: Id): Name = LocalName(id.name)
 
@@ -359,7 +361,7 @@ trait NamerOps { self: Context =>
     val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
 
     if (qualified) {
-      QualifiedName(decl.path, id.name + seed)
+      QualifiedName(module.decl.path, id.name + seed)
     } else {
       LocalName(id.name + seed)
     }
