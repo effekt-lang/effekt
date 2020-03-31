@@ -52,4 +52,28 @@ class RegressionTests {
     compiler.compileFile(filename, configs)
     configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "")
   }
+
+  /**
+   * Generates the check files from the actual outputs.
+   *
+   * Call from sbt with:
+   *    > project effektJVM
+   *    > test:console
+   *    scala> new effekt.RegressionTests().generateCheckFiles()
+   *
+   * Check afterwards with:
+   *    git diff
+   */
+  def generateCheckFiles(): Unit = {
+    println("Generating check files by running the tests. This can take a while...\n")
+    for (file <- (posFiles.get ++ negFiles.get)) {
+      val path = file.getParentFile
+      val baseName = file.getName.stripSuffix(".effekt")
+      val checkfile = path / (baseName + ".check")
+
+      val out = interpret(file.getPath)
+      IO.write(checkfile, out)
+    }
+  }
+
 }
