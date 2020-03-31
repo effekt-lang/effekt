@@ -57,7 +57,7 @@ class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
 
     resolve(decl)
 
-    Module(decl, src, terms.bindings.toMap, types.bindings.toMap)
+    Module(decl, src).export(terms.bindings.toMap, types.bindings.toMap)
   }
 
   /**
@@ -341,11 +341,11 @@ trait NamerOps { self: Context =>
   // State Access
   // ============
   private[namer] def source: Source = namerState.source
-  private[namer] def module: effekt.source.ModuleDecl = namerState.module
+  private[namer] def decl: effekt.source.ModuleDecl = namerState.module
   private[namer] def terms: Scope[TermSymbol] = namerState.terms
   private[namer] def types: Scope[TypeSymbol] = namerState.types
 
-  private[namer] def qualifiedName(id: Id): Name = QualifiedName(module.path, id.name)
+  private[namer] def qualifiedName(id: Id): Name = QualifiedName(decl.path, id.name)
 
   private[namer] def localName(id: Id): Name = LocalName(id.name)
 
@@ -359,7 +359,7 @@ trait NamerOps { self: Context =>
     val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
 
     if (qualified) {
-      QualifiedName(module.path, id.name + seed)
+      QualifiedName(decl.path, id.name + seed)
     } else {
       LocalName(id.name + seed)
     }

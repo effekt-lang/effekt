@@ -2,7 +2,7 @@ package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.TypesDB
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
 
@@ -35,12 +35,24 @@ package object symbols {
    */
   case class Module(
     decl: ModuleDecl,
-    source: Source,
-    terms: Map[String, TermSymbol], // exported (toplevel) terms
-    types: Map[String, TypeSymbol] // exported (toplevel) types
+    source: Source
   ) extends Symbol {
     val name = LocalName(moduleName(decl.path))
     def outputName = moduleFile(decl.path)
+
+    private var _terms: Map[String, TermSymbol] = _
+    def terms = _terms
+
+    private var _types: Map[String, TypeSymbol] = _
+    def types = _types
+
+    def export(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol]): this.type = {
+      if (_terms != null)
+        throw new FatalPhaseError("Internal compiler error: Already set exports on module")
+      _terms = terms
+      _types = types
+      this
+    }
   }
 
   sealed trait Param extends TermSymbol
