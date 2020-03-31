@@ -340,12 +340,10 @@ class Typer extends Phase[Module, Module] { typer =>
     var subst: Substitutions = if (targs.nonEmpty) { (rigids zip targs).toMap } else { Map.empty }
 
     // (3) refine substitutions by matching return type against expected type
-    expected.foreach { exp =>
+    expected.foreach { expectedReturn =>
       val refinedReturn = subst substitute ret
-      subst = subst union Substitution.unify(refinedReturn, exp)
+      subst = subst union Substitution.unify(refinedReturn, expectedReturn)
     }
-
-    val substBefore = subst
 
     var effs = retEffs
 

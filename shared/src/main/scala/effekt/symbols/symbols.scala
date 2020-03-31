@@ -225,7 +225,7 @@ package object symbols {
 
     def dealias: List[Effect] = effects.flatMap { _.dealias }
 
-    override def toString: String = effects match {
+    override def toString: String = toList match {
       case Nil        => "{}"
       case eff :: Nil => eff.toString
       case effs       => s"{ ${effs.mkString(", ")} }"
