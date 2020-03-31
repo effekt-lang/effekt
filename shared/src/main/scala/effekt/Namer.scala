@@ -69,14 +69,14 @@ class Namer extends Phase[Module, Module] { namer =>
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, imports, decls) =>
       decls foreach { resolve }
-      Context scoped { resolveAll(decls) }
+      resolveAll(decls)
 
     case source.DefStmt(d, rest) =>
-      Context scoped {
-        resolve(d)
-        resolveGeneric(d)
-        resolveGeneric(rest)
-      }
+      // resolve declarations but do not resolve bodies
+      resolve(d)
+      // resolve bodies
+      resolveGeneric(d)
+      resolveGeneric(rest)
 
     case source.ValueParam(id, tpe) =>
       Context.define(id, ValueParam(Name(id), tpe.map(resolve)))
@@ -190,102 +190,103 @@ class Namer extends Phase[Module, Module] { namer =>
       sym
     }
 
-  // TODO consider setting owner, instead of this qualify hack
-  def resolve(d: Def)(implicit C: Context): Unit = {
+  /**
+   * To allow mutually recursive definitions, here we only resolve the declarations,
+   * not the bodies of functions.
+   */
+  def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
 
-    Context.focusing(d) {
+    case d @ source.ValDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, ValBinder(Name(id), tpe, d))
 
-      case d @ source.ValDef(id, annot, binding) =>
-        val tpe = annot.map(resolve)
-        resolveGeneric(binding)
-        Context.define(id, ValBinder(Name(id), tpe, d))
+    case d @ source.VarDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, VarBinder(Name(id), tpe, d))
 
-      case d @ source.VarDef(id, annot, binding) =>
-        val tpe = annot.map(resolve)
-        resolveGeneric(binding)
-        Context.define(id, VarBinder(Name(id), tpe, d))
+    case f @ source.FunDef(id, tparams, params, annot, body) =>
+      val uniqueId = Context.freshTermName(id)
+      // we create a new scope, since resolving type params introduces them in this scope
+      val sym = Context scoped {
+        UserFunction(
+          uniqueId,
+          tparams map resolve,
+          params map resolve,
+          annot map resolve,
+          f
+        )
+      }
+      Context.define(id, sym)
 
-      case f @ source.FunDef(id, tparams, params, annot, body) =>
-        val sym = Context scoped {
-          // we create a new scope, since resolving type params introduces them in this scope
-          UserFunction(
-            Context.freshTermName(id),
-            tparams map resolve,
-            params map resolve,
-            annot map resolve,
-            f
-          )
-        }
-        Context.define(id, sym)
+    case source.EffDef(id, tparams, params, ret) =>
+      // we use the localName for effects, since they will be bound as capabilities
+      val effectSym = UserEffect(Name(id), Nil)
+      val opSym = Context scoped {
+        val tps = tparams map resolve
+        val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
+        EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+      }
+      effectSym.ops = List(opSym)
+      // we would need a second id that is the definition of the operation
+      Context.define(id, effectSym)
+      Context.bind(opSym)
 
-      case source.EffDef(id, tparams, params, ret) =>
-        // we use the localName for effects, since they will be bound as capabilities
-        val effectSym = UserEffect(Name(id), Nil)
-        val opSym = Context scoped {
-          val tps = tparams map resolve
-          val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
-          EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
-        }
-        effectSym.ops = List(opSym)
-        // we would need a second id that is the definition of the operation
-        Context.define(id, effectSym)
-        Context.bind(opSym)
+    case source.TypeDef(id, tparams, tpe) =>
+      val tps = Context scoped { tparams map resolve }
+      val alias = Context scoped {
+        tps.foreach { t => Context.bind(t) }
+        TypeAlias(Name(id), tps, resolve(tpe))
+      }
+      Context.define(id, alias)
 
-      case source.TypeDef(id, tparams, tpe) =>
-        val tps = Context scoped { tparams map resolve }
-        val alias = Context scoped {
-          tps.foreach { t => Context.bind(t) }
-          TypeAlias(Name(id), tps, resolve(tpe))
-        }
-        Context.define(id, alias)
+    case source.EffectDef(id, effs) =>
+      val alias = Context scoped {
+        EffectAlias(Name(id), resolve(effs))
+      }
+      Context.define(id, alias)
 
-      case source.EffectDef(id, effs) =>
-        val alias = Context scoped {
-          EffectAlias(Name(id), resolve(effs))
-        }
-        Context.define(id, alias)
+    case source.DataDef(id, tparams, ctors) =>
+      val (typ, tps) = Context scoped {
+        val tps = tparams map resolve
+        (DataType(Name(id), tps), tps)
+      }
+      Context.define(id, typ)
+      val cs = ctors map {
+        case source.Constructor(id, ps) =>
+          val sym = Context scoped {
+            tps.foreach { t => Context.bind(t) }
+            Constructor(Context.freshTermName(id), ps map resolve, typ)
+          }
+          Context.define(id, sym)
+          sym
+      }
+      typ.ctors = cs
 
-      case source.DataDef(id, tparams, ctors) =>
-        val (typ, tps) = Context scoped {
-          val tps = tparams map resolve
-          (DataType(Name(id), tps), tps)
-        }
-        Context.define(id, typ)
-        val cs = ctors map {
-          case source.Constructor(id, ps) =>
-            val sym = Context scoped {
-              tps.foreach { t => Context.bind(t) }
-              Constructor(Name(id), ps map resolve, typ)
-            }
-            Context.define(id, sym)
-            sym
-        }
-        typ.ctors = cs
+    case source.ExternType(id, tparams) =>
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        BuiltinType(Name(id), tps)
+      })
 
-      case source.ExternType(id, tparams) =>
-        Context.define(id, Context scoped {
-          val tps = tparams map resolve
-          BuiltinType(Name(id), tps)
-        })
+    case source.ExternEffect(id, tparams) =>
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        BuiltinEffect(Name(id), tps)
+      })
 
-      case source.ExternEffect(id, tparams) =>
-        Context.define(id, Context scoped {
-          val tps = tparams map resolve
-          BuiltinEffect(Name(id), tps)
-        })
+    case source.ExternFun(pure, id, tparams, params, ret, body) =>
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        val ps: Params = params map resolve
+        val tpe = resolve(ret)
+        BuiltinFunction(Context.freshTermName(id), tps, ps, Some(tpe), pure, body)
+      })
 
-      case source.ExternFun(pure, id, tparams, params, ret, body) =>
-        Context.define(id, Context scoped {
-          val tps = tparams map resolve
-          val ps: Params = params map resolve
-          val tpe = resolve(ret)
-          BuiltinFunction(Name(id), tps, ps, Some(tpe), pure, body)
-        })
-
-      case d @ source.ExternInclude(path) =>
-        d.contents = Context.contentsOf(path)
-        ()
-    }
+    case d @ source.ExternInclude(path) =>
+      d.contents = Context.contentsOf(path)
+      ()
   }
 
   /**
@@ -340,18 +341,11 @@ trait NamerOps { self: Context =>
   // - there is already another instance of that name in the same
   //   namespace.
   // - if it is not already fully qualified
-  private[namer] def freshTermName(id: Id): Name = Name(id)(this)
-
-  //    // how many terms of the same name are already in scope?
-  //    val alreadyBound = terms.lookup(id.name).toList.size
-  //    val seed = "" // if (alreadyBound > 0) "$" + alreadyBound else ""
-  //
-  //    if (qualified) {
-  //      QualifiedName(module.decl.path, id.name + seed)
-  //    } else {
-  //      LocalName(id.name + seed)
-  //    }
-  //  }
+  private[namer] def freshTermName(id: Id): Name = {
+    val alreadyBound = terms.lookupHere(id.name).toList.size
+    val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
+    Name(id.name + seed, module)
+  }
 
   // Name Binding and Resolution
   // ===========================

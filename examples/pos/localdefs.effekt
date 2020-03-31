@@ -1,6 +1,6 @@
 module localdefs
 
-def main(): Unit = {
+def main1(): Unit = {
     def foo(): Unit / Console = { println(42) }
     ()
 }

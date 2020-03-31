@@ -47,7 +47,7 @@ class CompilerJS extends Compiler {
               |
               |$program
               |
-              |return ${mod.name.qualified}.main().run();
+              |return ${mod.name}.main().run();
               |})()
               |""".stripMargin
         scalajs.js.eval(command)

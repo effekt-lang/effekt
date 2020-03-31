@@ -15,7 +15,9 @@ object scopes {
 
     def bindings: mutable.HashMap[String, V]
 
-    def lookup(key: String): Option[V] = bindings.get(key)
+    def lookupHere(key: String): Option[V] = bindings.get(key)
+    def lookup(key: String): Option[V] = lookupHere(key)
+
     def define(key: String, value: V): Unit = bindings.update(key, value)
     def enter: Scope[V] = BlockScope[V](mutable.HashMap.empty, this)
     def enterWith(bs: Map[String, V]) = BlockScope[V](mutable.HashMap.empty ++ bs, this)
