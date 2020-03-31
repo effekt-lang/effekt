@@ -79,6 +79,13 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
       return
     }
 
+    val tpe = C.blockTypeOf(main)
+    val userEffects = tpe.ret.effects.userDefined
+    if (userEffects.nonEmpty) {
+      C.error(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
+      return
+    }
+
     val jsFile = jsPath(mod)
     val jsScript = s"require('${jsFile}').main().run()"
     val command = Process(Seq("node", "--eval", jsScript))

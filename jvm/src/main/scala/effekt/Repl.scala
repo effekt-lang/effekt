@@ -244,12 +244,20 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
      * Create a module declaration using the given expression as body of main
      */
     def make(expr: Expr): ModuleDecl = {
+
+      // partition into toplevel definitions and into those that go into main:
+      val (toplevel, local) = definitions.partition {
+        case _: ValDef => false
+        case _: FunDef => false
+        case _         => true
+      }
+
       // all definitions are moved to the main function, so that value bindings work
-      val body = definitions.foldRight[Stmt](Return(expr)) { case (d, body) => DefStmt(d, body) }
+      val body = local.foldRight[Stmt](Return(expr)) { case (d, body) => DefStmt(d, body) }
 
       ModuleDecl("lib/interactive", Import("effekt") :: imports,
-        List(FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
-          body)))
+        toplevel :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+          body))
     }
 
     def makeEval(expr: Expr): ModuleDecl =

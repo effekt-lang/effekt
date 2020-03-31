@@ -1,0 +1,5 @@
+module unhandledmain
+
+effect Flip(): Boolean
+
+def main() = do Flip()
