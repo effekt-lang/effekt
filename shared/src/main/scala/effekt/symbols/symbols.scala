@@ -37,7 +37,7 @@ package object symbols {
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
-    val name = LocalName(moduleName(decl.path))
+    val name = Name(moduleName(decl.path), this)
     def outputName = moduleFile(decl.path)
 
     private var _terms: Map[String, TermSymbol] = _
@@ -58,7 +58,7 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
-  case class ResumeParam() extends Param with BlockSymbol { val name = LocalName("resume") }
+  case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.

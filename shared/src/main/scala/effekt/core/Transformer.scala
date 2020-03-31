@@ -8,7 +8,8 @@ import effekt.symbols._
 import effekt.util.control
 import effekt.util.control._
 
-object Wildcard extends Symbol { val name = LocalName("_") }
+case class Wildcard(module: Module) extends Symbol { val name = Name("_", module) }
+case class Tmp(module: Module) extends Symbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
@@ -83,7 +84,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       transform(d, transform(rest))
 
     case source.ExprStmt(e, rest) =>
-      Val(Wildcard, ANF { transform(e).map(Ret) }, transform(rest))
+      Val(Wildcard(C.module), ANF { transform(e).map(Ret) }, transform(rest))
 
     case source.Return(e) =>
       ANF { transform(e).map(Ret) }
@@ -183,10 +184,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }
 
   private val delimiter: Cap[Stmt] = new Capability { type Res = Stmt }
-  case class Tmp() extends Symbol { val name = LocalName("tmp" + Symbol.fresh.next()) }
+
   def ANF(e: Control[Stmt]): Stmt = control.handle(delimiter)(e).run()
-  def bind(e: Stmt): Control[Expr] = control.use(delimiter) { k =>
-    val x = Tmp()
+  def bind(e: Stmt)(implicit C: Context): Control[Expr] = control.use(delimiter) { k =>
+    val x = Tmp(C.module)
     k.apply(ValueVar(x)).map {
       case Ret(ValueVar(y)) if x == y => e
       case body => Val(x, e, body)

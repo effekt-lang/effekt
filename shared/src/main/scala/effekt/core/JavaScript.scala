@@ -2,10 +2,10 @@ package effekt
 package core
 
 import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
-
 import effekt.context.Context
+
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, builtins, moduleFile, moduleName }
+import effekt.symbols.{ Symbol, Name, builtins, moduleFile, moduleName }
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
@@ -17,14 +17,14 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-  def format(t: ModuleDecl): Document =
+  def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(amdefine(t))
 
   val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
 
   val emptyline: Doc = line <> line
 
-  def amdefine(m: ModuleDecl): Doc = {
+  def amdefine(m: ModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
@@ -32,11 +32,11 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
         braces(nest(line <> toDoc(m)) <> line))
   }
 
-  def toDoc(m: ModuleDecl): Doc =
+  def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
     "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocStmt(m.defs)
 
-  def toDoc(b: Block): Doc = link(b, b match {
-    case BlockVar(v) => v.name.qualified
+  def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
+    case BlockVar(v) => nameRef(v)
     case BlockDef(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> toDoc(body)
     case Lift(b) => "$effekt.lift" <> parens(toDoc(b))
@@ -44,18 +44,27 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> body
   })
 
-  def toDoc(p: Param): Doc = link(p, p.id.name.toString)
+  def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
-  def toDoc(n: Name): Doc = link(n, n.toString)
+  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
-  def toDoc(e: Expr): Doc = link(e, e match {
+  def nameDef(id: Symbol)(implicit C: Context): Doc = toDoc(id.name)
+
+  def nameRef(id: Symbol)(implicit C: Context): Doc =
+    if (id.name.module != C.module) {
+      link(id.name, id.name.qualified)
+    } else {
+      toDoc(id.name)
+    }
+
+  def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "null"
     case StringLit(s)  => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => id.name.qualified
+    case ValueVar(id)  => nameRef(id)
 
-    case Deref(id)     => toDoc(id.name) <> ".value()"
-    case Assign(id, e) => toDoc(id.name) <> ".value" <> parens(toDoc(e))
+    case Deref(id)     => nameRef(id) <> ".value()"
+    case Assign(id, e) => nameRef(id) <> ".value" <> parens(toDoc(e))
 
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
@@ -63,18 +72,18 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     }, comma))
   })
 
-  def argToDoc(e: Argument): Doc = e match {
+  def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
   }
 
-  def toDoc(s: Stmt): Doc =
+  def toDoc(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
       link(s, braces(nest(line <> toDocStmt(s)) <> line))
     else
       link(s, toDocExpr(s))
 
-  def toDocDelayed(s: Stmt): Doc =
+  def toDocDelayed(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
       "$effekt.delayed" <> parens("() => " <+> braces(nest(line <> toDocStmt(s)) <> line))
     else
@@ -82,13 +91,13 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   // pretty print the statement in a javascript expression context
   // not all statement types can be printed in this context!
-  def toDocExpr(s: Stmt): Doc = s match {
-    case Val(Wildcard, binding, body) =>
+  def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
+    case Val(Wildcard(_), binding, body) =>
       toDocDelayed(binding) <> ".then" <> parens("()" <+> "=>" <+> nest(line <> toDoc(body)))
     case Val(id, binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(toDoc(id.name) <+> "=>" <+> nest(line <> toDoc(body)))
+      toDocDelayed(binding) <> ".then" <> parens(nameDef(id) <+> "=>" <+> nest(line <> toDoc(body)))
     case Var(id, binding, body) =>
-      toDocDelayed(binding) <> ".state" <> parens(toDoc(id.name) <+> "=>" <+> nest(line <> toDoc(body)))
+      toDocDelayed(binding) <> ".state" <> parens(nameDef(id) <+> "=>" <+> nest(line <> toDoc(body)))
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>
@@ -109,26 +118,26 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
     case Match(sc, clauses) =>
       // TODO using the unqualified name here might lead to wrong operational behavior
-      val cs = braces(nest(line <> vsep(clauses map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+      val cs = braces(nest(line <> vsep(clauses map { case (id, b) => nameDef(id) <> ":" <+> toDoc(b) }, comma)) <> line)
       "$effekt.match" <> parens(toDoc(sc) <> comma <+> cs)
     case other =>
       sys error s"Cannot print ${other} in expression position"
   }
 
-  def toDocStmt(s: Stmt): Doc = s match {
+  def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
     case Def(id, BlockDef(ps, body), rest) =>
-      "function" <+> toDoc(id.name) <> parens(hsep(ps map toDoc, comma)) <+>
+      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
         braces(nest(line <> toDocStmt(body)) <> line) <> emptyline <> toDocStmt(rest)
 
     case Def(id, Extern(ps, body), rest) =>
-      "function" <+> toDoc(id.name) <> parens(hsep(ps map toDoc, comma)) <+>
+      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
         braces(nest(line <> "return" <+> body) <> line) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id =>
-        val datastr = "\"" + did.name + "\""
-        val consstr = "\"" + id.name + "\""
-        "const" <+> toDoc(id.name) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
+        val datastr = "\"" <> nameDef(did) <> "\""
+        val consstr = "\"" <> nameDef(id) <> "\""
+        "const" <+> nameDef(id) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
       }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
 

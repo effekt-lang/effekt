@@ -1,19 +1,14 @@
 package effekt.symbols
 
-sealed trait Name {
-  def name: String
-  def qualified: String
+import effekt.source.Id
+import effekt.context.Context
 
-  override def toString: String = name
+case class Name(name: String, module: Module) {
+  override def toString = name
+
+  def qualified: String = s"${module.name}.${name}"
 }
-case class LocalName(name: String) extends Name { def qualified = name }
-case class QualifiedName(path: String, name: String) extends Name {
-  def qualified: String = moduleName(path) + "." + name
-}
+
 object Name {
-  // constructs a name form a path
-  def apply(path: String): Name = path.split('/') match {
-    case Array(name) => LocalName(name)
-    case segs        => QualifiedName(segs.init.mkString("/"), segs.last)
-  }
+  def apply(id: Id)(implicit C: Context): Name = Name(id.name, C.module)
 }

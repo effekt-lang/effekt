@@ -35,7 +35,7 @@ trait TypesDB { self: ErrorReporter =>
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => blocks.get(b)
-      case _              => abort(s"Trying to find a block type for non block '${s}'")
+      case _              => sys.error(s"Trying to find a block type for non block '${s}'")
     }
 
   def valueTypeOf(s: Symbol): ValueType =

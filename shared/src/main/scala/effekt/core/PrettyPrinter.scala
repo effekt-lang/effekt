@@ -61,7 +61,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
   // pretty print the statement in a javascript expression context
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt): Doc = s match {
-    case Val(Wildcard, binding, body) =>
+    case Val(Wildcard(_), binding, body) =>
       toDoc(binding) <> ";" <> line <> toDoc(body)
     case Val(id, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
