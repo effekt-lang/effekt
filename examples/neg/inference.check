@@ -7,6 +7,3 @@ def test2(l1: List[Int]): Int = l1 match {
 [error] examples/neg/inference.effekt:25:33: Expected Int, but got String
   case Cons(a: String, rest) => a
                                 ^
-[error] examples/neg/inference.effekt:25:33: Expected Int, but got String
-  case Cons(a: String, rest) => a
-                                ^
