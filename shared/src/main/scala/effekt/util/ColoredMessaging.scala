@@ -1,6 +1,7 @@
 package effekt
 package util
 
+import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.{ Message, Messaging, Positions, Severities }
 
 class ColoredMessaging(positions: Positions) extends Messaging(positions) {
@@ -22,7 +23,8 @@ class ColoredMessaging(positions: Positions) extends Messaging(positions) {
         val context = pos.optContext.getOrElse("")
         s"[$severity] ${pos.format} ${message.label}\n$context\n"
       case None =>
-        s"${message.label}\n"
+        val severity = severityToWord(message.severity)
+        s"[$severity] ${message.label}\n"
     }
 
 }

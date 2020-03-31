@@ -23,8 +23,6 @@ trait Compiler {
 
   val positions: Positions
 
-  def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit
-
   // Frontend phases
   // ===============
   lazy val parser = new Parser(positions).cached
@@ -41,23 +39,62 @@ trait Compiler {
    * The full compiler pipeline from source to output
    */
   def compile(source: Source)(implicit C: Context): Option[Module] =
-    for {
-      ast <- parser(source)
-      mod <- frontend(source, ast)
-      js <- backend(mod)
-      _ = saveOutput(js, mod)
-    } yield mod
+    parsing(source) { pipeline }
+
+  /**
+   * Variant: Compiler without parser (used by Repl, since Kiama does the parsing)
+   */
+  def compile(ast: ModuleDecl, source: Source)(implicit C: Context): Option[Module] =
+    withModule(ast, source) { pipeline }
+
+  /**
+   * The full pipeline after parsing
+   */
+  private def pipeline(mod: Module)(implicit C: Context): Option[Module] = for {
+    mod <- frontend(mod)
+    js <- backend(mod)
+    _ = saveOutput(js, mod)
+  } yield mod
 
   /**
    * Frontend: Parser -> Namer -> Typer
    */
   def frontend(source: Source)(implicit C: Context): Option[Module] =
-    parser(source) flatMap { mod => frontend(source, mod) }
+    parsing(source) { mod => frontend(mod) }
+
+  /**
+   * Variant: Frontend without parser (used by Repl)
+   */
+  def frontend(ast: ModuleDecl, source: Source)(implicit C: Context): Option[Module] =
+    withModule(ast, source) { mod => frontend(mod) }
 
   /**
    * Backend: Module -> Document
    */
   def backend(mod: Module)(implicit C: Context): Option[Document] =
     (transformer andThen codegen)(mod)
+
+  /**
+   * Output writer: Document -> IO
+   */
+  def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit
+
+  // Utils
+  // =====
+
+  /**
+   * Parsing source and brings the module into scope
+   */
+  private def parsing[R](source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] =
+    parser(source).flatMap { ast => withModule(ast, source) { f } }
+
+  private def withModule[R](ast: ModuleDecl, source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] = {
+    val mod = Module(ast, source)
+    C in {
+      C.module = mod
+      C.focus = ast
+      f(mod)
+    }
+  }
 
 }

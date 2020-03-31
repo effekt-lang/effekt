@@ -134,7 +134,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
     out.emitln("")
 
-    reportOrElse(source, frontend(source, module.make(UnitLit()), config)) { cu =>
+    runFrontend(source, module.make(UnitLit()), config) { cu =>
       val ctx = driver.context
 
       module.definitions.foreach {
@@ -149,7 +149,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
   def typecheck(source: Source, config: EffektConfig): Unit =
     parse(source) match {
       case Success(e: Expr, _) =>
-        reportOrElse(source, frontend(source, module.make(e), config)) { mod =>
+        runFrontend(source, module.make(e), config) { mod =>
           val mainSym = mod.terms("main")
           val mainTpe = driver.context.blockTypeOf(mainSym)
           config.output().emitln(mainTpe.ret)
@@ -173,29 +173,20 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
     case e: Expr =>
-      val decl = module.makeEval(e)
-      implicit val context = driver.context
-      context.setup(decl, config)
-
-      reportOrElse(source, driver.frontend(source, decl)) { mod =>
-        driver.backend(mod).foreach { js =>
-          driver.saveOutput(js, mod)
-          driver.eval(mod)
-        }
-      }
+      runCompiler(source, module.makeEval(e), config)
 
     case i: Import if !module.contains(i) =>
       val extendedImports = module + i
       val decl = extendedImports.make(UnitLit())
 
-      reportOrElse(source, frontend(source, decl, config)) { cu =>
+      runFrontend(source, decl, config) { cu =>
         module = extendedImports
       }
 
     case d: Def =>
       val extendedDefs = module + d
       val decl = extendedDefs.make(UnitLit())
-      reportOrElse(source, frontend(source, decl, config)) { cu =>
+      runFrontend(source, decl, config) { cu =>
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
@@ -214,32 +205,27 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case _ => ()
   }
 
-  /**
-   * Only executes the block f, if there are no errors
-   *
-   * TODO move into driver
-   */
-  def reportOrElse(source: Source, res: Option[Module])(f: Module => Unit): Unit = res match {
-    case Some(cu) =>
-      val buffer = driver.context.buffer
-      if (buffer.hasErrors) {
-        report(source, buffer.get, driver.context.config)
-      } else {
-        f(cu)
-      }
-    case None =>
-      report(source, driver.context.buffer.get, driver.context.config)
+  def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
+    implicit val context = driver.context
+    context.setup(config)
+
+    for {
+      mod <- driver.compile(ast, source)
+    } driver.eval(mod)
+
+    report(source, driver.context.buffer.get, config)
   }
 
-  def frontend(source: Source, ast: ModuleDecl, config: EffektConfig): Option[Module] = {
-    driver.context.setup(ast, config)
-    driver.frontend(source, ast)(driver.context)
+  def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
+    driver.context.setup(config)
+    driver.frontend(ast, source)(driver.context) map { f } getOrElse {
+      report(source, driver.context.buffer.get, driver.context.config)
+    }
   }
 
   object Command {
     def unapply(str: String): Option[List[String]] =
       if (str.startsWith(":")) Some(str.split(' ').toList) else None
-
   }
 
   /**

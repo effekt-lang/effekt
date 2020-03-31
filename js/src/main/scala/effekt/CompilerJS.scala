@@ -8,14 +8,13 @@ import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source, StringS
 
 import scala.scalajs.js.annotation._
 
+object JSConfig extends EffektConfig {}
+
 class CompilerJS extends Compiler {
 
   val positions: Positions = new Positions
 
-  implicit object context extends Context(this) with VirtualModuleDB {
-    // TODO call setup instead of manually setting up everything here
-    config = new EffektConfig {}
-  }
+  implicit object context extends Context(this) with VirtualModuleDB
 
   /**
    * Don't output amdefine module declarations
@@ -26,7 +25,7 @@ class CompilerJS extends Compiler {
 
   def compile(s: String): String = {
     output = new StringBuilder
-    context.buffer.clear()
+    context.setup(JSConfig)
     compile(StringSource(s)) match {
       case None =>
         sys error "Error"
@@ -37,7 +36,7 @@ class CompilerJS extends Compiler {
 
   def eval(s: String): Unit = {
     output = new StringBuilder
-    context.buffer.clear()
+    context.setup(JSConfig)
     compile(StringSource(s)) match {
       case None =>
         sys error "Error"
@@ -64,16 +63,15 @@ class CompilerJS extends Compiler {
 
 class CodeInfoJS(input: String, val positions: Positions) extends Compiler with Intelligence {
 
-  implicit object context extends Context(this) with VirtualModuleDB {
-    config = new EffektConfig {}
-  }
+  implicit object context extends Context(this) with VirtualModuleDB
+
+  context.setup(JSConfig)
 
   val source = StringSource(input)
 
   val mod = frontend(source) getOrElse {
     sys error context.buffer.get.mkString("\n\n")
   }
-  context.setup(mod.decl, context.config)
 
   @JSExport
   def definitionAt(line: Int, col: Int): Option[effekt.source.Tree] = {

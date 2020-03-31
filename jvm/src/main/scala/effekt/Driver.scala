@@ -45,19 +45,14 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     sources(source.name) = source
 
     implicit val C = context
+    C.setup(config)
 
     for {
-      ast <- parser(source)
-      _ = context.setup(ast, config)
-      mod <- frontend(source, ast)
-      js <- backend(mod)
-      _ = saveOutput(js, mod)
+      mod <- compile(source)
       if config.interpret()
     } eval(mod)
 
     // report messages
-    clearSyntacticMessages(source, config)
-    clearSemanticMessages(source, config)
     report(source, C.buffer.get, config)
   }
 
@@ -71,7 +66,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
       IO.createFile(jsFile, js.layout)
     }
 
-  def eval(mod: Module)(implicit C: Context): Unit = {
+  def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
 
     val main = mod.terms.getOrElse("main", {
       C.error("No main function defined")

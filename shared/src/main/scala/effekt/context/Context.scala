@@ -31,15 +31,16 @@ abstract class Context(val compiler: Compiler)
   // the currently processed node
   var focus: Tree = _
 
-  // the config passed on creation o
-  var config: EffektConfig = _
-
   val buffer: MessageBuffer = new MessageBuffer
+  var _config: EffektConfig = _
+  def config = _config
 
-  def setup(ast: ModuleDecl, cfg: EffektConfig): Unit = {
-    config = cfg
-    focus = ast
-    buffer.clear() // TODO do that at the call-site
+  /**
+   * Clear current context to start processing a fresh unit
+   */
+  def setup(cfg: EffektConfig): Unit = {
+    buffer.clear()
+    _config = cfg
   }
 
   /**

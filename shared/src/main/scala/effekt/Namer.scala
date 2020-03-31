@@ -26,17 +26,12 @@ case class NamerState(
   types: Scope[TypeSymbol]
 )
 
-class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
+class Namer extends Phase[Module, Module] { namer =>
 
   val phaseName = "Namer"
 
-  def run(input: (Source, source.ModuleDecl))(implicit C: Context): Option[Module] = {
-    // TODO eventually this could be done at the call-site?
-    val mod = Module(input._2, input._1)
-    Context in {
-      Context.module = mod
-      Some(resolve(mod))
-    }
+  def run(mod: Module)(implicit C: Context): Option[Module] = {
+    Some(resolve(mod))
   }
 
   def resolve(mod: Module)(implicit C: Context): Module = {
@@ -47,9 +42,9 @@ class Namer extends Phase[(Source, source.ModuleDecl), Module] { namer =>
     // process all imports, updating the terms and types in scope
     mod.decl.imports foreach {
       case im @ source.Import(path) => Context.at(im) {
-        val mod = Context.moduleOf(path)
-        terms = terms.enterWith(mod.terms)
-        types = types.enterWith(mod.types)
+        val modImport = Context.moduleOf(path)
+        terms = terms.enterWith(modImport.terms)
+        types = types.enterWith(modImport.types)
       }
     }
 
