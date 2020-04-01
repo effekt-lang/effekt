@@ -2,6 +2,8 @@
 function show$impl(obj) {
   if (!!obj && !!obj.tag) {
     return obj.tag + "(" + obj.data.map(show).join(", ") + ")"
+  } else if (obj === $effekt.unit) {
+    return "()";
   } else {
     return obj;
   }
@@ -21,5 +23,7 @@ function equals$impl(obj1, obj2) {
 }
 
 function println$impl(obj) {
-  console.log(show(obj))
+  return $effekt.delayed(() => { console.log(show(obj)); return $effekt.unit; });
 }
+
+$effekt.unit = {}

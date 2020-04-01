@@ -11,7 +11,7 @@ extern include "effekt_builtins.js"
 
 // Side effecting ops
 // ==================
-extern pure def println[R](value: R): Unit / Console =
+extern def println[R](value: R): Unit / Console =
   "println$impl(value)"
 
 extern pure def random(): Int =

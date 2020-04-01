@@ -32,8 +32,9 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
         braces(nest(line <> toDoc(m)) <> line))
   }
 
+  // TODO print all top level value declarations as "var"
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocStmt(m.defs)
+    "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
 
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) => nameRef(v)
@@ -58,7 +59,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
-    case UnitLit()     => "null"
+    case UnitLit()     => "$effekt.unit"
     case StringLit(s)  => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
@@ -143,6 +144,36 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
+
+    case other => "return" <+> toDocExpr(other)
+  }
+
+  /**
+   * This is an alternative statement printer, rendering toplevel value bindings
+   * as variables, instead of using the monadic bind.
+   */
+  def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
+    case Val(id, binding, body) =>
+      "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
+
+    case Def(id, BlockDef(ps, body), rest) =>
+      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
+        braces(nest(line <> toDocStmt(body)) <> line) <> emptyline <> toDocTopLevel(rest)
+
+    case Def(id, Extern(ps, body), rest) =>
+      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
+        braces(nest(line <> "return" <+> body) <> line) <> emptyline <> toDocTopLevel(rest)
+
+    case Data(did, ctors, rest) =>
+      val cs = ctors.map { id =>
+        val datastr = "\"" <> nameDef(did) <> "\""
+        val consstr = "\"" <> nameDef(id) <> "\""
+        "const" <+> nameDef(id) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
+      }
+      vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
+
+    case Include(contents, rest) =>
+      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
 
     case other => "return" <+> toDocExpr(other)
   }

@@ -235,7 +235,11 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     definitions: List[Def],
     imports: List[Import]
   ) {
-    def +(d: Def) = copy(definitions = definitions :+ d)
+    def +(d: Def) = {
+      // drop all equally named definitions for now.
+      val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
+      copy(definitions = otherDefs :+ d)
+    }
     def +(i: Import) = copy(imports = imports :+ i)
 
     def contains(im: Import) = imports.exists { other => im.path == other.path }
@@ -244,6 +248,15 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
      * Create a module declaration using the given expression as body of main
      */
     def make(expr: Expr): ModuleDecl = {
+
+      val body = Return(expr)
+
+      ModuleDecl("lib/interactive", Import("effekt") :: imports,
+        definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+          body))
+    }
+
+    def make2(expr: Expr): ModuleDecl = {
 
       // partition into toplevel definitions and into those that go into main:
       val (toplevel, local) = definitions.partition {
