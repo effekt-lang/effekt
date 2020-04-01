@@ -25,6 +25,11 @@ $radius: 10px;
   .hljs-string {
     color: #25995f;
   }
+  .hljs-title, .hljs-attr, .hljs-selector-id, .hljs-selector-class,
+  .hljs-selector-attr, .hljs-selector-pseudo  {
+    color: #735080;
+  }
+
 }
 
 
@@ -51,13 +56,13 @@ $radius: 10px;
   .first-feature-icon-wrapper {
     -webkit-mask: url(../img/cubes.svg) no-repeat;
     mask: url(../img/cubes.svg) no-repeat;
-    background-color: $brand-primary;
+    background-color: lighten($brand-primary, 15%);
     background-image: none !important;
   }
   .second-feature-icon-wrapper {
     -webkit-mask: url(../img/fire.svg) no-repeat;
     mask: url(../img/fire.svg) no-repeat;
-    background-color: $brand-secondary;
+    background-color: lighten($brand-secondary, 5%);
     background-image: none !important;
   }
   .third-feature-icon-wrapper {

@@ -127,7 +127,7 @@ lazy val micrositeSettings = Seq(
 
 lazy val effektTheme = Map(
     // https://colorhunt.co/palette/179481
-    "brand-primary" -> "#522d5b",
+    "brand-primary" -> "#542e5a",
     "brand-secondary" -> "#d73a49",
     "brand-tertiary" -> "#36bc98", //"#fb7b6b",
     "gray-dark" -> "#394A4B",
