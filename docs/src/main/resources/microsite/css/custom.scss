@@ -5,7 +5,7 @@
 
 @import "variables_palette";
 
-
+$radius: 10px;
 
 // update syntax highlighting
 .docs #page-content-wrapper section {
@@ -77,6 +77,7 @@
 @media (min-width: 769px) {
   .features .feature-item {
     margin-top: -5em;
+    margin-bottom: -5em;
     -webkit-box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
     -moz-box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
     box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
@@ -92,7 +93,6 @@
 
 // mac like window
 .pseudo-window {
-  $radius: 10px;
   border-radius: $radius;
   border: 1px solid #eee;
   background-color: #fff;
@@ -126,5 +126,31 @@
   .window-contents {
     display: block;
     padding: 0 1em;
+  }
+}
+
+.warn {
+  border-radius: $radius;
+  background-color: lighten($brand-tertiary, 40%);
+  padding: 1em 1em 1em 4em;
+  margin-top: 1em;
+  margin-bottom: 1em;
+  box-sizing: border-box;
+  display: block;
+  position: relative;
+
+  &::before {
+    content: "";
+    display: block;
+    width: 30px;
+    height: 30px;
+
+    -webkit-mask: url(../img/exclamation-triangle.svg) no-repeat;
+    mask: url(../img/exclamation-triangle.svg) no-repeat;
+    background-color: $brand-tertiary;
+
+    position: absolute;
+    top: 1em;
+    left: 1em;
   }
 }

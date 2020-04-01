@@ -1,5 +1,5 @@
 ---
-layout: homeFeatures
+layout: effekt-home
 title:  "Home"
 section: "section_home"
 position: 1
@@ -20,15 +20,3 @@ features:
       "No need to understand effect polymorphic functions or annotate them. Explicit effect polymorphism simply does not exist.",
       "concepts/effect-polymorphism"]
 ---
-
-<!--
-
-Since sbt-microsite only allows limited configuration,
-the contents of the code displayed on the first page have to be changed
-in a JavaScript file for now!
-
-  src/main/microsite/js/index-feature-image.js
-
-Sorry!
-
- -->
