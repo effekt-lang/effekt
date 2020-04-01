@@ -1,0 +1,20 @@
+
+options:
+  - title: Guides and Examples
+    url: docs
+
+  - title: Getting Started
+    url: docs/getting-started
+
+  - title: Core Concepts
+    url: docs/concepts
+    nested_options:
+
+      - title: Effect Handlers
+        url: docs/concepts/effect-handlers
+
+      - title: Effect Safety
+        url: docs/concepts/effect-safety
+
+      - title: Effect Polymorphism
+        url: docs/concepts/effect-polymorphism

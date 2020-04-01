@@ -1,0 +1,130 @@
+---
+# this ensures Jekyll reads the file to be transformed into CSS later
+# only Main files contain this front matter, not partials.
+---
+
+@import "variables_palette";
+
+
+
+// update syntax highlighting
+.docs #page-content-wrapper section {
+  pre code {
+    border: none;
+    background: #f8f8f8;
+  }
+}
+
+.hljs {
+  line-height: 1.5em;
+
+  .hljs-keyword {
+    color: #333;
+    font-weight: 500;
+  }
+  .hljs-string {
+    color: #25995f;
+  }
+}
+
+
+// particles styles
+#masthead {
+  position: relative;
+
+  .feature-header {
+    position: relative;
+    z-index: 1;
+  }
+  canvas {
+    position: absolute;
+    display: block;
+    z-index: 0;
+  }
+  .features-image {
+    background: none;
+    font-size: 0.9em;
+  }
+}
+
+.features .feature-item .custom-feature-icon {
+  .first-feature-icon-wrapper {
+    -webkit-mask: url(../img/cubes.svg) no-repeat;
+    mask: url(../img/cubes.svg) no-repeat;
+    background-color: $brand-primary;
+    background-image: none !important;
+  }
+  .second-feature-icon-wrapper {
+    -webkit-mask: url(../img/fire.svg) no-repeat;
+    mask: url(../img/fire.svg) no-repeat;
+    background-color: $brand-secondary;
+    background-image: none !important;
+  }
+  .third-feature-icon-wrapper {
+    -webkit-mask: url(../img/hat-wizard.svg) no-repeat;
+    mask: url(../img/hat-wizard.svg) no-repeat;
+    background-color: $brand-tertiary;
+    background-image: none !important;
+  }
+}
+
+// styling of the features
+.features .feature-item {
+  background-color: #fff;
+  padding: 2em;
+}
+
+@media (min-width: 769px) {
+  .features .feature-item {
+    margin-top: -5em;
+    -webkit-box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
+    -moz-box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
+    box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
+  }
+}
+
+#navigation .navbar-wrapper .navigation-brand .custom-feature-icon .icon-wrapper {
+    -webkit-mask: url(../img/light-navbar-brand.svg) no-repeat;
+    mask: url(../img/light-navbar-brand.svg) no-repeat;
+    background-color: black;
+    background-image: none !important;
+}
+
+// mac like window
+.pseudo-window {
+  $radius: 10px;
+  border-radius: $radius;
+  border: 1px solid #eee;
+  background-color: #fff;
+
+  -webkit-box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
+  -moz-box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
+  box-shadow: 4px 6px 8px -1px rgba(0,0,0,0.21);
+
+  .window-titlebar {
+    border-radius: $radius $radius 0 0;
+    background: #efefef;
+    padding: $radius / 2  $radius;
+
+    .button-close, .button-minimize, .button-maximize {
+      height: $radius * 1.2;
+      width: $radius * 1.2;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .button-close {
+      background-color: rgb(250, 89, 88);
+    }
+    .button-minimize {
+      background-color: rgb(252, 187, 77);
+    }
+    .button-maximize {
+      background-color: rgb(58, 195, 95);
+    }
+  }
+
+  .window-contents {
+    display: block;
+    padding: 0 1em;
+  }
+}
