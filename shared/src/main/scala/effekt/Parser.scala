@@ -25,7 +25,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         val input = res.next
         positions.setStart(res, input.position)
         positions.setFinish(res, input.nextPosition)
-        C.error(res.message)
+        C.error(res, res.message)
         None
     }
 

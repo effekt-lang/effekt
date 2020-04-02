@@ -1,0 +1,6 @@
+module parser_error
+
+def main() = {
+    val x = 4
+    x + 1
+}
