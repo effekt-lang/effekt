@@ -1,0 +1,40 @@
+module data/string
+
+import data/option
+
+extern type Regex
+
+record Match(matched: String, index: Int)
+
+// these should be generated at some point
+def matched(m: Match): String = m match {
+  case Match(matched, index) => matched
+}
+def index(m: Match): Int = m match {
+  case Match(matched, index) => index
+}
+
+def charAt(str: String)(index: Int): Option[String] =
+    str.unsafeCharAt(index).undefinedToOption
+
+extern pure def length(str: String): Int =
+  "str.length"
+
+extern pure def substring(str: String)(from: Int): String =
+  "str.substring(from)"
+
+extern pure def trim(str: String): String =
+  "str.trim()"
+
+extern pure def regex(str: String): Regex =
+  "new RegExp(str)"
+
+def exec(reg: Regex)(str: String): Option[Match] =
+  reg.unsafeExec(str).undefinedToOption
+
+// internals
+extern pure def unsafeExec(reg: Regex)(str: String): Match =
+  "(function () { var res = reg.exec(str); if (res === null) { return undefined } else { return Match(res[0], res.index) }})()"
+
+extern pure def unsafeCharAt(str: String)(n: Int): String =
+  "str[n]"
