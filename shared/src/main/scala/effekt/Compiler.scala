@@ -88,8 +88,13 @@ trait Compiler {
   private def parsing[R](source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] =
     parser(source).flatMap { ast => withModule(ast, source) { f } }
 
+  /**
+   * Don't create a fresh module every time, but reuse the existing one. Modules are symbols, they are compared
+   * by identity. Otherwise importing the same module in two files will lead to different types with the same names.
+   */
+  private val moduleCache = mutable.HashMap.empty[Source, Module]
   private def withModule[R](ast: ModuleDecl, source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] = {
-    val mod = Module(ast, source)
+    val mod = moduleCache.getOrElseUpdate(source, Module(ast, source))
     C in {
       C.module = mod
       C.focus = ast
