@@ -4,6 +4,8 @@ import scalariform.formatter.preferences._
 
 enablePlugins(ScalaJSPlugin)
 
+lazy val effektVersion = "0.1.2"
+
 lazy val noPublishSettings = Seq(
   publish := {},
   publishLocal := {},
@@ -37,7 +39,7 @@ lazy val root = project.in(file("."))
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
     name := "effekt",
-    version := "0.1.1"
+    version := effektVersion
   )
   .settings(commonSettings)
   .jvmSettings(
