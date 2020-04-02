@@ -12,11 +12,9 @@ type Token {
 effect Peek(): Option[Token]
 effect Next(): Token
 effect EOS[A](): A
-
-effect Lexer = { Peek, Next }
-
 effect TokenizerError[A](msg: String): A
 
+effect Lexer = { Peek, Next }
 
 def peek(): Option[Token] / Lexer =
     do Peek()
@@ -29,7 +27,7 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
 
     val numberRx = regex("^[0-9]+");
     val identRx  = regex("^[a-zA-Z]+");
-    val punctRx  = regex("^[,.()\\[\\]]+");
+    val punctRx  = regex("^[,.()\\[\\]]");
 
     var str = in.trim;
 
@@ -69,8 +67,7 @@ def tokenErrorToFail[R] { p: R / TokenizerError } : R / Fail = try { p() } with 
 
 type ParseResult[R] {
   Success(t: R);
-  Failure(msg: String);
-  ParseError(msg: String)
+  Failure(msg: String)
 }
 
 def accept { p: Token => Boolean } : Token / { Fail, Next } = {
@@ -109,7 +106,6 @@ def eager[R] { p: R / { Flip, Fail } }: ParseResult[R] = try {
   case Flip() => resume(true) match {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
-    case ParseError(msg) => ParseError(msg)
   }
   case Fail(msg) => Failure(msg)
 }
@@ -123,8 +119,15 @@ def parse[R](s: String) { p : R / Parser } =
         }
     }
 
+def many { p: Unit }: Unit / Flip =
+    or { p(); many { p() } } { () }
+
+def some { p: Unit }: Unit / Flip = {
+    p(); many { p() }
+}
+
 // Example grammar
-// <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> `,` <EXPR>  `)`
+// <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
 // we count the number of nodes as semantic action
 def parseExpr(): Int / Parser =
     or { number(); 1 } {
@@ -132,11 +135,14 @@ def parseExpr(): Int / Parser =
         ident();
         punct("(");
         count = count + parseExpr();
-        punct(",");
-        count = count + parseExpr();
+        many {
+            punct(",");
+            count = count + parseExpr()
+        };
         punct(")");
         count
     }
+
 
 def main() = {
     // simple string ops
@@ -160,5 +166,7 @@ def main() = {
     // parser
     println(parse("42") { parseExpr() });
     println(parse("foo(1)") { parseExpr() });
-    println(parse("foo(1, 2)") { parseExpr() })
+    println(parse("foo(1, 2)") { parseExpr() });
+    println(parse("foo(1, 2, 3, 4)") { parseExpr() });
+    println(parse("foo(1, 2, bar(4, 5))") { parseExpr() })
 }

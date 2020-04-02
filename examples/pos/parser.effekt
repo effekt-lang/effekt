@@ -7,7 +7,7 @@ effect Error[A](msg: String): A
 
 type Stream {
   Cons(el: String, rest: Stream);
-  EOS()
+  Nil()
 }
 
 type Option[R] {
@@ -36,6 +36,10 @@ def or[R] { p: R } { q: R } =
 def asOrB(): Int / { Flip, Next, Fail } =
   or { accept("a"); asOrB() + 1 } { accept("b"); 0 }
 
+def parens(): Int / { Flip, Next, Fail } =
+  or { accept("()"); 0 }
+     { accept("("); val res = parens(); accept(")"); res + 1 }
+
 // Int = Result
 def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     var inn = s;
@@ -43,7 +47,7 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
       p()
     } with {
       case Next() => inn match {
-        case EOS() => { do Fail("Unexpected EOS") }
+        case Nil() => { do Fail("Unexpected Nil") }
         case Cons(el, rest) => {
           inn = rest;
           resume(el)
@@ -95,7 +99,7 @@ def ex() =
   }
 
 def p1() = {
-  val inn = Cons("a", Cons("a", Cons("a", Cons("b", EOS()))));
+  val inn = ["a", "a", "a", "b"];
   parse(inn) { asOrB() } match {
     case Success(n) => println(n)
     case Failure(msg) => ()
@@ -104,7 +108,7 @@ def p1() = {
 }
 
 def p2() = {
-  val inn = Cons("do", Cons("foo", EOS()));
+  val inn = ["do", "foo"];
   parse(inn) { ex() } match {
     case Success(n) => println(n)
     case Failure(msg) => ()
@@ -112,7 +116,19 @@ def p2() = {
   }
 }
 
+def p4() = {
+  val inn = ["(", "(", "()", ")", ")"];
+  parse(inn) { parens() } match {
+    case Success(n) => println(n)
+    case Failure(msg) => ()
+    case ParseError(msg) => ()
+  }
+}
+
+
+
 def main() = {
     p1();
-    p2()
+    p2();
+    p4()
 }
