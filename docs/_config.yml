@@ -16,7 +16,7 @@ version: 0.1.0-SNAPSHOT
 include:
 - css/light-style.scss
 - css/custom.scss
-exclude:
-- css
+- css/fontawesome.min.css
+- webfonts
 org: docs
 markdown: kramdown

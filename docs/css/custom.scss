@@ -92,8 +92,13 @@ $radius: 10px;
 #navigation .navbar-wrapper .navigation-brand .custom-feature-icon .icon-wrapper {
     -webkit-mask: url(../img/light-navbar-brand.svg) no-repeat;
     mask: url(../img/light-navbar-brand.svg) no-repeat;
-    background-color: black;
     background-image: none !important;
+}
+body.page #navigation .navbar-wrapper .navigation-brand .custom-feature-icon .icon-wrapper {
+  background-color: #ffffff;
+}
+body.home #navigation .navbar-wrapper .navigation-brand .custom-feature-icon .icon-wrapper {
+  background-color: #000000;
 }
 
 // mac like window
