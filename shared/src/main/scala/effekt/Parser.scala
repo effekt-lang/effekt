@@ -354,7 +354,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
   lazy val primExpr: P[Expr] =
-    literals | `(` ~/> expr <~ `)`
+    literals | pairLiteral | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Expr] =
     idRef ^^ Var
@@ -365,11 +365,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } }
 
+  lazy val pairLiteral: P[Expr] =
+    `(` ~> expr ~ (`,` ~/> expr <~ `)`) ^^ PairTree
+
   private def NilTree: Expr =
     Call(IdRef("Nil"), Nil, List(ValueArgs(Nil)))
 
   private def ConsTree(el: Expr, rest: Expr): Expr =
     Call(IdRef("Cons"), Nil, List(ValueArgs(List(el, rest))))
+
+  private def PairTree(fst: Expr, snd: Expr): Expr =
+    Call(IdRef("Pair"), Nil, List(ValueArgs(List(fst, snd))))
 
   /**
    * Types and Effects
@@ -378,6 +384,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val valueType: P[ValueType] =
     ( idRef ~ typeArgs ^^ TypeApp
     | idRef ^^ TypeVar
+    | `(` ~> valueType ~ (`,` ~/> valueType <~ `)`) ^^ PairTypeTree
     | failure("Expected a type")
     )
 
@@ -405,10 +412,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // === AST Helpers ===
 
-  def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
+  private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
      Call(IdRef(opName(op)), Nil, List(ValueArgs(List(lhs, rhs))))
 
-  def opName(op: String): String = op match {
+  private def opName(op: String): String = op match {
     case "||" => "infixOr"
     case "&&" => "infixAnd"
     case "==" => "infixEq"
@@ -423,6 +430,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     case "/"  => "infixDiv"
     case "++" => "infixConcat"
   }
+
+  private def PairTypeTree(fst: ValueType, snd: ValueType): ValueType =
+    TypeApp(IdRef("Pair"), (List(fst, snd)))
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

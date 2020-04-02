@@ -18,6 +18,11 @@ def orElse[A](self: Option[A]) { that: Option[A] }: Option[A] = self match {
   case Some(v) => Some(v)
 }
 
+def getOrElse[A](self: Option[A]) { that: A }: A = self match {
+  case None() => that()
+  case Some(v) => v
+}
+
 def map[A, B](self: Option[A]) { f: A => B }: Option[B] = self match {
   case None()  => None()
   case Some(v) => Some(f(v))
