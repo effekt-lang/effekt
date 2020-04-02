@@ -10,6 +10,7 @@
   padding: 0.5em;
   color: #333333;
   overflow-x: auto;
+  line-height: 1.5em;
 }
 
 .hljs-comment,
@@ -25,10 +26,14 @@
   color: #df5000;
 }
 
-.hljs-keyword,
 .hljs-selector-tag,
 .hljs-type {
   color: #d73a49;
+}
+
+.hljs-keyword {
+  color: #333;
+  font-weight: 500;
 }
 
 .hljs-literal,
@@ -53,7 +58,7 @@
 .hljs-selector-class,
 .hljs-selector-attr,
 .hljs-selector-pseudo {
-  color: #6f42c1;
+  color: #735080;
 }
 
 .hljs-addition {
@@ -75,5 +80,5 @@
 }
 
 .hljs-string {
-  color: #032f62;
+  color: #25995f;
 }
