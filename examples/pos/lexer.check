@@ -1,0 +1,16 @@
+Some(d)
+None()
+7
+Some(0)
+Ident(abcd)
+Number(12345)
+Punct(,)
+Number(4)
+Punct(()
+Ident(efgh)
+Punct())
+Ident(bar)
+Punct(()
+Ident(baz)
+Punct())
+End of Stream
