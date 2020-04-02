@@ -38,15 +38,21 @@ jobs:
 
     - name: Run tests and assemble jar file
       run: sbt clean assembly
-      
+
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
-      
+
     - name: Upload jar file
       uses: actions/upload-artifact@v1
       with:
         name: effekt
         path: jvm/target/scala-2.13/effekt.jar
+
+    - name: Upload js file
+      uses: actions/upload-artifact@v1
+      with:
+        name: effekt-js
+        path: js/target/scala-2.13/effekt-opt.js
 
   build-vscode:
     name: Build the VSCode extension
@@ -90,7 +96,7 @@ jobs:
         with:
           name: effekt-js
           path: distribution/
-          
+
       - name: Download VSCode artifact
         uses: actions/download-artifact@v1
         with:
