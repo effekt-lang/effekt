@@ -13,4 +13,6 @@ Ident(bar)
 Punct(()
 Ident(baz)
 Punct())
-End of Stream
+Success(1)
+Failure(Unexpected token Number(1))
+Success(3)
