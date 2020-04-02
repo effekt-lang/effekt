@@ -82,3 +82,8 @@ extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
 
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
   "x && y"
+
+// Is something an undefined JavaScript Value?
+// Should only be used internally since values in Effekt should not be undefined
+extern pure def isUndefined[A](value: A): Boolean =
+  "value === undefined"
