@@ -1,0 +1,2 @@
+Add(Add(Lit(1), Lit(2)), Lit(3))
+Let(x1, Add(Lit(1), Lit(2)), Let(x2, Add(Var(x1), Lit(3)), Var(x2)))

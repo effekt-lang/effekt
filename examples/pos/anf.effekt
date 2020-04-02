@@ -1,0 +1,49 @@
+module anf
+
+type Exp {
+    Lit(n: Int);
+    Var(x: String);
+    Add(l: Exp, r: Exp);
+    Let(x: String, bind: Exp, body: Exp)
+}
+
+effect Bind(e: Exp): Exp
+effect Fresh(): Int
+
+def freshVars[R] { prog: R / Fresh } : R = {
+    var i = 0;
+    try {
+        prog()
+    } with {
+        case Fresh() => {
+            i = i + 1;
+            resume(i)
+        }
+    }
+}
+
+def bindHere { prog: Exp / Bind } : Exp / Fresh = try {
+    prog()
+} with {
+    case Bind(e) => {
+        val id = "x" ++ show(do Fresh());
+        Let(id, e, resume(Var(id)))
+    }
+}
+
+def traverse(e: Exp): Exp / { Bind, Fresh } = e match {
+    case Lit(n) => Lit(n)
+    case Var(n) => Var(n)
+    case Add(l, r) => do Bind(Add(traverse(l), traverse(r)))
+    case Let(x, b, body) => Let(x, bindHere { traverse(b) }, bindHere { traverse(body) })
+}
+
+def main() = {
+    val exp = Add(Add(Lit(1), Lit(2)), Lit(3));
+    println(exp);
+
+    val anfResult = freshVars {
+        bindHere { traverse(exp) }
+    };
+    println(anfResult)
+}
