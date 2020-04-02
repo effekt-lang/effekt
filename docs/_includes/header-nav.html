@@ -1,0 +1,21 @@
+<nav id="navigation" aria-labelledby="main-navigation">
+    <div class="navbar-wrapper container">
+        <div class="navigation-brand">
+            <a href="{{ site.baseurl }}/" class="brand custom-feature-icon">
+            <div class="icon-wrapper"></div><span class="brand-title">Effekt Language</span></a>
+        </div>
+        <div class="navigation-menu">
+            <ul>{% if site.data.versions %}{% assign own_version = site.data.versions | where: "own", true | first %}
+                <li>
+                    <div id="version-dropdown">
+                        <button onclick="displayToggle(event)" title="Version {{ own_version.name }}" class="button link-like"><i class="nav-item-icon fa fa-lg fa-caret-square-o-down" hidden="true"></i><span class="nav-item-text" id="own-version">Version {{ own_version.name }}</span><i class="nav-item-text fa fa-caret-down"></i></button>
+                        <ul class="dropdown dropdown-content">{% for item in site.data.versions offset: 1 %}
+                            <li class="dropdown-item"><a title="{{ item.name }}" class="dropdown-item-link" href="{{ item.name | relative_url }}"><span>{{ item.name }}</span></a></li>{% endfor %}</ul>
+                    </div>
+                </li>{% endif %}
+                <li><a href="https://github.com/b-studios/effekt" target="_blank" rel="noopener noreferrer"><i class="nav-item-icon fa fa-lg fa-github" hidden="true"></i><span class="nav-item-text">GitHub</span></a></li>
+                <li><a href="docs"><i class="nav-item-icon fa fa-lg fa-file-text" hidden="true"></i><span class="nav-item-text">Documentation</span></a></li>
+            </ul>
+        </div>
+    </div>
+</nav>
