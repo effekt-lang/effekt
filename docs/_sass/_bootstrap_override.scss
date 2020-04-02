@@ -1,0 +1,97 @@
+// Scaffolding
+// -----------------------------------------------------
+body {
+	font-weight: 400;
+}
+
+::-moz-selection {
+	color: #fff;
+}
+
+::selection {
+	color: #fff;
+}
+
+// Buttons
+.btn {
+	@include button-size(($padding-base-vertical * 1.2), ($padding-base-horizontal * 3.5), $font-size-base, $line-height-base, ($btn-border-radius-base * 50));
+}
+
+// Navbar
+// -----------------------------------------------------
+.navbar-brand {
+	font-size: $font-size-large;
+}
+
+.navbar-text {
+	padding-top: 10px;
+}
+
+
+
+// Jumbotron
+// -----------------------------------------------------
+.jumbotron {
+	padding-top: ($jumbotron-padding * 1.7);
+	padding-bottom: $jumbotron-padding;
+	margin-bottom: 0;
+	background-attachment: fixed;
+	background: url('../img/jumbotron_pattern.png') fixed;
+	@include image-2x('../img/jumbotron_pattern2x.png', 56px,31px);
+	h1 {
+		margin-bottom: ($line-height-computed * 1.8);
+	}
+	.btn-outline-inverse {
+		border: 2px solid #fff;
+		color: #fff;
+		&:hover,
+		&:focus {
+			background: #fff;
+		}
+	}
+	@media screen and (min-width: $screen-sm-min) {
+		padding-top: ($jumbotron-padding * 2);
+		padding-bottom: ($jumbotron-padding * 1.15);
+	}
+}
+
+// Code
+// -----------------------------------------------------
+pre {
+	padding: 0;
+	font-size: ($font-size-base - 2);
+	background: rgba($pre-bg, 0.6);
+	border-radius: ($border-radius-base / 2);
+	margin-top: 20px;
+	@media screen and (min-width: $screen-md-min) {
+		margin-top: 0;
+	}
+	code {
+		font-size: inherit;
+		color: inherit;
+		white-space: pre-wrap;
+		background-color: transparent;
+		border-radius: 0;
+	}
+	.hljs {
+		padding: $line-height-computed;
+		background: none;
+	}
+}
+
+// Tooltip
+// -----------------------------------------------------
+.tooltip {
+	font-size: 12px;
+}
+
+.tooltip-inner {
+	padding: 6px 15px;
+}
+
+// Tables -- Inspired by GitHub style
+// ------------------------------------------------------
+table th, table td {
+    padding: 6px 13px;
+    border: 1px solid #ddd;
+}

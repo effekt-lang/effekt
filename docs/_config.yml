@@ -1,0 +1,22 @@
+name: Effekt Language
+baseurl: ''
+description: A research language with effect handlers and lightweight effect polymorphism
+highlighter: rouge
+docs: true
+collections:
+  tut:
+    output: true
+sass:
+  load_paths:
+  - _sass
+  - _sass_custom
+  style: compressed
+  sourcemap: never
+version: 0.1.0-SNAPSHOT
+include:
+- css/light-style.scss
+- css/custom.scss
+exclude:
+- css
+org: docs
+markdown: kramdown

@@ -1,0 +1,108 @@
+// Palette
+// -----------------------------------------------------
+//HOME
+// Technologies -----------------------------------------------------
+.technologies {
+	background: $brand-secondary;
+}
+
+// Header -----------------------------------------------------
+#site-header {
+	.navbar-wrapper {
+		a {
+			color: #fff;
+		}
+	}
+}
+
+// Footer -----------------------------------------------------
+#site-footer {
+	background: $brand-tertiary;
+}
+
+// Scaffolding -----------------------------------------------------
+::-moz-selection {
+	background: $brand-primary;
+	color: $white-color;
+}
+
+::selection {
+	background: $brand-primary;
+	color: $white-color;
+}
+
+// Jumbotron -----------------------------------------------------
+.jumbotron {
+	background-color: $brand-secondary;
+	.btn-outline-inverse {
+		border: 2px solid $white-color;
+		color: $white-color;
+		&:hover,
+		&:focus {
+			background: $white-color;
+			color: $brand-secondary;
+		}
+	}
+}
+
+// Code -----------------------------------------------------
+pre {
+	background: rgba($gray-lighter, 0.6);
+	code {
+		color: inherit;
+		background-color: transparent;
+	}
+	.hljs {
+		background: none;
+	}
+}
+
+//DOCS
+body.docs {
+	background: $gray-lighter;
+}
+
+#content code {
+	color: $gray;
+	background-color: $gray-lighter;
+}
+
+#sidebar-wrapper {
+	background: $brand-secondary;
+}
+
+#page-content-wrapper {
+	.nav {
+		a {
+			color: $gray;
+			&:hover {
+				color: $gray-dark;
+			}
+			i {
+				font-size: 18px;
+			}
+		}
+	}
+}
+
+.sidebar-nav {
+	> li {
+		a {
+			&:hover {
+				background: $brand-tertiary;
+			}
+			&.active {
+				border-left: 3px solid $brand-primary;
+				color: #fff;
+			}
+		}
+	}
+	> .sidebar-brand {
+		a {
+			background: $brand-tertiary;
+			&:hover {
+				background: $brand-tertiary;
+			}
+		}
+	}
+}

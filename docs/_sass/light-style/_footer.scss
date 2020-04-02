@@ -1,0 +1,25 @@
+#site-footer {
+  font-family: $title-font-family;
+  padding: ($base-point-grid * 5) 0;
+  font-size: $footer-font-size;
+
+  .row {
+    margin: 0 auto;
+
+    p {
+      margin: 8px 0;
+    }
+
+    a {
+      text-decoration: underline;
+
+      &:hover {
+        text-decoration: none;
+      }
+    }
+  }
+
+  @include bp(medium) {
+    text-align: center;
+  }
+}

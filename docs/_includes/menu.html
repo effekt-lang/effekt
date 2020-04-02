@@ -1,0 +1,1 @@
+<div id="horizontal-menu">{% assign pages = site.pages | sort:'position' %}<ul class="horizontal-nav">{% for p in pages %}{% if p.position != null %}<li><a class="{% if p.url == page.url %} active {% endif %}" href="{{ site.baseurl }}{{ p.url }}">{{ p.title }}</a></li>{% endif %}{% endfor %}</ul></div>

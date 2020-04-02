@@ -1,0 +1,199 @@
+// Features Header
+// -----------------------------------------------------
+.features-masthead {
+  padding: 130px 0;
+}
+
+.features-image {
+  width: 49%;
+  height: 100%;
+  background: url("../img/features-header.svg") no-repeat;
+  background-size: contain;
+  background-position: center;
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.feature-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 100%;
+  width: 100%;
+  position: relative;
+
+  .features-header-description {
+    display: flex;
+    flex-direction: column;
+
+    .masthead-title {
+      font-size: 3.5rem;
+      font-weight: 600;
+      margin: 0;
+    }
+    .masthead-description {
+      font-size: 1.65rem;
+      margin: 0 0 10px 0;
+    }
+    .masthead-button {
+      width: 106px;
+      margin-top: $base-point-grid * 2;
+    }
+  }
+}
+
+.features-header-description {
+  max-width: 49%;
+}
+
+.features {
+  display: flex;
+  padding: 100px 0;
+
+  .feature-item {
+    flex: 1;
+    align-items: center;
+    text-align: center;
+    min-height: $feature-item-height;
+    margin-right: ($base-point-grid * 5);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    color: $text-color;
+
+    h4,
+    p {
+      margin: $base-point-grid 0 0 0;
+    }
+
+    &:last-child {
+      margin-right: 0;
+    }
+
+    .first-feature-icon-wrapper,
+    .fourth-feature-icon-wrapper,
+    .second-feature-icon-wrapper,
+    .third-feature-icon-wrapper {
+      margin-top: 0;
+      width: 56px;
+      min-height: 56px;
+      padding-bottom: $base-point-grid;
+    }
+    @keyframes subtle-transition {
+      80% {
+        background-color: $brand-primary;
+      }
+
+      95% {
+        background-color: $text-color;
+      }
+    }
+
+    .background-mask {
+      .first-feature-icon-wrapper {
+        -webkit-mask: url("../img/first-feature-icon.svg") no-repeat;
+        mask: url("../img/first-feature-icon.svg") no-repeat;
+        background-color: $brand-primary;
+        animation: subtle-transition 6.66s infinite linear;
+      }
+
+      .second-feature-icon-wrapper {
+        -webkit-mask: url("../img/second-feature-icon.svg") no-repeat;
+        mask: url("../img/second-feature-icon.svg") no-repeat;
+        background-color: $brand-primary;
+        animation: subtle-transition 6.66s infinite linear;
+      }
+
+      .third-feature-icon-wrapper {
+        -webkit-mask: url("../img/third-feature-icon.svg") no-repeat;
+        mask: url("../img/third-feature-icon.svg") no-repeat;
+        background-color: $brand-primary;
+        animation: subtle-transition 6.66s infinite linear;
+      }
+    }
+
+    .custom-feature-icon {
+      .first-feature-icon-wrapper {
+        background: url("../img/first-feature-icon.svg") no-repeat;
+      }
+
+      .second-feature-icon-wrapper {
+        background: url("../img/second-feature-icon.svg") no-repeat;
+      }
+
+      .third-feature-icon-wrapper {
+        background: url("../img/third-feature-icon.svg") no-repeat;
+      }
+    }
+
+    .feature-item-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1 0 auto;
+    }
+  }
+}
+
+#site-main {
+  .learn-more-button {
+    padding: 6px ($base-point-grid * 3);
+    font-size: $footer-font-size;
+    color: $brand-primary;
+    border: 2px solid $brand-primary;
+    font-weight: 600;
+    border-radius: 2px;
+    transition: all 350ms ease;
+    width: 80px;
+    text-decoration: none;
+    margin-top: $base-point-grid * 2;
+
+    &:hover {
+      background-color: $brand-primary;
+      color: $white-color;
+    }
+  }
+}
+// Responsive
+// -----------------------------------------------------
+@include bp(medium) {
+  .feature-header {
+    justify-content: center;
+    text-align: center;
+    padding: 0;
+
+    .features-image {
+      display: none;
+    }
+
+    .features-header-description {
+      max-width: 100%;
+      align-items: center;
+      padding: $base-point-grid * 6 0;
+
+      .masthead-title {
+        font-size: 2rem;
+      }
+
+      .masthead-description {
+        font-size: 1.25rem;
+      }
+    }
+  }
+
+  .features {
+    flex-direction: column;
+    padding: 0;
+
+    .feature-item {
+      min-height: 220px;
+      width: 80%;
+      margin: ($base-point-grid * 6) auto;
+
+      &:last-child {
+        margin-right: auto;
+      }
+    }
+  }
+}

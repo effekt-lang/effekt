@@ -1,0 +1,89 @@
+// Masthead
+// -----------------------------------------------
+// -----------------------------------------------
+
+#masthead {
+  background: linear-gradient(160deg, transparent 66%, darken($brand-primary, 9%) 97%), linear-gradient(130deg, darken($brand-primary, 6%), $brand-primary 16%);
+  background-position: center;
+  background-size: 200% 100%;
+  animation: bg-gradient 12s ease infinite;
+  color: $white-color;
+  flex: 1 0 auto;
+  max-height: 50%;
+  padding: $base-point-grid * 6 0;
+  font-family: $title-font-family;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+
+  .text-center {
+    text-align: center;
+    max-width: $masthead-description;
+
+    .masthead-description {
+      font-size: 3rem;
+      margin-bottom: $base-point-grid * 7;
+      font-weight: 600;
+    }
+  }
+
+  .masthead-button {
+    color: $white-color;
+    padding: 11px ($base-point-grid * 5);
+    border: 2px solid $white-color;
+    font-weight: 600;
+    border-radius: 2px;
+    transition: all 350ms ease;
+
+    &:hover {
+      background-color: $white-color;
+      color: $brand-primary;
+    }
+  }
+}
+
+// Horizontal page menu
+// -----------------------------------------------
+// -----------------------------------------------
+
+.menu-container {
+  border-bottom: solid 1px rgba($text-color, 0.10);
+}
+
+#horizontal-menu {
+  display: flex;
+  justify-content: left;
+  max-width: $content-width;
+  margin: 0 auto;
+  padding: 0 ($base-point-grid * 3);
+  min-height: $horizontal-menu-height;
+
+  .horizontal-nav {
+    display: inline-flex;
+    flex-wrap: wrap;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+
+    li {
+      margin-right: $base-point-grid * 4;
+      padding: 10px 0;
+
+      a {
+        padding: 10px 0;
+        font-weight: 600;
+        color: rgba($text-color, 0.70);
+        transition: color 0.4ms ease;
+
+        &.active {
+          color: $brand-primary;
+        }
+
+        &:hover {
+          color: $text-color;
+          border-bottom: solid 3px $text-color;
+        }
+      }
+    }
+  }
+}
