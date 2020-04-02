@@ -301,10 +301,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
   lazy val accessExpr: P[Expr] =
-    ((accessExpr <~ `.`) ~ idRef ~ maybeTypeArgs ~ many(args) ^^ {
-      case firstArg ~ name ~ targs ~ otherArgs =>
-        Call(name, targs, ValueArgs(List(firstArg)) :: otherArgs)
-    }) | callExpr
+    callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
+      case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
+        case (firstArg, name ~ targs ~ otherArgs) =>
+          Call(name, targs, ValueArgs(List(firstArg)) :: otherArgs)
+      }
+    }
 
   lazy val callExpr: P[Expr] =
     ( ifExpr
