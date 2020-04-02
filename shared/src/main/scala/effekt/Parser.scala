@@ -293,12 +293,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Expressions
    */
   lazy val expr:    P[Expr] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
-  lazy val orExpr:  P[Expr] = andExpr  ~ "||" ~/ orExpr ^^ binaryOp | andExpr
-  lazy val andExpr: P[Expr] = eqExpr   ~ "&&" ~/ andExpr ^^ binaryOp | eqExpr
-  lazy val eqExpr:  P[Expr] = relExpr  ~ oneof("==", "!=") ~/ eqExpr ^^ binaryOp | relExpr
-  lazy val relExpr: P[Expr] = addExpr  ~ oneof("<=", ">=", "<", ">") ~/ relExpr ^^ binaryOp | addExpr
-  lazy val addExpr: P[Expr] = mulExpr  ~ oneof("++", "+", "-") ~/ addExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Expr] = callExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
+  lazy val orExpr:  P[Expr] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
+  lazy val andExpr: P[Expr] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
+  lazy val eqExpr:  P[Expr] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
+  lazy val relExpr: P[Expr] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
+  lazy val addExpr: P[Expr] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
+  lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
   lazy val accessExpr: P[Expr] =
     ((accessExpr <~ `.`) ~ idRef ~ maybeTypeArgs ~ many(args) ^^ {
