@@ -32,7 +32,7 @@ You can now start Effekt by running
 ```
 java -jar path/to/effekt.jar
 ```
-This assumes you have a Java JRE >= 8 installed.
+This assumes you have a Java JDK >= 1.8 and NodeJS >= 10.x installed.
 For convience, you can then set up a script like [this one](https://github.com/b-studios/effekt/tree/master/bin) and
 add it to your PATH.
 

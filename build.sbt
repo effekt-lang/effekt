@@ -115,6 +115,9 @@ lazy val micrositeSettings = Seq(
   micrositeAuthor := "the Effekt research team",
   micrositeHighlightLanguages ++= Seq("effekt"),
   micrositeDocumentationUrl := "docs",
+  micrositeGitterChannel := false,
+  micrositeShareOnSocial := false,
+  micrositeGithubLinks := false,
   // micrositeBaseUrl := "/effekt",
   micrositeGithubOwner := "b-studios",
   micrositeGithubRepo := "effekt",
@@ -133,7 +136,7 @@ lazy val effektTheme = Map(
     "brand-secondary" -> "#d73a49",
     "brand-tertiary" -> "#36bc98", //"#fb7b6b",
     "gray-dark" -> "#394A4B",
-    "gray" -> "#e7d39f",
+    "gray" -> "#394A4B",
     "gray-light" -> "#CFE4E4",
     "gray-lighter" -> "#F4F4F4",
     "white-color" -> "#FFFFFF")
