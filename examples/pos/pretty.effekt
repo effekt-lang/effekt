@@ -1,0 +1,93 @@
+module examples/pretty3
+
+import data/option
+import data/string
+
+// A very naive (backtracking) pretty printer
+// ===========================
+
+// Contextual parameters
+effect Indentation(): Int
+effect Width(): Int
+effect Horizontal(): Boolean
+
+// Document emitters
+effect Text(t: String): Unit
+effect Line(indent: Int): Unit
+
+// TODO looks like unused effects cause a problem
+def fitsTheLine[R] { p: R / { Text, Line } } = {
+  val INDENT = do Indentation();
+  val WIDTH = do Width();
+  var pos = INDENT;
+
+  try { p(); true } with {
+    case Text(t) => {
+      pos = pos + t.length;
+      if (pos > WIDTH) { false } else { resume(()) }
+    }
+    case Line(n) => {
+      pos = INDENT + n;
+      resume(())
+    }
+  }
+}
+
+def horizontal { p: Unit / { Horizontal } } = try { p () } with {
+  case Horizontal() => resume(true)
+}
+
+def vertical { p: Unit / { Horizontal } } = try { p () } with {
+  case Horizontal() => resume(false)
+}
+
+def group { p: Unit / { Horizontal, Text, Line } } =
+  if (fitsTheLine { horizontal { p() } })
+    horizontal { p() }
+  else
+    vertical { p() }
+
+def line() = if (do Horizontal()) { do Text(" ") } else { do Line(do Indentation()) }
+
+def text(s: String) = do Text(s)
+
+def nest[R](j: Int) { p: R / Indentation }: R / Indentation = try { p () } with {
+  case Indentation() => resume(do Indentation() + j)
+}
+
+def width[R](w: Int) { p: R / { Width, Indentation } } : R =
+    try { p () } with {
+        case Width() => resume(w)
+        case Indentation() => resume(0)
+    }
+
+def outputWriter { p: Unit / { Text, Line } } : String = {
+    var out = "";
+    try { p() } with {
+        case Text(t) => { out = out ++ t; resume(()) }
+        case Line(n) => { out = out ++ ("\n" ++ " ".repeat(n)); resume(()) }
+    };
+    out
+}
+
+def main() = {
+
+  def example2() = {
+    text("XX"); line();
+    nest(2) { group { text("XXXXXXXXX"); line(); text("XX") } };
+    line();
+    text("XXX"); line();
+    text("XX")
+  }
+
+  println("----------");
+  println(
+    width(10) {
+      outputWriter {
+        group {
+          example2()
+        }
+      }
+    }
+  )
+}
