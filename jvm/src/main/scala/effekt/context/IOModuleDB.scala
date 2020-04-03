@@ -17,7 +17,9 @@ trait IOModuleDB extends ModuleDB { self: Context =>
   override def contentsOf(path: String): String =
     module.source match {
       case JarSource(name) =>
-        val p = new File(name).toPath.getParent.resolve(path).toString
+        // Paths in Jar files don't use platform dependent separators!
+        val p = (name.split("/").init :+ path).mkString("/")
+
         if (!JarSource.exists(p)) {
           abort(s"Missing include in: ${p}")
         } else {
@@ -42,7 +44,7 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     config.includes().map { p => p.toPath.resolve(filename).toFile } collectFirst {
       case file if file.exists => FileSource(file.getCanonicalPath)
     } orElse {
-      val jarPath = "lib" + File.separator + filename
+      val jarPath = "lib/" + filename
       if (JarSource.exists(jarPath)) {
         Some(JarSource(jarPath))
       } else {
