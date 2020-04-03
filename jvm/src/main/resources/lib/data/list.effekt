@@ -16,3 +16,16 @@ def foreach[A](l: List[A]) { f: A => Unit } : Unit =
     case Nil() => ()
     case Cons(a, rest) => { f(a); foreach(rest) { a => f(a) } }
   }
+
+def reverse[A](l: List[A]): List[A] = {
+  def reverseWith(l: List[A])(acc: List[A]): List[A] = l match {
+    case Nil() => acc
+    case Cons(a, rest) => rest.reverseWith(Cons(a, acc))
+  }
+  l.reverseWith(Nil())
+}
+
+def isEmpty[A](l: List[A]): Boolean = l match {
+  case Nil() => true
+  case Cons(a, rest) => false
+}

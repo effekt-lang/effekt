@@ -5,7 +5,7 @@ function show$impl(obj) {
   } else if (obj === $effekt.unit) {
     return "()";
   } else {
-    return obj;
+    return "" + obj;
   }
 }
 

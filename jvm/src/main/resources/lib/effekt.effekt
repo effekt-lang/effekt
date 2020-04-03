@@ -14,6 +14,9 @@ extern include "effekt_builtins.js"
 extern def println[R](value: R): Unit / Console =
   "println$impl(value)"
 
+extern pure def inspect[R](value: R): Unit =
+  "console.log(value)"
+
 extern pure def random(): Int =
   "Math.random() * 100"
 
