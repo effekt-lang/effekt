@@ -1,6 +1,7 @@
-module examples/pretty3
+module examples/pretty
 
 import data/option
+import data/list
 import data/string
 
 // A very naive (backtracking) pretty printer
@@ -8,30 +9,51 @@ import data/string
 
 // Contextual parameters
 effect Indentation(): Int
-effect Width(): Int
 effect Horizontal(): Boolean
 
 // Document emitters
 effect Text(t: String): Unit
 effect Line(indent: Int): Unit
 
-// TODO looks like unused effects cause a problem
-def fitsTheLine[R] { p: R / { Text, Line } } = {
-  val INDENT = do Indentation();
-  val WIDTH = do Width();
-  var pos = INDENT;
+effect LayoutChoice(): Boolean
+effect LayoutFail[A](): A
 
-  try { p(); true } with {
-    case Text(t) => {
-      pos = pos + t.length;
-      if (pos > WIDTH) { false } else { resume(()) }
-    }
-    case Line(n) => {
-      pos = INDENT + n;
-      resume(())
+def layout[R] { p : R / { LayoutChoice, LayoutFail } }: Option[R] =
+  try { Some(p()) } with {
+    case LayoutFail() => None()
+    case LayoutChoice() => resume(true) match {
+      case None() => resume(false)
+      case Some(r) => Some(r)
     }
   }
+
+def printer(width: Int) { p: Unit / { Text, Line, Indentation, Horizontal } } = {
+  var pos: Int = 0;
+  var out = "";
+  try { p(); out } with {
+    case Text(t) => {
+      pos = pos + t.length;
+      if (pos > width) {
+        do LayoutFail()
+      } else {
+        out = out ++ t;
+        resume(())
+      }
+    }
+    case Line(indent) => {
+      pos = indent;
+      out = out ++ "\n" ++ (" ".repeat(indent));
+      resume(())
+    }
+    case Horizontal() => resume(do LayoutChoice())
+    case Indentation() => resume(0)
+  }
 }
+
+// TODO moving pretty to the top moves printer out of scope, why?
+// TODO using the wrong kind of argument section (like `opt.getOrElse("")`) crashes the compiler.
+def pretty(width: Int) { p: Unit / { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal } } =
+  (layout { printer(width) { p() } }).getOrElse { "Cannot print document, since it would overflow." }
 
 def horizontal { p: Unit / { Horizontal } } = try { p () } with {
   case Horizontal() => resume(true)
@@ -41,53 +63,71 @@ def vertical { p: Unit / { Horizontal } } = try { p () } with {
   case Horizontal() => resume(false)
 }
 
+def text(s: String) = do Text(s)
+
+def lineOr(replace: String) =
+  if (do Horizontal())
+    do Text(replace)
+  else
+    do Line(do Indentation())
+
+def line() =
+  lineOr(" ")
+
+// a non-breakable space
+def space() =
+  text(" ")
+
+def linebreak() =
+  lineOr("")
+
 def group { p: Unit / { Horizontal, Text, Line } } =
-  if (fitsTheLine { horizontal { p() } })
+  if (do LayoutChoice())
     horizontal { p() }
   else
     vertical { p() }
-
-def line() = if (do Horizontal()) { do Text(" ") } else { do Line(do Indentation()) }
-
-def text(s: String) = do Text(s)
 
 def nest[R](j: Int) { p: R / Indentation }: R / Indentation = try { p () } with {
   case Indentation() => resume(do Indentation() + j)
 }
 
-def width[R](w: Int) { p: R / { Width, Indentation } } : R =
-    try { p () } with {
-        case Width() => resume(w)
-        case Indentation() => resume(0)
-    }
-
-def outputWriter { p: Unit / { Text, Line } } : String = {
-    var out = "";
-    try { p() } with {
-        case Text(t) => { out = out ++ t; resume(()) }
-        case Line(n) => { out = out ++ ("\n" ++ " ".repeat(n)); resume(()) }
-    };
-    out
+def parens { p: Unit }: Unit / Text = {
+  text("("); p(); text(")")
 }
+
+def softbreak() =
+  group { linebreak() }
+
 
 def main() = {
 
-  def example2() = {
-    text("XX"); line();
-    nest(2) { group { text("XXXXXXXXX"); line(); text("XX") } };
-    line();
-    text("XXX"); line();
-    text("XX")
+  def example1(l: List[Int]) = {
+    text("[");
+    l.foreach { n =>
+      text(show(n));
+      text(",");
+      line()
+    };
+    text("]")
   }
 
   println("----------");
-  println(
-    width(10) {
-      outputWriter {
-        group {
-          example2()
-        }
+  println(pretty(10) { example1([1,2,3,4,5,6,7,8,9,1,2,3,4]) });
+
+  def example2() = {
+    text("def"); space(); text("foo"); parens {
+      group {
+        nest(2) {
+          softbreak();
+          group { text("x"); text(":"); space(); text("Int"); text(",") };
+          line();
+          group { text("y"); text(":"); space(); text("String") }
+        };
+        softbreak()
       }
     }
-  )
+  }
+
+  println("----------");
+  println(pretty(20) { example2() })
 }
