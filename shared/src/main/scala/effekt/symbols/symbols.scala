@@ -205,7 +205,7 @@ package object symbols {
     def -(eff: Effect): Effects = this -- Effects(eff)
 
     def ++(other: Effects): Effects = Effects((other.toList ++ this.toList).distinct)
-    def --(other: Effects): Effects = Effects(this.toList.toSet -- other.toList.toSet)
+    def --(other: Effects): Effects = Effects(this.toList.filterNot(other.contains))
 
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
