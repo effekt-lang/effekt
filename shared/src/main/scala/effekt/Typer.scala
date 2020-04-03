@@ -311,6 +311,8 @@ class Typer extends Phase[Module, Module] { typer =>
         ???
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
+        if (ps1.size != ps2.size)
+          Context.error(s"Wrong number of arguments, given ${ps2.size}, but ${name} expects ${ps1.size}.")
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
