@@ -92,9 +92,14 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     C.config.output().emit(command.!!)
   }
 
+  /**
+   * JavaScript paths are *not* platform dependent.
+   */
   def jsPath(mod: Module)(implicit C: Context): String = {
     val outDir = C.config.outputPath().toPath
-    outDir.resolve(mod.outputName).toFile.getCanonicalPath
+    val independent = outDir.resolve(mod.outputName).toFile.getCanonicalPath
+    val unix = independent.replace('\\', '/')
+    unix
   }
 
   def report(in: Source)(implicit C: Context): Unit =
