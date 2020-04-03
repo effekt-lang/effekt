@@ -76,7 +76,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
         val virtuals = resources.get.map { file =>
           val filename = file.relativeTo(baseDir).get
           val content = IO.read(file).replaceAllLiterally("$", "$$")
-          s"""VirtualFS.write(\"$filename\", raw\"\"\"$content\"\"\")"""
+          s"""VirtualFS.write(raw\"\"\"$filename\"\"\", raw\"\"\"$content\"\"\")"""
         }
 
         val scalaCode =
