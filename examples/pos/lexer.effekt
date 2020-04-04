@@ -3,6 +3,7 @@ module examples/pos/lexer
 import data/string
 import data/option
 
+// TODO Here the LSP plugin currently fails
 import examples/pos/pretty
 
 // =======================
@@ -256,12 +257,13 @@ def toDoc(t: Tree): Unit / Pretty = t match {
     case NumLit(value) => text(show(value))
     case Var(name) => text(name)
     case Let(name, binding, body) => {
-        text("let"); space(); text(name); space(); text("="); line();
-        group { nested { toDoc(binding) } };
-        space();
-        text("in");
-        line();
-        group { nested { toDoc(body) } }
+        text("let"); space(); text(name); space(); text("=");
+        group {
+            nested { line(); toDoc(binding) };
+            line();
+            text("in")
+        };
+        group { nested { line(); toDoc(body) } }
     }
     case App(name, arg) => {
         text(name); parens {
@@ -331,7 +333,7 @@ def main() = {
     println(parse(exampleProg) { parseExpr() });
 
     parse(exampleProg) { parseExpr() } match {
-        case Success(tree) => println(pretty(20) { toDoc(tree) })
+        case Success(tree) => println(pretty(15) { toDoc(tree) })
         case Failure(msg) => println(msg)
     }
 }
