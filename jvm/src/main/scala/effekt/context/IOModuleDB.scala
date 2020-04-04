@@ -3,8 +3,9 @@ package context
 
 import java.io.{ File, Reader }
 
-import scala.io.{ Source => ScalaSource }
+import effekt.util.JavaPathUtils._
 
+import scala.io.{ Source => ScalaSource }
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source }
 
 trait IOModuleDB extends ModuleDB { self: Context =>
@@ -14,39 +15,38 @@ trait IOModuleDB extends ModuleDB { self: Context =>
    *
    * used by Namer to resolve FFI includes
    */
-  override def contentsOf(path: String): String =
+  override def contentsOf(path: String): String = {
+    val includeFile = file(module.source.name).parent / path
+
     module.source match {
       case JarSource(name) =>
-        // Paths in Jar files don't use platform dependent separators!
-        val p = (name.split("/").init :+ path).mkString("/")
-
-        if (!JarSource.exists(p)) {
-          abort(s"Missing include in: ${p}")
+        if (!includeFile.existsInJar) {
+          abort(s"Missing include ${path}")
         } else {
-          JarSource(p).content
+          JarSource(includeFile.unixPath).content
         }
       case _ =>
-        val modulePath = module.source.name
-        val p = new File(modulePath).toPath.getParent.resolve(path).toFile
-        if (!p.exists()) {
-          abort(s"Missing include: ${p}")
+        if (!includeFile.exists) {
+          abort(s"Missing include: ${includeFile}")
         } else {
-          FileSource(p.getCanonicalPath).content
+          FileSource(includeFile.canonicalPath).content
         }
     }
+  }
 
   /**
    * First try to find it in the includes paths, then in the bundled resources
    */
-  override def findSource(path: String): Option[Source] = {
-    val filename = path + ".effekt"
+  override def findSource(modulePath: String): Option[Source] = {
+    // ATTENTION modulePath can contain non-platform dependent path separators
+    val filename = modulePath + ".effekt"
 
-    config.includes().map { p => p.toPath.resolve(filename).toFile } collectFirst {
-      case file if file.exists => FileSource(file.getCanonicalPath)
+    config.includes().map { p => p / filename } collectFirst {
+      case f if f.exists => FileSource(f.canonicalPath)
     } orElse {
-      val jarPath = "lib/" + filename
-      if (JarSource.exists(jarPath)) {
-        Some(JarSource(jarPath))
+      val f = "lib" / filename
+      if (f.existsInJar) {
+        Some(JarSource(f.unixPath))
       } else {
         None
       }
@@ -75,13 +75,5 @@ case class JarSource(name: String) extends Source {
     } finally {
       IO.deleteFile(filename)
     }
-  }
-}
-
-object JarSource {
-  def exists(name: String): Boolean = {
-    val cl = Thread.currentThread().getContextClassLoader
-    val stream = cl.getResourceAsStream(name)
-    stream != null
   }
 }

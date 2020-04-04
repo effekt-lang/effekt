@@ -42,7 +42,8 @@ package object symbols {
     source: Source
   ) extends Symbol {
     val name = Name(moduleName(decl.path), this)
-    def outputName = moduleFile(decl.path)
+
+    def path = decl.path
 
     private var _terms: Map[String, TermSymbol] = _
     def terms = _terms
