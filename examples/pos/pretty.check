@@ -5,5 +5,8 @@
 1, 2, 3,
 4, ]
 ----------
+def foo(x: Int, y: String)
 def foo(
-  x: Int, y: String)
+  x: Int,
+  y: String
+)

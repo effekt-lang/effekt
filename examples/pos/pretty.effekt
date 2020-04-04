@@ -118,16 +118,17 @@ def main() = {
     text("def"); space(); text("foo"); parens {
       group {
         nest(2) {
-          softbreak();
+          linebreak();
           group { text("x"); text(":"); space(); text("Int"); text(",") };
           line();
           group { text("y"); text(":"); space(); text("String") }
         };
-        softbreak()
+        linebreak()
       }
     }
   }
 
   println("----------");
+  println(pretty(30) { example2() });
   println(pretty(20) { example2() })
 }
