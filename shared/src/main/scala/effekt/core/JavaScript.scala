@@ -51,12 +51,11 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def nameDef(id: Symbol)(implicit C: Context): Doc = toDoc(id.name)
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc =
-    if (id.name.module != C.module) {
-      link(id.name, id.name.qualified)
-    } else {
-      toDoc(id.name)
-    }
+  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
+    case _: symbols.Effect | _: symbols.EffectOp => toDoc(id.name)
+    case _ if id.name.module != C.module => link(id.name, id.name.qualified)
+    case _ => toDoc(id.name)
+  }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "$effekt.unit"
