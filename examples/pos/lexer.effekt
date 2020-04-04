@@ -3,7 +3,7 @@ module stringtests
 import data/string
 import data/option
 
-record Position(line: Int, col: Int)
+record Position(line: Int, col: Int, index: Int)
 
 type Token {
     Number(content: String, pos: Position);
@@ -14,7 +14,7 @@ type Token {
 effect Peek(): Option[Token]
 effect Next(): Token
 effect EOS[A](): A
-effect TokenizerError[A](msg: String): A
+effect TokenizerError[A](msg: String, pos: Position): A
 
 effect Lexer = { Peek, Next }
 
@@ -33,22 +33,25 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
     val spaceRx  = regex("^[ \t]+");
     val lineRx  = regex("^[\n]");
 
-    var str = in;
+    var index = 0;
     var col = 1;
     var line = 1;
 
-    def position() = Position(line, col)
+    def position() = Position(line, col, index)
+    def input() = in.substring(index)
 
     def consume(len: Int): Unit = {
         col = col + len;
-        str = str.substring(len)
+        index = index + len
     }
 
+    def eos(): Boolean = index >= in.length
+
     def skipWhitespaces(): Unit =  {
-        spaceRx.exec(str).map { m =>
+        spaceRx.exec(input()).map { m =>
             consume(m.matched.length)
         }.orElse {
-            lineRx.exec(str).map { m =>
+            lineRx.exec(input()).map { m =>
                 consume(m.matched.length);
                 line = line + 1;
                 col = 1
@@ -58,7 +61,7 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
     }
 
     def tryMatch(regex: Regex) { f: String => Token } : Option[(Token, Int)] =
-        regex.exec(str).map { m =>
+        regex.exec(input()).map { m =>
           (f(m.matched), m.matched.length)
         }
 
@@ -73,14 +76,14 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
 
     try {  prog() } with {
         case Peek() =>
-            if (str == "")
+            if (eos())
                 resume(None())
             else
                 resume(lexeme().map { m => m.first })
 
         case Next() =>
-            if (str == "")  {
-                do TokenizerError("Unexpected EOS")
+            if (eos())  {
+                do TokenizerError("Unexpected EOS", position())
             } else {
                 val result = lexeme()
                     .map { m =>
@@ -88,7 +91,9 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
                         skipWhitespaces();
                         m.first
                     }
-                    .getOrElse { do TokenizerError("Cannot tokenize input: " ++ str) };
+                    .getOrElse {
+                        do TokenizerError("Cannot tokenize input", position())
+                    };
 
                 resume(result)
             }
@@ -102,7 +107,7 @@ effect Fail[A](msg: String): A
 effect Parser = { Flip, Fail, Next }
 
 def tokenErrorToFail[R] { p: R / TokenizerError } : R / Fail = try { p() } with {
-    case TokenizerError(msg) => do Fail(msg)
+    case TokenizerError(msg, pos) => do Fail(msg)
 }
 
 type ParseResult[R] {
@@ -200,7 +205,10 @@ def main() = {
             }
         }
     } with {
-        case TokenizerError(msg) => println(msg)
+        case TokenizerError(msg, pos) => pos match {
+            case Position(line, col, idx) =>
+                println(show(line) ++ ":" ++ show(col) ++ " " ++ msg)
+        }
     };
 
     // parser
