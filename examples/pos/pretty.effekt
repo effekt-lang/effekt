@@ -15,8 +15,12 @@ effect Horizontal(): Boolean
 effect Text(t: String): Unit
 effect Line(indent: Int): Unit
 
+// Backtracking search for layouts
 effect LayoutChoice(): Boolean
 effect LayoutFail[A](): A
+
+// TODO turn this into an effect later to make configurable
+def defaultIndent() = 2
 
 def layout[R] { p : R / { LayoutChoice, LayoutFail } }: Option[R] =
   try { Some(p()) } with {
@@ -63,6 +67,12 @@ def vertical { p: Unit / { Horizontal } } = try { p () } with {
   case Horizontal() => resume(false)
 }
 
+def group { p: Unit / { Horizontal, Text, Line } } =
+  if (do LayoutChoice())
+    horizontal { p() }
+  else
+    vertical { p() }
+
 def text(s: String) = do Text(s)
 
 def lineOr(replace: String) =
@@ -74,29 +84,41 @@ def lineOr(replace: String) =
 def line() =
   lineOr(" ")
 
-// a non-breakable space
-def space() =
-  text(" ")
+def softline() =
+  group { line() }
 
 def linebreak() =
   lineOr("")
 
-def group { p: Unit / { Horizontal, Text, Line } } =
-  if (do LayoutChoice())
-    horizontal { p() }
-  else
-    vertical { p() }
+def softbreak() =
+  group { linebreak() }
+
+
+// a non-breakable space
+def space() =
+  text(" ")
+
+def spaces(n: Int) =
+  if (n > 0) text(" ".repeat(n)) else ()
 
 def nest[R](j: Int) { p: R / Indentation }: R / Indentation = try { p () } with {
   case Indentation() => resume(do Indentation() + j)
 }
 
+// uses the default indentation to nest a document
+def nested[R] { p: R / Indentation }: R / Indentation =
+  nest(defaultIndent()) { p() }
+
+def nesting[R] { p: Int => R / Indentation }: R / Indentation =
+  p(do Indentation())
+
 def parens { p: Unit }: Unit / Text = {
   text("("); p(); text(")")
 }
 
-def softbreak() =
-  group { linebreak() }
+def braces { p: Unit }: Unit / Text = {
+  text("{"); p(); text("}")
+}
 
 
 def main() = {
@@ -127,8 +149,25 @@ def main() = {
       }
     }
   }
+  def example3() = {
+    example2();
+    space();
+    braces {
+      group {
+        nest(2) {
+          line();
+          text("var"); space(); text("z"); space(); text("="); space(); text("42"); text(";")
+        };
+        line()
+      }
+    }
+  }
 
   println("----------");
   println(pretty(30) { example2() });
-  println(pretty(20) { example2() })
+  println(pretty(20) { example2() });
+
+  println("----------");
+  println(pretty(50) { example3() });
+  println(pretty(15) { example3() })
 }

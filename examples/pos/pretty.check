@@ -10,3 +10,11 @@ def foo(
   x: Int,
   y: String
 )
+----------
+def foo(x: Int, y: String) { var z = 42; }
+def foo(
+  x: Int,
+  y: String
+) {
+  var z = 42;
+}
