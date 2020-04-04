@@ -26,13 +26,15 @@ extern pure def repeat(str: String)(n: Int): String =
 extern pure def substring(str: String)(from: Int): String =
   "str.substring(from)"
 
+
 extern pure def trim(str: String): String =
   "str.trim()"
 
+def toInt(str: String): Option[Int] =
+  str.unsafeToInt.undefinedToOption
+
 extern pure def regex(str: String): Regex =
   "new RegExp(str)"
-
-
 
 def exec(reg: Regex)(str: String): Option[Match] =
   reg.unsafeExec(str).undefinedToOption
@@ -43,3 +45,6 @@ extern pure def unsafeExec(reg: Regex)(str: String): Match =
 
 extern pure def unsafeCharAt(str: String)(n: Int): String =
   "str[n]"
+
+extern pure def unsafeToInt(str: String): Int =
+  "Number.isNaN(parseInt(str)) ? undefined : parseInt(str)"

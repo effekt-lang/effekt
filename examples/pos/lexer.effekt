@@ -3,6 +3,10 @@ module stringtests
 import data/string
 import data/option
 
+// =======================
+// Common
+// =======================
+
 record Position(line: Int, col: Int, index: Int)
 
 type Token {
@@ -10,6 +14,21 @@ type Token {
     Ident(content: String, pos: Position);
     Punct(content: String, pos: Position)
 }
+def content(t: Token): String = t match {
+    case Number(content, _) => content
+    case Ident(content, _) => content
+    case Punct(content, _) => content
+}
+
+def position(t: Token): Position = t match {
+    case Number(_, position) => position
+    case Ident(_, position) => position
+    case Punct(_, position) => position
+}
+
+// =======================
+// Lexing
+// =======================
 
 effect Peek(): Option[Token]
 effect Next(): Token
@@ -24,12 +43,11 @@ def peek(): Option[Token] / Lexer =
 def next(): Token / Lexer =
     do Next()
 
-
 def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
 
     val numberRx = regex("^[0-9]+");
     val identRx  = regex("^[a-zA-Z]+");
-    val punctRx  = regex("^[,.()\\[\\]{}:]");
+    val punctRx  = regex("^[=,.()\\[\\]{}:]");
     val spaceRx  = regex("^[ \t]+");
     val lineRx  = regex("^[\n]");
 
@@ -100,27 +118,42 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
     }
 }
 
-// parsing
-effect Flip(): Boolean
-effect Fail[A](msg: String): A
+// =======================
+// Parsing
+// =======================
+effect ParserAlt(): Boolean
+effect ParserFail[A](msg: String): A
 
-effect Parser = { Flip, Fail, Next }
-
-def tokenErrorToFail[R] { p: R / TokenizerError } : R / Fail = try { p() } with {
-    case TokenizerError(msg, pos) => do Fail(msg)
-}
+effect Parser = { ParserAlt, ParserFail, Next }
 
 type ParseResult[R] {
   Success(t: R);
   Failure(msg: String)
 }
 
-def accept { p: Token => Boolean } : Token / { Fail, Next } = {
+
+def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
+  lexer(input) { Success(p()) }
+} with {
+  case ParserAlt() => resume(true) match {
+    case Failure(msg) => resume(false)
+    case Success(res) => Success(res)
+  }
+  case ParserFail(msg) => Failure(msg)
+  case TokenizerError(msg, pos) => Failure(msg)
+}
+
+
+// =======================
+// Parser Combinators
+// =======================
+
+def accept { p: Token => Boolean } : Token / { ParserFail, Next } = {
     val got = do Next();
     if (p(got)) {
         got
     } else {
-        do Fail("Unexpected token " ++ show(got))
+        do ParserFail("Unexpected token " ++ show(got))
     }
 }
 def ident() = accept { t => t match {
@@ -140,54 +173,95 @@ def punct(p: String) = accept { t => t match {
 }}
 
 def or[R] { p: R } { q: R } =
-  if (do Flip()) { p() } else { q() }
+  if (do ParserAlt()) { p() } else { q() }
 
-def opt[R] { p: R }: Option[R] / Flip =
+def opt[R] { p: R }: Option[R] / ParserAlt =
    or { Some(p()) } { None() }
 
-def eager[R] { p: R / { Flip, Fail } }: ParseResult[R] = try {
-  Success(p())
-} with {
-  case Flip() => resume(true) match {
-    case Failure(msg) => resume(false)
-    case Success(res) => Success(res)
-  }
-  case Fail(msg) => Failure(msg)
-}
-
-def parse[R](s: String) { p : R / Parser } =
-    eager {
-        tokenErrorToFail {
-            lexer(s) {
-                p()
-            }
-        }
-    }
-
-def many { p: Unit }: Unit / Flip =
+def many { p: Unit }: Unit / ParserAlt =
     or { p(); many { p() } } { () }
 
-def some { p: Unit }: Unit / Flip = {
+def some { p: Unit }: Unit / ParserAlt = {
     p(); many { p() }
 }
+def fail[A](msg: String): A / Parser =
+  do ParserFail(msg)
+
+def kw(exp: String): Unit / Parser = {
+    val got = id();
+    if (got == exp) () else fail("Expected keyword " ++ exp ++ " but got " ++ got)
+}
+
+def id(): String / Parser = ident().content
+
+
+// =======================
+// Examples
+// =======================
+type Tree {
+    NumLit(value: Int);
+    Var(name: String);
+    Let(name: String, binding: Tree, body: Tree);
+    App(name: String, arg: Tree)
+}
+
+def parseNum(): Tree / Parser =
+    number().content.toInt.map { v =>
+        NumLit(v)
+    }.getOrElse {
+        fail("cannot convert input to integer")
+    }
+
+def parseVar(): Tree / Parser =
+    Var(id())
+
+def parseLit() = or { parseVar() } { parseNum() }
+
+def parseLet(): Tree / Parser = {
+    kw("let");
+    val name = id();
+    punct("=");
+    val binding = parseExpr();
+    kw("in");
+    val body = parseExpr();
+    Let(name, binding, body)
+}
+
+def parseAtomic() = or { parseLit() } {
+    punct("(");
+    val res = parseExpr();
+    punct(")");
+    res
+}
+
+def parseApp(): Tree / Parser = {
+    val funName = id();
+    punct("(");
+    val arg = parseExpr();
+    punct(")");
+    App(funName, arg)
+}
+
+def parseExpr(): Tree / Parser =
+    or { parseLet() } { or { parseApp() } { parseAtomic() } }
+
 
 // Example grammar
 // <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
 // we count the number of nodes as semantic action
-def parseExpr(): Int / Parser =
+def parseSampleExpr(): Int / Parser =
     or { number(); 1 } {
         var count = 1;
         ident();
         punct("(");
-        count = count + parseExpr();
+        count = count + parseSampleExpr();
         many {
             punct(",");
-            count = count + parseExpr()
+            count = count + parseSampleExpr()
         };
         punct(")");
         count
     }
-
 
 def main() = {
     // simple string ops
@@ -212,10 +286,19 @@ def main() = {
     };
 
     // parser
+    println(parse("42") { parseSampleExpr() });
+    println(parse("foo(1)") { parseSampleExpr() });
+    println(parse("foo(1, 2)") { parseSampleExpr() });
+    println(parse("foo(1, 2, 3, 4)") { parseSampleExpr() });
+    println(parse("foo(1, 2, bar(4, 5))") { parseSampleExpr() });
+    println(parse("foo(1, 2,\nbar(4, 5))") { parseSampleExpr() });
+
+
     println(parse("42") { parseExpr() });
-    println(parse("foo(1)") { parseExpr() });
-    println(parse("foo(1, 2)") { parseExpr() });
-    println(parse("foo(1, 2, 3, 4)") { parseExpr() });
-    println(parse("foo(1, 2, bar(4, 5))") { parseExpr() });
-    println(parse("foo(1, 2,\nbar(4, 5))") { parseExpr() })
+    println(parse("let x = 4 in 42") { parseExpr() });
+    println(parse("let x = let y = 2 in 1 in 42") { parseExpr() });
+    println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() });
+    println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() });
+    println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+
 }
