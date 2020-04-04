@@ -1,7 +1,9 @@
-module stringtests
+module examples/pos/lexer
 
 import data/string
 import data/option
+
+import examples/pos/pretty
 
 // =======================
 // Common
@@ -245,6 +247,31 @@ def parseApp(): Tree / Parser = {
 def parseExpr(): Tree / Parser =
     or { parseLet() } { or { parseApp() } { parseAtomic() } }
 
+// Pretty printer for the example tree
+
+// TODO also export type aliases from a module
+effect Pretty = { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal }
+
+def toDoc(t: Tree): Unit / Pretty = t match {
+    case NumLit(value) => text(show(value))
+    case Var(name) => text(name)
+    case Let(name, binding, body) => {
+        text("let"); space(); text(name); space(); text("="); line();
+        group { nested { toDoc(binding) } };
+        space();
+        text("in");
+        line();
+        group { nested { toDoc(body) } }
+    }
+    case App(name, arg) => {
+        text(name); parens {
+            group { nested {
+                linebreak();
+                toDoc(arg)
+            }; linebreak() }
+        }
+    }
+}
 
 // Example grammar
 // <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
@@ -294,11 +321,17 @@ def main() = {
     println(parse("foo(1, 2,\nbar(4, 5))") { parseSampleExpr() });
 
 
+    val exampleProg = "let x = (let y = f(let z = 1 in z) in 1) in 42";
+
     println(parse("42") { parseExpr() });
     println(parse("let x = 4 in 42") { parseExpr() });
     println(parse("let x = let y = 2 in 1 in 42") { parseExpr() });
     println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() });
     println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() });
-    println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+    println(parse(exampleProg) { parseExpr() });
 
+    parse(exampleProg) { parseExpr() } match {
+        case Success(tree) => println(pretty(20) { toDoc(tree) })
+        case Failure(msg) => println(msg)
+    }
 }

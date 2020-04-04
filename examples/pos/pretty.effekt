@@ -1,4 +1,4 @@
-module examples/pretty
+module examples/pos/pretty
 
 import data/option
 import data/list
@@ -54,9 +54,11 @@ def printer(width: Int) { p: Unit / { Text, Line, Indentation, Horizontal } } = 
   }
 }
 
+effect Pretty = { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal }
+
 // TODO moving pretty to the top moves printer out of scope, why?
 // TODO using the wrong kind of argument section (like `opt.getOrElse("")`) crashes the compiler.
-def pretty(width: Int) { p: Unit / { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal } } =
+def pretty(width: Int) { p: Unit / Pretty } =
   (layout { printer(width) { p() } }).getOrElse { "Cannot print document, since it would overflow." }
 
 def horizontal { p: Unit / { Horizontal } } = try { p () } with {

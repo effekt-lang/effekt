@@ -25,3 +25,8 @@ Success(Let(x, Let(y, NumLit(2), NumLit(1)), NumLit(42)))
 Success(Let(x, Let(y, NumLit(2), NumLit(1)), NumLit(42)))
 Success(Let(x, Let(y, App(f, NumLit(42)), NumLit(1)), NumLit(42)))
 Success(Let(x, Let(y, App(f, Let(z, NumLit(1), Var(z))), NumLit(1)), NumLit(42)))
+let x = let y = f(
+      let z =
+      1 in
+      z
+    ) in 1 in 42
