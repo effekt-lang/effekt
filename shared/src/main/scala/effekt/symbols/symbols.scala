@@ -26,6 +26,10 @@ package object symbols {
   sealed trait BlockSymbol extends TermSymbol
 
   // TODO move this to Name
+
+  /**
+   * path should be an include Effekt-path (foo/bar), not a system dependent file path
+   */
   def moduleName(path: String): String = "$" + path.replace('/', '_')
   def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 

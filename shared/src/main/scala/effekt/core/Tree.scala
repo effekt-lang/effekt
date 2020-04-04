@@ -12,6 +12,9 @@ sealed trait Tree extends Product {
   }
 }
 
+/**
+ * A module declartion, the path should be an Effekt include path, not a system dependent file path
+ */
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
 
 /**
