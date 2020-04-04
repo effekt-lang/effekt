@@ -208,6 +208,54 @@ type Tree {
     App(name: String, arg: Tree)
 }
 
+// A language that distiguishes between effectful statements and pure expressions
+type Expr {
+    CLit(value: Int);
+    CVar(name: String)
+}
+type Stmt {
+    CLet(name: String, binding: Stmt, body: Stmt);
+    CApp(name: String, arg: Expr);
+    CRet(expr: Expr)
+}
+
+// =======================
+// ANF
+// =======================
+
+effect Bind(e: Stmt): Expr
+effect Fresh(): Int
+
+def freshVars[R] { prog: R / Fresh } : R = {
+    var i = 0;
+    try { prog() } with {
+        case Fresh() => {
+            i = i + 1;
+            resume(i)
+        }
+    }
+}
+
+def bindHere { prog: Stmt / Bind } : Stmt / Fresh =
+    try { prog() } with {
+        case Bind(e) => {
+            val id = "x" ++ show(do Fresh());
+            CLet(id, e, resume(CVar(id)))
+        }
+    }
+
+
+def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
+    case NumLit(n) => CRet(CLit(n))
+    case Var(n) => CRet(CVar(n))
+    case App(name, arg) => CApp(name, do Bind(traverse(arg)))
+    case Let(x, b, body) => CLet(x, bindHere { traverse(b) }, bindHere { traverse(body) })
+}
+
+def translate(e: Tree): Stmt =
+    freshVars { bindHere { traverse(e) } }
+
+
 def parseNum(): Tree / Parser =
     number().content.toInt.map { v =>
         NumLit(v)
@@ -275,6 +323,34 @@ def toDoc(t: Tree): Unit / Pretty = t match {
     }
 }
 
+def toDocExpr(t: Expr): Unit / Pretty = t match {
+    case CLit(value) => text(show(value))
+    case CVar(name) => text(name)
+}
+
+def toDocStmt(s: Stmt): Unit / Pretty = s match {
+    case CLet(name, binding, body) => {
+        text("let"); space(); text(name); space(); text("=");
+        group {
+            nested { line(); toDocStmt(binding) };
+            line();
+            text("in")
+        };
+        group { nested { line(); toDocStmt(body) } }
+    }
+    case CApp(name, arg) => {
+        text(name); parens {
+            group { nested {
+                linebreak();
+                toDocExpr(arg)
+            }; linebreak() }
+        }
+    }
+    case CRet(expr) => {
+        text("return"); space(); toDocExpr(expr)
+    }
+}
+
 // Example grammar
 // <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
 // we count the number of nodes as semantic action
@@ -333,7 +409,12 @@ def main() = {
     println(parse(exampleProg) { parseExpr() });
 
     parse(exampleProg) { parseExpr() } match {
-        case Success(tree) => println(pretty(15) { toDoc(tree) })
+        case Success(tree) => {
+
+            println("\nSource Program:\n" ++ pretty(30) { toDoc(tree) });
+            val target = translate(tree);
+            println("\nTarget Program:\n" ++ pretty(30) { toDocStmt(target) })
+        }
         case Failure(msg) => println(msg)
     }
 }
