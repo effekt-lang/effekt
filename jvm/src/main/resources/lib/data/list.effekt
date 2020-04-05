@@ -1,5 +1,7 @@
 module data/list
 
+import data/option
+
 type List[A] {
   Nil();
   Cons(head: A, tail: List[A])
@@ -25,7 +27,42 @@ def reverse[A](l: List[A]): List[A] = {
   l.reverseWith(Nil())
 }
 
+// [1,2,3].reverseOnto([4,5,6])
+// [3,2,1,4,5,6]
+def reverseOnto[A](l: List[A])(other: List[A]): List[A] = l match {
+  case Nil() => other
+  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
+}
+
+// [1,2,3].append([4,5,6])
+// [3,2,1].reverseOnto([4,5,6])
+// [1,2,3,4,5,6]
+def append[A](l: List[A])(other: List[A]): List[A] =
+  l.reverse.reverseOnto(other)
+
+// gracefully fails
+def take[A](l: List[A])(n: Int): List[A] =
+  if (n == 0) {
+    Nil()
+  } else l match {
+    case Nil() => Nil()
+    case Cons(a, rest) => Cons(a, rest.take(n - 1))
+  }
+
+def drop[A](l: List[A])(n: Int): List[A] =
+  if (n == 0) {
+    l
+  } else l match {
+    case Nil() => Nil()
+    case Cons(a, rest) => rest.drop(n - 1)
+  }
+
 def isEmpty[A](l: List[A]): Boolean = l match {
   case Nil() => true
   case Cons(a, rest) => false
+}
+
+def headOption[A](l: List[A]): Option[A] = l match {
+  case Nil() => None()
+  case Cons(a, rest) => Some(a)
 }

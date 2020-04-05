@@ -38,7 +38,7 @@ extern pure def infixMul(x: Int, y: Int): Int =
   "(x * y)"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(x / y)"
+  "Math.floor(x / y)"
 
 extern pure def infixSub(x: Int, y: Int): Int =
   "(x - y)"
