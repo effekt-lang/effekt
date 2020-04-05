@@ -31,22 +31,25 @@ def layout[R] { p : R / { LayoutChoice, LayoutFail } }: Option[R] =
     }
   }
 
-def printer(width: Int) { p: Unit / { Text, Line, Indentation, Horizontal } } = {
-  var pos: Int = 0;
+effect Write(s: String): Unit
+def writer { p: Unit / Write } = {
   var out = "";
   try { p(); out } with {
+    case Write(s) => { out = out ++ s; resume(()) }
+  }
+}
+
+def printer(width: Int) { p: Unit / { Text, Line, Indentation, Horizontal } } = {
+  var pos: Int = 0;
+  try { p() } with {
     case Text(t) => {
       pos = pos + t.length;
-      if (pos > width) {
-        do LayoutFail()
-      } else {
-        out = out ++ t;
-        resume(())
-      }
+      if (pos > width) { do LayoutFail() }
+      else { do Write(t); resume(()) }
     }
     case Line(indent) => {
       pos = indent;
-      out = out ++ "\n" ++ (" ".repeat(indent));
+      do Write("\n" ++ (" ".repeat(indent)));
       resume(())
     }
     case Horizontal() => resume(do LayoutChoice())
@@ -58,8 +61,10 @@ effect Pretty = { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal 
 
 // TODO moving pretty to the top moves printer out of scope, why?
 // TODO using the wrong kind of argument section (like `opt.getOrElse("")`) crashes the compiler.
-def pretty(width: Int) { p: Unit / Pretty } =
-  (layout { printer(width) { p() } }).getOrElse { "Cannot print document, since it would overflow." }
+def pretty(width: Int) { p: Unit / Pretty } = {
+  val result = layout { writer { printer(width) { p() } } };
+  result.getOrElse { "Cannot print document, since it would overflow." }
+}
 
 def horizontal { p: Unit / { Horizontal } } = try { p () } with {
   case Horizontal() => resume(true)
@@ -86,12 +91,6 @@ def group { p: Unit / { Horizontal, Text, Line } } =
   } else {
     vertical { p() }
   }
-
-def groupOld { p: Unit / { Horizontal, Text, Line } } =
-  if (do LayoutChoice())
-    horizontal { p() }
-  else
-    vertical { p() }
 
 def text(s: String) = do Text(s)
 
@@ -200,17 +199,50 @@ def main() = {
     }
   }
 
-  println("----------");
+  def example6() = {
+    group {
+      text("this");
+      nest(9) {
+        line();
+        group { text("takes"); line(); text("many"); line(); text("f") }
+      };
+      line();
+      text("l")
+    }
+  }
+
+  def example7() = {
+    group {
+      text("this");
+      line();
+      text("will");
+      nest(9) {
+        line();
+        group { text("take"); line(); text("many") }
+      };
+      line();
+      text("lines")
+    }
+  }
+
+  println("------------------------------");
   println(pretty(30) { example2() });
+  println("--------------------");
   println(pretty(20) { example2() });
 
   println("----------");
   println(pretty(50) { example3() });
   println(pretty(15) { example3() });
 
-  println("----------");
+  println("------");
   println(pretty(6) { example4() });
 
-  println("----------");
-  println(pretty(15) { example5() })
+  println("---------------");
+  println(pretty(15) { example5() });
+
+  println("--------------");
+  println(pretty(14) { example6() });
+
+  println("--------------");
+  println(pretty(14) { example7() })
 }
