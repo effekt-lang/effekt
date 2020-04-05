@@ -69,7 +69,25 @@ def vertical { p: Unit / { Horizontal } } = try { p () } with {
   case Horizontal() => resume(false)
 }
 
+def collect { p: Unit / Text } : String / Text = {
+  var cache = "";
+  try { p(); cache } with {
+    case Text(s) => {
+      cache = cache ++ s;
+      resume(do Text(s))
+    }
+  }
+}
+
+// In languages with scoped effects, group would be an effect operation.
 def group { p: Unit / { Horizontal, Text, Line } } =
+  if (do LayoutChoice()) {
+    horizontal { p() }
+  } else {
+    vertical { p() }
+  }
+
+def groupOld { p: Unit / { Horizontal, Text, Line } } =
   if (do LayoutChoice())
     horizontal { p() }
   else
@@ -165,11 +183,34 @@ def main() = {
     }
   }
 
+  def example4() = {
+    group { text("Hi"); line(); text("you") };
+    text("!!!")
+  }
+
+  def example5() = {
+    group {
+      text("this");
+      nest(9) {
+        line();
+        group { text("takes"); line(); text("four") }
+      };
+      line();
+      text("lines")
+    }
+  }
+
   println("----------");
   println(pretty(30) { example2() });
   println(pretty(20) { example2() });
 
   println("----------");
   println(pretty(50) { example3() });
-  println(pretty(15) { example3() })
+  println(pretty(15) { example3() });
+
+  println("----------");
+  println(pretty(6) { example4() });
+
+  println("----------");
+  println(pretty(15) { example5() })
 }

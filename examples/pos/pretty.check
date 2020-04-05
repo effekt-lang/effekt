@@ -18,3 +18,11 @@ def foo(
 ) {
   var z = 42;
 }
+----------
+Hi
+you!!!
+----------
+this
+         takes
+         four
+lines
