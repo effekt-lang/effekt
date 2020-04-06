@@ -1,16 +1,14 @@
 module mutable/heap
 
-extern effect Heap
-
 extern include "heap_include.js"
 
 extern type Ref[T]
 
-extern def fresh[T](init: T): Ref[T] / Heap =
+extern def fresh[T](init: T): Ref[T] =
     "fresh$impl(init)"
 
-extern def put[T](ref: Ref[T])(value: T): Unit / Heap =
+extern def put[T](ref: Ref[T])(value: T): Unit =
     "put$impl(ref, value)"
 
-extern def get[T](ref: Ref[T]): T / Heap =
+extern def get[T](ref: Ref[T]): T =
     "get$impl(ref)"
