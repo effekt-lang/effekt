@@ -96,9 +96,23 @@ class Namer extends Phase[Module, Module] { namer =>
       }
 
     case source.EffDef(id, tparams, params, ret) => ()
-    case source.TypeDef(id, tparams, tpe) => ()
-    case source.EffectDef(id, effs) => ()
-    case source.DataDef(id, tparams, ctors) => ()
+    case source.TypeDef(id, tparams, tpe)        => ()
+    case source.EffectDef(id, effs)              => ()
+
+    // The type itself has already been resolved, now resolve constructors
+    case source.DataDef(id, tparams, ctors) =>
+      val typ = Context.resolveType(id).asDataType
+      val cs = ctors map {
+        case source.Constructor(id, ps) =>
+          val sym = Context scoped {
+            typ.tparams.foreach { t => Context.bind(t) }
+            Constructor(Context.freshTermName(id), ps map resolve, typ)
+          }
+          Context.define(id, sym)
+          sym
+      }
+      typ.ctors = cs
+
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
     case source.ExternFun(pure, id, tparams, params, ret, body) => ()
@@ -253,16 +267,6 @@ class Namer extends Phase[Module, Module] { namer =>
         (DataType(Name(id), tps), tps)
       }
       Context.define(id, typ)
-      val cs = ctors map {
-        case source.Constructor(id, ps) =>
-          val sym = Context scoped {
-            tps.foreach { t => Context.bind(t) }
-            Constructor(Context.freshTermName(id), ps map resolve, typ)
-          }
-          Context.define(id, sym)
-          sym
-      }
-      typ.ctors = cs
 
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
