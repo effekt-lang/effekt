@@ -100,9 +100,10 @@ class Namer extends Phase[Module, Module] { namer =>
       val typ = Context.resolveType(id).asDataType
       val cs = ctors map {
         case source.Constructor(id, ps) =>
+          val name = Context.freshTermName(id)
           val sym = Context scoped {
             typ.tparams.foreach { t => Context.bind(t) }
-            Constructor(Context.freshTermName(id), ps map resolve, typ)
+            Constructor(name, ps map resolve, typ)
           }
           Context.define(id, sym)
           sym
@@ -277,13 +278,15 @@ class Namer extends Phase[Module, Module] { namer =>
         BuiltinEffect(Name(id), tps)
       })
 
-    case source.ExternFun(pure, id, tparams, params, ret, body) =>
+    case source.ExternFun(pure, id, tparams, params, ret, body) => {
+      val name = Context.freshTermName(id)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val ps: Params = params map resolve
         val tpe = resolve(ret)
-        BuiltinFunction(Context.freshTermName(id), tps, ps, Some(tpe), pure, body)
+        BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
       })
+    }
 
     case d @ source.ExternInclude(path) =>
       d.contents = Context.contentsOf(path)

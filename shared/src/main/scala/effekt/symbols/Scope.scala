@@ -28,7 +28,8 @@ object scopes {
 
     def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol]
 
-    def currentTermsFor(key: String): Set[TermSymbol] = terms.getOrElse(key, Set.empty)
+    def currentTermsFor(key: String): Set[TermSymbol] =
+      terms.getOrElse(key, Set.empty)
 
     // TODO add appropriate checks
     def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
@@ -89,6 +90,8 @@ object scopes {
 
     def leave(implicit C: Context): Scope =
       parent
+
+    override def toString = s"BlockScope(${terms.keySet.mkString(", ")}) :: $parent"
   }
 
   def toplevel(types: Map[String, TypeSymbol])(implicit C: Context): Scope =
