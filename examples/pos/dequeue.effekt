@@ -1,6 +1,6 @@
 module examples/pos/dequeue
 
-import data/dequeue
+import immutable/dequeue
 
 def main() = {
     val dq = emptyQueue[Int]();

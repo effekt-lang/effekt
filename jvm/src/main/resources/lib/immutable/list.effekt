@@ -1,6 +1,6 @@
-module data/list
+module immutable/list
 
-import data/option
+import immutable/option
 
 type List[A] {
   Nil();

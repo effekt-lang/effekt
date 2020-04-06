@@ -1,7 +1,7 @@
 module examples/pos/overloading
 
-import data/list
-import data/option
+import immutable/list
+import immutable/option
 
 def main() = {
     val l = [1,2,3];

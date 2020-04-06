@@ -1,6 +1,6 @@
 module typealias
 
-import data/list
+import immutable/list
 
 type Foo = Int
 type Bar = String

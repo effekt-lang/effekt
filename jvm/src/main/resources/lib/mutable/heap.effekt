@@ -1,4 +1,4 @@
-module io/heap
+module mutable/heap
 
 extern effect Heap
 

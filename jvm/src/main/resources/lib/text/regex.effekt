@@ -1,0 +1,26 @@
+module text/regex
+
+import text/string
+import immutable/option
+
+extern type Regex
+
+record Match(matched: String, index: Int)
+
+// these should be generated at some point
+def matched(m: Match): String = m match {
+  case Match(matched, index) => matched
+}
+def index(m: Match): Int = m match {
+  case Match(matched, index) => index
+}
+
+extern pure def regex(str: String): Regex =
+  "new RegExp(str)"
+
+def exec(reg: Regex)(str: String): Option[Match] =
+  reg.unsafeExec(str).undefinedToOption
+
+// internals
+extern pure def unsafeExec(reg: Regex)(str: String): Match =
+  "(function () { var res = reg.exec(str); if (res === null) { return undefined } else { return Match(res[0], res.index) }})()"

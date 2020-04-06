@@ -1,8 +1,8 @@
 module examples/pos/pretty
 
-import data/option
-import data/list
-import data/string
+import immutable/option
+import immutable/list
+import text/string
 
 // A very naive (backtracking) pretty printer
 // ===========================

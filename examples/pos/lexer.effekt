@@ -1,7 +1,8 @@
 module examples/pos/lexer
 
-import data/string
-import data/option
+import text/string
+import text/regex
+import immutable/option
 
 // TODO Here the LSP plugin currently fails
 import examples/pos/pretty

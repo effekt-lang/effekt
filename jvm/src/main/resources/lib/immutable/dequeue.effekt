@@ -1,7 +1,7 @@
-module data/dequeue
+module immutable/dequeue
 
-import data/list
-import data/option
+import immutable/list
+import immutable/option
 
 // An implementation of a functional dequeue, using Okasaki's
 // bankers dequeue implementation.

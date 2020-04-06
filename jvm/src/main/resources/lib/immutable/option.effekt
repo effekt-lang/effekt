@@ -1,4 +1,4 @@
-module data/option
+module immutable/option
 
 type Option[A] {
   None();
