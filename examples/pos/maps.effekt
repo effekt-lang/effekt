@@ -1,0 +1,12 @@
+module examples/pos/maps
+
+import mutable/map
+
+def main() = {
+    val m = emptyMap[String, Int]();
+    m.update("hello", 5);
+    m.update("world", 6);
+    m.update("world", 7);
+    println(m.get("hello"));
+    println(m.get("world"))
+}
