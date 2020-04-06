@@ -45,13 +45,13 @@ package object symbols {
 
     def path = decl.path
 
-    private var _terms: Map[String, TermSymbol] = _
+    private var _terms: Map[String, Set[TermSymbol]] = _
     def terms = _terms
 
     private var _types: Map[String, TypeSymbol] = _
     def types = _types
 
-    def export(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol]): this.type = {
+    def export(terms: Map[String, Set[TermSymbol]], types: Map[String, TypeSymbol]): this.type = {
       if (_terms != null)
         throw new FatalPhaseError("Internal compiler error: Already set exports on module")
       _terms = terms

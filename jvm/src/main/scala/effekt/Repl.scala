@@ -150,7 +150,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     parse(source) match {
       case Success(e: Expr, _) =>
         runFrontend(source, module.make(e), config) { mod =>
-          val mainSym = mod.terms("main")
+          val mainSym = mod.terms("main").head
           val mainTpe = driver.context.blockTypeOf(mainSym)
           config.output().emitln(mainTpe.ret)
         }

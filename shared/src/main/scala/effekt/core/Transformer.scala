@@ -20,8 +20,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def transform(mod: Module)(implicit compiler: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl
-    val exports: Stmt = Exports(path, mod.terms.collect {
-      case (name, sym) if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
+    val exports: Stmt = Exports(path, mod.terms.flatMap {
+      case (name, syms) => syms.collect {
+        case sym if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
+      }
     }.toList)
 
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {

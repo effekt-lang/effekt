@@ -70,10 +70,19 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
 
-    val main = mod.terms.getOrElse("main", {
+    val mains = mod.terms.getOrElse("main", Set())
+
+    if (mains.isEmpty) {
       C.error("No main function defined")
       return
-    })
+    }
+
+    if (mains.size > 1) {
+      C.error("Multiple main functions defined")
+      return
+    }
+
+    val main = mains.head
 
     val mainParams = C.blockTypeOf(main).params
     if ((mainParams.size != 1) || (mainParams.head != Nil)) {
