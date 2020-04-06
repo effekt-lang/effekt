@@ -120,6 +120,13 @@ package object symbols {
   case class VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder
 
   /**
+   * Synthetic symbol representing potentially multiple call targets
+   *
+   * Refined by typer.
+   */
+  class CallTarget(val name: Name, var symbols: Set[BlockSymbol]) extends BlockSymbol
+
+  /**
    * Types
    */
 

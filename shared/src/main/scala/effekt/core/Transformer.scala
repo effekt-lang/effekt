@@ -124,8 +124,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
       transform(sc).flatMap { scrutinee => bind(Match(scrutinee, cs)) }
 
-    case source.Call(fun, _, args) =>
-      val sym: Symbol = fun.symbol.asInstanceOf[TermSymbol]
+    // assumption: typer removed all ambiguous references, so there is exactly one
+    case c @ source.Call(fun, _, args) =>
+      val sym: Symbol = c.definition.symbols.head
 
       // we do not want to provide capabilities for the effect itself
       val ownEffect = sym match {

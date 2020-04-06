@@ -16,12 +16,19 @@ object scopes {
     val terms: mutable.HashMap[String, Set[TermSymbol]] = mutable.HashMap.empty
     val types: mutable.HashMap[String, TypeSymbol] = mutable.HashMap.empty
 
-    // for now, just get the first one
-    def lookupTerm(key: String): Option[TermSymbol] = lookupTermHere(key)
-    def lookupType(key: String): Option[TypeSymbol] = lookupTypeHere(key)
+    /**
+     * Searches the nested scopes to find the first term.
+     * Fails if:
+     *   - there are multiple matching terms in the same scope
+     *   - there a no matching terms at all
+     */
+    def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol
 
-    def lookupTermHere(key: String): Option[TermSymbol] = terms.getOrElse(key, Set()).headOption
-    def lookupTypeHere(key: String): Option[TypeSymbol] = types.get(key)
+    def lookupType(key: String)(implicit C: Context): TypeSymbol
+
+    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol]
+
+    def currentTermsFor(key: String): Set[TermSymbol] = terms.getOrElse(key, Set.empty)
 
     // TODO add appropriate checks
     def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
@@ -41,22 +48,43 @@ object scopes {
       scope
     }
 
-    def leave: Scope = sys error "Leaving top level scope"
+    def leave(implicit C: Context): Scope
   }
-  //
-  case class Toplevel() extends Scope
+
+  case class EmptyScope() extends Scope {
+    def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
+      C.abort(s"Could not resolve term ${key}")
+
+    def lookupType(key: String)(implicit C: Context): TypeSymbol =
+      C.abort(s"Could not resolve type ${key}")
+
+    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol] =
+      Set.empty
+
+    def leave(implicit C: Context): Scope =
+      C.abort("Internal Compiler Error: Leaving top level scope")
+  }
 
   case class BlockScope(parent: Scope) extends Scope {
 
-    override def lookupTerm(key: String): Option[TermSymbol] = super.lookupTerm(key).orElse(parent.lookupTerm(key))
-    override def lookupType(key: String): Option[TypeSymbol] = super.lookupType(key).orElse(parent.lookupType(key))
+    def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
+      terms.get(key).map { bindings =>
+        if (bindings.size > 1)
+          C.abort(s"Ambiguous reference to ${key}")
+        else
+          bindings.head
+      }.getOrElse { parent.lookupFirstTerm(key) }
 
-    override def leave: Scope = parent
+    def lookupType(key: String)(implicit C: Context): TypeSymbol =
+      types.getOrElse(key, parent.lookupType(key))
+
+    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol] =
+      terms.getOrElse(key, Set.empty) ++ parent.lookupTerms(key)
+
+    def leave(implicit C: Context): Scope =
+      parent
   }
 
-  def toplevel(types: Map[String, TypeSymbol]): Scope = {
-    val scope = Toplevel()
-    scope.types.addAll(types)
-    scope
-  }
+  def toplevel(types: Map[String, TypeSymbol]): Scope =
+    EmptyScope().enterWith(Map.empty, types)
 }

@@ -325,11 +325,13 @@ class Typer extends Phase[Module, Module] { typer =>
   }
 
   def checkCall(
-    sym: Symbol,
+    target: CallTarget,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
+
+    val sym = target.symbols.head
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
