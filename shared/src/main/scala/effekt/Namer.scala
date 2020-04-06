@@ -8,7 +8,7 @@ import effekt.context.{ Context }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
 import effekt.symbols._
-import effekt.util.scopes._
+import scopes._
 
 import org.bitbucket.inkytonik.kiama.util.Source
 
