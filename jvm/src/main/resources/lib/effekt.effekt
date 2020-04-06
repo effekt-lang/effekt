@@ -17,6 +17,10 @@ extern def println[R](value: R): Unit / Console =
 extern pure def inspect[R](value: R): Unit =
   "console.log(value)"
 
+// a fatal runtime error that cannot be caught
+extern pure def error[R](msg: String): R =
+  "(function() { throw msg })()"
+
 extern pure def random(): Int =
   "Math.random() * 100"
 

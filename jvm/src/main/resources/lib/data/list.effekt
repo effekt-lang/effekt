@@ -62,6 +62,17 @@ def isEmpty[A](l: List[A]): Boolean = l match {
   case Cons(a, rest) => false
 }
 
+// raises a runtime exception that can't be caught
+def head[A](l: List[A]): A = l match {
+  case Nil() => error("Trying to get the head of an empty list")
+  case Cons(a, rest) => a
+}
+
+def tail[A](l: List[A]): List[A] = l match {
+  case Nil() => error("Trying to get the head of an empty list")
+  case Cons(a, rest) => rest
+}
+
 def headOption[A](l: List[A]): Option[A] = l match {
   case Nil() => None()
   case Cons(a, rest) => Some(a)
