@@ -35,7 +35,7 @@ def traverse(e: Exp): Exp / { Bind, Fresh } = e match {
     case Lit(n) => Lit(n)
     case Var(n) => Var(n)
     case Add(l, r) => do Bind(Add(traverse(l), traverse(r)))
-    case Let(x, b, body) => Let(x, traverse(b), traverse(body))
+    case Let(x, b, body) => Let(x, bindHere { traverse(b) }, bindHere { traverse(body) })
 }
 
 def main() = {
