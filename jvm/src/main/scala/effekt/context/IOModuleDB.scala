@@ -44,9 +44,8 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     config.includes().map { p => p / filename } collectFirst {
       case f if f.exists => FileSource(f.canonicalPath)
     } orElse {
-      val f = "lib" / filename
-      if (f.existsInJar) {
-        Some(JarSource(f.unixPath))
+      if (filename.existsInJar) {
+        Some(JarSource(filename.unixPath))
       } else {
         None
       }

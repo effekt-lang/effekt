@@ -32,6 +32,7 @@ lazy val commonSettings = Seq(
     .setPreference(MaxArrowIndent, 20)
 )
 
+
 lazy val root = project.in(file("."))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
@@ -53,7 +54,12 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
       "com.novocode" % "junit-interface" % "0.11" % "test",
       "org.scala-sbt" %% "io" % "1.3.1" % "test"
-    )
+    ),
+
+    // We use the lib folder as resource directory to include it in the JAR
+    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
+
+    Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt"
   )
   .jsSettings(
     // Add JS-specific settings here
@@ -65,7 +71,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     // include all resource files in the virtual file system
     sourceGenerators in Compile += Def.task {
 
-      val baseDir = effekt.jvm.base / "src" / "main" / "resources" / "lib"
+      val baseDir = (baseDirectory in ThisBuild).value / "lib"
       val resources = baseDir ** "*.*"
 
       val sourceDir = (sourceManaged in Compile).value

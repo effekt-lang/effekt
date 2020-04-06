@@ -29,6 +29,7 @@ object JavaPathUtils extends PathUtils {
     def existsInJar: Boolean = {
       val cl = Thread.currentThread().getContextClassLoader
       val stream = cl.getResourceAsStream(unixPath)
+
       stream != null
     }
 
