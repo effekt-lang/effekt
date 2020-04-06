@@ -41,7 +41,7 @@ class Namer extends Phase[Module, Module] { namer =>
     mod.decl.imports foreach {
       case im @ source.Import(path) => Context.at(im) {
         val modImport = Context.moduleOf(path)
-        scope = scope.enterWith(modImport.terms, modImport.types)
+        scope.defineAll(modImport.terms, modImport.types)
       }
     }
 

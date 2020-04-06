@@ -41,10 +41,14 @@ object scopes {
 
     def enter: Scope = BlockScope(this)
 
-    def enterWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol]) = {
+    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+      tms.foreach { case (n, syms) => syms.foreach { sym => define(n, sym) } }
+      tps.foreach { case (n, sym) => define(n, sym) }
+    }
+
+    def enterWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
       val scope = BlockScope(this)
-      scope.terms.addAll(tms)
-      scope.types.addAll(tps)
+      scope.defineAll(tms, tps)
       scope
     }
 
@@ -78,13 +82,15 @@ object scopes {
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       types.getOrElse(key, parent.lookupType(key))
 
-    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol] =
-      terms.getOrElse(key, Set.empty) ++ parent.lookupTerms(key)
+    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol] = {
+      val currentTerms = terms.getOrElse(key, Set.empty)
+      if (currentTerms.isEmpty) { parent.lookupTerms(key) } else { currentTerms }
+    }
 
     def leave(implicit C: Context): Scope =
       parent
   }
 
-  def toplevel(types: Map[String, TypeSymbol]): Scope =
+  def toplevel(types: Map[String, TypeSymbol])(implicit C: Context): Scope =
     EmptyScope().enterWith(Map.empty, types)
 }

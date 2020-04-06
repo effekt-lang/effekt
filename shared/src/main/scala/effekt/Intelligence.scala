@@ -64,26 +64,34 @@ trait Intelligence extends Compiler {
   def getSymbolAt(position: Position)(implicit C: Context): Option[(Tree, Symbol)] = for {
     id <- getIdTreeAt(position)
     sym <- C.symbolOption(id)
-  } yield (id, sym)
+  } yield (id, resolveCallTarget(sym))
 
   def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
     id <- getIdTreeAt(position)
-    decl <- C.symbolOf(id) match {
-      case u: UserFunction =>
-        Some(u.decl)
-      case u: Binder   => Some(u.decl)
-      case d: EffectOp => C.definitionTreeOf(d.effect)
-      case u           => C.definitionTreeOf(u)
-    }
+    decl <- getDefinitionOf(resolveCallTarget(C.symbolOf(id)))
   } yield decl
 
-  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(sym) {
+  def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
+    case u: UserFunction => Some(u.decl)
+    case u: Binder       => Some(u.decl)
+    case d: EffectOp     => C.definitionTreeOf(d.effect)
+    case u               => C.definitionTreeOf(u)
+  }
+
+  // For now, only show the first call target
+  def resolveCallTarget(sym: Symbol): Symbol = sym match {
+    case t: CallTarget => t.symbols.head
+    case s             => s
+  }
+
+  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
+
     case b: BuiltinFunction =>
-      SymbolInfo(sym, "Builtin function", Some(DeclPrinter(sym)), None)
+      SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 
     case f: UserFunction =>
       val tpe = C.blockTypeOf(f)
-      SymbolInfo(sym, "Function", Some(DeclPrinter(sym)), None)
+      SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
 
     case f: BuiltinEffect =>
       val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
@@ -91,7 +99,7 @@ trait Intelligence extends Compiler {
                    |of the main function can still have unhandled builtin effects.
                    |""".stripMargin
 
-      SymbolInfo(sym, "Builtin Effect", None, Some(ex))
+      SymbolInfo(f, "Builtin Effect", None, Some(ex))
 
     case f: EffectOp =>
       val ex =
@@ -113,13 +121,13 @@ trait Intelligence extends Compiler {
             |handled by the handler. This is important when considering higher-order functions.
             |""".stripMargin
 
-      SymbolInfo(sym, "Effect operation", Some(DeclPrinter(sym)), Some(ex))
+      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
 
     case f: EffectAlias =>
-      SymbolInfo(sym, "Effect alias", Some(DeclPrinter(sym)), None)
+      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None)
 
     case t: TypeAlias =>
-      SymbolInfo(sym, "Type alias", Some(DeclPrinter(sym)), None)
+      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
     case c: Constructor =>
       val ex = s"""|Instances of data types like `${c.datatype.name}` can only store
@@ -127,7 +135,7 @@ trait Intelligence extends Compiler {
                    |value parameter lists, not block parameters.
                    |""".stripMargin
 
-      SymbolInfo(sym, s"Constructor of data type `${c.datatype.name}`", Some(DeclPrinter(sym)), Some(ex))
+      SymbolInfo(c, s"Constructor of data type `${c.datatype.name}`", Some(DeclPrinter(c)), Some(ex))
 
     case c: BlockParam =>
       val tpe = C.blockTypeOf(c)
@@ -142,7 +150,7 @@ trait Intelligence extends Compiler {
             |yielded to.
             |""".stripMargin
 
-      SymbolInfo(sym, "Block parameter", Some(s"{ ${c.name}: ${tpe} }"), Some(ex))
+      SymbolInfo(c, "Block parameter", Some(s"{ ${c.name}: ${tpe} }"), Some(ex))
 
     case c: ResumeParam =>
       val tpe = C.blockTypeOf(c)
@@ -157,11 +165,11 @@ trait Intelligence extends Compiler {
             |- the return type of the resumption.
             |""".stripMargin
 
-      SymbolInfo(sym, "Resumption", Some(s"{ ${c.name}: ${tpe} }"), Some(ex))
+      SymbolInfo(c, "Resumption", Some(s"{ ${c.name}: ${tpe} }"), Some(ex))
 
     case c: ValueParam =>
       val tpe = C.valueTypeOption(c).getOrElse { c.tpe.get }
-      SymbolInfo(sym, "Value parameter", Some(s"${c.name}: ${tpe}"), None)
+      SymbolInfo(c, "Value parameter", Some(s"${c.name}: ${tpe}"), None)
 
     case c: VarBinder =>
       val tpe = C.valueTypeOption(c).getOrElse { c.tpe.get }
@@ -176,6 +184,6 @@ trait Intelligence extends Compiler {
             |combination with effect handlers.
          """.stripMargin
 
-      SymbolInfo(sym, "Mutable variable binder", Some(s"${c.name}: ${tpe}"), Some(ex))
+      SymbolInfo(c, "Mutable variable binder", Some(s"${c.name}: ${tpe}"), Some(ex))
   }
 }
