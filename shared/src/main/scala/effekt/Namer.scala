@@ -22,8 +22,7 @@ import org.bitbucket.inkytonik.kiama.util.Source
  *   - binding: that is adding a binding to the environment (lexical.Scope)
  */
 case class NamerState(
-  terms: Scope[TermSymbol],
-  types: Scope[TypeSymbol]
+  scope: Scope
 )
 
 class Namer extends Phase[Module, Module] { namer =>
@@ -36,27 +35,24 @@ class Namer extends Phase[Module, Module] { namer =>
 
   def resolve(mod: Module)(implicit C: Context): Module = {
 
-    var terms: Scope[TermSymbol] = toplevel(Map.empty)
-    var types: Scope[TypeSymbol] = toplevel(builtins.rootTypes)
+    var scope: Scope = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
     mod.decl.imports foreach {
       case im @ source.Import(path) => Context.at(im) {
         val modImport = Context.moduleOf(path)
-        terms = terms.enterWith(modImport.terms)
-        types = types.enterWith(modImport.types)
+        scope = scope.enterWith(modImport.terms, modImport.types)
       }
     }
 
     // create new scope for the current module
-    terms = terms.enter
-    types = types.enter
+    scope = scope.enter
 
-    Context.namerState = NamerState(terms, types)
+    Context.namerState = NamerState(scope)
 
     resolveGeneric(mod.decl)
 
-    mod.export(terms.bindings.toMap, types.bindings.toMap)
+    mod.export(scope.terms.toMap, scope.types.toMap)
   }
 
   /**
@@ -338,15 +334,14 @@ trait NamerOps { self: Context =>
 
   // State Access
   // ============
-  private[namer] def terms: Scope[TermSymbol] = namerState.terms
-  private[namer] def types: Scope[TypeSymbol] = namerState.types
+  private[namer] def scope: Scope = namerState.scope
 
   // TODO we only want to add a seed to a name under the following conditions:
   // - there is already another instance of that name in the same
   //   namespace.
   // - if it is not already fully qualified
   private[namer] def freshTermName(id: Id): Name = {
-    val alreadyBound = terms.lookupHere(id.name).toList.size
+    val alreadyBound = scope.lookupTermHere(id.name).toList.size
     val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
     Name(id.name + seed, module)
   }
@@ -355,17 +350,17 @@ trait NamerOps { self: Context =>
   // ===========================
   private[namer] def define(id: Id, s: TermSymbol): Unit = {
     assignSymbol(id, s)
-    terms.define(id.name, s)
+    scope.define(id.name, s)
   }
 
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
-    types.define(id.name, s)
+    scope.define(id.name, s)
   }
 
-  private[namer] def bind(s: TermSymbol): Unit = terms.define(s.name.name, s)
+  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
 
-  private[namer] def bind(s: TypeSymbol): Unit = types.define(s.name.name, s)
+  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
 
   private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
@@ -375,28 +370,28 @@ trait NamerOps { self: Context =>
   // lookup and resolve the given id from the environment and
   // store a binding in the symbol table
   private[namer] def resolveTerms(id: Id): List[TermSymbol] = {
-    val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
+    val sym = scope.lookupTerm(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
     assignSymbol(id, sym)
     List(sym)
   }
 
   // for positions that do not allow overloading (for now)
   private[namer] def resolveFilter[A](id: Id)(filter: PartialFunction[TermSymbol, A]): List[A] = {
-    val sym = terms.lookup(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
+    val sym = scope.lookupTerm(id.name).getOrElse { abort(s"Could not resolve term ${id.name}") }
     assignSymbol(id, sym)
 
     List(sym).collect(filter)
   }
 
   private[namer] def resolveType(id: Id): TypeSymbol = {
-    val sym = types.lookup(id.name).getOrElse { abort(s"Could not resolve type ${id.name}") }
+    val sym = scope.lookupType(id.name).getOrElse { abort(s"Could not resolve type ${id.name}") }
     assignSymbol(id, sym)
     sym
   }
 
   private[namer] def scoped[R](block: => R): R = {
     val before = namerState
-    namerState = before.copy(terms = before.terms.enter, types = before.types.enter)
+    namerState = before.copy(scope = before.scope.enter)
     val result = block
     namerState = before
     result
