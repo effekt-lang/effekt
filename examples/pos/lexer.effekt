@@ -37,7 +37,7 @@ def position(t: Token): Position = t match {
 effect Peek(): Option[Token]
 effect Next(): Token
 effect EOS[A](): A
-effect TokenizerError[A](msg: String, pos: Position): A
+effect LexerError[A](msg: String, pos: Position): A
 
 effect Lexer = { Peek, Next }
 
@@ -47,7 +47,7 @@ def peek(): Option[Token] / Lexer =
 def next(): Token / Lexer =
     do Next()
 
-def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
+def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
 
     val numberRx = regex("^[0-9]+");
     val identRx  = regex("^[a-zA-Z]+");
@@ -105,7 +105,7 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
 
         case Next() =>
             if (eos())  {
-                do TokenizerError("Unexpected EOS", position())
+                do LexerError("Unexpected EOS", position())
             } else {
                 val result = lexeme()
                     .map { m =>
@@ -114,7 +114,7 @@ def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
                         m.first
                     }
                     .getOrElse {
-                        do TokenizerError("Cannot tokenize input", position())
+                        do LexerError("Cannot tokenize input", position())
                     };
 
                 resume(result)
@@ -136,7 +136,14 @@ type ParseResult[R] {
 }
 
 
-def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
+// Simplified signatures
+//   def lexer[R](in: String) { prog: R / Next } : R / LexerError
+//   def parse[R](input: String) { p: R / { Next, Alt, Fail } }: ParseResult[R] / {}
+//
+// In Koka this would have a type like
+//   def lexer[R, E](in: String) { prog: R / { Next, E } } : R / { LexerError, E }
+//   def parse[R, E](input: String) { p: R / { Next, Alt, Fail, E } }: ParseResult[R] / E
+def parse[R](input: String) { p: R / {Parser} }: ParseResult[R] = try {
   lexer(input) { Success(p()) }
 } with {
   case ParserAlt() => resume(true) match {
@@ -144,7 +151,7 @@ def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
     case Success(res) => Success(res)
   }
   case ParserFail(msg) => Failure(msg)
-  case TokenizerError(msg, pos) => Failure(msg)
+  case LexerError(msg, pos) => Failure(msg)
 }
 
 
@@ -183,11 +190,11 @@ def opt[R] { p: R }: Option[R] / ParserAlt =
    or { Some(p()) } { None() }
 
 def many { p: Unit }: Unit / ParserAlt =
-    or { p(); many { p() } } { () }
+    or { some { p() } } { () }
 
-def some { p: Unit }: Unit / ParserAlt = {
-    p(); many { p() }
-}
+def some { p: Unit }: Unit / ParserAlt =
+    { p(); many { p() } }
+
 def fail[A](msg: String): A / Parser =
   do ParserFail(msg)
 
@@ -244,7 +251,6 @@ def bindHere { prog: Stmt / Bind } : Stmt / Fresh =
             CLet(id, e, resume(CVar(id)))
         }
     }
-
 
 def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
     case NumLit(n) => CRet(CLit(n))
@@ -385,7 +391,7 @@ def main() = {
             }
         }
     } with {
-        case TokenizerError(msg, pos) => pos match {
+        case LexerError(msg, pos) => pos match {
             case Position(line, col, idx) =>
                 println(show(line) ++ ":" ++ show(col) ++ " " ++ msg)
         }
