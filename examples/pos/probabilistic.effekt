@@ -33,19 +33,22 @@ type Var {
 }
 
 type Ref { MkRef(n: Int) }
-effect New(v: Var): Ref
-effect Get(r: Ref): Var
-effect Put(r: Ref, v: Var): Unit
 
-def heap[R] { prog: R / { New, Get, Put } } = {
+effect Heap {
+  def empty(v: Var): Ref
+  def get(r: Ref): Var
+  def put(r: Ref, v: Var): Unit
+}
+
+def heap[R] { prog: R / Heap } = {
   var cells: List[Var] = Nil();
   var n = 0;
-  try { prog() } with {
-    case New(v) => { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
-    case Get(r) => r match {
+  try { prog() } with Heap {
+    def empty(v) = { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
+    def get(r) = r match {
       case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
     }
-    case Put(r, v) => r match {
+    def put(r, v) = r match {
       case MkRef(idx) => { cells = updateAt(cells, (length(cells) - idx) - 1, v); resume(()) }
     }
   }
@@ -60,8 +63,8 @@ effect Fork(): Boolean
 effect Fail[A](): A
 
 def obs(r: Ref, a: Boolean) =
-  do Get(r) match {
-    case Unobserved() => do Put(r, Observed(a))
+  do get(r) match {
+    case Unobserved() => do put(r, Observed(a))
     case Observed(y) => if (a == y) { () } else { do Fail() }
   }
 
@@ -77,51 +80,44 @@ def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
     try {
       val res = prog();
       Cons(MkWeighted(current, res), empty)
-    } with {
-      case Score(p) => { current = mulDouble(current, p); resume(()) }
-    }
-  } with {
-    case Fork() => concat(resume(true), resume(false))
-    case Fail() => empty
-  }
+    } with Score { p => current = mulDouble(current, p); resume(()) }
+  } with Fork { () => concat(resume(true), resume(false)) }
+    with Fail { () => empty }
 }
 
-def fresh(): Ref / New = do New(Unobserved())
+def fresh(): Ref / Heap = do empty(Unobserved())
 
 def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
   val input = fresh();
-  try { do Put(prog(input), Observed(expected)) } with {
-    case Flip(p) => {
-      val res: Ref = fresh();
-      resume(res);
-      do Get(res) match {
-        case Unobserved() => ()
-        case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
-      }
+  try { do put(prog(input), Observed(expected)) }
+  with Flip { p =>
+    val res: Ref = fresh();
+    resume(res);
+    do get(res) match {
+      case Unobserved() => ()
+      case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
     }
-    case Disj(x, y) => {
-      val res: Ref = fresh();
-      resume(res);
-      do Get(res) match {
-        case Unobserved() => ()
-        case Observed(b) => if (b) { choose3 {
-          obs(x, false); obs(y, true)
-        } {
-          obs(x, true); obs(y, false)
-        } {
-          obs(x, true); obs(y, true)
-        } } else { obs(x, false); obs(y, false) }
-      }
+  } with Disj { (x, y) =>
+    val res: Ref = fresh();
+    resume(res);
+    do get(res) match {
+      case Unobserved() => ()
+      case Observed(b) => if (b) { choose3 {
+        obs(x, false); obs(y, true)
+      } {
+        obs(x, true); obs(y, false)
+      } {
+        obs(x, true); obs(y, true)
+      } } else { obs(x, false); obs(y, false) }
     }
-    case Prior(x, p) => {
-      resume(());
-      do Get(x) match {
-        case Unobserved() => ()
-        case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
-      }
+  } with Prior { (x, p) =>
+    resume(());
+    do get(x) match {
+      case Unobserved() => ()
+      case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
     }
   };
-  do Get(input)
+  do get(input)
 }
 
 def test() = {
@@ -141,26 +137,24 @@ def test() = {
 }
 
 def heapTest() = heap {
-  val r1 = do New(Unobserved());
-  val r2 = do New(Unobserved());
-  val r3 = do New(Unobserved());
-  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)));
+  val r1 = do empty(Unobserved());
+  val r2 = do empty(Unobserved());
+  val r3 = do empty(Unobserved());
+  println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)));
 
-  do Put(r2, Observed(true));
-  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)));
+  do put(r2, Observed(true));
+  println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)));
 
-  do Put(r3, Observed(false));
-  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)));
+  do put(r3, Observed(false));
+  println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)));
 
-  do Put(r2, Observed(false));
-  println(show(do Get(r1)) ++ show(do Get(r2)) ++ show(do Get(r3)))
+  do put(r2, Observed(false));
+  println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
 }
 
-def catch[R] { p: R / IndexOutOfBounds }: Unit / Console = try {
-  p(); ()
-} with {
-  case IndexOutOfBounds() => println("Index out of bounds!")
-}
+def catch[R] { p: R / IndexOutOfBounds }: Unit / Console =
+  try { p(); () }
+  with IndexOutOfBounds { () => println("Index out of bounds!") }
 
 def main() = {
   val res = handleProb {

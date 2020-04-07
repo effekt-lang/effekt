@@ -168,12 +168,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `pure`.? ^^ { _.isDefined }
 
   lazy val effectDef: P[Def] =
-    `effect` ~> idDef ~ maybeTypeParams ~ some(valueParams) ~ (`:` ~/> valueType) ^^ {
-      case id ~ tparams ~ params ~ ret =>
-        val opId = IdRef(id.name)
-        positions.dupPos(id, opId)
-        EffDef(id, List(Operation(opId, tparams, params, ret)))
-    }
+    ( `effect` ~> effectOp ^^ {
+        case op =>
+          val effectId = IdRef(op.id.name)
+          positions.dupPos(op.id, effectId)
+          EffDef(effectId, List(op))
+      }
+    | `effect` ~> idDef ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
+    )
+
+  lazy val effectOp: P[Operation] =
+    idDef ~ maybeTypeParams ~ some(valueParams) ~/ (`:` ~/> valueType) ^^ Operation
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType
@@ -350,18 +355,26 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     (`resume` ^^^ IdRef("resume")) ~ valueArgs ^^ { case r ~ args => Call(r, Nil, List(args)) }
 
   lazy val handleExpr: P[Expr] =
-    (`try` ~/> stmt <~ `with` ~ `{`) ~ (some(opClause) <~ `}`) ^^ TryHandle
+    `try` ~/> stmt ~ some(handler) ^^ TryHandle
+
+  lazy val handler: P[Handler] =
+    ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ Handler
+    | `with` ~> idRef ~ (`{` ~>lambdaArgs) ~ implicitResume ~ (`=>` ~/> stmts) <~ `}` ^^ {
+      case effectId ~ params ~ resume ~ body =>
+        val opId = IdRef(effectId.name)
+        positions.dupPos(effectId, opId)
+        Handler(effectId, List(OpClause(opId, List(params), body, resume)))
+      }
+    )
+
+  lazy val defClause: P[OpClause] =
+    (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {
+      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
+    }
 
   lazy val clause: P[Clause] =
     (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ Clause
 
-  lazy val opClause: P[Handler] =
-    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=>` ~/> stmt) ^^ {
-      case id ~ params ~ resume ~ body =>
-        val effectId = IdRef(id.name)
-        positions.dupPos(id, effectId)
-        Handler(effectId, List(OpClause(id, params, body, resume)))
-    }
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 

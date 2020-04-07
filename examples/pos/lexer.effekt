@@ -34,18 +34,13 @@ def position(t: Token): Position = t match {
 // Lexing
 // =======================
 
-effect Peek(): Option[Token]
-effect Next(): Token
 effect EOS[A](): A
 effect LexerError[A](msg: String, pos: Position): A
 
-effect Lexer = { Peek, Next }
-
-def peek(): Option[Token] / Lexer =
-    do Peek()
-
-def next(): Token / Lexer =
-    do Next()
+effect Lexer {
+  def peek(): Option[Token]
+  def next(): Token
+}
 
 def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
 
@@ -96,14 +91,13 @@ def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
     // skip initial whitespace
     skipWhitespaces();
 
-    try {  prog() } with {
-        case Peek() =>
+    try { prog() } with Lexer {
+        def peek() =
             if (eos())
                 resume(None())
             else
                 resume(lexeme().map { m => m.first })
-
-        case Next() =>
+        def next() =
             if (eos())  {
                 do LexerError("Unexpected EOS", position())
             } else {
@@ -125,10 +119,12 @@ def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
 // =======================
 // Parsing
 // =======================
-effect ParserAlt(): Boolean
-effect ParserFail[A](msg: String): A
+effect Nondet {
+  def alt(): Boolean
+  def fail[A](msg: String): A
+}
 
-effect Parser = { ParserAlt, ParserFail, Next }
+effect Parser = { Nondet, Lexer }
 
 type ParseResult[R] {
   Success(t: R);
@@ -137,34 +133,35 @@ type ParseResult[R] {
 
 
 // Simplified signatures
-//   def lexer[R](in: String) { prog: R / Next } : R / LexerError
-//   def parse[R](input: String) { p: R / { Next, Alt, Fail } }: ParseResult[R] / {}
+//   def lexer[R](in: String) { prog: R / Lexer } : R / LexerError
+//   def parse[R](input: String) { p: R / { Nondet, Lexer } }: ParseResult[R] / {}
 //
 // In Koka this would have a type like
-//   def lexer[R, E](in: String) { prog: R / { Next, E } } : R / { LexerError, E }
-//   def parse[R, E](input: String) { p: R / { Next, Alt, Fail, E } }: ParseResult[R] / E
+//   def lexer[R, E](in: String) { prog: R / { Lexer, E } } : R / { LexerError, E }
+//   def parse[R, E](input: String) { p: R / { Nondet, Lexer, E } }: ParseResult[R] / E
 def parse[R](input: String) { p: R / {Parser} }: ParseResult[R] = try {
-  lexer(input) { Success(p()) }
-} with {
-  case ParserAlt() => resume(true) match {
-    case Failure(msg) => resume(false)
-    case Success(res) => Success(res)
+    lexer(input) { Success(p()) }
+  } with Nondet {
+    def alt() = resume(true) match {
+      case Failure(msg) => resume(false)
+      case Success(res) => Success(res)
+    }
+    def fail(msg) = Failure(msg)
+  } with LexerError { (msg, pos) =>
+    Failure(msg)
   }
-  case ParserFail(msg) => Failure(msg)
-  case LexerError(msg, pos) => Failure(msg)
-}
 
 
 // =======================
 // Parser Combinators
 // =======================
 
-def accept { p: Token => Boolean } : Token / { ParserFail, Next } = {
-    val got = do Next();
+def accept { p: Token => Boolean } : Token / { Nondet, Lexer } = {
+    val got = do next();
     if (p(got)) {
         got
     } else {
-        do ParserFail("Unexpected token " ++ show(got))
+        do fail("Unexpected token " ++ show(got))
     }
 }
 def ident() = accept { t => t match {
@@ -184,19 +181,16 @@ def punct(p: String) = accept { t => t match {
 }}
 
 def or[R] { p: R } { q: R } =
-  if (do ParserAlt()) { p() } else { q() }
+  if (alt()) { p() } else { q() }
 
-def opt[R] { p: R }: Option[R] / ParserAlt =
+def opt[R] { p: R }: Option[R] / Parser =
    or { Some(p()) } { None() }
 
-def many { p: Unit }: Unit / ParserAlt =
+def many { p: Unit }: Unit / Parser =
     or { some { p() } } { () }
 
-def some { p: Unit }: Unit / ParserAlt =
+def some { p: Unit }: Unit / Parser =
     { p(); many { p() } }
-
-def fail[A](msg: String): A / Parser =
-  do ParserFail(msg)
 
 def kw(exp: String): Unit / Parser = {
     val got = id();
@@ -236,20 +230,16 @@ effect Fresh(): Int
 
 def freshVars[R] { prog: R / Fresh } : R = {
     var i = 0;
-    try { prog() } with {
-        case Fresh() => {
-            i = i + 1;
-            resume(i)
-        }
+    try { prog() } with Fresh { () =>
+        i = i + 1;
+        resume(i)
     }
 }
 
 def bindHere { prog: Stmt / Bind } : Stmt / Fresh =
-    try { prog() } with {
-        case Bind(e) => {
-            val id = "x" ++ show(do Fresh());
-            CLet(id, e, resume(CVar(id)))
-        }
+    try { prog() } with Bind { (e) =>
+        val id = "x" ++ show(do Fresh());
+        CLet(id, e, resume(CVar(id)))
     }
 
 def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
@@ -306,7 +296,7 @@ def parseExpr(): Tree / Parser =
 // Pretty printer for the example tree
 
 // TODO also export type aliases from a module
-effect Pretty = { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal }
+effect Pretty = { Text, Line, Indentation, Layout, Horizontal }
 
 def toDoc(t: Tree): Unit / Pretty = t match {
     case NumLit(value) => text(show(value))
@@ -390,10 +380,9 @@ def main() = {
                 println(next())
             }
         }
-    } with {
-        case LexerError(msg, pos) => pos match {
-            case Position(line, col, idx) =>
-                println(show(line) ++ ":" ++ show(col) ++ " " ++ msg)
+    } with LexerError { (msg, pos) => pos match {
+        case Position(line, col, idx) =>
+            println(show(line) ++ ":" ++ show(col) ++ " " ++ msg)
         }
     };
 

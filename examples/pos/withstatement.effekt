@@ -4,8 +4,8 @@ import immutable/list
 
 effect Exc[A](msg: String): A
 
-def printer { p: Unit / Exc }: Unit / Console = try { p() } with {
-    case Exc(msg) => println(msg)
+def printer { p: Unit / Exc }: Unit / Console = try { p() } with Exc { (msg) =>
+  println(msg)
 }
 
 def bar { f: (Int, String) => Unit / {}}: Unit =

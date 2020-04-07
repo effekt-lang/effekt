@@ -26,8 +26,8 @@ def max(n: Int, m: Int): Int =
   if (n > m) n else m
 
 def perfect[R] { prog: R / Move } =
-  try { prog() } with {
-    case Move(p, n) => resume(max(1, mod(n, 4)))
+  try { prog() } with Move { (p, n) =>
+    resume(max(1, mod(n, 4)))
   }
 
 def testPerfect1() = perfect { game(7) }
@@ -54,14 +54,12 @@ def range(from: Int, to: Int) { block: Int => Unit } = {
   }
 }
 
-def gametree { prog: Player / Move } = try { Winner(prog()) } with {
-  case Move(p, n) => {
-    var subtrees = Done[GTree]();
-    range(1, n) { i =>
-      subtrees = Step(i, resume(i), subtrees)
-    };
-    Take(p, subtrees)
-  }
+def gametree { prog: Player / Move } = try { Winner(prog()) } with Move { (p, n) =>
+  var subtrees = Done[GTree]();
+  range(1, n) { i =>
+    subtrees = Step(i, resume(i), subtrees)
+  };
+  Take(p, subtrees)
 }
 
 // ----------------
@@ -70,24 +68,22 @@ def gametree { prog: Player / Move } = try { Winner(prog()) } with {
 effect Cheat[A](p: Player): A
 effect Error[A](msg: String): A
 
-def printError { prog: Unit / Error } = try { prog() } with {
-  case Error(msg) => println(msg)
+def printError { prog: Unit / Error } = try { prog() } with Error { (msg) =>
+  println(msg)
 }
 
 def cheatReport[R] { prog: R / Cheat }: R / Error =
-  try { prog() } with {
-    case Cheat(p) => do Error(show(p) ++ " cheated!")
+  try { prog() } with Cheat { (p) =>
+    do Error(show(p) ++ " cheated!")
   }
 
-def check { prog: Player / Move } = try { prog() } with {
-  case Move(p, n) => {
-    val m = do Move(p, n);
-    if (m <= 3) { resume(m) } else { do Cheat(p) }
-  }
+def check { prog: Player / Move } = try { prog() } with Move { (p, n) =>
+  val m = do Move(p, n);
+  if (m <= 3) { resume(m) } else { do Cheat(p) }
 }
 
-def pc  { prog: Player / Move } = try { prog() } with {
-  case Move(p, n) => p match {
+def pc  { prog: Player / Move } = try { prog() } with Move { (p, n) =>
+  p match {
     case Alice() => resume(max(1, mod(n, 4)))
     case Bob()   => resume(n)
   }
@@ -111,19 +107,19 @@ def bobChooses { prog: Player / Move } =
     perfect { prog() }
   }
 
-def allResults[R] { prog: R / Choose } = try { [prog()] } with {
-  case Choose() => concat(resume(true), resume(false))
+def allResults[R] { prog: R / Choose } = try { [prog()] } with Choose { () =>
+  concat(resume(true), resume(false))
 }
 
-def coin[R] { prog: R / Choose } = try { prog() } with {
-  case Choose() => resume(random() > 50)
+def coin[R] { prog: R / Choose } = try { prog() } with Choose { () =>
+  resume(random() > 50)
 }
 
 def deterministic[R] { prog: R / Choose } = {
   val allFlips = [true, false, true, true, false];
   var flips = allFlips;
-  try { prog() } with {
-    case Choose() => flips match {
+  try { prog() } with Choose { () =>
+    flips match {
       case Nil() => { flips = allFlips; resume(true) }
       case Cons(b, rest) => { flips = rest; resume(b) }
     }
@@ -149,9 +145,11 @@ def updatedScore(p: Player, board: Scoreboard) = board match {
 
 def withScore[R] { prog: R / { GetScore, UpdateScore } }: R = {
   var s: Scoreboard = Board(0, 0);
-  try { prog() } with {
-    case GetScore() => resume(s)
-    case UpdateScore(p) => { s = updatedScore(p, s); resume(()) }
+  try { prog()
+  } with GetScore { () =>
+    resume(s)
+  } with UpdateScore { (p) =>
+    s = updatedScore(p, s); resume(())
   }
 }
 

@@ -16,16 +16,18 @@ effect Text(t: String): Unit
 effect Line(indent: Int): Unit
 
 // Backtracking search for layouts
-effect LayoutChoice(): Boolean
-effect LayoutFail[A](): A
+effect Layout {
+  def choice(): Boolean
+  def fail[A](): A
+}
 
 // TODO turn this into an effect later to make configurable
 def defaultIndent() = 2
 
-def layout[R] { p : R / { LayoutChoice, LayoutFail } }: Option[R] =
-  try { Some(p()) } with {
-    case LayoutFail() => None()
-    case LayoutChoice() => resume(true) match {
+def layout[R] { p : R / Layout }: Option[R] =
+  try { Some(p()) } with Layout {
+    def fail() = None()
+    def choice() = resume(true) match {
       case None() => resume(false)
       case Some(r) => Some(r)
     }
@@ -34,30 +36,30 @@ def layout[R] { p : R / { LayoutChoice, LayoutFail } }: Option[R] =
 effect Write(s: String): Unit
 def writer { p: Unit / Write } = {
   var out = "";
-  try { p(); out } with {
-    case Write(s) => { out = out ++ s; resume(()) }
+  try { p(); out } with Write { (s) =>
+    out = out ++ s; resume(())
   }
 }
 
 def printer(width: Int) { p: Unit / { Text, Line, Indentation, Horizontal } } = {
   var pos: Int = 0;
-  try { p() } with {
-    case Text(t) => {
+  try { p()
+  } with Text { (t) =>
       pos = pos + t.length;
-      if (pos > width) { do LayoutFail() }
+      if (pos > width) { do fail() }
       else { do Write(t); resume(()) }
-    }
-    case Line(indent) => {
+  } with Line { (indent) =>
       pos = indent;
       do Write("\n" ++ (" ".repeat(indent)));
       resume(())
-    }
-    case Horizontal() => resume(do LayoutChoice())
-    case Indentation() => resume(0)
+  } with Horizontal { () =>
+      resume(do choice())
+  } with Indentation { () =>
+      resume(0)
   }
 }
 
-effect Pretty = { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal }
+effect Pretty = { Text, Line, Indentation, Layout, Horizontal }
 
 // TODO moving pretty to the top moves printer out of scope, why?
 // TODO using the wrong kind of argument section (like `opt.getOrElse("")`) crashes the compiler.
@@ -66,27 +68,27 @@ def pretty(width: Int) { p: Unit / Pretty } = {
   result.getOrElse { "Cannot print document, since it would overflow." }
 }
 
-def horizontal { p: Unit / { Horizontal } } = try { p () } with {
-  case Horizontal() => resume(true)
-}
+def horizontal { p: Unit / { Horizontal } } = try { p ()
+  } with Horizontal { () =>
+    resume(true)
+  }
 
-def vertical { p: Unit / { Horizontal } } = try { p () } with {
-  case Horizontal() => resume(false)
-}
+def vertical { p: Unit / { Horizontal } } = try { p ()
+  } with Horizontal { () =>
+    resume(false)
+  }
 
 def collect { p: Unit / Text } : String / Text = {
   var cache = "";
-  try { p(); cache } with {
-    case Text(s) => {
-      cache = cache ++ s;
-      resume(do Text(s))
-    }
+  try { p(); cache } with Text { (s) =>
+    cache = cache ++ s;
+    resume(do Text(s))
   }
 }
 
 // In languages with scoped effects, group would be an effect operation.
 def group { p: Unit / { Horizontal, Text, Line } } =
-  if (do LayoutChoice()) {
+  if (do choice()) {
     horizontal { p() }
   } else {
     vertical { p() }
@@ -120,9 +122,9 @@ def space() =
 def spaces(n: Int) =
   if (n > 0) text(" ".repeat(n)) else ()
 
-def nest[R](j: Int) { p: R / Indentation }: R / Indentation = try { p () } with {
-  case Indentation() => resume(do Indentation() + j)
-}
+def nest[R](j: Int) { p: R / Indentation }: R / Indentation = try { p ()
+  } with Indentation { () => resume(do Indentation() + j)
+  }
 
 // uses the default indentation to nest a document
 def nested[R] { p: R / Indentation }: R / Indentation =

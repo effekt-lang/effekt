@@ -109,6 +109,10 @@ class Typer extends Phase[Module, Module] { typer =>
             Context.error(s"Missing definitions for effect operations: ${explanation}")
           }
 
+          if (covered.size > covered.distinct.size) {
+            Context.error(s"Duplicate definitions of effect operations")
+          }
+
           h.clauses foreach {
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition

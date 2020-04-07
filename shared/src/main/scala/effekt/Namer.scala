@@ -20,6 +20,12 @@ import org.bitbucket.inkytonik.kiama.util.Source
  * There is an important distinction between:
  *   - resolving: that is looking up symbols (might include storing the result into the symbolTable)
  *   - binding: that is adding a binding to the environment (lexical.Scope)
+ *
+ *
+ * TODO we could split resolution in three phases
+ * 1. only look at the declaration head of definitions in one scope
+ * 2. look at the bodies of effect declarations and type definitions
+ * 3. look into the bodies of functions
  */
 case class NamerState(
   scope: Scope
@@ -144,16 +150,24 @@ class Namer extends Phase[Module, Module] { namer =>
       resolveAll(handlers)
 
     case source.Handler(name, clauses) =>
-      Context.at(name) { Context.resolveType(name) }
-      resolveAll(clauses)
+      val eff = Context.at(name) { Context.resolveType(name) }.asUserEffect
 
-    case source.OpClause(op, params, body, resumeId) =>
-      Context.at(op) { Context.resolveTerm(op) }
-      val ps = params.map(resolve)
-      Context scoped {
-        Context.bind(ps)
-        Context.define(resumeId, ResumeParam(C.module))
-        resolveGeneric(body)
+      clauses.foreach {
+        case source.OpClause(op, params, body, resumeId) =>
+
+          // try to find the operation in the handled effect:
+          eff.ops.filter { o => o.name.toString == op.name }.headOption map { opSym =>
+            Context.assignSymbol(op, opSym)
+          } getOrElse {
+            Context.abort(s"Effect operation ${op.name} is not part of effect ${name.name}.")
+          }
+
+          val ps = params.map(resolve)
+          Context scoped {
+            Context.bind(ps)
+            Context.define(resumeId, ResumeParam(C.module))
+            resolveGeneric(body)
+          }
       }
 
     case source.Clause(op, params, body) =>
@@ -402,6 +416,11 @@ trait NamerOps { self: Context =>
       case b: Fun         => b
       case _              => abort("Expected callable")
     }
+
+    if (syms.isEmpty) {
+      abort(s"Cannot resolve function ${id.name}")
+    }
+
     val target = new CallTarget(Name(id), syms)
     assignSymbol(id, target)
     target

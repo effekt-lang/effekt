@@ -14,21 +14,17 @@ def freshVars[R] { prog: R / Fresh } : R = {
     var i = 0;
     try {
         prog()
-    } with {
-        case Fresh() => {
+    } with Fresh { () =>
             i = i + 1;
             resume(i)
-        }
     }
 }
 
 def bindHere { prog: Exp / Bind } : Exp / Fresh = try {
     prog()
-} with {
-    case Bind(e) => {
-        val id = "x" ++ show(do Fresh());
-        Let(id, e, resume(Var(id)))
-    }
+} with Bind { (e) =>
+    val id = "x" ++ show(do Fresh());
+    Let(id, e, resume(Var(id)))
 }
 
 def traverse(e: Exp): Exp / { Bind, Fresh } = e match {

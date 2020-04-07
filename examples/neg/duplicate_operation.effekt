@@ -1,0 +1,21 @@
+module examples/pos/duplicate_operation
+
+// TODO If we move `State` below `state` then it is not resolved
+effect State {
+    def get(): Int
+    def set(n: Int): Unit
+}
+
+def state[R](init: Int) { f: R / { State } }: Unit / Console = {
+    var s = init;
+    try { f(); () } with State {
+        def get() = resume(s)
+        def get() = resume(s)
+        def set(n) = { s = n; resume(()) }
+    }
+}
+
+def main() = {
+    with state(4);
+    println(do get())
+}
