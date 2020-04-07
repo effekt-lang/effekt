@@ -168,23 +168,22 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           as2.flatMap { args => bind(App(BlockVar(sym), args ++ capabilities)) }
       }
 
-    case source.TryHandle(prog, clauses) =>
+    case source.TryHandle(prog, handlers) =>
 
-      val effects = clauses.groupBy(cl => cl.definition.effect)
-
-      val capabilities = effects.keys.map { c => core.BlockParam(c) }.toList
+      val effects = handlers.map(_.definition)
+      val capabilities = effects.map { c => core.BlockParam(c) }
       val body = BlockDef(capabilities, transform(prog))
 
-      val handlers = effects.map {
-        case (eff, cls) =>
-          Handler(eff, cls.map {
+      val hs = handlers.map {
+        case h @ source.Handler(eff, cls) =>
+          Handler(h.definition, cls.map {
             case op @ source.OpClause(id, params, body, resume) =>
               val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
               (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
           })
       }
 
-      bind(Handle(body, handlers.toList))
+      bind(Handle(body, hs))
   }).map { _.inheritPosition(tree) }
 
   def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {

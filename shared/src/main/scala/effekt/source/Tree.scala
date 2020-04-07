@@ -164,7 +164,10 @@ case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-case class TryHandle(prog: Stmt, clauses: List[OpClause]) extends Expr
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+case class Handler(id: Id, clauses: List[OpClause]) extends Reference {
+  type symbol = symbols.UserEffect
+}
 case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.EffectOp
 }

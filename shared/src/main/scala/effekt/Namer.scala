@@ -139,8 +139,12 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    case source.TryHandle(body, clauses) =>
+    case source.TryHandle(body, handlers) =>
       Context scoped { resolveGeneric(body) }
+      resolveAll(handlers)
+
+    case source.Handler(name, clauses) =>
+      Context.at(name) { Context.resolveType(name) }
       resolveAll(clauses)
 
     case source.OpClause(op, params, body, resumeId) =>

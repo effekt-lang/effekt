@@ -355,9 +355,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val clause: P[Clause] =
     (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ Clause
 
-  lazy val opClause: P[OpClause] =
+  lazy val opClause: P[Handler] =
     (`case` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=>` ~/> stmt) ^^ {
-      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
+      case id ~ params ~ resume ~ body =>
+        val effectId = IdRef(id.name)
+        positions.dupPos(id, effectId)
+        Handler(effectId, List(OpClause(id, params, body, resume)))
     }
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))

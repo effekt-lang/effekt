@@ -92,33 +92,35 @@ class Typer extends Phase[Module, Module] { typer =>
       case c @ source.Call(fun, targs, args) =>
         checkCall(fun, c.definition, targs map { resolveValueType }, args, expected)
 
-      case source.TryHandle(prog, clauses) =>
+      case source.TryHandle(prog, handlers) =>
 
         val (ret / effs) = checkStmt(prog, expected)
 
-        val effectOps = clauses.map { c => c.definition }
-        val effects = effectOps.map { _.effect }
-        val requiredOps = effects.flatMap { _.ops }
-        val notCovered = requiredOps.toSet -- effectOps.toSet
-
-        if (notCovered.nonEmpty) {
-          val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-          Context.error(s"Missing definitions for effect operations: ${explanation}")
-        }
-
+        val effects = handlers.map { c => c.definition }
         var handlerEffs = Pure
 
-        clauses foreach {
-          case d @ source.OpClause(op, params, body, resume) =>
-            val effectOp = d.definition
-            val bt = Context.blockTypeOf(effectOp)
-            val ps = checkAgainstDeclaration(op.name, bt.params, params)
-            val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
+        handlers.foreach { h =>
+          val effect = h.definition
+          val covered = h.clauses.map { _.definition }
+          val notCovered = effect.ops.toSet -- covered.toSet
 
-            Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
-              val (_ / heffs) = body checkAgainst ret
-              handlerEffs = handlerEffs ++ heffs
-            }
+          if (notCovered.nonEmpty) {
+            val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
+            Context.error(s"Missing definitions for effect operations: ${explanation}")
+          }
+
+          h.clauses foreach {
+            case d @ source.OpClause(op, params, body, resume) =>
+              val effectOp = d.definition
+              val bt = Context.blockTypeOf(effectOp)
+              val ps = checkAgainstDeclaration(op.name, bt.params, params)
+              val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
+
+              Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
+                val (_ / heffs) = body checkAgainst ret
+                handlerEffs = handlerEffs ++ heffs
+              }
+          }
         }
 
         val unusedEffects = Effects(effects) -- effs
