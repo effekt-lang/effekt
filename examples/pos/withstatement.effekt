@@ -12,7 +12,11 @@ def printer { p: Unit / Exc }: Unit / Console = try { p() } with {
 def user(): Unit / Console = {
     with printer;
     with x = foreach([1,2,3]);
-    println("hello " ++ show(x));
+    println(x);
+    val z = {
+        val x = 2;
+        println("hello " ++ show(x))
+    };
     do Exc[Unit]("raised exception");
     println("world")
 }

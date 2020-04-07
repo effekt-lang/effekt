@@ -67,6 +67,15 @@ trait LSPServer extends Driver with Intelligence {
     detail <- getInfoOf(sym)(context)
   } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header))
 
+  override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
+    for {
+      (tree, sym) <- getSymbolAt(position)(context)
+      refs = context.references.getOrDefault(sym, Nil).distinctBy(r => System.identityHashCode(r))
+      allRefs = if (includeDecl) tree :: refs else refs
+    } yield refs.toVector
+
+  //references
+
   def getSymbolKind(sym: Symbol): Option[SymbolKind] =
     sym match {
       case _: Module =>
@@ -78,6 +87,7 @@ trait LSPServer extends Driver with Intelligence {
       case _ =>
         None
     }
+
 }
 
 object Server extends LSPServer
