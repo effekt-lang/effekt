@@ -169,7 +169,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val effectDef: P[Def] =
     `effect` ~> idDef ~ maybeTypeParams ~ some(valueParams) ~ (`:` ~/> valueType) ^^ {
-      case id ~ tparams ~ params ~ ret => EffDef(id, List(Operation(id, tparams, params, ret)))
+      case id ~ tparams ~ params ~ ret =>
+        val opId = IdRef(id.name)
+        positions.dupPos(id, opId)
+        EffDef(id, List(Operation(opId, tparams, params, ret)))
     }
 
   lazy val externType: P[Def] =
