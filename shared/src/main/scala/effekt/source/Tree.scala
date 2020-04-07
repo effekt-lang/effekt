@@ -131,6 +131,7 @@ sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
 case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
 case class Return(d: Expr) extends Stmt
+case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
@@ -157,14 +158,14 @@ case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
 case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
-  type symbol = symbols.CallTarget
+  type symbol = symbols.BlockSymbol
 }
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
 case class TryHandle(prog: Stmt, clauses: List[OpClause]) extends Expr
-case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef = IdDef("resume")) extends Reference {
+case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.EffectOp
 }
 

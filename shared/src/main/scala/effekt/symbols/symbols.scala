@@ -124,7 +124,7 @@ package object symbols {
    *
    * Refined by typer.
    */
-  class CallTarget(val name: Name, var symbols: Set[BlockSymbol]) extends BlockSymbol
+  case class CallTarget(name: Name, symbols: Set[BlockSymbol]) extends BlockSymbol
 
   /**
    * Types

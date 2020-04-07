@@ -74,6 +74,10 @@ object assertions {
       case t: Fun => t
       case _ => reporter.abort("Expected a function")
     }
+    def asCallTarget: CallTarget = s match {
+      case t: CallTarget => t
+      case _ => reporter.abort("Expected a call target")
+    }
     def asTermSymbol: TermSymbol = s match {
       case t: TermSymbol => t
       case _ => reporter.abort("Expected a term symbol")

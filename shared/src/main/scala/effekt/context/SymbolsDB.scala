@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.source.{ Id, IdDef }
+import effekt.source.{ Id, IdDef, IdRef, Reference }
 import effekt.symbols.{ Symbol, Module }
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
@@ -12,12 +12,16 @@ trait SymbolsDB { self: Context =>
 
   val symbols: Memoiser[Id, Symbol] = Memoiser.makeIdMemoiser
 
+  // the module a symbol is defined in
+  val modules: Memoiser[Symbol, Module] = Memoiser.makeIdMemoiser
+
+  // Databases used by the language server
+
   // for reverse lookup in LSP server
   // TODO maybe store the whole definition tree instead of the name, which requries refactoring of assignSymbol
   val sources: Memoiser[Symbol, IdDef] = Memoiser.makeIdMemoiser
 
-  // the module a symbol is defined in
-  val modules: Memoiser[Symbol, Module] = Memoiser.makeIdMemoiser
+  val references: Memoiser[Symbol, List[Reference]] = Memoiser.makeIdMemoiser
 
   def assignSymbol(id: Id, d: Symbol): Unit = id match {
     case id: IdDef =>
@@ -39,8 +43,12 @@ trait SymbolsDB { self: Context =>
   // Searching the defitions for a Reference
   // =======================================
   // this one can fail.
-  def symbolOf(tree: source.Reference): tree.symbol =
-    symbolOf(tree.id).asInstanceOf[tree.symbol]
+  def symbolOf(tree: source.Reference): tree.symbol = {
+    val sym = symbolOf(tree.id).asInstanceOf[tree.symbol]
+    val refs = references.getOrDefault(sym, Nil)
+    references.put(sym, tree :: refs)
+    sym
+  }
 
   // Searching the symbol for a definition
   // =====================================

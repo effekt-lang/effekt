@@ -90,7 +90,7 @@ class Typer extends Phase[Module, Module] { typer =>
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
-        checkCall(c.definition, targs map { resolveValueType }, args, expected)
+        checkCall(fun, c.definition, targs map { resolveValueType }, args, expected)
 
       case source.TryHandle(prog, clauses) =>
 
@@ -207,7 +207,9 @@ class Typer extends Phase[Module, Module] { typer =>
         val (r / eff2) = checkStmt(rest, expected)
         r / (eff1 ++ eff2)
 
-      case source.Return(e) => checkExpr(e, expected)
+      case source.Return(e)        => checkExpr(e, expected)
+
+      case source.BlockStmt(stmts) => checkStmt(stmts, expected)
     }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
@@ -334,13 +336,21 @@ class Typer extends Phase[Module, Module] { typer =>
    *   - if there is no without errors: report all possible solutions with corresponding errors
    */
   def checkCall(
-    target: CallTarget,
+    fun: source.Id,
+    target: BlockSymbol,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    target.symbols.toList.map { sym =>
+    val targets = target match {
+      // an overloaded call target
+      case CallTarget(name, syms) => syms.toList
+      // already resolved by a previous attempt to typecheck
+      case sym                    => List(sym)
+    }
+
+    targets.map { sym =>
       sym -> Try { checkCallTo(sym, targs, args, expected) }
     }.partitionMap {
       case (sym, Left(msg))  => Left((sym, msg))
@@ -349,7 +359,8 @@ class Typer extends Phase[Module, Module] { typer =>
 
       // Exactly one successful result
       case (_, List((sym, tpe))) =>
-        target.symbols = Set(sym)
+        // reassign symbol of fun to resolved calltarget
+        C.assignSymbol(fun, sym)
         tpe
 
       // Ambiguous reference

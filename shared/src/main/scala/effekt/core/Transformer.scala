@@ -90,6 +90,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case source.Return(e) =>
       ANF { transform(e).map(Ret) }
+
+    case source.BlockStmt(b) =>
+      transform(b)
+
   }).inheritPosition(tree)
 
   def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = (tree match {
@@ -126,7 +130,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     // assumption: typer removed all ambiguous references, so there is exactly one
     case c @ source.Call(fun, _, args) =>
-      val sym: Symbol = c.definition.symbols.head
+      val sym: Symbol = c.definition
 
       // we do not want to provide capabilities for the effect itself
       val ownEffect = sym match {

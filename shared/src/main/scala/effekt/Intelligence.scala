@@ -68,7 +68,8 @@ trait Intelligence extends Compiler {
 
   def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
     id <- getIdTreeAt(position)
-    decl <- getDefinitionOf(resolveCallTarget(C.symbolOf(id)))
+    sym <- C.symbolOption(id)
+    decl <- getDefinitionOf(resolveCallTarget(sym))
   } yield decl
 
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
@@ -89,7 +90,7 @@ trait Intelligence extends Compiler {
     case b: BuiltinFunction =>
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 
-    case f: UserFunction =>
+    case f: UserFunction if C.blockTypeOption(f).isDefined =>
       val tpe = C.blockTypeOf(f)
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
 

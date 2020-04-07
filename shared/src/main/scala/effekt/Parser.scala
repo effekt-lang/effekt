@@ -241,7 +241,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val stmt: P[Stmt] =
     ( expr ^^ Return
-    | `{` ~/> stmts <~ `}`
+    | `{` ~/> stmts <~ `}` ^^ BlockStmt
     | failure("Expected a statement")
     )
 
@@ -353,9 +353,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ Clause
 
   lazy val opClause: P[OpClause] =
-    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ {
-      case id ~ params ~ body => OpClause(id, params, body)
+    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=>` ~/> stmt) ^^ {
+      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
     }
+
+  lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 
 
   lazy val assignExpr: P[Expr] =
