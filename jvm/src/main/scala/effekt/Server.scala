@@ -7,6 +7,7 @@ import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
 
 trait LSPServer extends Driver with Intelligence {
 
@@ -55,6 +56,28 @@ trait LSPServer extends Driver with Intelligence {
         null
     }
   }
+
+  override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
+    sym <- context.sources.keys
+    mod = context.owner(sym)
+    if mod.source == source
+    id <- context.sources.get(sym)
+    decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
+    kind <- getSymbolKind(sym)
+    detail <- getInfoOf(sym)(context)
+  } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header))
+
+  def getSymbolKind(sym: Symbol): Option[SymbolKind] =
+    sym match {
+      case _: Module =>
+        Some(SymbolKind.Class)
+      case _: Fun =>
+        Some(SymbolKind.Method)
+      case _: Param | _: ValBinder | _: VarBinder =>
+        Some(SymbolKind.Variable)
+      case _ =>
+        None
+    }
 }
 
 object Server extends LSPServer
