@@ -157,22 +157,34 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
-      if ((sym.builtin && sym.asBuiltinFunction.pure) || sym.isInstanceOf[Constructor]) {
-        as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
-      } else {
-        as2.flatMap { args => bind(App(BlockVar(sym), args ++ capabilities)) }
+      sym match {
+        case f: BuiltinFunction if f.pure =>
+          as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
+        case f: Constructor =>
+          as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
+        case f: EffectOp =>
+          as2.flatMap { args => bind(Do(BlockVar(f.effect), f, args ++ capabilities)) }
+        case f =>
+          as2.flatMap { args => bind(App(BlockVar(sym), args ++ capabilities)) }
       }
 
     case source.TryHandle(prog, clauses) =>
-      val capabilities = clauses.map { c => core.BlockParam(c.definition) }
+
+      val effects = clauses.groupBy(cl => cl.definition.effect)
+
+      val capabilities = effects.keys.map { c => core.BlockParam(c) }.toList
       val body = BlockDef(capabilities, transform(prog))
-      val cs = clauses.map {
-        case op @ source.OpClause(id, params, body, resume) =>
-          val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
-          (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
+
+      val handlers = effects.map {
+        case (eff, cls) =>
+          Handler(eff, cls.map {
+            case op @ source.OpClause(id, params, body, resume) =>
+              val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
+              (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
+          })
       }
-      // TODO here we need to create one handler for each effect
-      bind(Handle(body, Handler(clauses.head.definition.effect, cs)))
+
+      bind(Handle(body, handlers.toList))
   }).map { _.inheritPosition(tree) }
 
   def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {

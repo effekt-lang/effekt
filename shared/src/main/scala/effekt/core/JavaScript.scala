@@ -100,6 +100,8 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       toDocDelayed(binding) <> ".state" <> parens(nameDef(id) <+> "=>" <+> nest(line <> toDoc(body)))
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case Do(b, id, args) =>
+      toDoc(b) <> "." <> nameRef(id) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>
       parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
     case While(cond, body) =>
@@ -113,8 +115,11 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       "Object.assign" <> parens(moduleName(path) <> comma <+> braces(nest(line <> vsep(exports.map { e =>
         toDoc(e.name) <> ":" <+> toDoc(e.name)
       }, comma)) <> line))
-    case Handle(body, handler) =>
-      val cs = parens("[" <> nest(line <> vsep(handler.clauses map { case (_, b) => toDoc(b) }, comma)) <> "]")
+    case Handle(body, hs) =>
+      val handlers = hs map { handler =>
+        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => nameDef(id) <> ":" <+> toDoc(b) }, comma)) <> line)
+      }
+      val cs = parens("[" <> hsep(handlers, comma) <> "]")
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
     case Match(sc, clauses) =>
       // TODO using the unqualified name here might lead to wrong operational behavior

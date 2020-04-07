@@ -67,6 +67,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
     case Var(id, binding, body) =>
       "var" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+    case Do(b, id, args) =>
+      toDoc(b) <> "." <> toDoc(id.name) <> parens(hsep(args map argToDoc, comma))
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>
@@ -78,9 +80,13 @@ class PrettyPrinter extends ParenPrettyPrinter {
     // don't print exports for now
     case Exports(path, exports) =>
       emptyDoc
-    case Handle(body, handler) =>
-      val cs = vsep(handler.clauses map { case (n, b) => "case" <+> toDoc(n.name) <> toDoc(b) })
-      "handle" <+> braces(nest(line <+> toDoc(body)) <> line) <+> "with" <+> braces(nest(line <+> cs) <> line)
+    case Handle(body, hs) =>
+      // TODO pretty print correctly
+      val handlers = hs map { handler =>
+        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+      }
+      val cs = parens("[" <> hsep(handlers, comma) <> "]")
+      "handle" <+> braces(nest(line <+> toDoc(body)) <> line) <+> "with" <+> cs
     case Match(sc, clauses) =>
       val cs = braces(nest(line <> vsep(clauses map { case (id, b) => "case" <+> toDoc(id.name) <> toDoc(b) })) <> line)
       toDoc(sc) <+> "match" <+> cs
