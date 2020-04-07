@@ -249,7 +249,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Statements
    */
   lazy val stmts: P[Stmt] =
-    ( exprStmt
+    ( withStmt
+    | exprStmt
     | defStmt
     | valDef  ~ (`;` ~/> stmts) ^^ DefStmt
     | varDef  ~ (`;` ~/> stmts) ^^ DefStmt
@@ -266,6 +267,15 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val handleStmt: P[Stmt] =
     handleExpr ~/ stmts ^^ { case h ~ s => ExprStmt(h, s) }
+
+  lazy val withStmt: P[Stmt] =
+    ( `with` ~> valueParamOpt ~ (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
+        case param ~ id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(ValueParams(List(param)), body) ))
+       }
+    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
+        case id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body) ))
+       }
+    )
 
   lazy val valDef: P[ValDef] =
      `val` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef
