@@ -12,7 +12,7 @@ export function activate(context: ExtensionContext) {
 
     let compilerPath = config.get<string>("compiler") || ""
 
-    let java = "/usr/bin/java";
+    let java = "java";
     let args: string[] = [
         "-jar",
         compilerPath,
