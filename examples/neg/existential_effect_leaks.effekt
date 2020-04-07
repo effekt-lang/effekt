@@ -9,16 +9,14 @@ def flipTrue { prog: Unit / { Flip, GiveInt } } : Unit / Console =
   try {
     try {
       prog()
-    } with {
-      case Flip() => {
-        println(do GiveInt());
-        resume(true);
-        resume(false)
-      }
+    } with Flip { () =>
+      println(do GiveInt());
+      resume(true);
+      resume(false)
     }
   // implementation detail!
-  } with {
-    case GiveInt() => resume(42)
+  } with GiveInt { () =>
+    resume(42)
   }
 
 def main(): Unit / { Console } = {
@@ -33,8 +31,8 @@ def main(): Unit / { Console } = {
         println(1)
       }
     }
-  } with {
-    case GiveInt() => resume(100)
+  } with GiveInt { () =>
+    resume(100)
   }
 }
 

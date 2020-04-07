@@ -7,20 +7,22 @@ effect Done() : Int
 
 effect Read() : Int
 
-effect Get() : Int
-effect Put(n : Int) : Unit
+effect State {
+  def get() : Int
+  def put(n : Int) : Unit
+}
 
 def sum() = {
   while (true) {
-    do Put(do Get() + do Read())
+    do put(do get() + do Read())
   }
 }
 
 def map { f : Int => Int } { prog : Unit / Read } : Unit / {Read} = {
   try {
     prog()
-  } with {
-    case Read() => resume(f(do Read()))
+  } with Read { () =>
+    resume(f(do Read()))
   }
 }
 
@@ -28,26 +30,24 @@ def range(from : Int, to : Int) { prog : Unit / Read } = {
   var n = from;
   try {
     prog()
-  } with {
-    case Read() => {
-      val x = n;
-      if (x < to) {
-        n = x + 1;
-        resume(x)
-      } else {
-        ()
-      }
+  } with Read { () =>
+    val x = n;
+    if (x < to) {
+      n = x + 1;
+      resume(x)
+    } else {
+      ()
     }
   }
 }
 
-def state { prog: Unit / {Get, Put} } = {
+def state { prog: Unit / State } = {
   var s = 0;
   try {
     prog()
-  } with {
-    case Get() => resume(s)
-    case Put(n) => {
+  } with State {
+    def get() = resume(s)
+    def put(n) = {
       s = n;
       resume(())
     }

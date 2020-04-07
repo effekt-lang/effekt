@@ -5,16 +5,16 @@ effect Emit(n: Int) : Unit
 
 def sum { stream: Unit / Emit } : Int = {
   var sum = 0;
-  try { stream() } with {
-    case Emit(n: Int) => { sum = sum + n; resume(()) }
+  try { stream() } with Emit { (n: Int) =>
+    sum = sum + n; resume(())
   };
   sum
 }
 
 
 def map { stream: Unit / Emit } { f : Int => Int } : Unit / Emit =
-  try { stream() } with {
-    case Emit(n: Int) => { do Emit(f(n)); resume(()) }
+  try { stream() } with Emit { (n: Int) =>
+    do Emit(f(n)); resume(())
   }
 
 def range(from: Int, to: Int): Unit / Emit = {

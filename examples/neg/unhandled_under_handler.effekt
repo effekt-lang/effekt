@@ -11,7 +11,7 @@ def main(): Unit / { Console } = {
     do MyPrint(4);
     do Flip();
     ()
-  } with {
-    case MyPrint(n: Int) => resume(())
+  } with MyPrint { (n: Int) =>
+    resume(())
   }
 }
