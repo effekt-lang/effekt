@@ -45,8 +45,7 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     var inn = s;
     try{
       p()
-    } with {
-      case Next() => inn match {
+    } with Next { () => inn match {
         case Nil() => { do Fail("Unexpected Nil") }
         case Cons(el, rest) => {
           inn = rest;
@@ -58,24 +57,26 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
 
 def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
   Success(p())
-} with {
-  case Flip() => resume(true) match {
-    case Failure(msg) => resume(false)
-    case Success(res) => Success(res)
-    case ParseError(msg) => ParseError(msg)
-  }
-  case Fail(msg) => Failure(msg)
-  case Error(msg) => ParseError(msg)
+} with Flip { () =>
+    resume(true) match {
+        case Failure(msg) => resume(false)
+        case Success(res) => Success(res)
+        case ParseError(msg) => ParseError(msg)
+    }
+} with Fail { (msg) =>
+    Failure(msg)
+} with Error { (msg) =>
+    ParseError(msg)
 }
 
 def commit[R] { p : R / Fail } : R / Error =
-  try { p() } with {
-    case Fail(msg) => { do Error(msg) }
+  try { p() } with Fail { (msg) =>
+    do Error(msg)
   }
 
 def nocut[R] { p: R / Error } : R / Fail =
-  try { p() } with {
-    case Error(msg) => { do Fail(msg) }
+  try { p() } with Error { (msg) =>
+     do Fail(msg)
   }
 
 def opt[R] { p: R }: Option[R] / Flip =
