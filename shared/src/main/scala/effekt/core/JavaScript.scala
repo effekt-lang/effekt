@@ -49,10 +49,15 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
-  def nameDef(id: Symbol)(implicit C: Context): Doc = toDoc(id.name)
+  // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
+  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
+    case _: symbols.EffectOp => "op$" + id.name.toString
+    case _                   => toDoc(id.name)
+  }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect | _: symbols.EffectOp => toDoc(id.name)
+    case _: symbols.Effect => toDoc(id.name)
+    case _: symbols.EffectOp => "op$" + id.name.toString
     case _ if id.name.module != C.module => link(id.name, id.name.qualified)
     case _ => toDoc(id.name)
   }
@@ -117,7 +122,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       }, comma)) <> line))
     case Handle(body, hs) =>
       val handlers = hs map { handler =>
-        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => nameDef(id) <> ":" <+> toDoc(b) }, comma)) <> line)
+        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => "\"" <> nameDef(id) <> "\"" <+> ":" <+> toDoc(b) }, comma)) <> line)
       }
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
