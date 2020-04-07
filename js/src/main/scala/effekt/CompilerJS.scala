@@ -28,7 +28,7 @@ class CompilerJS extends Compiler {
     context.setup(JSConfig)
     compile(StringSource(s)) match {
       case None =>
-        sys error "Error"
+        sys error "Could not compile with EffektJS"
       case Some(_) =>
         output.toString
     }

@@ -50,6 +50,9 @@ sealed trait Reference extends Tree {
  * The type of whole compilation units
  *
  * Only a subset of definitions (FunDef and EffDef) is allowed on the toplevel
+ *
+ * A module declartion, the path should be an Effekt include path, not a system dependent file path
+ *
  */
 case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
 case class Import(path: String) extends Tree
@@ -151,7 +154,9 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
-case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference
+case class Call(id: Id, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+  type symbol = symbols.CallTarget
+}
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr

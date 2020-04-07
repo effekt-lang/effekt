@@ -1,7 +1,7 @@
 module type_parameters_blocks
 
 // tests whether resolution of type parameters on blocks works
-import data/list
+import immutable/list
 
 def myMap[A, B](l: List[A]) { f: A => B }: List[B] =
   l.map { (a: A) => f(a) }

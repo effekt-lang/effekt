@@ -2,19 +2,37 @@ Some(d)
 None()
 7
 Some(0)
-Ident(abcd)
-Number(12345)
-Punct(,)
-Number(4)
-Punct(()
-Ident(efgh)
-Punct())
-Ident(bar)
-Punct(()
-Ident(baz)
-Punct())
+Ident(abcd, Position(1, 1, 0))
+Number(12345, Position(1, 6, 5))
+Punct(,, Position(1, 11, 10))
+Number(4, Position(1, 12, 11))
+Punct((, Position(2, 1, 13))
+Ident(efgh, Position(2, 2, 14))
+Punct(), Position(2, 6, 18))
+Ident(bar, Position(2, 7, 19))
+Punct((, Position(2, 10, 22))
+Ident(baz, Position(2, 11, 23))
+Punct(), Position(2, 14, 26))
 Success(1)
 Success(2)
 Success(3)
 Success(5)
 Success(6)
+Success(6)
+Success(NumLit(42))
+Success(Let(x, NumLit(4), NumLit(42)))
+Success(Let(x, Let(y, NumLit(2), NumLit(1)), NumLit(42)))
+Success(Let(x, Let(y, NumLit(2), NumLit(1)), NumLit(42)))
+Success(Let(x, Let(y, App(f, NumLit(42)), NumLit(1)), NumLit(42)))
+Success(Let(x, Let(y, App(f, Let(z, NumLit(1), Var(z))), NumLit(1)), NumLit(42)))
+
+Source Program:
+let x = let y = f(let z = 1 in
+        z) in 1 in 42
+
+Target Program:
+let x = let y = let x1 =
+      let z = return 1 in
+        return z
+    in f(x1) in return 1 in
+  return 42

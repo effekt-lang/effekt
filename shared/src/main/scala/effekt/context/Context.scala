@@ -6,6 +6,7 @@ import effekt.typer.{ TyperOps, TyperState }
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
+import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
 /**
  * The compiler context consists of
@@ -23,7 +24,10 @@ abstract class Context(val compiler: Compiler)
     with TypesDB
     with TyperOps
     // Util
-    with ErrorReporter { context =>
+    with ErrorReporter { self =>
+
+  // bring the context itself in scope
+  implicit val context: Context = self
 
   // the currently processed module
   var module: Module = _
@@ -31,7 +35,8 @@ abstract class Context(val compiler: Compiler)
   // the currently processed node
   var focus: Tree = _
 
-  val buffer: MessageBuffer = new MessageBuffer
+  var _buffer: MessageBuffer = new MessageBuffer
+  def buffer = _buffer
   var _config: EffektConfig = _
   def config = _config
 
@@ -74,4 +79,16 @@ abstract class Context(val compiler: Compiler)
     module = moduleBefore
     result
   }
+
+  // temporarily switches the message buffer to collect messages
+  def withMessages[T](block: => T): (Messages, T) = {
+    val bufferBefore = _buffer
+
+    _buffer = new MessageBuffer
+    val res = block
+    val msgs = _buffer.get
+    _buffer = bufferBefore
+    (msgs, res)
+  }
+
 }

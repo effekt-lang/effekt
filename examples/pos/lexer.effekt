@@ -1,18 +1,43 @@
-module stringtests
+module examples/pos/lexer
 
-import data/string
-import data/option
+import text/string
+import text/regex
+import immutable/option
+
+// TODO Here the LSP plugin currently fails
+import examples/pos/pretty
+
+// =======================
+// Common
+// =======================
+
+record Position(line: Int, col: Int, index: Int)
 
 type Token {
-    Number(content: String);
-    Ident(content: String);
-    Punct(content: String)
+    Number(content: String, pos: Position);
+    Ident(content: String, pos: Position);
+    Punct(content: String, pos: Position)
 }
+def content(t: Token): String = t match {
+    case Number(content, _) => content
+    case Ident(content, _) => content
+    case Punct(content, _) => content
+}
+
+def position(t: Token): Position = t match {
+    case Number(_, position) => position
+    case Ident(_, position) => position
+    case Punct(_, position) => position
+}
+
+// =======================
+// Lexing
+// =======================
 
 effect Peek(): Option[Token]
 effect Next(): Token
 effect EOS[A](): A
-effect TokenizerError[A](msg: String): A
+effect LexerError[A](msg: String, pos: Position): A
 
 effect Lexer = { Peek, Next }
 
@@ -22,127 +47,333 @@ def peek(): Option[Token] / Lexer =
 def next(): Token / Lexer =
     do Next()
 
-
-def lexer[R](in: String) { prog: R / Lexer } : R / TokenizerError = {
+def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
 
     val numberRx = regex("^[0-9]+");
     val identRx  = regex("^[a-zA-Z]+");
-    val punctRx  = regex("^[,.()\\[\\]]");
+    val punctRx  = regex("^[=,.()\\[\\]{}:]");
+    val spaceRx  = regex("^[ \t]+");
+    val lineRx  = regex("^[\n]");
 
-    var str = in.trim;
+    var index = 0;
+    var col = 1;
+    var line = 1;
 
-    def tryMatch(regex: Regex) { f: String => Token } : Option[(Token, String)] =
-        regex.exec(str).map { m =>
-          val rest = str.substring(m.matched.length).trim;
-          (f(m.matched), rest)
+    def position() = Position(line, col, index)
+    def input() = in.substring(index)
+
+    def consume(len: Int): Unit = {
+        col = col + len;
+        index = index + len
+    }
+
+    def eos(): Boolean = index >= in.length
+
+    def skipWhitespaces(): Unit =  {
+        spaceRx.exec(input()).map { m =>
+            consume(m.matched.length)
+        }.orElse {
+            lineRx.exec(input()).map { m =>
+                consume(m.matched.length);
+                line = line + 1;
+                col = 1
+            }
+        }.map { m => skipWhitespaces() };
+        ()
+    }
+
+    def tryMatch(regex: Regex) { f: String => Token } : Option[(Token, Int)] =
+        regex.exec(input()).map { m =>
+          (f(m.matched), m.matched.length)
         }
 
-    def number() = tryMatch(numberRx) { m => Number(m) }
-    def ident()  = tryMatch(identRx) { m => Ident(m) }
-    def punct()  = tryMatch(punctRx) { m => Punct(m) }
+    def number() = tryMatch(numberRx) { m => Number(m, position()) }
+    def ident()  = tryMatch(identRx) { m => Ident(m, position()) }
+    def punct()  = tryMatch(punctRx) { m => Punct(m, position()) }
 
     def lexeme() = number().orElse { ident() }.orElse { punct() }
 
-    try {  prog() } with {
-        case Peek() => if (str == "") resume(None()) else resume(lexeme().map { m => m.first })
-        case Next() => if (str == "") do TokenizerError("Unexpected EOS") else {
-            val result = lexeme()
-                .map { m => str = m.second; m.first }
-                .getOrElse { do TokenizerError("Cannot tokenize input: " ++ str) };
+    // skip initial whitespace
+    skipWhitespaces();
 
-            resume(result)
-        }
+    try {  prog() } with {
+        case Peek() =>
+            if (eos())
+                resume(None())
+            else
+                resume(lexeme().map { m => m.first })
+
+        case Next() =>
+            if (eos())  {
+                do LexerError("Unexpected EOS", position())
+            } else {
+                val result = lexeme()
+                    .map { m =>
+                        consume(m.second);
+                        skipWhitespaces();
+                        m.first
+                    }
+                    .getOrElse {
+                        do LexerError("Cannot tokenize input", position())
+                    };
+
+                resume(result)
+            }
     }
 }
 
-// parsing
-effect Flip(): Boolean
-effect Fail[A](msg: String): A
+// =======================
+// Parsing
+// =======================
+effect ParserAlt(): Boolean
+effect ParserFail[A](msg: String): A
 
-effect Parser = { Flip, Fail, Next }
-
-def tokenErrorToFail[R] { p: R / TokenizerError } : R / Fail = try { p() } with {
-    case TokenizerError(msg) => do Fail(msg)
-}
+effect Parser = { ParserAlt, ParserFail, Next }
 
 type ParseResult[R] {
   Success(t: R);
   Failure(msg: String)
 }
 
-def accept { p: Token => Boolean } : Token / { Fail, Next } = {
+
+// Simplified signatures
+//   def lexer[R](in: String) { prog: R / Next } : R / LexerError
+//   def parse[R](input: String) { p: R / { Next, Alt, Fail } }: ParseResult[R] / {}
+//
+// In Koka this would have a type like
+//   def lexer[R, E](in: String) { prog: R / { Next, E } } : R / { LexerError, E }
+//   def parse[R, E](input: String) { p: R / { Next, Alt, Fail, E } }: ParseResult[R] / E
+def parse[R](input: String) { p: R / {Parser} }: ParseResult[R] = try {
+  lexer(input) { Success(p()) }
+} with {
+  case ParserAlt() => resume(true) match {
+    case Failure(msg) => resume(false)
+    case Success(res) => Success(res)
+  }
+  case ParserFail(msg) => Failure(msg)
+  case LexerError(msg, pos) => Failure(msg)
+}
+
+
+// =======================
+// Parser Combinators
+// =======================
+
+def accept { p: Token => Boolean } : Token / { ParserFail, Next } = {
     val got = do Next();
     if (p(got)) {
         got
     } else {
-        do Fail("Unexpected token " ++ show(got))
+        do ParserFail("Unexpected token " ++ show(got))
     }
 }
 def ident() = accept { t => t match {
-    case Ident(content) => true
-    case Number(content) => false
-    case Punct(content) => false
+    case Ident(content, pos) => true
+    case Number(content, pos) => false
+    case Punct(content, pos) => false
 }}
 def number() = accept { t => t match {
-    case Ident(content) => false
-    case Number(content) => true
-    case Punct(content) => false
+    case Ident(content, pos) => false
+    case Number(content, pos) => true
+    case Punct(content, pos) => false
 }}
 def punct(p: String) = accept { t => t match {
-    case Ident(content) => false
-    case Number(content) => false
-    case Punct(content) => content == p
+    case Ident(content, pos) => false
+    case Number(content, pos) => false
+    case Punct(content, pos) => content == p
 }}
 
 def or[R] { p: R } { q: R } =
-  if (do Flip()) { p() } else { q() }
+  if (do ParserAlt()) { p() } else { q() }
 
-def opt[R] { p: R }: Option[R] / Flip =
+def opt[R] { p: R }: Option[R] / ParserAlt =
    or { Some(p()) } { None() }
 
-def eager[R] { p: R / { Flip, Fail } }: ParseResult[R] = try {
-  Success(p())
-} with {
-  case Flip() => resume(true) match {
-    case Failure(msg) => resume(false)
-    case Success(res) => Success(res)
-  }
-  case Fail(msg) => Failure(msg)
+def many { p: Unit }: Unit / ParserAlt =
+    or { some { p() } } { () }
+
+def some { p: Unit }: Unit / ParserAlt =
+    { p(); many { p() } }
+
+def fail[A](msg: String): A / Parser =
+  do ParserFail(msg)
+
+def kw(exp: String): Unit / Parser = {
+    val got = id();
+    if (got == exp) () else fail("Expected keyword " ++ exp ++ " but got " ++ got)
 }
 
-def parse[R](s: String) { p : R / Parser } =
-    eager {
-        tokenErrorToFail {
-            lexer(s) {
-                p()
-            }
+def id(): String / Parser = ident().content
+
+
+// =======================
+// Examples
+// =======================
+type Tree {
+    NumLit(value: Int);
+    Var(name: String);
+    Let(name: String, binding: Tree, body: Tree);
+    App(name: String, arg: Tree)
+}
+
+// A language that distiguishes between effectful statements and pure expressions
+type Expr {
+    CLit(value: Int);
+    CVar(name: String)
+}
+type Stmt {
+    CLet(name: String, binding: Stmt, body: Stmt);
+    CApp(name: String, arg: Expr);
+    CRet(expr: Expr)
+}
+
+// =======================
+// ANF
+// =======================
+
+effect Bind(e: Stmt): Expr
+effect Fresh(): Int
+
+def freshVars[R] { prog: R / Fresh } : R = {
+    var i = 0;
+    try { prog() } with {
+        case Fresh() => {
+            i = i + 1;
+            resume(i)
+        }
+    }
+}
+
+def bindHere { prog: Stmt / Bind } : Stmt / Fresh =
+    try { prog() } with {
+        case Bind(e) => {
+            val id = "x" ++ show(do Fresh());
+            CLet(id, e, resume(CVar(id)))
         }
     }
 
-def many { p: Unit }: Unit / Flip =
-    or { p(); many { p() } } { () }
+def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
+    case NumLit(n) => CRet(CLit(n))
+    case Var(n) => CRet(CVar(n))
+    case App(name, arg) => CApp(name, do Bind(traverse(arg)))
+    case Let(x, b, body) => CLet(x, bindHere { traverse(b) }, bindHere { traverse(body) })
+}
 
-def some { p: Unit }: Unit / Flip = {
-    p(); many { p() }
+def translate(e: Tree): Stmt =
+    freshVars { bindHere { traverse(e) } }
+
+
+def parseNum(): Tree / Parser =
+    number().content.toInt.map { v =>
+        NumLit(v)
+    }.getOrElse {
+        fail("cannot convert input to integer")
+    }
+
+def parseVar(): Tree / Parser =
+    Var(id())
+
+def parseLit() = or { parseVar() } { parseNum() }
+
+def parseLet(): Tree / Parser = {
+    kw("let");
+    val name = id();
+    punct("=");
+    val binding = parseExpr();
+    kw("in");
+    val body = parseExpr();
+    Let(name, binding, body)
+}
+
+def parseAtomic() = or { parseLit() } {
+    punct("(");
+    val res = parseExpr();
+    punct(")");
+    res
+}
+
+def parseApp(): Tree / Parser = {
+    val funName = id();
+    punct("(");
+    val arg = parseExpr();
+    punct(")");
+    App(funName, arg)
+}
+
+def parseExpr(): Tree / Parser =
+    or { parseLet() } { or { parseApp() } { parseAtomic() } }
+
+// Pretty printer for the example tree
+
+// TODO also export type aliases from a module
+effect Pretty = { Text, Line, Indentation, LayoutChoice, LayoutFail, Horizontal }
+
+def toDoc(t: Tree): Unit / Pretty = t match {
+    case NumLit(value) => text(show(value))
+    case Var(name) => text(name)
+    case Let(name, binding, body) => {
+        text("let"); space(); text(name); space(); text("=");
+        group {
+            nested { line(); toDoc(binding) };
+            line();
+            text("in")
+        };
+        group { nested { line(); toDoc(body) } }
+    }
+    case App(name, arg) => {
+        text(name); parens {
+            group { nested {
+                linebreak();
+                toDoc(arg)
+            }; linebreak() }
+        }
+    }
+}
+
+def toDocExpr(t: Expr): Unit / Pretty = t match {
+    case CLit(value) => text(show(value))
+    case CVar(name) => text(name)
+}
+
+def toDocStmt(s: Stmt): Unit / Pretty = s match {
+    case CLet(name, binding, body) => {
+        text("let"); space(); text(name); space(); text("=");
+        group {
+            nested { line(); toDocStmt(binding) };
+            line();
+            text("in")
+        };
+        group { nested { line(); toDocStmt(body) } }
+    }
+    case CApp(name, arg) => {
+        text(name); parens {
+            group { nested {
+                linebreak();
+                toDocExpr(arg)
+            }; linebreak() }
+        }
+    }
+    case CRet(expr) => {
+        text("return"); space(); toDocExpr(expr)
+    }
 }
 
 // Example grammar
 // <EXPR> ::= <NUMBER> | <IDENT> `(` <EXPR> (`,` <EXPR>)*  `)`
 // we count the number of nodes as semantic action
-def parseExpr(): Int / Parser =
+def parseSampleExpr(): Int / Parser =
     or { number(); 1 } {
         var count = 1;
         ident();
         punct("(");
-        count = count + parseExpr();
+        count = count + parseSampleExpr();
         many {
             punct(",");
-            count = count + parseExpr()
+            count = count + parseSampleExpr()
         };
         punct(")");
         count
     }
-
 
 def main() = {
     // simple string ops
@@ -154,19 +385,43 @@ def main() = {
 
     // lexer
     try {
-        lexer("abcd 12345,4 (efgh)bar(baz)") {
+        lexer("abcd 12345,4\n(efgh)bar(baz)") {
             while (peek().isDefined) {
                 println(next())
             }
         }
     } with {
-        case TokenizerError(msg) => println(msg)
+        case LexerError(msg, pos) => pos match {
+            case Position(line, col, idx) =>
+                println(show(line) ++ ":" ++ show(col) ++ " " ++ msg)
+        }
     };
 
     // parser
+    println(parse("42") { parseSampleExpr() });
+    println(parse("foo(1)") { parseSampleExpr() });
+    println(parse("foo(1, 2)") { parseSampleExpr() });
+    println(parse("foo(1, 2, 3, 4)") { parseSampleExpr() });
+    println(parse("foo(1, 2, bar(4, 5))") { parseSampleExpr() });
+    println(parse("foo(1, 2,\nbar(4, 5))") { parseSampleExpr() });
+
+
+    val exampleProg = "let x = (let y = f(let z = 1 in z) in 1) in 42";
+
     println(parse("42") { parseExpr() });
-    println(parse("foo(1)") { parseExpr() });
-    println(parse("foo(1, 2)") { parseExpr() });
-    println(parse("foo(1, 2, 3, 4)") { parseExpr() });
-    println(parse("foo(1, 2, bar(4, 5))") { parseExpr() })
+    println(parse("let x = 4 in 42") { parseExpr() });
+    println(parse("let x = let y = 2 in 1 in 42") { parseExpr() });
+    println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() });
+    println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() });
+    println(parse(exampleProg) { parseExpr() });
+
+    parse(exampleProg) { parseExpr() } match {
+        case Success(tree) => {
+
+            println("\nSource Program:\n" ++ pretty(30) { toDoc(tree) });
+            val target = translate(tree);
+            println("\nTarget Program:\n" ++ pretty(30) { toDocStmt(target) })
+        }
+        case Failure(msg) => println(msg)
+    }
 }

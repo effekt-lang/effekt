@@ -1,0 +1,28 @@
+module text/string
+
+import immutable/option
+
+
+def charAt(str: String)(index: Int): Option[String] =
+    str.unsafeCharAt(index).undefinedToOption
+
+extern pure def length(str: String): Int =
+  "str.length"
+
+extern pure def repeat(str: String)(n: Int): String =
+  "str.repeat(n)"
+
+extern pure def substring(str: String)(from: Int): String =
+  "str.substring(from)"
+
+extern pure def trim(str: String): String =
+  "str.trim()"
+
+def toInt(str: String): Option[Int] =
+  str.unsafeToInt.undefinedToOption
+
+extern pure def unsafeCharAt(str: String)(n: Int): String =
+  "str[n]"
+
+extern pure def unsafeToInt(str: String): Int =
+  "Number.isNaN(parseInt(str)) ? undefined : parseInt(str)"

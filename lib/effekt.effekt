@@ -17,6 +17,10 @@ extern def println[R](value: R): Unit / Console =
 extern pure def inspect[R](value: R): Unit =
   "console.log(value)"
 
+// a fatal runtime error that cannot be caught
+extern pure def error[R](msg: String): R =
+  "(function() { throw msg })()"
+
 extern pure def random(): Int =
   "Math.random() * 100"
 
@@ -38,7 +42,7 @@ extern pure def infixMul(x: Int, y: Int): Int =
   "(x * y)"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "(x / y)"
+  "Math.floor(x / y)"
 
 extern pure def infixSub(x: Int, y: Int): Int =
   "(x - y)"

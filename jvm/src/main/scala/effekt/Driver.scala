@@ -3,10 +3,13 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
+import java.util
+
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.ColoredMessaging
+import effekt.util.{ ColoredMessaging }
+import effekt.util.JavaPathUtils._
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
@@ -62,16 +65,24 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   override def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit =
     if (C.config.requiresCompilation()) {
       C.config.outputPath().mkdirs
-      val jsFile = jsPath(unit)
-      IO.createFile(jsFile, js.layout)
+      IO.createFile(jsPath(unit), js.layout)
     }
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
 
-    val main = mod.terms.getOrElse("main", {
+    val mains = mod.terms.getOrElse("main", Set())
+
+    if (mains.isEmpty) {
       C.error("No main function defined")
       return
-    })
+    }
+
+    if (mains.size > 1) {
+      C.error("Multiple main functions defined")
+      return
+    }
+
+    val main = mains.head
 
     val mainParams = C.blockTypeOf(main).params
     if ((mainParams.size != 1) || (mainParams.head != Nil)) {
@@ -95,12 +106,8 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   /**
    * JavaScript paths are *not* platform dependent.
    */
-  def jsPath(mod: Module)(implicit C: Context): String = {
-    val outDir = C.config.outputPath().toPath
-    val independent = outDir.resolve(mod.outputName).toFile.getCanonicalPath
-    val unix = independent.replace('\\', '/')
-    unix
-  }
+  def jsPath(mod: Module)(implicit C: Context): String =
+    (C.config.outputPath() / moduleFileName(mod.path)).unixPath
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)

@@ -26,6 +26,10 @@ package object symbols {
   sealed trait BlockSymbol extends TermSymbol
 
   // TODO move this to Name
+
+  /**
+   * path should be an include Effekt-path (foo/bar), not a system dependent file path
+   */
   def moduleName(path: String): String = "$" + path.replace('/', '_')
   def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
@@ -38,15 +42,16 @@ package object symbols {
     source: Source
   ) extends Symbol {
     val name = Name(moduleName(decl.path), this)
-    def outputName = moduleFile(decl.path)
 
-    private var _terms: Map[String, TermSymbol] = _
+    def path = decl.path
+
+    private var _terms: Map[String, Set[TermSymbol]] = _
     def terms = _terms
 
     private var _types: Map[String, TypeSymbol] = _
     def types = _types
 
-    def export(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol]): this.type = {
+    def export(terms: Map[String, Set[TermSymbol]], types: Map[String, TypeSymbol]): this.type = {
       if (_terms != null)
         throw new FatalPhaseError("Internal compiler error: Already set exports on module")
       _terms = terms
@@ -113,6 +118,13 @@ package object symbols {
   }
   case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder
   case class VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder
+
+  /**
+   * Synthetic symbol representing potentially multiple call targets
+   *
+   * Refined by typer.
+   */
+  class CallTarget(val name: Name, var symbols: Set[BlockSymbol]) extends BlockSymbol
 
   /**
    * Types

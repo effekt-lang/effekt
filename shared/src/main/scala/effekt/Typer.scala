@@ -4,12 +4,14 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context }
+import effekt.context.Context
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Expr, Stmt, Tree }
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
+import effekt.util.messages.FatalPhaseError
+import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
 // We add a dependency to driver to resolve types of symbols from other modules
 /**
@@ -324,8 +326,63 @@ class Typer extends Phase[Module, Module] { typer =>
     }.toMap
   }
 
+  /**
+   * Attempts to check the call to sym, not reporting any errors but returning them instead.
+   *
+   * This is necessary for overload resolution by trying all alternatives.
+   *   - if there is multiple without errors: Report ambiguity
+   *   - if there is no without errors: report all possible solutions with corresponding errors
+   */
   def checkCall(
-    sym: Symbol,
+    target: CallTarget,
+    targs: List[ValueType],
+    args: List[source.ArgSection],
+    expected: Option[Type]
+  )(implicit C: Context): Effectful = {
+
+    target.symbols.toList.map { sym =>
+      sym -> Try { checkCallTo(sym, targs, args, expected) }
+    }.partitionMap {
+      case (sym, Left(msg))  => Left((sym, msg))
+      case (sym, Right(res)) => Right((sym, res))
+    } match {
+
+      // Exactly one successful result
+      case (_, List((sym, tpe))) =>
+        target.symbols = Set(sym)
+        tpe
+
+      // Ambiguous reference
+      case (_, succeeded) if succeeded.size > 1 =>
+        val sucMsgs = succeeded.map {
+          case (sym, tpe) =>
+            s"- ${sym.name} of type ${Context.blockTypeOf(sym)}"
+        }.mkString("\n")
+
+        val explanation =
+          s"""| Ambiguous reference to ${target.name}. The following blocks would typecheck:
+              |
+              |${sucMsgs}
+              |""".stripMargin
+
+        C.abort(explanation)
+
+      // Exactly one error
+      case (List((sym, errs)), Nil) =>
+        val msg = errs.head
+        val msgs = errs.tail
+        C.buffer.append(msgs)
+        // reraise and abort
+        // TODO clean this up
+        C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
+
+      case (failed, Nil) =>
+        C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
+    }
+  }
+
+  def checkCallTo(
+    sym: BlockSymbol,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
@@ -413,6 +470,30 @@ class Typer extends Phase[Module, Module] { typer =>
     subst.checkFullyDefined(rigids)
 
     (subst substitute ret) / effs
+  }
+
+  /**
+   * Returns Left(Messages) if there are any errors
+   *
+   * In the case of nested calls, currently only the errors of the innermost failing call
+   * are reported
+   */
+  private def Try[T](block: => T)(implicit C: Context): Either[Messages, T] = {
+    import org.bitbucket.inkytonik.kiama.util.Severities.Error
+
+    val (msgs, optRes) = Context withMessages {
+      try { Some(block) } catch {
+        case FatalPhaseError(msg) =>
+          C.error(msg)
+          None
+      }
+    }
+
+    if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
+      Left(msgs)
+    } else {
+      Right(optRes.get)
+    }
   }
 
   //</editor-fold>

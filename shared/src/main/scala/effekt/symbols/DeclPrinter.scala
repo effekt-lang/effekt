@@ -14,6 +14,7 @@ object DeclPrinter extends ParenPrettyPrinter {
     pretty(toDoc(t, context)).layout
 
   def toDoc(t: Symbol, context: Context): Doc = t match {
+
     case e @ UserEffect(name, tparams, List(op)) =>
       format("effect", op, op.ret.get)
 

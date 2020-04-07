@@ -1,0 +1,20 @@
+module mutable/array
+
+import immutable/option
+
+// A mutable array, backed by a JavaScript array.
+extern type Array[T]
+
+def emptyArray[T](): Array[T] = emptyArray(0)
+
+extern pure def emptyArray[T](initialSize: Int): Array[T] =
+  "(new Array(initialSize))"
+
+def get[T](arr: Array[T])(index: Int): Option[T] =
+    arr.unsafeGet(index).undefinedToOption
+
+extern pure def unsafeGet[T](arr: Array[T])(index: Int): T =
+    "arr[index]"
+
+extern pure def put[T](arr: Array[T])(index: Int, value: T): Unit =
+    "(function() { arr[index] = value; return $effekt.unit })()"
