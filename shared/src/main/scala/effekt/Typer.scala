@@ -219,7 +219,7 @@ class Typer extends Phase[Module, Module] { typer =>
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
 
-    case d @ source.EffDef(id, tparams, params, ret) =>
+    case d @ source.EffDef(id, ops) =>
       d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
@@ -247,7 +247,7 @@ class Typer extends Phase[Module, Module] { typer =>
           tpe / Pure // all effects are handled by the function itself (since they are inferred)
       }
 
-    case d @ source.EffDef(id, tps, ps, ret) =>
+    case d @ source.EffDef(id, ops) =>
       Context.withEffect(d.symbol)
       TUnit / Pure
 

@@ -78,14 +78,23 @@ sealed trait Def extends Definition {
 case class FunDef(id: Id, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
-case class EffDef(id: Id, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Def {
-  type symbol = symbols.UserEffect
-}
 case class ValDef(id: Id, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.ValBinder
 }
 case class VarDef(id: Id, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
+}
+case class EffDef(id: Id, ops: List[Operation]) extends Def {
+  type symbol = symbols.UserEffect
+}
+case class Operation(id: Id, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
+  type symbol = symbols.EffectOp
+}
+case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def {
+  type symbol = symbols.DataType
+}
+case class Constructor(id: Id, params: List[ValueParams]) extends Definition {
+  type symbol = symbols.Constructor
 }
 
 /**
@@ -100,13 +109,6 @@ case class TypeDef(id: Id, tparams: List[Id], tpe: ValueType) extends Def {
  */
 case class EffectDef(id: Id, effs: Effects) extends Def {
   type symbol = symbols.EffectAlias
-}
-
-case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def {
-  type symbol = symbols.DataType
-}
-case class Constructor(id: Id, params: List[ValueParams]) extends Definition {
-  type symbol = symbols.Constructor
 }
 
 // only valid on the toplevel!

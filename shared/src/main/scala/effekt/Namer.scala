@@ -91,9 +91,21 @@ class Namer extends Phase[Module, Module] { namer =>
         resolveGeneric(body)
       }
 
-    case source.EffDef(id, tparams, params, ret) => ()
-    case source.TypeDef(id, tparams, tpe)        => ()
-    case source.EffectDef(id, effs)              => ()
+    case source.EffDef(id, ops) =>
+      val effectSym = Context.resolveType(id).asUserEffect
+      effectSym.ops = ops.map {
+        case source.Operation(id, tparams, params, ret) =>
+          val name = Context.freshTermName(id)
+          Context scoped {
+            val tps = tparams map resolve
+            val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
+            EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+          }
+      }
+      effectSym.ops.foreach { op => Context.bind(op) }
+
+    case source.TypeDef(id, tparams, tpe) => ()
+    case source.EffectDef(id, effs)       => ()
 
     // The type itself has already been resolved, now resolve constructors
     case source.DataDef(id, tparams, ctors) =>
@@ -232,18 +244,10 @@ class Namer extends Phase[Module, Module] { namer =>
       }
       Context.define(id, sym)
 
-    case source.EffDef(id, tparams, params, ret) =>
+    case source.EffDef(id, ops) =>
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = UserEffect(Name(id), Nil)
-      val opSym = Context scoped {
-        val tps = tparams map resolve
-        val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
-        EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
-      }
-      effectSym.ops = List(opSym)
-      // we would need a second id that is the definition of the operation
       Context.define(id, effectSym)
-      Context.bind(opSym)
 
     case source.TypeDef(id, tparams, tpe) =>
       val tps = Context scoped { tparams map resolve }
