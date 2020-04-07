@@ -150,16 +150,24 @@ class Namer extends Phase[Module, Module] { namer =>
       resolveAll(handlers)
 
     case source.Handler(name, clauses) =>
-      Context.at(name) { Context.resolveType(name) }
-      resolveAll(clauses)
+      val eff = Context.at(name) { Context.resolveType(name) }.asUserEffect
 
-    case source.OpClause(op, params, body, resumeId) =>
-      Context.at(op) { Context.resolveTerm(op) }
-      val ps = params.map(resolve)
-      Context scoped {
-        Context.bind(ps)
-        Context.define(resumeId, ResumeParam(C.module))
-        resolveGeneric(body)
+      clauses.foreach {
+        case source.OpClause(op, params, body, resumeId) =>
+
+          // try to find the operation in the handled effect:
+          eff.ops.filter { o => o.name.toString == op.name }.headOption map { opSym =>
+            Context.assignSymbol(op, opSym)
+          } getOrElse {
+            Context.abort(s"Effect operation ${op.name} is not part of effect ${name.name}.")
+          }
+
+          val ps = params.map(resolve)
+          Context scoped {
+            Context.bind(ps)
+            Context.define(resumeId, ResumeParam(C.module))
+            resolveGeneric(body)
+          }
       }
 
     case source.Clause(op, params, body) =>
