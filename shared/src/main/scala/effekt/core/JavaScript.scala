@@ -113,8 +113,8 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       "Object.assign" <> parens(moduleName(path) <> comma <+> braces(nest(line <> vsep(exports.map { e =>
         toDoc(e.name) <> ":" <+> toDoc(e.name)
       }, comma)) <> line))
-    case Handle(body, clauses) =>
-      val cs = parens("[" <> nest(line <> vsep(clauses map { case (_, b) => toDoc(b) }, comma)) <> "]")
+    case Handle(body, handler) =>
+      val cs = parens("[" <> nest(line <> vsep(handler.clauses map { case (_, b) => toDoc(b) }, comma)) <> "]")
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
     case Match(sc, clauses) =>
       // TODO using the unqualified name here might lead to wrong operational behavior

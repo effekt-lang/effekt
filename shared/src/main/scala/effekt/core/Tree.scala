@@ -68,6 +68,8 @@ case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
 case class Exports(path: String, exports: List[Symbol]) extends Stmt
-case class Handle(body: Block, clauses: List[(Symbol, Block)]) extends Stmt
+case class Handle(body: Block, handler: Handler) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Symbol, Block)]) extends Stmt
 case class Include(contents: String, rest: Stmt) extends Stmt
+
+case class Handler(id: Symbol, clauses: List[(Symbol, Block)])

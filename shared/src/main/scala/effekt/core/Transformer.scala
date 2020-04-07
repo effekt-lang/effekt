@@ -171,7 +171,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
           (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))
       }
-      bind(Handle(body, cs))
+      // TODO here we need to create one handler for each effect
+      bind(Handle(body, Handler(clauses.head.definition.effect, cs)))
   }).map { _.inheritPosition(tree) }
 
   def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {

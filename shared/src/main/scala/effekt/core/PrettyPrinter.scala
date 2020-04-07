@@ -78,8 +78,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
     // don't print exports for now
     case Exports(path, exports) =>
       emptyDoc
-    case Handle(body, clauses) =>
-      val cs = vsep(clauses map { case (n, b) => "case" <+> toDoc(n.name) <> toDoc(b) })
+    case Handle(body, handler) =>
+      val cs = vsep(handler.clauses map { case (n, b) => "case" <+> toDoc(n.name) <> toDoc(b) })
       "handle" <+> braces(nest(line <+> toDoc(body)) <> line) <+> "with" <+> braces(nest(line <+> cs) <> line)
     case Match(sc, clauses) =>
       val cs = braces(nest(line <> vsep(clauses map { case (id, b) => "case" <+> toDoc(id.name) <> toDoc(b) })) <> line)
