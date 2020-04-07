@@ -23,15 +23,14 @@ pagetype: home
             <div class="window-contents">
           <pre><code class="language-effekt">def eager[R] { p: R / { Flip, Fail, Error } } = try {
   Success(p())
-} with {
-  case Flip() => resume(true) match {
+} with Flip { () =>
+  resume(true) match {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
     case ParseError(msg) => ParseError(msg)
   }
-  case Fail(msg) => Failure(msg)
-  case Error(msg) => ParseError(msg)
-}
+} with Fail { (msg) => Failure(msg)
+} with Error { (msg) => ParseError(msg) }
 </code></pre>
             </div>
           </div>
