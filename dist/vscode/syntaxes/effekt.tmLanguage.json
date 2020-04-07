@@ -21,7 +21,7 @@
     "definitions": {
       "patterns": [{
           "begin": "\\s*(def)\\s+([a-zA-Z][a-z-A-Z0-9_]*)\\b",
-          "end" : "=",
+          "end" : "[=\\n]",
           "beginCaptures": {
             "1": { "name": "keyword.declaration.function" },
             "2": { "name": "entity.name.function" }
