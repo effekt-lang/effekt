@@ -8,11 +8,14 @@ def printer { p: Unit / Exc }: Unit / Console = try { p() } with {
     case Exc(msg) => println(msg)
 }
 
+def bar { f: (Int, String) => Unit / {}}: Unit =
+  f(4, "string")
 
 def user(): Unit / Console = {
     with printer;
-    with x = foreach([1,2,3]);
-    println(x);
+    with x: Int = foreach([1,2,3]);
+    with (a, b) = bar;
+    println(show(x) ++ b);
     val z = {
         val x = 2;
         println("hello " ++ show(x))

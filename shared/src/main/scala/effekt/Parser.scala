@@ -269,8 +269,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     handleExpr ~/ stmts ^^ { case h ~ s => ExprStmt(h, s) }
 
   lazy val withStmt: P[Stmt] =
-    ( `with` ~> valueParamOpt ~ (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
-        case param ~ id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(ValueParams(List(param)), body) ))
+    ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p))}) ~ (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
+        case params ~ id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(params, body) ))
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
         case id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body) ))
