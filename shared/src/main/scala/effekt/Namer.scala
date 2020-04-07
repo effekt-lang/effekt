@@ -416,6 +416,11 @@ trait NamerOps { self: Context =>
       case b: Fun         => b
       case _              => abort("Expected callable")
     }
+
+    if (syms.isEmpty) {
+      abort(s"Cannot resolve function ${id.name}")
+    }
+
     val target = new CallTarget(Name(id), syms)
     assignSymbol(id, target)
     target
