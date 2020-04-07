@@ -174,7 +174,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
           positions.dupPos(op.id, effectId)
           EffDef(effectId, List(op))
       }
-    | `effect` ~> idDef ~/ (`{` ~> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
+    | `effect` ~> idDef ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
     )
 
   lazy val effectOp: P[Operation] =
