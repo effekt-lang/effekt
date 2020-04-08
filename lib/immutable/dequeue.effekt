@@ -56,12 +56,12 @@ def pushFront[R](dq: Dequeue[R])(el: R): Dequeue[R] = dq match {
 }
 
 def popFront[R](dq: Dequeue[R]): Option[(R, Dequeue[R])] = dq match {
-    case Dequeue(f, fs, r, rs) =>
-        if ((fs == 0) && (rs == 1)) r.headOption.map { x => (x, emptyQueue()) }
-        else f match {
-            case Nil() => None()
-            case Cons(x, rest) => Some((x, Dequeue(rest, fs - 1, r, rs).check))
-        }
+    case Dequeue(Nil(), fs, Cons(x, Nil()), rs) =>
+        Some((x, emptyQueue()))
+    case Dequeue(Nil(), fs, r, rs) =>
+        None()
+    case Dequeue(Cons(x, rest), fs, r, rs) =>
+        Some((x, Dequeue(rest, fs - 1, r, rs).check))
 }
 
 def pushBack[R](dq: Dequeue[R])(el: R): Dequeue[R] = dq match {
@@ -69,10 +69,10 @@ def pushBack[R](dq: Dequeue[R])(el: R): Dequeue[R] = dq match {
 }
 
 def popBack[R](dq: Dequeue[R]): Option[(R, Dequeue[R])] = dq match {
-    case Dequeue(f, fs, r, rs) =>
-        if ((fs == 1) && (rs == 0)) f.headOption.map { x => (x, emptyQueue()) }
-        else r match {
-            case Nil() => None()
-            case Cons(x, rest) => Some((x, Dequeue(f, fs, rest, rs - 1).check))
-        }
+    case Dequeue(Cons(x, Nil()), fs, Nil(), rs) =>
+        Some((x, emptyQueue()))
+    case Dequeue(f, fs, Nil(), rs) =>
+        None()
+    case Dequeue(f, fs, Cons(x, rest), rs) =>
+        Some((x, Dequeue(f, fs, rest, rs - 1).check))
 }
