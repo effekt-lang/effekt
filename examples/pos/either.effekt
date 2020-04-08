@@ -1,0 +1,13 @@
+module examples/pos/either
+
+type Either[A, B] {
+    Left(value: A);
+    Right(value: B)
+}
+
+def main() = {
+    val l: Either[Int, String] = Left(42);
+    val l2 = Left[Int, String](42);
+    println(l);
+    println(l2)
+}

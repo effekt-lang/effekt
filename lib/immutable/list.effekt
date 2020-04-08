@@ -21,6 +21,11 @@ def foreach[A](l: List[A]) { f: A => Unit } : Unit =
       foreach(rest) { a => f(a) }
   }
 
+def size[A](l: List[A]): Int = l match {
+  case Nil() => 0
+  case Cons(_, rest) => 1 + rest.size
+}
+
 def reverse[A](l: List[A]): List[A] = {
   def reverseWith(l: List[A])(acc: List[A]): List[A] = l match {
     case Nil() => acc
