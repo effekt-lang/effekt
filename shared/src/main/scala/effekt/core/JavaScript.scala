@@ -6,6 +6,8 @@ import effekt.context.Context
 
 import scala.language.implicitConversions
 import effekt.symbols.{ Symbol, Name, builtins, moduleFile, moduleName }
+import effekt.context.assertions._
+
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
@@ -124,7 +126,16 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
     case Match(sc, clauses) =>
-      val cs = jsObject(clauses map { case (id, b) => nameDef(id) -> toDoc(b) })
+      val cs = jsArray(clauses map {
+        case (id, b) =>
+          val tag = jsString(nameDef(id))
+          // for now we do not match on children, so use the any-wildcard
+          val childMatchers = id.asConstructor.params.flatten.map { _ => text("$effekt.any") }
+          jsObject(
+            text("pattern") -> ("$effekt.tagged(" <> hsep(tag :: childMatchers, comma) <> ")"),
+            text("exec") -> toDoc(b)
+          )
+      })
       "$effekt.match" <> parens(toDoc(sc) <> comma <+> cs)
     case other =>
       sys error s"Cannot print ${other} in expression position"
@@ -171,8 +182,8 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id =>
-        val datastr = "\"" <> nameDef(did) <> "\""
-        val consstr = "\"" <> nameDef(id) <> "\""
+        val datastr = jsString(nameDef(did))
+        val consstr = jsString(nameDef(id))
         "const" <+> nameDef(id) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
       }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
@@ -182,6 +193,9 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
     case other => "return" <+> toDocExpr(other)
   }
+
+  def jsObject(fields: (Doc, Doc)*): Doc =
+    jsObject(fields.toList)
 
   def jsObject(fields: List[(Doc, Doc)]): Doc =
     braces(nest(line <> vsep(fields.map { case (n, d) => jsString(n) <> ":" <+> d }, comma)) <> line)
