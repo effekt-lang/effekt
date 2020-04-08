@@ -21,8 +21,8 @@ def test1(l1: List[Int]): Int = l1 match {
 }
 
 def test2(l1: List[Int]): Int = l1 match {
-  case Nil() => 4
-  case Cons(a: String, rest) => a
+  case Cons(a, rest) => a
+  case Nil() => ""
 }
 
 

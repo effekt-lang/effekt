@@ -170,11 +170,10 @@ class Namer extends Phase[Module, Module] { namer =>
           }
       }
 
-    case source.MatchClause(op, params, body) =>
-      Context.at(op) { Context.resolveTerm(op) }
-      val ps = params.map(resolve)
+    case source.MatchClause(pattern, body) =>
+      val ps = resolve(pattern)
       Context scoped {
-        Context.bind(ps)
+        ps.foreach { Context.bind }
         resolveGeneric(body)
       }
 
@@ -316,6 +315,22 @@ class Namer extends Phase[Module, Module] { namer =>
     case d @ source.ExternInclude(path) =>
       d.contents = Context.contentsOf(path)
       ()
+  }
+
+  /**
+   * Resolve pattern matching
+   *
+   * Returns the value params it binds
+   */
+  def resolve(p: source.MatchPattern)(implicit C: Context): List[ValueParam] = p match {
+    case source.IgnorePattern() => Nil
+    case source.AnyPattern(id) =>
+      val p = ValueParam(Name(id), None)
+      Context.assignSymbol(id, p)
+      List(p)
+    case source.TagPattern(id, patterns) =>
+      Context.resolveTerm(id)
+      patterns.flatMap(p => p.flatMap { resolve })
   }
 
   /**

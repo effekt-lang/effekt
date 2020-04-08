@@ -120,8 +120,8 @@ def deterministic[R] { prog: R / Choose } = {
   var flips = allFlips;
   try { prog() } with Choose { () =>
     flips match {
-      case Nil() => { flips = allFlips; resume(true) }
-      case Cons(b, rest) => { flips = rest; resume(b) }
+      case Nil() => flips = allFlips; resume(true)
+      case Cons(b, rest) => flips = rest; resume(b)
     }
   }
 }

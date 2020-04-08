@@ -301,7 +301,7 @@ effect Pretty = { Text, Line, Indentation, Layout, Horizontal }
 def toDoc(t: Tree): Unit / Pretty = t match {
     case NumLit(value) => text(show(value))
     case Var(name) => text(name)
-    case Let(name, binding, body) => {
+    case Let(name, binding, body) =>
         text("let"); space(); text(name); space(); text("=");
         group {
             nested { line(); toDoc(binding) };
@@ -309,15 +309,14 @@ def toDoc(t: Tree): Unit / Pretty = t match {
             text("in")
         };
         group { nested { line(); toDoc(body) } }
-    }
-    case App(name, arg) => {
+
+    case App(name, arg) =>
         text(name); parens {
             group { nested {
                 linebreak();
                 toDoc(arg)
             }; linebreak() }
         }
-    }
 }
 
 def toDocExpr(t: Expr): Unit / Pretty = t match {
@@ -326,7 +325,7 @@ def toDocExpr(t: Expr): Unit / Pretty = t match {
 }
 
 def toDocStmt(s: Stmt): Unit / Pretty = s match {
-    case CLet(name, binding, body) => {
+    case CLet(name, binding, body) =>
         text("let"); space(); text(name); space(); text("=");
         group {
             nested { line(); toDocStmt(binding) };
@@ -334,18 +333,18 @@ def toDocStmt(s: Stmt): Unit / Pretty = s match {
             text("in")
         };
         group { nested { line(); toDocStmt(body) } }
-    }
-    case CApp(name, arg) => {
+
+    case CApp(name, arg) =>
         text(name); parens {
             group { nested {
                 linebreak();
                 toDocExpr(arg)
             }; linebreak() }
         }
-    }
-    case CRet(expr) => {
+
+    case CRet(expr) =>
         text("return"); space(); toDocExpr(expr)
-    }
+
 }
 
 // Example grammar
@@ -405,12 +404,11 @@ def main() = {
     println(parse(exampleProg) { parseExpr() });
 
     parse(exampleProg) { parseExpr() } match {
-        case Success(tree) => {
-
+        case Success(tree) =>
             println("\nSource Program:\n" ++ pretty(30) { toDoc(tree) });
             val target = translate(tree);
             println("\nTarget Program:\n" ++ pretty(30) { toDocStmt(target) })
-        }
+
         case Failure(msg) => println(msg)
     }
 }

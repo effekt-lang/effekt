@@ -173,9 +173,7 @@ case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef
 }
 
 case class MatchExpr(matchee: Expr, clauses: List[MatchClause]) extends Expr
-case class MatchClause(id: Id, params: List[ValueParams], body: Stmt) extends Reference {
-  type symbol = symbols.Constructor
-}
+case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
 sealed trait MatchPattern extends Tree
 
@@ -191,7 +189,7 @@ case class AnyPattern(id: Id) extends MatchPattern with Definition { type symbol
  *
  *   case Cons(a, as) => ...
  */
-case class TagPattern(id: Id, patterns: List[MatchPattern]) extends MatchPattern with Reference {
+case class TagPattern(id: Id, patterns: List[List[MatchPattern]]) extends MatchPattern with Reference {
   type symbol = symbols.Constructor
 }
 

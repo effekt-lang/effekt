@@ -118,13 +118,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       bind(While(ANF { transform(cond) map Ret }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
-      val cs = clauses.map {
-        case cl @ source.MatchClause(id, params, body) =>
-          val ps = params.flatMap {
-            case source.ValueParams(params) => params.map { v => core.ValueParam(v.symbol) }
-          }
 
-          (cl.definition, BlockDef(ps, transform(body)))
+      val cs: List[(Pattern, Block)] = clauses.map {
+        case cl @ source.MatchClause(pattern, body) =>
+          val (p, ps) = transform(pattern)
+          (p, BlockDef(ps, transform(body)))
       }
       transform(sc).flatMap { scrutinee => bind(Match(scrutinee, cs)) }
 
@@ -185,6 +183,14 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
       bind(Handle(body, hs))
   }).map { _.inheritPosition(tree) }
+
+  def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
+    case source.IgnorePattern() => (core.IgnorePattern(), Nil)
+    case source.AnyPattern(id)  => (core.AnyPattern(), List(core.ValueParam(id.symbol)))
+    case p @ source.TagPattern(id, ps) =>
+      val (patterns, params) = ps.flatten.map(transform).unzip
+      (core.TagPattern(p.definition, patterns), params.flatten)
+  }
 
   def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {
     case Nil => pure { Nil }

@@ -9,7 +9,7 @@ type List {
 }
 
 def first(l : List) = l match {
-  case Cons(m: Int, _) => m
+  case Cons(m, _) => m
   case Nil() => do NoSuchElement()
 }
 
@@ -21,14 +21,16 @@ def genlist { f: Int / Done } : List = {
   l
 }
 
+type Foo {
+  Bar()
+}
 
 def foreach(l : List) { f: Int => Unit } : Unit =
   l match {
     case Nil() => ()
-    case Cons(n, rest) => {
-        f(n);
-        foreach(rest) { n => f(n) }
-    }
+    case Cons(n, Cons(m, rest)) =>
+      f(m);
+      foreach(rest) { n => f(n) }
   }
 
 def main() = {

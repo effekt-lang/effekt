@@ -127,18 +127,23 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {
-        case (id, b) =>
-          val tag = jsString(nameDef(id))
-          // for now we do not match on children, so use the any-wildcard
-          val childMatchers = id.asConstructor.params.flatten.map { _ => text("$effekt.any") }
-          jsObject(
-            text("pattern") -> ("$effekt.tagged(" <> hsep(tag :: childMatchers, comma) <> ")"),
-            text("exec") -> toDoc(b)
-          )
+        case (pattern, b) => jsObject(
+          text("pattern") -> toDoc(pattern),
+          text("exec") -> toDoc(b)
+        )
       })
       "$effekt.match" <> parens(toDoc(sc) <> comma <+> cs)
     case other =>
       sys error s"Cannot print ${other} in expression position"
+  }
+
+  def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
+    case IgnorePattern() => "$effekt.ignore"
+    case AnyPattern()    => "$effekt.any"
+    case TagPattern(id, ps) =>
+      val tag = jsString(nameDef(id))
+      val childMatchers = ps map { p => toDoc(p) }
+      "$effekt.tagged(" <> hsep(tag :: childMatchers, comma) <> ")"
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {

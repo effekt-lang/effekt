@@ -49,7 +49,9 @@ def heap[R] { prog: R / Heap } = {
       case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
     }
     def put(r, v) = r match {
-      case MkRef(idx) => { cells = updateAt(cells, (length(cells) - idx) - 1, v); resume(()) }
+      case MkRef(idx) =>
+        cells = updateAt(cells, (length(cells) - idx) - 1, v);
+        resume(())
     }
   }
 }

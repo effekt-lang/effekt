@@ -15,7 +15,9 @@ def map[A, B](l: List[A]) { f: A => B } : List[B] =
 def foreach[A](l: List[A]) { f: A => Unit } : Unit =
   l match {
     case Nil() => ()
-    case Cons(a, rest) => { f(a); foreach(rest) { a => f(a) } }
+    case Cons(a, rest) =>
+      f(a);
+      foreach(rest) { a => f(a) }
   }
 
 def main() = {

@@ -46,11 +46,11 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     try{
       p()
     } with Next { () => inn match {
-        case Nil() => { do Fail("Unexpected Nil") }
-        case Cons(el, rest) => {
+        case Nil() =>
+          do Fail("Unexpected Nil")
+        case Cons(el, rest) =>
           inn = rest;
           resume(el)
-        }
       }
     }
 }

@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.Context
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ Def, Expr, Stmt, Tree }
+import effekt.source.{ Def, Expr, Stmt, Tree, MatchPattern, MatchClause }
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -149,41 +149,11 @@ class Typer extends Phase[Module, Module] { typer =>
         }
 
         // (3) check exhaustivity
-        val covered = clauses.map { c => c.definition }.toSet
-        val cases: Set[Symbol] = datatype.ctors.toSet
-        val notCovered = cases -- covered
-
-        if (notCovered.nonEmpty) {
-          Context.error(s"Missing cases: ${notCovered}")
-        }
+        checkExhaustivity(tpe, clauses)
 
         val tpes = clauses.map {
-          case c @ source.MatchClause(id, annotatedParams, body) =>
-            val sym = c.definition
-
-            // (4) Compute blocktype of this constructor with rigid type vars
-            // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-            val (rigids, BlockType(_, pms, ret / _)) = Substitution.instantiate(sym.toType)
-
-            // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-            val subst = Substitution.unify(ret, tpe)
-
-            // (6) check for existential type variables
-            // at the moment we do not allow existential type parameters on constructors.
-            val skolems = rigids.filterNot { subst.isDefinedAt }
-            if (skolems.nonEmpty) {
-              Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
-            }
-
-            // (7) refine parameter types of constructor
-            // i.e. `(Int, List[Int])`
-            val constructorParams = subst substitute pms
-
-            // (8) check against parameters (potentially) annotated clause
-            val paramBindings = checkAgainstDeclaration(id.name, constructorParams, annotatedParams)
-
-            // (9) check body with bindings in place
-            Context.define(paramBindings) in {
+          case c @ source.MatchClause(p, body) =>
+            Context.define(checkPattern(tpe, p)) in {
               checkStmt(body, expected)
             }
         }
@@ -195,6 +165,68 @@ class Typer extends Phase[Module, Module] { typer =>
         }
         tpeCases / (effsCases ++ effs)
     }
+
+  //</editor-fold>
+
+  //<editor-fold desc="pattern matching">
+
+  // TODO implement
+  def checkExhaustivity(sc: ValueType, cls: List[MatchClause]): Unit = {
+    //    val covered = clauses.map { c => c.definition }.toSet
+    //    val cases: Set[Symbol] = datatype.ctors.toSet
+    //    val notCovered = cases -- covered
+    //
+    //    if (notCovered.nonEmpty) {
+    //      Context.error(s"Missing cases: ${notCovered}")
+    //    }
+    ()
+  }
+
+  def checkPattern(sc: ValueType, pattern: MatchPattern)(implicit C: Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
+    case source.IgnorePattern()    => Map.empty
+    case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
+    case p @ source.TagPattern(id, patterns) =>
+      // symbol of the constructor we match against
+      val sym = p.definition
+
+      // (4) Compute blocktype of this constructor with rigid type vars
+      // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
+      val (rigids, BlockType(_, pms, ret / _)) = Substitution.instantiate(sym.toType)
+
+      // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
+      val subst = Substitution.unify(ret, sc)
+
+      // (6) check for existential type variables
+      // at the moment we do not allow existential type parameters on constructors.
+      val skolems = rigids.filterNot { subst.isDefinedAt }
+      if (skolems.nonEmpty) {
+        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
+      }
+
+      // (7) refine parameter types of constructor
+      // i.e. `(Int, List[Int])`
+      val constructorParams = subst substitute pms
+
+      // (8) check nested patterns
+      if (patterns.size != constructorParams.size)
+        Context.error(s"Wrong number of pattern sections, given ${patterns.size}, but ${sym.name} expects ${constructorParams.size}.")
+
+      var bindings = Map.empty[Symbol, ValueType]
+
+      (patterns zip constructorParams) foreach {
+        case (pats, pars) =>
+          if (pats.size != pars.size)
+            Context.error(s"Wrong number of pattern arguments, given ${pats.size}, expected ${pars.size}.")
+
+          (pats zip pars) foreach {
+            case (pat, par: ValueType) =>
+              bindings ++= checkPattern(par, pat)
+            case _ =>
+              sys error "Should not happen, since constructors can only take value parameters"
+          }
+      }
+      bindings
+  }
 
   //</editor-fold>
 

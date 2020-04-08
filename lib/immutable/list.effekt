@@ -10,13 +10,15 @@ type List[A] {
 def map[A, B](l: List[A]) { f: A => B } : List[B] =
   l match {
     case Nil() => Nil[B]()
-    case Cons(a, rest: List[A]) => Cons(f(a), map(rest) { a => f(a) })
+    case Cons(a, rest) => Cons(f(a), map(rest) { a => f(a) })
   }
 
 def foreach[A](l: List[A]) { f: A => Unit } : Unit =
   l match {
     case Nil() => ()
-    case Cons(a, rest) => { f(a); foreach(rest) { a => f(a) } }
+    case Cons(a, rest) =>
+      f(a);
+      foreach(rest) { a => f(a) }
   }
 
 def reverse[A](l: List[A]): List[A] = {
