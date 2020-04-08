@@ -41,6 +41,7 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 case class PureApp(b: Block, args: List[Argument]) extends Expr
+case class Select(target: Expr, field: Symbol) extends Expr
 
 /**
  * Blocks
@@ -63,6 +64,7 @@ case class Def(id: Symbol, block: Block, rest: Stmt) extends Stmt
 case class Val(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
 case class Var(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
+case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
 case class App(b: Block, args: List[Argument]) extends Stmt
 case class Do(b: Block, id: Symbol, args: List[Argument]) extends Stmt

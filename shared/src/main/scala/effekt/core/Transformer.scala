@@ -22,7 +22,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
-        case sym if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] => sym
+        case sym if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
       }
     }.toList)
 
@@ -46,6 +46,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case d @ source.DataDef(id, _, ctors) =>
       Data(d.symbol, ctors.map { c => c.symbol }, rest)
+
+    case d @ source.RecordDef(id, _, _) =>
+      val rec = d.symbol
+      core.Record(rec, rec.fields.flatten, rest)
 
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest)
@@ -158,10 +162,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       sym match {
         case f: BuiltinFunction if f.pure =>
           as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
-        case f: Constructor =>
+        case _: Constructor | _: Record =>
           as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
         case f: EffectOp =>
           as2.flatMap { args => bind(Do(BlockVar(f.effect), f, args ++ capabilities)) }
+        case f: Field =>
+          as2.map { case List(arg: Expr) => Select(arg, f) }
         case f =>
           as2.flatMap { args => bind(App(BlockVar(sym), args ++ capabilities)) }
       }

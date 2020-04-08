@@ -114,8 +114,8 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.EffectDef(id, effs)       => ()
 
     // The type itself has already been resolved, now resolve constructors
-    case source.DataDef(id, tparams, ctors) =>
-      val typ = Context.resolveType(id).asDataType
+    case d @ source.DataDef(id, tparams, ctors) =>
+      val typ = d.symbol
       val cs = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshTermName(id)
@@ -127,6 +127,26 @@ class Namer extends Phase[Module, Module] { namer =>
           sym
       }
       typ.ctors = cs
+
+    case d @ source.RecordDef(id, tparams, fields) =>
+      val typ = d.symbol
+      typ.fields = fields map { ps =>
+        ps.params.map { field =>
+
+          // create symbol for fields
+          val name = Context.freshTermName(field.id)
+          val fieldSym = Context scoped {
+            typ.tparams.foreach { t => Context.bind(t) }
+            ValueParam(name, field.tpe.map(resolve))
+            Field(name, resolve(field.tpe.get), typ)
+          }
+          // WARNING we violate an invariant here:
+          //   fields in the record source tree are ValueParams that should resolve to a ValueParams symbol
+          //   however, we store a Field symbol here!
+          Context.define(field.id, fieldSym)
+          fieldSym
+        }
+      }
 
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
@@ -290,6 +310,14 @@ class Namer extends Phase[Module, Module] { namer =>
       }
       Context.define(id, typ)
 
+    case source.RecordDef(id, tparams, fields) =>
+      val sym = Context scoped {
+        val tps = tparams map resolve
+        Record(Name(id), tps)
+      }
+      Context.define(id, sym: TermSymbol)
+      Context.define(id, sym: TypeSymbol)
+
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
@@ -425,11 +453,13 @@ trait NamerOps { self: Context =>
    * Resolves a potentially overloaded call target
    */
   private[namer] def resolveCalltarget(id: Id): BlockSymbol = {
-    val syms = scope.lookupTerms(id.name) collect {
-      case b: BlockParam  => b
-      case b: ResumeParam => b
-      case b: Fun         => b
-      case _              => abort("Expected callable")
+    val syms = scope.lookupOverloaded(id.name) map {
+      _ collect {
+        case b: BlockParam  => b
+        case b: ResumeParam => b
+        case b: Fun         => b
+        case _              => abort("Expected callable")
+      }
     }
 
     if (syms.isEmpty) {

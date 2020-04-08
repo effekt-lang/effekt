@@ -300,11 +300,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val dataDef: P[DataDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef
 
-  lazy val recordDef: P[DataDef] =
-    `record` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ^^ {
-      case id ~ tparams ~ params =>
-        DataDef(id, tparams, List(Constructor(id, params)))
-    }
+  lazy val recordDef: P[RecordDef] =
+    `record` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ^^ RecordDef
 
   lazy val constructor: P[Constructor] =
     idDef ~ some(valueParams) ^^ Constructor

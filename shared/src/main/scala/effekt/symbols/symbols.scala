@@ -124,7 +124,7 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: Set[BlockSymbol]) extends BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
 
   /**
    * Types
@@ -185,9 +185,26 @@ package object symbols {
   }
 
   case class DataType(name: Name, tparams: List[TypeVar], var ctors: List[Constructor] = Nil) extends ValueType with TypeSymbol
+
   case class Constructor(name: Name, params: List[List[ValueParam]], datatype: DataType) extends Fun {
     def tparams = datatype.tparams
     def ret = if (tparams.size > 0) Some(Effectful(TypeApp(datatype, tparams), Pure)) else Some(Effectful(datatype, Pure))
+  }
+
+  /**
+   * The record symbols is _both_ a type (record type) _and_ a term symbol (constructor).
+   */
+  case class Record(name: Name, tparams: List[TypeVar], var fields: List[List[Field]] = Nil) extends ValueType with Fun with TypeSymbol {
+    lazy val params = fields.map { _ map { field => field.field } }
+    def ret = Some(Effectful(tpe, Pure))
+    def tpe = if (tparams.size > 0) TypeApp(this, tparams) else this
+  }
+
+  case class Field(name: Name, tpe: ValueType, rec: Record) extends Fun {
+    val field = ValueParam(name, Some(tpe))
+    val tparams = rec.tparams
+    val params = List(List(ValueParam(rec.name, Some(rec.tpe))))
+    val ret = Some(Effectful(tpe, Pure))
   }
 
   sealed trait Effect extends TypeSymbol {

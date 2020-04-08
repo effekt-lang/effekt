@@ -30,8 +30,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     val deps = m.imports
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
-      parens(imports <> comma <+> "function" <> parens(hsep(deps.map { d => moduleName(d) }, comma)) <+>
-        braces(nest(line <> toDoc(m)) <> line))
+      parens(imports <> comma <+> jsFunction("", deps.map { d => moduleName(d) }, toDoc(m)))
   }
 
   // TODO print all top level value declarations as "var"
@@ -39,12 +38,14 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
 
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v) => nameRef(v)
+    case BlockVar(v) =>
+      nameRef(v)
     case BlockDef(ps, body) =>
-      parens(hsep(ps map toDoc, comma)) <+> "=>" <+> toDoc(body)
-    case Lift(b) => "$effekt.lift" <> parens(toDoc(b))
+      jsLambda(ps map toDoc, toDoc(body))
+    case Lift(b) =>
+      "$effekt.lift" <> parens(toDoc(b))
     case Extern(ps, body) =>
-      parens(hsep(ps map toDoc, comma)) <+> "=>" <+> body
+      jsLambda(ps map toDoc, body)
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
@@ -77,6 +78,9 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
+
+    case Select(b, field) =>
+      toDoc(b) <> "." <> nameDef(field)
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
@@ -86,13 +90,13 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def toDoc(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
-      link(s, braces(nest(line <> toDocStmt(s)) <> line))
+      link(s, jsBlock(toDocStmt(s)))
     else
       link(s, toDocExpr(s))
 
   def toDocDelayed(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
-      "$effekt.delayed" <> parens("() => " <+> braces(nest(line <> toDocStmt(s)) <> line))
+      "$effekt.delayed" <> parens(jsLambda(Nil, jsBlock(toDocStmt(s))))
     else
       toDocExpr(s)
 
@@ -100,11 +104,11 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
     case Val(Wildcard(_), binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens("()" <+> "=>" <+> nest(line <> toDoc(body)))
+      toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
     case Val(id, binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(nameDef(id) <+> "=>" <+> nest(line <> toDoc(body)))
+      toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case Var(id, binding, body) =>
-      toDocDelayed(binding) <> ".state" <> parens(nameDef(id) <+> "=>" <+> nest(line <> toDoc(body)))
+      toDocDelayed(binding) <> ".state" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case Do(b, id, args) =>
@@ -113,8 +117,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
     case While(cond, body) =>
       "$effekt._while" <> parens(
-        "() =>" <+> toDoc(cond) <> comma <+>
-          "() =>" <+> toDoc(body)
+        jsLambda(Nil, toDoc(cond)) <> comma <+> jsLambda(Nil, toDoc(body))
       )
     case Ret(e) =>
       "$effekt.pure" <> parens(toDoc(e))
@@ -148,12 +151,10 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
     case Def(id, BlockDef(ps, body), rest) =>
-      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
-        braces(nest(line <> toDocStmt(body)) <> line) <> emptyline <> toDocStmt(rest)
+      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
     case Def(id, Extern(ps, body), rest) =>
-      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
-        braces(nest(line <> "return" <+> body) <> line) <> emptyline <> toDocStmt(rest)
+      jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id =>
@@ -178,12 +179,10 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
     case Def(id, BlockDef(ps, body), rest) =>
-      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
-        braces(nest(line <> toDocStmt(body)) <> line) <> emptyline <> toDocTopLevel(rest)
+      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
     case Def(id, Extern(ps, body), rest) =>
-      "function" <+> nameDef(id) <> parens(hsep(ps map toDoc, comma)) <+>
-        braces(nest(line <> "return" <+> body) <> line) <> emptyline <> toDocTopLevel(rest)
+      jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id =>
@@ -193,17 +192,33 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
 
+    case Record(did, fields, rest) =>
+      jsFunction(nameDef(did), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
+        text("__tag") -> jsString(nameDef(did)),
+        text("__fields") -> jsArray(fields map { f => jsString(nameDef(f)) })
+      ) ++ fields.map { f =>
+          (nameDef(f), nameDef(f))
+        })) <> ";" <> emptyline <> toDocTopLevel(rest)
+
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
 
     case other => "return" <+> toDocExpr(other)
   }
 
+  def jsLambda(params: List[Doc], body: Doc) =
+    parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))
+
+  def jsFunction(name: Doc, params: List[Doc], body: Doc): Doc =
+    "function" <+> name <> parens(hsep(params, comma)) <+> jsBlock(body)
+
   def jsObject(fields: (Doc, Doc)*): Doc =
     jsObject(fields.toList)
 
   def jsObject(fields: List[(Doc, Doc)]): Doc =
-    braces(nest(line <> vsep(fields.map { case (n, d) => jsString(n) <> ":" <+> d }, comma)) <> line)
+    group(jsBlock(vsep(fields.map { case (n, d) => jsString(n) <> ":" <+> d }, comma)))
+
+  def jsBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
 
   def jsArray(els: List[Doc]): Doc =
     brackets(hsep(els, comma))

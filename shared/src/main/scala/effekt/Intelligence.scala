@@ -81,7 +81,7 @@ trait Intelligence extends Compiler {
 
   // For now, only show the first call target
   def resolveCallTarget(sym: Symbol): Symbol = sym match {
-    case t: CallTarget => t.symbols.head
+    case t: CallTarget => t.symbols.flatten.head
     case s             => s
   }
 

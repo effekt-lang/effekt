@@ -379,10 +379,8 @@ def main() = {
                 println(next())
             }
         }
-    } with LexerError { (msg, pos) => pos match {
-        case Position(line, col, idx) =>
-            println(show(line) ++ ":" ++ show(col) ++ " " ++ msg)
-        }
+    } with LexerError { (msg, pos) =>
+        println(pos.line.show ++ ":" ++ pos.col.show ++ " " ++ msg)
     };
 
     // parser

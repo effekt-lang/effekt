@@ -101,9 +101,3 @@ extern pure def isUndefined[A](value: A): Boolean =
 // =====
 // for now we only support pairs, since we do not have overloading of selectors
 record Pair[A, B](first: A, second: B)
-def first[A, B](p: Pair[A, B]): A = p match {
-  case Pair(fst, snd) => fst
-}
-def second[A, B](p: Pair[A, B]): B = p match {
-  case Pair(fst, snd) => snd
-}
