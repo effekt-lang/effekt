@@ -158,7 +158,7 @@ class Typer extends Phase[Module, Module] { typer =>
         }
 
         val tpes = clauses.map {
-          case c @ source.Clause(id, annotatedParams, body) =>
+          case c @ source.MatchClause(id, annotatedParams, body) =>
             val sym = c.definition
 
             // (4) Compute blocktype of this constructor with rigid type vars

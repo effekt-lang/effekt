@@ -119,7 +119,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case source.MatchExpr(sc, clauses) =>
       val cs = clauses.map {
-        case cl @ source.Clause(id, params, body) =>
+        case cl @ source.MatchClause(id, params, body) =>
           val ps = params.flatMap {
             case source.ValueParams(params) => params.map { v => core.ValueParam(v.symbol) }
           }

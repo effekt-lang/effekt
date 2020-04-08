@@ -170,7 +170,7 @@ class Namer extends Phase[Module, Module] { namer =>
           }
       }
 
-    case source.Clause(op, params, body) =>
+    case source.MatchClause(op, params, body) =>
       Context.at(op) { Context.resolveTerm(op) }
       val ps = params.map(resolve)
       Context scoped {

@@ -372,9 +372,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
       case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
     }
 
-  lazy val clause: P[Clause] =
-    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ Clause
+  lazy val clause: P[MatchClause] =
+    (`case` ~/> idRef) ~ some(valueParamsOpt) ~ (`=>` ~/> stmt) ^^ MatchClause
 
+  lazy val pattern: P[MatchPattern] =
+    ( "_" ^^^ IgnorePattern()
+    | idDef ^^ AnyPattern
+    | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
+    )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 

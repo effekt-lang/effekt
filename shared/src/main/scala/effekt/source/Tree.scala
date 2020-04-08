@@ -172,10 +172,35 @@ case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef
   type symbol = symbols.EffectOp
 }
 
-case class MatchExpr(matchee: Expr, clauses: List[Clause]) extends Expr
-case class Clause(id: Id, params: List[ValueParams], body: Stmt) extends Reference {
+case class MatchExpr(matchee: Expr, clauses: List[MatchClause]) extends Expr
+case class MatchClause(id: Id, params: List[ValueParams], body: Stmt) extends Reference {
   type symbol = symbols.Constructor
 }
+
+sealed trait MatchPattern extends Tree
+
+/**
+ * Pattern matching anything:
+ *
+ *   case a => ...
+ */
+case class AnyPattern(id: Id) extends MatchPattern with Definition { type symbol = symbols.ValueParam }
+
+/**
+ * Pattern matching on a constructor
+ *
+ *   case Cons(a, as) => ...
+ */
+case class TagPattern(id: Id, patterns: List[MatchPattern]) extends MatchPattern with Reference {
+  type symbol = symbols.Constructor
+}
+
+/**
+ * A wildcard pattern ignoring the matched value
+ *
+ *   case _ => ...
+ */
+case class IgnorePattern() extends MatchPattern
 
 /**
  * Types and Effects
