@@ -8,10 +8,9 @@ def withState(init: Int) { prog : Unit / { Get, Put } } = {
 
     var s = init;
 
-    try { prog()
-    } with Get { () =>
-        resume(s)
-    } with Put { (n) =>
+    try { prog() }
+    with Get { () => resume(s) }
+    with Put { (n) =>
         s = n;
         resume(())
     }
