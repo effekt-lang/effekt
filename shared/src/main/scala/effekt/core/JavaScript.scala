@@ -117,18 +117,14 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case Ret(e) =>
       "$effekt.pure" <> parens(toDoc(e))
     case Exports(path, exports) =>
-      "Object.assign" <> parens(moduleName(path) <> comma <+> braces(nest(line <> vsep(exports.map { e =>
-        toDoc(e.name) <> ":" <+> toDoc(e.name)
-      }, comma)) <> line))
+      "Object.assign" <> parens(moduleName(path) <> comma <+>
+        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) }))
     case Handle(body, hs) =>
-      val handlers = hs map { handler =>
-        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => "\"" <> nameDef(id) <> "\"" <+> ":" <+> toDoc(b) }, comma)) <> line)
-      }
-      val cs = parens("[" <> hsep(handlers, comma) <> "]")
+      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
+      val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
     case Match(sc, clauses) =>
-      // TODO using the unqualified name here might lead to wrong operational behavior
-      val cs = braces(nest(line <> vsep(clauses map { case (id, b) => nameDef(id) <> ":" <+> toDoc(b) }, comma)) <> line)
+      val cs = jsObject(clauses map { case (id, b) => nameDef(id) -> toDoc(b) })
       "$effekt.match" <> parens(toDoc(sc) <> comma <+> cs)
     case other =>
       sys error s"Cannot print ${other} in expression position"
@@ -145,8 +141,8 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id =>
-        val datastr = "\"" <> nameDef(did) <> "\""
-        val consstr = "\"" <> nameDef(id) <> "\""
+        val datastr = jsString(nameDef(did))
+        val consstr = jsString(nameDef(id))
         "const" <+> nameDef(id) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
       }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
@@ -186,6 +182,15 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
     case other => "return" <+> toDocExpr(other)
   }
+
+  def jsObject(fields: List[(Doc, Doc)]): Doc =
+    braces(nest(line <> vsep(fields.map { case (n, d) => jsString(n) <> ":" <+> d }, comma)) <> line)
+
+  def jsArray(els: List[Doc]): Doc =
+    brackets(hsep(els, comma))
+
+  def jsString(contents: Doc): Doc =
+    "\"" <> contents <> "\""
 
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
