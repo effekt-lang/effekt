@@ -140,15 +140,7 @@ class Typer extends Phase[Module, Module] { typer =>
         // for example. tpe = List[Int]
         val (tpe / effs) = checkExpr(sc, None)
 
-        // (2) Extract datatype to pattern match on
-        // i.e. List
-        val datatype = tpe match {
-          case d: DataType             => d
-          case TypeApp(d: DataType, _) => d
-          case other                   => Context.abort(s"Cannot pattern match on value of type ${other}")
-        }
-
-        // (3) check exhaustivity
+        // (2) check exhaustivity
         checkExhaustivity(tpe, clauses)
 
         val tpes = clauses.map {

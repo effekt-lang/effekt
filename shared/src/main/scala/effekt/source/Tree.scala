@@ -172,7 +172,7 @@ case class OpClause(id: Id, params: List[ValueParams], body: Stmt, resume: IdDef
   type symbol = symbols.EffectOp
 }
 
-case class MatchExpr(matchee: Expr, clauses: List[MatchClause]) extends Expr
+case class MatchExpr(scrutinee: Expr, clauses: List[MatchClause]) extends Expr
 case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
 sealed trait MatchPattern extends Tree
