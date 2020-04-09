@@ -18,19 +18,10 @@ trait IOModuleDB extends ModuleDB { self: Context =>
   override def contentsOf(path: String): String = {
     val includeFile = file(module.source.name).parent / path
 
-    module.source match {
-      case JarSource(name) =>
-        if (!includeFile.existsInJar) {
-          abort(s"Missing include ${path}")
-        } else {
-          JarSource(includeFile.unixPath).content
-        }
-      case _ =>
-        if (!includeFile.exists) {
-          abort(s"Missing include: ${includeFile}")
-        } else {
-          FileSource(includeFile.canonicalPath).content
-        }
+    if (!includeFile.exists) {
+      abort(s"Missing include: ${includeFile}")
+    } else {
+      FileSource(includeFile.canonicalPath).content
     }
   }
 
@@ -43,36 +34,6 @@ trait IOModuleDB extends ModuleDB { self: Context =>
 
     config.includes().map { p => p / filename } collectFirst {
       case f if f.exists => FileSource(f.canonicalPath)
-    } orElse {
-      if (filename.existsInJar) {
-        Some(JarSource(filename.unixPath))
-      } else {
-        None
-      }
-    }
-  }
-}
-
-/**
- * A source that is a string.
- *
- * TODO open a PR and make `content`` a def in Kiama
- */
-case class JarSource(name: String) extends Source {
-
-  private val resource = ScalaSource.fromResource(name)
-
-  def reader: Reader = resource.bufferedReader
-
-  val content: String = resource.mkString
-
-  def useAsFile[T](fn: String => T): T = {
-    val filename = Filenames.makeTempFilename(name)
-    try {
-      IO.createFile(filename, content)
-      fn(filename)
-    } finally {
-      IO.deleteFile(filename)
     }
   }
 }

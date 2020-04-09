@@ -33,6 +33,8 @@ object JavaPathUtils extends PathUtils {
       stream != null
     }
 
+    def toFile: JFile = underlying
+
     override def toString = underlying.toString
   }
 

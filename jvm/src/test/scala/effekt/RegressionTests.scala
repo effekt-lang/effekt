@@ -47,7 +47,7 @@ class RegressionTests {
 
   def interpret(filename: String): String = {
     val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq("--Koutput", "string"))
+    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "lib"))
     configs.verify()
     compiler.compileFile(filename, configs)
     configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "")
