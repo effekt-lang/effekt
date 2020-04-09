@@ -56,6 +56,9 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
     ),
 
+    // show duration of the tests
+    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
+
     // We use the lib folder as resource directory to include it in the JAR
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
 
