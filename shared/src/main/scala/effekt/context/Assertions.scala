@@ -38,8 +38,8 @@ object assertions {
       case t: BuiltinFunction => t
       case _ => reporter.abort("Expected a builtin function")
     }
-    def asConstructor: Constructor = s match {
-      case t: Constructor => t
+    def asConstructor: Record = s match {
+      case t: Record => t
       case _ => reporter.abort("Expected a constructor")
     }
     def asDataType: DataType = s match {

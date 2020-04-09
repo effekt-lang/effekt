@@ -116,37 +116,25 @@ class Namer extends Phase[Module, Module] { namer =>
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
       val typ = d.symbol
-      val cs = ctors map {
+      typ.variants = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshTermName(id)
-          val sym = Context scoped {
-            typ.tparams.foreach { t => Context.bind(t) }
-            Constructor(name, ps map resolve, typ)
-          }
-          Context.define(id, sym)
-          sym
-      }
-      typ.ctors = cs
+          val ctorRet = if (typ.tparams.isEmpty) typ else TypeApp(typ, typ.tparams)
+          val record = Record(name, typ.tparams, ctorRet)
+          // define constructor
+          Context.define(id, record: TermSymbol)
+          // define record type
+          Context.define(id, record: TypeSymbol)
 
+          // now also resolve fields
+          record.fields = resolveFields(ps, record)
+          record
+      }
+
+    // The record has been resolved as part of the preresolution step
     case d @ source.RecordDef(id, tparams, fields) =>
-      val typ = d.symbol
-      typ.fields = fields map { ps =>
-        ps.params.map { field =>
-
-          // create symbol for fields
-          val name = Context.freshTermName(field.id)
-          val fieldSym = Context scoped {
-            typ.tparams.foreach { t => Context.bind(t) }
-            ValueParam(name, field.tpe.map(resolve))
-            Field(name, resolve(field.tpe.get), typ)
-          }
-          // WARNING we violate an invariant here:
-          //   fields in the record source tree are ValueParams that should resolve to a ValueParams symbol
-          //   however, we store a Field symbol here!
-          Context.define(field.id, fieldSym)
-          fieldSym
-        }
-      }
+      val record = d.symbol
+      record.fields = resolveFields(fields, record)
 
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
@@ -220,6 +208,26 @@ class Namer extends Phase[Module, Module] { namer =>
     case id: Id                => Context.resolveTerm(id)
 
     case other                 => resolveAll(other)
+  }
+
+  // TODO move away
+  def resolveFields(params: source.ValueParams, record: Record)(implicit C: Context): List[Field] = Context.focusing(params) {
+    case ps @ source.ValueParams(params) =>
+
+      val paramSyms = Context scoped {
+        // Bind the type parameters
+        record.tparams.foreach { t => Context.bind(t) }
+        resolve(ps)
+      }
+
+      (paramSyms zip params) map {
+        case (paramSym, paramTree) =>
+          val fieldId = paramTree.id.clone
+          val name = Context.freshTermName(fieldId)
+          val fieldSym = Field(name, paramSym, record)
+          Context.define(fieldId, fieldSym)
+          fieldSym
+      }
   }
 
   def resolveAll(obj: Any)(implicit C: Context): Unit = obj match {
@@ -306,16 +314,24 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.DataDef(id, tparams, ctors) =>
       val (typ, tps) = Context scoped {
         val tps = tparams map resolve
+        // we do not resolve the constructors here to allow them to refer to types that are defined
+        // later in the file
         (DataType(Name(id), tps), tps)
       }
       Context.define(id, typ)
 
     case source.RecordDef(id, tparams, fields) =>
-      val sym = Context scoped {
-        val tps = tparams map resolve
-        Record(Name(id), tps)
+      lazy val sym: Record = {
+        val tps = Context scoped { tparams map resolve }
+        // we do not resolve the fields here to allow them to refer to types that are defined
+        // later in the file
+        Record(Name(id), tps, null)
       }
+      sym.tpe = if (sym.tparams.isEmpty) sym else TypeApp(sym, sym.tparams)
+
+      // define constructor
       Context.define(id, sym: TermSymbol)
+      // define record type
       Context.define(id, sym: TypeSymbol)
 
     case source.ExternType(id, tparams) =>

@@ -180,9 +180,9 @@ class Typer extends Phase[Module, Module] { typer =>
     case p @ source.TagPattern(id, patterns) =>
 
       // symbol of the constructor we match against
-      val sym: Constructor = Context.symbolOf(id) match {
-        case c: Constructor => c
-        case _              => Context.abort("Can only match on constructors")
+      val sym: Record = Context.symbolOf(id) match {
+        case c: Record => c
+        case _         => Context.abort("Can only match on constructors")
       }
 
       // (4) Compute blocktype of this constructor with rigid type vars
@@ -267,7 +267,7 @@ class Typer extends Phase[Module, Module] { typer =>
     case d @ source.RecordDef(id, tparams, fields) =>
       val rec = d.symbol
       Context.assignType(rec, rec.toType)
-      rec.fields.flatten.foreach { field =>
+      rec.fields.foreach { field =>
         Context.assignType(field, field.toType)
       }
 

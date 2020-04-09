@@ -130,13 +130,13 @@ trait Intelligence extends Compiler {
     case t: TypeAlias =>
       SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
-    case c: Constructor =>
-      val ex = s"""|Instances of data types like `${c.datatype.name}` can only store
+    case c: Record =>
+      val ex = s"""|Instances of data types like `${c.tpe}` can only store
                    |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
                    |value parameter lists, not block parameters.
                    |""".stripMargin
 
-      SymbolInfo(c, s"Constructor of data type `${c.datatype.name}`", Some(DeclPrinter(c)), Some(ex))
+      SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
 
     case c: BlockParam =>
       val tpe = C.blockTypeOf(c)

@@ -157,17 +157,27 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
-      val cs = ctors.map { id =>
-        val datastr = jsString(nameDef(did))
-        val consstr = jsString(nameDef(id))
-        "const" <+> nameDef(id) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
-      }
+      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
+
+    case Record(did, fields, rest) =>
+      generateConstructor(did.asConstructor) <> ";" <> emptyline <> toDocStmt(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
 
     case other => "return" <+> toDocExpr(other)
+  }
+
+  def generateConstructor(ctor: symbols.Record)(implicit C: Context): Doc = {
+    val fields = ctor.fields
+    jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
+      text("__tag") -> jsString(nameDef(ctor)),
+      text("__data") -> jsArray(fields map { f => nameDef(f) }),
+      text("__fields") -> jsArray(fields map { f => jsString(nameDef(f)) })
+    ) ++ fields.map { f =>
+        (nameDef(f), nameDef(f))
+      }))
   }
 
   /**
@@ -185,20 +195,11 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
-      val cs = ctors.map { id =>
-        val datastr = jsString(nameDef(did))
-        val consstr = jsString(nameDef(id))
-        "const" <+> nameDef(id) <+> "=" <+> "$effekt.constructor" <> parens(datastr <> comma <+> consstr)
-      }
+      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Record(did, fields, rest) =>
-      jsFunction(nameDef(did), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
-        text("__tag") -> jsString(nameDef(did)),
-        text("__fields") -> jsArray(fields map { f => jsString(nameDef(f)) })
-      ) ++ fields.map { f =>
-          (nameDef(f), nameDef(f))
-        })) <> ";" <> emptyline <> toDocTopLevel(rest)
+      generateConstructor(did.asConstructor) <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)

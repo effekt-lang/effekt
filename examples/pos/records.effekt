@@ -11,5 +11,6 @@ def main() = {
   val x = (1, "goo");
 
   println(somePerson().foo);
-  println(x.first)
+  println(x.first);
+  println(somePerson())
 }

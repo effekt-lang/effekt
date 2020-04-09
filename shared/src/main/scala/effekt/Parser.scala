@@ -301,10 +301,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef
 
   lazy val recordDef: P[RecordDef] =
-    `record` ~/> idDef ~ maybeTypeParams ~ some(valueParams) ^^ RecordDef
+    `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef
 
   lazy val constructor: P[Constructor] =
-    idDef ~ some(valueParams) ^^ Constructor
+    idDef ~ valueParams ^^ Constructor
 
   /**
    * Expressions

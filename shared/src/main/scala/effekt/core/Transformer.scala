@@ -49,7 +49,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      core.Record(rec, rec.fields.flatten, rest)
+      core.Record(rec, rec.fields, rest)
 
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest)
@@ -162,7 +162,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       sym match {
         case f: BuiltinFunction if f.pure =>
           as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
-        case _: Constructor | _: Record =>
+        case _: Record =>
           as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
         case f: EffectOp =>
           as2.flatMap { args => bind(Do(BlockVar(f.effect), f, args ++ capabilities)) }
