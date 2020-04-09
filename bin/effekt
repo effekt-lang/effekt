@@ -1,6 +1,0 @@
-#!/bin/bash
-
-# find path to the current script
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
-
-java -jar "$DIR/../jvm/target/scala-2.13/effekt.jar" $@
