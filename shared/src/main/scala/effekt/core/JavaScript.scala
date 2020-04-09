@@ -20,7 +20,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
-    pretty(amdefine(t))
+    pretty(commonjs(t))
 
   val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
 
@@ -31,6 +31,15 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
       parens(imports <> comma <+> jsFunction("", deps.map { d => moduleName(d) }, toDoc(m)))
+  }
+
+  def commonjs(m: ModuleDecl)(implicit C: Context): Doc = {
+    val deps = m.imports
+    val imports = vsep(deps.map { i =>
+      "const" <+> moduleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
+    }, semi)
+
+    imports <> emptyline <> toDoc(m)
   }
 
   // TODO print all top level value declarations as "var"
@@ -125,7 +134,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       jsCall("$effekt.pure", toDoc(e))
     case Exports(path, exports) =>
       jsCall(
-        "Object.assign",
+        "module.exports = Object.assign",
         moduleName(path),
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )

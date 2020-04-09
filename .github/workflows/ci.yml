@@ -26,15 +26,13 @@ jobs:
       with:
         node-version: '10.x'
 
-    - run: npm install amdefine
-
     - name: Install Kiama fork
       run: sbt publishLocal
       working-directory: kiama
 
     - name: Run tests and assemble jar file
       run: sbt clean assembly
-      
+
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
 
