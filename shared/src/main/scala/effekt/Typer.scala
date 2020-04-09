@@ -395,6 +395,7 @@ class Typer extends Phase[Module, Module] { typer =>
       case sym                    => List(Set(sym))
     }
 
+    // TODO improve: stop typechecking if one scope was successful
     val results = scopes map { scope =>
       scope.toList.map { sym => sym -> Try { checkCallTo(sym, targs, args, expected) } }
     }

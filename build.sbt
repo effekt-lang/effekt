@@ -4,7 +4,7 @@ import scalariform.formatter.preferences._
 
 enablePlugins(ScalaJSPlugin)
 
-lazy val effektVersion = "0.1.4"
+lazy val effektVersion = "0.1.5"
 
 lazy val noPublishSettings = Seq(
   publish := {},
