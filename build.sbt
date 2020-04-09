@@ -52,8 +52,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       "org.rogach" %% "scallop" % "3.4.0",
       "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0",
       "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
-      "com.novocode" % "junit-interface" % "0.11" % "test",
-      "org.scala-sbt" %% "io" % "1.3.1" % "test"
+      "org.scala-sbt" %% "io" % "1.3.1" % "test",
+      "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
     ),
 
     // We use the lib folder as resource directory to include it in the JAR
