@@ -1,0 +1,34 @@
+{
+  "name": "effekt",
+  "author": "Jonathan Brachthäuser",
+  "version": "0.1.5",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/b-studios/effekt.git"
+  },
+  "description": "A language with effects and handlers",
+  "main": "index.js",
+  "scripts": {},
+  "bin": {
+    "effekt": "bin/effekt.js"
+  },
+  "preferGlobal": true,
+  "license": "MIT",
+  "dependencies": {
+    "shelljs": "^0.8.3"
+  },
+  "files": [
+    "bin",
+    "lib"
+  ],
+  "bugs": {
+    "url": "https://github.com/b-studios/effekt/issues"
+  },
+  "homepage": "https://github.com/b-studios/effekt#readme",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "lib": "lib"
+  },
+  "devDependencies": {}
+}

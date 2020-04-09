@@ -37,6 +37,8 @@ lazy val root = project.in(file("."))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
 
+lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
+
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
     name := "effekt",
@@ -61,6 +63,12 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
 
     // We use the lib folder as resource directory to include it in the JAR
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
+
+    deploy := {
+      val targetFile = (baseDirectory in ThisBuild).value / "bin" / "effekt.jar"
+      val jarfile = assembly.value
+      IO.copyFile(jarfile, targetFile)
+    },
 
     Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt"
   )

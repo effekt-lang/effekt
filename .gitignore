@@ -6,3 +6,4 @@ target/
 drafts/
 node_modules/
 package-lock.json
+bin/effekt.jar
