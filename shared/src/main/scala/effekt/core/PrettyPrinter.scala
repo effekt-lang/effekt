@@ -45,6 +45,9 @@ class PrettyPrinter extends ParenPrettyPrinter {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
+
+    case Select(b, field) =>
+      toDoc(b) <> "." <> toDoc(field.name)
   }
 
   def argToDoc(e: Argument): Doc = e match {

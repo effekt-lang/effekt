@@ -114,19 +114,27 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.EffectDef(id, effs)       => ()
 
     // The type itself has already been resolved, now resolve constructors
-    case source.DataDef(id, tparams, ctors) =>
-      val typ = Context.resolveType(id).asDataType
-      val cs = ctors map {
+    case d @ source.DataDef(id, tparams, ctors) =>
+      val typ = d.symbol
+      typ.variants = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshTermName(id)
-          val sym = Context scoped {
-            typ.tparams.foreach { t => Context.bind(t) }
-            Constructor(name, ps map resolve, typ)
-          }
-          Context.define(id, sym)
-          sym
+          val ctorRet = if (typ.tparams.isEmpty) typ else TypeApp(typ, typ.tparams)
+          val record = Record(name, typ.tparams, ctorRet)
+          // define constructor
+          Context.define(id, record: TermSymbol)
+          // define record type
+          Context.define(id, record: TypeSymbol)
+
+          // now also resolve fields
+          record.fields = resolveFields(ps, record)
+          record
       }
-      typ.ctors = cs
+
+    // The record has been resolved as part of the preresolution step
+    case d @ source.RecordDef(id, tparams, fields) =>
+      val record = d.symbol
+      record.fields = resolveFields(fields, record)
 
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
@@ -200,6 +208,26 @@ class Namer extends Phase[Module, Module] { namer =>
     case id: Id                => Context.resolveTerm(id)
 
     case other                 => resolveAll(other)
+  }
+
+  // TODO move away
+  def resolveFields(params: source.ValueParams, record: Record)(implicit C: Context): List[Field] = Context.focusing(params) {
+    case ps @ source.ValueParams(params) =>
+
+      val paramSyms = Context scoped {
+        // Bind the type parameters
+        record.tparams.foreach { t => Context.bind(t) }
+        resolve(ps)
+      }
+
+      (paramSyms zip params) map {
+        case (paramSym, paramTree) =>
+          val fieldId = paramTree.id.clone
+          val name = Context.freshTermName(fieldId)
+          val fieldSym = Field(name, paramSym, record)
+          Context.define(fieldId, fieldSym)
+          fieldSym
+      }
   }
 
   def resolveAll(obj: Any)(implicit C: Context): Unit = obj match {
@@ -286,9 +314,25 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.DataDef(id, tparams, ctors) =>
       val (typ, tps) = Context scoped {
         val tps = tparams map resolve
+        // we do not resolve the constructors here to allow them to refer to types that are defined
+        // later in the file
         (DataType(Name(id), tps), tps)
       }
       Context.define(id, typ)
+
+    case source.RecordDef(id, tparams, fields) =>
+      lazy val sym: Record = {
+        val tps = Context scoped { tparams map resolve }
+        // we do not resolve the fields here to allow them to refer to types that are defined
+        // later in the file
+        Record(Name(id), tps, null)
+      }
+      sym.tpe = if (sym.tparams.isEmpty) sym else TypeApp(sym, sym.tparams)
+
+      // define constructor
+      Context.define(id, sym: TermSymbol)
+      // define record type
+      Context.define(id, sym: TypeSymbol)
 
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
@@ -425,11 +469,13 @@ trait NamerOps { self: Context =>
    * Resolves a potentially overloaded call target
    */
   private[namer] def resolveCalltarget(id: Id): BlockSymbol = {
-    val syms = scope.lookupTerms(id.name) collect {
-      case b: BlockParam  => b
-      case b: ResumeParam => b
-      case b: Fun         => b
-      case _              => abort("Expected callable")
+    val syms = scope.lookupOverloaded(id.name) map {
+      _ collect {
+        case b: BlockParam  => b
+        case b: ResumeParam => b
+        case b: Fun         => b
+        case _              => abort("Expected callable")
+      }
     }
 
     if (syms.isEmpty) {

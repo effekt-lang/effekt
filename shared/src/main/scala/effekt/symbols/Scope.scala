@@ -26,7 +26,7 @@ object scopes {
 
     def lookupType(key: String)(implicit C: Context): TypeSymbol
 
-    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol]
+    def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
 
     def currentTermsFor(key: String): Set[TermSymbol] =
       terms.getOrElse(key, Set.empty)
@@ -63,8 +63,10 @@ object scopes {
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       C.abort(s"Could not resolve type ${key}")
 
-    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol] =
-      Set.empty
+    // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
+    // the ambiguity. If it is nested, the first one that type checks should be chosen.
+    def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
+      Nil
 
     def leave(implicit C: Context): Scope =
       C.abort("Internal Compiler Error: Leaving top level scope")
@@ -83,10 +85,10 @@ object scopes {
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       types.getOrElse(key, parent.lookupType(key))
 
-    def lookupTerms(key: String)(implicit C: Context): Set[TermSymbol] = {
-      val currentTerms = terms.getOrElse(key, Set.empty)
-      if (currentTerms.isEmpty) { parent.lookupTerms(key) } else { currentTerms }
-    }
+    def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
+      terms.get(key).map { _ :: parent.lookupOverloaded(key) }.getOrElse {
+        parent.lookupOverloaded(key)
+      }
 
     def leave(implicit C: Context): Scope =
       parent

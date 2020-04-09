@@ -5,6 +5,7 @@ import effekt.context.TypesDB
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
+import effekt.symbols.{ TypeSymbol, ValueType }
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -124,7 +125,7 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: Set[BlockSymbol]) extends BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
 
   /**
    * Types
@@ -184,10 +185,29 @@ package object symbols {
       if (tparams.isEmpty) { tpe } else { sys error "Cannot delias unapplied type constructor" }
   }
 
-  case class DataType(name: Name, tparams: List[TypeVar], var ctors: List[Constructor] = Nil) extends ValueType with TypeSymbol
-  case class Constructor(name: Name, params: List[List[ValueParam]], datatype: DataType) extends Fun {
-    def tparams = datatype.tparams
-    def ret = if (tparams.size > 0) Some(Effectful(TypeApp(datatype, tparams), Pure)) else Some(Effectful(datatype, Pure))
+  trait TypeConstructor extends TypeSymbol with ValueType
+
+  case class DataType(name: Name, tparams: List[TypeVar], var variants: List[Record] = Nil) extends TypeConstructor
+
+  /**
+   * Structures are also function symbols to represent the constructor
+   */
+  case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Fun {
+    // Parameter and return type of the constructor:
+    lazy val params = List(fields.map { f => f.param })
+    def ret = Some(Effectful(tpe, Pure))
+  }
+
+  /**
+   * The record symbols is _both_ a type (record type) _and_ a term symbol (constructor).
+   *
+   * param: The underlying constructor parameter
+   */
+  case class Field(name: Name, param: ValueParam, rec: Record) extends Fun {
+    val tparams = rec.tparams
+    val tpe = param.tpe.get
+    val params = List(List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))
+    val ret = Some(Effectful(tpe, Pure))
   }
 
   sealed trait Effect extends TypeSymbol {

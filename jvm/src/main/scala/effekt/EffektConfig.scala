@@ -20,16 +20,30 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     required = false
   )
 
-  lazy val includes: ScallopOption[List[File]] = opt[List[File]](
+  lazy val includePath: ScallopOption[List[File]] = opt[List[File]](
     "includes",
     descr = "Path to consider for includes (can be set multiple times)",
     default = Some(List(new File("."))),
     noshort = true
   )
 
+  lazy val stdlibPath: ScallopOption[File] = opt[File](
+    "lib",
+    descr = "Path to the standard library to be used",
+    required = false
+  )
+
+  var stdLibTmpPath: Option[File] = None
+
+  def libPath: File = stdlibPath orElse stdLibTmpPath getOrElse {
+    sys error "Path to standard library not properly set"
+  }
+
+  def includes() = libPath :: includePath()
+
   def requiresCompilation(): Boolean = !server()
 
   def interpret(): Boolean = !server() && !compile()
 
-  validateFilesIsDirectory(includes)
+  validateFilesIsDirectory(includePath)
 }

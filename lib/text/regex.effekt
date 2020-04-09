@@ -7,14 +7,6 @@ extern type Regex
 
 record Match(matched: String, index: Int)
 
-// these should be generated at some point
-def matched(m: Match): String = m match {
-  case Match(matched, index) => matched
-}
-def index(m: Match): Int = m match {
-  case Match(matched, index) => index
-}
-
 extern pure def regex(str: String): Regex =
   "new RegExp(str)"
 

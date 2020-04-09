@@ -178,8 +178,12 @@ class Typer extends Phase[Module, Module] { typer =>
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
     case p @ source.TagPattern(id, patterns) =>
+
       // symbol of the constructor we match against
-      val sym = p.definition
+      val sym: Record = Context.symbolOf(id) match {
+        case c: Record => c
+        case _         => Context.abort("Can only match on constructors")
+      }
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
@@ -258,6 +262,17 @@ class Typer extends Phase[Module, Module] { typer =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
         Context.assignType(sym, sym.toType)
+
+        sym.fields.foreach { field =>
+          Context.assignType(field, field.toType)
+        }
+      }
+
+    case d @ source.RecordDef(id, tparams, fields) =>
+      val rec = d.symbol
+      Context.assignType(rec, rec.toType)
+      rec.fields.foreach { field =>
+        Context.assignType(field, field.toType)
       }
 
     case d => ()
@@ -373,29 +388,33 @@ class Typer extends Phase[Module, Module] { typer =>
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val targets = target match {
+    val scopes = target match {
       // an overloaded call target
-      case CallTarget(name, syms) => syms.toList
+      case CallTarget(name, syms) => syms
       // already resolved by a previous attempt to typecheck
-      case sym                    => List(sym)
+      case sym                    => List(Set(sym))
     }
 
-    targets.map { sym =>
-      sym -> Try { checkCallTo(sym, targs, args, expected) }
-    }.partitionMap {
-      case (sym, Left(msg))  => Left((sym, msg))
-      case (sym, Right(res)) => Right((sym, res))
-    } match {
+    val results = scopes map { scope =>
+      scope.toList.map { sym => sym -> Try { checkCallTo(sym, targs, args, expected) } }
+    }
 
-      // Exactly one successful result
-      case (_, List((sym, tpe))) =>
+    val successes = results.map { scope => scope.collect { case (sym, Right(r)) => sym -> r } }
+    val errors = results.flatMap { scope => scope.collect { case (sym, Left(r)) => sym -> r } }
+
+    successes foreach {
+      // continue in outer scope
+      case Nil => ()
+
+      // Exactly one successful result in the current scope
+      case List((sym, tpe)) =>
         // reassign symbol of fun to resolved calltarget
         C.assignSymbol(fun, sym)
-        tpe
+        return tpe
 
       // Ambiguous reference
-      case (_, succeeded) if succeeded.size > 1 =>
-        val sucMsgs = succeeded.map {
+      case results =>
+        val sucMsgs = results.map {
           case (sym, tpe) =>
             s"- ${sym.name} of type ${Context.blockTypeOf(sym)}"
         }.mkString("\n")
@@ -407,9 +426,14 @@ class Typer extends Phase[Module, Module] { typer =>
               |""".stripMargin
 
         C.abort(explanation)
+    }
 
-      // Exactly one error
-      case (List((sym, errs)), Nil) =>
+    errors match {
+      case Nil =>
+        C.abort("Cannot typecheck call, no function found")
+
+      // exactly one error
+      case List((sym, errs)) =>
         val msg = errs.head
         val msgs = errs.tail
         C.buffer.append(msgs)
@@ -417,7 +441,7 @@ class Typer extends Phase[Module, Module] { typer =>
         // TODO clean this up
         C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
 
-      case (failed, Nil) =>
+      case failed =>
         C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
     }
   }

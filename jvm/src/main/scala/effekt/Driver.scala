@@ -3,17 +3,17 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import java.util
-
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.{ ColoredMessaging }
+import effekt.util.ColoredMessaging
 import effekt.util.JavaPathUtils._
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ CompilerWithConfig, IO, Source }
+
+import java.io.{ File => JFile }
 
 import scala.sys.process.Process
 
@@ -31,18 +31,27 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   /**
    * If no file names are given, run the REPL
    */
-  override def run(config: EffektConfig): Unit =
+  override def run(config: EffektConfig): Unit = {
+
+    // if no path to the standard library is provided, create a copy in a temporary folder
+    if (config.stdlibPath.isEmpty) {
+      config.stdLibTmpPath = Some(extractJarFile())
+    }
+
     if (config.filenames().isEmpty && !config.server()) {
       new Repl(this).run(config)
     } else {
       super.run(config)
     }
+  }
 
   override def createConfig(args: Seq[String]) =
     new EffektConfig(args)
 
   /**
    * Main entry to the compiler, invoked by Kiama after creating the config
+   *
+   * In LSP mode: invoked for each file opened in an editor
    */
   override def compileSource(source: Source, config: EffektConfig): Unit = {
     sources(source.name) = source
@@ -122,6 +131,43 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
    * Originally called by kiama, not used anymore.
    */
   override def parse(source: Source): ParseResult[ModuleDecl] = ???
+
+  /**
+   * Creates a temporary folder and copies all .effekt and .js files into this folder
+   *
+   * This is how we establish that the files are present for the IDE to jump to definition.
+   *
+   * It registers all temporary files and folders for deletion, once the JVM shuts down gracefully.
+   */
+  def extractJarFile(): JFile = {
+    import java.nio.file.{ FileSystems, Files, Paths, Path }
+
+    // register for automatic deletion
+    def deleteLater(p: Path): Unit =
+      p.toFile.deleteOnExit()
+
+    val tmpFolder = Files.createTempDirectory("effekt_lib")
+    deleteLater { tmpFolder }
+
+    // get the class loader and try to find a single resource to have obtain a valid path
+    val cl = Thread.currentThread().getContextClassLoader()
+    val url = cl.getResource("effekt.effekt")
+    val fs = FileSystems.newFileSystem(url.toURI, new java.util.HashMap[String, Any]())
+
+    Files.walk(fs.getPath(".")).forEach { source =>
+      val sourceName = source.toString
+      val target = tmpFolder.resolve(sourceName)
+
+      // only copy effekt and js files
+      if (sourceName.endsWith(".effekt") || sourceName.endsWith(".js")) deleteLater {
+        if (source.getParent != null) deleteLater {
+          Files.createDirectories(tmpFolder.resolve(source.getParent.toString))
+        }
+        Files.copy(source, target)
+      }
+    }
+    tmpFolder.toFile
+  }
 
   def format(m: ModuleDecl): Document = ???
 }

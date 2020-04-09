@@ -1,7 +1,7 @@
 package effekt
 package source
 
-import effekt.context.SymbolsDB
+import effekt.context.{ SymbolsDB, Context }
 import effekt.symbols.Symbol
 
 /**
@@ -26,9 +26,23 @@ case class Comment() extends Tree
 sealed trait Id extends Tree {
   def name: String
   def symbol(implicit db: SymbolsDB): Symbol = db.symbolOf(this)
+  def clone(implicit C: Context): Id
+
 }
-case class IdDef(name: String) extends Id
-case class IdRef(name: String) extends Id
+case class IdDef(name: String) extends Id {
+  def clone(implicit C: Context): Id = {
+    val copy = IdDef(name)
+    C.compiler.positions.dupPos(this, copy)
+    copy
+  }
+}
+case class IdRef(name: String) extends Id {
+  def clone(implicit C: Context): Id = {
+    val copy = IdRef(name)
+    C.compiler.positions.dupPos(this, copy)
+    copy
+  }
+}
 
 // Something that later will be stored in the symbol table
 sealed trait Definition extends Tree {
@@ -93,8 +107,11 @@ case class Operation(id: Id, tparams: List[Id], params: List[ValueParams], ret: 
 case class DataDef(id: Id, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }
-case class Constructor(id: Id, params: List[ValueParams]) extends Definition {
-  type symbol = symbols.Constructor
+case class Constructor(id: Id, params: ValueParams) extends Definition {
+  type symbol = symbols.Record
+}
+case class RecordDef(id: Id, tparams: List[Id], fields: ValueParams) extends Def {
+  type symbol = symbols.Record
 }
 
 /**
@@ -190,7 +207,7 @@ case class AnyPattern(id: Id) extends MatchPattern with Definition { type symbol
  *   case Cons(a, as) => ...
  */
 case class TagPattern(id: Id, patterns: List[List[MatchPattern]]) extends MatchPattern with Reference {
-  type symbol = symbols.Constructor
+  type symbol = symbols.Record
 }
 
 /**
