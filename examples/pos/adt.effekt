@@ -31,6 +31,7 @@ def foreach(l : List) { f: Int => Unit } : Unit =
     case Cons(n, Cons(m, rest)) =>
       f(m);
       foreach(rest) { n => f(n) }
+    case _ => ()
   }
 
 def main() = {

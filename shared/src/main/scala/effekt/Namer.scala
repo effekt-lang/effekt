@@ -374,7 +374,7 @@ class Namer extends Phase[Module, Module] { namer =>
       List(p)
     case source.TagPattern(id, patterns) =>
       Context.resolveTerm(id)
-      patterns.flatMap(p => p.flatMap { resolve })
+      patterns.flatMap { resolve }
   }
 
   /**

@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.Context
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ Def, Expr, Stmt, Tree, MatchPattern, MatchClause }
+import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchClause, MatchPattern, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -141,7 +141,7 @@ class Typer extends Phase[Module, Module] { typer =>
         val (tpe / effs) = checkExpr(sc, None)
 
         // (2) check exhaustivity
-        checkExhaustivity(tpe, clauses)
+        checkExhaustivity(tpe, clauses.map { _.pattern })
 
         val tpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
@@ -162,16 +162,38 @@ class Typer extends Phase[Module, Module] { typer =>
 
   //<editor-fold desc="pattern matching">
 
-  // TODO implement
-  def checkExhaustivity(sc: ValueType, cls: List[MatchClause]): Unit = {
-    //    val covered = clauses.map { c => c.definition }.toSet
-    //    val cases: Set[Symbol] = datatype.ctors.toSet
-    //    val notCovered = cases -- covered
-    //
-    //    if (notCovered.nonEmpty) {
-    //      Context.error(s"Missing cases: ${notCovered}")
-    //    }
-    ()
+  /**
+   * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
+   * can be improved a lot.
+   */
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(implicit C: Context): Unit = {
+    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
+
+    if (catchall)
+      return ;
+
+    sc match {
+      case TypeConstructor(t: DataType) =>
+        t.variants.foreach { variant =>
+          checkExhaustivity(variant, cls)
+        }
+
+      case TypeConstructor(t: Record) =>
+        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
+          case p if p.definition == t => Left(p.patterns)
+          case p => Right(p)
+        }
+
+        if (related.isEmpty) {
+          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
+        }
+
+        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
+          case (t, ps) => checkExhaustivity(t, ps)
+        }
+      case other =>
+        ()
+    }
   }
 
   def checkPattern(sc: ValueType, pattern: MatchPattern)(implicit C: Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
@@ -204,12 +226,9 @@ class Typer extends Phase[Module, Module] { typer =>
       val constructorParams = subst substitute pms
 
       // (8) check nested patterns
-      if (patterns.size != constructorParams.size)
-        Context.error(s"Wrong number of pattern sections, given ${patterns.size}, but ${sym.name} expects ${constructorParams.size}.")
-
       var bindings = Map.empty[Symbol, ValueType]
 
-      (patterns zip constructorParams) foreach {
+      (List(patterns) zip constructorParams) foreach {
         case (pats, pars) =>
           if (pats.size != pars.size)
             Context.error(s"Wrong number of pattern arguments, given ${pats.size}, expected ${pars.size}.")

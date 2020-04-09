@@ -186,6 +186,15 @@ package object symbols {
   }
 
   trait TypeConstructor extends TypeSymbol with ValueType
+  object TypeConstructor {
+    def unapply(t: ValueType): Option[TypeConstructor] = t match {
+      case t: TypeVar         => None
+      case t: TypeAlias       => unapply(t.dealias)
+      case t: TypeConstructor => Some(t)
+      case TypeApp(tpe, args) => unapply(tpe)
+      case t: BuiltinType     => None
+    }
+  }
 
   case class DataType(name: Name, tparams: List[TypeVar], var variants: List[Record] = Nil) extends TypeConstructor
 

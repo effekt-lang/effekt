@@ -374,7 +374,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val pattern: P[MatchPattern] =
     ( "_" ^^^ IgnorePattern()
-    | idRef ~ some(`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
+    | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
     )
 

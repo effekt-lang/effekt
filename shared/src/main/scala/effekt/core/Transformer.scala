@@ -194,7 +194,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.IgnorePattern() => (core.IgnorePattern(), Nil)
     case source.AnyPattern(id)  => (core.AnyPattern(), List(core.ValueParam(id.symbol)))
     case p @ source.TagPattern(id, ps) =>
-      val (patterns, params) = ps.flatten.map(transform).unzip
+      val (patterns, params) = ps.map(transform).unzip
       (core.TagPattern(p.definition, patterns), params.flatten)
   }
 

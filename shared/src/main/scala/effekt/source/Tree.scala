@@ -206,7 +206,7 @@ case class AnyPattern(id: Id) extends MatchPattern with Definition { type symbol
  *
  *   case Cons(a, as) => ...
  */
-case class TagPattern(id: Id, patterns: List[List[MatchPattern]]) extends MatchPattern with Reference {
+case class TagPattern(id: Id, patterns: List[MatchPattern]) extends MatchPattern with Reference {
   type symbol = symbols.Record
 }
 
