@@ -262,6 +262,10 @@ class Typer extends Phase[Module, Module] { typer =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
         Context.assignType(sym, sym.toType)
+
+        sym.fields.foreach { field =>
+          Context.assignType(field, field.toType)
+        }
       }
 
     case d @ source.RecordDef(id, tparams, fields) =>

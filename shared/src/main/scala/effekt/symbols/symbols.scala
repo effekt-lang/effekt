@@ -206,7 +206,7 @@ package object symbols {
   case class Field(name: Name, param: ValueParam, rec: Record) extends Fun {
     val tparams = rec.tparams
     val tpe = param.tpe.get
-    val params = List(List(ValueParam(rec.name, Some(rec.tpe))))
+    val params = List(List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))
     val ret = Some(Effectful(tpe, Pure))
   }
 
