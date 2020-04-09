@@ -11,12 +11,23 @@ if (!shell.which(java)) {
 }
 
 var userArgs = process.argv.slice(2);
-var args = [
-  // the jar file to be executed
-  "-jar", __dirname + "/effekt.jar",
-  // the path to the standard library
-  "--lib", __dirname + "/../lib"
-].concat(userArgs)
+var args = []
+
+// don't provide the library path on help
+if (userArgs.indexOf("--help") != -1 || userArgs.indexOf("-h") != -1) {
+  args = [
+    // the jar file to be executed
+    "-jar", __dirname + "/effekt.jar"
+  ].concat(userArgs)
+
+} else {
+  args = [
+    // the jar file to be executed
+    "-jar", __dirname + "/effekt.jar",
+    // the path to the standard library
+    "--lib", __dirname + "/../lib"
+  ].concat(userArgs)
+}
 
 var effekt = spawn(java, args);
 
