@@ -43,7 +43,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case BlockDef(ps, body) =>
       jsLambda(ps map toDoc, toDoc(body))
     case Lift(b) =>
-      "$effekt.lift" <> parens(toDoc(b))
+      jsCall("$effekt.lift", toDoc(b))
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
   })
@@ -67,12 +67,12 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "$effekt.unit"
-    case StringLit(s)  => "\"" + s + "\""
+    case StringLit(s)  => jsString(s)
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
 
-    case Deref(id)     => nameRef(id) <> ".value()"
-    case Assign(id, e) => nameRef(id) <> ".value" <> parens(toDoc(e))
+    case Deref(id)     => jsCall(nameRef(id) <> ".value")
+    case Assign(id, e) => jsCall(nameRef(id) <> ".value", toDoc(e))
 
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
@@ -96,7 +96,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def toDocDelayed(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
-      "$effekt.delayed" <> parens(jsLambda(Nil, jsBlock(toDocStmt(s))))
+      jsCall("$effekt.delayed", jsLambda(Nil, jsBlock(toDocStmt(s))))
     else
       toDocExpr(s)
 
@@ -110,20 +110,25 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case Var(id, binding, body) =>
       toDocDelayed(binding) <> ".state" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+      jsCall(toDoc(b), args map argToDoc)
     case Do(b, id, args) =>
-      toDoc(b) <> "." <> nameRef(id) <> parens(hsep(args map argToDoc, comma))
+      jsCall(toDoc(b) <> "." <> nameRef(id), args map argToDoc)
     case If(cond, thn, els) =>
       parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
     case While(cond, body) =>
-      "$effekt._while" <> parens(
-        jsLambda(Nil, toDoc(cond)) <> comma <+> jsLambda(Nil, toDoc(body))
+      jsCall(
+        "$effekt._while",
+        jsLambda(Nil, toDoc(cond)),
+        jsLambda(Nil, toDoc(body))
       )
     case Ret(e) =>
-      "$effekt.pure" <> parens(toDoc(e))
+      jsCall("$effekt.pure", toDoc(e))
     case Exports(path, exports) =>
-      "Object.assign" <> parens(moduleName(path) <> comma <+>
-        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) }))
+      jsCall(
+        "Object.assign",
+        moduleName(path),
+        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
+      )
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
       val cs = parens(jsArray(handlers))
@@ -135,7 +140,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
           text("exec") -> toDoc(b)
         )
       })
-      "$effekt.match" <> parens(toDoc(sc) <> comma <+> cs)
+      jsCall("$effekt.match", toDoc(sc), cs)
     case other =>
       sys error s"Cannot print ${other} in expression position"
   }
@@ -146,7 +151,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case TagPattern(id, ps) =>
       val tag = jsString(nameDef(id))
       val childMatchers = ps map { p => toDoc(p) }
-      "$effekt.tagged(" <> hsep(tag :: childMatchers, comma) <> ")"
+      jsCall("$effekt.tagged", tag :: childMatchers)
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
@@ -174,7 +179,6 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
       text("__tag") -> jsString(nameDef(ctor)),
       text("__data") -> jsArray(fields map { f => nameDef(f) }),
-      text("__fields") -> jsArray(fields map { f => jsString(nameDef(f)) })
     ) ++ fields.map { f =>
         (nameDef(f), nameDef(f))
       }))
@@ -226,6 +230,9 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
 
   def jsString(contents: Doc): Doc =
     "\"" <> contents <> "\""
+
+  def jsCall(fun: Doc, args: Doc*): Doc = jsCall(fun, args.toList)
+  def jsCall(fun: Doc, args: List[Doc]): Doc = fun <> parens(hsep(args, comma))
 
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
