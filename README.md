@@ -35,6 +35,17 @@ You need to have the following software installed to build and use Effekt:
 - sbt
 - node and npm
 
+Additionally, since Effekt also compiles to JavaScript -- before building Effekt you also need a JS compatible fork of the Kiama library:
+
+- https://github.com/b-studios/kiama
+
+```
+git@github.com:b-studios/kiama.git
+cd kiama
+git checkout scala-js
+sbt publishLocal
+```
+
 ### REPL
 To start the REPL just clone the repository and enter `sbt run`. Checkout the `examples/` folder for examples demonstrating features of the Effekt language.
 
