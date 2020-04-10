@@ -37,6 +37,9 @@ lazy val commonSettings = Seq(
 lazy val root = project.in(file("."))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
+  .settings(Seq(
+    Compile / run := (effekt.jvm / Compile / run).evaluated
+  ))
 
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
 
