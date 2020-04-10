@@ -30,7 +30,13 @@ Maybe most importantly, effect checking becomes almost trivial, while supporting
 
 You need to have Java (>= 1.8) and Node (>= 10) and npm installed.
 
-The recommended way of installing Effekt is by downloading the `effekt.tgz` file from the [latest release](https://github.com/b-studios/effekt/releases) and then run
+The recommended way of installing Effekt is by running:
+
+```
+npm install -g https://github.com/b-studios/effekt/releases/latest/download/effekt.tgz
+```
+
+Alternatively, you can download the `effekt.tgz` file from [another release](https://github.com/b-studios/effekt/releases) and then run
 
 ```
 npm install -g effekt.tgz
