@@ -22,23 +22,33 @@ features:
 ---
 
 ## Getting Started
+Currently, the Effekt language is implemented in Scala and compiles to JavaScript.
+To use the Effekt compiler and run the resulting programs, you need to have a
+Java (>= 1.8), [Node.js](https://nodejs.org/en/) (>= 10)
+and [npm](https://www.npmjs.com) installed.
 
-Currently, the recommended way of getting started with Effekt is to download a pre-built relase.
-
-- Visit the [Release Page on Github](https://github.com/b-studios/effekt/releases)
-- Download `effekt.jar`
-
-You can now start Effekt by running
+The recommended way to install Effekt is by running:
 ```
-java -jar path/to/effekt.jar
+npm install -g https://github.com/b-studios/effekt/releases/latest/download/effekt.tgz
 ```
-This assumes you have a Java JDK >= 1.8 and NodeJS >= 10.x installed.
-For convience, you can then set up a script like [this one](https://github.com/b-studios/effekt/tree/master/bin) and
-add it to your PATH.
+This will download the compiler and install the `effekt` command.
+
+Alternatively, you can also download a specific release on the
+[release page on Github](https://github.com/b-studios/effekt/releases).
+
+And then install it with
+```
+npm install -g <PATH_TO_FILE>/effekt.tgz
+```
 
 ### Running the REPL
-Running Effekt without any additional arguments will bring you into the REPL:
 
+After making sure you satisfy all requirements and installed Effekt, you
+can run the Effekt REPL by entering the following command:
+```
+effekt
+```
+Running Effekt without any additional arguments will bring you into the REPL:
 ```
   _____     ______  __  __     _    _
  (_____)   |  ____|/ _|/ _|   | |  | |
@@ -54,6 +64,8 @@ Running Effekt without any additional arguments will bring you into the REPL:
 
 >
 ```
-Here, you can define functions and enter expressions to evaluate.
+Here, you can define functions, import modules and enter expressions to evaluate.
 Executing commands in the REPL compiles the corresponding Effekt-programs
-to Javascript (you can find them in `./out/`) and runs them with nodeJS.
+to Javascript (you can find them in `./out/`) and runs them with Node.js.
+
+You can find example programs in the [examples folder](https://github.com/b-studios/effekt/tree/master/examples/pos).
