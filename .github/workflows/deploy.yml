@@ -35,22 +35,23 @@ jobs:
       working-directory: kiama
 
     - name: Run tests and assemble jar file
-      run: sbt clean assembly
+      run: sbt clean deploy
 
-    - name: Assemble fully optimized js file
-      run: sbt effektJS/fullOptJS
+    - id: npmpackage
+      name: Generate npm package
+      run: mv $(npm pack) effekt.tgz
 
     - name: Upload jar file
       uses: actions/upload-artifact@v1
       with:
         name: effekt
-        path: jvm/target/scala-2.13/effekt.jar
+        path: bin/effekt.jar
 
-    - name: Upload js file
+    - name: Upload the npm package
       uses: actions/upload-artifact@v1
       with:
-        name: effekt-js
-        path: js/target/scala-2.13/effekt-opt.js
+        name: effekt-npm-package
+        path: effekt.tgz
 
   build-vscode:
     name: Build the VSCode extension
@@ -89,10 +90,10 @@ jobs:
           name: effekt
           path: distribution/
 
-      - name: Download JS artifact
+      - name: Download npm package
         uses: actions/download-artifact@v1
         with:
-          name: effekt-js
+          name: effekt-npm-package
           path: distribution/
 
       - name: Download VSCode artifact
@@ -124,16 +125,16 @@ jobs:
           asset_name: effekt.jar
           asset_content_type: application/java-archive
 
-      - name: Upload js file
-        id: upload_js
+      - name: Upload npm package
+        id: upload_npm
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./distribution/effekt-opt.js
-          asset_name: effekt.js
-          asset_content_type: text/javascript
+          asset_path: ./distribution/effekt.tgz
+          asset_name: effekt.tgz
+          asset_content_type: application/gzip
 
       - name: Upload vsix file
         id: upload_vsix
