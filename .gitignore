@@ -1,4 +1,5 @@
 .idea/
+*.code-workspace
 build/
 out/
 project/target/
@@ -7,3 +8,8 @@ drafts/
 node_modules/
 package-lock.json
 bin/effekt.jar
+licenses/
+
+notes/
+artwork/
+sbt-microsite-docs

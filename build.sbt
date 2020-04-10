@@ -4,6 +4,7 @@ import scalariform.formatter.preferences._
 
 enablePlugins(ScalaJSPlugin)
 
+
 lazy val effektVersion = "0.1.5"
 
 lazy val noPublishSettings = Seq(
@@ -64,7 +65,14 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     // We use the lib folder as resource directory to include it in the JAR
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
 
+    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
+
     deploy := {
+      import scala.sys.process.Process
+
+      // Download licenses of third party libraries
+      Process("mvn license:download-licenses license:add-third-party").!!
+
       val targetFile = (baseDirectory in ThisBuild).value / "bin" / "effekt.jar"
       val jarfile = assembly.value
       IO.copyFile(jarfile, targetFile)

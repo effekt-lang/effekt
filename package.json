@@ -12,6 +12,7 @@
   "bin": {
     "effekt": "bin/effekt.js"
   },
+  "private": true,
   "preferGlobal": true,
   "license": "MIT",
   "dependencies": {
@@ -19,7 +20,8 @@
   },
   "files": [
     "bin",
-    "lib"
+    "lib",
+    "licenses"
   ],
   "bugs": {
     "url": "https://github.com/b-studios/effekt/issues"
