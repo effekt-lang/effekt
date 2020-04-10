@@ -210,7 +210,7 @@
           display: inline-block;
 
           span {
-            display: inline-flex;
+            // display: inline-flex;
             flex-direction: row-reverse;
             font-size: 14px;
           }
@@ -220,6 +220,20 @@
             font-weight: bold;
             color: $brand-primary;
           }
+        }
+      }
+    }
+
+
+    .navigation-menu {
+
+      a, a:hover {
+        color: $text-color;
+      }
+      a span {
+        &:focus,
+        &:hover {
+          border-bottom: 2px solid;
         }
       }
     }
