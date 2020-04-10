@@ -26,6 +26,22 @@ The requirement that blocks always have to be (fully) applied and that we do not
 
 Maybe most importantly, effect checking becomes almost trivial, while supporting many use cases of effect polymorphism.
 
+## Installation
+
+You need to have Java (>= 1.8) and Node (>= 10) and npm installed.
+
+The recommended way of installing Effekt is by downloading the `effekt.tgz` file from the [latest release](https://github.com/b-studios/effekt/releases) and then run
+
+```
+npm install -g effekt.tgz
+```
+
+This will make the `effekt` command globally available. You can start the Effekt REPL by entering:
+
+```
+> effekt
+```
+
 ## Usage
 
 ### Preliminaries
