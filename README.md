@@ -26,24 +26,17 @@ The requirement that blocks always have to be (fully) applied and that we do not
 
 Maybe most importantly, effect checking becomes almost trivial, while supporting many use cases of effect polymorphism.
 
-
-## Possible Language Extensions
-There are many possible language extensions to grow Effekt into a GPL. When considering extensions, 
-we need to check against our top one priority: simplicity. 
-Are they really necessary? Do they work with the second class notion of blocks?
-
-- ~val binding (without polymorphism!) -- should be easy~ (implemented)
-- ~mutable variables, local control flow (branching, loops) -- should be easy~ (implemented)
-- ~algebraic data types, pattern matching -- should be easy as long as constructors can only store values, no blocks~ (draft implemented)
-- ~local function definitions -- while requiring FULL annotation of arguments. local functions can "close" over arguments / blocks. This is fine, since they are themselves not first class.~ (implemented)
-- multi arity returns
-- ~built in "show" and "equality"~ (implemented)
-- type classes? Ad hoc polymorphism? overloading?
-
 ## Usage
 
+### Preliminaries
+You need to have the following software installed to build and use Effekt:
+
+- java and maven
+- sbt
+- node and npm
+
 ### REPL
-To start the REPL just clone the repository and enter `sbt run`. Checkout the `examples/` folder for a examples demonstrating features of the Effekt language.
+To start the REPL just clone the repository and enter `sbt run`. Checkout the `examples/` folder for examples demonstrating features of the Effekt language.
 
 ### Compiling
 To compile Effekt sources to JavaScript, provide the `--compile` flag. For example:
@@ -51,26 +44,23 @@ To compile Effekt sources to JavaScript, provide the `--compile` flag. For examp
 ```
 sbt run --compile myfile.effekt
 ```
-This will generate JavaScript files in `./out`.
+This will generate JavaScript files in `./out`, the output folder can be configured by providing arguments `--out ./otherdir`.
 
 To run the generated JavaScript files you need to have a recent (> 10.0) version of Node.
-The generated files currently use the `amdefine` module format.
-To execute them you need to install `amdefine` and run it with nodeJS:
 
 ```
 cd out
-npm install amdefine
 node
 > require("./MY_FILE.js").main().run()
 ```
 
 ### Language Server
 Effekt comes with a basic language server implementation (LSP). The `dist/vscode` folder contains a VSCode extension. 
-There are at least two ways to setup VSCode. You can either download the `.vsix` file as Artifact from the latest commit, or build the VSCode editor extension yourself.
-Both ways, however rely on a jar file that contains the Effekt implementation. Again, you can either download the `jar` file as Artifact, or build it yourself.
+There are at least two ways to setup VSCode. You can either download the `.vsix` file from the latest release, or build the VSCode editor extension yourself.
+Both ways, however rely on a jar file that contains the Effekt implementation. Again, you can either download the `jar`, or build it yourself.
 
 #### Downloading or Building the Jar File
-Either download the `effekt.jar` or build it by running `sbt assembly`. The latter will generate the jar in the folder `target/scala-*/effekt.jar`. Remember the absolute path to the jar file, we need it later.
+Either download the `effekt.jar` or build it by running `sbt deploy`. The latter will generate the jar in the folder `bin/effekt.jar`. Remember the absolute path to the jar file, we need it later.
 
 #### Downloading the VSCode Extension
 Download the VSCode extension as Artifact from the latest commit. It should include a `vsix` file. In VSCode select "extensions / From VSIX ...".
