@@ -5,7 +5,7 @@ import scalariform.formatter.preferences._
 enablePlugins(ScalaJSPlugin)
 
 
-lazy val effektVersion = "0.1.5"
+lazy val effektVersion = "0.1.6"
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -78,7 +78,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
 
       // Update version in package.json and pom.xml
       Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
-      Process(s"mvn versions:set -DnewVersion=${effektVersion}").!!
+      Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
 
       val targetFile = (baseDirectory in ThisBuild).value / "bin" / "effekt.jar"
       val jarfile = assembly.value
