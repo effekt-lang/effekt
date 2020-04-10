@@ -76,6 +76,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       // Download licenses of third party libraries
       Process("mvn license:download-licenses license:add-third-party").!!
 
+      // Update version in package.json and pom.xml
+      Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
+      Process(s"mvn versions:set -DnewVersion=${effektVersion}").!!
+
       val targetFile = (baseDirectory in ThisBuild).value / "bin" / "effekt.jar"
       val jarfile = assembly.value
       IO.copyFile(jarfile, targetFile)
