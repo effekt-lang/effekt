@@ -5,7 +5,7 @@ on: [push]
 jobs:
   build-jar:
     name: Build Effekt compiler and run tests
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest, windows-latest]
     steps:
     - uses: actions/checkout@v2
 
