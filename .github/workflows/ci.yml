@@ -6,7 +6,7 @@ jobs:
   build-jar:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest]
 
     name: Build Effekt compiler and run tests
     runs-on: ${{ matrix.os }}
