@@ -6,7 +6,7 @@ jobs:
   build-jar:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [windows-latest]
 
     name: Build Effekt compiler and run tests
     runs-on: ${{ matrix.os }}
@@ -25,20 +25,6 @@ jobs:
       with:
         java-version: 1.8
 
-    - name: Set up NodeJS
-      uses: actions/setup-node@v1
-      with:
-        node-version: '10.x'
-
     - name: Install Kiama fork
       run: sbt publishLocal
       working-directory: kiama
-
-    - name: Run tests and assemble jar file
-      run: sbt clean deploy
-
-    - name: Generate npm package
-      run: npm pack
-
-    - name: Assemble fully optimized js file
-      run: sbt effektJS/fullOptJS
