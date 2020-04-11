@@ -38,20 +38,3 @@ jobs:
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
-
-  build-vscode:
-    name: Build the VSCode extension
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install Node.js
-      uses: actions/setup-node@v1
-      with:
-        node-version: 12.x
-    - run: npm install -g typescript
-    - run: npm install -g vsce
-    - run: npm install
-      working-directory: dist/vscode
-    - name: Package VSCode extension into .vsix file
-      run: vsce package
-      working-directory: dist/vscode

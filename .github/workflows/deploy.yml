@@ -53,29 +53,6 @@ jobs:
         name: effekt-npm-package
         path: effekt.tgz
 
-  build-vscode:
-    name: Build the VSCode extension
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install Node.js
-      uses: actions/setup-node@v1
-      with:
-        node-version: 12.x
-    - run: npm install -g typescript
-    - run: npm install -g vsce
-    - run: npm install
-      working-directory: dist/vscode
-    - name: Package VSCode extension into .vsix file
-      run: vsce package
-      working-directory: dist/vscode
-
-    - name: Upload vsix file
-      uses: actions/upload-artifact@v1
-      with:
-        name: effekt-vscode
-        path: dist/vscode/effekt-0.1.0.vsix
-
   release:
     name: Create Release
     runs-on: ubuntu-latest
@@ -135,14 +112,3 @@ jobs:
           asset_path: ./distribution/effekt.tgz
           asset_name: effekt.tgz
           asset_content_type: application/gzip
-
-      - name: Upload vsix file
-        id: upload_vsix
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./distribution/effekt-0.1.0.vsix
-          asset_name: effekt-vscode-extension.vsix
-          asset_content_type: application/zip
