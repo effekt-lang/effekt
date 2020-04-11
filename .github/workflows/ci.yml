@@ -4,8 +4,12 @@ on: [push]
 
 jobs:
   build-jar:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
     name: Build Effekt compiler and run tests
-    runs-on: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v2
 
