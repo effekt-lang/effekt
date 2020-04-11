@@ -58,6 +58,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       "org.rogach" %% "scallop" % "3.4.0",
       "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0",
       "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
+      "com.lihaoyi" %% "ammonite-terminal" % "2.0.4",
       "org.scala-sbt" %% "io" % "1.3.1" % "test",
       "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
     ),

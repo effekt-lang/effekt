@@ -2,8 +2,11 @@ package effekt
 
 import java.io.File
 
-import org.bitbucket.inkytonik.kiama.util.REPLConfig
-import org.rogach.scallop.ScallopOption
+import effekt.util.AmmoniteConsole
+
+import org.bitbucket.inkytonik.kiama.util.{ Console, FileConsole, REPLConfig, StringConsole }
+import org.rogach.scallop.{ ArgType, ScallopOption, ValueConverter }
+import scala.reflect.runtime.universe.TypeTag
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   lazy val compile: ScallopOption[Boolean] = toggle(
@@ -39,6 +42,27 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     sys error "Path to standard library not properly set"
   }
 
+  //  override object consoleConverter extends ValueConverter[Console] {
+  //
+  //    val argType = ArgType.LIST
+  //
+  //    def parse(s: List[(String, List[String])]): Either[String, Option[Console]] =
+  //      s match {
+  //        case List((_, List("ammonite"))) =>
+  //          Right(Some(AmmoniteConsole))
+  //        case List((_, List("file", filename))) =>
+  //          Right(Some(new FileConsole(filename)))
+  //        case List((_, List("string", contents))) =>
+  //          Right(Some(new StringConsole(contents)))
+  //        case List((_, _)) =>
+  //          Left("expected ammonite, 'file name' or 'string value'")
+  //        case _ =>
+  //          Right(None)
+  //      }
+  //
+  //    val tag = implicitly[TypeTag[Console]]
+  //  }
+
   def includes() = libPath :: includePath()
 
   def requiresCompilation(): Boolean = !server()
@@ -46,4 +70,5 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def interpret(): Boolean = !server() && !compile()
 
   validateFilesIsDirectory(includePath)
+
 }

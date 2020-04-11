@@ -2,11 +2,13 @@ package effekt
 
 import effekt.source._
 import effekt.symbols.{ BlockSymbol, Module, ValueSymbol }
-import effekt.util.ColoredMessaging
+import effekt.util.{ AmmoniteConsole, ColoredMessaging }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
+
+import scala.annotation.tailrec
 
 // for now we only take expressions
 class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
@@ -14,6 +16,8 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
   var module: ReplModule = emptyModule
 
   override val messaging = new ColoredMessaging(positions)
+
+  override val prompt = "\neffekt>"
 
   val banner =
     """|  _____     ______  __  __     _    _
@@ -120,6 +124,16 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       // Otherwise it's an expression for evaluation
       case _ =>
         super.processline(source, console, config)
+    }
+  }
+
+  override def processlines(config: EffektConfig): Unit = readEvalPrint(config)
+
+  @tailrec final def readEvalPrint(config: EffektConfig): EffektConfig = AmmoniteConsole.readLineOption(prompt) match {
+    case None => config
+    case Some(line) => processline(StringSource(line), AmmoniteConsole, config) match {
+      case None         => config
+      case Some(config) => readEvalPrint(config)
     }
   }
 
