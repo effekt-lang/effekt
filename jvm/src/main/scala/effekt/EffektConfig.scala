@@ -33,9 +33,9 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     required = false
   )
 
-  var stdLibTmpPath: Option[File] = None
+  var _libPath: Option[File] = None
 
-  def libPath: File = stdlibPath orElse stdLibTmpPath getOrElse {
+  def libPath: File = stdlibPath orElse _libPath getOrElse {
     sys error "Path to standard library not properly set"
   }
 

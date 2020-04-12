@@ -2,6 +2,7 @@ package effekt
 package util
 
 import java.io.{ File => JFile }
+import java.net.URI
 import java.nio.file.{ Path => JPath }
 
 object JavaPathUtils extends PathUtils {
@@ -40,4 +41,5 @@ object JavaPathUtils extends PathUtils {
 
   implicit def file(filepath: String) = new File(new JFile(filepath))
   implicit def file(underlying: JFile): File = new File(underlying)
+  implicit def file(uri: URI): File = new File(new JFile(uri))
 }

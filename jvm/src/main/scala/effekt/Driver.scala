@@ -33,10 +33,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
    */
   override def run(config: EffektConfig): Unit = {
 
-    // if no path to the standard library is provided, create a copy in a temporary folder
-    if (config.stdlibPath.isEmpty) {
-      config.stdLibTmpPath = Some(extractJarFile())
-    }
+    config._libPath = Some(findStdLib(config).toFile)
 
     if (config.filenames().isEmpty && !config.server()) {
       new Repl(this).run(config)
@@ -133,12 +130,54 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   override def parse(source: Source): ParseResult[ModuleDecl] = ???
 
   /**
+   * Tries to find the path to the standard library. Proceeds in the following
+   * order:
+   * 1) specified as part of the settings arg `lib`?
+   * 2) specified in an environment variable `EFFEKT_LIB`
+   * 3) relative to the current working directory
+   * 4) relative to to the executed JAR file (effekt.jar)
+   */
+  def findStdLib(config: EffektConfig): File = {
+
+    // 1) in config?
+    config.stdlibPath.foreach { path =>
+      return path
+    }
+
+    // 2) in PATH
+    if (System.getenv.containsKey("EFFEKT_LIB")) {
+      return System.getenv("EFFEKT_LIB")
+    }
+
+    // 3) in PWD
+    val pwd = file(".")
+    if ((pwd / "lib" / "effekt.effekt").exists) {
+      return pwd / "lib"
+    }
+
+    // 4) next to Jar
+    val jarPath = try {
+      file(getClass.getProtectionDomain.getCodeSource.getLocation.toURI).parent
+    } catch {
+      case e: Throwable =>
+        sys.error("Cannot find path to standard library")
+    }
+
+    if ((jarPath / "lib" / "effekt.effekt").exists) {
+      jarPath / "lib"
+    }
+
+    sys.error("Cannot find path to standard library")
+  }
+
+  /**
    * Creates a temporary folder and copies all .effekt and .js files into this folder
    *
    * This is how we establish that the files are present for the IDE to jump to definition.
    *
    * It registers all temporary files and folders for deletion, once the JVM shuts down gracefully.
    */
+  @deprecated
   def extractJarFile(): JFile = {
     import java.nio.file.{ FileSystems, Files, Paths, Path }
 
