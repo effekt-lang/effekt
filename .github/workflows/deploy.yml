@@ -41,11 +41,11 @@ jobs:
       name: Generate npm package
       run: mv $(npm pack) effekt.tgz
 
-    - name: Upload jar file
+    - name: Upload Effekt binary
       uses: actions/upload-artifact@v1
       with:
         name: effekt
-        path: bin/effekt.jar
+        path: bin/effekt
 
     - name: Upload the npm package
       uses: actions/upload-artifact@v1
@@ -73,12 +73,6 @@ jobs:
           name: effekt-npm-package
           path: distribution/
 
-      - name: Download VSCode artifact
-        uses: actions/download-artifact@v1
-        with:
-          name: effekt-vscode
-          path: distribution/
-
       - name: Create Release
         id: create_release
         uses: actions/create-release@latest
@@ -98,7 +92,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./distribution/effekt.jar
+          asset_path: ./distribution/effekt
           asset_name: effekt.jar
           asset_content_type: application/java-archive
 
