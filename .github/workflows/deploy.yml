@@ -56,7 +56,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build-jar, build-vscode]
+    needs: [build-jar]
     steps:
       - name: Checkout code
         uses: actions/checkout@master
