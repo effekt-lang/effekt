@@ -7,7 +7,7 @@ import scala.sys.process.Process
 enablePlugins(ScalaJSPlugin)
 
 
-lazy val effektVersion = "0.1.6"
+lazy val effektVersion = "0.1.7"
 
 lazy val noPublishSettings = Seq(
   publish := {},
