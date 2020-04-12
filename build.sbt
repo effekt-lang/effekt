@@ -2,6 +2,8 @@ import sbtcrossproject.CrossProject
 import scalariform.formatter.preferences.AlignSingleLineCaseStatements.MaxArrowIndent
 import scalariform.formatter.preferences._
 
+import scala.sys.process.Process
+
 enablePlugins(ScalaJSPlugin)
 
 
@@ -42,6 +44,8 @@ lazy val root = project.in(file("."))
   ))
 
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
+lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
+lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
@@ -70,19 +74,23 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
 
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
 
-    deploy := {
-      import scala.sys.process.Process
-
-      // Download licenses of third party libraries
+    generateLicenses := {
       Process("mvn license:download-licenses license:add-third-party").!!
+    },
 
-      // Update version in package.json and pom.xml
+    updateVersions := {
       Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
       Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
+    },
+
+    deploy := {
+      generateLicenses.value
+      updateVersions.value
+
+      val jarfile = assembly.value
 
       // prepend shebang to make jar file executable
       val binary = (baseDirectory in ThisBuild).value / "bin" / "effekt"
-      val jarfile = assembly.value
       IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
     },
@@ -97,24 +105,29 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
     // include all resource files in the virtual file system
-    sourceGenerators in Compile += Def.task {
+    sourceGenerators in Compile += stdLibGenerator.taskValue,
 
-      val baseDir = (baseDirectory in ThisBuild).value / "lib"
-      val resources = baseDir ** "*.*"
+    scalaJSUseMainModuleInitializer := true
+  )
 
-      val sourceDir = (sourceManaged in Compile).value
-      val sourceFile = sourceDir / "Resources.scala"
+lazy val stdLibGenerator = Def.task {
 
-      if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
+  val baseDir = (baseDirectory in ThisBuild).value / "lib"
+  val resources = baseDir ** "*.*"
 
-        val virtuals = resources.get.map { file =>
-          val filename = file.relativeTo(baseDir).get
-          val content = IO.read(file).replaceAllLiterally("$", "$$")
-          s"""file(raw\"\"\"$filename\"\"\").write(raw\"\"\"$content\"\"\")"""
-        }
+  val sourceDir = (sourceManaged in Compile).value
+  val sourceFile = sourceDir / "Resources.scala"
 
-        val scalaCode =
-          s"""
+  if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
+
+    val virtuals = resources.get.map { file =>
+      val filename = file.relativeTo(baseDir).get
+      val content = IO.read(file).replaceAllLiterally("$", "$$")
+      s"""file(raw\"\"\"$filename\"\"\").write(raw\"\"\"$content\"\"\")"""
+    }
+
+    val scalaCode =
+      s"""
 package effekt.util
 import effekt.util.JSPathUtils._
 
@@ -126,11 +139,8 @@ ${virtuals.mkString("\n\n")}
 }
 """
 
-        IO.write(sourceFile, scalaCode)
-      }
+    IO.write(sourceFile, scalaCode)
+  }
 
-      Seq(sourceFile)
-    }.taskValue,
-
-    scalaJSUseMainModuleInitializer := true
-  )
+  Seq(sourceFile)
+}

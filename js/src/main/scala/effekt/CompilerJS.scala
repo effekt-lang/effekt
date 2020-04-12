@@ -28,6 +28,7 @@ class CompilerJS extends Compiler {
     context.setup(JSConfig)
     compile(StringSource(s)) match {
       case None =>
+        println(context.buffer.get)
         sys error "Could not compile with EffektJS"
       case Some(_) =>
         output.toString
@@ -117,9 +118,7 @@ object Main extends App {
       |def bar() = "hello world"
       |def baz() = try {
       |  do Print(bar())
-      |} with {
-      |  case Print(s) => println(s)
-      |}
+      |} with Print { s => println(s) }
       |
       |def main() = println(bar())
       |""".stripMargin
