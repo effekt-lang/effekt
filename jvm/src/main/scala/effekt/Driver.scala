@@ -163,8 +163,8 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
         sys.error("Cannot find path to standard library")
     }
 
-    if ((jarPath / "lib" / "effekt.effekt").exists) {
-      jarPath / "lib"
+    if ((jarPath / ".." / "lib" / "effekt.effekt").exists) {
+      return jarPath / ".." / "lib"
     }
 
     sys.error("Cannot find path to standard library")

@@ -80,6 +80,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
       Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
 
+      // prepend shebang to make jar file executable
       val binary = (baseDirectory in ThisBuild).value / "bin" / "effekt"
       val jarfile = assembly.value
       IO.append(binary, "#! /usr/bin/env java -jar\n")
