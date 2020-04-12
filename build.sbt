@@ -80,9 +80,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
       Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
 
-      val targetFile = (baseDirectory in ThisBuild).value / "bin" / "effekt.jar"
+      val binary = (baseDirectory in ThisBuild).value / "bin" / "effekt"
       val jarfile = assembly.value
-      IO.copyFile(jarfile, targetFile)
+      IO.append(binary, "#! /usr/bin/env java -jar\n")
+      IO.append(binary, IO.readBytes(jarfile))
     },
 
     Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt"

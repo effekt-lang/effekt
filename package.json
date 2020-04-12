@@ -10,7 +10,7 @@
   "main": "index.js",
   "scripts": {},
   "bin": {
-    "effekt": "bin/effekt.js"
+    "effekt": "bin/effekt"
   },
   "private": true,
   "preferGlobal": true,
