@@ -264,6 +264,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | varDef  ~ (`;` ~/> stmts) ^^ DefStmt
     | dataDef ~ (`;` ~/> stmts) ^^ DefStmt
     | recordDef ~ (`;` ~/> stmts) ^^ DefStmt
+    | matchDef
     | expr ^^ Return
     )
 
@@ -286,10 +287,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val valDef: P[ValDef] =
-     `val` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef
+     `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef
 
   lazy val varDef: P[VarDef] =
      `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ VarDef
+
+  // TODO make the scrutinee a statement
+  lazy val matchDef: P[Stmt] =
+     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~/> stmts) ^^ {
+       case p ~ sc ~ body => Return(MatchExpr(sc, List(MatchClause(p, body))))
+     }
 
   lazy val typeDef: P[TypeDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef
@@ -376,6 +383,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( "_" ^^^ IgnorePattern()
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
+    | `(` ~> pattern ~ (`,` ~> pattern <~ `)`) ^^ { case f ~ s => TagPattern(IdRef("Pair"), List(f, s)) }
     )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
