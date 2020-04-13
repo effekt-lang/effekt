@@ -383,7 +383,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( "_" ^^^ IgnorePattern()
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
-    | `(` ~> pattern ~ (`,` ~> pattern <~ `)`) ^^ { case f ~ s => TagPattern(IdRef("Pair"), List(f, s)) }
+    | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
+        TagPattern(IdRef(s"Tuple${r.size + 1}"), f :: r)
+      }
     )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
@@ -399,7 +401,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
   lazy val primExpr: P[Expr] =
-    literals | pairLiteral | `(` ~/> expr <~ `)`
+    literals | tupleLiteral | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Expr] =
     idRef ^^ Var
@@ -410,8 +412,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } }
 
-  lazy val pairLiteral: P[Expr] =
-    `(` ~> expr ~ (`,` ~/> expr <~ `)`) ^^ PairTree
+  lazy val tupleLiteral: P[Expr] =
+    `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case first ~ rest => TupleTree(first :: rest) }
 
   private def NilTree: Expr =
     Call(IdRef("Nil"), Nil, List(ValueArgs(Nil)))
@@ -419,8 +421,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   private def ConsTree(el: Expr, rest: Expr): Expr =
     Call(IdRef("Cons"), Nil, List(ValueArgs(List(el, rest))))
 
-  private def PairTree(fst: Expr, snd: Expr): Expr =
-    Call(IdRef("Pair"), Nil, List(ValueArgs(List(fst, snd))))
+  private def TupleTree(args: List[Expr]): Expr =
+    Call(IdRef(s"Tuple${args.size}"), Nil, List(ValueArgs(args)))
 
   /**
    * Types and Effects
@@ -429,7 +431,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val valueType: P[ValueType] =
     ( idRef ~ typeArgs ^^ TypeApp
     | idRef ^^ TypeVar
-    | `(` ~> valueType ~ (`,` ~/> valueType <~ `)`) ^^ PairTypeTree
+    | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | failure("Expected a type")
     )
 
@@ -476,8 +478,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     case "++" => "infixConcat"
   }
 
-  private def PairTypeTree(fst: ValueType, snd: ValueType): ValueType =
-    TypeApp(IdRef("Pair"), (List(fst, snd)))
+  private def TupleTypeTree(tps: List[ValueType]): ValueType =
+    TypeApp(IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =
