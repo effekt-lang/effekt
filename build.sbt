@@ -7,7 +7,7 @@ import scala.sys.process.Process
 enablePlugins(ScalaJSPlugin)
 
 
-lazy val effektVersion = "0.1.7"
+lazy val effektVersion = "0.1.8"
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -95,6 +95,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       IO.append(binary, IO.readBytes(jarfile))
     },
 
+    Compile / sourceGenerators += versionGenerator.taskValue,
+
     Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt"
   )
   .jsSettings(
@@ -105,10 +107,25 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
     // include all resource files in the virtual file system
-    sourceGenerators in Compile += stdLibGenerator.taskValue,
+    Compile / sourceGenerators += stdLibGenerator.taskValue,
 
     scalaJSUseMainModuleInitializer := true
   )
+
+lazy val versionGenerator = Def.task {
+  val sourceDir = (sourceManaged in Compile).value
+  val sourceFile = sourceDir / "effekt" / "util" / "Version.scala"
+
+  IO.write(sourceFile,
+    s"""package effekt.util
+       |
+       |object Version {
+       |  val effektVersion = \"${effektVersion}\"
+       |}
+       |""".stripMargin)
+
+  Seq(sourceFile)
+}
 
 lazy val stdLibGenerator = Def.task {
 

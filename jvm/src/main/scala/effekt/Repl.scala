@@ -3,6 +3,8 @@ package effekt
 import effekt.source._
 import effekt.symbols.{ BlockSymbol, Module, ValueSymbol }
 import effekt.util.ColoredMessaging
+import effekt.util.Version.effektVersion
+
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
@@ -15,19 +17,22 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   override val messaging = new ColoredMessaging(positions)
 
-  val banner =
+  val logo =
     """|  _____     ______  __  __     _    _
        | (_____)   |  ____|/ _|/ _|   | |  | |
        |   ___     | |__  | |_| |_ ___| | _| |_
        |  (___)    |  __| |  _|  _/ _ \ |/ / __|
        |  _____    | |____| | | ||  __/   <| |_
        | (_____)   |______|_| |_| \___|_|\_\\__|
-       |
-       | Welcome to the Effekt interpreter. Enter a top-level definition, or
-       | an expression to evaluate.
-       |
-       | To print the available commands, enter :help
        |""".stripMargin
+
+  val banner = logo +
+    s"""|
+        | Welcome to the Effekt interpreter (v$effektVersion). Enter a top-level definition, or
+        | an expression to evaluate.
+        |
+        | To print the available commands, enter :help
+        |""".stripMargin
 
   def createConfig(args: Seq[String]) = driver.createConfig(args)
 
