@@ -46,8 +46,8 @@ object Highlight {
 
   val tokens = List(whitespace, comment, keyword, ident, number, string, any)
 
-  final def highlight(input: String, out: StringBuffer): StringBuffer = {
-
+  final def apply(input: String): String = {
+    val out = new StringBuffer
     var in = input
 
     while (in.nonEmpty) {
@@ -63,6 +63,6 @@ object Highlight {
       out.append(hl)
       in = rest
     }
-    out
+    out.toString
   }
 }
