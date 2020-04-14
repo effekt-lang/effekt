@@ -40,13 +40,10 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
   def run(config: EffektConfig): Unit = {
     val out = config.output()
     out.emitln(banner)
-
-    if (config.time())
-      profiler.time(processlines(config))
-    else
+    usingCommandHistory(config) {
       processlines(config)
-
-    config.output().emitln
+      config.output().emitln
+    }
   }
 
   def parse(source: Source): ParseResult[Tree] = {
@@ -232,6 +229,25 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     def unapply(str: String): Option[List[String]] =
       if (str.startsWith(":")) Some(str.split(' ').toList) else None
   }
+
+  import kiama.util.JLineConsole
+  import effekt.util.JavaPathUtils._
+  import jline.console.history.FileHistory
+
+  /**
+   * Enables persistent command history on JLine
+   */
+  def usingCommandHistory[T](config: EffektConfig)(block: => T): T =
+    config.console() match {
+      case c: JLineConsole.type =>
+        val historyFile = file(System.getProperty("user.home")) / ".effekt_history"
+        val history = new FileHistory(historyFile.toFile)
+        c.reader.setHistory(history)
+        c.reader.setHistoryEnabled(true)
+
+        try { block } finally { history.flush() }
+      case _ => block
+    }
 
   /**
    * A virtual module to which we add by using the REPL
