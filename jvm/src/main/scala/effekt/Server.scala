@@ -59,6 +59,7 @@ trait LSPServer extends Driver with Intelligence {
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
     sym <- context.sources.keys
+    if !sym.synthetic
     mod = context.owner(sym)
     if mod.source == source
     id <- context.sources.get(sym)
