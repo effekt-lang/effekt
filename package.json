@@ -15,9 +15,7 @@
   "private": true,
   "preferGlobal": true,
   "license": "MIT",
-  "dependencies": {
-    "shelljs": "^0.8.3"
-  },
+  "dependencies": {},
   "files": [
     "bin",
     "lib",
