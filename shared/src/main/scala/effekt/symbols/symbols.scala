@@ -26,6 +26,10 @@ package object symbols {
   sealed trait ValueSymbol extends TermSymbol
   sealed trait BlockSymbol extends TermSymbol
 
+  sealed trait Synthetic extends Symbol {
+    override def synthetic = true
+  }
+
   // TODO move this to Name
 
   /**
@@ -201,7 +205,7 @@ package object symbols {
   /**
    * Structures are also function symbols to represent the constructor
    */
-  case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Fun {
+  case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Fun with Synthetic {
     // Parameter and return type of the constructor:
     lazy val params = List(fields.map { f => f.param })
     def ret = Some(Effectful(tpe, Pure))
@@ -212,7 +216,7 @@ package object symbols {
    *
    * param: The underlying constructor parameter
    */
-  case class Field(name: Name, param: ValueParam, rec: Record) extends Fun {
+  case class Field(name: Name, param: ValueParam, rec: Record) extends Fun with Synthetic {
     val tparams = rec.tparams
     val tpe = param.tpe.get
     val params = List(List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))

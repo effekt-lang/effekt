@@ -32,6 +32,11 @@ trait Symbol {
    */
   def builtin = false
 
+  /**
+   * Is this symbol synthesized? (e.g. a constructor or field access)
+   */
+  def synthetic = false
+
   override def hashCode: Int = id
   override def equals(other: Any): Boolean = other match {
     case other: Symbol => this.id == other.id

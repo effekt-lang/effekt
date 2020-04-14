@@ -1,19 +1,18 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ BlockSymbol, Module, ValueSymbol }
-import effekt.util.ColoredMessaging
+import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.util.{ ColoredMessaging, Highlight }
 import effekt.util.Version.effektVersion
-
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
-// for now we only take expressions
+
 class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
-  var module: ReplModule = emptyModule
+  private implicit lazy val context = driver.context
 
   override val messaging = new ColoredMessaging(positions)
 
@@ -26,7 +25,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
        | (_____)   |______|_| |_| \___|_|\_\\__|
        |""".stripMargin
 
-  val banner = logo +
+  override val banner = logo +
     s"""|
         | Welcome to the Effekt interpreter (v$effektVersion). Enter a top-level definition, or
         | an expression to evaluate.
@@ -34,24 +33,30 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         | To print the available commands, enter :help
         |""".stripMargin
 
-  def createConfig(args: Seq[String]) = driver.createConfig(args)
+  override def createConfig(args: Seq[String]) = driver.createConfig(args)
 
-  // Adapting Kiama REPL's driver to work with an already processed config
+  /**
+   * Adapting Kiama REPL's driver to work with an already processed config.
+   *
+   * Called by the Driver if no arguments are provided to the Effekt binary
+   */
   def run(config: EffektConfig): Unit = {
     val out = config.output()
     out.emitln(banner)
     usingCommandHistory(config) {
       processlines(config)
-      config.output().emitln
+      out.emitln()
     }
   }
 
-  def parse(source: Source): ParseResult[Tree] = {
+  /**
+   * Use the special `repl` nonterminal to process the input. It recognizes expressions, statements
+   * and everything else that can occur on the top-level.
+   */
+  override def parse(source: Source): ParseResult[Tree] = {
     val parsers = new Parser(positions)
     parsers.parseAll(parsers.repl, source)
   }
-
-  def reset() = { module = emptyModule }
 
   /**
    * Adapted from the kiama/lambda2/Lambda example
@@ -65,10 +70,10 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     // Shorthand access to the output emitter
     val output = config.output()
 
-    /*
-     * Print help about the available commands.
+    /**
+     * Command `help`: Prints help about the available commands.
      */
-    def printHelp(): Unit = {
+    def help(): Unit = {
       output.emitln(
         """|<expression>              print the result of evaluating exp
            |<definition>              add a definition to the REPL context
@@ -83,40 +88,86 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       )
     }
 
-    source.content match {
+    /**
+     * Command `:reset` -- Reset the virtual module the Repl operates on
+     */
+    def reset() = { module = emptyModule }
 
-      case Command(List(":status")) =>
+    /**
+     * Command `:status` -- Prints help about the available commands
+     */
+    def status(config: EffektConfig): Unit = {
+      import symbols._
+
+      module.imports.foreach { im =>
+        outputCode(s"import ${im.path}", config)
+      }
+      output.emitln("")
+
+      runFrontend(StringSource(""), module.make(UnitLit()), config) { cu =>
+        module.definitions.foreach {
+          case u: Def =>
+            outputCode(DeclPrinter(context.symbolOf(u)), config)
+        }
+      }
+    }
+
+    /**
+     * Command `:type` -- runs the frontend (and typechecker) on the given expression
+     */
+    def typecheck(source: Source, config: EffektConfig): Unit =
+      parse(source) match {
+        case Success(e: Expr, _) =>
+          runFrontend(source, module.make(e), config) { mod =>
+            // TODO this is a bit ad-hoc
+            val mainSym = mod.terms("main").head
+            val mainTpe = context.blockTypeOf(mainSym)
+            output.emitln(mainTpe.ret)
+          }
+
+        case Success(other, _) =>
+          output.emitln("Can only show type of expressions")
+
+        // this is usually encapsulated in REPL.processline
+        case res: NoSuccess =>
+          val pos = res.next.position
+          positions.setStart(res, pos)
+          positions.setFinish(res, pos)
+          val messages = message(res, res.message)
+          report(source, messages, config)
+      }
+
+    source.content match {
+      case Command(":status", _) =>
         status(config)
         Some(config)
 
-      case Command(List(":reset")) =>
+      case Command(":reset", _) =>
         reset()
         Some(config)
 
-      case Command(List(":l", path)) =>
+      case Command(":l", path) =>
         val src = StringSource(s"import $path", source.name)
         super.processline(src, console, config)
         Some(config)
 
-      case Command(List(":imports")) =>
+      case Command(":imports", _) =>
         output.emitln(module.imports.map { i => i.path }.mkString("\n"))
         Some(config)
 
-      case Command(List(":help")) | Command(List(":h")) =>
-        printHelp()
+      case Command(":help", _) | Command(":h", _) =>
+        help()
         Some(config)
 
-      case Command(List(":quit")) | Command(List(":q")) =>
+      case Command(":quit", _) | Command(":q", _) =>
         None
 
-      case Command(":type" :: _) =>
-        val exprSource = StringSource(source.content.stripPrefix(":type "), source.name)
-        typecheck(exprSource, config)
+      case Command(cmd, expr) if cmd == ":type" || cmd == ":t" =>
+        typecheck(StringSource(expr, source.name), config)
         Some(config)
 
-      case Command(":t" :: _) =>
-        val exprSource = StringSource(source.content.stripPrefix(":t "), source.name)
-        typecheck(exprSource, config)
+      case Command(cmd, _) =>
+        output.emitln(s"Unknown command ${cmd}, enter :help for a list of available commands")
         Some(config)
 
       // Otherwise it's an expression for evaluation
@@ -124,50 +175,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         super.processline(source, console, config)
     }
   }
-
-  def status(config: EffektConfig): Unit = {
-    import symbols._
-
-    val source = StringSource("")
-    val out = config.output()
-
-    module.imports.foreach { im =>
-      out.emitln(s"import ${im.path}")
-    }
-    out.emitln("")
-
-    runFrontend(source, module.make(UnitLit()), config) { cu =>
-      val ctx = driver.context
-
-      module.definitions.foreach {
-        case u: Def =>
-          val sym = ctx.symbolOf(u)
-          out.emitln(DeclPrinter(sym)(driver.context))
-      }
-    }
-  }
-
-  // TODO refactor and clean this up
-  def typecheck(source: Source, config: EffektConfig): Unit =
-    parse(source) match {
-      case Success(e: Expr, _) =>
-        runFrontend(source, module.make(e), config) { mod =>
-          val mainSym = mod.terms("main").head
-          val mainTpe = driver.context.blockTypeOf(mainSym)
-          config.output().emitln(mainTpe.ret)
-        }
-
-      case Success(other, _) =>
-        config.output().emitln("Can only show type of expressions")
-
-      // this is usually encapsulated in REPL.processline
-      case res: NoSuccess =>
-        val pos = res.next.position
-        positions.setStart(res, pos)
-        positions.setFinish(res, pos)
-        val messages = message(res, res.message)
-        report(source, messages, config)
-    }
 
   /**
    * Processes the given tree, but only commits changes to definitions and
@@ -179,9 +186,29 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
     case i: Import if !module.contains(i) =>
       val extendedImports = module + i
-      val decl = extendedImports.make(UnitLit())
+      val output = config.output()
 
-      runFrontend(source, decl, config) { cu =>
+      context.setup(config)
+      val src = context.findSource(i.path).getOrElse {
+        output.emitln(s"Cannot find source for import ${i.path}")
+        return
+      }
+
+      runParsingFrontend(src, config) { cu =>
+        output.emitln(s"Successfully imported ${i.path}\n")
+        output.emitln(s"Imported Types\n==============")
+        cu.types.toList.sortBy { case (n, _) => n }.collect {
+          case (name, sym) if !sym.synthetic =>
+            outputCode(DeclPrinter(sym), config)
+        }
+        output.emitln(s"\nImported Functions\n==================")
+        cu.terms.toList.sortBy { case (n, _) => n }.foreach {
+          case (name, syms) =>
+            syms.collect {
+              case sym if !sym.synthetic =>
+                outputCode(DeclPrinter(sym), config)
+            }
+        }
         module = extendedImports
       }
 
@@ -192,52 +219,65 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        (driver.context.symbolOf(d) match {
+        (context.symbolOf(d) match {
           case v: ValueSymbol =>
-            Some(driver.context.valueTypeOf(v))
+            Some(context.valueTypeOf(v))
           case b: BlockSymbol =>
-            Some(driver.context.blockTypeOf(b))
+            Some(context.blockTypeOf(b))
           case t =>
             None
         }) map { tpe =>
-          config.output().emitln(tpe)
+          outputCode(s"${d.id.name}: ${tpe}", config)
         }
       }
 
     case _ => ()
   }
 
-  def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
-    implicit val context = driver.context
+  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
     context.setup(config)
 
     for {
       mod <- driver.compile(ast, source)
     } driver.eval(mod)
 
-    report(source, driver.context.buffer.get, config)
+    report(source, context.buffer.get, config)
   }
 
-  def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
-    driver.context.setup(config)
-    driver.frontend(ast, source)(driver.context) map { f } getOrElse {
-      report(source, driver.context.buffer.get, driver.context.config)
+  private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
+    context.setup(config)
+    driver.frontend(ast, source) map { f } getOrElse {
+      report(source, context.buffer.get, context.config)
+    }
+  }
+
+  private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
+    context.setup(config)
+    driver.frontend(source) map { f } getOrElse {
+      report(source, context.buffer.get, context.config)
     }
   }
 
   object Command {
-    def unapply(str: String): Option[List[String]] =
-      if (str.startsWith(":")) Some(str.split(' ').toList) else None
+    import scala.util.matching.Regex
+
+    val command = ":[\\w]+".r
+    def unapply(str: String): Option[(String, String)] = command.findPrefixMatchOf(str) map {
+      m => (m.matched, str.substring(m.end).trim)
+    }
   }
 
-  import kiama.util.JLineConsole
-  import effekt.util.JavaPathUtils._
-  import jline.console.history.FileHistory
+  def outputCode(code: String, config: EffektConfig): Unit =
+    config.output().emitln(Highlight(code))
 
   /**
    * Enables persistent command history on JLine
    */
-  def usingCommandHistory[T](config: EffektConfig)(block: => T): T =
+  def usingCommandHistory[T](config: EffektConfig)(block: => T): T = {
+    import kiama.util.JLineConsole
+    import effekt.util.JavaPathUtils._
+    import jline.console.history.FileHistory
+
     config.console() match {
       case c: JLineConsole.type =>
         val historyFile = file(System.getProperty("user.home")) / ".effekt_history"
@@ -248,6 +288,9 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         try { block } finally { history.flush() }
       case _ => block
     }
+  }
+
+  private var module: ReplModule = emptyModule
 
   /**
    * A virtual module to which we add by using the REPL
