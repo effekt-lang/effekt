@@ -169,9 +169,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val effectDef: P[Def] =
     ( `effect` ~> effectOp ^^ {
         case op =>
-          val effectId = IdRef(op.id.name)
-          positions.dupPos(op.id, effectId)
-          EffDef(effectId, List(op))
+          EffDef(IdRef(op.id.name) withPositionOf op.id, List(op))
       }
     | `effect` ~> idDef ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
     )
@@ -222,7 +220,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `[` ~/> manySep(idDef, `,`) <~ `]`
 
   lazy val maybeTypeParams: P[List[Id]] =
-    typeParams.? ^^ { o => o.getOrElse(Nil) }
+    typeParams.? ^^ { o => o getOrElse Nil }
 
   /**
    * Arguments
@@ -295,12 +293,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~/> stmts) ^^ {
        case p ~ sc ~ body =>
-        // TODO clean up positions code here
-        val clause = MatchClause(p, body)
-        positions.dupPos(p, clause)
-        val matchExpr = MatchExpr(sc, List(clause))
-        positions.dupPos(p, matchExpr)
-        Return(matchExpr)
+        Return(MatchExpr(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
   lazy val typeDef: P[TypeDef] =
@@ -333,7 +326,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
         case (firstArg, name ~ targs ~ otherArgs) =>
-          Call(name, targs, ValueArgs(List(firstArg)) :: otherArgs)
+          Call(name, targs, ValueArgs(List(firstArg)).withPositionOf(firstArg) :: otherArgs)
       }
     }
 
@@ -361,7 +354,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val resumeExpr: P[Expr] =
-    (`resume` ^^^ IdRef("resume")) ~ valueArgs ^^ { case r ~ args => Call(r, Nil, List(args)) }
+    (`resume` ^^^ IdRef("resume")) ~ valueArgs ^^ { case r ~ args => Call(r, Nil, List(args)) withPositionOf r }
 
   lazy val handleExpr: P[Expr] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
@@ -370,9 +363,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ Handler
     | `with` ~> idRef ~ (`{` ~>lambdaArgs) ~ implicitResume ~ (`=>` ~/> stmts) <~ `}` ^^ {
       case effectId ~ params ~ resume ~ body =>
-        val opId = IdRef(effectId.name)
-        positions.dupPos(effectId, opId)
-        Handler(effectId, List(OpClause(opId, List(params), body, resume)))
+        Handler(effectId, List(OpClause(IdRef(effectId.name), List(params), body, resume) withPositionOf effectId))
       }
     )
 
@@ -499,4 +490,19 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
     rep1sep(p, sep) ^^ { _.toList }
 
+
+  implicit class PositionOps[T](val self: T) {
+    def withPositionOf(other: Tree): self.type = { dupAll(other, self); self }
+
+    private def dupIfEmpty(from: Tree, to: Tree): Unit =
+      if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
+
+    private def dupAll(from: Tree, to: Any): Unit = to match {
+      case t: Tree =>
+        dupIfEmpty(from, t)
+        t.productIterator.foreach { dupAll(from, _) }
+      case t: Iterable[t] => t.foreach { dupAll(from, _) }
+      case _ => ()
+    }
+  }
 }
