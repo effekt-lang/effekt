@@ -1,0 +1,17 @@
+module matchblock
+
+import immutable/list
+
+type P {
+  Person(name: String, age: Int)
+}
+
+def people() = [
+    Person("Peter", 38),
+    Person("Mary", 43),
+    Person("Steve", 17)
+]
+
+def main() = println(people().map {
+    case Person(n, a) => a
+})

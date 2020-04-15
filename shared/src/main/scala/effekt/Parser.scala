@@ -233,6 +233,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val blockArg: P[BlockArg] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ BlockArg
+    | `{` ~> some(clause) <~ `}` ^^ { cs =>
+      // TODO positions should be improved here and fresh names should be generated for the scrutinee
+      val name = "__tmpRes"
+      BlockArg(
+        ValueParams(List(ValueParam(IdDef(name), None))),
+        Return(MatchExpr(Var(IdRef(name)), cs)))
+    }
     | `{` ~> stmts <~ `}` ^^ { s => BlockArg(ValueParams(Nil), s) }
     )
 
