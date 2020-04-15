@@ -1,0 +1,15 @@
+module matchdef
+
+type P {
+  Person(name: String, age: Int);
+  Other()
+}
+
+def main() = {
+
+    // here a match is synthesized, error message should still point to this location
+    val r = Person("Peter", 39);
+
+    val Person(name, age) = r;
+    println(name)
+}

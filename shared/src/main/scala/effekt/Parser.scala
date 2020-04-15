@@ -294,7 +294,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~/> stmts) ^^ {
-       case p ~ sc ~ body => Return(MatchExpr(sc, List(MatchClause(p, body))))
+       case p ~ sc ~ body =>
+        // TODO clean up positions code here
+        val clause = MatchClause(p, body)
+        positions.dupPos(p, clause)
+        val matchExpr = MatchExpr(sc, List(clause))
+        positions.dupPos(p, matchExpr)
+        Return(matchExpr)
      }
 
   lazy val typeDef: P[TypeDef] =
