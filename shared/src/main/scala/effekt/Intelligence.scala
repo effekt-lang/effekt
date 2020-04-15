@@ -155,13 +155,13 @@ trait Intelligence extends Compiler {
     case c: ResumeParam =>
       val tpe = C.blockTypeOption(c)
       val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
-      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse("")
+      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse(" ")
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound
             |when handling effect operations.
             |
-            |The following three types have to be the same (i.e., `$hint`):
+            |The following three types have to be the same$hint:
             |- the return type of the operation clause
             |- the type of the handled expression enclosed by `try { EXPR } with { ... }`, and
             |- the return type of the resumption.
