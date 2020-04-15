@@ -1,2 +1,2 @@
 #!/bin/bash
-java -jar /usr/bin/local/effekt $@
+java -jar $(npm root -g)/effekt/bin/effekt $@
