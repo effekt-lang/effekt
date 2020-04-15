@@ -9,7 +9,6 @@ import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
-
 class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   private implicit lazy val context = driver.context
