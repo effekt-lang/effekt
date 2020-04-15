@@ -91,7 +91,6 @@ trait Intelligence extends Compiler {
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 
     case f: UserFunction if C.blockTypeOption(f).isDefined =>
-      val tpe = C.blockTypeOf(f)
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
 
     case f: BuiltinEffect =>
@@ -139,7 +138,7 @@ trait Intelligence extends Compiler {
       SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
 
     case c: BlockParam =>
-      val tpe = C.blockTypeOf(c)
+      val signature = C.blockTypeOption(c).map { tpe => s"{ ${c.name}: ${tpe} }" }
 
       val ex =
         s"""|Blocks, like `${c.name}`, are similar to functions in other languages.
@@ -151,22 +150,24 @@ trait Intelligence extends Compiler {
             |yielded to.
             |""".stripMargin
 
-      SymbolInfo(c, "Block parameter", Some(s"{ ${c.name}: ${tpe} }"), Some(ex))
+      SymbolInfo(c, "Block parameter", signature, Some(ex))
 
     case c: ResumeParam =>
-      val tpe = C.blockTypeOf(c)
+      val tpe = C.blockTypeOption(c)
+      val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
+      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse("")
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound
             |when handling effect operations.
             |
-            |The following three types have to be the same (i.e., `${tpe.ret.tpe}`):
+            |The following three types have to be the same (i.e., `$hint`):
             |- the return type of the operation clause
             |- the type of the handled expression enclosed by `try { EXPR } with { ... }`, and
             |- the return type of the resumption.
             |""".stripMargin
 
-      SymbolInfo(c, "Resumption", Some(s"{ ${c.name}: ${tpe} }"), Some(ex))
+      SymbolInfo(c, "Resumption", signature, Some(ex))
 
     case c: ValueParam =>
       val tpe = C.valueTypeOption(c).getOrElse { c.tpe.get }
