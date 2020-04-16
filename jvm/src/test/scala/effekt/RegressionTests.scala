@@ -11,43 +11,31 @@ import scala.language.implicitConversions
 
 class RegressionTests extends AnyFunSpec {
 
-  val srcFolder = new File("examples")
-  val posFiles = (srcFolder / "pos") ** "*.effekt"
-  val negFiles = (srcFolder / "neg") ** "*.effekt"
+  def runTestsIn(dir: File): Unit = describe(dir.getName) {
+    dir.listFiles.foreach {
+      case f if f.isDirectory => runTestsIn(f)
+      case f if f.getName.endsWith(".effekt") =>
+        val path = f.getParentFile
+        val baseName = f.getName.stripSuffix(".effekt")
 
-  describe("Positive tests") {
-    for (file <- posFiles.get) {
-      val path = file.getParentFile
-      val baseName = file.getName.stripSuffix(".effekt")
-      val checkfile = path / (baseName + ".check")
+        val checkfile = path / (baseName + ".check")
 
-      it(file.getPath) {
-        val out = interpret(file.getPath)
-        val expected = if (checkfile.exists()) { IO.read(checkfile).toString } else { "" }
-        assert(expected == out)
-      }
-    }
-  }
-
-  describe("Negative tests") {
-    for (file <- negFiles.get) {
-      val path = file.getParentFile
-      val baseName = file.getName.stripSuffix(".effekt")
-      val checkfile = path / (baseName + ".check")
-
-      it(file.getPath) {
-        val out = interpret(file.getPath)
-
-        if (checkfile.exists()) {
-          val expected = IO.read(checkfile).toString
-          assert(expected == out)
-        } else {
-          ??? // TODO check output for messages.. for now that would be good enough for
-          // a neg test
+        if (!checkfile.exists()) {
+          sys error s"Missing checkfile for ${f.getPath}"
         }
-      }
+
+        it(f.getName) {
+          val out = interpret(f.getPath)
+
+          if (checkfile.exists()) {
+            assert(IO.read(checkfile).toString == out)
+          }
+        }
+      case _ => ()
     }
   }
+
+  runTestsIn(new File("examples"))
 
   def interpret(filename: String): String = {
     val compiler = new effekt.Driver {}
@@ -68,16 +56,22 @@ class RegressionTests extends AnyFunSpec {
    * Check afterwards with:
    *    git diff
    */
-  def generateCheckFiles(): Unit = {
-    println("Generating check files by running the tests. This can take a while...\n")
-    for (file <- (posFiles.get ++ negFiles.get)) {
-      val path = file.getParentFile
-      val baseName = file.getName.stripSuffix(".effekt")
-      val checkfile = path / (baseName + ".check")
+  def generateCheckFilesIn(dir: File): Unit = {
+    println(s"Generating check files in folder: ${dir.getPath}")
+    dir.listFiles.foreach {
+      case f if f.isDirectory => generateCheckFilesIn(f)
+      case f if f.getName.endsWith(".effekt") =>
+        println(s"Writing checkfile for ${f}")
+        val path = f.getParentFile
+        val baseName = f.getName.stripSuffix(".effekt")
+        val checkfile = path / (baseName + ".check")
 
-      val out = interpret(file.getPath)
-      IO.write(checkfile, out)
+        val out = interpret(f.getPath)
+        IO.write(checkfile, out)
+      case _ => ()
     }
   }
+
+  def generateCheckFiles(): Unit = generateCheckFilesIn(new File("examples"))
 
 }
