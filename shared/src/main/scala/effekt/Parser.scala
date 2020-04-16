@@ -1,9 +1,11 @@
 package effekt
 
+import java.util
+
 import effekt.context.Context
 import effekt.source._
 import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, Parsers, Success }
-import org.bitbucket.inkytonik.kiama.util.{ Positions, Source }
+import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
 
@@ -133,7 +135,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
 
   // === Parsing ===
-  
+
   // turn scalariform formatting off!
   // format: OFF
 
@@ -235,10 +237,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ BlockArg
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
+      // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
       BlockArg(
         ValueParams(List(ValueParam(IdDef(name), None))),
-        Return(MatchExpr(Var(IdRef(name)), cs)))
+        Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockArg(ValueParams(Nil), s) }
     )
@@ -286,11 +289,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     handleExpr ~/ stmts ^^ { case h ~ s => ExprStmt(h, s) }
 
   lazy val withStmt: P[Stmt] =
-    ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p))}) ~ (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
-        case params ~ id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(params, body) ))
+    ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
+          (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
+        case params ~ id ~ tps ~ args ~ body =>
+          Return(Call(id, tps, args :+ BlockArg(params, body)) withPositionOf params)
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
-        case id ~ tps ~ args ~ body => Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body) ))
+        case id ~ tps ~ args ~ body =>
+          Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body)) withPositionOf id)
        }
     )
 
@@ -391,7 +397,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
     | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
-        TagPattern(IdRef(s"Tuple${r.size + 1}"), f :: r)
+        TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
 
@@ -417,10 +423,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     double | int | bool | unit | variable | string | listLiteral
 
   lazy val listLiteral: P[Expr] =
-    `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } }
+    `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
 
   lazy val tupleLiteral: P[Expr] =
-    `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case first ~ rest => TupleTree(first :: rest) }
+    `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Expr =
     Call(IdRef("Nil"), Nil, List(ValueArgs(Nil)))
@@ -501,19 +507,65 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def someSep[T](p: => Parser[T], sep: => Parser[_]): Parser[List[T]] =
     rep1sep(p, sep) ^^ { _.toList }
 
-
   implicit class PositionOps[T](val self: T) {
-    def withPositionOf(other: Tree): self.type = { dupAll(other, self); self }
+    def withPositionOf(other: Any): self.type = { dupAll(other, self); self }
 
-    private def dupIfEmpty(from: Tree, to: Tree): Unit =
+    private def dupIfEmpty(from: Any, to: Any): Unit =
       if (positions.getStart(to).isEmpty) { positions.dupPos(from, to) }
 
-    private def dupAll(from: Tree, to: Any): Unit = to match {
+    private def dupAll(from: Any, to: Any): Unit = to match {
       case t: Tree =>
         dupIfEmpty(from, t)
         t.productIterator.foreach { dupAll(from, _) }
       case t: Iterable[t] => t.foreach { dupAll(from, _) }
       case _ => ()
     }
+
+    def range: Option[Range] = for {
+      from <- positions.getStart(self)
+      to   <- positions.getFinish(self)
+    } yield SourceRange(from, to)
   }
+
+  trait Range {
+    def ++(other: Range): Range
+  }
+
+  case object EmptyRange extends Range {
+    def ++(other: Range) = other
+  }
+
+  case class SourceRange(val from: Position, val to: Position) extends Range {
+    // computes the envelope containing both ranges
+    def ++(other: Range) = other match {
+      case EmptyRange => this
+      case SourceRange(from2, to2) =>
+        SourceRange(if (from2 < from) from2 else from, if (to < to2) to2 else to)
+    }
+  }
+
+  /**
+   * Check positions of all subtrees, stopping at trees that already have positions
+   */
+  def checkPosition(t: Tree): Range = t.range.getOrElse {
+    t.productIterator.map(checkPositions).fold(EmptyRange)(_ ++ _) match {
+      case EmptyRange => sys error s"Missing position for ${t}. Cannot guess the source position from its children."
+      case rng @ SourceRange(from, to) =>
+        positions.setStart(t, from)
+        positions.setFinish(t, to)
+        rng
+    }
+  }
+
+  def checkPositions(t: Any): Range = t match {
+    case t: Tree => checkPosition(t)
+    case t: Iterable[t] => t.map(checkPositions).fold(EmptyRange)(_ ++ _)
+    case _ => EmptyRange
+  }
+
+  override implicit def memo[T](parser : => Parser[T]) : PackratParser[T] =
+    new PackratParser[T](parser.map { t =>
+      checkPositions(t)
+      t
+    })
 }
