@@ -155,8 +155,9 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
   }
 
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
-    case IgnorePattern() => "$effekt.ignore"
-    case AnyPattern()    => "$effekt.any"
+    case IgnorePattern()   => "$effekt.ignore"
+    case AnyPattern()      => "$effekt.any"
+    case LiteralPattern(l) => jsCall("$effekt.literal", toDoc(l))
     case TagPattern(id, ps) =>
       val tag = jsString(nameDef(id))
       val childMatchers = ps map { p => toDoc(p) }

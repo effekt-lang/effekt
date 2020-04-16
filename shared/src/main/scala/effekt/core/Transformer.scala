@@ -100,6 +100,14 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   }).inheritPosition(tree)
 
+  def transformLit[T](tree: source.Literal[T])(implicit C: Context): Literal[T] = tree match {
+    case source.UnitLit()         => UnitLit()
+    case source.IntLit(value)     => IntLit(value)
+    case source.BooleanLit(value) => BooleanLit(value)
+    case source.DoubleLit(value)  => DoubleLit(value)
+    case source.StringLit(value)  => StringLit(value)
+  }
+
   def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = (tree match {
     case v: source.Var => v.definition match {
       case sym: VarBinder => pure { Deref(sym) }
@@ -109,11 +117,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case a @ source.Assign(id, expr) =>
       transform(expr).map { e => Assign(a.definition, e) }
 
-    case source.UnitLit()         => pure { UnitLit() }
-    case source.IntLit(value)     => pure { IntLit(value) }
-    case source.BooleanLit(value) => pure { BooleanLit(value) }
-    case source.DoubleLit(value)  => pure { DoubleLit(value) }
-    case source.StringLit(value)  => pure { StringLit(value) }
+    case l: source.Literal[t] => pure { transformLit(l) }
 
     case source.If(cond, thn, els) =>
       transform(cond).flatMap { c => bind(If(c, transform(thn), transform(els))) }
@@ -191,8 +195,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }).map { _.inheritPosition(tree) }
 
   def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
-    case source.IgnorePattern() => (core.IgnorePattern(), Nil)
-    case source.AnyPattern(id)  => (core.AnyPattern(), List(core.ValueParam(id.symbol)))
+    case source.IgnorePattern()   => (core.IgnorePattern(), Nil)
+    case source.LiteralPattern(l) => (core.LiteralPattern(transformLit(l)), Nil)
+    case source.AnyPattern(id)    => (core.AnyPattern(), List(core.ValueParam(id.symbol)))
     case p @ source.TagPattern(id, ps) =>
       val (patterns, params) = ps.map(transform).unzip
       (core.TagPattern(p.definition, patterns), params.flatten)

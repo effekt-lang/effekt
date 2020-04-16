@@ -79,6 +79,7 @@ sealed trait Pattern extends Tree
 case class IgnorePattern() extends Pattern
 case class AnyPattern() extends Pattern
 case class TagPattern(tag: Symbol, patterns: List[Pattern]) extends Pattern
+case class LiteralPattern[T](l: Literal[T]) extends Pattern
 
 case class Include(contents: String, rest: Stmt) extends Stmt
 

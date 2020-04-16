@@ -367,7 +367,8 @@ class Namer extends Phase[Module, Module] { namer =>
    * Returns the value params it binds
    */
   def resolve(p: source.MatchPattern)(implicit C: Context): List[ValueParam] = p match {
-    case source.IgnorePattern() => Nil
+    case source.IgnorePattern()     => Nil
+    case source.LiteralPattern(lit) => Nil
     case source.AnyPattern(id) =>
       val p = ValueParam(Name(id), None)
       Context.assignSymbol(id, p)

@@ -378,8 +378,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val handler: P[Handler] =
     ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ Handler
-    | `with` ~> idRef ~ (`{` ~>lambdaArgs) ~ implicitResume ~ (`=>` ~/> stmts) <~ `}` ^^ {
-      case effectId ~ params ~ resume ~ body =>
+    | `with` ~> idRef ~ implicitResume ~ blockArg ^^ {
+      case effectId ~ resume ~ BlockArg(params, body) =>
         Handler(effectId, List(OpClause(IdRef(effectId.name), List(params), body, resume) withPositionOf effectId))
       }
     )
@@ -394,6 +394,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val pattern: P[MatchPattern] =
     ( "_" ^^^ IgnorePattern()
+    | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
     | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
@@ -414,13 +415,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
   lazy val primExpr: P[Expr] =
-    literals | tupleLiteral | `(` ~/> expr <~ `)`
+    variable | literals | tupleLiteral | listLiteral | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Expr] =
     idRef ^^ Var
 
-  lazy val literals: P[Expr] =
-    double | int | bool | unit | variable | string | listLiteral
+  lazy val literals: P[Literal[_]] =
+    double | int | bool | unit | string
 
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }

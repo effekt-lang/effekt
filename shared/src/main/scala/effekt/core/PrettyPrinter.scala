@@ -99,6 +99,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(p: Pattern): Doc = p match {
     case IgnorePattern()          => "_"
+    case LiteralPattern(l)        => toDoc(l)
     case AnyPattern()             => "*"
     case TagPattern(id, patterns) => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
   }

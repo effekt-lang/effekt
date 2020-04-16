@@ -218,6 +218,11 @@ case class TagPattern(id: Id, patterns: List[MatchPattern]) extends MatchPattern
 case class IgnorePattern() extends MatchPattern
 
 /**
+ * A pattern that matches a single literal value
+ */
+case class LiteralPattern[T](l: Literal[T]) extends MatchPattern
+
+/**
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks

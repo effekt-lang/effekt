@@ -1,0 +1,13 @@
+module matchhandler
+
+record Person(name: String, age: Int)
+
+effect Age(p: Person): Int
+
+def main() = try {
+    println(Age(Person("Peter", 12)));
+    println(Age(Person("Mary", 23)))
+} with Age {
+    case Person("Peter", age) => resume(age + 1)
+    case Person(name, age) => resume(age)
+}
