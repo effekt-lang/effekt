@@ -19,23 +19,22 @@ def find(store: Store, key: Key): Val / KeyNotFound = {
     }
 }
 
-def build(key: Key) { tasks: Key => Val / { Need } }: Val / {} = {
-    try { tasks(key) } with Need { (key) =>
-        resume(build(key) { (key) => tasks(key) })
+def build(key: Key) { tasks: Key => Val / { Need } }: Val / {} =
+    try { tasks(key) } with Need { key =>
+        resume(build(key) { k => tasks(k) })
     }
-}
 
 def memo[R] { prog: R / { Need } } = {
-    var store = Nil[(Key,Val)]();
+    var store: Store = Nil();
     try {
         prog()
     } with Need { (key) =>
         try {
             resume(find(store, key))
         } with KeyNotFound { (k) =>
-             val v = do Need(k);
-             store = Cons((k, v), store);
-             resume(v)
+            val v = do Need(k);
+            store = Cons((k, v), store);
+            resume(v)
         }
     }
 }
@@ -49,16 +48,15 @@ def supplyInput[R](store: Store) { prog: R / { NeedInput } } = {
 // A2: 20
 // B1: A1 + A2
 // B2: B1 * 2
-// Fails when given an input key
 def example1(key: Key) = {
     println(key);
     if (key == "B1") {
         do Need("A1") + do Need("A2")
-    } else { if(key == "B2") {
+    } else if (key == "B2") {
         do Need("B1") * 2
     } else {
         do NeedInput(key)
-    } }
+    }
 }
 
 // Needing the same key twice
@@ -66,11 +64,11 @@ def example2(key: Key) = {
     println(key);
     if (key == "B1") {
         do Need("A1") + do Need("A2")
-    } else { if(key == "B2") {
+    } else if (key == "B2") {
         do Need("B1") * do Need("B1")
     } else {
         do NeedInput(key)
-    } }
+    }
 }
 
 def main() = {
@@ -84,7 +82,7 @@ def main() = {
         println("");
         val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
         println(result3)
-    } with KeyNotFound { (key) => println(key) }
+    } with KeyNotFound { (key) => println("Key not found: " ++ key) }
 }
 
 
