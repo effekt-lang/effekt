@@ -1,0 +1,90 @@
+module examples/pos/build
+
+import immutable/list
+import immutable/option
+
+type Key = String
+type Val = Int
+
+effect Need(key: Key): Val
+effect NeedInput(key: Key): Val
+effect KeyNotFound[A](key: Key): A
+
+type Store = List[(Key,Val)]
+
+def find(store: Store, key: Key): Val / KeyNotFound = {
+    store match {
+        case Nil() => do KeyNotFound(key)
+        case Cons((k, v), xs) => if (k == key) { v } else { find(xs, key) }
+    }
+}
+
+def build(key: Key) { tasks: Key => Val / { Need } }: Val / {} = {
+    try { tasks(key) } with Need { (key) =>
+        resume(build(key) { (key) => tasks(key) })
+    }
+}
+
+def memo[R] { prog: R / { Need } } = {
+    var store = Nil[(Key,Val)]();
+    try {
+        prog()
+    } with Need { (key) =>
+        try {
+            resume(find(store, key))
+        } with KeyNotFound { (k) =>
+             val v = do Need(k);
+             store = Cons((k, v), store);
+             resume(v)
+        }
+    }
+}
+
+def supplyInput[R](store: Store) { prog: R / { NeedInput } } = {
+    try { prog() } with NeedInput { (key) => resume(find(store, key)) }
+}
+
+// Spreadsheet example from "Build systems ala Carte"
+// A1: 10
+// A2: 20
+// B1: A1 + A2
+// B2: B1 * 2
+// Fails when given an input key
+def example1(key: Key) = {
+    println(key);
+    if (key == "B1") {
+        do Need("A1") + do Need("A2")
+    } else { if(key == "B2") {
+        do Need("B1") * 2
+    } else {
+        do NeedInput(key)
+    } }
+}
+
+// Needing the same key twice
+def example2(key: Key) = {
+    println(key);
+    if (key == "B1") {
+        do Need("A1") + do Need("A2")
+    } else { if(key == "B2") {
+        do Need("B1") * do Need("B1")
+    } else {
+        do NeedInput(key)
+    } }
+}
+
+def main() = {
+    val inputs = [("A1", 10), ("A2", 20)];
+    try {
+        val result1 = supplyInput(inputs) { build ("B2") { (key) => example1(key) } };
+        println(result1);
+        println("");
+        val result2 = supplyInput(inputs) { build ("B2") { (key) => example2(key) } };
+        println(result2);
+        println("");
+        val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
+        println(result3)
+    } with KeyNotFound { (key) => println(key) }
+}
+
+
