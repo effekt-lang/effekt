@@ -6,13 +6,12 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.ColoredMessaging
+import effekt.util.{ ColoredMessaging, MarkdownSource }
 import effekt.util.JavaPathUtils._
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ CompilerWithConfig, IO, Source }
-
 import java.io.{ File => JFile }
 
 import scala.sys.process.Process
@@ -51,18 +50,20 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
    * In LSP mode: invoked for each file opened in an editor
    */
   override def compileSource(source: Source, config: EffektConfig): Unit = {
-    sources(source.name) = source
+    val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
+
+    sources(source.name) = src
 
     implicit val C = context
     C.setup(config)
 
     for {
-      mod <- compile(source)
+      mod <- compile(src)
       if config.interpret()
     } eval(mod)
 
     // report messages
-    report(source, C.buffer.get, config)
+    report(src, C.buffer.get, config)
   }
 
   /**
