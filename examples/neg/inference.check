@@ -1,6 +1,6 @@
-[error] examples/neg/inference.effekt:23:33: Expected Int, but got String
+[error] jvm/target/test/neg/inference.effekt:23:33: Expected Int, but got String
 def test2(l1: List[Int]): Int = l1 match {
                                 ^
-[error] examples/neg/inference.effekt:25:17: Expected Int, but got String
+[error] jvm/target/test/neg/inference.effekt:25:17: Expected Int, but got String
   case Nil() => ""
                 ^

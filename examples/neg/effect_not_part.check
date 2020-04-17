@@ -1,3 +1,3 @@
-[error] examples/neg/effect_not_part.effekt:13:21: Effect operation raise is not part of effect State.
+[error] jvm/target/test/neg/effect_not_part.effekt:13:21: Effect operation raise is not part of effect State.
     try { f(); () } with State {
                     ^

@@ -1,3 +1,3 @@
-[error] examples/neg/mainnoargs.effekt:1:1: Main does not take arguments
+[error] jvm/target/test/neg/mainnoargs.effekt:1:1: Main does not take arguments
 module mainnoargs
 ^

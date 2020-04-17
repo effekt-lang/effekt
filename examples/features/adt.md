@@ -1,18 +1,38 @@
-module adt
+This example shows basic usage of algebraic datatypes.
 
+```
+module adt
+```
+
+We also use some example effects, so declare them first
+```
 effect NoSuchElement(): Int
 effect Done(): Unit
+```
 
+
+ADTs are declared with the following syntax:
+```
 type List {
   Cons(n: Int, l: List);
   Nil()
 }
+```
+This defines a datatype of integer lists.
 
+
+While selectors are immediately available for records, on a sumtype like `List`, we cannot
+be sure that selecting will succeed. So we write our own selector here:
+
+```
 def first(l : List) = l match {
   case Cons(m, _) => m
   case Nil() => do NoSuchElement()
 }
+```
 
+A helper function to generate lists of length `n` using `Done` to signal stopping.
+```
 def genlist { f: Int / Done } : List = {
   var l = Nil();
   try {
@@ -20,11 +40,10 @@ def genlist { f: Int / Done } : List = {
   } with Done { () => () };
   l
 }
+```
 
-type Foo {
-  Bar()
-}
-
+Effekt performs trampolining, so using recursion is stack-safe:
+```
 def foreach(l : List) { f: Int => Unit } : Unit =
   l match {
     case Nil() => ()
@@ -33,7 +52,10 @@ def foreach(l : List) { f: Int => Unit } : Unit =
       foreach(rest) { n => f(n) }
     case _ => ()
   }
+```
 
+Finally, we can run a few examples using our list datatype:
+```
 def main() = {
 
     var n = 10;
@@ -49,3 +71,4 @@ def main() = {
         println(first(Cons(42, Nil())))
     } with NoSuchElement { () => () }
 }
+```
