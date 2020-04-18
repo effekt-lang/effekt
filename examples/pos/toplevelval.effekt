@@ -1,0 +1,5 @@
+module toplevelval
+
+val x = 1 + 2
+
+def main() = println(x)
