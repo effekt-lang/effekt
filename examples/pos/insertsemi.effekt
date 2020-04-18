@@ -1,5 +1,20 @@
 module parser_error
 
+
+def noSemis(n: Int) = {
+  def bar() = { () }
+  val x = 3
+  println(3)
+}
+
+def multiLineParen() = {
+  val x = 3
+  noSemis(
+    5
+  )
+  println(3)
+}
+
 def main() = {
     val x = 4
     println(x + 1)
