@@ -21,7 +21,7 @@ type List {
 This defines a datatype of integer lists.
 
 
-While selectors are immediately available for records, on a sumtype like `List`, we cannot
+While selectors are immediately available for **records**, on a sumtype like `List`, we cannot
 be sure that selecting will succeed. So we write our own selector here:
 
 ```
