@@ -126,11 +126,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     def apply(in: Input): ParseResult[Unit] = {
       val content = in.source.content
       var pos = in.offset
+      val str = content.substring(pos)
 
       // \n   ; while
       //      ^
-      if (content.charAt(pos) == ';') {
+      if (str.startsWith(";")) {
         return Success((), Input(in.source, in.offset + 1))
+
+        // foo }
+        //     ^
+      } else if (str.startsWith("}") || str.startsWith("case")) {
+        return Success((), in)
       } else {
         // \n   while
         //      ^
@@ -138,6 +144,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         while (pos > 0 && (content.charAt(pos) == ' ' || content.charAt(pos) == '\t')) {
           pos = pos - 1
         }
+
         // \n   while
         //  ^
         if (content.charAt(pos) == '\n') {
@@ -193,7 +200,18 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    funDef | effectDef | typeDef | effectAliasDef | dataDef | recordDef | externType | externEffect | externFun | externInclude | failure("Expected a definition")
+    ( funDef
+    | effectDef
+    | typeDef
+    | effectAliasDef
+    | dataDef
+    | recordDef
+    | externType
+    | externEffect
+    | externFun
+    | externInclude
+    | failure("Expected a definition")
+    )
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
@@ -302,25 +320,15 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
   lazy val stmts: P[Stmt] =
     ( withStmt
-    | exprStmt
-    | defStmt
-    | valDef  ~ (`;` ~> stmts) ^^ DefStmt
-    | varDef  ~ (`;` ~> stmts) ^^ DefStmt
-    | dataDef ~ (`;` ~> stmts) ^^ DefStmt
-    | recordDef ~ (`;` ~> stmts) ^^ DefStmt
+    | (expr <~ `;`) ~ stmts ^^ ExprStmt
+    | (definition <~ `;`) ~ stmts ^^ DefStmt
+    | (valDef  <~ `;`) ~ stmts ^^ DefStmt
+    | (varDef  <~ `;`) ~ stmts ^^ DefStmt
+    | (dataDef <~ `;`) ~ stmts ^^ DefStmt
+    | (recordDef <~ `;`) ~ stmts ^^ DefStmt
+    | (expr <~ `;`) ^^ Return
     | matchDef
-    | expr ^^ Return
-    | literal(";") ^^^ Return(UnitLit())
     )
-
-  lazy val exprStmt: P[Stmt] =
-    expr ~ (`;` ~> stmts) ^^ ExprStmt
-
-  lazy val defStmt: P[Stmt] =
-    definition ~/ stmts ^^ DefStmt
-
-  lazy val handleStmt: P[Stmt] =
-    handleExpr ~/ stmts ^^ { case h ~ s => ExprStmt(h, s) }
 
   lazy val withStmt: P[Stmt] =
     ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
@@ -328,7 +336,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         case params ~ id ~ tps ~ args ~ body =>
           Return(Call(id, tps, args :+ BlockArg(params, body)) withPositionOf params)
        }
-    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
+    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ args ~ body =>
           Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body)) withPositionOf id)
        }
