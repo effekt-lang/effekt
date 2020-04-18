@@ -4,7 +4,7 @@ import java.util
 
 import effekt.context.Context
 import effekt.source._
-import org.bitbucket.inkytonik.kiama.parsing.{ NoSuccess, Parsers, Success }
+import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
@@ -42,7 +42,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
-  lazy val `;` = literal(";")
   lazy val `{` = literal("{")
   lazy val `}` = literal("}")
   lazy val `(` = literal("(")
@@ -115,6 +114,40 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val linebreak = """(\r\n|\n)""".r
   lazy val singleline = """//[^\n]*(\n|\z)""".r
   override val whitespace = rep("""\s+""".r | singleline)
+
+  /**
+   * Automatic Semicolon Insertion
+   *
+   * Since Kiama already consumes whitespace:
+   * the idea is to scroll back whitespaces until we find a newline
+   */
+  lazy val `;` = new Parser[Unit] {
+
+    def apply(in: Input): ParseResult[Unit] = {
+      val content = in.source.content
+      var pos = in.offset
+
+      // \n   ; while
+      //      ^
+      if (content.charAt(pos) == ';') {
+        return Success((), Input(in.source, in.offset + 1))
+      } else {
+        // \n   while
+        //      ^
+        pos = pos - 1
+        while (pos > 0 && (content.charAt(pos) == ' ' || content.charAt(pos) == '\t')) {
+          pos = pos - 1
+        }
+        // \n   while
+        //  ^
+        if (content.charAt(pos) == '\n') {
+          Success((), in)
+        } else {
+          Failure(s"Expected ;", in)
+        }
+      }
+    }
+  }
 
   /**
    * Numbers
@@ -271,16 +304,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( withStmt
     | exprStmt
     | defStmt
-    | valDef  ~ (`;` ~/> stmts) ^^ DefStmt
-    | varDef  ~ (`;` ~/> stmts) ^^ DefStmt
-    | dataDef ~ (`;` ~/> stmts) ^^ DefStmt
-    | recordDef ~ (`;` ~/> stmts) ^^ DefStmt
+    | valDef  ~ (`;` ~> stmts) ^^ DefStmt
+    | varDef  ~ (`;` ~> stmts) ^^ DefStmt
+    | dataDef ~ (`;` ~> stmts) ^^ DefStmt
+    | recordDef ~ (`;` ~> stmts) ^^ DefStmt
     | matchDef
     | expr ^^ Return
+    | literal(";") ^^^ Return(UnitLit())
     )
 
   lazy val exprStmt: P[Stmt] =
-    expr ~ (`;` ~/> stmts) ^^ ExprStmt
+    expr ~ (`;` ~> stmts) ^^ ExprStmt
 
   lazy val defStmt: P[Stmt] =
     definition ~/ stmts ^^ DefStmt
@@ -290,11 +324,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val withStmt: P[Stmt] =
     ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
-          (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
+          (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ args ~ body =>
           Return(Call(id, tps, args :+ BlockArg(params, body)) withPositionOf params)
        }
-    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;`  ~/> stmts) ^^ {
+    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
         case id ~ tps ~ args ~ body =>
           Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body)) withPositionOf id)
        }
@@ -308,7 +342,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
-     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~/> stmts) ^^ {
+     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
        case p ~ sc ~ body =>
         Return(MatchExpr(sc, List(MatchClause(p, body)))) withPositionOf p
      }
