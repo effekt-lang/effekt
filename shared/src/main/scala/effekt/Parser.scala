@@ -156,6 +156,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     }
   }
 
+  object defaultModulePath extends Parser[String] {
+    // we are purposefully not using File here since the parser needs to work both
+    // on the JVM and in JavaScript
+    def apply(in: Input): ParseResult[String] = {
+      val filename = in.source.name
+      val baseWithExt = filename.split("[\\/]]").last
+      val base = baseWithExt.split('.').head
+      Success(base, in)
+    }
+  }
+
   /**
    * Numbers
    */
@@ -180,11 +191,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // format: OFF
 
   lazy val program: P[ModuleDecl] =
-    ( `module` ~/> moduleName ~ many(importDecl) ~ many(definition) ^^ {
+    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
       case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
       case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
+    )
+
+  lazy val moduleDecl: P[String] =
+    ( `module` ~/> moduleName
+    | defaultModulePath
     )
 
   lazy val importDecl: P[Import] =
