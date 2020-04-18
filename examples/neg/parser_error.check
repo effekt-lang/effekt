@@ -1,3 +1,0 @@
-[error] examples/neg/parser_error.effekt:5:5: ';' expected but 'x' found
-    x + 1
-    ^
