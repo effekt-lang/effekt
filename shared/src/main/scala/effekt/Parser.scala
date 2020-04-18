@@ -194,13 +194,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   /**
    * For the REPL
    */
-  lazy val repl: P[Tree] = definition | valDef  | expr | importDecl
+  lazy val repl: P[Tree] = definition | expr | importDecl
 
   /**
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( funDef
+    ( valDef
+    | funDef
     | effectDef
     | typeDef
     | effectAliasDef
@@ -322,10 +323,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( withStmt
     | (expr <~ `;`) ~ stmts ^^ ExprStmt
     | (definition <~ `;`) ~ stmts ^^ DefStmt
-    | (valDef  <~ `;`) ~ stmts ^^ DefStmt
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt
-    | (dataDef <~ `;`) ~ stmts ^^ DefStmt
-    | (recordDef <~ `;`) ~ stmts ^^ DefStmt
     | (expr <~ `;`) ^^ Return
     | matchDef
     )
