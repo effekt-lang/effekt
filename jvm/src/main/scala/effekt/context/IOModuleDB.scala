@@ -1,11 +1,8 @@
 package effekt
 package context
 
-import java.io.{ File, Reader }
-
 import effekt.util.JavaPathUtils._
-
-import scala.io.{ Source => ScalaSource }
+import effekt.util.MarkdownSource
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source }
 
 trait IOModuleDB extends ModuleDB { self: Context =>
@@ -30,10 +27,13 @@ trait IOModuleDB extends ModuleDB { self: Context =>
    */
   override def findSource(modulePath: String): Option[Source] = {
     // ATTENTION modulePath can contain non-platform dependent path separators
-    val filename = modulePath + ".effekt"
 
-    config.includes().map { p => p / filename } collectFirst {
-      case f if f.exists => FileSource(f.canonicalPath)
+    def effektFile(include: File) = include / (modulePath + ".effekt")
+    def mdFile(include: File) = include / (modulePath + ".md")
+
+    config.includes().collectFirst {
+      case p if effektFile(p).exists => FileSource(effektFile(p).canonicalPath)
+      case p if mdFile(p).exists     => MarkdownSource(FileSource(mdFile(p).canonicalPath))
     }
   }
 }
