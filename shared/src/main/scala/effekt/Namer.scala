@@ -86,6 +86,16 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.BlockParam(id, tpe) =>
       Context.define(id, BlockParam(Name(id), resolve(tpe)))
 
+    case d @ source.ValDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, ValBinder(Name(id), tpe, d))
+
+    case d @ source.VarDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, VarBinder(Name(id), tpe, d))
+
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = Context.symbolOf(f)
@@ -269,14 +279,10 @@ class Namer extends Phase[Module, Module] { namer =>
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
 
     case d @ source.ValDef(id, annot, binding) =>
-      val tpe = annot.map(resolve)
-      resolveGeneric(binding)
-      Context.define(id, ValBinder(Name(id), tpe, d))
+      ()
 
     case d @ source.VarDef(id, annot, binding) =>
-      val tpe = annot.map(resolve)
-      resolveGeneric(binding)
-      Context.define(id, VarBinder(Name(id), tpe, d))
+      ()
 
     case f @ source.FunDef(id, tparams, params, annot, body) =>
       val uniqueId = Context.freshTermName(id)
