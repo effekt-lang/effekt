@@ -15,22 +15,24 @@ on a non-deterministic description of layouts. In particular, to fill the horizo
 space as best as possible, we first try to  pretty print horizontally and fall
 back to vertical mode, if not enough space is available.
 
-The layout configuration is modeled by the following data types:
+The layout configuration is modeled by the following data types and effects:
 ```
 type Direction { Vertical(); Horizontal() }
-// TODO maybe split into two effects Flow and Indentation?
-record LayoutConfig(indent: Int, defaultIndent: Int, dir: Direction)
+
+effect Indent(): Int
+effect DefaultIndent(): Int
+effect Flow(): Direction
 ```
 
-Since the layout depends on the current context, we allow obtaining the current layout
-configuration with an affect operation `Layout`:
+Computing the layout of a document to be pretty printed uses the above
+three effects:
 ```
-effect Layout(): LayoutConfig
+effect Layout = { Indent, DefaultIndent, Flow }
 ```
 
 ## Output: A Stream of Layout Elements
 Before we look at examples on how to use the `Layout` effect, we introduce yet another effect to
-emit documents:
+emit the layouted documents:
 ```
 effect Emit {
   def text(content: String): Unit
@@ -44,22 +46,18 @@ Using the text emitter and the layout configuration, we can express simple funct
 express spacing between layout elements.
 
 ```
-def isHorizontal() = Layout().dir == Horizontal()
-def isVertical() = Layout().dir == Vertical()
-def currentIndent() = Layout().indent
-
 def space() =
   text(" ")
 
 def spaces(n: Int) =
   if (n > 0) text(" ".repeat(n)) else ()
 
-def lineOr(replace: String) = (Layout().dir) match {
+def lineOr(replace: String) = do Flow() match {
   case Horizontal() =>
     text(replace)
   case Vertical() =>
     newline()
-    text(" ".repeat(currentIndent()))
+    text(" ".repeat(do Indent()))
 }
 
 def line() =
@@ -73,25 +71,21 @@ We purposefully distinguish between potential linebreaks that are horizontally r
 and those that are not rendered horizontally (`linebreak`).
 
 ## Indentation
-Indentation can be configured by locally handling `Layout` and changing the indentation:
+Indentation can be configured by locally handling `Layout` and thereby changing the indentation:
 
 ```
-def withIndent[R](n: Int) { p: R / Layout }: R / Layout =
-  try { p () }
-  with Layout { () => Layout() match {
-    case LayoutConfig(ind, defInd, dir) => resume(LayoutConfig(ind + n, defInd, dir))
-  }}
+// Uses `n` as the indentation in the given document
+def in[R](n: Int) { doc: R / Layout }: R / Layout =
+  try { doc() }
+  with Indent { () => resume(n) }
 
-def nest[R](j: Int) { p: R / Layout }: R / Layout =
-  withIndent(currentIndent() + j) { p() }
+// Adds `j` to the indentation in the current document
+def nest[R](j: Int) { doc: R / Layout }: R / Layout =
+  (do Indent() + j).in { doc() }
 
-// uses the default indentation to nest a document
-def nested[R] { p: R / Layout }: R / Layout =
-  nest(Layout().defaultIndent) { p() }
-
-// obtain the current nesting
-def nesting[R] { p: Int => R / Layout } : R / Layout =
-  p(Layout().defaultIndent)
+// Uses the default indentation to nest a document
+def nested[R] { doc: R / Layout }: R / Layout =
+  (do DefaultIndent()).in { doc() }
 ```
 
 ## Fixing Local Layout Choices: Grouping as Handlers
@@ -100,17 +94,15 @@ are _all_ layouted horizontally or vertically. Similarly, we can implement handl
 fix the direction:
 
 ```
-def withDirection[R](dir: Direction) { p: R / Layout }: R / Layout =
+def in[R](dir: Direction) { p: R / Layout }: R / Layout =
   try { p () }
-  with Layout { () => Layout() match {
-    case LayoutConfig(ind, defInd, _) => resume(LayoutConfig(ind, defInd, dir))
-  }}
+  with Flow { () => resume(dir) }
 
 def horizontal { p: Unit / Layout }: Unit / Layout =
-  withDirection(Horizontal()) { p() }
+  Horizontal().in { p() }
 
 def vertical { p: Unit / Layout }: Unit / Layout =
-  withDirection(Vertical()) { p() }
+  Vertical().in { p() }
 ```
 
 This way, we can locally determine whether _all_ children of a group should be layouted either
@@ -128,7 +120,7 @@ Using it, we can express the maybe most important pretty printing combinator:
 
 ```
 def group { p: Unit / Layout } =
-  withDirection(choice()) { p() }
+  choice().in { p() }
 ```
 The `group` combinator expresses that depending on the result of `choice` we either layout all children
 horizontally or vertically.
@@ -165,12 +157,11 @@ The handler is essentially the same as the backtracking implementation of the [p
 effect Pretty = { Emit, Layout, LayoutChoice }
 ```
 
-
 ```
 def printer(width: Int, defaultIndent: Int) { prog: Unit / { Emit, Layout } } : Unit / { Emit, LayoutChoice } = {
   var pos: Int = 0;
-  try { prog()
-  } with Emit {
+  try { prog() }
+  with Emit {
     def text(t) = {
       pos = pos + t.length;
       if (pos > width) { do fail() }
@@ -181,9 +172,10 @@ def printer(width: Int, defaultIndent: Int) { prog: Unit / { Emit, Layout } } : 
       newline()
       resume(())
     }
-  } with Layout {
-      resume(LayoutConfig(0, defaultIndent, choice()))
   }
+  with Flow { () => resume(choice()) }
+  with Indent { () => resume(0) }
+  with DefaultIndent { () => resume(defaultIndent) }
 }
 ```
 
