@@ -13,6 +13,9 @@ extern pure def emptyArray[T](initialSize: Int): Array[T] =
 def get[T](arr: Array[T])(index: Int): Option[T] =
     arr.unsafeGet(index).undefinedToOption
 
+extern pure def size[T](arr: Array[T]): Int =
+    "arr.length"
+
 extern pure def unsafeGet[T](arr: Array[T])(index: Int): T =
     "arr[index]"
 

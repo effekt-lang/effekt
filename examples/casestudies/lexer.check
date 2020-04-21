@@ -1,0 +1,2 @@
+Tuple3(Token(Ident(), foo, Position(0, 0, 0)), Token(Ident(), foo, Position(0, 0, 0)), Token(Ident(), foo, Position(0, 0, 0)))
+Tuple3(Token(Ident(), foo, Position(1, 1, 0)), Token(Punct(), (, Position(1, 4, 3)), Token(Punct(), ), Position(1, 5, 4)))

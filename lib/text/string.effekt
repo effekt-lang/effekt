@@ -1,7 +1,7 @@
 module text/string
 
 import immutable/option
-
+import mutable/array
 
 def charAt(str: String)(index: Int): Option[String] =
     str.unsafeCharAt(index).undefinedToOption
@@ -14,6 +14,9 @@ extern pure def repeat(str: String)(n: Int): String =
 
 extern pure def substring(str: String)(from: Int): String =
   "str.substring(from)"
+
+extern pure def split(str: String)(sep: String): Array[String] =
+  "str.split(sep)"
 
 extern pure def trim(str: String): String =
   "str.trim()"
