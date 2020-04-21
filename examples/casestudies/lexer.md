@@ -183,18 +183,18 @@ yields the output:
 Interestingly, a whitespace skipping lexer can be implemented as a _effect transformer_. That is, a handler that (partially) re-raises effect operations.
 
 ```
+def skipSpaces(): Unit / Lexer = peek() match {
+  case None() => ()
+  case Some(t) => if (t.kind == Space()) { next(); skipSpaces() } else ()
+}
+
 def skipWhitespace[R] { prog: R / Lexer }: R / Lexer =
   try { prog() } with Lexer {
-    def peek() = resume(peek())
-    def next() = next() match {
-      case Token(Space(), text, pos) =>
-        resume(next())
-      case Token(kind, text, pos) =>
-        resume(Token(kind, text, pos))
-    }
+    def peek() = { skipSpaces(); resume(peek()) }
+    def next() = { skipSpaces(); resume(next()) }
   }
 ```
-For simplicity of this example, `peek` does not skip whitespaces and still returns white space tokens.
+The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect itself.
 
 ```
 def runExample3() =
