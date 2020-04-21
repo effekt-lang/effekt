@@ -177,11 +177,40 @@ yields the output:
 //> (Token(Ident(), foo, Position(1, 1, 0)), Token(Punct(), (, Position(1, 4, 3)), Token(Punct(), ), Position(1, 5, 4)))
 ```
 
+## Whitespace Skipping
+Interestingly, a whitespace skipping lexer can be implemented as a _handler transformer_. That is, a handler that (partially) re-raises effect operations.
+
+```
+def skipWhitespace[R] { prog: R / Lexer }: R / Lexer =
+  try { prog() } with Lexer {
+    def peek() = resume(peek())
+    def next() = next() match {
+      case Token(Space(), text, pos) =>
+        resume(next())
+      case Token(tpe, text, pos) =>
+        resume(Token(tpe, text, pos))
+    }
+  }
+```
+For simplicity of this example, `peek` does not skip whitespaces and still returns white space tokens.
+
+```
+def runExample3() =
+  report {
+    lexer("foo (   \n  )") {
+      skipWhitespace {
+        println(example1())
+      }
+    }
+  }
+```
+
 ### Running the Examples
 To run this markdown file, simply supply its name as argument to the `effekt` binary.
 ```
 def main() = {
   runExample1()
   runExample2()
+  runExample3()
 }
 ```
