@@ -35,8 +35,7 @@ describes "noncompositional phenomena in natural languages" as
 _linguistic side effects_.
 Delimited continuations
 have successfully been used to model linguistic side effects, such as
-quantification, focus, and polymorphic coordination (
-  [Shan, 2004][@shan2004delimited] and[2005][@shan2005linguistic]; [Barker, 2004][@barker2004continuations]).
+quantification, focus, and polymorphic coordination ([Shan, 2004][@shan2004delimited] and [2005][@shan2005linguistic]; [Barker, 2004][@barker2004continuations]).
 [Maršík and Amblard][@marvsik2016introducing] recently used algebraic
 effects with handlers to give a compositional semantics to deixis
 (_"John loves *me*"_), quantification with scope islands (_"John loves *every woman*"_), and
@@ -153,7 +152,7 @@ That is, `s1b` still has the speaker effect, while s1a is pure and
 all linguistic effects are handled. We can handle `s1b` by adding the speaker:
 
 ```
-def s1c() = Peter.said { s1b() }
+def s1c(): Sentence / {} = Peter.said { s1b() }
 ```
 which results in
 ```

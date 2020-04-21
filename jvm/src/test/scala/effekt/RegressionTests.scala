@@ -68,10 +68,10 @@ trait TestUtils {
     println(s"Generating check files in folder: ${dir.getPath}")
     dir.listFiles.foreach {
       case f if f.isDirectory => generateCheckFilesIn(f)
-      case f if f.getName.endsWith(".effekt") =>
+      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
         println(s"Writing checkfile for ${f}")
         val path = f.getParentFile
-        val baseName = f.getName.stripSuffix(".effekt")
+        val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
         val checkfile = path / (baseName + ".check")
 
         val out = interpret(f)
