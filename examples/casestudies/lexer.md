@@ -20,9 +20,9 @@ First we define the datatypes to represent lexemes (tokens) and positions in the
 ```
 record Position(line: Int, col: Int, index: Int)
 
-type TokenType { Number(); Ident(); Punct(); Space() }
+type TokenKind { Number(); Ident(); Punct(); Space() }
 
-record Token(tpe: TokenType, text: String, position: Position)
+record Token(kind: TokenKind, text: String, position: Position)
 ```
 Tokens simply are tagged with a token type (distinguishing numbers, identifiers, and punctuation),
 the original text of the token and its position.
@@ -100,7 +100,7 @@ processes an input and computes the tokens contained therein.
 This time, we use a number of different regular expressions to recognize lexemes.
 First, we define the different token types as a list of pairs of regular expressions and token types.
 ```
-record TokenRx(tpe: TokenType, rx: Regex)
+record TokenRx(kind: TokenKind, rx: Regex)
 
 val tokenDesriptors = [
   TokenRx(Number(), "^[0-9]+".regex),
@@ -116,53 +116,53 @@ def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
 Additionally, we keep track of the current position in the input stream, by maintaining
 three mutable variables for the zero based index, and one-based column and line position.
 ```
-    var index = 0;
-    var col = 1;
-    var line = 1;
+  var index = 0;
+  var col = 1;
+  var line = 1;
 ```
 A few local helper functions ease the handling of the input stream.
 At the same time, we need to keep track of the line information.
 ```
-    def position() = Position(line, col, index)
-    def input() = in.substring(index)
-    def consume(text: String): Unit = {
-      val lines = text.split("\n")
-      val len = lines.unsafeGet(lines.size - 1).length
-      // compute new positions
-      index = index + text.length
-      line = line + lines.size - 1
-      if (lines.size == 1) { col = col + text.length } else { col = len }
-    }
-    def eos(): Boolean = index >= in.length
+  def position() = Position(line, col, index)
+  def input() = in.substring(index)
+  def consume(text: String): Unit = {
+    val lines = text.split("\n")
+    val len = lines.unsafeGet(lines.size - 1).length
+    // compute new positions
+    index = index + text.length
+    line = line + lines.size - 1
+    if (lines.size == 1) { col = col + text.length } else { col = len }
+  }
+  def eos(): Boolean = index >= in.length
 ```
 The function `tryMatch` applies a given token description to the current position of
 the input stream, without advancing it. Its companion `tryMatchAll` returns the first token
 matched by any of the matches in the given description list.
 ```
-    def tryMatch(desc: TokenRx): Option[Token] =
-        desc.rx.exec(input()).map { m => Token(desc.tpe, m.matched, position()) }
+  def tryMatch(desc: TokenRx): Option[Token] =
+      desc.rx.exec(input()).map { m => Token(desc.kind, m.matched, position()) }
 
-    def tryMatchAll(descs: List[TokenRx]): Option[Token] = descs match {
-      case Nil() => None()
-      case Cons(desc, descs) => tryMatch(desc).orElse { tryMatchAll(descs) }
-    }
+  def tryMatchAll(descs: List[TokenRx]): Option[Token] = descs match {
+    case Nil() => None()
+    case Cons(desc, descs) => tryMatch(desc).orElse { tryMatchAll(descs) }
+  }
 ```
 Now defining the lexer is trivial. We just need to use `tryMatchAll` and either consume
 the input, or not.
 ```
-    try { prog() } with Lexer {
-      def peek() = resume(tryMatchAll(tokenDesriptors))
-      def next() =
-        if (eos())
-          do LexerError("Unexpected EOS", position())
-        else {
-          val tok = tryMatchAll(tokenDesriptors).getOrElse {
-            do LexerError("Cannot tokenize input", position())
-          }
-          consume(tok.text)
-          resume(tok)
+  try { prog() } with Lexer {
+    def peek() = resume(tryMatchAll(tokenDesriptors))
+    def next() =
+      if (eos())
+        do LexerError("Unexpected EOS", position())
+      else {
+        val tok = tryMatchAll(tokenDesriptors).getOrElse {
+          do LexerError("Cannot tokenize input", position())
         }
-    }
+        consume(tok.text)
+        resume(tok)
+      }
+  }
 }
 ```
 Running our above consumer with the string `"foo()"`
@@ -180,7 +180,7 @@ yields the output:
 ```
 
 ## Whitespace Skipping
-Interestingly, a whitespace skipping lexer can be implemented as a _handler transformer_. That is, a handler that (partially) re-raises effect operations.
+Interestingly, a whitespace skipping lexer can be implemented as a _effect transformer_. That is, a handler that (partially) re-raises effect operations.
 
 ```
 def skipWhitespace[R] { prog: R / Lexer }: R / Lexer =
@@ -189,8 +189,8 @@ def skipWhitespace[R] { prog: R / Lexer }: R / Lexer =
     def next() = next() match {
       case Token(Space(), text, pos) =>
         resume(next())
-      case Token(tpe, text, pos) =>
-        resume(Token(tpe, text, pos))
+      case Token(kind, text, pos) =>
+        resume(Token(kind, text, pos))
     }
   }
 ```

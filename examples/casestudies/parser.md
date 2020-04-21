@@ -31,26 +31,27 @@ input stream and fails, if it does not match.
 
 ```
 def accept { p: Token => Boolean } : Token / Parser = {
-    val got = next();
-    if (p(got)) got
-    else fail("Unexpected token " ++ show(got))
+  val got = next();
+  if (p(got)) got
+  else fail("Unexpected token " ++ show(got))
 }
 ```
 
 Using `accept`, we can define parsers for the different token types.
 ```
 def any() = accept { t => true }
-def ident() = accept { t => t.tpe == Ident() }.text
-def number() = accept { t => t.tpe == Number() }.text
+def accept(exp: TokenKind) = accept { t => t.kind == exp }
+def ident() = accept(Ident()).text
+def number() = accept(Number()).text
 def punct(p: String) = {
-    val tok = accept { t => t.tpe == Punct() }
-    if (tok.text == p) ()
-    else fail("Expected " ++ p ++ " but got " ++ tok.text)
+  val tok = accept(Punct())
+  if (tok.text == p) ()
+  else fail("Expected " ++ p ++ " but got " ++ tok.text)
 }
 def kw(exp: String): Unit / Parser = {
-    val got = ident();
-    if (got == exp) ()
-    else fail("Expected keyword " ++ exp ++ " but got " ++ got)
+  val got = ident();
+  if (got == exp) ()
+  else fail("Expected keyword " ++ exp ++ " but got " ++ got)
 }
 ```
 Using the effect for non-deterministic choice `alt`, we can model alternatives, optional matches and various repetitions:
@@ -59,13 +60,13 @@ def or[R] { p: R } { q: R } =
   if (alt()) { p() } else { q() }
 
 def opt[R] { p: R }: Option[R] / Parser =
-   or { Some(p()) } { None() }
+  or { Some(p()) } { None() }
 
 def many { p: Unit }: Unit / Parser =
-    or { some { p() } } { () }
+  or { some { p() } } { () }
 
 def some { p: Unit }: Unit / Parser =
-    { p(); many { p() } }
+  { p(); many { p() } }
 ```
 
 ## Example: A Simple Expression Language
@@ -96,7 +97,7 @@ resulting string to an intenger.
 
 ```
 def parseVar(): Tree / Parser =
-    Var(ident())
+  Var(ident())
 
 def parseAtom() = or { parseVar() } { parseNum() }
 ```
@@ -110,13 +111,13 @@ Similarly, we can write parsers for let bindings, by sequentially composing
 our existing parsers:
 ```
 def parseLet(): Tree / Parser = {
-    kw("let");
-    val name = ident();
-    punct("=");
-    val binding = parseExpr();
-    kw("in");
-    val body = parseExpr();
-    Let(name, binding, body)
+  kw("let");
+  val name = ident();
+  punct("=");
+  val binding = parseExpr();
+  kw("in");
+  val body = parseExpr();
+  Let(name, binding, body)
 }
 ```
 Again, note how naturally the result can be composed from the individual results, much like
@@ -127,22 +128,22 @@ of `alt` and `fail` is still left open, offering flexibility in the implementati
 We proceed to implement the remaining parsers for our expression language:
 ```
 def parseGroup() = or { parseAtom() } {
-    punct("(");
-    val res = parseExpr();
-    punct(")");
-    res
+  punct("(");
+  val res = parseExpr();
+  punct(")");
+  res
 }
 
 def parseApp(): Tree / Parser = {
-    val funName = ident();
-    punct("(");
-    val arg = parseExpr();
-    punct(")");
-    App(funName, arg)
+  val funName = ident();
+  punct("(");
+  val arg = parseExpr();
+  punct(")");
+  App(funName, arg)
 }
 
 def parseExpr(): Tree / Parser =
-    or { parseLet() } { or { parseApp() } { parseGroup() } }
+  or { parseLet() } { or { parseApp() } { parseGroup() } }
 ```
 
 ## Example: Combining Parsers and Local Mutable State
@@ -219,19 +220,19 @@ Having implemented a handler for the `Parser` effect, we can run our example "gr
 
 ```
 def main() = {
-    println(parse("42") { parseCalls() })
-    println(parse("foo(1)") { parseCalls() })
-    println(parse("foo(1, 2)") { parseCalls() })
-    println(parse("foo(1, 2, 3, 4)") { parseCalls() })
-    println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
-    println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
+  println(parse("42") { parseCalls() })
+  println(parse("foo(1)") { parseCalls() })
+  println(parse("foo(1, 2)") { parseCalls() })
+  println(parse("foo(1, 2, 3, 4)") { parseCalls() })
+  println(parse("foo(1, 2, bar(4, 5))") { parseCalls() })
+  println(parse("foo(1, 2,\nbar(4, 5))") { parseCalls() })
 
-    println(parse("}42") { parseExpr() })
-    println(parse("42") { parseExpr() })
-    println(parse("let x = 4 in 42") { parseExpr() })
-    println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
-    println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
-    println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
-    println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
+  println(parse("}42") { parseExpr() })
+  println(parse("42") { parseExpr() })
+  println(parse("let x = 4 in 42") { parseExpr() })
+  println(parse("let x = let y = 2 in 1 in 42") { parseExpr() })
+  println(parse("let x = (let y = 2 in 1) in 42") { parseExpr() })
+  println(parse("let x = (let y = f(42) in 1) in 42") { parseExpr() })
+  println(parse("let x = (let y = f(let z = 1 in z) in 1) in 42") { parseExpr() })
 }
 ```
