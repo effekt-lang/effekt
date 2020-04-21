@@ -498,11 +498,19 @@ class Typer extends Phase[Module, Module] { typer =>
       Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
 
     def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
-      case (ps: List[ValueType @unchecked], source.ValueArgs(as)) =>
+      case (ps: List[Type], source.ValueArgs(as)) =>
         if (ps.size != as.size)
           Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
 
-        (ps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
+        // check that types are actually value types
+        val vps = ps map {
+          case tpe: ValueType => tpe
+          case _ =>
+            Context.error("Wrong argument type, expected a value argument")
+            return
+        }
+
+        (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
       case (List(bt: BlockType), arg: source.BlockArg) =>
         checkBlockArgument(bt, arg)
