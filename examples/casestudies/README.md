@@ -8,6 +8,7 @@ Some of the case studies build up on each other. For those, we recommend looking
    of an input stream.
 2. [Backtracking Parser](parser.md): An implementation of an imperative parser combinator library, that uses the lexer.
 3. [Pretty Printer](prettyprinter.md): A pretty printer that uses nondeterminism to search for a layout filling a given width.
+4. [ANF Transformation](anf.md): An implementation of an ANF transformation using a `Bind` effect. Also composes all four case studies in one pipeline.
 
 Other, independent case studies:
 
