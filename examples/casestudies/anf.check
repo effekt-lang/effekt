@@ -1,0 +1,6 @@
+[error] examples/casestudies/anf.md:113:1: Effects Emit leave their defining scope.
+def toDocExpr(t: Expr): Unit / Pretty = t match {
+^
+[error] examples/casestudies/anf.md:118:1: Effects { Emit, Indent, DefaultIndent, Flow, LayoutChoice } leave their defining scope.
+def toDocStmt(s: Stmt): Unit / Pretty = s match {
+^
