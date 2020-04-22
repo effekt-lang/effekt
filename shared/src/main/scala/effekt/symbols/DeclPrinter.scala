@@ -18,6 +18,11 @@ object DeclPrinter extends ParenPrettyPrinter {
     case e @ UserEffect(name, tparams, List(op)) =>
       format("effect", op, op.ret.get)
 
+    case e @ UserEffect(name, tparams, ops) =>
+      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
+      val effs = ops.map { op => format("def", op, op.ret.get) }
+      "effect" <+> name.toString <> tps <+> braces(nest(line <> vsep(effs)) <> line)
+
     case b @ ValBinder(name, tps, decl) =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       s"val ${name}: ${tpe}"
