@@ -34,9 +34,7 @@ class Typer extends Phase[Module, Module] { typer =>
     val module = mod.decl
 
     // Effects that are lexically in scope at the top level
-    val toplevelEffects = Effects(mod.types.values.collect {
-      case e: Effect => e
-    })
+    val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
     Context.typerState = TyperState(toplevelEffects)
 
     Context in {

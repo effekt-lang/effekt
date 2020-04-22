@@ -44,10 +44,11 @@ class Namer extends Phase[Module, Module] { namer =>
     var scope: Scope = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
-    mod.decl.imports foreach {
+    val imports = mod.decl.imports map {
       case im @ source.Import(path) => Context.at(im) {
         val modImport = Context.moduleOf(path)
         scope.defineAll(modImport.terms, modImport.types)
+        modImport
       }
     }
 
@@ -58,7 +59,7 @@ class Namer extends Phase[Module, Module] { namer =>
 
     resolveGeneric(mod.decl)
 
-    mod.export(scope.terms.toMap, scope.types.toMap)
+    mod.export(imports, scope.terms.toMap, scope.types.toMap)
   }
 
   /**

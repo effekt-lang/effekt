@@ -56,9 +56,22 @@ package object symbols {
     private var _types: Map[String, TypeSymbol] = _
     def types = _types
 
-    def export(terms: Map[String, Set[TermSymbol]], types: Map[String, TypeSymbol]): this.type = {
+    private var _imports: List[Module] = _
+    def imports = _imports
+
+    // toplevle declared effects
+    def effects: Effects = Effects(types.values.collect {
+      case e: Effect => e
+    })
+
+    def export(
+      imports: List[Module],
+      terms: Map[String, Set[TermSymbol]],
+      types: Map[String, TypeSymbol]
+    ): this.type = {
       if (_terms != null)
         throw new FatalPhaseError("Internal compiler error: Already set exports on module")
+      _imports = imports
       _terms = terms
       _types = types
       this
@@ -259,7 +272,7 @@ package object symbols {
 
     def contains(e: Effect): Boolean = contains(e.dealias)
     def contains(other: List[Effect]): Boolean = other.toList.forall {
-      e => this.toList.contains(e)
+      e => this.toList.flatMap(_.dealias).contains(e)
     }
 
     def filterNot(p: Effect => Boolean): Effects =
