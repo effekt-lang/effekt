@@ -64,25 +64,26 @@ trait TestUtils {
    * Check afterwards with:
    *    git diff
    */
-  def generateCheckFilesIn(dir: File): Unit = {
-    println(s"Generating check files in folder: ${dir.getPath}")
+  def generateCheckFilesIn(dir: File, regenerateAll: Boolean): Unit = {
     dir.listFiles.foreach {
-      case f if f.isDirectory => generateCheckFilesIn(f)
+      case f if f.isDirectory => generateCheckFilesIn(f, regenerateAll)
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
-        println(s"Writing checkfile for ${f}")
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
         val checkfile = path / (baseName + ".check")
 
-        val out = interpret(f)
-        // save checkfile in source folder (e.g. examples/)
-        IO.write(checkfile, out)
+        if (regenerateAll || f.lastModified() > checkfile.lastModified()) {
+          println(s"Writing checkfile for ${f}")
+          val out = interpret(f)
+          // save checkfile in source folder (e.g. examples/)
+          IO.write(checkfile, out)
+        }
       case _ => ()
     }
   }
 
-  def generateCheckFiles(): Unit = {
-    generateCheckFilesIn(examplesDir)
+  def generateCheckFiles(regenerateAll: Boolean = false): Unit = {
+    generateCheckFilesIn(examplesDir, regenerateAll)
   }
 }
 object TestUtils extends TestUtils
