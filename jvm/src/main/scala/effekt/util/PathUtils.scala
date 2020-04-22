@@ -27,6 +27,8 @@ object JavaPathUtils extends PathUtils {
     def exists: Boolean =
       underlying.exists()
 
+    def lastModified: Long = underlying.lastModified
+
     def existsInJar: Boolean = {
       val cl = Thread.currentThread().getContextClassLoader
       val stream = cl.getResourceAsStream(unixPath)

@@ -90,7 +90,13 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     /**
      * Command `:reset` -- Reset the virtual module the Repl operates on
      */
-    def reset() = { module = emptyModule }
+    def reset() = {
+      module = emptyModule
+      // reset the cache
+      // TODO this is very roundabout and we should have a more principled solution for
+      //      invalidating caches.
+      driver.parser.reset()
+    }
 
     /**
      * Command `:status` -- Prints help about the available commands
@@ -183,7 +189,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case e: Expr =>
       runCompiler(source, module.makeEval(e), config)
 
-    case i: Import if !module.contains(i) =>
+    case i: Import =>
       val extendedImports = module + i
       val output = config.output()
 
@@ -303,7 +309,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
       copy(definitions = otherDefs :+ d)
     }
-    def +(i: Import) = copy(imports = imports :+ i)
+    def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
 
     def contains(im: Import) = imports.exists { other => im.path == other.path }
 
