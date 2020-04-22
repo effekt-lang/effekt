@@ -170,11 +170,11 @@ trait Intelligence extends Compiler {
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
     case c: ValueParam =>
-      val tpe = C.valueTypeOption(c).getOrElse { c.tpe.get }
-      SymbolInfo(c, "Value parameter", Some(s"${c.name}: ${tpe}"), None)
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Value parameter", signature, None)
 
     case c: VarBinder =>
-      val tpe = C.valueTypeOption(c).getOrElse { c.tpe.get }
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
 
       val ex =
         s"""|Like in other languages, mutable variable binders like `${c.name}`
@@ -186,6 +186,6 @@ trait Intelligence extends Compiler {
             |combination with effect handlers.
          """.stripMargin
 
-      SymbolInfo(c, "Mutable variable binder", Some(s"${c.name}: ${tpe}"), Some(ex))
+      SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
   }
 }
