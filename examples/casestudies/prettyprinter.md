@@ -42,15 +42,14 @@ fit horizontally, all of its elements will be layouted vertically:
 
 ```
 // --------------
-// hello (this is too long)
+// hello (this (is too) long)
 ```
 Even though the first two words of the group would fit, the document will be pretty printed as
 
 ```
 // -------------
 // hello (this
-// is
-// too
+// is too
 // long)
 ```
 
@@ -132,7 +131,7 @@ def nest[R](j: Int) { doc: R / Layout }: R / Layout =
 
 // Uses the default indentation to nest a document
 def nested[R] { doc: R / Layout }: R / Layout =
-  (do DefaultIndent()).in { doc() }
+  nest(do DefaultIndent()) { doc() }
 ```
 
 ## Fixing Local Layout Choices: Grouping as Handlers
@@ -141,8 +140,8 @@ are _all_ layouted horizontally or vertically. Similarly, we can implement handl
 fix the direction:
 
 ```
-def in[R](dir: Direction) { p: R / Layout }: R / Layout =
-  try { p () }
+def in[R](dir: Direction) { doc: R / Layout }: R / Layout =
+  try { doc() }
   with Flow { () => resume(dir) }
 
 def horizontal { p: Unit / Layout }: Unit / Layout =
@@ -266,7 +265,7 @@ def searchLayout[R] { p : R / LayoutChoice }: Option[R] =
     def choice() = resume(Horizontal()).orElse { resume(Vertical()) }
   }
 ```
-The handler is essentially the same as the backtracking implementation of the [parser case study](parser.md)
+The handler is essentially the same as the backtracking implementation of the [parser case study](parser.md) but
 using optional values to indicate success or failure of a layouting attempt. If layouting horizontally fails
 for a particular choice-point, we resume a second time with `Vertical`.
 
@@ -312,8 +311,8 @@ If the current text still fits the line, we simply re-emit it.
 
 Finally, we can compose the different handlers to a single pretty printing handler:
 ```
-def pretty(width: Int) { p: Unit / Pretty }: String = {
-  val result = searchLayout { writer { printer(width, 2) { p() } } };
+def pretty(width: Int) { doc: Unit / Pretty }: String = {
+  val result = searchLayout { writer { printer(width, 2) { doc() } } };
   result.getOrElse { "Cannot print document, since it would overflow." }
 }
 ```
@@ -378,7 +377,7 @@ def example4() = parseAndPrint("let x = (let y = 2 in 1) in 42", 10)
 // ----------
 // let x =
 //   let y =
-//   2
+//     2
 //   in 1
 // in 42
 ```
@@ -448,6 +447,12 @@ def main() = {
       line();
       text("lines")
     }
+  }
+
+  def helloWorld() = {
+    text("hello")
+    line()
+    text("world")
   }
 
   println("------------------------------");
