@@ -1,7 +1,7 @@
 This example shows basic usage of algebraic datatypes.
 
 ```
-module adt
+module examples/features/adt
 ```
 
 We also use some example effects, so declare them first
