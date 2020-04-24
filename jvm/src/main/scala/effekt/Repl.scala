@@ -92,10 +92,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
      */
     def reset() = {
       module = emptyModule
-      // reset the cache
-      // TODO this is very roundabout and we should have a more principled solution for
-      //      invalidating caches.
-      driver.parser.reset()
     }
 
     /**

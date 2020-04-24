@@ -28,7 +28,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   object context extends Context(outer) with IOModuleDB
 
   // we override the caching behavior of the parser to invalidate if the file changed
-  override lazy val parser = new SourceTask(new Parser(positions))
+  //  override lazy val parser = new SourceTask(new Parser(positions))
 
   /**
    * If no file names are given, run the REPL

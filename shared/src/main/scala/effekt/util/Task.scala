@@ -50,9 +50,13 @@ trait Task[In, Out] { self =>
 
     def fingerprint(key: In): Long = self.fingerprint(key)
   }
+
+  override def toString = taskName
 }
 
 object Task { build =>
+
+  private def log(msg: String) = ()
 
   /**
    * A concrete target / request to be build
@@ -97,6 +101,7 @@ object Task { build =>
 
   def compute[K, V](target: Target[K, V])(implicit C: Context): Option[V] = {
     var before = trace
+    log(s"computing for ${target}")
 
     // we start with an empty trace for this target
     trace = Nil
@@ -110,7 +115,7 @@ object Task { build =>
   }
 
   def reuse[V](tr: Trace[V]): Option[V] = {
-    //println(s"reusing ${tr.value} for ${tr.current.target}")
+    log(s"reusing ${tr.current.target}")
     // replay the trace
     trace ++= tr.trace
     tr.value
@@ -120,11 +125,13 @@ object Task { build =>
 
   def need[K, V](target: Target[K, V])(implicit C: Context): Option[V] = get(target) match {
     case Some(trace) if !trace.isValid =>
-      //println(s"Something changed for ${target}")
+      log(s"Something changed for ${target}")
       compute(target)
     case Some(trace) =>
       reuse(trace)
     case None =>
       compute(target)
   }
+
+  def dump() = db.foreach { case (k, v) => println(k.toString.padTo(20, ' ') + " -> " + v) }
 }

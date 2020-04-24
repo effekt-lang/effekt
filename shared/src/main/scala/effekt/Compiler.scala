@@ -26,7 +26,7 @@ trait Compiler {
 
   // Frontend phases
   // ===============
-  lazy val parser: Task[Source, ModuleDecl] = new Parser(positions)
+  lazy val parser = new Parser(positions)
   lazy val namer = new Namer()
   lazy val typer = new Typer
   lazy val frontend = (namer andThen typer)
