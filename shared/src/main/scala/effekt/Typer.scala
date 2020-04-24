@@ -10,6 +10,7 @@ import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchClause, MatchP
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
+import effekt.util.Task
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
@@ -25,9 +26,9 @@ case class TyperState(
   effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
 )
 
-class Typer extends Phase[Module, Module] { typer =>
+class Typer extends Task[Module, Module] { typer =>
 
-  val phaseName = "typer"
+  val taskName = "typer"
 
   def run(mod: Module)(implicit C: Context): Option[Module] = {
 

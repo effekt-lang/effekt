@@ -4,16 +4,15 @@ package core
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
 import effekt.symbols._
-
-import effekt.util.control
+import effekt.util.{ Task, control }
 import effekt.util.control._
 
 case class Wildcard(module: Module) extends Symbol { val name = Name("_", module) }
 case class Tmp(module: Module) extends Symbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-class Transformer extends Phase[Module, core.ModuleDecl] {
+class Transformer extends Task[Module, core.ModuleDecl] {
 
-  val phaseName = "transformer"
+  val taskName = "transformer"
 
   def run(mod: Module)(implicit compiler: Context): Option[ModuleDecl] =
     Some(transform(mod))

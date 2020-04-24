@@ -6,7 +6,7 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.{ ColoredMessaging, MarkdownSource, SourcePhase }
+import effekt.util.{ ColoredMessaging, MarkdownSource, SourceTask }
 import effekt.util.JavaPathUtils._
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
@@ -28,7 +28,7 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   object context extends Context(outer) with IOModuleDB
 
   // we override the caching behavior of the parser to invalidate if the file changed
-  override lazy val parser = new SourcePhase(new Parser(positions))
+  override lazy val parser = new SourceTask(new Parser(positions))
 
   /**
    * If no file names are given, run the REPL

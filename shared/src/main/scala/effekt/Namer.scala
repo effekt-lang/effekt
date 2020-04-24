@@ -4,12 +4,12 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context }
+import effekt.context.Context
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
 import effekt.symbols._
+import effekt.util.Task
 import scopes._
-
 import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
@@ -31,9 +31,9 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Phase[Module, Module] { namer =>
+class Namer extends Task[Module, Module] { namer =>
 
-  val phaseName = "Namer"
+  val taskName = "Namer"
 
   def run(mod: Module)(implicit C: Context): Option[Module] = {
     Some(resolve(mod))

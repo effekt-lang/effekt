@@ -5,14 +5,14 @@ import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 import effekt.context.Context
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Symbol, Name, builtins, moduleFile, moduleName }
+import effekt.symbols.{ Name, Symbol, builtins, moduleFile, moduleName }
 import effekt.context.assertions._
-
+import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
+class JavaScript extends ParenPrettyPrinter with Task[ModuleDecl, Document] {
 
-  val phaseName = "code-generator"
+  val taskName = "code-generator"
 
   def run(t: ModuleDecl)(implicit C: Context): Option[Document] =
     Some(format(t))

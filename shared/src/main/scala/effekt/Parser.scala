@@ -4,6 +4,7 @@ import java.util
 
 import effekt.context.Context
 import effekt.source._
+import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
@@ -14,9 +15,9 @@ import scala.language.implicitConversions
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
+class Parser(positions: Positions) extends Parsers(positions) with Task[Source, ModuleDecl] {
 
-  val phaseName = "parser"
+  val taskName = "parser"
 
   def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parseAll(program, source) match {

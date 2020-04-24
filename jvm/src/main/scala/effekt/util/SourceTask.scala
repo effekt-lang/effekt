@@ -11,8 +11,8 @@ import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source, StringSource }
  * A Caching wrapper around a phase, that invalidates the phase if the
  * source changed.
  */
-class SourcePhase[Out](phase: Phase[Source, Out]) extends Phase[Source, Out] {
-  val phaseName = phase.phaseName
+class SourceTask[Out](phase: Task[Source, Out]) extends Task[Source, Out] {
+  val taskName = phase.taskName
 
   type Timestamp = Long
 
