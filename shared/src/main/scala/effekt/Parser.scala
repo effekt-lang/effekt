@@ -32,6 +32,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Task[Source, 
         None
     }
 
+  def fingerprint(source: Source) = source.content.hashCode.toLong
+
   type P[T] = PackratParser[T]
 
   // === Lexing ===

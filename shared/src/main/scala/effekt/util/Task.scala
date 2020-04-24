@@ -32,6 +32,8 @@ trait Task[In, Out] { self =>
       None
   }
 
+  def fingerprint(key: In): Long
+
   /**
    * Helper method to find the currently implicit context
    */
@@ -45,6 +47,8 @@ trait Task[In, Out] { self =>
 
     def run(input: In)(implicit C: Context): Option[Out2] =
       self.run(input).flatMap(other.run)
+
+    def fingerprint(key: In): Long = self.fingerprint(key)
   }
 
   def cached: Task[In, Out] = new CachedTask(this)
@@ -57,4 +61,6 @@ class CachedTask[In, Out](task: Task[In, Out]) extends Task[In, Out] {
 
   def run(input: In)(implicit C: Context): Option[Out] =
     cache.getOrElseUpdate(input, task.run(input))
+
+  def fingerprint(key: In): Long = task.fingerprint(key)
 }

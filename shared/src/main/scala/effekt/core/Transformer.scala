@@ -17,6 +17,8 @@ class Transformer extends Task[Module, core.ModuleDecl] {
   def run(mod: Module)(implicit compiler: Context): Option[ModuleDecl] =
     Some(transform(mod))
 
+  def fingerprint(key: Module) = key.hashCode.toLong
+
   def transform(mod: Module)(implicit compiler: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {

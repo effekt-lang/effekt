@@ -17,6 +17,8 @@ class JavaScript extends ParenPrettyPrinter with Task[ModuleDecl, Document] {
   def run(t: ModuleDecl)(implicit C: Context): Option[Document] =
     Some(format(t))
 
+  def fingerprint(key: ModuleDecl) = key.hashCode.toLong
+
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
   def format(t: ModuleDecl)(implicit C: Context): Document =

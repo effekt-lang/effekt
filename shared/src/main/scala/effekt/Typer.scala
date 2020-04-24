@@ -58,6 +58,8 @@ class Typer extends Task[Module, Module] { typer =>
     }
   }
 
+  def fingerprint(m: Module) = m.hashCode.toLong
+
   //<editor-fold desc="expressions">
 
   def checkExpr(expr: Expr, expected: Option[Type])(implicit C: Context): Effectful =

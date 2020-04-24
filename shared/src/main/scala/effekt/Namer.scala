@@ -39,6 +39,8 @@ class Namer extends Task[Module, Module] { namer =>
     Some(resolve(mod))
   }
 
+  def fingerprint(mod: Module) = mod.hashCode.toLong
+
   def resolve(mod: Module)(implicit C: Context): Module = {
 
     var scope: Scope = toplevel(builtins.rootTypes)

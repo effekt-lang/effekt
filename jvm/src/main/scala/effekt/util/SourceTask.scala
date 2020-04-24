@@ -40,6 +40,8 @@ class SourceTask[Out](phase: Task[Source, Out]) extends Task[Source, Out] {
     case StringSource(content, name) => 0L
   }
 
+  def fingerprint(s: Source) = lastModified(s)
+
   def reset(): Unit = cache.clear()
 
   //cache.getOrElseUpdate(input, phase.run(input))
