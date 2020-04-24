@@ -62,6 +62,12 @@ abstract class Context(val compiler: Compiler)
   def typerState: TyperState = _typerState
   def typerState_=(st: TyperState): Unit = _typerState = st
 
+  def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
+    self.module = module
+    self.focus = focus
+    block
+  }
+
   /**
    * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
    */

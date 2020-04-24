@@ -366,7 +366,9 @@ class Namer extends Task[Module, Module] { namer =>
     }
 
     case d @ source.ExternInclude(path) =>
-      d.contents = Context.contentsOf(path)
+      d.contents = Context.contentsOf(path).getOrElse {
+        C.abort(s"Missing include: ${path}")
+      }
       ()
   }
 

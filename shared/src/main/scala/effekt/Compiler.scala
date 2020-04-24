@@ -6,7 +6,7 @@ import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.typer.Typer
-import effekt.util.Task
+import effekt.util.{ Task, SourceContentTask }
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
@@ -39,8 +39,15 @@ trait Compiler {
   /**
    * The full compiler pipeline from source to output
    */
-  def compile(source: Source)(implicit C: Context): Option[Module] =
-    parsing(source) { pipeline }
+  object compile extends SourceContentTask[Module]("compile") {
+    def run(source: Source)(implicit C: Context): Option[Module] =
+      //      parsing(source) { mod => pipeline(mod) }
+      for {
+        ast <- parser(source)
+        mod <- moduleFor(ast, source)
+        _ <- C.using(module = mod, focus = ast) { pipeline(mod) }
+      } yield mod
+  }
 
   /**
    * Variant: Compiler without parser (used by Repl, since Kiama does the parsing)
@@ -101,6 +108,16 @@ trait Compiler {
       C.focus = ast
       f(mod)
     }
+  }
+
+  object moduleFor extends Task[(ModuleDecl, Source), Module] {
+
+    val taskName = "module"
+
+    def run(input: (ModuleDecl, Source))(implicit C: Context): Option[Module] =
+      Some(Module(input._1, input._2))
+
+    def fingerprint(input: (ModuleDecl, Source)): Long = input._2.content.hashCode
   }
 
 }

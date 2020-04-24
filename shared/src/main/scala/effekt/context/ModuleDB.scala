@@ -2,6 +2,7 @@ package effekt
 package context
 
 import effekt.symbols.Module
+import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.util.Source
 
 import scala.collection.mutable
@@ -19,7 +20,9 @@ trait ModuleDB { self: Context =>
    *
    * Used by Namer to resolve FFI includes
    */
-  def contentsOf(path: String): String
+  //  def contentsOf: Task[String, String]
+
+  def contentsOf(path: String): Option[String]
 
   /**
    * Find the source for a given module name / path

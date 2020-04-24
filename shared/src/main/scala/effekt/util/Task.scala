@@ -5,6 +5,8 @@ import effekt.util.messages.FatalPhaseError
 
 import scala.collection.mutable
 
+import org.bitbucket.inkytonik.kiama.util.Source
+
 trait Task[In, Out] { self =>
 
   /**
@@ -54,15 +56,28 @@ trait Task[In, Out] { self =>
   override def toString = taskName
 }
 
+abstract class SourceContentTask[Out](name: String) extends Task[Source, Out] {
+  val taskName = name
+
+  // This is slow. Contenthash should be a cached field on Source
+  // On file sources, we can use the timestamp to approximate content changes
+  def fingerprint(source: Source) = source.content.hashCode
+}
+
+abstract class HashTask[In, Out](name: String) extends Task[In, Out] {
+  val taskName = name
+  def fingerprint(in: In) = in.hashCode
+}
+
 object Task { build =>
 
-  private def log(msg: String) = ()
+  private def log(msg: => String) = () // println(msg)
 
   /**
    * A concrete target / request to be build
    */
   case class Target[K, V](task: Task[K, V], key: K) {
-    override def toString = s"${task}@${key}"
+    override def toString = s"${task}@${key.toString.slice(0, 15)}"
     def fingerprint: Long = task.fingerprint(key)
   }
 
