@@ -30,9 +30,14 @@ def alwaysHello[R] { prog: () => R / Next }: R / {} =
 def number() : Int / { Next, Fail } =
   stringToInt(do Next())
 
-def tokenize[R](input: String) { prog: () => R / Next } : R / Fail = {
-  // TODO: split input at whitespace
-  try { prog() } with Next { () => resume("oh") }
+def feed[R](input: List[String]) { prog: () => R / Next } : R / Fail = {
+  var remaining = input;
+  try { prog() } with Next { () =>
+    remaining match {
+      case Nil() => do Fail("End of input")
+      case Cons(element, rest) => remaining = rest; resume(element)
+    }
+  }
 }
 
 
@@ -68,11 +73,11 @@ effect Parser = { Fail, Flip, Next }
 
 def manyNumbers() : List[Int] / Parser = many { number() }
 
-def parse[R](input: String) { prog: () => R / Parser }: Result[R] / {} =
-  backtrack { tokenize(input) { prog() } }
+def parse[R](input: List[String]) { prog: () => R / Parser }: Result[R] / {} =
+  backtrack { feed(input) { prog() } }
 
 
 def main() = {
-  println(parse("12 34 56") { manyNumbers() })
+  println(parse(["12", "34", "56"]) { manyNumbers() })
   // Success(Cons(12, Cons(34, Cons(56, Nil()))))
 }
