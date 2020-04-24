@@ -54,6 +54,81 @@ trait Task[In, Out] { self =>
   def cached: Task[In, Out] = new CachedTask(this)
 }
 
+object Task { build =>
+
+  /**
+   * A concrete target / request to be build
+   */
+  case class Target[K, V](task: Task[K, V], key: K) {
+    override def toString = s"${task}@${key}"
+    def fingerprint: Long = task.fingerprint(key)
+  }
+
+  /**
+   * A heterogenous store from Target to Trace
+   */
+  val db = mutable.HashMap.empty[Target[Any, Any], Trace[Any]]
+
+  case class Info(target: Target[_, _], hash: Long) {
+    def isValid: Boolean = target.fingerprint == hash
+    override def toString = s"${target}#${hash}"
+  }
+
+  // The datatype Trace is adapted from the paper "Build systems a la carte" (Mokhov et al. 2018)
+  // currently the invariant that Info.target.V =:= V is not enforced
+  case class Trace[V](current: Info, depends: List[Info], value: Option[V]) {
+    def trace = current :: depends
+    def isValid: Boolean = current.isValid && depends.forall { _.isValid }
+    override def toString = {
+      s"Trace($current) { ${depends.mkString("; ")} }"
+    }
+  }
+
+  private def coerce[A, B](a: A): B = a.asInstanceOf[B]
+
+  def get[K, V](target: Target[K, V]): Option[Trace[V]] =
+    coerce(db.get(coerce(target)))
+
+  def update[K, V](target: Target[K, V], trace: Trace[V]): Unit =
+    db.update(coerce(target), coerce(trace))
+
+  /**
+   * A trace recording information about computed targets
+   */
+  private var trace: List[Info] = Nil
+
+  def compute[K, V](target: Target[K, V])(implicit C: Context): Option[V] = {
+    var before = trace
+
+    // we start with an empty trace for this target
+    trace = Nil
+    val res = target.task.run(target.key)
+    val tr = Trace(Info(target, target.fingerprint), trace, res)
+    build.update(target, tr)
+
+    // for the potential parent task, we append our trace to the existing one
+    trace = before ++ tr.trace
+    res
+  }
+
+  def reuse[V](tr: Trace[V]): Option[V] = {
+    //println(s"reusing ${tr.value} for ${tr.current.target}")
+    // replay the trace
+    trace ++= tr.trace
+    tr.value
+  }
+
+  def need[K, V](target: Target[K, V])(implicit C: Context): Option[V] = get(target) match {
+    case Some(trace) if !trace.isValid =>
+      //println(s"Something changed for ${target}")
+      compute(target)
+    case Some(trace) =>
+      reuse(trace)
+    case None =>
+      compute(target)
+  }
+}
+
 class CachedTask[In, Out](task: Task[In, Out]) extends Task[In, Out] {
   val taskName = task.taskName
 
