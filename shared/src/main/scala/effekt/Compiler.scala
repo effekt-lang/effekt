@@ -6,6 +6,7 @@ import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.typer.Typer
+import effekt.util.Task
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
@@ -25,10 +26,10 @@ trait Compiler {
 
   // Frontend phases
   // ===============
-  lazy val parser = new Parser(positions).cached
+  lazy val parser: Task[Source, ModuleDecl] = new Parser(positions)
   lazy val namer = new Namer()
   lazy val typer = new Typer
-  lazy val frontend = (namer andThen typer).cached
+  lazy val frontend = (namer andThen typer)
 
   // Backend phases
   // ==============

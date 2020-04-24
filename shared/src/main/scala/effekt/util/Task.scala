@@ -25,7 +25,7 @@ trait Task[In, Out] { self =>
    * Apply this task
    */
   def apply(input: In)(implicit C: Context): Option[Out] = try {
-    run(input)
+    Task.need(this, input)
   } catch {
     case FatalPhaseError(msg) =>
       C.error(msg)
@@ -50,8 +50,6 @@ trait Task[In, Out] { self =>
 
     def fingerprint(key: In): Long = self.fingerprint(key)
   }
-
-  def cached: Task[In, Out] = new CachedTask(this)
 }
 
 object Task { build =>
@@ -118,6 +116,8 @@ object Task { build =>
     tr.value
   }
 
+  def need[K, V](task: Task[K, V], key: K)(implicit C: Context): Option[V] = need(Target(task, key))
+
   def need[K, V](target: Target[K, V])(implicit C: Context): Option[V] = get(target) match {
     case Some(trace) if !trace.isValid =>
       //println(s"Something changed for ${target}")
@@ -127,15 +127,4 @@ object Task { build =>
     case None =>
       compute(target)
   }
-}
-
-class CachedTask[In, Out](task: Task[In, Out]) extends Task[In, Out] {
-  val taskName = task.taskName
-
-  private val cache: mutable.Map[In, Option[Out]] = mutable.Map.empty
-
-  def run(input: In)(implicit C: Context): Option[Out] =
-    cache.getOrElseUpdate(input, task.run(input))
-
-  def fingerprint(key: In): Long = task.fingerprint(key)
 }
