@@ -46,6 +46,7 @@ lazy val root = project.in(file("."))
 lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
 lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
+lazy val install = taskKey[Unit]("Installs the current version locally")
 
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
@@ -91,8 +92,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
 
       // prepend shebang to make jar file executable
       val binary = (baseDirectory in ThisBuild).value / "bin" / "effekt"
+      IO.delete(binary)
       IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
+    },
+
+    install := {
+      deploy.value
+      Process("npm pack").!!
+      Process(s"npm install -g effekt-${effektVersion}.tgz").!!
     },
 
     Compile / sourceGenerators += versionGenerator.taskValue,
