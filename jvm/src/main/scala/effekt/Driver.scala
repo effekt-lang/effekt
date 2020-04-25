@@ -63,8 +63,12 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
       mod <- frontend(src)
     } eval(mod)
 
+    afterCompilation(source, config)
+  }
+
+  def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // report messages
-    report(src, C.buffer.get, config)
+    report(source, C.buffer.get, config)
   }
 
   /**

@@ -2,12 +2,9 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
-import effekt.source.{ ModuleDecl, Tree }
-import effekt.symbols.Module
-import effekt.util.Task
+import effekt.source.Tree
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
 
 trait LSPServer extends Driver with Intelligence {
@@ -25,23 +22,24 @@ trait LSPServer extends Driver with Intelligence {
     if (!settingBool("showExplanations")) "" else explanation.stripMargin('|')
 
   /**
-   * Overriding backend to also publish core and target for LSP server
+   * Overriding hook to also publish core and target for LSP server
    */
+  override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+    super.compileSource(source, config)
+    for (mod <- frontend(source); core <- computeCore(source)) {
 
-  // TODO: use another hook to publish cire and target!
-  //  override def backend(mod: Module)(implicit C: Context): Option[Document] = transformer(mod) flatMap { core =>
-  //
-  //    if (C.config.server() && settingBool("showCore")) {
-  //      publishProduct(mod.source, "target", "effekt", prettyCore.format(core))
-  //    }
-  //
-  //    generator(core) map { js =>
-  //      if (C.config.server() && settingBool("showTarget")) {
-  //        publishProduct(mod.source, "target", "js", js)
-  //      }
-  //      js
-  //    }
-  //  }
+      if (C.config.server() && settingBool("showCore")) {
+        publishProduct(source, "target", "effekt", prettyCore.format(core))
+      }
+
+      generator(core) map { js =>
+        if (C.config.server() && settingBool("showTarget")) {
+          publishProduct(source, "target", "js", js)
+        }
+        js
+      }
+    }
+  }
 
   override def getHover(position: Position): Option[String] = for {
     (tree, sym) <- getSymbolAt(position)(context)

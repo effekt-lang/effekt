@@ -6,14 +6,10 @@ import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.typer.Typer
-import effekt.util.{ SourceTask, Task, VirtualSource }
-import effekt.util.messages.FatalPhaseError
+import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
-import kiama.parsing.{ NoSuccess, Success }
 import kiama.util.{ Positions, Source }
-
-import scala.collection.mutable
 
 /**
  * "Pure" compiler without reading or writing to files
