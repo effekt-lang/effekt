@@ -10,14 +10,10 @@ import effekt.util.control._
 case class Wildcard(module: Module) extends Symbol { val name = Name("_", module) }
 case class Tmp(module: Module) extends Symbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-class Transformer extends Task[Module, core.ModuleDecl] {
-
-  val taskName = "transformer"
+class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def run(mod: Module)(implicit compiler: Context): Option[ModuleDecl] =
     Some(transform(mod))
-
-  def fingerprint(key: Module) = key.hashCode.toLong
 
   def transform(mod: Module)(implicit compiler: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl

@@ -19,7 +19,7 @@ class CompilerJS extends Compiler {
   /**
    * Don't output amdefine module declarations
    */
-  override lazy val codegen = new JavaScriptGlobal
+  override lazy val generator = new JavaScriptGlobal
 
   var output: StringBuilder = _
 

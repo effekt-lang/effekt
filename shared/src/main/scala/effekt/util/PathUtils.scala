@@ -43,10 +43,10 @@ trait PathUtils {
     modulePath.replace('/', '_') + ".js"
 
   def lastModified(src: Source): Long = src match {
-    case FileSource(name, encoding)  => file(name).lastModified
-    case MarkdownSource(src)         => lastModified(src)
+    case FileSource(name, encoding) => file(name).lastModified
+    case MarkdownSource(src) => lastModified(src)
 
-    // it is always 0 for string sources since they are compared by content
-    case StringSource(content, name) => 0L
+    // it is always 0 for string sources and virtual sources since they are compared by content
+    case _ => 0L
   }
 }

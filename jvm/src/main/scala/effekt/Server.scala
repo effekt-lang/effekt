@@ -4,6 +4,7 @@ import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
+import effekt.util.Task
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
@@ -26,19 +27,21 @@ trait LSPServer extends Driver with Intelligence {
   /**
    * Overriding backend to also publish core and target for LSP server
    */
-  override def backend(mod: Module)(implicit C: Context): Option[Document] = transformer(mod) flatMap { core =>
 
-    if (C.config.server() && settingBool("showCore")) {
-      publishProduct(mod.source, "target", "effekt", prettyCore.format(core))
-    }
-
-    codegen(core) map { js =>
-      if (C.config.server() && settingBool("showTarget")) {
-        publishProduct(mod.source, "target", "js", js)
-      }
-      js
-    }
-  }
+  // TODO: use another hook to publish cire and target!
+  //  override def backend(mod: Module)(implicit C: Context): Option[Document] = transformer(mod) flatMap { core =>
+  //
+  //    if (C.config.server() && settingBool("showCore")) {
+  //      publishProduct(mod.source, "target", "effekt", prettyCore.format(core))
+  //    }
+  //
+  //    generator(core) map { js =>
+  //      if (C.config.server() && settingBool("showTarget")) {
+  //        publishProduct(mod.source, "target", "js", js)
+  //      }
+  //      js
+  //    }
+  //  }
 
   override def getHover(position: Position): Option[String] = for {
     (tree, sym) <- getSymbolAt(position)(context)
@@ -88,7 +91,6 @@ trait LSPServer extends Driver with Intelligence {
       case _ =>
         None
     }
-
 }
 
 object Server extends LSPServer

@@ -2,7 +2,7 @@ package effekt
 
 import effekt.source._
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
-import effekt.util.{ ColoredMessaging, Highlight }
+import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
@@ -238,8 +238,11 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
   private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
     context.setup(config)
 
+    val src = VirtualSource(ast, source)
+
     for {
-      mod <- driver.compile(ast, source)
+      _ <- driver.compile(src)
+      mod <- driver.frontend(src)
     } driver.eval(mod)
 
     report(source, context.buffer.get, config)
@@ -247,7 +250,8 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
   private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
-    driver.frontend(ast, source) map { f } getOrElse {
+    val src = VirtualSource(ast, source)
+    driver.frontend(src) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }

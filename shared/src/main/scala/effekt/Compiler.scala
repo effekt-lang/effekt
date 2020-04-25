@@ -6,7 +6,7 @@ import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.typer.Typer
-import effekt.util.{ Task, SourceTask }
+import effekt.util.{ SourceTask, Task, VirtualSource }
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
@@ -26,96 +26,71 @@ trait Compiler {
 
   // Frontend phases
   // ===============
-  lazy val parser = new Parser(positions)
-  lazy val namer = new Namer()
-  lazy val typer = new Typer
-  lazy val frontend = (namer andThen typer)
+  object parser extends Parser(positions)
+  object namer extends Namer
+  object typer extends Typer
 
   // Backend phases
   // ==============
-  lazy val transformer = new Transformer
-  lazy val codegen = new JavaScript
+  object transformer extends Transformer
+  object generator extends JavaScript
 
-  /**
-   * The full compiler pipeline from source to output
-   */
-  object compile extends SourceTask[Module]("compile") {
-    def run(source: Source)(implicit C: Context): Option[Module] =
-      //      parsing(source) { mod => pipeline(mod) }
-      for {
-        ast <- parser(source)
-        mod <- moduleFor(ast, source)
-        _ <- C.using(module = mod, focus = ast) { pipeline(mod) }
-      } yield mod
+  // Tasks
+  // =====
+
+  object getAST extends SourceTask[ModuleDecl]("ast") {
+    def run(source: Source)(implicit C: Context): Option[ModuleDecl] = source match {
+      case VirtualSource(decl, _) => Some(decl)
+      case _ =>
+        println("Running parser on " + source.name)
+        parser(source)
+    }
   }
 
-  /**
-   * Variant: Compiler without parser (used by Repl, since Kiama does the parsing)
-   */
-  def compile(ast: ModuleDecl, source: Source)(implicit C: Context): Option[Module] =
-    withModule(ast, source) { pipeline }
+  object frontend extends SourceTask[Module]("frontend") {
+    def run(source: Source)(implicit C: Context): Option[Module] = for {
+      ast <- getAST(source)
+      _ = println("Running frontend on " + source.name)
+      mod = Module(ast, source)
+      _ <- C.using(module = mod, focus = ast) {
+        for {
+          _ <- namer(mod)
+          _ <- typer(mod)
+        } yield ()
+      }
+    } yield mod
+  }
 
-  /**
-   * The full pipeline after parsing
-   */
-  private def pipeline(mod: Module)(implicit C: Context): Option[Module] = for {
-    mod <- frontend(mod)
-    js <- backend(mod)
-    _ = saveOutput(js, mod)
-  } yield mod
+  object computeCore extends SourceTask[core.ModuleDecl]("core") {
+    def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
+      mod <- frontend(source)
+      core <- transformer(mod)
+    } yield core
+  }
 
-  /**
-   * Frontend: Parser -> Namer -> Typer
-   */
-  def frontend(source: Source)(implicit C: Context): Option[Module] =
-    parsing(source) { mod => frontend(mod) }
+  object generateJS extends SourceTask[Document]("generator") {
+    def run(source: Source)(implicit C: Context): Option[Document] = for {
+      core <- computeCore(source)
+      _ = println("generating JS for " + source.name)
+      doc <- generator(core)
+    } yield doc
+  }
 
-  /**
-   * Variant: Frontend without parser (used by Repl, which uses a different parser for the toplevel)
-   */
-  def frontend(ast: ModuleDecl, source: Source)(implicit C: Context): Option[Module] =
-    withModule(ast, source) { mod => frontend(mod) }
-
-  /**
-   * Backend: Module -> Document
-   */
-  def backend(mod: Module)(implicit C: Context): Option[Document] =
-    (transformer andThen codegen)(mod)
+  // TODO change result from Unit to File
+  object compile extends SourceTask[Unit]("compile") {
+    def run(source: Source)(implicit C: Context): Option[Unit] = for {
+      mod <- frontend(source)
+      js <- generateJS(source)
+      _ = println("writing output for " + source.name)
+      _ = saveOutput(js, mod)
+    } yield ()
+  }
 
   /**
    * Output writer: Document -> IO
+   *
+   * TODO convert into task?
    */
   def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit
-
-  // Utils
-  // =====
-
-  /**
-   * Parsing source and brings the module into scope
-   */
-  private def parsing[R](source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] =
-    parser(source).flatMap { ast => withModule(ast, source) { f } }
-
-  /**
-   * Don't create a fresh module every time, but reuse the existing one. Modules are symbols, they are compared
-   * by identity. Otherwise importing the same module in two files will lead to different types with the same names.
-   *
-   * However reusing modules symbols also has problems: If dependencies change, we need to run the frontend again.
-   * This will result in an error "Exports already set."
-   */
-  private def withModule[R](ast: ModuleDecl, source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] = for {
-    mod <- moduleFor(ast, source)
-    res <- C.using(module = mod, focus = ast) { f(mod) }
-  } yield res
-
-  object moduleFor extends Task[(ModuleDecl, Source), Module] {
-
-    val taskName = "module"
-
-    def run(input: (ModuleDecl, Source))(implicit C: Context): Option[Module] =
-      Some(Module(input._1, input._2))
-
-    def fingerprint(input: (ModuleDecl, Source)): Long = input._1.hashCode
-  }
 
 }

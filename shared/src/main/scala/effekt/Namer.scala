@@ -31,15 +31,11 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Task[Module, Module] { namer =>
-
-  val taskName = "Namer"
+class Namer extends Phase[Module, Module] { namer =>
 
   def run(mod: Module)(implicit C: Context): Option[Module] = {
     Some(resolve(mod))
   }
-
-  def fingerprint(mod: Module) = mod.hashCode.toLong
 
   def resolve(mod: Module)(implicit C: Context): Module = {
 

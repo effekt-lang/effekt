@@ -26,20 +26,10 @@ trait Task[In, Out] { self =>
   /**
    * Apply this task
    */
-  def apply(input: In)(implicit C: Context): Option[Out] = try {
+  def apply(input: In)(implicit C: Context): Option[Out] =
     Task.need(this, input)
-  } catch {
-    case FatalPhaseError(msg) =>
-      C.error(msg)
-      None
-  }
 
   def fingerprint(key: In): Long
-
-  /**
-   * Helper method to find the currently implicit context
-   */
-  def Context(implicit ctx: Context): Context = ctx
 
   /**
    * sequentially composes two tasks
@@ -74,7 +64,7 @@ abstract class HashTask[In, Out](name: String) extends Task[In, Out] {
 
 object Task { build =>
 
-  private def log(msg: => String) = () // println(msg)
+  private def log(msg: => String) = println(msg)
 
   /**
    * A concrete target / request to be build
@@ -94,6 +84,8 @@ object Task { build =>
     override def toString =
       if (isValid) target.toString else s"${target}#${Console.RED_B}${Console.WHITE}${hash}${Console.RESET}"
   }
+
+  // TODO deduplicate items in the trace
 
   // The datatype Trace is adapted from the paper "Build systems a la carte" (Mokhov et al. 2018)
   // currently the invariant that Info.target.V =:= V is not enforced

@@ -15,9 +15,7 @@ import scala.language.implicitConversions
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Task[Source, ModuleDecl] {
-
-  val taskName = "parser"
+class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
 
   def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parseAll(program, source) match {
@@ -31,8 +29,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Task[Source, 
         C.error(res, res.message)
         None
     }
-
-  def fingerprint(source: Source) = source.content.hashCode.toLong
 
   type P[T] = PackratParser[T]
 

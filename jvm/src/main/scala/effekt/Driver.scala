@@ -58,8 +58,9 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     C.setup(config)
 
     for {
-      mod <- compile(src)
+      _ <- compile(src)
       if config.interpret()
+      mod <- frontend(src)
     } eval(mod)
 
     // report messages

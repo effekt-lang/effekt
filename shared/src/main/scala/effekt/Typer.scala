@@ -26,9 +26,7 @@ case class TyperState(
   effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
 )
 
-class Typer extends Task[Module, Module] { typer =>
-
-  val taskName = "typer"
+class Typer extends Phase[Module, Module] { typer =>
 
   def run(mod: Module)(implicit C: Context): Option[Module] = {
 
@@ -57,8 +55,6 @@ class Typer extends Task[Module, Module] { typer =>
       Some(mod)
     }
   }
-
-  def fingerprint(m: Module) = m.hashCode.toLong
 
   //<editor-fold desc="expressions">
 
