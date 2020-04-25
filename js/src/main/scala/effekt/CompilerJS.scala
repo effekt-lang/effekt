@@ -37,21 +37,20 @@ class CompilerJS extends Compiler {
 
   def eval(s: String): Unit = {
     output = new StringBuilder
+    val src = StringSource(s)
     context.setup(JSConfig)
-    compile(StringSource(s)) match {
-      case None =>
-        sys error "Error"
-      case Some(mod) =>
-        val program = output.toString
-        val command =
-          s"""(function() {
-              |
-              |$program
-              |
-              |return ${mod.name}.main().run();
-              |})()
-              |""".stripMargin
-        scalajs.js.eval(command)
+
+    for (mod <- frontend(src); _ <- compile(src)) {
+      val program = output.toString
+      val command =
+        s"""(function() {
+            |
+            |$program
+            |
+            |return ${mod.name}.main().run();
+            |})()
+            |""".stripMargin
+      scalajs.js.eval(command)
     }
   }
 

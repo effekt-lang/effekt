@@ -32,7 +32,7 @@ trait Compiler {
   // Backend phases
   // ==============
   object transformer extends Transformer
-  object generator extends JavaScript
+  lazy val generator = new JavaScript
 
   // Tasks
   // =====
