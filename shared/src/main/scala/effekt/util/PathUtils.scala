@@ -23,6 +23,10 @@ trait PathUtils {
      */
     def unixPath: String
 
+    def exists: Boolean
+
+    def lastModified: Long
+
     /**
      * Prints the path as platform dependent path
      */

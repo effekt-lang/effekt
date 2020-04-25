@@ -146,7 +146,7 @@ lazy val stdLibGenerator = Def.task {
     val scalaCode =
       s"""
 package effekt.util
-import effekt.util.JSPathUtils._
+import effekt.util.paths._
 
 object Resources {
 

@@ -2,7 +2,7 @@ package effekt
 package util
 
 import effekt.context.Context
-import effekt.util.JavaPathUtils._
+import effekt.util.paths._
 
 import scala.collection.mutable
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source, StringSource }

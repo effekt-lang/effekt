@@ -7,7 +7,7 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
-import effekt.util.JavaPathUtils._
+import effekt.util.paths._
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult

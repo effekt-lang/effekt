@@ -9,7 +9,7 @@ class FileNotFound(filename: String) extends Exception(s"File not found: ${filen
  *
  * TODO Extend and implement util.PathUtil
  */
-object JSPathUtils extends PathUtils {
+object paths extends PathUtils {
 
   private type Path = String
 
@@ -31,6 +31,9 @@ object JSPathUtils extends PathUtils {
     def canonicalPath = unixPath
 
     def parent = file(path.split(separatorChar).init.mkString(separator))
+
+    // TODO implement by also keeping a timestamp in the map
+    def lastModified: Long = 0
 
     def read: String = files.getOrElse(path, throw new FileNotFound(path))
     def tryRead: Option[String] = files.get(path)

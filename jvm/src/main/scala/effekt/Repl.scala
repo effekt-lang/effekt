@@ -276,7 +276,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   def usingCommandHistory[T](config: EffektConfig)(block: => T): T = {
     import kiama.util.JLineConsole
-    import effekt.util.JavaPathUtils._
+    import effekt.util.paths._
     import jline.console.history.FileHistory
 
     config.console() match {

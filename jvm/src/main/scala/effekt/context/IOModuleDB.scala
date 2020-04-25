@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.util.JavaPathUtils._
+import effekt.util.paths._
 import effekt.util.MarkdownSource
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, IO, Source }
 

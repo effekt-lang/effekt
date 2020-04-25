@@ -49,6 +49,7 @@ trait TestUtils {
   val configs = compiler.createConfig(Seq("--lib", "lib"))
   configs.verify()
   compiler.compileFile("examples/features/adt.md", configs)
+  effekt.util.Task.dump()
 
   def interpret(file: File): String = {
     val compiler = new effekt.Driver {}

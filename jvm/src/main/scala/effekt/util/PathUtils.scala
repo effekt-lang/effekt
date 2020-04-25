@@ -5,7 +5,7 @@ import java.io.{ File => JFile }
 import java.net.URI
 import java.nio.file.{ Path => JPath }
 
-object JavaPathUtils extends PathUtils {
+object paths extends PathUtils {
 
   val separatorChar = JFile.separatorChar
 

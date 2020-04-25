@@ -5,7 +5,7 @@ import effekt.util.messages.FatalPhaseError
 
 import scala.collection.mutable
 
-import org.bitbucket.inkytonik.kiama.util.Source
+import org.bitbucket.inkytonik.kiama.util.{ Source, FileSource, StringSource }
 
 trait Task[In, Out] { self =>
 
@@ -45,7 +45,7 @@ trait Task[In, Out] { self =>
    * sequentially composes two tasks
    */
   def andThen[Out2](other: Task[Out, Out2]): Task[In, Out2] = new Task[In, Out2] {
-    val taskName = s"${self.taskName} -> ${other.taskName}"
+    val taskName = s"${self.taskName} andThen ${other.taskName}"
 
     def run(input: In)(implicit C: Context): Option[Out2] =
       self.run(input).flatMap(other.run)
@@ -57,11 +57,23 @@ trait Task[In, Out] { self =>
 }
 
 abstract class SourceContentTask[Out](name: String) extends Task[Source, Out] {
+  import effekt.util.paths._
+
   val taskName = name
 
-  // This is slow. Contenthash should be a cached field on Source
-  // On file sources, we can use the timestamp to approximate content changes
-  def fingerprint(source: Source) = source.content.hashCode
+  // On file sources, we use the timestamp to approximate content changes
+  // We currently can't simply use a content hash, since
+  // in kiama.FilesSource the content is only read once! and then stored in a `val`.
+  // It will not update, if the external file changes.
+  def fingerprint(source: Source) = lastModified(source)
+
+  def lastModified(src: Source): Long = src match {
+    case FileSource(name, encoding)  => file(name).lastModified
+    case MarkdownSource(src)         => lastModified(src)
+
+    // it is always 0 for string sources since they are compared by content
+    case StringSource(content, name) => 0L
+  }
 }
 
 abstract class HashTask[In, Out](name: String) extends Task[In, Out] {
@@ -77,7 +89,7 @@ object Task { build =>
    * A concrete target / request to be build
    */
   case class Target[K, V](task: Task[K, V], key: K) {
-    override def toString = s"${task}@${key.toString.slice(0, 15)}"
+    override def toString = s"${task}@${fingerprint}"
     def fingerprint: Long = task.fingerprint(key)
   }
 
@@ -88,7 +100,8 @@ object Task { build =>
 
   case class Info(target: Target[_, _], hash: Long) {
     def isValid: Boolean = target.fingerprint == hash
-    override def toString = s"${target}#${hash}"
+    override def toString =
+      if (isValid) target.toString else s"${target}#${Console.RED_B}${Console.WHITE}${hash}${Console.RESET}"
   }
 
   // The datatype Trace is adapted from the paper "Build systems a la carte" (Mokhov et al. 2018)
@@ -148,5 +161,5 @@ object Task { build =>
       compute(target)
   }
 
-  def dump() = db.foreach { case (k, v) => println(k.toString.padTo(20, ' ') + " -> " + v) }
+  def dump() = db.foreach { case (k, v) => println(k.toString + " -> " + v) }
 }

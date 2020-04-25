@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.util.Resources
-import effekt.util.JSPathUtils._
+import effekt.util.paths._
 
 import org.bitbucket.inkytonik.kiama.util.{ Source, StringSource }
 
@@ -16,13 +16,12 @@ trait VirtualModuleDB extends ModuleDB { self: Context =>
    *
    * used by Namer to resolve FFI includes
    */
-  override def contentsOf(path: String): String = {
+  override def contentsOf(path: String): Option[String] = {
     val f = file(module.source.name).parent / path
     if (!f.exists) {
-      error(s"Cannot find include: ${path}");
-      "" // continue nonetheless
+      None
     } else {
-      f.read
+      Some(f.read)
     }
   }
 
