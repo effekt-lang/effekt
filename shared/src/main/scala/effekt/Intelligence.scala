@@ -95,7 +95,7 @@ trait Intelligence extends Compiler {
 
     case f: BuiltinEffect =>
       val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
-                   |but cannot be handled with `try { ... } with { ... }`. The return type
+                   |but cannot be handled with `try { ... } with ${f.name} { ... }`. The return type
                    |of the main function can still have unhandled builtin effects.
                    |""".stripMargin
 
@@ -108,7 +108,7 @@ trait Intelligence extends Compiler {
             |Other than blocks, the implementation of an effect operation is provided by
             |the closest
             |```effekt
-            |try { EXPR } with { case ${f.name}(...) => ...  }
+            |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
             |```
             |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
             |
@@ -163,7 +163,7 @@ trait Intelligence extends Compiler {
             |
             |The following three types have to be the same$hint:
             |- the return type of the operation clause
-            |- the type of the handled expression enclosed by `try { EXPR } with { ... }`, and
+            |- the type of the handled expression enclosed by `try { EXPR } with EFFECT { ... }`, and
             |- the return type of the resumption.
             |""".stripMargin
 
