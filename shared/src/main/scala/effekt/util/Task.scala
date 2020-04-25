@@ -62,9 +62,10 @@ abstract class HashTask[In, Out](name: String) extends Task[In, Out] {
   def fingerprint(in: In) = in.hashCode
 }
 
+// TODO maybe tasks should either memoize the result OR error messages? Otherwise we don't have the messages on the next cached run
 object Task { build =>
 
-  private def log(msg: => String) = println(msg)
+  private def log(msg: => String) = () // println(msg)
 
   /**
    * A concrete target / request to be build
@@ -110,25 +111,37 @@ object Task { build =>
    */
   private var trace: List[Info] = Nil
 
-  def compute[K, V](target: Target[K, V])(implicit C: Context): Option[V] = {
-    var before = trace
-    log(s"computing for ${target}")
-
-    // we start with an empty trace for this target
+  def clearTrace(): List[Info] = {
+    val before = trace
     trace = Nil
+    before
+  }
+  def restoreTrace(tr: List[Info]) = {
+    trace = tr
+  }
+  def appendToTrace(t: List[Info]) = {
+    val extended = trace ++ t
+    trace = extended.distinct
+  }
+
+  def compute[K, V](target: Target[K, V])(implicit C: Context): Option[V] = {
+    var before = clearTrace()
+    // log(s"computing for ${target}")
+
     val res = target.task.run(target.key)
     val tr = Trace(Info(target, target.fingerprint), trace, res)
     build.update(target, tr)
 
     // for the potential parent task, we append our trace to the existing one
-    trace = before ++ tr.trace
+    restoreTrace(before)
+    appendToTrace(tr.trace)
     res
   }
 
   def reuse[V](tr: Trace[V]): Option[V] = {
-    log(s"reusing ${tr.current.target}")
+    // log(s"reusing ${tr.current.target}")
     // replay the trace
-    trace ++= tr.trace
+    appendToTrace(tr.trace)
     tr.value
   }
 
@@ -136,7 +149,7 @@ object Task { build =>
 
   def need[K, V](target: Target[K, V])(implicit C: Context): Option[V] = get(target) match {
     case Some(trace) if !trace.isValid =>
-      log(s"Something changed for ${target}")
+      // log(s"Something changed for ${target}")
       compute(target)
     case Some(trace) =>
       reuse(trace)
