@@ -38,7 +38,7 @@ trait Intelligence extends Compiler {
   }
 
   def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
-    decl <- C.compiler.parser(position.source)
+    decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
     trees = positions.findNodesContaining(tree.nodes, position)
     nodes = trees.sortWith {
@@ -67,8 +67,7 @@ trait Intelligence extends Compiler {
   } yield (id, resolveCallTarget(sym))
 
   def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
-    id <- getIdTreeAt(position)
-    sym <- C.symbolOption(id)
+    (_, sym) <- getSymbolAt(position)
     decl <- getDefinitionOf(resolveCallTarget(sym))
   } yield decl
 
