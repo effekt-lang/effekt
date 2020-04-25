@@ -18,7 +18,7 @@ object Highlight {
   }
 
   val keyword = Token(
-    parser.keywordStrings.mkString("|").r,
+    ("(" + parser.keywordStrings.mkString("|") + ")\\b").r,
     Console.MAGENTA + _ + Console.RESET
   )
 
