@@ -3,7 +3,6 @@ package util
 
 import java.io.{ File => JFile }
 import java.net.URI
-import java.nio.file.{ Path => JPath }
 
 object paths extends PathUtils {
 
@@ -41,7 +40,7 @@ object paths extends PathUtils {
     override def toString = underlying.toString
   }
 
-  implicit def file(filepath: String) = new File(new JFile(filepath))
   implicit def file(underlying: JFile): File = new File(underlying)
-  implicit def file(uri: URI): File = new File(new JFile(uri))
+  implicit def file(uri: URI): File = file(new JFile(uri.getPath))
+  implicit def file(filepath: String) = file(new URI(filepath))
 }
