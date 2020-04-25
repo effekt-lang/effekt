@@ -25,18 +25,15 @@ trait LSPServer extends Driver with Intelligence {
    * Overriding hook to also publish core and target for LSP server
    */
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
-    super.compileSource(source, config)
-    for (mod <- frontend(source); core <- computeCore(source)) {
+    super.afterCompilation(source, config)
+    for (mod <- frontend(source); core <- computeCore(source); js <- generateJS(source)) {
 
       if (C.config.server() && settingBool("showCore")) {
         publishProduct(source, "target", "effekt", prettyCore.format(core))
       }
 
-      generator(core) map { js =>
-        if (C.config.server() && settingBool("showTarget")) {
-          publishProduct(source, "target", "js", js)
-        }
-        js
+      if (C.config.server() && settingBool("showTarget")) {
+        publishProduct(source, "target", "js", js)
       }
     }
   }
