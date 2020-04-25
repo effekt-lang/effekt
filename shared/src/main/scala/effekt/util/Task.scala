@@ -2,10 +2,10 @@ package effekt.util
 
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
+import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
 import scala.collection.mutable
-
-import org.bitbucket.inkytonik.kiama.util.{ Source, FileSource, StringSource }
+import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source, StringSource }
 
 trait Task[In, Out] { self =>
 
@@ -86,11 +86,9 @@ object Task { build =>
       if (isValid) target.toString else s"${target}#${Console.RED_B}${Console.WHITE}${hash}${Console.RESET}"
   }
 
-  // TODO deduplicate items in the trace
-
   // The datatype Trace is adapted from the paper "Build systems a la carte" (Mokhov et al. 2018)
   // currently the invariant that Info.target.V =:= V is not enforced
-  case class Trace[V](current: Info, depends: List[Info], value: Option[V]) {
+  case class Trace[V](current: Info, depends: List[Info], value: Option[V], msgs: Messages) {
     def trace = current :: depends
     def isValid: Boolean = current.isValid && depends.forall { _.isValid }
     override def toString = {
@@ -128,8 +126,13 @@ object Task { build =>
     var before = clearTrace()
     // log(s"computing for ${target}")
 
-    val res = target.task.run(target.key)
-    val tr = Trace(Info(target, target.fingerprint), trace, res)
+    // capture the messages, so they can be replayed later
+    val (msgs, res) = C.withMessages {
+      target.task.run(target.key)
+    }
+    C.buffer.append(msgs)
+
+    val tr = Trace(Info(target, target.fingerprint), trace, res, msgs)
     build.update(target, tr)
 
     // for the potential parent task, we append our trace to the existing one
@@ -138,9 +141,10 @@ object Task { build =>
     res
   }
 
-  def reuse[V](tr: Trace[V]): Option[V] = {
+  def reuse[V](tr: Trace[V])(implicit C: Context): Option[V] = {
     // log(s"reusing ${tr.current.target}")
     // replay the trace
+    C.buffer.append(tr.msgs)
     appendToTrace(tr.trace)
     tr.value
   }
