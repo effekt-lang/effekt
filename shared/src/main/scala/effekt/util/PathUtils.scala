@@ -1,6 +1,8 @@
 package effekt
 package util
 
+import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source, StringSource }
+
 /**
  * PathUtils independent of Java as a host platform.
  * Can be implemented to also be compatible with JS
@@ -39,4 +41,12 @@ trait PathUtils {
    */
   def moduleFileName(modulePath: String) =
     modulePath.replace('/', '_') + ".js"
+
+  def lastModified(src: Source): Long = src match {
+    case FileSource(name, encoding)  => file(name).lastModified
+    case MarkdownSource(src)         => lastModified(src)
+
+    // it is always 0 for string sources since they are compared by content
+    case StringSource(content, name) => 0L
+  }
 }

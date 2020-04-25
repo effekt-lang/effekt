@@ -56,24 +56,15 @@ trait Task[In, Out] { self =>
   override def toString = taskName
 }
 
-abstract class SourceContentTask[Out](name: String) extends Task[Source, Out] {
-  import effekt.util.paths._
-
+abstract class SourceTask[Out](name: String) extends Task[Source, Out] {
   val taskName = name
 
   // On file sources, we use the timestamp to approximate content changes
   // We currently can't simply use a content hash, since
   // in kiama.FilesSource the content is only read once! and then stored in a `val`.
   // It will not update, if the external file changes.
-  def fingerprint(source: Source) = lastModified(source)
+  def fingerprint(source: Source) = paths.lastModified(source)
 
-  def lastModified(src: Source): Long = src match {
-    case FileSource(name, encoding)  => file(name).lastModified
-    case MarkdownSource(src)         => lastModified(src)
-
-    // it is always 0 for string sources since they are compared by content
-    case StringSource(content, name) => 0L
-  }
 }
 
 abstract class HashTask[In, Out](name: String) extends Task[In, Out] {

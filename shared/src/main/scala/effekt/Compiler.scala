@@ -6,7 +6,7 @@ import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.typer.Typer
-import effekt.util.{ Task, SourceContentTask }
+import effekt.util.{ Task, SourceTask }
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
@@ -39,7 +39,7 @@ trait Compiler {
   /**
    * The full compiler pipeline from source to output
    */
-  object compile extends SourceContentTask[Module]("compile") {
+  object compile extends SourceTask[Module]("compile") {
     def run(source: Source)(implicit C: Context): Option[Module] =
       //      parsing(source) { mod => pipeline(mod) }
       for {
@@ -71,7 +71,7 @@ trait Compiler {
     parsing(source) { mod => frontend(mod) }
 
   /**
-   * Variant: Frontend without parser (used by Repl)
+   * Variant: Frontend without parser (used by Repl, which uses a different parser for the toplevel)
    */
   def frontend(ast: ModuleDecl, source: Source)(implicit C: Context): Option[Module] =
     withModule(ast, source) { mod => frontend(mod) }
@@ -99,16 +99,14 @@ trait Compiler {
   /**
    * Don't create a fresh module every time, but reuse the existing one. Modules are symbols, they are compared
    * by identity. Otherwise importing the same module in two files will lead to different types with the same names.
+   *
+   * However reusing modules symbols also has problems: If dependencies change, we need to run the frontend again.
+   * This will result in an error "Exports already set."
    */
-  private val moduleCache = mutable.HashMap.empty[Source, Module]
-  private def withModule[R](ast: ModuleDecl, source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] = {
-    val mod = moduleCache.getOrElseUpdate(source, Module(ast, source))
-    C in {
-      C.module = mod
-      C.focus = ast
-      f(mod)
-    }
-  }
+  private def withModule[R](ast: ModuleDecl, source: Source)(f: Module => Option[R])(implicit C: Context): Option[R] = for {
+    mod <- moduleFor(ast, source)
+    res <- C.using(module = mod, focus = ast) { f(mod) }
+  } yield res
 
   object moduleFor extends Task[(ModuleDecl, Source), Module] {
 
@@ -117,7 +115,7 @@ trait Compiler {
     def run(input: (ModuleDecl, Source))(implicit C: Context): Option[Module] =
       Some(Module(input._1, input._2))
 
-    def fingerprint(input: (ModuleDecl, Source)): Long = input._2.content.hashCode
+    def fingerprint(input: (ModuleDecl, Source)): Long = input._1.hashCode
   }
 
 }

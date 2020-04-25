@@ -64,13 +64,16 @@ package object symbols {
       case e: Effect => e
     })
 
+    /**
+     * It is actually possible, that exports is invoked on a single module multiple times:
+     * The dependencies of a module might change, which triggers frontend on the same module
+     * again. It is the same, since the source and AST did not change.
+     */
     def export(
       imports: List[Module],
       terms: Map[String, Set[TermSymbol]],
       types: Map[String, TypeSymbol]
     ): this.type = {
-      if (_terms != null)
-        throw new FatalPhaseError("Internal compiler error: Already set exports on module")
       _imports = imports
       _terms = terms
       _types = types
