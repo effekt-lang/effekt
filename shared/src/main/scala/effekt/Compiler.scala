@@ -15,6 +15,10 @@ import kiama.util.{ Positions, Source }
  * "Pure" compiler without reading or writing to files
  *
  * All methods return Option, the errors are reported in the given context
+ *
+ * We distinguish between Phases and Tasks. Phases, by default, perform no memoization
+ * while task use the "build system" abstraction in `Task`, track dependencies and
+ * avoid rebuilding by memoization.
  */
 trait Compiler {
 
@@ -23,8 +27,9 @@ trait Compiler {
   // Frontend phases
   // ===============
 
-  // the parser needs to be created freshly since otherwise the memo tables will maintain wrong results for
-  // new input sources (the sources compare to the same result, since their path is the same, but the content is not!)
+  // The parser needs to be created freshly since otherwise the memo tables will maintain wrong results for
+  // new input sources. Even though the contents differ, two sources are considered equal since only the paths are
+  // compared.
   def parser = new Parser(positions)
   object namer extends Namer
   object typer extends Typer
@@ -32,6 +37,8 @@ trait Compiler {
   // Backend phases
   // ==============
   object transformer extends Transformer
+
+  // This is a lazy val to be overwritten in the JavaScript version of the compiler (to switch to another JS module system)
   lazy val generator = new JavaScript
 
   // Tasks
