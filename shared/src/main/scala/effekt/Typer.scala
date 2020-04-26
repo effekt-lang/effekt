@@ -632,7 +632,7 @@ trait TyperOps { self: Context =>
   }
 
   private[typer] def wellscoped(a: Effects): Unit = {
-    val forbidden = a.userDefined -- effects
+    val forbidden = (a.userDefined -- effects) - EffectHole
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }
