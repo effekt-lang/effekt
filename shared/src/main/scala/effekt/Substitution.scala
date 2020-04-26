@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, Effectful, TypeApp, Sections }
+import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, Effectful, TypeApp, Sections, TypeHole }
 
 import effekt.util.messages.ErrorReporter
 
@@ -98,6 +98,9 @@ object subtitutions {
       (tpe1.dealias, tpe2.dealias) match {
 
         case (t, s) if t == s =>
+          Substitution.empty
+
+        case (TypeHole, _) | (_, TypeHole) =>
           Substitution.empty
 
         case (s: RigidVar, t: ValueType) =>

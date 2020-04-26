@@ -5,7 +5,7 @@ import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 import effekt.context.Context
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, Symbol, builtins, moduleFile, moduleName }
+import effekt.symbols.{ Name, QualifiedName, Symbol, builtins, moduleFile, moduleName }
 import effekt.context.assertions._
 import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
@@ -66,10 +66,12 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
   }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect => toDoc(id.name)
+    case _: symbols.Effect   => toDoc(id.name)
     case _: symbols.EffectOp => "op$" + id.name.toString
-    case _ if id.name.module != C.module => link(id.name, id.name.qualified)
-    case _ => toDoc(id.name)
+    case _ => id.name match {
+      case name: QualifiedName if name.module != C.module => link(name, name.qualified)
+      case name => toDoc(name)
+    }
   }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
