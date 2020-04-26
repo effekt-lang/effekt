@@ -34,11 +34,15 @@ effect NeedInput(key: Key): Val
 
 With these two effect operations, we can express the rules for the spreadsheet example from the paper. We define the rules for cells `"B1"` and `"B2"` and treats the other cells as inputs.
 
+Here is the spreadsheet example from "Build systems ala Carte", modeling the
+spreadsheet:
+
+|        | A  | B       |
+| ------ | -- | ------- |
+| **1**  | 10 | A1 + A2 |
+| **2**  | 20 | B1 * 2  |
+
 ```
-// Spreadsheet example from "Build systems ala Carte"
-//  |  A | B
-// 1| 10 | A1 + A2
-// 2| 20 | B1 * 2
 def example1(key: Key): Val / { Need, NeedInput, Console } = {
     println(key);
     key match {
@@ -140,4 +144,3 @@ def main() = {
     } with KeyNotFound { (key) => println("Key not found: " ++ key) }
 }
 ```
-
