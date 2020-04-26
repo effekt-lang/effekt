@@ -52,6 +52,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `/` = literal("/")
   lazy val `=>` = literal("=>")
   lazy val `<>` = literal("<>")
+  lazy val `<{` = literal("<{")
+  lazy val `}>` = literal("}>")
 
   lazy val `handle` = keyword("handle")
   lazy val `true` = keyword("true")
@@ -477,7 +479,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ^^ Var
 
   lazy val hole: P[Expr] =
-    `<>` ^^^ Hole(Return(UnitLit()))
+    ( `<>` ^^^ Hole(Return(UnitLit()))
+    | `<{` ~> stmts <~ `}>` ^^ Hole
+    )
 
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
