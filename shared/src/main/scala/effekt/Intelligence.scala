@@ -84,6 +84,14 @@ trait Intelligence extends Compiler {
     case s             => s
   }
 
+  def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
+    outerTpe <- C.typeOf(hole)
+    innerTpe <- C.typeOf(hole.stmts)
+  } yield s"""| | Outside       | Inside        |
+              | |:------------- |:------------- |
+              | | `${outerTpe}` | `${innerTpe}` |
+              |""".stripMargin
+
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
     case b: BuiltinFunction =>

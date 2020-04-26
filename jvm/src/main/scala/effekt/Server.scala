@@ -38,10 +38,19 @@ trait LSPServer extends Driver with Intelligence {
     }
   }
 
-  override def getHover(position: Position): Option[String] = for {
+  override def getHover(position: Position): Option[String] =
+    getSymbolHover(position) orElse getHoleHover(position)
+
+  def getSymbolHover(position: Position): Option[String] = for {
     (tree, sym) <- getSymbolAt(position)(context)
     info <- getInfoOf(sym)(context)
   } yield if (settingBool("showExplanations")) info.fullDescription else info.shortDescription
+
+  def getHoleHover(position: Position): Option[String] = for {
+    trees <- getTreesAt(position)(context)
+    tree <- trees.collectFirst { case h: source.Hole => h }
+    info <- getHoleInfo(tree)(context)
+  } yield info
 
   // The implementation in kiama.Server does not support file sources
   override def locationOfNode(node: Tree): Location = {
