@@ -150,6 +150,8 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
         )
       })
       jsCall("$effekt.match", toDoc(sc), cs)
+    case Hole =>
+      jsCall("$effekt.hole", Nil)
     case other =>
       sys error s"Cannot print ${other} in expression position"
   }

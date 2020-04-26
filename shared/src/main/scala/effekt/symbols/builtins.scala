@@ -20,6 +20,8 @@ object builtins {
   val TString = BuiltinType(name("String"), Nil)
   val TDouble = BuiltinType(name("Double"), Nil)
 
+  val THole = BuiltinType(name("Unknown"), Nil)
+
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
     "Boolean" -> TBoolean,

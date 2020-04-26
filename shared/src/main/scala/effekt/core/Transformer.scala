@@ -189,6 +189,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
 
       bind(Handle(body, hs))
+
+    case source.Hole(stmts) =>
+      bind(Hole)
+
   }).map { _.inheritPosition(tree) }
 
   def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
