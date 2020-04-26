@@ -167,10 +167,6 @@ package object symbols {
     def apply(name: Name): TypeVar = new TypeVar(name)
   }
 
-  case object TypeHole extends ValueType with TypeSymbol {
-    val name = NoName
-  }
-
   /**
    * Introduced when instantiating type schemes
    *
@@ -217,7 +213,6 @@ package object symbols {
       case t: TypeConstructor => Some(t)
       case TypeApp(tpe, args) => unapply(tpe)
       case t: BuiltinType     => None
-      case TypeHole           => None
     }
   }
 
@@ -247,10 +242,6 @@ package object symbols {
   sealed trait Effect extends TypeSymbol {
     // invariant: no EffectAlias in this list
     def dealias: List[Effect] = List(this)
-  }
-
-  case object EffectHole extends Effect {
-    val name = NoName
   }
 
   case class EffectAlias(name: Name, effs: Effects) extends Effect {

@@ -51,6 +51,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `.` = literal(".")
   lazy val `/` = literal("/")
   lazy val `=>` = literal("=>")
+  lazy val `<>` = literal("<>")
 
   lazy val `handle` = keyword("handle")
   lazy val `true` = keyword("true")
@@ -470,10 +471,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
   lazy val primExpr: P[Expr] =
-    variable | literals | tupleLiteral | listLiteral | `(` ~/> expr <~ `)`
+    variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Expr] =
     idRef ^^ Var
+
+  lazy val hole: P[Expr] =
+    `<>` ^^^ Hole(Return(UnitLit()))
 
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string

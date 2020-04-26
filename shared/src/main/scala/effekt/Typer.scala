@@ -153,6 +153,10 @@ class Typer extends Phase[Module, Module] { typer =>
             tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
+
+      case source.Hole(stmt) =>
+        val tpe / effs = checkStmt(stmt, None)
+        THole / Pure
     }
 
   //</editor-fold>
@@ -632,7 +636,7 @@ trait TyperOps { self: Context =>
   }
 
   private[typer] def wellscoped(a: Effects): Unit = {
-    val forbidden = (a.userDefined -- effects) - EffectHole
+    val forbidden = a.userDefined -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }

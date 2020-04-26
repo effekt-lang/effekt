@@ -83,6 +83,8 @@ case class LiteralPattern[T](l: Literal[T]) extends Pattern
 
 case class Include(contents: String, rest: Stmt) extends Stmt
 
+case object Hole extends Stmt
+
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Symbol, clauses: List[(Symbol, Block)])

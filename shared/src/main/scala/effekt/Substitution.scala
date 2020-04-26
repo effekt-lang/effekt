@@ -1,6 +1,7 @@
 package effekt
 
-import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, Effectful, TypeApp, Sections, TypeHole }
+import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, Effectful, TypeApp, Sections }
+import effekt.symbols.builtins.THole
 
 import effekt.util.messages.ErrorReporter
 
@@ -100,9 +101,6 @@ object subtitutions {
         case (t, s) if t == s =>
           Substitution.empty
 
-        case (TypeHole, _) | (_, TypeHole) =>
-          Substitution.empty
-
         case (s: RigidVar, t: ValueType) =>
           Map(s -> t)
 
@@ -118,6 +116,9 @@ object subtitutions {
           (args1 zip args2).foldLeft(Substitution.empty) {
             case (u, (a1, a2)) => u union unifyValueTypes(a1, a2)
           }
+
+        case (THole, _) | (_, THole) =>
+          Substitution.empty
 
         case (t, s) =>
           report.error(s"Expected ${tpe1}, but got ${tpe2}")
