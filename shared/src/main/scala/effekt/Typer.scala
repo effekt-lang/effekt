@@ -58,7 +58,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[Type])(implicit C: Context): Effectful =
+  def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): Effectful =
     checkAgainst(expr, expected) {
       case source.IntLit(n)     => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
@@ -156,7 +156,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
       case source.Hole(stmt) =>
         val tpe / effs = checkStmt(stmt, None)
-        THole / Pure
+        expected.getOrElse(THole) / Pure
     }
 
   //</editor-fold>
@@ -251,7 +251,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[Type])(implicit C: Context): Effectful =
+  def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): Effectful =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -596,12 +596,12 @@ class Typer extends Phase[Module, Module] { typer =>
   //</editor-fold>
 
   private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: Type)(implicit C: Context): Effectful =
+    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
       checkExpr(expr, Some(tpe))
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: Type)(implicit C: Context): Effectful =
+    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
       checkStmt(stmt, Some(tpe))
   }
 
