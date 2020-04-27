@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
-import effekt.source.{ FunDef, Tree }
+import effekt.source.{ FunDef, Hole, Tree }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
@@ -99,14 +99,22 @@ trait LSPServer extends Driver with Intelligence {
   override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
     Some(for {
       trees <- getTreesAt(position)(context).toVector
-      fun <- trees.collect { case f: FunDef => f }
-      action <- inferEffectsAction(fun)(context)
-    } yield action)
+      actions <- trees.flatMap { t => action(t)(context) }
+    } yield actions)
+
+  def action(tree: Tree)(implicit C: Context): Option[TreeAction] = tree match {
+    case f: FunDef => inferEffectsAction(f)
+    case h: Hole   => closeHoleAction(h)
+    case _         => None
+  }
 
   /**
    * TODO it would be great, if Kiama would allow setting the position of the code action separately
    * from the node to replace. Here, we replace the annotated return type, but would need the
    * action on the function (since the return type might not exist in the original program).
+   *
+   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
+   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
    */
   def inferEffectsAction(fun: FunDef)(implicit C: Context): Option[TreeAction] = for {
     pos <- positions.getStart(fun)
@@ -123,12 +131,27 @@ trait LSPServer extends Driver with Intelligence {
     tpe.toString
   )
 
+  def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
+    pos <- positions.getStart(hole)
+    (holeTpe / _) <- context.typeOf(hole)
+    (contentTpe / _) <- context.typeOf(hole.stmts)
+    if holeTpe == contentTpe
+    res <- hole match {
+      case Hole(source.Return(exp)) => for {
+        text <- positions.textOf(exp)
+      } yield TreeAction("Close hole", pos.source.name, hole, text)
+
+      case Hole(stmts) => for {
+        text <- positions.textOf(stmts)
+      } yield TreeAction("Close hole", pos.source.name, hole, s"locally { ${text} }")
+    }
+  } yield res
+
   def needsUpdate(annotated: Effectful, inferred: Effectful)(implicit C: Context): Boolean = {
     val (tpe1 / effs1) = annotated
     val (tpe2 / effs2) = inferred
     tpe1 != tpe2 || effs1 != effs2
   }
-
 }
 
 object Server extends LSPServer
