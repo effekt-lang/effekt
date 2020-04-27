@@ -1,8 +1,8 @@
 package effekt
 package context
 
-import effekt.source.{ Id, IdDef, IdRef, Reference }
-import effekt.symbols.{ Symbol, Module }
+import effekt.source.{ Id, IdDef, IdRef, Reference, FunDef }
+import effekt.symbols.{ Symbol, Module, Effectful }
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 /**

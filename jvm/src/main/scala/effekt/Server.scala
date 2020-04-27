@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
-import effekt.source.Tree
+import effekt.source.{ FunDef, Tree }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
@@ -95,6 +95,40 @@ trait LSPServer extends Driver with Intelligence {
       case _ =>
         None
     }
+
+  override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
+    Some(for {
+      trees <- getTreesAt(position)(context).toVector
+      fun <- trees.collect { case f: FunDef => f }
+      action <- inferEffectsAction(fun)(context)
+    } yield action)
+
+  /**
+   * TODO it would be great, if Kiama would allow setting the position of the code action separately
+   * from the node to replace. Here, we replace the annotated return type, but would need the
+   * action on the function (since the return type might not exist in the original program).
+   */
+  def inferEffectsAction(fun: FunDef)(implicit C: Context): Option[TreeAction] = for {
+    pos <- positions.getStart(fun)
+    ret <- fun.ret
+    // the inferred type
+    tpe <- context.typeOf(fun)
+    // the annotated type
+    ann = fun.symbol.ret
+    if ann.map { a => needsUpdate(a, tpe) }.getOrElse(true)
+  } yield TreeAction(
+    "Update return type with inferred effects",
+    pos.source.name,
+    ret,
+    tpe.toString
+  )
+
+  def needsUpdate(annotated: Effectful, inferred: Effectful)(implicit C: Context): Boolean = {
+    val (tpe1 / effs1) = annotated
+    val (tpe2 / effs2) = inferred
+    tpe1 != tpe2 || effs1 != effs2
+  }
+
 }
 
 object Server extends LSPServer

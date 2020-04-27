@@ -301,44 +301,49 @@ class Typer extends Phase[Module, Module] { typer =>
     case d => ()
   }
 
-  def synthDef(d: Def)(implicit C: Context): Effectful = check(d) {
-    case d @ source.FunDef(id, tparams, params, ret, body) =>
-      val sym = d.symbol
-      Context.define(sym.params)
-      sym.ret match {
-        case Some(tpe / funEffs) =>
-          val (_ / effs) = body checkAgainst tpe
-          Context.wellscoped(effs)
-          tpe / (effs -- funEffs) // the declared effects are considered as bound
-        case None =>
-          val (tpe / effs) = checkStmt(body, None)
-          Context.wellscoped(effs) // check they are in scope
-          Context.assignType(sym, sym.toType(tpe / effs))
-          tpe / Pure // all effects are handled by the function itself (since they are inferred)
-      }
+  def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
+    d match {
+      case d @ source.FunDef(id, tparams, params, ret, body) =>
+        val sym = d.symbol
+        Context.define(sym.params)
+        sym.ret match {
+          case Some(tpe / funEffs) =>
+            val (_ / effs) = body checkAgainst tpe
+            Context.wellscoped(effs)
+            Context.assignType(d, tpe / effs)
 
-    case d @ source.EffDef(id, ops) =>
-      Context.withEffect(d.symbol)
-      TUnit / Pure
+            tpe / (effs -- funEffs) // the declared effects are considered as bound
+          case None =>
+            val (tpe / effs) = checkStmt(body, None)
+            Context.wellscoped(effs) // check they are in scope
+            Context.assignType(sym, sym.toType(tpe / effs))
+            Context.assignType(d, tpe / effs)
+            tpe / Pure // all effects are handled by the function itself (since they are inferred)
+        }
 
-    case d @ source.ValDef(id, annot, binding) =>
-      val (t / effBinding) = d.symbol.tpe match {
-        case Some(t) => binding checkAgainst t
-        case None    => checkStmt(binding, None)
-      }
-      Context.define(d.symbol, t)
-      t / effBinding
+      case d @ source.EffDef(id, ops) =>
+        Context.withEffect(d.symbol)
+        TUnit / Pure
 
-    case d @ source.VarDef(id, annot, binding) =>
-      val (t / effBinding) = d.symbol.tpe match {
-        case Some(t) => binding checkAgainst t
-        case None    => checkStmt(binding, None)
-      }
-      Context.define(d.symbol, t)
-      t / effBinding
+      case d @ source.ValDef(id, annot, binding) =>
+        val (t / effBinding) = d.symbol.tpe match {
+          case Some(t) => binding checkAgainst t
+          case None    => checkStmt(binding, None)
+        }
+        Context.define(d.symbol, t)
+        t / effBinding
 
-    // all other defintions have already been prechecked
-    case d => TUnit / Pure
+      case d @ source.VarDef(id, annot, binding) =>
+        val (t / effBinding) = d.symbol.tpe match {
+          case Some(t) => binding checkAgainst t
+          case None    => checkStmt(binding, None)
+        }
+        Context.define(d.symbol, t)
+        t / effBinding
+
+      // all other defintions have already been prechecked
+      case d => TUnit / Pure
+    }
   }
 
   //</editor-fold>

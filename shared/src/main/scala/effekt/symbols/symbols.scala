@@ -273,6 +273,11 @@ package object symbols {
 
     def distinct: Effects = new Effects(toList)
 
+    override def equals(other: Any): Boolean = other match {
+      case other: Effects => this.contains(other.toList) && other.contains(this.toList)
+      case _              => false
+    }
+
     def contains(e: Effect): Boolean = contains(e.dealias)
     def contains(other: List[Effect]): Boolean = other.toList.forall {
       e => this.toList.flatMap(_.dealias).contains(e)
