@@ -33,4 +33,4 @@ This will make the `effekt` command globally available. You can start the Effekt
 > effekt
 ```
 
-You will soon find more information about how to use Effekt on the website (<http://effekt-lang.org>). For the time being, you can explore the [docs/](https://github.com/effekt-lang/effekt-website/tree/master/docs).
+You will soon find more information about how to use Effekt on the website (<https://effekt-lang.github.io/effekt-website>). For the time being, you can explore the [docs/](https://github.com/effekt-lang/effekt-website/tree/master/docs).
