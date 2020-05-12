@@ -17,7 +17,7 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     if (!includeFile.exists) {
       None
     } else {
-      Some(FileSource(includeFile.canonicalPath).content)
+      Some(FileSource(includeFile.toString).content)
     }
   }
 
@@ -50,8 +50,8 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     def mdFile(include: File) = include / (modulePath + ".md")
 
     config.includes().collectFirst {
-      case p if effektFile(p).exists => FileSource(effektFile(p).canonicalPath)
-      case p if mdFile(p).exists     => MarkdownSource(FileSource(mdFile(p).canonicalPath))
+      case p if effektFile(p).exists => FileSource(effektFile(p).toString)
+      case p if mdFile(p).exists     => MarkdownSource(FileSource(mdFile(p).toString))
     }
   }
 }
