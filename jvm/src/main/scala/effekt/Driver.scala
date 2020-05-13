@@ -158,7 +158,8 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     // 3) in PWD
     val pwd = file(".")
     if ((pwd / "lib" / "effekt.effekt").exists) {
-      return pwd / "lib"
+      // here we return the absolute path to avoid problems with LSP
+      return file("lib").canonicalPath
     }
 
     // 4) next to Jar
