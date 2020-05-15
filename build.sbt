@@ -112,12 +112,12 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     libraryDependencies ++= Seq(
       "org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
     ),
-    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.NoModule) },
 
     // include all resource files in the virtual file system
-    Compile / sourceGenerators += stdLibGenerator.taskValue,
+    Compile / sourceGenerators += stdLibGenerator.taskValue
 
-    scalaJSUseMainModuleInitializer := true
+//    scalaJSUseMainModuleInitializer := true
   )
 
 lazy val versionGenerator = Def.task {
