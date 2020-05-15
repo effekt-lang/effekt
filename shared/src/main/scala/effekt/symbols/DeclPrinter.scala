@@ -57,11 +57,10 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"extern type ${name}$tps"
 
     case c: Fun =>
-      val tpe = context.blockTypeOf(c)
-      format("def", c, tpe.ret)
+      format("def", c, context.blockTypeOption(c).map(_.ret))
   }
-
-  def format(kw: String, f: Fun, ret: Effectful): Doc = {
+  def format(kw: String, f: Fun, ret: Effectful): Doc = format(kw, f, Some(ret))
+  def format(kw: String, f: Fun, ret: Option[Effectful]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
     val ps = f.params.map {
       case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
@@ -69,6 +68,7 @@ object DeclPrinter extends ParenPrettyPrinter {
         val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
         s"($vps)"
     }.mkString
-    s"$kw ${f.name}$tps$ps: ${ret}"
+
+    s"$kw ${f.name}$tps$ps${ret.map { tpe => s": $tpe" }}"
   }
 }
