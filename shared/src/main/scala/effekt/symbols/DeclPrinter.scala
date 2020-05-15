@@ -69,6 +69,6 @@ object DeclPrinter extends ParenPrettyPrinter {
         s"($vps)"
     }.mkString
 
-    s"$kw ${f.name}$tps$ps${ret.map { tpe => s": $tpe" }}"
+    s"$kw ${f.name}$tps$ps${ret.map { tpe => s": $tpe" }.getOrElse("")}"
   }
 }
