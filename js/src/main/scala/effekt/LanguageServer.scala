@@ -1,0 +1,159 @@
+package effekt
+
+import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
+import effekt.core.{ JavaScriptGlobal, JavaScriptVirtual }
+import effekt.{ Compiler, Intelligence, JSConfig, symbols }
+import effekt.util.paths._
+import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, Message, Messaging, Position, Positions, Severities, Source, StringSource }
+
+import scala.scalajs.js
+import js.JSConverters._
+import scala.scalajs.js.annotation._
+
+// the LSP types
+// https://github.com/microsoft/vscode-languageserver-node/blob/master/types/src/main.ts
+object lsp {
+
+  // General Messages
+  // -----------
+
+  class RequestMessage[T](val id: Int, val method: String, val params: T) extends js.Object
+  class NotificationMessage[T](val method: String, val params: T) extends js.Object
+  class ResponseError(val code: Int, val message: String, val data: Any) extends js.Object
+  class ResponseMessage[T](val id: Int, val method: String, val params: T, val error: ResponseError = null) extends js.Object
+
+  // Positions
+  // ---------
+
+  // for now we do not stick to the protocol and use simple filenames
+  type DocumentUri = String
+
+  // LSP positions are zero indexed
+  class Position(val line: Int, val character: Int) extends js.Object
+  class Range(val start: Position, val end: Position) extends js.Object
+  class Location(val uri: DocumentUri, val range: Range) extends js.Object
+
+  // Diagnostics
+  // -----------
+  class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String) extends js.Object {
+    val source = "effekt"
+  }
+  type DiagnosticSeverity = Int
+  object DiagnosticSeverity {
+    val Error = 1
+    val Warning = 2
+    val Information = 3
+    val Hint = 4
+  }
+
+}
+
+/**
+ * A language server to be run in a webworker
+ */
+class LanguageServer extends Compiler with Intelligence {
+
+  implicit object context extends Context(this) with VirtualModuleDB
+
+  val positions: Positions = new Positions
+  object messaging extends Messaging(positions)
+
+  context.setup(JSConfig)
+
+  var source = StringSource("")
+
+  /**
+   * Don't output amdefine module declarations
+   */
+  override lazy val generator = new JavaScriptVirtual
+
+  var output: StringBuilder = new StringBuilder()
+
+  @JSExport
+  def infoAt(path: String, pos: lsp.Position): String = {
+    val p = fromLSPPosition(pos, VirtualFileSource(path))
+    for {
+      (tree, sym) <- getSymbolAt(p)
+      info <- getInfoOf(sym)
+    } yield info.fullDescription
+  }.orNull
+
+  @JSExport
+  def typecheck(path: String): js.Array[lsp.Diagnostic] = {
+    context.buffer.clear()
+    frontend(VirtualFileSource(path))
+    context.buffer.get.map(messageToDiagnostic).toJSArray
+  }
+
+  @JSExport
+  def writeFile(path: String, contents: String): Unit =
+    file(path).write(contents)
+
+  @JSExport
+  def readFile(path: String): String =
+    file(path).read
+
+  @JSExport
+  def compileFile(path: String): String =
+    generateJS(VirtualFileSource(path + ".effekt")).getOrElse {
+      throw js.JavaScriptException(s"Cannot compile ${path}")
+    }.layout
+
+  @JSExport
+  def compileString(content: String): String =
+    generateJS(StringSource(content)).getOrElse {
+      throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
+    }.layout
+
+  @JSExport
+  def evaluate(s: String): Unit = {
+    val src = StringSource(s)
+
+    output = new StringBuilder
+    context.setup(JSConfig)
+
+    for {
+      mod <- frontend(src)
+      _ <- compile(src)
+      program = output.toString()
+      command = s"""(function(loader) {
+        | console.log(loader.readFile)
+        | var module = {}
+        |$program
+        |
+        |return ${mod.name}.main().run();
+        |})(this)
+        |""".stripMargin
+    } yield scalajs.js.eval(command)
+  }.orNull
+
+  private def messageToDiagnostic(m: Message) = {
+    val from = messaging.start(m).map(convertPosition).getOrElse(null)
+    val to = messaging.finish(m).map(convertPosition).getOrElse(null)
+    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), m.label)
+  }
+
+  private def convertPosition(p: Position): lsp.Position =
+    new lsp.Position(p.line - 1, p.column - 1)
+
+  private def fromLSPPosition(p: lsp.Position, source: Source): Position =
+    Position(p.line + 1, p.character + 1, source)
+
+  private def convertSeverity(s: Severities.Severity): lsp.DiagnosticSeverity = s match {
+    case Severities.Error       => lsp.DiagnosticSeverity.Error
+    case Severities.Warning     => lsp.DiagnosticSeverity.Warning
+    case Severities.Information => lsp.DiagnosticSeverity.Information
+    case Severities.Hint        => lsp.DiagnosticSeverity.Hint
+  }
+
+  @JSExport
+  def updateContents(input: String) = {
+    source = StringSource(input)
+  }
+
+  override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = {
+    file(moduleFileName(unit.path)).write(js.layout)
+    output.append(js.layout)
+  }
+}

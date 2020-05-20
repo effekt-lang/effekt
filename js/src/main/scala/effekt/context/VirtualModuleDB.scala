@@ -26,7 +26,12 @@ trait VirtualModuleDB extends ModuleDB { self: Context =>
   }
 
   override def findSource(path: String): Option[Source] = {
-    val f = file(path + ".effekt")
-    f.tryRead.map { content => StringSource(content, f.canonicalPath) }
+    val filename = path + ".effekt"
+    val f = file(filename)
+    f.tryRead.map { content => VirtualFileSource(filename) }
   }
+}
+
+case class VirtualFileSource(name: String) extends Source {
+  lazy val content = file(name).read
 }
