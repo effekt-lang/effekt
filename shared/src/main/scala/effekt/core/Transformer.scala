@@ -19,7 +19,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
+        // TODO export valuebinders properly
         case sym if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+        case sym if sym.isInstanceOf[ValBinder] => sym
       }
     }.toList)
 
