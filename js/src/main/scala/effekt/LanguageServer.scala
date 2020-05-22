@@ -101,10 +101,41 @@ class LanguageServer extends Compiler with Intelligence {
     }.layout
 
   @JSExport
-  def compileString(content: String): String =
+  def compileString(content: String): String = {
+    val src = StringSource(content)
+
+    // TODO aggregate in one place: the checks here are copied from Driver.eval
+    val mod = frontend(src).getOrElse {
+      throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
+    }
+
+    val mains = mod.terms.getOrElse("main", Set())
+
+    if (mains.isEmpty) {
+      throw js.JavaScriptException("No main function defined")
+    }
+
+    if (mains.size > 1) {
+      throw js.JavaScriptException("Multiple main functions defined")
+    }
+
+    val main = mains.head
+    val tpe = context.blockTypeOf(main)
+
+    val mainParams = tpe.params
+    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
+      throw js.JavaScriptException("Main does not take arguments")
+    }
+
+    val userEffects = tpe.ret.effects.userDefined
+    if (userEffects.nonEmpty) {
+      throw js.JavaScriptException(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
+    }
+
     generateJS(StringSource(content)).getOrElse {
       throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
     }.layout
+  }
 
   @JSExport
   def evaluate(s: String): Unit = {
