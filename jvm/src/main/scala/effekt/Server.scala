@@ -7,6 +7,12 @@ import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
 
+/**
+ * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
+ *     |
+ *     v
+ * effekt.Compiler
+ */
 trait LSPServer extends Driver with Intelligence {
 
   object prettyCore extends PrettyPrinter
@@ -154,4 +160,7 @@ trait LSPServer extends Driver with Intelligence {
   }
 }
 
+/**
+ * Main entry point for Effekt
+ */
 object Server extends LSPServer

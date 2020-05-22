@@ -16,6 +16,9 @@ import java.io.{ File => JFile }
 
 import scala.sys.process.Process
 
+/**
+ * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
+ */
 trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
