@@ -241,8 +241,8 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     val src = VirtualSource(ast, source)
 
     for {
-      _ <- driver.compile(src)
-      mod <- driver.frontend(src)
+      _ <- context.compile(src)
+      mod <- context.frontend(src)
     } driver.eval(mod)
 
     report(source, context.buffer.get, config)
@@ -251,14 +251,14 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
   private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
-    driver.frontend(src) map { f } getOrElse {
+    context.frontend(src) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
-    driver.frontend(source) map { f } getOrElse {
+    context.frontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }

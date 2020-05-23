@@ -38,9 +38,9 @@ trait Intelligence {
   }
 
   def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
-    decl <- C.compiler.getAST(position.source)
+    decl <- C.getAST(position.source)
     tree = new EffektTree(decl)
-    pos = C.compiler.positions
+    pos = C.positions
     trees = pos.findNodesContaining(tree.nodes, position)
     nodes = trees.sortWith {
       (t1, t2) =>

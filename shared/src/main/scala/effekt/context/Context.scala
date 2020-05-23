@@ -7,6 +7,7 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
+import org.bitbucket.inkytonik.kiama.util.Positions
 
 /**
  * The compiler context consists of
@@ -15,9 +16,10 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  * - types (mutable database)
  * - error reporting (mutable focus)
  */
-abstract class Context(val compiler: Compiler)
+abstract class Context(val positions: Positions)
+    extends Compiler
     // Namer
-    extends SymbolsDB
+    with SymbolsDB
     with NamerOps
     with ModuleDB
     // Typer

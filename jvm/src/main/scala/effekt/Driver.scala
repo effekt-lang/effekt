@@ -19,7 +19,7 @@ import scala.sys.process.Process
 /**
  * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
  */
-trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
+trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -28,7 +28,16 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
   // Compiler context
   // ================
   // We always only have one global instance of CompilerContext
-  object context extends Context(outer) with IOModuleDB
+  object context extends Context(positions) with IOModuleDB {
+    /**
+     * Output: JavaScript -> File
+     */
+    override def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit =
+      if (C.config.requiresCompilation()) {
+        C.config.outputPath().mkdirs
+        IO.createFile(outer.jsPath(unit)(C), js.layout)
+      }
+  }
 
   /**
    * If no file names are given, run the REPL
@@ -61,9 +70,9 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     C.setup(config)
 
     for {
-      _ <- compile(src)
+      _ <- C.compile(src)
       if config.interpret()
-      mod <- frontend(src)
+      mod <- C.frontend(src)
     } eval(mod)
 
     afterCompilation(source, config)
@@ -73,15 +82,6 @@ trait Driver extends Compiler with CompilerWithConfig[Tree, ModuleDecl, EffektCo
     // report messages
     report(source, C.buffer.get, config)
   }
-
-  /**
-   * Output: JavaScript -> File
-   */
-  override def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit =
-    if (C.config.requiresCompilation()) {
-      C.config.outputPath().mkdirs
-      IO.createFile(jsPath(unit), js.layout)
-    }
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
 

@@ -7,7 +7,7 @@ import effekt.symbols.Symbol
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
-    C.compiler.positions.dupPos(from, this);
+    C.positions.dupPos(from, this);
     this
   }
 }

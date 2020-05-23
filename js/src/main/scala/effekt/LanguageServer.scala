@@ -52,21 +52,27 @@ object lsp {
 /**
  * A language server to be run in a webworker
  */
-class LanguageServer extends Compiler with Intelligence {
-
-  implicit object context extends Context(this) with VirtualModuleDB
+class LanguageServer {
 
   val positions: Positions = new Positions
+
+  implicit object context extends Context(positions) with Intelligence with VirtualModuleDB {
+    /**
+     * Don't output amdefine module declarations
+     */
+    override lazy val generator = new JavaScriptVirtual
+
+    override def saveOutput(js: Document, unit: effekt.symbols.Module)(implicit C: Context): Unit = {
+      file(moduleFileName(unit.path)).write(js.layout)
+      output.append(js.layout)
+    }
+  }
+
   object messaging extends Messaging(positions)
 
   context.setup(JSConfig)
 
   var source = StringSource("")
-
-  /**
-   * Don't output amdefine module declarations
-   */
-  override lazy val generator = new JavaScriptVirtual
 
   var output: StringBuilder = new StringBuilder()
 
@@ -74,15 +80,15 @@ class LanguageServer extends Compiler with Intelligence {
   def infoAt(path: String, pos: lsp.Position): String = {
     val p = fromLSPPosition(pos, VirtualFileSource(path))
     for {
-      (tree, sym) <- getSymbolAt(p)
-      info <- getInfoOf(sym)
+      (tree, sym) <- context.getSymbolAt(p)
+      info <- context.getInfoOf(sym)
     } yield info.fullDescription
   }.orNull
 
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.buffer.clear()
-    frontend(VirtualFileSource(path))
+    context.frontend(VirtualFileSource(path))
     context.buffer.get.map(messageToDiagnostic).toJSArray
   }
 
@@ -96,7 +102,7 @@ class LanguageServer extends Compiler with Intelligence {
 
   @JSExport
   def compileFile(path: String): String =
-    generateJS(VirtualFileSource(path + ".effekt")).getOrElse {
+    context.generateJS(VirtualFileSource(path + ".effekt")).getOrElse {
       throw js.JavaScriptException(s"Cannot compile ${path}")
     }.layout
 
@@ -105,7 +111,7 @@ class LanguageServer extends Compiler with Intelligence {
     val src = StringSource(content)
 
     // TODO aggregate in one place: the checks here are copied from Driver.eval
-    val mod = frontend(src).getOrElse {
+    val mod = context.frontend(src).getOrElse {
       throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
     }
 
@@ -132,7 +138,7 @@ class LanguageServer extends Compiler with Intelligence {
       throw js.JavaScriptException(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
     }
 
-    generateJS(StringSource(content)).getOrElse {
+    context.generateJS(StringSource(content)).getOrElse {
       throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
     }.layout
   }
@@ -145,8 +151,8 @@ class LanguageServer extends Compiler with Intelligence {
     context.setup(JSConfig)
 
     for {
-      mod <- frontend(src)
-      _ <- compile(src)
+      mod <- context.frontend(src)
+      _ <- context.compile(src)
       program = output.toString()
       command = s"""(function(loader) {
         | console.log(loader.readFile)
@@ -181,10 +187,5 @@ class LanguageServer extends Compiler with Intelligence {
   @JSExport
   def updateContents(input: String) = {
     source = StringSource(input)
-  }
-
-  override def saveOutput(js: Document, unit: symbols.Module)(implicit C: Context): Unit = {
-    file(moduleFileName(unit.path)).write(js.layout)
-    output.append(js.layout)
   }
 }
