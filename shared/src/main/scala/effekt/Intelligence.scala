@@ -6,7 +6,7 @@ import effekt.source.{ ModuleDecl, Tree }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Position
 
-trait Intelligence extends Compiler {
+trait Intelligence {
 
   import effekt.symbols._
 
@@ -40,15 +40,16 @@ trait Intelligence extends Compiler {
   def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
     decl <- C.compiler.getAST(position.source)
     tree = new EffektTree(decl)
-    trees = positions.findNodesContaining(tree.nodes, position)
+    pos = C.compiler.positions
+    trees = pos.findNodesContaining(tree.nodes, position)
     nodes = trees.sortWith {
       (t1, t2) =>
-        val p1s = positions.getStart(t1).get
-        val p2s = positions.getStart(t2).get
+        val p1s = pos.getStart(t1).get
+        val p2s = pos.getStart(t2).get
 
         if (p2s == p1s) {
-          val p1e = positions.getFinish(t1).get
-          val p2e = positions.getFinish(t2).get
+          val p1e = pos.getFinish(t1).get
+          val p2e = pos.getFinish(t2).get
           p1e < p2e
         } else {
           p2s < p1s
