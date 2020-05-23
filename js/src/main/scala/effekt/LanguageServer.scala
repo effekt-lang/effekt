@@ -3,7 +3,7 @@ package effekt
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.core.{ JavaScriptGlobal, JavaScriptVirtual }
 import effekt.util.messages.FatalPhaseError
-import effekt.{ Compiler, Intelligence, JSConfig, symbols }
+import effekt.{ Compiler, Intelligence, symbols }
 import effekt.util.paths._
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, Message, Messaging, Position, Positions, Severities, Source, StringSource }
@@ -57,6 +57,8 @@ class LanguageServer extends Intelligence {
 
   val positions: Positions = new Positions
 
+  object config extends EffektConfig
+
   implicit object context extends Context(positions) with VirtualModuleDB {
     /**
      * Don't output amdefine module declarations
@@ -71,7 +73,7 @@ class LanguageServer extends Intelligence {
 
   object messaging extends Messaging(positions)
 
-  context.setup(JSConfig)
+  context.setup(config)
 
   var source = StringSource("")
 
@@ -131,7 +133,7 @@ class LanguageServer extends Intelligence {
     val src = StringSource(s)
 
     output = new StringBuilder
-    context.setup(JSConfig)
+    context.setup(config)
 
     for {
       mod <- context.frontend(src)
