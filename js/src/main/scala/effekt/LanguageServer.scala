@@ -2,6 +2,7 @@ package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.core.{ JavaScriptGlobal, JavaScriptVirtual }
+import effekt.util.messages.FatalPhaseError
 import effekt.{ Compiler, Intelligence, JSConfig, symbols }
 import effekt.util.paths._
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
@@ -52,11 +53,11 @@ object lsp {
 /**
  * A language server to be run in a webworker
  */
-class LanguageServer {
+class LanguageServer extends Intelligence {
 
   val positions: Positions = new Positions
 
-  implicit object context extends Context(positions) with Intelligence with VirtualModuleDB {
+  implicit object context extends Context(positions) with VirtualModuleDB {
     /**
      * Don't output amdefine module declarations
      */
@@ -80,8 +81,8 @@ class LanguageServer {
   def infoAt(path: String, pos: lsp.Position): String = {
     val p = fromLSPPosition(pos, VirtualFileSource(path))
     for {
-      (tree, sym) <- context.getSymbolAt(p)
-      info <- context.getInfoOf(sym)
+      (tree, sym) <- getSymbolAt(p)
+      info <- getInfoOf(sym)
     } yield info.fullDescription
   }.orNull
 
@@ -110,37 +111,19 @@ class LanguageServer {
   def compileString(content: String): String = {
     val src = StringSource(content)
 
-    // TODO aggregate in one place: the checks here are copied from Driver.eval
     val mod = context.frontend(src).getOrElse {
       throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
     }
 
-    val mains = mod.terms.getOrElse("main", Set())
-
-    if (mains.isEmpty) {
-      throw js.JavaScriptException("No main function defined")
+    try {
+      context.checkMain(mod)
+      context.generateJS(StringSource(content)).getOrElse {
+        throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
+      }.layout
+    } catch {
+      case FatalPhaseError(msg) =>
+        throw js.JavaScriptException(msg)
     }
-
-    if (mains.size > 1) {
-      throw js.JavaScriptException("Multiple main functions defined")
-    }
-
-    val main = mains.head
-    val tpe = context.blockTypeOf(main)
-
-    val mainParams = tpe.params
-    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
-      throw js.JavaScriptException("Main does not take arguments")
-    }
-
-    val userEffects = tpe.ret.effects.userDefined
-    if (userEffects.nonEmpty) {
-      throw js.JavaScriptException(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
-    }
-
-    context.generateJS(StringSource(content)).getOrElse {
-      throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
-    }.layout
   }
 
   @JSExport
@@ -188,4 +171,10 @@ class LanguageServer {
   def updateContents(input: String) = {
     source = StringSource(input)
   }
+}
+
+@JSExportTopLevel("effekt")
+object Effekt {
+  @JSExport
+  def LanguageServer(): LanguageServer = new LanguageServer()
 }

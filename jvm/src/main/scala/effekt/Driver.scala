@@ -14,6 +14,8 @@ import kiama.parsing.ParseResult
 import kiama.util.{ CompilerWithConfig, IO, Source }
 import java.io.{ File => JFile }
 
+import effekt.util.messages.FatalPhaseError
+
 import scala.sys.process.Process
 
 /**
@@ -27,7 +29,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
 
   // Compiler context
   // ================
-  // We always only have one global instance of CompilerContext
+  // We always only have one global instance of the compiler
   object context extends Context(positions) with IOModuleDB {
     /**
      * Output: JavaScript -> File
@@ -84,38 +86,16 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   }
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
-
-    val mains = mod.terms.getOrElse("main", Set())
-
-    if (mains.isEmpty) {
-      C.error("No main function defined")
-      return
+    try {
+      C.checkMain(mod)
+      val jsFile = jsPath(mod)
+      val jsScript = s"require('${jsFile}').main().run()"
+      val command = Process(Seq("node", "--eval", jsScript))
+      C.config.output().emit(command.!!)
+    } catch {
+      case FatalPhaseError(e) =>
+        C.error(e)
     }
-
-    if (mains.size > 1) {
-      C.error("Multiple main functions defined")
-      return
-    }
-
-    val main = mains.head
-
-    val mainParams = C.blockTypeOf(main).params
-    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
-      C.error("Main does not take arguments")
-      return
-    }
-
-    val tpe = C.blockTypeOf(main)
-    val userEffects = tpe.ret.effects.userDefined
-    if (userEffects.nonEmpty) {
-      C.error(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
-      return
-    }
-
-    val jsFile = jsPath(mod)
-    val jsScript = s"require('${jsFile}').main().run()"
-    val command = Process(Seq("node", "--eval", jsScript))
-    C.config.output().emit(command.!!)
   }
 
   /**

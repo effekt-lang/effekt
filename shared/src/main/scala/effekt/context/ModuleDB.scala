@@ -54,4 +54,31 @@ trait ModuleDB { self: Context =>
     _ <- compile(source)(this)
   } yield mod
 
+  /**
+   * Util to check whether main exists on the given module
+   */
+  def checkMain(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+    val mains = mod.terms.getOrElse("main", Set())
+
+    if (mains.isEmpty) {
+      C.abort("No main function defined")
+    }
+
+    if (mains.size > 1) {
+      C.abort("Multiple main functions defined")
+    }
+
+    val main = mains.head
+
+    val mainParams = C.blockTypeOf(main).params
+    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
+      C.abort("Main does not take arguments")
+    }
+
+    val tpe = C.blockTypeOf(main)
+    val userEffects = tpe.ret.effects.userDefined
+    if (userEffects.nonEmpty) {
+      C.abort(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
+    }
+  }
 }

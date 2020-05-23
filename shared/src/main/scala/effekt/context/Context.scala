@@ -17,6 +17,7 @@ import org.bitbucket.inkytonik.kiama.util.Positions
  * - error reporting (mutable focus)
  */
 abstract class Context(val positions: Positions)
+    // Compiler phases
     extends Compiler
     // Namer
     with SymbolsDB
