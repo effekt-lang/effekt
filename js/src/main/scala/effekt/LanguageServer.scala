@@ -30,7 +30,7 @@ object lsp {
   // for now we do not stick to the protocol and use simple filenames
   type DocumentUri = String
 
-  // LSP positions are zero indexed
+  // LSP positions are zero indexed (for both line and character)
   class Position(val line: Int, val character: Int) extends js.Object
   class Range(val start: Position, val end: Position) extends js.Object
   class Location(val uri: DocumentUri, val range: Range) extends js.Object
@@ -140,7 +140,6 @@ class LanguageServer extends Intelligence {
       _ <- context.compile(src)
       program = output.toString()
       command = s"""(function(loader) {
-        | console.log(loader.readFile)
         | var module = {}
         |$program
         |
