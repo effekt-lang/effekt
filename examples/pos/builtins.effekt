@@ -1,4 +1,4 @@
-module builtins
+module examples/pos/builtins
 
 type Color { Red(); Green(); Blue() }
 

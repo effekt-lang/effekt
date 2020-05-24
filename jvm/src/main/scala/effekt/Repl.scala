@@ -241,7 +241,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     val src = VirtualSource(ast, source)
 
     for {
-      _ <- context.compile(src)
+      _ <- context.generate(src)
       mod <- context.frontend(src)
     } driver.eval(mod)
 
@@ -322,23 +322,6 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
       ModuleDecl("lib/interactive", Import("effekt") :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
-          body))
-    }
-
-    def make2(expr: Expr): ModuleDecl = {
-
-      // partition into toplevel definitions and into those that go into main:
-      val (toplevel, local) = definitions.partition {
-        case _: ValDef => false
-        case _: FunDef => false
-        case _         => true
-      }
-
-      // all definitions are moved to the main function, so that value bindings work
-      val body = local.foldRight[Stmt](Return(expr)) { case (d, body) => DefStmt(d, body) }
-
-      ModuleDecl("lib/interactive", Import("effekt") :: imports,
-        toplevel :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
           body))
     }
 

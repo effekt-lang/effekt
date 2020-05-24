@@ -2,10 +2,11 @@ package effekt
 package core
 
 import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
-
 import effekt.context.Context
+
 import scala.language.implicitConversions
 import effekt.symbols.{ Name, builtins, moduleFile, moduleName }
+import effekt.target.JavaScript
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 class JavaScriptVirtual extends JavaScript {

@@ -51,7 +51,6 @@ trait ModuleDB { self: Context =>
    */
   def tryModuleOf(source: Source): Option[Module] = for {
     mod <- frontend(source)(this)
-    _ <- compile(source)(this)
   } yield mod
 
   /**

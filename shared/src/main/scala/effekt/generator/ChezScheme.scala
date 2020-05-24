@@ -1,25 +1,57 @@
-package effekt
-package core
+package effekt.generator
 
-import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 import effekt.context.Context
+import effekt.core._
+import effekt.symbols.Module
+import effekt.symbols.{ Name, Symbol }
+
+import org.bitbucket.inkytonik.kiama
+import kiama.output.ParenPrettyPrinter
+import kiama.output.PrettyPrinterTypes.Document
+import kiama.util.Source
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, QualifiedName, Symbol, builtins, moduleFile, moduleName }
-import effekt.context.assertions._
-import effekt.util.Task
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+
+import effekt.util.paths._
 
 /**
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezScheme extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
+class ChezScheme extends Generator with ParenPrettyPrinter {
 
-  def run(t: ModuleDecl)(implicit C: Context): Option[Document] =
-    Some(format(t))
+  /**
+   * This is used for both: writing the files to and generating the `require` statements.
+   */
+  def path(m: Module)(implicit C: Context): String =
+    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+
+  /**
+   * This is only called on the main entry point, we have to manually traverse the dependencies
+   * and write them.
+   */
+  def run(src: Source)(implicit C: Context): Option[Document] = for {
+    core <- C.lower(src)
+    mod <- C.frontend(src)
+    _ = mod.dependencies.flatMap(compile)
+    doc <- compile(mod)
+  } yield doc
+
+  /**
+   * Compiles only the given module, does not compile dependencies
+   */
+  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+    core <- C.lower(mod.source)
+    doc = ChezSchemePrinter.format(core)
+    _ = C.saveOutput(doc, path(mod))
+  } yield doc
+}
+
+object ChezSchemePrinter extends ParenPrettyPrinter {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+
+  def moduleFile(path: String): String = path.replace('/', '_') + ".ss"
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(module(t))
@@ -210,5 +242,4 @@ class ChezScheme extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case Def(id, d, rest) => true
     case _ => false
   }
-
 }

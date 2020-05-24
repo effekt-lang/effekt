@@ -1,10 +1,11 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{ ChezScheme, JavaScript, Transformer }
+import effekt.core.Transformer
 import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
+import effekt.target.{ ChezScheme, Generator, JavaScript }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
@@ -41,11 +42,8 @@ trait Compiler {
   // This is overwritten in the JavaScript version of the compiler (to switch to another JS module system)
   // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
   //      easily switch
-  def generator(implicit C: Context): Phase[effekt.core.ModuleDecl, Document] = C.config.generator() match {
-    case "js" => new JavaScript()
-    case "cs" => new ChezScheme()
-    case _    => sys error "Generator missing"
-  }
+  def jsGenerator: Generator = new JavaScript
+  def csGenerator: Generator = new ChezScheme
 
   // Tasks
   // =====
@@ -70,7 +68,7 @@ trait Compiler {
     } yield mod
   }
 
-  object computeCore extends SourceTask[core.ModuleDecl]("core") {
+  object lower extends SourceTask[core.ModuleDecl]("lower") {
     def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
@@ -80,26 +78,18 @@ trait Compiler {
   object generate extends SourceTask[Document]("generate") {
     def run(source: Source)(implicit C: Context): Option[Document] = for {
       mod <- frontend(source)
-      _ = println(mod.dependencies.map { m => "module " + m.path }) // DEBUG
-      core <- computeCore(source)
-      doc <- C.using(module = mod) { generator.apply(core) }
+      gen = C.config.generator() match {
+        case "js" => jsGenerator
+        case "cs" => csGenerator
+      }
+      doc <- C.using(module = mod) {
+        gen.apply(source)
+      }
     } yield doc
   }
 
-  // TODO change result from Unit to File
-  object compile extends SourceTask[Unit]("compile") {
-    def run(source: Source)(implicit C: Context): Option[Unit] = for {
-      mod <- frontend(source)
-      target <- generate(source)
-      _ = saveOutput(target, mod)
-    } yield ()
-  }
-
   /**
-   * Output writer: Document -> IO
-   *
-   * TODO convert into task?
+   * Hook potentially used by the generators
    */
-  def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit
-
+  def saveOutput(doc: Document, path: String)(implicit C: Context): Unit
 }

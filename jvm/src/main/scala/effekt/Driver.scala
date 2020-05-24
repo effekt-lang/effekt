@@ -34,10 +34,10 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     /**
      * Output: JavaScript -> File
      */
-    override def saveOutput(js: Document, unit: Module)(implicit C: Context): Unit =
+    override def saveOutput(doc: Document, path: String)(implicit C: Context): Unit =
       if (C.config.requiresCompilation()) {
         C.config.outputPath().mkdirs
-        IO.createFile(outer.jsPath(unit)(C), js.layout)
+        IO.createFile(path, doc.layout)
       }
   }
 
@@ -72,7 +72,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     C.setup(config)
 
     for {
-      _ <- C.compile(src)
+      doc <- C.generate(src)
       if config.interpret()
       mod <- C.frontend(src)
     } eval(mod)
@@ -88,7 +88,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val jsFile = jsPath(mod)
+      val jsFile = C.jsGenerator.path(mod)
       val jsScript = s"require('${jsFile}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
@@ -97,12 +97,6 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
         C.error(e)
     }
   }
-
-  /**
-   * JavaScript paths are *not* platform dependent.
-   */
-  def jsPath(mod: Module)(implicit C: Context): String =
-    (C.config.outputPath() / moduleFileName(mod.path)).unixPath
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)

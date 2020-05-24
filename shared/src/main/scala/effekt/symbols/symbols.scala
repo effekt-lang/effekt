@@ -30,13 +30,12 @@ package object symbols {
     override def synthetic = true
   }
 
-  // TODO move this to Name
-
   /**
    * path should be an include Effekt-path (foo/bar), not a system dependent file path
+   *
+   * TODO this is JS dependent and should be customized in the generator, not hard-coded here!
    */
   def moduleName(path: String): String = "$" + path.replace('/', '_')
-  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
   /**
    * The result of running the frontend on a module.

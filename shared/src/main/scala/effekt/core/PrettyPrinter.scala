@@ -4,7 +4,7 @@ package core
 import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{ builtins, moduleName, moduleFile, Name }
+import effekt.symbols.{ builtins, moduleName, Name }
 
 class PrettyPrinter extends ParenPrettyPrinter {
 

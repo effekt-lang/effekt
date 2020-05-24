@@ -1,22 +1,51 @@
-package effekt
-package core
+package effekt.generator
 
-import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 import effekt.context.Context
+import effekt.context.assertions._
+import effekt.core._
+import effekt.symbols.{ Module, Name, QualifiedName, Symbol, moduleName }
+import effekt.symbols
+import org.bitbucket.inkytonik.kiama
+import kiama.output.ParenPrettyPrinter
+import kiama.output.PrettyPrinterTypes.Document
+import kiama.util.Source
+
+import effekt.util.paths._
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, QualifiedName, Symbol, builtins, moduleFile, moduleName }
-import effekt.context.assertions._
-import effekt.source.Constructor
-import effekt.util.Task
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
+class JavaScript extends Generator {
 
-  def run(t: ModuleDecl)(implicit C: Context): Option[Document] =
-    Some(format(t))
+  /**
+   * This is used for both: writing the files to and generating the `require` statements.
+   */
+  def path(m: Module)(implicit C: Context): String =
+    (C.config.outputPath() / JavaScriptPrinter.moduleFile(m.path)).unixPath
 
-  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+  /**
+   * This is only called on the main entry point, we have to manually traverse the dependencies
+   * and write them.
+   */
+  def run(src: Source)(implicit C: Context): Option[Document] = for {
+    core <- C.lower(src)
+    mod <- C.frontend(src)
+    _ = mod.dependencies.flatMap(compile)
+    doc <- compile(mod)
+  } yield doc
+
+  /**
+   * Compiles only the given module, does not compile dependencies
+   */
+  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+    core <- C.lower(mod.source)
+    doc = JavaScriptPrinter.format(core)
+    _ = C.saveOutput(doc, path(mod))
+  } yield doc
+}
+
+object JavaScriptPrinter extends ParenPrettyPrinter {
+
+  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(commonjs(t))
@@ -254,5 +283,4 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case Def(id, d, rest) => true
     case _ => false
   }
-
 }
