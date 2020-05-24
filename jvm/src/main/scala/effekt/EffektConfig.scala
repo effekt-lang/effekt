@@ -3,19 +3,20 @@ package effekt
 import java.io.File
 
 import org.bitbucket.inkytonik.kiama.util.REPLConfig
-import org.rogach.scallop.ScallopOption
+import org.rogach.scallop.{ ScallopOption, ValueConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
+
   lazy val compile: ScallopOption[Boolean] = toggle(
     "compile",
-    descrYes = "Compile the Effekt program to JavaScript",
+    descrYes = "Compile the Effekt program",
     descrNo = "Run the effekt program in the interpreter",
     default = Some(false)
   )
 
   lazy val outputPath: ScallopOption[File] = opt[File](
     "out",
-    descr = "Path to write generated JavaScript files to (defaults to ./out)",
+    descr = "Path to write generated files to (defaults to ./out)",
     default = Some(new File("./out")),
     required = false
   )
@@ -32,6 +33,16 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     descr = "Path to the standard library to be used",
     required = false
   )
+
+  lazy val generator: ScallopOption[String] = choice(
+    choices = List("js", "cs"),
+    name = "generator",
+    descr = "The code generator that should be used",
+    default = Some("js"),
+    noshort = true
+  )
+
+  dependsOnAll(generator, List(compile))
 
   var _libPath: Option[File] = None
 

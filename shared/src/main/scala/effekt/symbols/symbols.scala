@@ -59,6 +59,10 @@ package object symbols {
     private var _imports: List[Module] = _
     def imports = _imports
 
+    // a topological ordering of all transitive dependencies
+    // this is the order in which the modules need to be compiled / loaded
+    lazy val dependencies: List[Module] = imports.flatMap { im => im :: im.dependencies }.distinct
+
     // toplevle declared effects
     def effects: Effects = Effects(types.values.collect {
       case e: Effect => e

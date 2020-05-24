@@ -48,7 +48,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
 
     config._libPath = Some(findStdLib(config).toFile)
 
-    if (config.filenames().isEmpty && !config.server()) {
+    if (config.filenames().isEmpty && !config.server() && !config.compile()) {
       new Repl(this).run(config)
     } else {
       super.run(config)

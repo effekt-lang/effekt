@@ -25,7 +25,7 @@ trait Symbol {
   /**
    * The unique id of this symbol
    */
-  private[symbols] lazy val id: Int = Symbol.fresh.next()
+  lazy val id: Int = Symbol.fresh.next()
 
   /**
    * Does this symbol denote a builtin?

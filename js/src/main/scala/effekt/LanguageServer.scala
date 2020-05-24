@@ -105,7 +105,7 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def compileFile(path: String): String =
-    context.generateJS(VirtualFileSource(path + ".effekt")).getOrElse {
+    context.generate(VirtualFileSource(path + ".effekt")).getOrElse {
       throw js.JavaScriptException(s"Cannot compile ${path}")
     }.layout
 
@@ -119,7 +119,7 @@ class LanguageServer extends Intelligence {
 
     try {
       context.checkMain(mod)
-      context.generateJS(StringSource(content)).getOrElse {
+      context.generate(StringSource(content)).getOrElse {
         throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
       }.layout
     } catch {

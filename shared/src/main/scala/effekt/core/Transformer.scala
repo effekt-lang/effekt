@@ -80,8 +80,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case e: source.ExternEffect =>
       rest
 
-    case e: source.EffDef =>
-      rest
+    case d @ source.EffDef(id, ops) =>
+      core.Record(d.symbol, ops.map { e => e.symbol }, rest)
   }).inheritPosition(d)
 
   def transform(tree: source.Stmt)(implicit C: Context): Stmt = (tree match {

@@ -87,4 +87,4 @@ case object Hole extends Stmt
 
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: Symbol, clauses: List[(Symbol, Block)])
+case class Handler(id: Symbol, clauses: List[(Symbol, BlockDef)])

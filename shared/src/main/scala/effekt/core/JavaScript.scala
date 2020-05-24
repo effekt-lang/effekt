@@ -7,6 +7,7 @@ import effekt.context.Context
 import scala.language.implicitConversions
 import effekt.symbols.{ Name, QualifiedName, Symbol, builtins, moduleFile, moduleName }
 import effekt.context.assertions._
+import effekt.source.Constructor
 import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
@@ -178,7 +179,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
 
     case Record(did, fields, rest) =>
-      generateConstructor(did.asConstructor) <> ";" <> emptyline <> toDocStmt(rest)
+      generateConstructor(did, fields) <> ";" <> emptyline <> toDocStmt(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
@@ -186,8 +187,10 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
     case other => "return" <+> toDocExpr(other)
   }
 
-  def generateConstructor(ctor: symbols.Record)(implicit C: Context): Doc = {
-    val fields = ctor.fields
+  def generateConstructor(ctor: symbols.Record)(implicit C: Context): Doc =
+    generateConstructor(ctor, ctor.fields)
+
+  def generateConstructor(ctor: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
     jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
       text("__tag") -> jsString(nameDef(ctor)),
       text("__data") -> jsArray(fields map { f => nameDef(f) }),
@@ -215,7 +218,7 @@ class JavaScript extends ParenPrettyPrinter with Phase[ModuleDecl, Document] {
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Record(did, fields, rest) =>
-      generateConstructor(did.asConstructor) <> ";" <> emptyline <> toDocTopLevel(rest)
+      generateConstructor(did, fields) <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)

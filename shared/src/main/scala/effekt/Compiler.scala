@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{ JavaScript, Transformer }
+import effekt.core.{ ChezScheme, JavaScript, Transformer }
 import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
@@ -38,8 +38,14 @@ trait Compiler {
   // ==============
   object transformer extends Transformer
 
-  // This is a lazy val to be overwritten in the JavaScript version of the compiler (to switch to another JS module system)
-  lazy val generator = new JavaScript
+  // This is overwritten in the JavaScript version of the compiler (to switch to another JS module system)
+  // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
+  //      easily switch
+  def generator(implicit C: Context): Phase[effekt.core.ModuleDecl, Document] = C.config.generator() match {
+    case "js" => new JavaScript()
+    case "cs" => new ChezScheme()
+    case _    => sys error "Generator missing"
+  }
 
   // Tasks
   // =====
@@ -71,11 +77,12 @@ trait Compiler {
     } yield core
   }
 
-  object generateJS extends SourceTask[Document]("generator") {
+  object generate extends SourceTask[Document]("generate") {
     def run(source: Source)(implicit C: Context): Option[Document] = for {
       mod <- frontend(source)
+      _ = println(mod.dependencies.map { m => "module " + m.path }) // DEBUG
       core <- computeCore(source)
-      doc <- C.using(module = mod) { generator(core) }
+      doc <- C.using(module = mod) { generator.apply(core) }
     } yield doc
   }
 
@@ -83,8 +90,8 @@ trait Compiler {
   object compile extends SourceTask[Unit]("compile") {
     def run(source: Source)(implicit C: Context): Option[Unit] = for {
       mod <- frontend(source)
-      js <- generateJS(source)
-      _ = saveOutput(js, mod)
+      target <- generate(source)
+      _ = saveOutput(target, mod)
     } yield ()
   }
 
