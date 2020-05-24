@@ -6,7 +6,7 @@ import effekt.context.Context
 
 import scala.language.implicitConversions
 import effekt.symbols.{ Name, builtins, moduleFile, moduleName }
-import effekt.target.JavaScript
+import effekt.generator.JavaScript
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 class JavaScriptGlobal extends JavaScript {

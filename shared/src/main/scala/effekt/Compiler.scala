@@ -5,7 +5,7 @@ import effekt.core.Transformer
 import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
-import effekt.target.{ ChezScheme, Generator, JavaScript }
+import effekt.generator.{ ChezScheme, Generator, JavaScript }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
