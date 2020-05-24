@@ -33,8 +33,11 @@ class ChezScheme extends Generator with ParenPrettyPrinter {
   def run(src: Source)(implicit C: Context): Option[Document] = for {
     core <- C.lower(src)
     mod <- C.frontend(src)
-    _ = mod.dependencies.flatMap(compile)
+    deps = mod.dependencies.flatMap(dep => compile(dep).map(_.layout))
     doc <- compile(mod)
+    // TODO use StringBuilder
+    result = deps.mkString("\n") + "\n\n" + doc
+    _ = C.saveOutput(result, path(mod))
   } yield doc
 
   /**
@@ -43,7 +46,6 @@ class ChezScheme extends Generator with ParenPrettyPrinter {
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
     core <- C.lower(mod.source)
     doc = ChezSchemePrinter.format(core)
-    _ = C.saveOutput(doc, path(mod))
   } yield doc
 }
 

@@ -41,7 +41,7 @@ class JavaScript extends Generator {
     core <- C.lower(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }
-    _ = C.saveOutput(doc, path(mod))
+    _ = C.saveOutput(doc.layout, path(mod))
   } yield doc
 }
 

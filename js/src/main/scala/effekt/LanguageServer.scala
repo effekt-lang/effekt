@@ -64,9 +64,9 @@ class LanguageServer extends Intelligence {
      */
     override val jsGenerator = new JavaScriptVirtual
 
-    override def saveOutput(js: Document, path: String)(implicit C: Context): Unit = {
-      file(path).write(js.layout)
-      output.append(js.layout)
+    override def saveOutput(js: String, path: String)(implicit C: Context): Unit = {
+      file(path).write(js)
+      output.append(js)
     }
   }
 

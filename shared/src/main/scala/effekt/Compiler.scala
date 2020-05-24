@@ -89,5 +89,5 @@ trait Compiler {
   /**
    * Hook potentially used by the generators
    */
-  def saveOutput(doc: Document, path: String)(implicit C: Context): Unit
+  def saveOutput(doc: String, path: String)(implicit C: Context): Unit
 }

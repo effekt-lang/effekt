@@ -34,10 +34,10 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     /**
      * Output: JavaScript -> File
      */
-    override def saveOutput(doc: Document, path: String)(implicit C: Context): Unit =
+    override def saveOutput(doc: String, path: String)(implicit C: Context): Unit =
       if (C.config.requiresCompilation()) {
         C.config.outputPath().mkdirs
-        IO.createFile(path, doc.layout)
+        IO.createFile(path, doc)
       }
   }
 
