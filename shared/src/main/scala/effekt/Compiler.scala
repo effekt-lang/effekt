@@ -42,8 +42,8 @@ trait Compiler {
   // This is overwritten in the JavaScript version of the compiler (to switch to another JS module system)
   // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
   //      easily switch
-  def jsGenerator: Generator = new JavaScript
-  def csGenerator: Generator = new ChezScheme
+  val jsGenerator: Generator = new JavaScript
+  val csGenerator: Generator = new ChezScheme
 
   // Tasks
   // =====
@@ -82,9 +82,7 @@ trait Compiler {
         case "js" => jsGenerator
         case "cs" => csGenerator
       }
-      doc <- C.using(module = mod) {
-        gen.apply(source)
-      }
+      doc <- gen.apply(source)
     } yield doc
   }
 

@@ -16,18 +16,19 @@ import scala.language.implicitConversions
 
 class JavaScript extends Generator {
 
+  val prettyPrinter: JavaScriptPrinter = new JavaScriptPrinter {}
+
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / JavaScriptPrinter.moduleFile(m.path)).unixPath
+    (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
 
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
    * and write them.
    */
   def run(src: Source)(implicit C: Context): Option[Document] = for {
-    core <- C.lower(src)
     mod <- C.frontend(src)
     _ = mod.dependencies.flatMap(compile)
     doc <- compile(mod)
@@ -38,12 +39,13 @@ class JavaScript extends Generator {
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
     core <- C.lower(mod.source)
-    doc = JavaScriptPrinter.format(core)
+    // setting the scope to mod is important to generate qualified names
+    doc = C.using(module = mod) { prettyPrinter.format(core) }
     _ = C.saveOutput(doc, path(mod))
   } yield doc
 }
 
-object JavaScriptPrinter extends ParenPrettyPrinter {
+trait JavaScriptPrinter extends ParenPrettyPrinter {
 
   def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 

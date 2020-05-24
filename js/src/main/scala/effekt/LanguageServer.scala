@@ -1,12 +1,11 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.core.{ JavaScriptGlobal, JavaScriptVirtual }
+import effekt.generator.JavaScriptVirtual
 import effekt.util.messages.FatalPhaseError
-import effekt.{ Compiler, Intelligence, symbols }
 import effekt.util.paths._
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-import org.bitbucket.inkytonik.kiama.util.{ FileSource, Filenames, Message, Messaging, Position, Positions, Severities, Source, StringSource }
+import org.bitbucket.inkytonik.kiama.util.{ Message, Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
 import js.JSConverters._
@@ -63,10 +62,10 @@ class LanguageServer extends Intelligence {
     /**
      * Don't output amdefine module declarations
      */
-    override lazy val generator = new JavaScriptVirtual
+    override val jsGenerator = new JavaScriptVirtual
 
-    override def saveOutput(js: Document, unit: effekt.symbols.Module)(implicit C: Context): Unit = {
-      file(moduleFileName(unit.path)).write(js.layout)
+    override def saveOutput(js: Document, path: String)(implicit C: Context): Unit = {
+      file(path).write(js.layout)
       output.append(js.layout)
     }
   }
@@ -137,7 +136,7 @@ class LanguageServer extends Intelligence {
 
     for {
       mod <- context.frontend(src)
-      _ <- context.compile(src)
+      _ <- context.generate(src)
       program = output.toString()
       command = s"""(function(loader) {
         | var module = {}

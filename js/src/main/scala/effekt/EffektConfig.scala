@@ -9,4 +9,8 @@ trait EffektConfig {
   def output(): Emitter = new OutputEmitter
 
   def includes(): List[File] = Nil
+
+  def generator(): String = "js"
+
+  def outputPath(): String = "out"
 }

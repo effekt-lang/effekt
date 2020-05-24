@@ -1,16 +1,17 @@
-package effekt
-package core
+package effekt.generator
 
-import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
 import effekt.context.Context
-
-import scala.language.implicitConversions
-import effekt.symbols.{ Name, builtins, moduleFile, moduleName }
-import effekt.generator.JavaScript
+import effekt.core.ModuleDecl
+import effekt.symbols.moduleName
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-class JavaScriptVirtual extends JavaScript {
+import scala.language.implicitConversions
 
+class JavaScriptVirtual extends JavaScript {
+  override val prettyPrinter: JavaScriptPrinter = new JSVirtualPrinter {}
+}
+
+trait JSVirtualPrinter extends JavaScriptPrinter {
   override def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(virtual(t))
 
