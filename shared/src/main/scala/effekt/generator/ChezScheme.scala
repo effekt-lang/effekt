@@ -36,7 +36,7 @@ class ChezScheme extends Generator with ParenPrettyPrinter {
     deps = mod.dependencies.flatMap(dep => compile(dep).map(_.layout))
     doc <- compile(mod)
     // TODO use StringBuilder
-    result = deps.mkString("\n") + "\n\n" + doc
+    result = deps.mkString("\n") + "\n\n" + doc.layout
     _ = C.saveOutput(result, path(mod))
   } yield doc
 
@@ -61,8 +61,8 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
   val emptyline: Doc = line <> line
 
   def module(m: ModuleDecl)(implicit C: Context): Doc = {
-    vsep(m.imports.map { im => schemeCall("load", jsString(moduleFile(im))) }, line) <> emptyline <>
-      toDoc(m)
+    //    vsep(m.imports.map { im => schemeCall("load", jsString(moduleFile(im))) }, line) <> emptyline <>
+    toDoc(m)
   }
 
   // TODO print all top level value declarations as "var"
@@ -206,10 +206,16 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
 
+    // only export main for now
     case Exports(path, exports) =>
-      vsep(exports.map { e =>
-        defineValue(e.name.toString, nameDef(e))
-      }, line)
+      exports.find(e => e.name.name == "main").map { main =>
+        defineValue("main", nameDef(main))
+      }.getOrElse("")
+
+    //      vsep(exports.map { e =>
+    //        defineValue(e.name.toString, nameDef(e))
+    //      }, line)
+    
     case _ => ";; NOT YET SUPPORTED"
   }
 
