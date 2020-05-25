@@ -9,6 +9,7 @@ import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
+import effekt.context.assertions._
 
 import scala.language.implicitConversions
 
@@ -18,7 +19,7 @@ import effekt.util.paths._
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezScheme extends Generator with ParenPrettyPrinter {
+class ChezScheme extends Generator {
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
@@ -31,14 +32,13 @@ class ChezScheme extends Generator with ParenPrettyPrinter {
    * and write them.
    */
   def run(src: Source)(implicit C: Context): Option[Document] = for {
-    core <- C.lower(src)
     mod <- C.frontend(src)
-    deps = mod.dependencies.flatMap(dep => compile(dep).map(_.layout))
-    doc <- compile(mod)
-    // TODO use StringBuilder
-    result = deps.mkString("\n") + "\n\n" + doc.layout
-    _ = C.saveOutput(result, path(mod))
-  } yield doc
+    _ = C.checkMain(mod)
+    deps = mod.dependencies.flatMap(dep => compile(dep))
+    core <- C.lower(src)
+    result = ChezSchemePrinter.compilationUnit(mod, core, deps)
+    _ = C.saveOutput(result.layout, path(mod))
+  } yield result
 
   /**
    * Compiles only the given module, does not compile dependencies
@@ -53,7 +53,20 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
+  val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
+
   def moduleFile(path: String): String = path.replace('/', '_') + ".ss"
+
+  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
+    pretty {
+
+      val main = mod.terms("main").toList.head
+
+      prelude <>
+        vsep(dependencies.map { m => string(m.layout) }) <>
+        module(core) <> emptyline <>
+        "(runCC " <> nameRef(main) <> ")"
+    }
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(module(t))
@@ -67,7 +80,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
   // TODO print all top level value declarations as "var"
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    toDocTopLevel(m.defs)
+    toDoc(m.defs)
 
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
@@ -75,7 +88,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case BlockDef(ps, body) =>
       schemeLambda(ps map toDoc, toDoc(body))
     case Lift(b) =>
-      schemeCall("$effekt.lift", toDoc(b))
+      "LIFT NOT SUPPORTED"
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
   })
@@ -94,6 +107,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "#f"
     case StringLit(s)  => jsString(s)
+    case BooleanLit(b) => if (b) "#t" else "#f"
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
 
@@ -115,9 +129,10 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def toDoc(p: Pattern)(implicit C: Context): Doc = ";; NOT YET SUPPORTED "
-
   def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
+
+    case If(cond, thn, els) =>
+      parens("if" <+> toDoc(cond) <+> toDoc(thn) <+> toDoc(els))
 
     case While(cond, body) =>
       parens("while" <+> toDoc(cond) <+> toDoc(body))
@@ -125,18 +140,19 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case Def(id, BlockDef(ps, body), rest) =>
       defineFunction(nameDef(id), ps map toDoc, toDoc(body)) <> emptyline <> toDoc(rest)
 
+    // we can't use the unique id here, since we do not know it in the extern string.
     case Def(id, Extern(ps, body), rest) =>
-      defineFunction(nameDef(id), ps map toDoc, body) <> emptyline <> toDoc(rest)
+      defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest)
 
     case Var(id, binding, rest) =>
       defineValue(nameDef(id), toDoc(binding)) <> emptyline <> toDoc(rest)
 
-    case Data(did, ctors, rest) => ";; NOT YET SUPPORTED "
+    case Data(did, ctors, rest) =>
+      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
+      vsep(cs) <> emptyline <> toDoc(rest)
 
-    // (define-record point (x y))
     case Record(did, fields, rest) =>
-      parens("define-record" <+> nameDef(did) <+> parens(hsep(fields.map { nameDef }, space))) <>
-        emptyline <> toDoc(rest)
+      generateConstructor(did, fields) <> emptyline <> toDoc(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDoc(rest)
@@ -156,55 +172,38 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
     case Ret(e) => toDoc(e)
 
-    // TODO change to macro in Scheme
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>
-        // call capability constructor
-        schemeCall(nameRef(h.id), h.clauses.map {
+
+        brackets(nameRef(h.id) <+> vsep(h.clauses.map {
           case (op, impl) =>
-            // TODO the LAST argument is the continuation...
+            // the LAST argument is the continuation...
             val params = impl.params.init
             val kParam = impl.params.last
-            schemeLambda(
-              params.map { p => nameRef(p.id) },
-              schemeCall("shift0-at", List(string("P"), nameRef(kParam.id), toDoc(impl.body)))
-            )
-        })
+
+            parens(nameDef(op) <+>
+              parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
+              nameRef(kParam.id) <+>
+              toDoc(impl.body))
+        }, line))
       }
-      parens("let" <+>
-        parens(brackets("P (newPrompt)")) <+>
-        parens("pushPrompt" <+> "P" <+> schemeCall(toDoc(body), handlers)))
+      parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
 
-    //    case class Handler(id: Symbol, clauses: List[(Symbol, Block)])
+    case Match(sc, cls) =>
+      val clauses: List[Doc] = cls map {
+        // curry the block
+        case (pattern, b: BlockDef) if b.params.isEmpty =>
+          brackets(toDoc(pattern) <+> schemeLambda(Nil, toDoc(b.body)))
 
-    case other => other.toString
-  }
+        // curry the block
+        case (pattern, b: BlockDef) =>
+          brackets(toDoc(pattern) <+> b.params.foldLeft(toDoc(b.body)) {
+            case (body, p) => schemeLambda(List(nameDef(p.id)), body)
+          })
 
-  def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, BlockDef(ps, body), rest) =>
-      defineFunction(nameDef(id), ps.map { p => nameDef(p.id) }, toDoc(body)) <> emptyline <> toDocTopLevel(rest)
-
-    // we can't use the unique id here, since we do not know it in the extern string.
-    case Def(id, Extern(ps, body), rest) =>
-      defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDocTopLevel(rest)
-
-    case Val(id, binding, rest) => defineValue(nameDef(id), toDoc(binding)) <> emptyline <> toDocTopLevel(rest)
-    case Var(id, binding, rest) => ";; VARS NOT YET SUPPORTED" <> emptyline <> toDocTopLevel(rest)
-    case Data(id, ctors, rest)  => ";; DATA NOT YET SUPPORTED" <> emptyline <> toDocTopLevel(rest)
-
-    // TODO add class=immutable and type to avoid boxing
-    // https://www.scheme.com/csug8/objects.html
-    case Record(did, fields, rest) =>
-      s";;; Record definition for ${did.name}" <> line <>
-        parens("define-record" <+> nameDef(did) <+> parens(hsep(fields.map { nameDef }, space))) <> line <>
-        defineValue(nameDef(did), "make-" <> nameDef(did)) <> line <>
-        vsep(fields.map { f =>
-          defineValue(nameRef(f), nameRef(did) <> "-" <> nameRef(f))
-        }) <>
-        emptyline <> toDocTopLevel(rest)
-
-    case Include(contents, rest) =>
-      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
+        case (pattern, b) => sys error "Right hand side of a matcher needs to be a block definition"
+      }
+      schemeCall("pattern-match", toDoc(sc) :: parens(vsep(clauses, line)) :: Nil)
 
     // only export main for now
     case Exports(path, exports) =>
@@ -212,11 +211,40 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
         defineValue("main", nameDef(main))
       }.getOrElse("")
 
-    //      vsep(exports.map { e =>
-    //        defineValue(e.name.toString, nameDef(e))
-    //      }, line)
-    
-    case _ => ";; NOT YET SUPPORTED"
+    case other => other.toString
+  }
+
+  def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
+    case IgnorePattern()    => "ignore"
+    case AnyPattern()       => "any"
+    case LiteralPattern(l)  => schemeCall("literal", toDoc(l))
+    case TagPattern(id, ps) => schemeCall("match-" <> nameDef(id), ps map { p => toDoc(p) })
+  }
+
+  def generateConstructor(ctor: effekt.symbols.Record)(implicit C: Context): Doc =
+    generateConstructor(ctor, ctor.fields)
+
+  // https://www.scheme.com/csug8/objects.html
+  // https://scheme.com/tspl4/records.html
+  def generateConstructor(did: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
+    val pred = nameDef(did) <> "?"
+    val matcher = "match-" <> nameDef(did)
+
+    val definition =
+      parens("define-record-type" <+> parens(nameDef(did) <+> nameDef(did) <+> pred) <>
+        nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
+          parens("nongenerative" <+> nameDef(did))))
+
+    var fresh = 0;
+
+    val matcherDef =
+      parens("define-matcher" <+> matcher <+> pred <>
+        nest(line <> parens(vsep(fields.map { f =>
+          fresh += 1
+          brackets(s"p${fresh}" <+> nameDef(f))
+        }))))
+
+    s";;; Record definition for ${did.name}" <> line <> definition <> line <> matcherDef
   }
 
   def defineValue(name: Doc, binding: Doc) =
