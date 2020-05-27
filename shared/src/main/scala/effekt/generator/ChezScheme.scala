@@ -87,10 +87,12 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       nameRef(v)
     case BlockDef(ps, body) =>
       schemeLambda(ps map toDoc, toDoc(body))
-    case Lift(b) =>
-      "LIFT NOT SUPPORTED"
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))
+    case AdapterDef(id, b) =>
+      toDoc(b)
+    case AdapterApp(b, _) =>
+      toDoc(b)
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
   })

@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.Transformer
+import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
@@ -38,6 +38,7 @@ trait Compiler {
   // Backend phases
   // ==============
   object transformer extends Transformer
+  object lifter extends LiftInference
 
   // This is overwritten in the JavaScript version of the compiler (to switch to another JS module system)
   // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
@@ -72,7 +73,8 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
-    } yield core
+      lifted <- C.using(module = mod) { lifter(core) }
+    } yield lifted
   }
 
   object generate extends SourceTask[Document]("generate") {

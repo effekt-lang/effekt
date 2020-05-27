@@ -2,8 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-
-import effekt.symbols.Symbol
+import effekt.symbols.{ NoName, Symbol }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -51,7 +50,6 @@ sealed trait Block extends Tree with Argument
 case class BlockVar(id: Symbol) extends Block
 case class BlockDef(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: Symbol) extends Block
-case class Lift(b: Block) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 
 /**
@@ -85,3 +83,21 @@ case class State(id: Symbol, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Symbol, clauses: List[(Symbol, BlockDef)])
+
+/**
+ * Explicit Lifts
+ *
+ * TODO maybe add a separate core language with explicit lifts
+ */
+sealed trait Adapter extends Tree
+case class Here() extends Adapter
+case class Lift() extends Adapter
+case class AdaptVar(id: Symbol) extends Adapter
+
+case class AdapterDef(id: Symbol, body: Block) extends Block {
+}
+case class AdapterApp(b: Block, adapters: List[Adapter]) extends Block
+
+case class AdapterParam() extends Symbol {
+  val name = NoName
+}
