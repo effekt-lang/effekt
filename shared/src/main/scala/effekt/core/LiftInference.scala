@@ -15,12 +15,13 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
   def transform(tree: Block)(implicit env: Environment): Block = tree match {
     case BlockDef(params, body) =>
-      val id = AdapterParam()
-      val extendedEnv = params.foldLeft(env.adapt(AdaptVar(id))) {
+      val id = ScopeId()
+      val extendedEnv = params.foldLeft(env.adapt(ScopeVar(id))) {
         case (env, BlockParam(p)) => env.bind(p)
         case (env, ValueParam(p)) => env
+        case (env, ScopeParam(p)) => env
       }
-      AdapterDef(id, BlockDef(params, transform(body)(extendedEnv)))
+      BlockDef(ScopeParam(id) :: params, transform(body)(extendedEnv))
     case Member(body, id) =>
       Member(transform(body), id)
     case e => e
@@ -43,14 +44,17 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       Record(id, fields, transform(rest))
 
     case Handle(body, handler) =>
-      val transformedBody = AdapterApp(transform(body), List(Lift()))
+      val transformedBody = transform(body) // lift is provided by the handler runtime
       val transformedHandler = handler.map { transform }
       Handle(transformedBody, transformedHandler)
 
-    case App(b: Block, args: List[Argument]) => App(env.supply(transform(b)), args)
+    case App(b: Block, args: List[Argument]) => b match {
+      case b: Extern => App(b, args)
+      case b         => App(transform(b), env.evidenceFor(b) :: args)
+    }
 
     case Match(scrutinee, clauses) =>
-      Match(scrutinee, clauses.map { case (p, b) => (p, env.supply(transform(b))) })
+      Match(scrutinee, clauses.map { case (p, b) => (p, transform(b)) }) // the implementation of match should provide evidence
 
     case If(cond, thn, els) =>
       If(cond, transform(thn), transform(els))
@@ -67,22 +71,22 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
   def transform(h: Handler)(implicit env: Environment): Handler = h match {
     case Handler(id, clauses) =>
-      Handler(id, clauses.map { case (op, impl) => (op, transform(impl)) })
+      Handler(id, clauses.map { case (op, impl) => (op, transform(impl).asInstanceOf[BlockDef]) })
   }
 
-  case class Environment(env: Map[Symbol, List[Adapter]]) {
+  case class Environment(env: Map[Symbol, List[Scope]]) {
     def bind(s: Symbol) = copy(env = env + (s -> Nil))
-    def adapt(a: Adapter) = copy(env = env.map { case (s, as) => s -> (a :: as) })
-    def supply(b: Block): Block = b match {
-      case b: BlockVar       => AdapterApp(b, env.getOrElse(b.id, sys error s"${b} is not in scope"))
-      // this is an abstraction followed by an application and can be statically reduced
-      case AdapterDef(id, b) => b
-      case b: BlockDef       => b
-      case b: Extern         => b
-      case Member(b, id)     => Member(supply(b), id)
-      case b: AdapterApp     => sys error "should not happen"
-    }
+    def adapt(a: Scope) = copy(env = env.map { case (s, as) => s -> (a :: as) })
 
+    def evidenceFor(b: Block): Scope = b match {
+      case b: BlockVar => env.getOrElse(b.id, Nil) match {
+        case Nil    => Here()
+        case scopes => Nested(scopes)
+      }
+      case b: BlockDef   => Here()
+      case Member(b, id) => evidenceFor(b)
+      case b: Extern     => sys error "Cannot provide scope evidence for built in function"
+    }
   }
 }
 
