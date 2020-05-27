@@ -81,10 +81,12 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       nameRef(v)
     case BlockDef(ps, body) =>
       jsLambda(ps map toDoc, toDoc(body))
-    case Lift(b) =>
-      jsCall("$effekt.lift", toDoc(b))
     case Member(b, id) =>
       toDoc(b) <> "." <> nameDef(id)
+    case AdapterDef(id, b) =>
+      toDoc(b)
+    case AdapterApp(b, _) =>
+      toDoc(b)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
   })
