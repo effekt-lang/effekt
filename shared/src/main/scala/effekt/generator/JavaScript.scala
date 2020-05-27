@@ -83,10 +83,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       jsLambda(ps map toDoc, toDoc(body))
     case Member(b, id) =>
       toDoc(b) <> "." <> nameDef(id)
-    case AdapterDef(id, b) =>
-      jsLambda(List(string(s"ev${id.id}")), toDoc(b))
-    case AdapterApp(b, evs) =>
-      jsCall(parens(toDoc(b)), List(jsCall("$effekt.evidence", evs.map { toDoc })))
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
   })
@@ -119,6 +115,7 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
+      case s: Scope => toDoc(s)
     }, comma))
 
     case Select(b, field) =>
@@ -128,6 +125,7 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
+    case s: Scope => toDoc(s)
   }
 
   def toDoc(s: Stmt)(implicit C: Context): Doc =
@@ -188,10 +186,12 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       sys error s"Cannot print ${other} in expression position"
   }
 
-  def toDoc(a: Adapter): Doc = a match {
-    case Here()       => "id"
-    case Lift()       => "lift"
-    case AdaptVar(id) => s"ev${id.id}"
+  def toDoc(a: Scope)(implicit C: Context): Doc = a match {
+    case Here() => "id"
+    case Nested(scopes) =>
+      val ss: List[Doc] = scopes.map(a => toDoc(a))
+      jsCall("nested", ss)
+    case ScopeVar(id) => id.name.toString
   }
 
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
@@ -210,9 +210,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
 
     case Def(id, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
-
-    case Def(id, block, rest) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -252,9 +249,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
 
     case Def(id, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
-
-    case Def(id, block, rest) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }

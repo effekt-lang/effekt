@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ NoName, Symbol }
+import effekt.symbols.{ NoName, QualifiedName, Symbol }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -45,6 +45,7 @@ case class Select(target: Expr, field: Symbol) extends Expr
 sealed trait Param extends Tree { def id: Symbol }
 case class ValueParam(id: Symbol) extends Param
 case class BlockParam(id: Symbol) extends Param
+case class ScopeParam(id: Symbol) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: Symbol) extends Block
@@ -82,22 +83,16 @@ case object Hole extends Stmt
 case class State(id: Symbol, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: Symbol, clauses: List[(Symbol, Block)])
+case class Handler(id: Symbol, clauses: List[(Symbol, BlockDef)])
 
 /**
  * Explicit Lifts
  *
  * TODO maybe add a separate core language with explicit lifts
  */
-sealed trait Adapter extends Tree
-case class Here() extends Adapter
-case class Lift() extends Adapter
-case class AdaptVar(id: Symbol) extends Adapter
+sealed trait Scope extends Tree with Argument
+case class Here() extends Scope
+case class Nested(list: List[Scope]) extends Scope
+case class ScopeVar(id: Symbol) extends Scope
 
-case class AdapterDef(id: Symbol, body: Block) extends Block {
-}
-case class AdapterApp(b: Block, adapters: List[Adapter]) extends Block
-
-case class AdapterParam() extends Symbol {
-  val name = NoName
-}
+case class ScopeId() extends Symbol { val name = QualifiedName(s"ev${id}", effekt.symbols.builtins.prelude) }

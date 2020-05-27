@@ -89,10 +89,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       schemeLambda(ps map toDoc, toDoc(body))
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))
-    case AdapterDef(id, b) =>
-      toDoc(b)
-    case AdapterApp(b, _) =>
-      toDoc(b)
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
   })
@@ -118,6 +114,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case PureApp(b, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
+      case s: Scope => toDoc(s)
     })
 
     case Select(b, field) =>
@@ -127,7 +124,10 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
+    case s: Scope => toDoc(s)
   }
+
+  def toDoc(s: Scope)(implicit C: Context): Doc = ???
 
   def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
 
@@ -157,6 +157,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case App(b, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
+      case s: Scope => toDoc(s)
     })
 
     case Val(Wildcard(_), binding, body) =>
@@ -172,15 +173,15 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
         brackets(nameRef(h.id) <+> vsep(h.clauses.map {
           // impl now is not a BlockDef anymore, but a potentially lifted block
-          case (op, impl) => "TODO FIX BLOCK RENDERING IN SCHEME"
-          //            // the LAST argument is the continuation...
-          //            val params = impl.params.init
-          //            val kParam = impl.params.last
-          //
-          //            parens(nameDef(op) <+>
-          //              parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
-          //              nameRef(kParam.id) <+>
-          //              toDoc(impl.body))
+          case (op, impl) =>
+            // the LAST argument is the continuation...
+            val params = impl.params.init
+            val kParam = impl.params.last
+
+            parens(nameDef(op) <+>
+              parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
+              nameRef(kParam.id) <+>
+              toDoc(impl.body))
         }, line))
       }
       parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
