@@ -84,9 +84,9 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     case Member(b, id) =>
       toDoc(b) <> "." <> nameDef(id)
     case AdapterDef(id, b) =>
-      toDoc(b)
-    case AdapterApp(b, _) =>
-      toDoc(b)
+      jsLambda(List(string(s"ev${id.id}")), toDoc(b))
+    case AdapterApp(b, evs) =>
+      jsCall(parens(toDoc(b)), List(jsCall("$effekt.evidence", evs.map { toDoc })))
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
   })
@@ -188,6 +188,12 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       sys error s"Cannot print ${other} in expression position"
   }
 
+  def toDoc(a: Adapter): Doc = a match {
+    case Here()       => "id"
+    case Lift()       => "lift"
+    case AdaptVar(id) => s"ev${id.id}"
+  }
+
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
     case IgnorePattern()   => "$effekt.ignore"
     case AnyPattern()      => "$effekt.any"
@@ -204,6 +210,9 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
 
     case Def(id, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, block, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -243,6 +252,9 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
 
     case Def(id, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
+
+    case Def(id, block, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }

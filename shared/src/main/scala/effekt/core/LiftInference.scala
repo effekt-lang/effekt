@@ -6,7 +6,6 @@ import effekt.context.Context
 
 class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
-
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
     Some(transform(mod)(Environment(Map.empty)))
 
@@ -17,7 +16,13 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
   def transform(tree: Block)(implicit env: Environment): Block = tree match {
     case BlockDef(params, body) =>
       val id = AdapterParam()
-      AdapterDef(id, BlockDef(params, transform(body)(env.adapt(AdaptVar(id)))))
+      val extendedEnv = params.foldLeft(env.adapt(AdaptVar(id))) {
+        case (env, BlockParam(p)) => env.bind(p)
+        case (env, ValueParam(p)) => env
+      }
+      AdapterDef(id, BlockDef(params, transform(body)(extendedEnv)))
+    case Member(body, id) =>
+      Member(transform(body), id)
     case e => e
   }
 
@@ -38,15 +43,11 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       Record(id, fields, transform(rest))
 
     case Handle(body, handler) =>
-      val transformedBody = env.supply(transform(body)(env.adapt(Lift())))
-      val transformedHandler = ??? // TODO
+      val transformedBody = AdapterApp(transform(body), List(Lift()))
+      val transformedHandler = handler.map { transform }
       Handle(transformedBody, transformedHandler)
 
-    case App(b: Block, args: List[Argument])            => App(env.supply(transform(b)), args)
-
-    // TODO we should change the representation to App(Member(b, id), args)
-    //      so that we can rewrite it to App(AdapterApp(Member(b, id), args)
-    case Do(b: Block, id: Symbol, args: List[Argument]) => ???
+    case App(b: Block, args: List[Argument]) => App(env.supply(transform(b)), args)
 
     case Match(scrutinee, clauses) =>
       Match(scrutinee, clauses.map { case (p, b) => (p, env.supply(transform(b))) })
@@ -64,15 +65,21 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     case Hole       => Hole
   }
 
+  def transform(h: Handler)(implicit env: Environment): Handler = h match {
+    case Handler(id, clauses) =>
+      Handler(id, clauses.map { case (op, impl) => (op, transform(impl)) })
+  }
+
   case class Environment(env: Map[Symbol, List[Adapter]]) {
     def bind(s: Symbol) = copy(env = env + (s -> Nil))
     def adapt(a: Adapter) = copy(env = env.map { case (s, as) => s -> (a :: as) })
-    def supply(b: Block) = b match {
+    def supply(b: Block): Block = b match {
       case b: BlockVar       => AdapterApp(b, env.getOrElse(b.id, sys error s"${b} is not in scope"))
       // this is an abstraction followed by an application and can be statically reduced
       case AdapterDef(id, b) => b
       case b: BlockDef       => b
       case b: Extern         => b
+      case Member(b, id)     => Member(supply(b), id)
       case b: AdapterApp     => sys error "should not happen"
     }
 
