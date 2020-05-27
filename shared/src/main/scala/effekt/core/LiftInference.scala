@@ -80,8 +80,9 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
     def evidenceFor(b: Block): Scope = b match {
       case b: BlockVar => env.getOrElse(b.id, Nil) match {
-        case Nil    => Here()
-        case scopes => Nested(scopes)
+        case Nil      => Here()
+        case s :: Nil => s
+        case scopes   => Nested(scopes)
       }
       case b: BlockDef   => Here()
       case Member(b, id) => evidenceFor(b)
