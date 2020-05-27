@@ -171,15 +171,16 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       val handlers: List[Doc] = handler.map { h =>
 
         brackets(nameRef(h.id) <+> vsep(h.clauses.map {
-          case (op, impl) =>
-            // the LAST argument is the continuation...
-            val params = impl.params.init
-            val kParam = impl.params.last
-
-            parens(nameDef(op) <+>
-              parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
-              nameRef(kParam.id) <+>
-              toDoc(impl.body))
+          // impl now is not a BlockDef anymore, but a potentially lifted block
+          case (op, impl) => "TODO FIX BLOCK RENDERING IN SCHEME"
+          //            // the LAST argument is the continuation...
+          //            val params = impl.params.init
+          //            val kParam = impl.params.last
+          //
+          //            parens(nameDef(op) <+>
+          //              parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
+          //              nameRef(kParam.id) <+>
+          //              toDoc(impl.body))
         }, line))
       }
       parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
