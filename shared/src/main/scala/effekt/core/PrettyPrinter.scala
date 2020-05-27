@@ -24,7 +24,9 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(v) => v.name.toString
     case BlockDef(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
-    case Lift(b)          => parens(toDoc(b))
+    case Lift(b) => parens(toDoc(b))
+    case Member(b, id) =>
+      toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
   }
 
@@ -70,8 +72,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
     case Var(id, binding, body) =>
       "var" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
-    case Do(b, id, args) =>
-      toDoc(b) <> "." <> toDoc(id.name) <> parens(hsep(args map argToDoc, comma))
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>

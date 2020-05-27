@@ -83,6 +83,8 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       jsLambda(ps map toDoc, toDoc(body))
     case Lift(b) =>
       jsCall("$effekt.lift", toDoc(b))
+    case Member(b, id) =>
+      toDoc(b) <> "." <> nameDef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
   })
@@ -152,8 +154,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       toDocDelayed(binding) <> ".state" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
       jsCall(toDoc(b), args map argToDoc)
-    case Do(b, id, args) =>
-      jsCall(toDoc(b) <> "." <> nameRef(id), args map argToDoc)
     case If(cond, thn, els) =>
       parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
     case While(cond, body) =>

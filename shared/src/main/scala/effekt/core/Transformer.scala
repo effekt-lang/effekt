@@ -168,7 +168,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         case _: Record =>
           as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
         case f: EffectOp =>
-          as2.flatMap { args => bind(Do(BlockVar(f.effect), f, args ++ capabilities)) }
+          as2.flatMap { args => bind(App(Member(BlockVar(f.effect), f), args ++ capabilities)) }
         case f: Field =>
           as2.map { case List(arg: Expr) => Select(arg, f) }
         case f =>

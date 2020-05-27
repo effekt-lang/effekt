@@ -89,6 +89,8 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       schemeLambda(ps map toDoc, toDoc(body))
     case Lift(b) =>
       "LIFT NOT SUPPORTED"
+    case Member(b, id) =>
+      schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
   })
@@ -161,8 +163,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     })
-    case Do(b, id, args) =>
-      schemeCall(schemeCall(nameRef(id), List(toDoc(b))), args.map(argToDoc))
 
     case Val(Wildcard(_), binding, body) =>
       toDoc(binding) <> line <> toDoc(body)
@@ -191,9 +191,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
     case Match(sc, cls) =>
       val clauses: List[Doc] = cls map {
-        // curry the block
-        case (pattern, b: BlockDef) if b.params.isEmpty =>
-          brackets(toDoc(pattern) <+> schemeLambda(Nil, toDoc(b.body)))
 
         // curry the block
         case (pattern, b: BlockDef) =>

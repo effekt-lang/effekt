@@ -13,7 +13,7 @@ sealed trait Tree extends Product {
 }
 
 /**
- * A module declartion, the path should be an Effekt include path, not a system dependent file path
+ * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
 
@@ -53,6 +53,7 @@ case class BlockParam(id: Symbol) extends Param
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: Symbol) extends Block
 case class BlockDef(params: List[Param], body: Stmt) extends Block
+case class Member(b: Block, field: Symbol) extends Block
 case class Lift(b: Block) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 
@@ -67,7 +68,6 @@ case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
 case class App(b: Block, args: List[Argument]) extends Stmt
-case class Do(b: Block, id: Symbol, args: List[Argument]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
