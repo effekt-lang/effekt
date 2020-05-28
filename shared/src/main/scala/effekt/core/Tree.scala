@@ -53,6 +53,8 @@ case class BlockDef(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: Symbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 
+case class Lifted(s: Scope, b: Block) extends Block
+
 /**
  * Statements
  */

@@ -1,0 +1,39 @@
+module triples
+
+effect Flip(): Boolean
+effect Fail[A](): A
+effect Out(t: Tuple3[Int, Int, Int]): Unit
+def choice(n : Int): Int / { Flip, Fail } =
+  if (n < 1) {
+    do Fail()
+  } else if (do Flip()) {
+    n
+  } else {
+    choice(n - 1)
+  }
+
+def triple(n: Int, s: Int) = {
+  val i = choice(n);
+  val j = choice(i - 1);
+  val k = choice(j - 1);
+  if ((i + j + k) == s) {
+    (i, j ,k)
+  } else {
+    do Fail()
+  }
+}
+
+def handledTriple(n : Int, s : Int): Unit / Out =
+  try {
+    try { Out(triple(n, s)) }
+    with Fail { () }
+  } with Flip { resume(true); resume(false) }
+
+def main() = {
+  try {
+    handledTriple(8, 16)
+  } with Out { t =>
+    println(t)
+    resume(())
+  }
+}
