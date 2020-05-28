@@ -85,6 +85,8 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> nameDef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
+    case Lifted(ev, BlockVar(id)) if id.isInstanceOf[effekt.symbols.Effect] => "$effekt.liftCap" <> parens(toDoc(ev) <> comma <+> nameRef(id))
+    case Lifted(ev, b) => "$effekt.liftBlock" <> parens(toDoc(ev) <> comma <+> toDoc(b))
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
@@ -144,18 +146,18 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
     case Val(Wildcard(_), binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
+      "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(Nil, toDoc(body)))
     case Val(id, binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
+      "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
+    case Var(id, binding, body) =>
+      "$effekt.state" <> parens(toDocExpr(binding)) <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
       jsCall(toDoc(b), args map argToDoc)
     case If(cond, thn, els) =>
-      parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
+      parens(toDoc(cond)) <+> "?" <+> toDocExpr(thn) <+> ":" <+> toDocExpr(els)
     case While(cond, body) =>
       jsCall(
-        "$effekt._while",
-        jsLambda(Nil, toDoc(cond)),
-        jsLambda(Nil, toDoc(body))
+        "$effekt._while", toDocExpr(cond), toDocExpr(body)
       )
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
@@ -187,10 +189,10 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(a: Scope)(implicit C: Context): Doc = a match {
-    case Here() => "id"
+    case Here() => "$effekt.here"
     case Nested(scopes) =>
       val ss: List[Doc] = scopes.map(a => toDoc(a))
-      jsCall("nested", ss)
+      jsCall("$effekt.nested", ss)
     case ScopeVar(id) => id.name.toString
   }
 

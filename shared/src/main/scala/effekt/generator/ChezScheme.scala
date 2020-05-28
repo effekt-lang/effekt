@@ -91,6 +91,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
+    case Lifted(ev, b) => ???
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))

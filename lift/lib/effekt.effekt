@@ -1,0 +1,111 @@
+module effekt
+
+extern effect Console
+
+// Runtime
+extern include "effekt_runtime.js"
+
+// Builtins
+extern include "effekt_builtins.js"
+
+// Pattern Matching
+extern include "effekt_matching.js"
+
+def locally[R] { f: R }: R = f()
+
+// Side effecting ops
+// ==================
+extern def println[R](value: R): Unit / Console =
+  "println$impl(value)"
+
+extern pure def inspect[R](value: R): Unit =
+  "console.log(value)"
+
+// a fatal runtime error that cannot be caught
+extern pure def error[R](msg: String): R =
+  "(function() { throw msg })()"
+
+extern pure def random(): Int =
+  "Math.random() * 100"
+
+
+// String ops
+// ==========
+extern pure def show[R](value: R): String =
+  "show$impl(value)"
+
+extern pure def infixConcat(s1: String, s2: String): String =
+  "s1 + s2"
+
+// Math ops
+// ========
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "(x + y)"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  "(x * y)"
+
+extern pure def infixDiv(x: Int, y: Int): Int =
+  "Math.floor(x / y)"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  "(x - y)"
+
+extern pure def mod(x: Int, y: Int): Int =
+  "(x % y)"
+
+extern pure def addDouble(x: Double, y: Double): Double =
+  "(x + y)"
+
+extern pure def mulDouble(x: Double, y: Double): Double =
+  "(x * y)"
+
+extern pure def subDouble(x: Double, y: Double): Double =
+  "(x - y)"
+
+
+// Comparison ops
+// ==============
+extern pure def infixEq[R](x: R, y: R): Boolean =
+  "equals$impl(x, y)"
+
+extern pure def infixNeq[R](x: R, y: R): Boolean =
+  "!equals$impl(x, y)"
+
+extern pure def infixLt(x: Int, y: Int): Boolean =
+  "x < y"
+
+extern pure def infixLte(x: Int, y: Int): Boolean =
+  "x <= y"
+
+extern pure def infixGt(x: Int, y: Int): Boolean =
+  "x > y"
+
+extern pure def infixGte(x: Int, y: Int): Boolean =
+  "x >= y"
+
+
+// Boolean ops
+// ===========
+// for now those are considered eager
+extern pure def not(b: Boolean): Boolean =
+  "!b"
+
+extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+  "x || y"
+
+extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+  "x && y"
+
+// Is something an undefined JavaScript Value?
+// Should only be used internally since values in Effekt should not be undefined
+extern pure def isUndefined[A](value: A): Boolean =
+  "value === undefined"
+
+// Pairs
+// =====
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)

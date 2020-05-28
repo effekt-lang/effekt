@@ -27,6 +27,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
+    case Lifted(ev, b)    => "lift" <> parens(toDoc(ev) <> comma <+> toDoc(b))
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
