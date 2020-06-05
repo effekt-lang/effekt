@@ -75,13 +75,15 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     case Hole       => Hole
   }
 
-  // TODO apply lifts to the arguments if it is block variables
+  // apply lifts to the arguments if it is block variables
+  // this is the same as eta expanding them, since then the lifts would be composed for the call
   def liftArguments(args: List[Argument])(implicit env: Environment, C: Context): List[Argument] = args map {
     case b: BlockVar => env.evidenceFor(b) match {
       case Here() => b
       case ev     => Lifted(ev, b)
     }
-    case other => other
+    case b: Block => transform(b)
+    case other    => other
   }
 
   def transform(h: Handler)(implicit env: Environment, C: Context): Handler = h match {

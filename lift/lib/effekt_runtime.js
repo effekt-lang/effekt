@@ -32,6 +32,7 @@ const $runtime = (function() {
     return ev(b.apply(null, args))
   }
 
+  // TODO delayed(() => console.log("foo"))(pure) is forced
   // (Unit => t) => Eff t
   const delayed = thunk => k => k(thunk())
 
@@ -50,6 +51,7 @@ const $runtime = (function() {
       var cap = Object.create({})
       for (var op in h) {
         const impl = h[op];
+        // (ev, args..., resume) => ...
         cap[op] = function(lift) {
           // the first argument is the lift
           // console.log(arguments)
@@ -75,7 +77,7 @@ const $runtime = (function() {
       } else if (args.length == 3) {
         return m => args[0](args[1](args[2](m)))
       } else {
-        throw "Only specialized to two lifts, yet"
+        throw "Only specialized to three lifts, yet"
       }
     },
     callcc: callcc,
