@@ -88,6 +88,13 @@ trait LSPServer extends Driver with Intelligence {
       allRefs = if (includeDecl) tree :: refs else refs
     } yield refs.toVector
 
+  // settings might be null
+  override def setSettings(settings: Object): Unit = {
+    import com.google.gson.JsonObject
+    if (settings == null) super.setSettings(new JsonObject())
+    else super.setSettings(settings)
+  }
+
   //references
 
   def getSymbolKind(sym: Symbol): Option[SymbolKind] =
