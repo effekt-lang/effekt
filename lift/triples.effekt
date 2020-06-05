@@ -1,0 +1,75 @@
+module lift/triples
+
+
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+def reverse[A](l: List[A]): List[A] = {
+  def reverseWith(l: List[A])(acc: List[A]): List[A] = l match {
+    case Nil() => acc
+    case Cons(a, rest) => rest.reverseWith(Cons(a, acc))
+  }
+  l.reverseWith(Nil())
+}
+
+// [1,2,3].reverseOnto([4,5,6])
+// [3,2,1,4,5,6]
+def reverseOnto[A](l: List[A])(other: List[A]): List[A] = l match {
+  case Nil() => other
+  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
+}
+
+// [1,2,3].append([4,5,6])
+// [3,2,1].reverseOnto([4,5,6])
+// [1,2,3,4,5,6]
+def append[A](l: List[A])(other: List[A]): List[A] =
+  l.reverse.reverseOnto(other)
+
+
+effect Flip(): Boolean
+effect Fail[A](): A
+effect Out(t: Tuple3[Int, Int, Int]): Unit
+def choice(n : Int): Int / { Flip, Fail } =
+  if (n < 1) {
+    do Fail()
+  } else if (do Flip()) {
+    n
+  } else {
+    choice(n - 1)
+  }
+
+def triple(n: Int, s: Int) = {
+  val i = choice(n);
+  val j = choice(i - 1);
+  val k = choice(j - 1);
+  if ((i + j + k) == s) {
+    (i, j ,k)
+  } else {
+    do Fail()
+  }
+}
+
+def handledList(n : Int, s : Int): List[Tuple3[Int, Int, Int]] =
+  try {
+    try { Cons(triple(n, s), Nil()) }
+    with Fail { Nil() }
+  } with Flip { resume(true).append(resume(false)) }
+
+
+def handledTriple(n : Int, s : Int): Unit / Out =
+  try {
+    try { Out(triple(n, s)) }
+    with Fail { () }
+  } with Flip { resume(true); resume(false) }
+
+def main() = {
+  println(handledList(20, 40))
+
+  try {
+    handledTriple(20, 40)
+  } with Out { t =>
+    println(t)
+    resume(())
+  }
+}
