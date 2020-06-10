@@ -113,10 +113,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
 
-    // we use mutable state for now.
-    case Deref(id)     => nameRef(id)
-    case Assign(id, e) => schemeCall("set!", List(nameRef(id), toDoc(e)))
-
     case PureApp(b, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
@@ -145,9 +141,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     // we can't use the unique id here, since we do not know it in the extern string.
     case Def(id, Extern(ps, body), rest) =>
       defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest)
-
-    case Var(id, binding, rest) =>
-      defineValue(nameDef(id), toDoc(binding)) <> emptyline <> toDoc(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }

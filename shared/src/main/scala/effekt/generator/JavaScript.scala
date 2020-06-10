@@ -114,9 +114,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
 
-    case Deref(id)     => jsCall(nameRef(id) <> ".value")
-    case Assign(id, e) => jsCall(nameRef(id) <> ".value", toDoc(e))
-
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
@@ -150,8 +147,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
     case Val(id, binding, body) =>
       toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
-    case Var(id, binding, body) =>
-      toDocDelayed(binding) <> ".state" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
       jsCall(toDoc(b), args map argToDoc)
     case If(cond, thn, els) =>
@@ -170,6 +165,9 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
         moduleName(path),
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )
+    case State(id, init, body) =>
+      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
+
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
       val cs = parens(jsArray(handlers))

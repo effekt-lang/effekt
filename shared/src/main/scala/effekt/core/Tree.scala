@@ -26,10 +26,7 @@ sealed trait Argument extends Tree
  * Expressions
  */
 sealed trait Expr extends Tree with Argument
-
 case class ValueVar(id: Symbol) extends Expr
-case class Assign(id: Symbol, binding: Expr) extends Expr
-case class Deref(id: Symbol) extends Expr
 
 sealed trait Literal[T] extends Expr {
   def value: T
@@ -63,7 +60,6 @@ case class Extern(params: List[Param], body: String) extends Block
 sealed trait Stmt extends Tree
 case class Def(id: Symbol, block: Block, rest: Stmt) extends Stmt
 case class Val(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
-case class Var(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
@@ -85,6 +81,7 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
+case class State(id: Symbol, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Symbol, clauses: List[(Symbol, BlockDef)])
