@@ -40,9 +40,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => id.name.toString
 
-    case Deref(id)     => "!" <> toDoc(id.name)
-    case Assign(id, e) => toDoc(id.name) <+> ":=" <+> toDoc(e)
-
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
@@ -70,8 +67,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
       toDoc(binding) <> ";" <> line <> toDoc(body)
     case Val(id, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
-    case Var(id, binding, body) =>
-      "var" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
     case App(b, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>

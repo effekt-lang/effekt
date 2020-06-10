@@ -1,6 +1,8 @@
 package effekt
 package core
 
+import scala.collection.mutable
+
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
 import effekt.symbols._
@@ -12,10 +14,10 @@ case class Tmp(module: Module) extends Symbol { val name = Name("tmp" + Symbol.f
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
-  def run(mod: Module)(implicit compiler: Context): Option[ModuleDecl] =
-    Some(transform(mod))
+  def run(mod: Module)(implicit C: Context): Option[ModuleDecl] =
+    Some(transform(mod)(TransformerContext(C)))
 
-  def transform(mod: Module)(implicit compiler: Context): ModuleDecl = {
+  def transform(mod: Module)(implicit C: TransformerContext): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
@@ -27,11 +29,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {
       case (d, r) =>
-        transform(d, r)(compiler)
+        transform(d, r)(C)
     }).inheritPosition(mod.decl)
   }
 
-  def transform(d: source.Def, rest: Stmt)(implicit C: Context): Stmt = (d match {
+  def transform(d: source.Def, rest: Stmt)(implicit C: TransformerContext): Stmt = (d match {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val effs = sym.effects.userDefined
@@ -54,7 +56,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       Val(v.symbol, transform(binding), rest)
 
     case v @ source.VarDef(id, _, binding) =>
-      Var(v.symbol, transform(binding), rest)
+      val eff = C.state(v.symbol)
+      val capabilities = List(core.BlockParam(eff.effect))
+      val body = BlockDef(capabilities, rest)
+      State(eff.effect, transform(binding), body)
 
     case source.ExternType(id, tparams) =>
       rest
@@ -84,7 +89,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       core.Record(d.symbol, ops.map { e => e.symbol }, rest)
   }).inheritPosition(d)
 
-  def transform(tree: source.Stmt)(implicit C: Context): Stmt = (tree match {
+  def transform(tree: source.Stmt)(implicit C: TransformerContext): Stmt = (tree match {
     case source.DefStmt(d, rest) =>
       transform(d, transform(rest))
 
@@ -99,7 +104,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   }).inheritPosition(tree)
 
-  def transformLit[T](tree: source.Literal[T])(implicit C: Context): Literal[T] = tree match {
+  def transformLit[T](tree: source.Literal[T])(implicit C: TransformerContext): Literal[T] = tree match {
     case source.UnitLit()         => UnitLit()
     case source.IntLit(value)     => IntLit(value)
     case source.BooleanLit(value) => BooleanLit(value)
@@ -107,14 +112,17 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.StringLit(value)  => StringLit(value)
   }
 
-  def transform(tree: source.Expr)(implicit C: Context): Control[Expr] = (tree match {
+  def transform(tree: source.Expr)(implicit C: TransformerContext): Control[Expr] = (tree match {
     case v: source.Var => v.definition match {
-      case sym: VarBinder => pure { Deref(sym) }
+      case sym: VarBinder => bind(App(Member(BlockVar(C.state(sym).effect), C.state(sym).get), Nil))
       case sym            => pure { ValueVar(sym) }
     }
 
     case a @ source.Assign(id, expr) =>
-      transform(expr).map { e => Assign(a.definition, e) }
+      transform(expr).flatMap { e =>
+        val state = C.state(a.definition)
+        bind(App(Member(BlockVar(state.effect), state.put), List(e)))
+      }
 
     case l: source.Literal[t] => pure { transformLit(l) }
 
@@ -197,7 +205,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   }).map { _.inheritPosition(tree) }
 
-  def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
+  def transform(tree: source.MatchPattern)(implicit C: TransformerContext): (Pattern, List[core.ValueParam]) = tree match {
     case source.IgnorePattern()   => (core.IgnorePattern(), Nil)
     case source.LiteralPattern(l) => (core.LiteralPattern(transformLit(l)), Nil)
     case source.AnyPattern(id)    => (core.AnyPattern(), List(core.ValueParam(id.symbol)))
@@ -206,7 +214,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       (core.TagPattern(p.definition, patterns), params.flatten)
   }
 
-  def traverse[R](ar: List[Control[R]])(implicit C: Context): Control[List[R]] = ar match {
+  def traverse[R](ar: List[Control[R]])(implicit C: TransformerContext): Control[List[R]] = ar match {
     case Nil => pure { Nil }
     case (r :: rs) => for {
       rv <- r
@@ -214,7 +222,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     } yield rv :: rsv
   }
 
-  def transform(exprs: List[source.Expr])(implicit C: Context): Control[List[Expr]] = exprs match {
+  def transform(exprs: List[source.Expr])(implicit C: TransformerContext): Control[List[Expr]] = exprs match {
     case Nil => pure { Nil }
     case (e :: rest) => for {
       ev <- transform(e)
@@ -222,14 +230,31 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     } yield ev :: rv
   }
 
+  case class StateEffect(effect: UserEffect, get: EffectOp, put: EffectOp)
+  def synthesizeStateEffect(binder: VarBinder)(implicit C: Context): StateEffect = {
+    val tpe = C.valueTypeOf(binder)
+    val eff = UserEffect(binder.name, Nil)
+    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
+    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
+    eff.ops = List(get, put)
+    StateEffect(eff, get, put)
+  }
+
   private val delimiter: Cap[Stmt] = new Capability { type Res = Stmt }
 
   def ANF(e: Control[Stmt]): Stmt = control.handle(delimiter)(e).run()
-  def bind(e: Stmt)(implicit C: Context): Control[Expr] = control.use(delimiter) { k =>
+  def bind(e: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
     val x = Tmp(C.module)
     k.apply(ValueVar(x)).map {
       case Ret(ValueVar(y)) if x == y => e
       case body => Val(x, e, body)
     }
   }
+
+  case class TransformerContext(context: Context) {
+    private var stateEffects = mutable.Map.empty[VarBinder, StateEffect]
+    def state(binder: VarBinder): StateEffect = stateEffects.getOrElseUpdate(binder, synthesizeStateEffect(binder)(context))
+  }
+  private implicit def asContext(C: TransformerContext): Context = C.context
+  private implicit def getContext(implicit C: TransformerContext): Context = C.context
 }
