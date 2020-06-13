@@ -20,8 +20,9 @@ const $runtime = (function() {
     var newCap = {}
     for (var m in c) {
       let f = c[m]
-      if (c.hasOwnProperty(m) && (f instanceof Function)) {
-        newCap[m] = liftBlock(ev, f)
+      if (c.hasOwnProperty(m)) {
+        if (f instanceof Function) { newCap[m] = liftBlock(ev, f) }
+        else { newCap[m] = f }
       }
     }
     return newCap
@@ -38,10 +39,24 @@ const $runtime = (function() {
 
   const callcc = f => { throw "callcc not yet supported" }
 
-
-
   function _while(c, body) {
-    return bind(c)(b => b ? bind(body)(() => _while(c, body)) : pure(null))
+    return then(c)(b => b ? then(body)(() => _while(c, body)) : pure($effekt.unit))
+  }
+
+  // the lift that state introduces should lift over the cont AND the reader.
+  const state = init => m => m(a => s => k => k(a))(init)
+  const stateGet = k => s => k(s)(s)
+  const statePut = s => k => s2 => k($effekt.unit)(s)
+  const stateLift = m => s => k1 => k2 => m(a => k1(s)(a)(k2))
+
+
+  function handleState(init) {
+    return body => then(init)(s => {
+      return state(s)(body(stateLift, {
+        "op$get": function(ev) { return ev(stateGet) },
+        "op$put": function(ev, s) { return ev(statePut(s)) }
+      }))
+    });
   }
 
   function handle(handlers) {
@@ -85,6 +100,7 @@ const $runtime = (function() {
     liftCap: liftCap,
     liftBlock: liftBlock,
     handle: handle,
+    state: handleState,
     then: then,
     _while: _while,
     constructor: (_, tag) => function() {
