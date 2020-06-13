@@ -47,7 +47,9 @@ const $runtime = (function() {
   const state = init => m => m(a => s => k => k(a))(init)
   const stateGet = k => s => k(s)(s)
   const statePut = s => k => s2 => k($effekt.unit)(s)
-  const stateLift = m => s => k1 => k2 => m(a => k1(s)(a)(k2))
+
+  // Eff[T, K :: rs] => Eff[T, S :: K :: K :: rs]
+  const stateLift = m => k1 => s => k2 => m(a => k1(a)(s)(k2))
 
 
   function handleState(init) {
@@ -88,9 +90,9 @@ const $runtime = (function() {
     nested: function() {
       const args = arguments
       if (args.length == 2) {
-        return m => args[0](args[1](m))
+        return m => args[1](args[0](m))
       } else if (args.length == 3) {
-        return m => args[0](args[1](args[2](m)))
+        return m => args[2](args[1](args[0](m)))
       } else {
         throw "Only specialized to three lifts, yet"
       }
