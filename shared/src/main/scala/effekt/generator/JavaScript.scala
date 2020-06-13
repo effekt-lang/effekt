@@ -149,8 +149,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(Nil, toDoc(body)))
     case Val(id, binding, body) =>
       "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
-    case Var(id, binding, body) =>
-      "$effekt.state" <> parens(toDocExpr(binding)) <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
       jsCall(toDoc(b), args map argToDoc)
     case If(cond, thn, els) =>
@@ -167,8 +165,9 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
         moduleName(path),
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )
+
     case State(id, init, body) =>
-      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
+      "$effekt.state" <> parens(toDocExpr(init)) <> parens(toDoc(body))
 
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }

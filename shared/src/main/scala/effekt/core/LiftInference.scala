@@ -38,8 +38,8 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     case Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
 
-    case Var(id, binding, body) =>
-      Var(id, transform(binding), transform(body))
+    case State(id, init, body) =>
+      State(id, transform(init), transform(body))
 
     case Data(id, ctors, rest) =>
       Data(id, ctors, transform(rest))
