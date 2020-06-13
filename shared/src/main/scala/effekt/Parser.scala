@@ -1,10 +1,7 @@
 package effekt
 
-import java.util
-
 import effekt.context.Context
 import effekt.source._
-import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
@@ -163,7 +160,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     // on the JVM and in JavaScript
     def apply(in: Input): ParseResult[String] = {
       val filename = in.source.name
-      val baseWithExt = filename.split("[\\/]]").last
+      val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
       Success(base, in)
     }
