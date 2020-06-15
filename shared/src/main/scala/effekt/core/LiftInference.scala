@@ -59,8 +59,10 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case b => App(transform(b), env.evidenceFor(b) :: liftArguments(args))
     }
 
+    // TODO either the implementation of match should provide evidence
+    // or we should not abstract over evidence!
     case Match(scrutinee, clauses) =>
-      Match(scrutinee, clauses.map { case (p, b) => (p, transform(b)) }) // the implementation of match should provide evidence
+      Match(scrutinee, clauses.map { case (p, b) => (p, transform(b)) })
 
     case If(cond, thn, els) =>
       If(cond, transform(thn), transform(els))

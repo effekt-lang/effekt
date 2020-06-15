@@ -26,6 +26,8 @@ def reverseOnto[A](l: List[A])(other: List[A]): List[A] = l match {
 def append[A](l: List[A])(other: List[A]): List[A] =
   l.reverse.reverseOnto(other)
 
+def testAppend() =
+  println([1,2,3].append([4,5,6]))
 
 effect Flip(): Boolean
 effect Fail[A](): A
@@ -64,10 +66,10 @@ def handledTriple(n : Int, s : Int): Unit / Out =
   } with Flip { resume(true); resume(false) }
 
 def main() = {
-  println(handledList(20, 40))
+  println(handledList(8, 10))
 
   try {
-    handledTriple(20, 40)
+    handledTriple(8, 10)
   } with Out { t =>
     println(t)
     resume(())
