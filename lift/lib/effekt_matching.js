@@ -38,7 +38,7 @@ const $matching = (function() {
             const alt = alternatives[i]
             const matched = alt.pattern(x)
             if (matched !== null) {
-                return alt.exec.apply(null, matched)
+                return alt.exec.apply(null, [x => x].concat(matched)) // TODO refactor to remove evidence here!
             }
         }
     }
