@@ -48,7 +48,7 @@ const $runtime = (function() {
   const stateGet = k => s => k(s)(s)
   const statePut = s => k => s2 => k($effekt.unit)(s)
 
-  // Eff[T, K :: rs] => Eff[T, S :: K :: K :: rs]
+  // Eff[T, K :: rs] => Eff[T, K :: S :: K :: rs]
   const stateLift = m => k1 => s => k2 => m(a => k1(a)(s)(k2))
 
 
