@@ -62,7 +62,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     // TODO either the implementation of match should provide evidence
     // or we should not abstract over evidence!
     case Match(scrutinee, clauses) =>
-      Match(scrutinee, clauses.map { case (p, b) => (p, transform(b)) })
+      Match(scrutinee, clauses.map { case (p, b) => (p, transformBody(b)) })
 
     case If(cond, thn, els) =>
       If(cond, transform(thn), transform(els))
@@ -75,6 +75,15 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
     case i: Include => i
     case Hole       => Hole
+  }
+
+  /**
+   * Don't transform the block itself, but only the body. Used for local abstractions like match clauses where
+   * we know the evidence is Here.
+   */
+  def transformBody(tree: BlockDef)(implicit env: Environment, C: Context): BlockDef = tree match {
+    case BlockDef(params, body) =>
+      BlockDef(params, transform(body))
   }
 
   // apply lifts to the arguments if it is block variables

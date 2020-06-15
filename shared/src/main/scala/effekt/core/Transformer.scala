@@ -134,7 +134,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case source.MatchExpr(sc, clauses) =>
 
-      val cs: List[(Pattern, Block)] = clauses.map {
+      val cs: List[(Pattern, BlockDef)] = clauses.map {
         case cl @ source.MatchClause(pattern, body) =>
           val (p, ps) = transform(pattern)
           (p, BlockDef(ps, transform(body)))
