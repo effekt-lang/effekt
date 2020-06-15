@@ -70,7 +70,7 @@ case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
 case class Exports(path: String, exports: List[Symbol]) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Pattern, Block)]) extends Stmt
+case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockDef)]) extends Stmt
 
 sealed trait Pattern extends Tree
 case class IgnorePattern() extends Pattern
