@@ -12,26 +12,7 @@ const $runtime = (function() {
 
   const run = prog => prog(id)
   const reset = prog => prog(pure)
-
-  // { "__tag": "Flip", "__data": [op$Flip], "op$Flip": op$Flip } }
-  const liftCap = (ev, c) => {
-
-    // this reflective method is probably not very fast...
-    var newCap = {}
-    for (var m in c) {
-      let f = c[m]
-      if (c.hasOwnProperty(m)) {
-        if (f instanceof Function) { newCap[m] = liftBlock(ev, f) }
-        else { newCap[m] = f }
-      }
-    }
-    return newCap
-  }
-
-  const liftBlock = (ev, b) => function() {
-    const args = Array.from(arguments)
-    return ev(b.apply(null, args))
-  }
+  const liftBlock = (ev, b) => ev2 => b(m => ev2(ev(m)))
 
   // TODO delayed(() => console.log("foo"))(pure) is forced
   // (Unit => t) => Eff t
@@ -42,6 +23,9 @@ const $runtime = (function() {
   function _while(c, body) {
     return then(c)(b => b ? then(body)(() => _while(c, body)) : pure($effekt.unit))
   }
+
+  // TODO an alternative strategy for state is to operate on mutable state and save/restore in
+  // stateLift.
 
   // the lift that state introduces should lift over the cont AND the reader.
   const state = init => m => m(a => s => k => k(a))(init)
@@ -54,10 +38,10 @@ const $runtime = (function() {
 
   function handleState(init) {
     return body => then(init)(s => {
-      return state(s)(body(stateLift, {
-        "op$get": function(ev) { return ev(stateGet) },
-        "op$put": function(ev, s) { return ev(statePut(s)) }
-      }))
+      return state(s)(body(stateLift)(ev => ({
+        "op$get": () => ev(stateGet),
+        "op$put": (s) => ev(statePut(s))
+      })))
     });
   }
 
@@ -65,20 +49,21 @@ const $runtime = (function() {
 
     // modify all implementations in the handlers to capture the continuation
     const caps = handlers.map(h => {
-      var cap = Object.create({})
-      for (var op in h) {
-        const impl = h[op];
-        // (ev, args..., resume) => ...
-        cap[op] = function(lift) {
-          // the first argument is the lift
-          // console.log(arguments)
-          const args = Array.from(arguments).slice(1);
-          return lift(shift(k => impl.apply(null, args.concat([(ev, arg) => ev(k(arg))]))))
+      // capabilities are functions from evidence to handler-object
+      return ev => {
+        var cap = Object.create({})
+        for (var op in h) {
+          const impl = h[op];
+          // (args..., resume) => ...
+          cap[op] = function () {
+            const args = Array.from(arguments)
+            return ev(shift(k => impl.apply(null, args.concat([ev => arg => ev(k(arg))]))))
+          }
         }
+        return cap;
       }
-      return cap;
     });
-    return body => reset(body.apply(null, [lift].concat(caps)))
+    return body => reset(body(lift).apply(null, caps))
   }
 
   return {
@@ -99,7 +84,6 @@ const $runtime = (function() {
     },
     callcc: callcc,
     delayed: delayed,
-    liftCap: liftCap,
     liftBlock: liftBlock,
     handle: handle,
     state: handleState,

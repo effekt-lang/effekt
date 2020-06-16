@@ -1,0 +1,82 @@
+(define (show_impl obj)
+  (cond
+    [(number? obj) (number->string obj)]
+    [(string? obj) obj]
+    [(boolean? obj) (if obj "true" "false")]
+    ; [(record? obj)
+    ;   (let* ([rtd (record-rtd obj)]
+    ;          [name (symbol->string (record-type-name rtd))])
+    ;     ;; how can we show the fields?
+    ;     (string-append name))]
+    [(list? obj) (map show_impl obj)]
+    [else obj]))
+
+(define (println_impl obj)
+  (display (show_impl obj))
+  (newline))
+
+(define (while_impl cond body)
+  (if (cond)
+    (begin
+      (body)
+      (while_impl cond))
+    #f))
+
+(define-syntax while
+  (syntax-rules ()
+    ((_ cond body)
+      (do () (cond) (loop)))))
+
+(define (equal_impl obj1 obj2)
+  (equal? obj1 obj2))
+
+; ;; EXAMPLE
+; ; (handle ([Fail_22 (Fail_109 () resume_120 (Nil_74))])
+; ;       (let ((tmp86_121 ((Fail_109  Fail_22))))
+; ;         (Cons_73  tmp86_121  (Nil_74))))
+; (define-syntax handle
+;   (syntax-rules ()
+;     [(_ ((cap1 (op1 (arg1 ...) k exp ...) ...) ...) body ...)
+;      (let ([P (newPrompt)])
+;         (pushPrompt P
+;           (let ([cap1 (cap1 (define-effect-op P (arg1 ...) k exp ...) ...)] ...)
+;             body ...)))]))
+
+(define-syntax handle
+  (syntax-rules ()
+    [(_ ((cap1 (op1 (arg1 ...) k exp ...) ...) ...) body)
+     (let ([P (newPrompt)])
+        (pushPrompt P
+          (body (cap1 (define-effect-op P (arg1 ...) k exp ...) ...) ...)))]))
+
+(define-syntax define-effect-op
+  (syntax-rules ()
+    [(_ P (arg1 ...) k exp ...)
+     (lambda (arg1 ...)
+       (shift0-at P k exp ...))]))
+
+(define-syntax shift0-at
+  (syntax-rules ()
+    [(_ P id exp ...)
+     (withSubCont
+      P
+      (lambda (s)
+        (pushPrompt
+         P
+         (let ([id (lambda (v) (pushPrompt P (pushSubCont s v)))])
+           exp ...))))]))
+
+; (define fail (newPrompt))
+
+
+
+; (define (do-fail) (shift0-at fail k '()))
+
+; (define (to-list prog)
+;   (pushPrompt fail (prog)))
+
+(define-syntax thunk
+  (syntax-rules ()
+    [(_ e ...) (lambda () e ...)]))
+
+(define call/cc/base call/cc)

@@ -85,8 +85,10 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> nameDef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
-    case Lifted(ev, BlockVar(id)) if id.isInstanceOf[effekt.symbols.Effect] => "$effekt.liftCap" <> parens(toDoc(ev) <> comma <+> nameRef(id))
-    case Lifted(ev, b) => "$effekt.liftBlock" <> parens(toDoc(ev) <> comma <+> toDoc(b))
+
+    case ScopeApp(b, sc) => jsCall(toDoc(b), List(toDoc(sc)))
+    case ScopeAbs(id, b) => jsLambda(List(nameDef(id)), toDoc(b))
+    case Lifted(ev, b)   => jsCall("$effekt.liftBlock", List(toDoc(ev), toDoc(b)))
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
@@ -117,7 +119,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
-      case s: Scope => toDoc(s)
     }, comma))
 
     case Select(b, field) =>
@@ -127,7 +128,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
-    case s: Scope => toDoc(s)
   }
 
   def toDoc(s: Stmt)(implicit C: Context): Doc =
@@ -206,6 +206,11 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
+
+    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+      jsFunction(nameDef(id), List(nameDef(sc)),
+        "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocStmt(rest)
+
     case Def(id, BlockDef(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
@@ -245,8 +250,12 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     case Val(id, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
+    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+      jsFunction(nameDef(id), List(nameDef(sc)),
+        "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocTopLevel(rest)
+
     case Def(id, BlockDef(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
+      jsFunction(nameDef(id), ps map toDoc, toDoc(body)) <> emptyline <> toDocTopLevel(rest)
 
     case Def(id, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)

@@ -63,9 +63,10 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       val main = mod.terms("main").toList.head
 
       prelude <>
+        "(let () " <+> emptyline <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
-        "(runCC " <> nameRef(main) <> ")"
+        "(run ((" <> nameRef(main) <> " here))))"
     }
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
@@ -91,7 +92,10 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
-    case Lifted(ev, b) => ???
+
+    case ScopeApp(b, sc) => schemeCall(toDoc(b), List(toDoc(sc)))
+    case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
+    case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
@@ -115,7 +119,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case PureApp(b, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
-      case s: Scope => toDoc(s)
     })
 
     case Select(b, field) =>
@@ -125,10 +128,15 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
-    case s: Scope => toDoc(s)
   }
 
-  def toDoc(s: Scope)(implicit C: Context): Doc = ???
+  def toDoc(a: Scope)(implicit C: Context): Doc = a match {
+    case Here() => "here"
+    case Nested(scopes) =>
+      val ss: List[Doc] = scopes.map(a => toDoc(a))
+      schemeCall("nested", ss)
+    case ScopeVar(id) => nameRef(id)
+  }
 
   def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
 
@@ -137,6 +145,10 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
     case While(cond, body) =>
       parens("while" <+> toDoc(cond) <+> toDoc(body))
+
+    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+      defineFunction(nameDef(id), List(nameDef(sc)),
+        schemeLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDoc(rest)
 
     case Def(id, BlockDef(ps, body), rest) =>
       defineFunction(nameDef(id), ps map toDoc, toDoc(body)) <> emptyline <> toDoc(rest)
@@ -158,16 +170,15 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case App(b, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
-      case s: Scope => toDoc(s)
     })
 
     case Val(Wildcard(_), binding, body) =>
-      toDoc(binding) <> line <> toDoc(body)
+      schemeCall("then", toDoc(binding), "_", toDoc(body))
 
     case Val(id, binding, body) =>
-      parens("let" <+> parens(parens(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body))))
+      schemeCall("then", toDoc(binding), nameDef(id), toDoc(body))
 
-    case Ret(e) => toDoc(e)
+    case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>
@@ -226,9 +237,9 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     val matcher = "match-" <> nameDef(did)
 
     val definition =
-      parens("define-record-type" <+> parens(nameDef(did) <+> nameDef(did) <+> pred) <>
+      parens("define-record-type" <+> parens("Tp" <> nameDef(did) <+> nameDef(did) <+> pred) <>
         nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
-          parens("nongenerative" <+> nameDef(did))))
+          parens("nongenerative" <+> "Tp" <> nameDef(did))))
 
     var fresh = 0;
 
