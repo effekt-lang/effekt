@@ -45,15 +45,18 @@ case class Select(target: Expr, field: Symbol) extends Expr
 sealed trait Param extends Tree { def id: Symbol }
 case class ValueParam(id: Symbol) extends Param
 case class BlockParam(id: Symbol) extends Param
-case class ScopeParam(id: Symbol) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: Symbol) extends Block
+
+// introduced by lift inference only
+case class ScopeAbs(scope: Symbol, body: Block) extends Block
+case class ScopeApp(b: Block, evidence: Scope) extends Block
+case class Lifted(s: Scope, b: Block) extends Block
+
 case class BlockDef(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: Symbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
-
-case class Lifted(s: Scope, b: Block) extends Block
 
 /**
  * Statements
@@ -89,10 +92,11 @@ case class Handler(id: Symbol, clauses: List[(Symbol, BlockDef)])
 
 /**
  * Explicit Lifts
- *
+ * ---
+ * introduced by lift inference only
  * TODO maybe add a separate core language with explicit lifts
  */
-sealed trait Scope extends Tree with Argument
+sealed trait Scope extends Tree
 case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope

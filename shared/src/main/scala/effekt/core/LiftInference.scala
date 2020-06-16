@@ -13,6 +13,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
   def transform(mod: ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =
     mod.copy(defs = transform(mod.defs))
 
+  // [[ a -> b ]] = [ev] -> a -> b
   def transform(tree: Block, self: Option[Symbol] = None)(implicit env: Environment, C: Context): Block = tree match {
     case BlockDef(params, body) =>
       val id = ScopeId()
@@ -23,12 +24,10 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       val extendedEnv = params.foldLeft(ownBindings.adapt(ScopeVar(id))) {
         case (env, BlockParam(p)) => env.bind(p)
         case (env, ValueParam(p)) => env
-        case (env, ScopeParam(p)) => env
       }
-      BlockDef(ScopeParam(id) :: params, transform(body)(extendedEnv, C))
-    case Member(body, id) =>
-      Member(transform(body), id)
-    case e => e
+      ScopeAbs(id, BlockDef(params, transform(body)(extendedEnv, C)))
+    case Member(body, id) => ??? // Member(transform(body), id)
+    case e                => e
   }
 
   def transform(tree: Stmt)(implicit env: Environment, C: Context): Stmt = tree match {
@@ -56,7 +55,10 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case b: Extern => App(b, liftArguments(args))
       // TODO also for "pure" and "toplevel" functions
       case b: BlockVar if b.id.builtin => App(b, liftArguments(args))
-      case b => App(transform(b), env.evidenceFor(b) :: liftArguments(args))
+
+      // [[ Eff.op(arg) ]] = Eff(ev).op(arg)
+      case Member(b, field) => App(Member(ScopeApp(transform(b), env.evidenceFor(b)), field), liftArguments(args))
+      case b => App(ScopeApp(transform(b), env.evidenceFor(b)), liftArguments(args))
     }
 
     // TODO either the implementation of match should provide evidence
@@ -121,37 +123,8 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case Member(b, id) => evidenceFor(b)
       case b: Extern     => sys error "Cannot provide scope evidence for built in function"
       case b: Lifted     => sys error "Should not happen"
+      case b: ScopeApp   => sys error "Should not happen"
+      case b: ScopeAbs   => sys error "Should not happen"
     }
   }
 }
-
-//
-// f...               f = f
-// handle {           f = lift(f)
-//   def g[ev7] {     f = lift(f)
-//     handle {       f = lift(lift(f))
-//       f
-//     }
-//   }
-//
-// }
-
-//
-// f...               f @ List(), ...
-// handle {           f @ List(Lift), ...
-//   def g[ev7] {     f @ List(ev7, Lift), ...
-//     handle {       f @ List(Lift, ev7, Lift), ...
-//       f[compose(Lift, ev7, Lift)]()
-//     }
-//   }
-//
-// }
-
-// f...
-// handle {       f @ Lift
-//   map { ev3 => f @ ev3, Lift
-//     handle {   f @ Lift, ev3, Lift
-//       f[Lift, ev3, Lift]()
-//     }
-//   }
-// }

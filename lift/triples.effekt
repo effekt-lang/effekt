@@ -32,6 +32,7 @@ def testAppend() =
 effect Flip(): Boolean
 effect Fail[A](): A
 effect Out(t: Tuple3[Int, Int, Int]): Unit
+
 def choice(n : Int): Int / { Flip, Fail } =
   if (n < 1) {
     do Fail()
@@ -65,13 +66,12 @@ def handledTriple(n : Int, s : Int): Unit / Out =
     with Fail { () }
   } with Flip { resume(true); resume(false) }
 
-def main() = {
-  println(handledList(8, 10))
+def main() =
+  measure(30, 30) { handledList(100, 15); () }
 
-  try {
-    handledTriple(8, 10)
-  } with Out { t =>
-    println(t)
-    resume(())
-  }
-}
+  // try {
+  //   handledTriple(100, 15)
+  // } with Out { t =>
+  //   println(t)
+  //   resume(())
+  // }
