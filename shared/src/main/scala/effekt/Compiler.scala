@@ -5,7 +5,7 @@ import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
-import effekt.generator.{ ChezScheme, Generator, JavaScript }
+import effekt.generator.{ ChezScheme, ChezSchemeLift, Generator, JavaScript }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
@@ -45,6 +45,7 @@ trait Compiler {
   //      easily switch
   val jsGenerator: Generator = new JavaScript
   val csGenerator: Generator = new ChezScheme
+  val csliftGenerator: Generator = new ChezSchemeLift
 
   // Tasks
   // =====
@@ -73,6 +74,13 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
+    } yield core
+  }
+
+  object inferLifts extends SourceTask[core.ModuleDecl]("lifts") {
+    def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
+      mod <- frontend(source)
+      core <- lower(source)
       lifted <- C.using(module = mod) { lifter(core) }
     } yield lifted
   }
@@ -81,8 +89,9 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[Document] = for {
       mod <- frontend(source)
       gen = C.config.generator() match {
-        case "js" => jsGenerator
-        case "cs" => csGenerator
+        case "js"     => jsGenerator
+        case "cs"     => csGenerator
+        case "cslift" => csliftGenerator
       }
       doc <- gen.apply(source)
     } yield doc

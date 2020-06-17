@@ -3,7 +3,7 @@
 
 ;;; Tail-recursive implementation of the operators
 
-(case-sensitive #t)
+;(case-sensitive #t)
 
 (define-syntax pushPrompt
   (syntax-rules ()
@@ -42,7 +42,7 @@
 
 (define newPrompt (lambda () (string #\p)))
 
-(define (runCC th)
+(define (run th)
   (set! mk (EmptyS))
   (underflow
    (call/cc/base
@@ -61,4 +61,4 @@
 (define (go)
   (new-cafe
     (lambda (x)
-      (runCC (lambda () (eval x))))))
+      (run (lambda () (eval x))))))

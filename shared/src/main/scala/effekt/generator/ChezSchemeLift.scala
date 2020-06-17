@@ -19,7 +19,7 @@ import effekt.util.paths._
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezScheme extends Generator {
+class ChezSchemeLift extends Generator {
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
@@ -35,8 +35,8 @@ class ChezScheme extends Generator {
     mod <- C.frontend(src)
     _ = C.checkMain(mod)
     deps = mod.dependencies.flatMap(dep => compile(dep))
-    core <- C.lower(src)
-    result = ChezSchemePrinter.compilationUnit(mod, core, deps)
+    core <- C.inferLifts(src)
+    result = ChezSchemeLiftPrinter.compilationUnit(mod, core, deps)
     _ = C.saveOutput(result.layout, path(mod))
   } yield result
 
@@ -44,12 +44,12 @@ class ChezScheme extends Generator {
    * Compiles only the given module, does not compile dependencies
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.lower(mod.source)
-    doc = ChezSchemePrinter.format(core)
+    core <- C.inferLifts(mod.source)
+    doc = ChezSchemeLiftPrinter.format(core)
   } yield doc
 }
 
-object ChezSchemePrinter extends ParenPrettyPrinter {
+object ChezSchemeLiftPrinter extends ParenPrettyPrinter {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
@@ -66,7 +66,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
         "(let () " <+> emptyline <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
-        "(run " <> nameRef(main) <> "))"
+        "(run ((" <> nameRef(main) <> " here))))"
     }
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
@@ -93,9 +93,9 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
 
-    case ScopeApp(b, sc) => ???
-    case ScopeAbs(id, b) => ???
-    case Lifted(ev, b)   => ???
+    case ScopeApp(b, sc) => schemeCall(toDoc(b), List(toDoc(sc)))
+    case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
+    case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
@@ -130,6 +130,14 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
+  def toDoc(a: Scope)(implicit C: Context): Doc = a match {
+    case Here() => "here"
+    case Nested(scopes) =>
+      val ss: List[Doc] = scopes.map(a => toDoc(a))
+      schemeCall("nested", ss)
+    case ScopeVar(id) => nameRef(id)
+  }
+
   def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
 
     case If(cond, thn, els) =>
@@ -137,6 +145,10 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
     case While(cond, body) =>
       parens("while" <+> toDoc(cond) <+> toDoc(body))
+
+    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+      defineFunction(nameDef(id), List(nameDef(sc)),
+        schemeLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDoc(rest)
 
     case Def(id, BlockDef(ps, body), rest) =>
       defineFunction(nameDef(id), ps map toDoc, toDoc(body)) <> emptyline <> toDoc(rest)
@@ -161,17 +173,18 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     })
 
     case Val(Wildcard(_), binding, body) =>
-      toDoc(binding) <> line <> toDoc(body)
+      schemeCall("then", toDoc(binding), "_", toDoc(body))
 
     case Val(id, binding, body) =>
-      parens("let" <+> parens(parens(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body))))
+      schemeCall("then", toDoc(binding), nameDef(id), toDoc(body))
 
-    case Ret(e) => toDoc(e)
+    case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>
 
         brackets(nameRef(h.id) <+> vsep(h.clauses.map {
+          // impl now is not a BlockDef anymore, but a potentially lifted block
           case (op, impl) =>
             // the LAST argument is the continuation...
             val params = impl.params.init
