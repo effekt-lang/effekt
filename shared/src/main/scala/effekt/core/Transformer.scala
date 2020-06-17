@@ -59,7 +59,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val eff = C.state(v.symbol)
       val capabilities = List(core.BlockParam(eff.effect))
       val body = BlockDef(capabilities, rest)
-      State(eff.effect, transform(binding), body)
+      State(eff.effect, eff.get, eff.put, transform(binding), body)
 
     case source.ExternType(id, tparams) =>
       rest

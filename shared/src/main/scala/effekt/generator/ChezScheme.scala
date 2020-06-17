@@ -164,7 +164,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       toDoc(binding) <> line <> toDoc(body)
 
     case Val(id, binding, body) =>
-      parens("let" <+> parens(parens(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body))))
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body))))
 
     case Ret(e) => toDoc(e)
 
@@ -184,6 +184,11 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
         }, line))
       }
       parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
+
+    case State(eff, get, put, init, block) =>
+      defineValue(nameDef(get), "getter") <> line <>
+        defineValue(nameDef(put), "setter") <> line <>
+        schemeCall("state", toDoc(init), toDoc(block))
 
     case Match(sc, cls) =>
       val clauses: List[Doc] = cls map {
@@ -248,17 +253,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
   def schemeLambda(params: List[Doc], body: Doc) =
     parens("lambda" <+> parens(hsep(params, space)) <> group(nest(line <> body)))
-
-  def jsObject(fields: (Doc, Doc)*): Doc =
-    jsObject(fields.toList)
-
-  def jsObject(fields: List[(Doc, Doc)]): Doc =
-    group(jsBlock(vsep(fields.map { case (n, d) => jsString(n) <> ":" <+> d }, comma)))
-
-  def jsBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
-
-  def jsArray(els: List[Doc]): Doc =
-    brackets(hsep(els, comma))
 
   def jsString(contents: Doc): Doc =
     "\"" <> contents <> "\""
