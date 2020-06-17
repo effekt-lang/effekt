@@ -29,6 +29,11 @@
     (set! mk (PushP p (PushSeg/t k mk)))
     (abort th))))
 
+(define (pushState init th)
+  (define b (box init))
+  (set! mk (PushState b #f mk))
+  (th b))
+
 (define (withSubCont p f)
   (let-values ([(subk mk*) (splitSeq p mk)])
     (set! mk mk*)
@@ -56,6 +61,7 @@
   (Seq-case mk
     [(EmptyS) v]
     [(PushP _ mk*) (set! mk mk*) (underflow v)]
+    [(PushState b _ mk*) (set! mk mk*) (underflow v)]
     [(PushSeg k mk*) (set! mk mk*) (k v)]))
 
 (define (go)
