@@ -180,6 +180,9 @@ object ChezSchemeLiftPrinter extends ParenPrettyPrinter {
 
     case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
+    case State(eff, get, put, init, block) =>
+      schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init), toDoc(block))
+
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>
 

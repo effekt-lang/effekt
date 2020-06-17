@@ -44,10 +44,14 @@
     [(_ m a f)
      (lambda (k) (m (lambda (a) (f k))))]))
 
-; (define (then m f)
-;   (lambda (k) (m (lambda (a) ((f a) k)))))
+(define ($then m f)
+  (lambda (k) (m (lambda (a) ((f a) k)))))
 
 (define (here x) x)
+
+(define (while cond exp)
+  ($then cond (lambda (c)
+    (if c ($then exp (lambda (_) (while cond exp))) (pure #f)))))
 
 ; (define-syntax lift
 ;   (syntax-rules ()
@@ -88,6 +92,26 @@
      (reset ((body lift)
         (lambda (ev) (cap1 (define-effect-op ev (arg1 ...) kid exp ...) ...)
          ...)))]))
+
+
+(define-syntax state
+  (syntax-rules ()
+    [(_ effid getid setid init body)
+     ($then init (lambda (s)
+        (define cell (box s))
+        (define (cap ev) cell)
+
+        (define (getid c) (lambda () (lambda (k) (k (unbox c)))))
+        (define (setid c) (lambda (s*) (lambda (k) (set-box! c s*) (k #f))))
+
+        (define (lift m) (lambda (k)
+          (define backup (unbox cell))
+          (m (lambda (a)
+            (set-box! cell backup)
+            (k a)))))
+
+        ((body lift) cap)))]))
+
 
 (define-syntax define-effect-op
   (syntax-rules ()
