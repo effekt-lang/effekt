@@ -166,7 +166,7 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )
 
-    case State(id, init, body) =>
+    case State(id, get, put, init, body) =>
       "$effekt.state" <> parens(toDocExpr(init)) <> parens(toDoc(body))
 
     case Handle(body, hs) =>

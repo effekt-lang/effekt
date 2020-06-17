@@ -29,10 +29,16 @@
     (set! mk (PushP p (PushSeg/t k mk)))
     (abort th))))
 
-(define (pushState init th)
+(define (state init th)
   (define b (box init))
   (set! mk (PushState b #f mk))
   (th b))
+
+(define (getter ref)
+  (lambda () (unbox ref)))
+
+(define (setter ref)
+  (lambda (v) (set-box! ref v)))
 
 (define (withSubCont p f)
   (let-values ([(subk mk*) (splitSeq p mk)])
