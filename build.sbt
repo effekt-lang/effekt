@@ -47,6 +47,7 @@ lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
 lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 lazy val install = taskKey[Unit]("Installs the current version locally")
+lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
@@ -84,10 +85,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
     },
 
-    deploy := {
-      generateLicenses.value
-      updateVersions.value
-
+    assembleBinary := {
       val jarfile = assembly.value
 
       // prepend shebang to make jar file executable
@@ -97,8 +95,14 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       IO.append(binary, IO.readBytes(jarfile))
     },
 
+    deploy := {
+      generateLicenses.value
+      updateVersions.value
+      assembleBinary.value
+    },
+
     install := {
-      deploy.value
+      assembleBinary.value
       Process("npm pack").!!
       Process(s"npm install -g effekt-${effektVersion}.tgz").!!
     },
