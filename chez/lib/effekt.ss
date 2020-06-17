@@ -15,17 +15,12 @@
   (display (show_impl obj))
   (newline))
 
-(define (while_impl cond body)
-  (if (cond)
-    (begin
-      (body)
-      (while_impl cond))
-    #f))
-
 (define-syntax while
   (syntax-rules ()
-    ((_ cond body)
-      (do () (cond) (loop)))))
+    [(_ c exp1 exp2 ...)
+     (letrec ([loop (lambda ()
+       (if c (begin exp1 exp2 ... (loop)) #f))])
+       (loop))]))
 
 (define (equal_impl obj1 obj2)
   (equal? obj1 obj2))
