@@ -6,6 +6,8 @@
 (define-datatype Seq
   (EmptyS)
   (PushP p Seq)
+  ; Box -> BackupState -> Seq -> Seq
+  (PushState b s Seq)
   (PushSeg k Seq))
 
 (define (splitSeq p seq)
@@ -16,6 +18,9 @@
          (let-values ([(subk sk*) (splitSeq p sk)])
            (values (PushP p* subk) sk*))
          (values (EmptyS) sk))]
+    [(PushState b _ sk)
+      (let-values ([(subk sk*) (splitSeq p sk)])
+        (values (PushState b (unbox b) subk) sk*))]
     [(PushSeg k sk)
      (let-values ([(subk sk*) (splitSeq p sk)])
        (values (PushSeg k subk) sk*))]))
@@ -24,4 +29,7 @@
   (Seq-case seq_1
     [(EmptyS) seq_2]
     [(PushP p subk) (PushP p (appendSeq subk seq_2))]
+    [(PushState b s subk)
+      (set-box! b s)
+      (PushState b #f (appendSeq subk seq_2))]
     [(PushSeg k subk) (PushSeg k (appendSeq subk seq_2))]))
