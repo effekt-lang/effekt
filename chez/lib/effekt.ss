@@ -80,3 +80,26 @@
     [(_ e ...) (lambda () e ...)]))
 
 (define call/cc/base call/cc)
+
+;; Benchmarking utils
+
+; time in milliseconds
+(define (timed block)
+  (let ([before (current-time)])
+    (block)
+    (let ([after (current-time)])
+      (seconds (time-difference after before)))))
+
+(define (seconds diff)
+  (+ (time-second diff) (/ (time-nanosecond diff) 1000000000.0)))
+
+(define (measure block warmup iterations)
+  (define (run n)
+    (if (<= n 0)
+        '()
+        (begin
+          (collect)
+          (cons (timed block) (run (- n 1))))))
+  (begin
+    (run warmup)
+    (run iterations)))
