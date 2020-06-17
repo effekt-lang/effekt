@@ -38,7 +38,7 @@ class JavaScript extends Generator {
    * Compiles only the given module, does not compile dependencies
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.lower(mod.source)
+    core <- C.inferLifts(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }
     _ = C.saveOutput(doc.layout, path(mod))

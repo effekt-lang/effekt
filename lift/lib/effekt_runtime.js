@@ -27,22 +27,51 @@ const $runtime = (function() {
   // TODO an alternative strategy for state is to operate on mutable state and save/restore in
   // stateLift.
 
-  // the lift that state introduces should lift over the cont AND the reader.
-  const state = init => m => m(a => s => k => k(a))(init)
-  const stateGet = k => s => k(s)(s)
-  const statePut = s => k => s2 => k($effekt.unit)(s)
+  function oldState() {
 
-  // Eff[T, K :: rs] => Eff[T, K :: S :: K :: rs]
-  const stateLift = m => k1 => s => k2 => m(a => k1(a)(s)(k2))
+    // the lift that state introduces should lift over the cont AND the reader.
+    const state = init => m => m(a => s => k => k(a))(init)
+    const stateGet = k => s => k(s)(s)
+    const statePut = s => k => s2 => k($effekt.unit)(s)
+
+    // Eff[T, K :: rs] => Eff[T, K :: S :: K :: rs]
+    const stateLift = m => k1 => s => k2 => m(a => k1(a)(s)(k2))
 
 
+    function handleStateOld(init) {
+      return body => then(init)(s => {
+        return state(s)(body(stateLift)(ev => ({
+          "op$get": () => ev(stateGet),
+          "op$put": (s) => ev(statePut(s))
+        })))
+      });
+    }
+  }
+
+  // This is an alternative form of state using reference cells and
+  // lift to backup and restore
   function handleState(init) {
     return body => then(init)(s => {
-      return state(s)(body(stateLift)(ev => ({
-        "op$get": () => ev(stateGet),
-        "op$put": (s) => ev(statePut(s))
-      })))
-    });
+      var cell = s;
+      // is calling the evidence ev here necessary?
+      const cap = ev => ({
+        "op$get": () => k => k(cell),
+        "op$put": (s) => k => { cell = s; return k($effekt.unit) }
+      })
+      const lift = m => {
+        return k => {
+          // is this the correct position?
+          // the "finalizer"
+          const backup = cell
+          return m(a => {
+            // the "initializer"
+            cell = backup
+            return k(a)
+          })
+        }
+      }
+      return body(lift)(cap)
+    })
   }
 
   function handle(handlers) {
