@@ -50,26 +50,6 @@
      (lambda (arg1 ...)
        (shift0-at P k exp ...))]))
 
-(define-syntax shift0-at
-  (syntax-rules ()
-    [(_ P id exp ...)
-     (withSubCont
-      P
-      (lambda (s)
-        (pushPrompt
-         P
-         (let ([id (lambda (v) (pushPrompt P (pushSubCont s v)))])
-           exp ...))))]))
-
-; (define fail (newPrompt))
-
-
-
-; (define (do-fail) (shift0-at fail k '()))
-
-; (define (to-list prog)
-;   (pushPrompt fail (prog)))
-
 (define-syntax thunk
   (syntax-rules ()
     [(_ e ...) (lambda () e ...)]))

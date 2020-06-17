@@ -33,3 +33,12 @@
       (set-box! b s)
       (PushState b #f (appendSeq subk seq_2))]
     [(PushSeg k subk) (PushSeg k (appendSeq subk seq_2))]))
+
+(define-syntax shift0-at
+  (syntax-rules ()
+    [(_ P id exp ...)
+     (withSubCont
+      P
+      (lambda (s)
+         (let ([id (lambda (v) (pushPrompt P (pushSubCont s v)))])
+           exp ...)))]))

@@ -2,9 +2,9 @@ module effekt
 
 extern effect Console
 
-extern include "datatype.ss"
-extern include "seq.ss"
-extern include "tail.ss"
+// shift-0 based implementation
+extern include "seq0.ss"
+extern include "tail0.ss"
 extern include "effekt.ss"
 extern include "effekt_matching.ss"
 
