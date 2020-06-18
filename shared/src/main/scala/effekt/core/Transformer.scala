@@ -189,9 +189,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val capabilities = effects.map { c => core.BlockParam(c) }
       val body = BlockDef(capabilities, transform(prog))
 
+      // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
         case h @ source.Handler(eff, cls) =>
-          Handler(h.definition, cls.map {
+          val clauses = cls.map { cl => (cl.definition, cl) }.toMap
+
+          Handler(h.definition, h.definition.ops.map(clauses.apply).map {
             case op @ source.OpClause(id, params, body, resume) =>
               val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
               (op.definition, BlockDef(ps :+ core.BlockParam(resume.symbol), transform(body)))

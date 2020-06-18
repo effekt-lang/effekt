@@ -6,7 +6,7 @@ extern pure def fresh[T](init: T): Ref[T] =
     "(box init)"
 
 extern pure def put[T](ref: Ref[T])(value: T): Unit =
-    "(box-set! ref value)"
+    "(set-box! ref value)"
 
 extern pure def get[T](ref: Ref[T]): T =
     "(unbox ref)"

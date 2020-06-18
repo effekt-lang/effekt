@@ -19,10 +19,11 @@ def exec(reg: Regex)(str: String): Option[Match] = {
 }
 
 extern pure def unsafeMatchIndex(reg: Regex)(str: String): Int =
-  "(let ([m (pregexp-match-positions reg str)]) (if (null? m) #f (car (car m))))"
+  "(let ([m (pregexp-match-positions reg str)]) (if m (car (car m)) #f))"
 
+// we ignore the captures for now and only return the whole match
 extern pure def unsafeMatchString(reg: Regex)(str: String): String =
-  "(pregexp-match reg str)"
+  "(let ([m (pregexp-match reg str)]) (if m (car m) #f))"
 
 extern pure def split(reg: Regex)(str: String): CSList[String] =
   "(pregexp-split reg str)"
