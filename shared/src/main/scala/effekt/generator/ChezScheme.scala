@@ -248,9 +248,9 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     val constructor = if (did.isInstanceOf[effekt.symbols.Effect]) "make-" <> nameDef(did) else nameDef(did)
 
     val definition =
-      parens("define-record-type" <+> parens("Tp" <> nameDef(did) <+> constructor <+> pred) <>
+      parens("define-record-type" <+> parens(did.name.toString <+> constructor <+> pred) <>
         nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
-          parens("nongenerative" <+> "Tp" <> nameDef(did))))
+          parens("nongenerative" <+> nameDef(did))))
 
     var fresh = 0;
 

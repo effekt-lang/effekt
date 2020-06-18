@@ -9,12 +9,28 @@
     ;     ;; how can we show the fields?
     ;     (string-append name))]
     [(list? obj) (map show_impl obj)]
+    [(record? obj) (show-record obj)]
     [else (generic-show obj)]))
 
 (define (generic-show obj)
   (define out (open-output-string))
   (write obj out)
   (get-output-string out))
+
+(define (show-record rec)
+  (let* ([rtd (record-rtd rec)]
+         [tpe (generic-show (record-type-name rtd))]
+         [fields (record-type-field-names rtd)]
+         [n (vector-length fields)])
+     (define out (string-append tpe "("))
+     (do ([i 0 (+ i 1)])
+         ((= i n))
+       (set! out (string-append out (show_impl ((record-accessor rtd i) rec))))
+       (if (< i (- n 1)) (set! out (string-append out ", "))))
+     (set! out (string-append out ")"))
+     out))
+
+
 
 (define (println_impl obj)
   (display (show_impl obj))
