@@ -1,0 +1,44 @@
+module lift/state
+
+effect Tick(): Unit
+effect Tick2(): Unit
+
+effect Flip(): Boolean
+
+def example() =
+  try {
+    var x = 0;
+    if (Flip()) { x = 1 } else { () }
+    println(x)
+  } with Flip { resume(true); resume(false) }
+
+def testOuter() = {
+  try {
+    var x = 10;
+    Tick2();
+    println(x)
+  } with Tick2 { println("Tick2"); resume(()) }
+}
+
+def test() = {
+  try {
+    var x = 100;
+    // x = x + 1
+    // println(x)
+    // x = x + 2
+    // println(x)
+    // x = x + 3
+    // println(x)
+
+    try {
+      while (x > 0) {
+        // println(x);
+        // Tick();
+        // Tick2();
+        x = x - 1
+      }
+    } with Tick { println("Tick"); resume(()); }
+  } with Tick2 { println("Tick2"); resume(()); resume(()) }
+}
+
+def main() = measure(10, 10) { test() }
