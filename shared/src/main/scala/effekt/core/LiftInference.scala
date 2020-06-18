@@ -68,15 +68,19 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
     case If(cond, thn, els) =>
       If(cond, transform(thn), transform(els))
+
     case While(cond, body) =>
       While(transform(cond), transform(body))
+
     case Ret(e) =>
       Ret(e)
+
     case Exports(path, exports) =>
       Exports(path, exports)
 
-    case i: Include => i
-    case Hole       => Hole
+    case Include(contents, rest) => Include(contents, transform(rest))
+
+    case Hole                    => Hole
   }
 
   /**
