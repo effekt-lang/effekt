@@ -1,4 +1,4 @@
-module nim
+module examples/pos/nim
 
 // Example from "Liberating effects with rows and handlers"
 // Translated from Koka https://github.com/koka-lang/koka/blob/master/test/algeff/nim.kk

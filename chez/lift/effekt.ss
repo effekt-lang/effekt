@@ -1,38 +1,8 @@
-(define-syntax thunk
-  (syntax-rules ()
-    [(_ e ...) (lambda () e ...)]))
-
 (define-syntax delayed
   (syntax-rules ()
     [(_ e ...)
       (lambda (k) (k
         (begin e ...)))]))
-
-(define (show_impl obj)
-  (cond
-    [(number? obj) (number->string obj)]
-    [(string? obj) obj]
-    [(boolean? obj) (if obj "true" "false")]
-    ; [(record? obj)
-    ;   (let* ([rtd (record-rtd obj)]
-    ;          [name (symbol->string (record-type-name rtd))])
-    ;     ;; how can we show the fields?
-    ;     (string-append name))]
-    [(list? obj) (map show_impl obj)]
-    [else obj]))
-
-(define (equal_impl obj1 obj2)
-  (equal? obj1 obj2))
-
-(define (println_impl obj)
-  (delayed
-    (display (show_impl obj))
-    (newline)))
-
-; (define-syntax pure
-;   (syntax-rules ()
-;     [(_ v)
-;       (lambda (k) (k v))]))
 
 (define (pure v)
   (lambda (k) (k v)))
@@ -136,40 +106,3 @@
 ; should also work for handlers / capabilities
 (define (lift-block f ev)
   (lambda (ev2) (f (nested ev ev2))))
-
-
-; (define (while_impl cond body)
-;   (if (cond)
-;     (begin
-;       (body)
-;       (while_impl cond))
-;     #f))
-
-; (define-syntax while
-;   (syntax-rules ()
-;     ((_ cond body)
-;       (do () (cond) (loop)))))
-
-
-;; Benchmarking utils
-
-; time in milliseconds
-(define (timed block)
-  (let ([before (current-time)])
-    (block)
-    (let ([after (current-time)])
-      (seconds (time-difference after before)))))
-
-(define (seconds diff)
-  (+ (time-second diff) (/ (time-nanosecond diff) 1000000000.0)))
-
-(define (measure block warmup iterations)
-  (define (run n)
-    (if (<= n 0)
-        '()
-        (begin
-          (collect)
-          (cons (timed block) (run (- n 1))))))
-  (begin
-    (run warmup)
-    (run iterations)))
