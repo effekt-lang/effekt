@@ -35,7 +35,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   lazy val generator: ScallopOption[String] = choice(
-    choices = List("js", "cs", "cslift"),
+    choices = List("js", "cs", "cslift", "jslift"),
     name = "generator",
     descr = "The code generator that should be used",
     default = Some("js"),
