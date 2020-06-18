@@ -4,9 +4,9 @@ extern effect Console
 
 // shift-0 based implementation
 extern include "../common/effekt_primitives.ss"
-extern include "datatype.ss"
-extern include "seq.ss"
-extern include "tail.ss"
+// extern include "datatype.ss"
+extern include "seq0.ss"
+extern include "tail0.ss"
 extern include "effekt.ss"
 extern include "../common/effekt_matching.ss"
 
