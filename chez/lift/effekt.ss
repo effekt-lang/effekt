@@ -58,10 +58,9 @@
 ; capabilities first take evidence than require selection!
 (define-syntax handle
   (syntax-rules ()
-    [(_ ((cap1 (op1 (arg1 ...) kid exp ...) ...) ...) body)
+    [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
      (reset ((body lift)
-        (lambda (ev) (cap1 (define-effect-op ev (arg1 ...) kid exp ...) ...)
-         ...)))]))
+        (lambda (ev) (cap1 (define-effect-op ev (arg1 ...) kid exp) ...)) ...))]))
 
 
 (define-syntax state
