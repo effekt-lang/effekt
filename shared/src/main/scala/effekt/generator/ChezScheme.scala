@@ -49,13 +49,7 @@ class ChezScheme extends Generator {
   } yield doc
 }
 
-object ChezSchemePrinter extends ParenPrettyPrinter {
-
-  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-
-  val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
-
-  def moduleFile(path: String): String = path.replace('/', '_') + ".ss"
+object ChezSchemePrinter extends ChezSchemeBase {
 
   def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
@@ -69,21 +63,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
         "(run " <> nameRef(main) <> "))"
     }
 
-  def format(t: ModuleDecl)(implicit C: Context): Document =
-    pretty(module(t))
-
-  val emptyline: Doc = line <> line
-
-  def module(m: ModuleDecl)(implicit C: Context): Doc = {
-    //    vsep(m.imports.map { im => schemeCall("load", jsString(moduleFile(im))) }, line) <> emptyline <>
-    toDoc(m)
-  }
-
-  // TODO print all top level value declarations as "var"
-  def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    toDoc(m.defs)
-
-  def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
+  override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
     case BlockDef(ps, body) =>
@@ -97,6 +77,39 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     case ScopeAbs(id, b) => ???
     case Lifted(ev, b)   => ???
   })
+
+  override def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
+    case State(eff, get, put, init, block) =>
+      defineValue(nameDef(get), "getter") <> line <>
+        defineValue(nameDef(put), "setter") <> line <>
+        schemeCall("state", toDoc(init), toDoc(block))
+
+    case other => super.toDoc(s)
+  }
+}
+
+trait ChezSchemeBase extends ParenPrettyPrinter {
+
+  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+
+  val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
+
+  def moduleFile(path: String): String = path.replace('/', '_') + ".ss"
+
+  def format(t: ModuleDecl)(implicit C: Context): Document =
+    pretty(module(t))
+
+  val emptyline: Doc = line <> line
+
+  def module(m: ModuleDecl)(implicit C: Context): Doc = {
+    //    vsep(m.imports.map { im => schemeCall("load", jsString(moduleFile(im))) }, line) <> emptyline <>
+    toDoc(m)
+  }
+
+  def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
+    toDoc(m.defs)
+
+  def toDoc(b: Block)(implicit C: Context): Doc
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
@@ -185,11 +198,6 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
       }
       parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
 
-    case State(eff, get, put, init, block) =>
-      defineValue(nameDef(get), "getter") <> line <>
-        defineValue(nameDef(put), "setter") <> line <>
-        schemeCall("state", toDoc(init), toDoc(block))
-
     case Match(sc, cls) =>
       val clauses: List[Doc] = cls map {
 
@@ -209,7 +217,7 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
         defineValue("main", nameDef(main))
       }.getOrElse("")
 
-    case other => other.toString
+    case other => sys error s"Can't print: ${other}"
   }
 
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
@@ -245,13 +253,13 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
     s";;; Record definition for ${did.name}" <> line <> definition <> line <> matcherDef
   }
 
-  def defineValue(name: Doc, binding: Doc) =
+  def defineValue(name: Doc, binding: Doc): Doc =
     parens("define" <+> name <+> binding)
 
-  def defineFunction(name: Doc, params: List[Doc], body: Doc) =
+  def defineFunction(name: Doc, params: List[Doc], body: Doc): Doc =
     parens("define" <+> name <+> schemeLambda(params, body))
 
-  def schemeLambda(params: List[Doc], body: Doc) =
+  def schemeLambda(params: List[Doc], body: Doc): Doc =
     parens("lambda" <+> parens(hsep(params, space)) <> group(nest(line <> body)))
 
   def jsString(contents: Doc): Doc =
@@ -259,10 +267,4 @@ object ChezSchemePrinter extends ParenPrettyPrinter {
 
   def schemeCall(fun: Doc, args: Doc*): Doc = schemeCall(fun, args.toList)
   def schemeCall(fun: Doc, args: List[Doc]): Doc = parens(hsep(fun :: args, space))
-
-  def requiresBlock(s: Stmt): Boolean = s match {
-    case Data(did, ctors, rest) => true
-    case Def(id, d, rest) => true
-    case _ => false
-  }
 }
