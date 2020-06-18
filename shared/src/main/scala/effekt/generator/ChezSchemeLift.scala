@@ -67,7 +67,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case BlockVar(v) =>
       nameRef(v)
     case BlockDef(ps, body) =>
-      schemeLambda(ps map toDoc, toDoc(body))
+      schemeLambda(ps map toDoc, toDoc(body, false))
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
@@ -78,23 +78,23 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
   })
 
-  override def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
+  override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
     case Val(Wildcard(_), binding, body) =>
-      schemeCall("then", toDoc(binding), "_", toDoc(body))
+      schemeCall("then", toDoc(binding, false), "_", toDoc(body, false))
 
     case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
     case Val(id, binding, body) =>
-      schemeCall("then", toDoc(binding), nameDef(id), toDoc(body))
+      schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))
 
     case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
       defineFunction(nameDef(id), List(nameDef(sc)),
-        schemeLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDoc(rest)
+        schemeLambda(ps map toDoc, toDoc(body, false))) <> emptyline <> toDoc(rest, toplevel)
 
     case State(eff, get, put, init, block) =>
-      schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init), toDoc(block))
+      schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
 
-    case other => super.toDoc(s)
+    case other => super.toDoc(s, toplevel)
   }
 
   def toDoc(a: Scope)(implicit C: Context): Doc = a match {

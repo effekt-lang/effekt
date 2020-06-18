@@ -67,7 +67,7 @@ object ChezSchemePrinter extends ChezSchemeBase {
     case BlockVar(v) =>
       nameRef(v)
     case BlockDef(ps, body) =>
-      schemeLambda(ps map toDoc, toDoc(body))
+      schemeLambda(ps map toDoc, toDoc(body, false))
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
@@ -78,13 +78,19 @@ object ChezSchemePrinter extends ChezSchemeBase {
     case Lifted(ev, b)   => ???
   })
 
-  override def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
+  override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
     case State(eff, get, put, init, block) =>
       defineValue(nameDef(get), "getter") <> line <>
         defineValue(nameDef(put), "setter") <> line <>
-        schemeCall("state", toDoc(init), toDoc(block))
+        schemeCall("state", toDoc(init, false), toDoc(block))
 
-    case other => super.toDoc(s)
+    case other => super.toDoc(s, toplevel)
+  }
+
+  override def requiresBlock(s: Stmt): Boolean = s match {
+    // this is only true for the direct-style PP
+    case _: Val => true
+    case _      => super.requiresBlock(s)
   }
 }
 
@@ -107,7 +113,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
   }
 
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    toDoc(m.defs)
+    toDoc(m.defs, true)
 
   def toDoc(b: Block)(implicit C: Context): Doc
 
@@ -143,30 +149,30 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def toDoc(s: Stmt)(implicit C: Context): Doc = s match {
+  def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
 
     case If(cond, thn, els) =>
-      parens("if" <+> toDoc(cond) <+> toDoc(thn) <+> toDoc(els))
+      parens("if" <+> toDoc(cond) <+> toDocInBlock(thn) <+> toDocInBlock(els))
 
     case While(cond, body) =>
-      parens("while" <+> toDoc(cond) <+> toDoc(body))
+      parens("while" <+> toDocInBlock(cond) <+> toDoc(body, false))
 
     case Def(id, BlockDef(ps, body), rest) =>
-      defineFunction(nameDef(id), ps map toDoc, toDoc(body)) <> emptyline <> toDoc(rest)
+      defineFunction(nameDef(id), ps map toDoc, toDoc(body, false)) <> emptyline <> toDoc(rest, toplevel)
 
     // we can't use the unique id here, since we do not know it in the extern string.
     case Def(id, Extern(ps, body), rest) =>
-      defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest)
+      defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest, toplevel)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
-      vsep(cs) <> emptyline <> toDoc(rest)
+      vsep(cs) <> emptyline <> toDoc(rest, toplevel)
 
     case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> emptyline <> toDoc(rest)
+      generateConstructor(did, fields) <> emptyline <> toDoc(rest, toplevel)
 
     case Include(contents, rest) =>
-      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDoc(rest)
+      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDoc(rest, toplevel)
 
     case App(b, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
@@ -174,10 +180,13 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     })
 
     case Val(Wildcard(_), binding, body) =>
-      toDoc(binding) <> line <> toDoc(body)
+      toDoc(binding, false) <> line <> toDoc(body, toplevel)
+
+    case Val(id, binding, body) if toplevel =>
+      defineValue(nameDef(id), toDocInBlock(binding)) <> line <> toDoc(body, toplevel)
 
     case Val(id, binding, body) =>
-      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body))))
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
 
     case Ret(e) => toDoc(e)
 
@@ -193,7 +202,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
             parens(nameDef(op) <+>
               parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
               nameRef(kParam.id) <+>
-              toDoc(impl.body))
+              toDocInBlock(impl.body))
         }, line))
       }
       parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
@@ -203,7 +212,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
         // curry the block
         case (pattern, b: BlockDef) =>
-          brackets(toDoc(pattern) <+> b.params.foldLeft(toDoc(b.body)) {
+          brackets(toDoc(pattern) <+> b.params.foldLeft(schemeLambda(Nil, toDoc(b.body, false))) {
             case (body, p) => schemeLambda(List(nameDef(p.id)), body)
           })
 
@@ -267,4 +276,17 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
   def schemeCall(fun: Doc, args: Doc*): Doc = schemeCall(fun, args.toList)
   def schemeCall(fun: Doc, args: List[Doc]): Doc = parens(hsep(fun :: args, space))
+
+  def toDocInBlock(s: Stmt)(implicit C: Context): Doc =
+    if (requiresBlock(s))
+      schemeCall("begin", toDoc(s, false))
+    else
+      toDoc(s, false)
+
+  def requiresBlock(s: Stmt): Boolean = s match {
+    case _: Data   => true
+    case _: Record => true
+    case _: Def    => true
+    case _         => false
+  }
 }
