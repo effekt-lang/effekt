@@ -109,3 +109,31 @@ record Tuple3[A, B, C](first: A, second: B, third: C)
 record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
 record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
 record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+
+// Benchmarking
+// ============
+
+// Current time in nanoseconds
+// TODO use a better timer
+extern def currentTimeNanos(): Int =
+  "$effekt.delayed(() => new Date().getTime() * 1000)"
+
+// runs the block and returns the time in nanoseconds
+def timed { block: Unit }: Int = {
+  val before = currentTimeNanos()
+  block()
+  val after = currentTimeNanos()
+  after - before
+}
+
+def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
+  def run(n: Int, report: Boolean): Unit = {
+    if (n <= 0) { () } else {
+      val time = timed { block() };
+      if (report) { println(time) } else { () };
+      run(n - 1, report)
+    }
+  }
+  run(warmup, false)
+  run(iterations, true)
+}

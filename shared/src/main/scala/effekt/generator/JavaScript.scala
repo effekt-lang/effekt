@@ -45,7 +45,82 @@ class JavaScript extends Generator {
   } yield doc
 }
 
-trait JavaScriptPrinter extends ParenPrettyPrinter {
+/**
+ * A JavaScript PrettyPrinter that generates code using the
+ * control monad.
+ */
+trait JavaScriptPrinter extends JavaScriptBase {
+
+  def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
+    case BlockVar(v) =>
+      nameRef(v)
+    case BlockDef(ps, body) =>
+      jsLambda(ps map toDoc, toDoc(body))
+    case Member(b, id) =>
+      toDoc(b) <> "." <> nameDef(id)
+    case Extern(ps, body) =>
+      jsLambda(ps map toDoc, body)
+    case _ => sys error "Unsupported block in plain JS pretty printer"
+  })
+
+  // pretty print the statement in a javascript expression context
+  // not all statement types can be printed in this context!
+  def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
+    case Val(Wildcard(_), binding, body) =>
+      toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
+
+    case Val(id, binding, body) =>
+      toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
+
+    case App(b, args) =>
+      jsCall(toDoc(b), args map argToDoc)
+
+    case If(cond, thn, els) =>
+      parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
+
+    case While(cond, body) =>
+      jsCall(
+        "$effekt._while",
+        jsLambda(Nil, toDoc(cond)),
+        jsLambda(Nil, toDoc(body))
+      )
+
+    case Ret(e) =>
+      jsCall("$effekt.pure", toDoc(e))
+
+    case State(id, get, put, init, body) =>
+      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
+
+    case Handle(body, hs) =>
+      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
+      val cs = parens(jsArray(handlers))
+      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
+
+    case Match(sc, clauses) =>
+      val cs = jsArray(clauses map {
+        case (pattern, b) => jsObject(
+          text("pattern") -> toDoc(pattern),
+          text("exec") -> toDoc(b)
+        )
+      })
+      jsCall("$effekt.match", toDoc(sc), cs)
+
+    case Hole =>
+      jsCall("$effekt.hole", Nil)
+
+    case Exports(path, exports) =>
+      jsCall(
+        "module.exports = Object.assign",
+        moduleName(path),
+        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
+      )
+
+    case other =>
+      sys error s"Cannot print ${other} in expression position"
+  }
+}
+
+trait JavaScriptBase extends ParenPrettyPrinter {
 
   def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
@@ -72,21 +147,10 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     imports <> emptyline <> toDoc(m)
   }
 
-  // TODO print all top level value declarations as "var"
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
     "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
 
-  def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v) =>
-      nameRef(v)
-    case BlockDef(ps, body) =>
-      jsLambda(ps map toDoc, toDoc(body))
-    case Member(b, id) =>
-      toDoc(b) <> "." <> nameDef(id)
-    case Extern(ps, body) =>
-      jsLambda(ps map toDoc, body)
-    case _ => sys error "Unsupported block in plain JS pretty printer"
-  })
+  def toDoc(b: Block)(implicit C: Context): Doc
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
@@ -137,53 +201,11 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     if (requiresBlock(s))
       jsCall("$effekt.delayed", jsLambda(Nil, jsBlock(toDocStmt(s))))
     else
-      toDocExpr(s)
+      parens(toDocExpr(s))
 
   // pretty print the statement in a javascript expression context
   // not all statement types can be printed in this context!
-  def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
-    case Val(Wildcard(_), binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
-    case Val(id, binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
-    case App(b, args) =>
-      jsCall(toDoc(b), args map argToDoc)
-    case If(cond, thn, els) =>
-      parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
-    case While(cond, body) =>
-      jsCall(
-        "$effekt._while",
-        jsLambda(Nil, toDoc(cond)),
-        jsLambda(Nil, toDoc(body))
-      )
-    case Ret(e) =>
-      jsCall("$effekt.pure", toDoc(e))
-    case Exports(path, exports) =>
-      jsCall(
-        "module.exports = Object.assign",
-        moduleName(path),
-        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
-      )
-    case State(id, get, put, init, body) =>
-      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
-
-    case Handle(body, hs) =>
-      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
-      val cs = parens(jsArray(handlers))
-      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
-    case Match(sc, clauses) =>
-      val cs = jsArray(clauses map {
-        case (pattern, b) => jsObject(
-          text("pattern") -> toDoc(pattern),
-          text("exec") -> toDoc(b)
-        )
-      })
-      jsCall("$effekt.match", toDoc(sc), cs)
-    case Hole =>
-      jsCall("$effekt.hole", Nil)
-    case other =>
-      sys error s"Cannot print ${other} in expression position"
-  }
+  def toDocExpr(s: Stmt)(implicit C: Context): Doc
 
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
     case IgnorePattern()   => "$effekt.ignore"
@@ -279,6 +301,7 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
 
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
+    case Record(did, fields, rest) => true
     case Def(id, d, rest) => true
     case _ => false
   }
