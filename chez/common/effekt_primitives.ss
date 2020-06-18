@@ -23,7 +23,6 @@
 (define (equal_impl obj1 obj2)
   (equal? obj1 obj2))
 
-
 (define-syntax thunk
   (syntax-rules ()
     [(_ e ...) (lambda () e ...)]))

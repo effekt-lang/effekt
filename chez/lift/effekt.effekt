@@ -19,10 +19,10 @@ extern pure def show[R](value: R): String =
   "(show_impl value)"
 
 extern def println[R](r: R): Unit / Console =
-  "(println_impl r)"
+  "(delayed (println_impl r))"
 
 extern def error[R](msg: String): R =
-  "(raise msg)"
+  "(delayed (raise msg))"
 
 extern pure def random(): Int =
   "(random 100)"
