@@ -155,6 +155,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case While(cond, body) =>
       parens("while" <+> toDocInBlock(cond) <+> toDoc(body, false))
 
+    // definitions can *only* occur at the top of a (begin ...)
     case Def(id, BlockDef(ps, body), rest) =>
       defineFunction(nameDef(id), ps map toDoc, toDoc(body, false)) <> emptyline <> toDoc(rest, toplevel)
 
@@ -177,11 +178,14 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       case b: Block => toDoc(b)
     })
 
-    case Val(Wildcard(_), binding, body) =>
-      toDoc(binding, false) <> line <> toDoc(body, toplevel)
+    case Val(Wildcard(_), binding, body) if toplevel =>
+      toDoc(binding, false) <> line <> toDoc(body, true)
 
     case Val(id, binding, body) if toplevel =>
       defineValue(nameDef(id), toDocInBlock(binding)) <> line <> toDoc(body, toplevel)
+
+    case Val(Wildcard(_), binding, body) =>
+      toDoc(binding, false) <> line <> toDocInBlock(body)
 
     case Val(id, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
@@ -275,9 +279,10 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
   def schemeCall(fun: Doc, args: Doc*): Doc = schemeCall(fun, args.toList)
   def schemeCall(fun: Doc, args: List[Doc]): Doc = parens(hsep(fun :: args, space))
 
+  // printing blocks with let prevents locally defined mutually recursive functions
   def toDocInBlock(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
-      schemeCall("begin", toDoc(s, false))
+      parens("let ()" <+> nest(line <> toDoc(s, false)))
     else
       toDoc(s, false)
 
