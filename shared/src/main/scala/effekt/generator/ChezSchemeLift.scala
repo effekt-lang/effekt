@@ -79,6 +79,12 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
+    case Val(Wildcard(_), binding, body) if toplevel =>
+      "(run " <> toDoc(binding, false) <> ")" <> emptyline <> toDoc(body, toplevel)
+
+    case Val(id, binding, body) if toplevel =>
+      defineValue(nameDef(id), "(run " <> toDoc(binding, false) <> ")") <> emptyline <> toDoc(body, toplevel)
+
     case Val(Wildcard(_), binding, body) =>
       schemeCall("then", toDoc(binding, false), "_", toDoc(body, false))
 
