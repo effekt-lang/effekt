@@ -42,8 +42,6 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true
   )
 
-  dependsOnAll(generator, List(compile))
-
   var _libPath: Option[File] = None
 
   def libPath: File = stdlibPath orElse _libPath getOrElse {
