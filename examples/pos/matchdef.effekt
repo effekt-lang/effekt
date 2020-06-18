@@ -1,4 +1,4 @@
-module matchdef
+module examples/pos/matchdef
 
 import text/string
 
