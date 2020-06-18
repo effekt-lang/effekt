@@ -11,8 +11,8 @@
 ; (then m a n) -> (lambda (k) (m (lambda (a) (n k))))
 (define-syntax then
   (syntax-rules ()
-    [(_ m a f)
-     (lambda (k) (m (lambda (a) (f k))))]))
+    [(_ m a f1 ...)
+     (lambda (k) (m (lambda (a) ((let () f1 ...) k))))]))
 
 (define ($then m f)
   (lambda (k) (m (lambda (a) ((f a) k)))))
