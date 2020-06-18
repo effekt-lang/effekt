@@ -20,7 +20,6 @@
       (lambda (x)
         (((m (lambda (y) ((matched x) y))) failed) x)))))
 
-
 ;; to be used like
 ;;   (define-matcher match-Pair Pair?
 ;;     ([p1 Pair-first]
@@ -64,8 +63,14 @@
     [(_ matched failed sc ((p1 sel1) (p2 sel2) ...))
      (((p1 (match-fields matched failed sc ((p2 sel2) ...))) failed) (sel1 sc))]))
 
+; forces the pattern match
 (define-syntax pattern-match
   (syntax-rules ()
-    [(_ sc ()) (raise "match failed")]
+    [(_ sc ()) (raise "no patterns provided")]
+    [(_ sc ((p1 k1) ...)) ((pattern-match-helper sc ((p1 k1) ...)))]))
+
+(define-syntax pattern-match-helper
+  (syntax-rules ()
+    [(_ sc ()) (lambda () (raise "match failed"))]
     [(_ sc ((p1 k1) (p2 k2) ...))
-     (((p1 k1) (lambda () (pattern-match sc ((p2 k2) ...)))) sc)]))
+     (((p1 k1) (lambda () (pattern-match-helper sc ((p2 k2) ...)))) sc)]))

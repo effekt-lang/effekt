@@ -44,7 +44,7 @@ trait Compiler {
   // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
   //      easily switch
   val jsGenerator: Generator = new JavaScript
-  val csGenerator: Generator = new ChezSchemeLift
+  val csGenerator: Generator = new ChezScheme
 
   // lift variants
   val jsLiftGenerator: Generator = new JavaScriptLift
