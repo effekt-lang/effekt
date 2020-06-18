@@ -1,30 +1,6 @@
 module lift/triples
 
-
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-def reverse[A](l: List[A]): List[A] = {
-  def reverseWith(l: List[A])(acc: List[A]): List[A] = l match {
-    case Nil() => acc
-    case Cons(a, rest) => rest.reverseWith(Cons(a, acc))
-  }
-  l.reverseWith(Nil())
-}
-
-// [1,2,3].reverseOnto([4,5,6])
-// [3,2,1,4,5,6]
-def reverseOnto[A](l: List[A])(other: List[A]): List[A] = l match {
-  case Nil() => other
-  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
-}
-
-// [1,2,3].append([4,5,6])
-// [3,2,1].reverseOnto([4,5,6])
-// [1,2,3,4,5,6]
-def append[A](l: List[A])(other: List[A]): List[A] =
-  l.reverse.reverseOnto(other)
+import immutable/list
 
 def testAppend() =
   println([1,2,3].append([4,5,6]))
@@ -66,7 +42,7 @@ def handledTriple(n : Int, s : Int): Unit / Out =
     with Fail { () }
   } with Flip { resume(true); resume(false) }
 
-def main() =
+def main() = // handledList(8, 8)
   measure(30, 30) { handledList(100, 15); () }
 
   // try {

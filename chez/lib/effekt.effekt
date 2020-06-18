@@ -6,7 +6,7 @@ extern effect Console
 extern include "seq0.ss"
 extern include "tail0.ss"
 extern include "effekt.ss"
-extern include "effekt_matching.ss"
+extern include "../common/effekt_matching.ss"
 
 
 def locally[R] { f: R }: R = f()
@@ -85,6 +85,9 @@ extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
   "(and x y)"
 
+// Should only be used internally since values in Effekt should not be undefined
+extern pure def isUndefined[A](value: A): Boolean =
+  "(eq? value #f)"
 
 // Pairs
 // =====

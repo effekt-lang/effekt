@@ -32,3 +32,6 @@ def foreach[A](self: Option[A]) { f: A => Unit }: Unit = self match {
   case None()  => ()
   case Some(v) => f(v)
 }
+
+def undefinedToOption[A](value: A): Option[A] =
+  if (value.isUndefined) { None() } else { Some(value) }
