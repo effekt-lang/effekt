@@ -38,7 +38,7 @@ class JavaScript extends Generator {
    * Compiles only the given module, does not compile dependencies
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.inferLifts(mod.source)
+    core <- C.lower(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }
     _ = C.saveOutput(doc.layout, path(mod))
@@ -85,10 +85,7 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> nameDef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
-
-    case ScopeApp(b, sc) => jsCall(toDoc(b), List(toDoc(sc)))
-    case ScopeAbs(id, b) => jsLambda(List(nameDef(id)), toDoc(b))
-    case Lifted(ev, b)   => jsCall("$effekt.liftBlock", List(toDoc(ev), toDoc(b)))
+    case _ => sys error "Unsupported block in plain JS pretty printer"
   })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
@@ -146,16 +143,18 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
     case Val(Wildcard(_), binding, body) =>
-      "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(Nil, toDoc(body)))
+      toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
     case Val(id, binding, body) =>
-      "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
+      toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
     case App(b, args) =>
       jsCall(toDoc(b), args map argToDoc)
     case If(cond, thn, els) =>
-      parens(toDoc(cond)) <+> "?" <+> toDocExpr(thn) <+> ":" <+> toDocExpr(els)
+      parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
     case While(cond, body) =>
       jsCall(
-        "$effekt._while", toDocExpr(cond), toDocExpr(body)
+        "$effekt._while",
+        jsLambda(Nil, toDoc(cond)),
+        jsLambda(Nil, toDoc(body))
       )
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
@@ -165,9 +164,8 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
         moduleName(path),
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )
-
     case State(id, get, put, init, body) =>
-      "$effekt.state" <> parens(toDocExpr(init)) <> parens(toDoc(body))
+      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
 
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
@@ -187,14 +185,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
       sys error s"Cannot print ${other} in expression position"
   }
 
-  def toDoc(a: Scope)(implicit C: Context): Doc = a match {
-    case Here() => "$effekt.here"
-    case Nested(scopes) =>
-      val ss: List[Doc] = scopes.map(a => toDoc(a))
-      jsCall("$effekt.nested", ss)
-    case ScopeVar(id) => id.name.toString
-  }
-
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
     case IgnorePattern()   => "$effekt.ignore"
     case AnyPattern()      => "$effekt.any"
@@ -206,11 +196,6 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-
-    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
-      jsFunction(nameDef(id), List(nameDef(sc)),
-        "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocStmt(rest)
-
     case Def(id, BlockDef(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
@@ -250,12 +235,8 @@ trait JavaScriptPrinter extends ParenPrettyPrinter {
     case Val(id, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
-    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
-      jsFunction(nameDef(id), List(nameDef(sc)),
-        "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocTopLevel(rest)
-
     case Def(id, BlockDef(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDoc(body)) <> emptyline <> toDocTopLevel(rest)
+      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
     case Def(id, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
