@@ -3,8 +3,10 @@ module effekt
 extern effect Console
 
 // shift-0 based implementation
-extern include "seq0.ss"
-extern include "tail0.ss"
+extern include "../common/effekt_primitives.ss"
+extern include "datatype.ss"
+extern include "seq.ss"
+extern include "tail.ss"
 extern include "effekt.ss"
 extern include "../common/effekt_matching.ss"
 
@@ -26,6 +28,9 @@ extern def println[R](r: R): Unit / Console =
 extern def error[R](msg: String): R =
   "(raise msg)"
 
+extern pure def random(): Int =
+  "(random 100)"
+
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
@@ -40,8 +45,8 @@ extern pure def infixDiv(x: Int, y: Int): Int =
 extern pure def infixSub(x: Int, y: Int): Int =
   "(- x y)"
 
-// extern pure def mod(x: Int, y: Int): Int =
-//   "(x % y)"
+extern pure def mod(x: Int, y: Int): Int =
+  "(modulo x y)"
 
 extern pure def addDouble(x: Double, y: Double): Double =
   "(+ x y)"
