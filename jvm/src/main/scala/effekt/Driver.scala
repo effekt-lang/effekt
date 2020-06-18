@@ -86,11 +86,30 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   }
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+    C.config.generator() match {
+      case "js" | "jslift"  => evalJS(mod)
+      case "cs" | "cslift " => evalCS(mod)
+    }
+  }
+
+  def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val jsFile = C.jsGenerator.path(mod)
       val jsScript = s"require('${jsFile}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
+      C.config.output().emit(command.!!)
+    } catch {
+      case FatalPhaseError(e) =>
+        C.error(e)
+    }
+  }
+
+  def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+    try {
+      C.checkMain(mod)
+      val csFile = C.csGenerator.path(mod)
+      val command = Process(Seq("scheme", "--script", csFile))
       C.config.output().emit(command.!!)
     } catch {
       case FatalPhaseError(e) =>
