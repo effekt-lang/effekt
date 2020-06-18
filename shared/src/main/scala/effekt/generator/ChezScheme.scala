@@ -193,7 +193,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>
 
-        brackets(nameRef(h.id) <+> vsep(h.clauses.map {
+        brackets("make-" <> nameRef(h.id) <+> vsep(h.clauses.map {
           case (op, impl) =>
             // the LAST argument is the continuation...
             val params = impl.params.init
@@ -245,8 +245,11 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     val pred = nameDef(did) <> "?"
     val matcher = "match-" <> nameDef(did)
 
+    // rethrowing an effect causes some unexpected shadowing since the constructor and effect names are called the same.
+    val constructor = if (did.isInstanceOf[effekt.symbols.Effect]) "make-" <> nameDef(did) else nameDef(did)
+
     val definition =
-      parens("define-record-type" <+> parens("Tp" <> nameDef(did) <+> nameDef(did) <+> pred) <>
+      parens("define-record-type" <+> parens("Tp" <> nameDef(did) <+> constructor <+> pred) <>
         nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
           parens("nongenerative" <+> "Tp" <> nameDef(did))))
 
