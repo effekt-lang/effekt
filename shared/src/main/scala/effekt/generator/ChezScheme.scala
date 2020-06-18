@@ -60,6 +60,7 @@ object ChezSchemePrinter extends ChezSchemeBase {
         "(let () " <+> emptyline <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
+        defineValue("main", nameDef(main)) <> emptyline <>
         "(run " <> nameRef(main) <> "))"
     }
 
@@ -107,10 +108,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
   val emptyline: Doc = line <> line
 
-  def module(m: ModuleDecl)(implicit C: Context): Doc = {
-    //    vsep(m.imports.map { im => schemeCall("load", jsString(moduleFile(im))) }, line) <> emptyline <>
-    toDoc(m)
-  }
+  def module(m: ModuleDecl)(implicit C: Context): Doc = toDoc(m)
 
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
     toDoc(m.defs, true)
@@ -221,12 +219,9 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       schemeCall("pattern-match", toDoc(sc) :: parens(vsep(clauses, line)) :: Nil)
 
     // only export main for now
-    case Exports(path, exports) =>
-      exports.find(e => e.name.name == "main").map { main =>
-        defineValue("main", nameDef(main))
-      }.getOrElse("")
+    case Exports(path, exports) => ""
 
-    case other => sys error s"Can't print: ${other}"
+    case other                  => sys error s"Can't print: ${other}"
   }
 
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {

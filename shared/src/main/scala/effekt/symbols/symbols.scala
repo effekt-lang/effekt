@@ -60,7 +60,7 @@ package object symbols {
 
     // a topological ordering of all transitive dependencies
     // this is the order in which the modules need to be compiled / loaded
-    lazy val dependencies: List[Module] = imports.flatMap { im => im :: im.dependencies }.distinct
+    lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
     // toplevle declared effects
     def effects: Effects = Effects(types.values.collect {

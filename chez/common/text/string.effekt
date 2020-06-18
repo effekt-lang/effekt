@@ -10,14 +10,11 @@ import text/regex
 extern pure def length(str: String): Int =
   "(string-length str)"
 
-// extern pure def repeat(str: String)(n: Int): String =
-//   "str.repeat(n)"
+extern pure def repeat(str: String)(n: Int): String =
+  "(letrec ([repeat (lambda (n acc) (if (<= n 0) acc (repeat (- n 1) (string-append acc str))))]) (repeat n (list->string '())))"
 
 extern pure def substring(str: String)(from: Int): String =
   "(substring str from (string-length str))"
-
-// extern pure def split(str: String)(sep: String): Array[String] =
-//   "str.split(sep)"
 
 // extern pure def trim(str: String): String =
 //   "str.trim()"
