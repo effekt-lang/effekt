@@ -1,0 +1,28 @@
+module text/regex
+
+import immutable/option
+import immutable/cslist
+
+extern include "pregexp.scm"
+
+extern type Regex
+
+record Match(matched: String, index: Int)
+
+extern pure def regex(str: String): Regex =
+  "(pregexp str)"
+
+def exec(reg: Regex)(str: String): Option[Match] = {
+  val matched = reg.unsafeMatchString(str)
+  if (matched.isUndefined) { None() }
+  else { Some(Match(matched, reg.unsafeMatchIndex(str))) }
+}
+
+extern pure def unsafeMatchIndex(reg: Regex)(str: String): Int =
+  "(let ([m (pregexp-match-positions reg str)]) (if (null? m) #f (car (car m))))"
+
+extern pure def unsafeMatchString(reg: Regex)(str: String): String =
+  "(pregexp-match reg str)"
+
+extern pure def split(reg: Regex)(str: String): CSList[String] =
+  "(pregexp-split reg str)"
