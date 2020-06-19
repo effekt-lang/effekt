@@ -179,10 +179,10 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     })
 
     case Val(Wildcard(_), binding, body) if toplevel =>
-      toDoc(binding, false) <> line <> toDoc(body, true)
+      "(run (thunk " <> toDoc(binding, false) <> "))" <> line <> toDoc(body, true)
 
     case Val(id, binding, body) if toplevel =>
-      defineValue(nameDef(id), toDocInBlock(binding)) <> line <> toDoc(body, toplevel)
+      defineValue(nameDef(id), "(run (thunk " <> toDocInBlock(binding) <> "))") <> line <> toDoc(body, toplevel)
 
     case Val(Wildcard(_), binding, body) =>
       toDoc(binding, false) <> line <> toDocInBlock(body)
