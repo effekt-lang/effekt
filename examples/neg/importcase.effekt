@@ -1,5 +1,5 @@
 module importcase
-import examples/pos/liStS //should fail, but does not
+import examples/pos/liStS
 // the following uses foreach from lists.effekt.
 // Execution of main() still fails as .js transpilation
 // imports "liStS" but calls lists.foreach()

@@ -1,3 +1,4 @@
-[error] examples/neg/importcase.effekt:1:1: Cannot find source for examples/pos/liStS
+[error] examples/neg/importcase.effekt:2:1: Could find an import, but has wrong module path.
+Path declared in the module: examples/pos/lists
 import examples/pos/liStS
 ^
