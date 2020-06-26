@@ -1,0 +1,10 @@
+module importcase
+import examples/pos/liStS //should fail, but does not
+// the following uses foreach from lists.effekt.
+// Execution of main() still fails as .js transpilation
+// imports "liStS" but calls lists.foreach()
+def main() = {
+    val l = Cons(1, Cons(2, Nil()));
+    foreach(l) { el => println(el) };
+    ()
+}

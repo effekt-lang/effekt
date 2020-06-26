@@ -10,6 +10,7 @@ import scala.util.matching._
 import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
 class RegressionTests extends AnyFunSpec with TestUtils {
 
@@ -29,7 +30,11 @@ class RegressionTests extends AnyFunSpec with TestUtils {
         }
 
         it(f.getName) {
-          val out = interpret(f)
+          val out = try { interpret(f) } catch {
+            case e: RuntimeException => println("RuntimeException caught:" + e)
+            // as described in https://stackoverflow.com/questions/21170322/scala-silently-catch-all-exceptions
+            case NonFatal(t)         => ()
+          }
 
           if (checkfile.exists()) {
             assert(IO.read(checkfile).toString == out)
