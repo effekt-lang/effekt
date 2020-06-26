@@ -30,11 +30,7 @@ class RegressionTests extends AnyFunSpec with TestUtils {
         }
 
         it(f.getName) {
-          val out = try { interpret(f) } catch {
-            case e: RuntimeException => println("RuntimeException caught:" + e)
-            // as described in https://stackoverflow.com/questions/21170322/scala-silently-catch-all-exceptions
-            case NonFatal(t)         => ()
-          }
+          val out = interpret(f)
 
           if (checkfile.exists()) {
             assert(IO.read(checkfile).toString == out)
