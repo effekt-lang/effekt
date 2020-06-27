@@ -214,8 +214,8 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
         // curry the block
         case (pattern, b: BlockDef) =>
-          brackets(toDoc(pattern) <+> b.params.foldLeft(schemeLambda(Nil, toDoc(b.body, false))) {
-            case (body, p) => schemeLambda(List(nameDef(p.id)), body)
+          brackets(toDoc(pattern) <+> b.params.foldRight(schemeLambda(Nil, toDoc(b.body, false))) {
+            case (p, body) => schemeLambda(List(nameDef(p.id)), body)
           })
 
         case (pattern, b) => sys error "Right hand side of a matcher needs to be a block definition"
