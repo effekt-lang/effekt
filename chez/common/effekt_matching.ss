@@ -1,76 +1,100 @@
-(define (any matched)
-  (lambda (failed)
-    (lambda (x)
-      (matched x))))
+; Matcher = (SCRUTINEE, ANS -> () -> R, () -> R, (ANS -> () -> R) -> R) -> R
 
-(define (ignore matched)
-  (lambda (failed)
-    (lambda (x)
-      matched)))
+(define done (lambda (matched) (matched)))
+
+(define (any m matched failed k)
+  (k (matched m)))
+
+(define (ignore m matched failed k)
+  (k matched))
 
 (define (literal l)
-  (lambda (matched)
-    (lambda (failed)
-      (lambda (x)
-        (if (equal_impl x l) matched (failed))))))
+  (lambda (m matched failed k)
+    (if (equal_impl m l)
+        (k matched)
+        (failed))))
 
-(define (bind m)
-  (lambda (matched)
-    (lambda (failed)
-      (lambda (x)
-        (((m (lambda (y) ((matched x) y))) failed) x)))))
+(define (bind p)
+  (lambda (m matched failed k)
+    (p m (matched m) failed k)))
 
-;; to be used like
-;;   (define-matcher match-Pair Pair?
-;;     ([p1 Pair-first]
-;;      [p2 Pair-second]))
-;;
-;; will expand to
-;;  (define (match-Pair p1 p2)
-;;    (lambda (matched0)
-;;      (lambda (failed)
-;;        (lambda (x)
-;;          ;; -- tag
-;;          (if (Pair? x)
-;;              ;; selectors
-;;              (let* ([matched2 (((p2 matched0) failed) (Pair-second x))]
-;;                     [matched1 (((p1 matched2) failed) (Pair-first x))])
-;;                matched1)
-;;
-;;              ;; wrong tag
-;;              (failed))))))
+;; for this record
+; (define-record Pair (fst snd))
+
+;; this is what we need to generate
+; (define (match-Pair p1 p2)
+;   (lambda (m matched failed k)
+;     (if (Pair? m)
+;       (p1 (Pair-fst m) matched failed (lambda (matched)
+;         (p2 (Pair-snd m) matched failed k)))
+;       (failed))))
+
+
 (define-syntax define-matcher
   (syntax-rules ()
     [(_ name pred ())
       (define (name)
-        (lambda (matched)
-          (lambda (failed)
-            (lambda (sc)
-              (if (pred sc) matched (failed))))))]
+        (lambda (sc matched failed k)
+          (if (pred sc) (k matched) (failed))))]
     [(_ name pred ((p1 sel1) (p2 sel2) ...))
      (define (name p1 p2 ...)
-       (lambda (matched)
-         (lambda (failed)
-           (lambda (sc)
+       (lambda (m matched failed k)
              ;; has correct tag?
-             (if (pred sc)
-                 (match-fields matched failed sc ((p1 sel1) (p2 sel2) ...))
-                 (failed))))))]))
+             (if (pred m)
+                 (match-fields m matched failed k ([p1 sel1] [p2 sel2] ...))
+                 (failed))))]))
 
 (define-syntax match-fields
   (syntax-rules ()
-    [(_ matched failed sc ()) matched]
-    [(_ matched failed sc ((p1 sel1) (p2 sel2) ...))
-     (((p1 (match-fields matched failed sc ((p2 sel2) ...))) failed) (sel1 sc))]))
+    [(_ m matched failed k ()) (k matched)]
+    [(_ m matched failed k ([p1 sel1] [p2 sel2] ...))
+     (p1 (sel1 m) matched failed (lambda (matched)
+       (match-fields m matched failed k ([p2 sel2] ...))))]))
+
 
 ; forces the pattern match
 (define-syntax pattern-match
   (syntax-rules ()
-    [(_ sc ()) (raise "no patterns provided")]
-    [(_ sc ((p1 k1) ...)) ((pattern-match-helper sc ((p1 k1) ...)))]))
+    [(_ m ()) (raise "no patterns provided")]
+    [(_ m ([p1 k1] [p2 k2]...))
+      (p1 m k1 (lambda () (pattern-match m ([p2 k2] ...))) done)]))
 
-(define-syntax pattern-match-helper
-  (syntax-rules ()
-    [(_ sc ()) (lambda () (raise "match failed"))]
-    [(_ sc ((p1 k1) (p2 k2) ...))
-     (((p1 k1) (lambda () (pattern-match-helper sc ((p2 k2) ...)))) sc)]))
+;; Examples
+
+; (define-matcher match-Pair2 Pair? ([p1 Pair-fst] [p2 Pair-snd]))
+
+; (define (match sc p matched)
+;   (p sc matched abort done))
+
+; (display (match (make-Pair 1 2)
+;   (match-Pair2 any any)
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (match 3
+;   (match-Pair2 any any)
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (match (make-Pair 1 2)
+;   (match-Pair2 any (match-Pair2 ignore any))
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (match (make-Pair 1 (make-Pair 2 3))
+;   (match-Pair2 any (match-Pair2 ignore any))
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (match (make-Pair (make-Pair 1 2) (make-Pair 3 4))
+;   (match-Pair (match-Pair ignore any) (match-Pair ignore any))
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (match (make-Pair (make-Pair 1 2) (make-Pair 10 15))
+;   (match-Pair2 (match-Pair2 any ignore) (match-Pair2 ignore any))
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (match (make-Pair (make-Pair 1 2) (make-Pair 10 15))
+;   (match-Pair2 (match-Pair2 any ignore) (match-Pair2 ignore any))
+;   (lambda (x) (lambda (y) (lambda () (+ x y))))))
+
+; (display (pattern-match (make-Pair 1 2)
+;   ([(match-Pair2 (match-Pair2 any ignore) (match-Pair2 ignore any))
+;       (lambda (x) (lambda (y) (lambda () (+ x y))))]
+;    [any (lambda (x) (lambda () (Pair-snd x)))])))
