@@ -25,6 +25,9 @@ jobs:
       with:
         java-version: 1.8
 
+    - name: Install Chez Scheme
+      run: sudo apt-get install chezscheme
+
     - name: Set up NodeJS
       uses: actions/setup-node@v1
       with:
