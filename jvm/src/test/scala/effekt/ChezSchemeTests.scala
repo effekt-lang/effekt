@@ -18,7 +18,6 @@ class ChezSchemeTests extends AnyFunSpec {
   lazy val ignored: List[File] = List(
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "maps.effekt",
-    examplesDir / "pos" / "dequeue.effekt",
     examplesDir / "pos" / "unsafe_cont.effekt",
     examplesDir / "pos" / "propagators.effekt"
   )
