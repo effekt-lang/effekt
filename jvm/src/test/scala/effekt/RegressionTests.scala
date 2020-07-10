@@ -10,7 +10,6 @@ import scala.util.matching._
 import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
-import scala.util.control.NonFatal
 
 class RegressionTests extends AnyFunSpec with TestUtils {
 

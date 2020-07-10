@@ -47,7 +47,7 @@ class Namer extends Phase[Module, Module] { namer =>
         val modImport = Context.moduleOf(path)
         // compare path with modImport.path to ensure correct handling of case sensitivity
         if (modImport.decl.path != path) {
-          Context.abort(s"Could find an import, but has wrong module path.\nPath declared in the module: ${modImport.decl.path}")
+          Context.abort(s"Could find an import, but has wrong module path.\nPath declared in the imported module: ${modImport.decl.path}")
         }
         scope.defineAll(modImport.terms, modImport.types)
         modImport
