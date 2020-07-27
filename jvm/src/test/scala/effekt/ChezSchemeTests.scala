@@ -42,7 +42,7 @@ class ChezSchemeTests extends AnyFunSpec {
         } else {
           it(f.getName + " (call/cc)") {
 
-            val out = interpretCS(f)
+            val out = interpretCSCallcc(f)
             if (checkfile.exists()) {
               assert(IO.read(checkfile).toString == out)
             }
@@ -60,14 +60,14 @@ class ChezSchemeTests extends AnyFunSpec {
     }
   }
 
-  def interpretCS(file: File): String = {
+  def interpretCSCallcc(file: File): String = {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--generator", "cs",
       "--includes", "chez/common",
       "--includes", ".",
-      "--lib", "chez/lib"
+      "--lib", "chez/callcc"
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
