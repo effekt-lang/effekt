@@ -108,7 +108,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val csFile = C.csGenerator.path(mod)
+      val csFile = C.csCallCCGenerator.path(mod)
       val command = Process(Seq("scheme", "--script", csFile))
       C.config.output().emit(command.!!)
     } catch {

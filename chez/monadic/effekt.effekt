@@ -1,0 +1,107 @@
+module effekt
+
+extern effect Console
+
+extern include "../common/effekt_primitives.ss"
+extern include "seq0.ss"
+extern include "effekt.ss"
+extern include "../common/effekt_matching.ss"
+
+
+def locally[R] { f: R }: R = f()
+
+// String ops
+// ==========
+extern pure def infixConcat(s1: String, s2: String): String =
+  "(string-append s1 s2)"
+
+// TODO implement
+extern pure def show[R](value: R): String =
+  "(show_impl value)"
+
+extern def println[R](r: R): Unit / Console =
+  "(delayed (println_impl r))"
+
+extern def error[R](msg: String): R =
+  "(delayed (raise msg))"
+
+extern pure def random(): Int =
+  "(random 100)"
+
+// Math ops
+// ========
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "(+ x y)"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  "(* x y)"
+
+extern pure def infixDiv(x: Int, y: Int): Int =
+  "(floor (/ x y))"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  "(- x y)"
+
+extern pure def mod(x: Int, y: Int): Int =
+  "(modulo x y)"
+
+extern pure def addDouble(x: Double, y: Double): Double =
+  "(+ x y)"
+
+extern pure def mulDouble(x: Double, y: Double): Double =
+  "(* x y)"
+
+extern pure def subDouble(x: Double, y: Double): Double =
+  "(- x y)"
+
+// Comparison ops
+// ==============
+extern pure def infixEq[R](x: R, y: R): Boolean =
+  "(equal_impl x y)"
+
+extern pure def infixNeq[R](x: R, y: R): Boolean =
+  "(not (equal_impl x y))"
+
+extern pure def infixLt(x: Int, y: Int): Boolean =
+  "(< x y)"
+
+extern pure def infixLte(x: Int, y: Int): Boolean =
+  "(<= x y)"
+
+extern pure def infixGt(x: Int, y: Int): Boolean =
+  "(> x y)"
+
+extern pure def infixGte(x: Int, y: Int): Boolean =
+  "(>= x y)"
+
+
+// Boolean ops
+// ===========
+// for now those are considered eager
+extern pure def not(b: Boolean): Boolean =
+  "(not b)"
+
+extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+  "(or x y)"
+
+extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+  "(and x y)"
+
+// Should only be used internally since values in Effekt should not be undefined
+extern pure def isUndefined[A](value: A): Boolean =
+  "(eq? value #f)"
+
+// Pairs
+// =====
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+
+
+// Benchmarking
+// ============
+// should only be used with pure blocks
+extern def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console =
+  "(delayed (display (measure (lambda () (run ((block here)))) warmup iterations)))"

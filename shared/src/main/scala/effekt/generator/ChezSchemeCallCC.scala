@@ -36,7 +36,7 @@ class ChezSchemeCallCC extends Generator {
     _ = C.checkMain(mod)
     deps = mod.dependencies.flatMap(dep => compile(dep))
     core <- C.lower(src)
-    result = ChezSchemePrinter.compilationUnit(mod, core, deps)
+    result = ChezSchemeCallCCPrinter.compilationUnit(mod, core, deps)
     _ = C.saveOutput(result.layout, path(mod))
   } yield result
 
@@ -45,11 +45,11 @@ class ChezSchemeCallCC extends Generator {
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
     core <- C.lower(mod.source)
-    doc = ChezSchemePrinter.format(core)
+    doc = ChezSchemeCallCCPrinter.format(core)
   } yield doc
 }
 
-object ChezSchemePrinter extends ChezSchemeBase {
+object ChezSchemeCallCCPrinter extends ChezSchemeBase {
 
   def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {

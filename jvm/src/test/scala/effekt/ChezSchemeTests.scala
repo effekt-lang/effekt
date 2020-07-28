@@ -40,16 +40,23 @@ class ChezSchemeTests extends AnyFunSpec {
         if (ignored.contains(f)) {
           ignore(f.getName) { () }
         } else {
-          it(f.getName + " (call/cc)") {
+          it(f.getName + " (callcc)") {
 
-            val out = interpretCSCallcc(f)
+            val out = interpretCS(f, "callcc")
             if (checkfile.exists()) {
               assert(IO.read(checkfile).toString == out)
             }
           }
-          it(f.getName + " (cps)") {
+          it(f.getName + " (lift)") {
 
-            val out = interpretCSLift(f)
+            val out = interpretCS(f, "lift")
+            if (checkfile.exists()) {
+              assert(IO.read(checkfile).toString == out)
+            }
+          }
+          it(f.getName + " (monadic)") {
+
+            val out = interpretCS(f, "monadic")
             if (checkfile.exists()) {
               assert(IO.read(checkfile).toString == out)
             }
@@ -60,28 +67,14 @@ class ChezSchemeTests extends AnyFunSpec {
     }
   }
 
-  def interpretCSCallcc(file: File): String = {
+  def interpretCS(file: File, variant: String): String = {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
-      "--generator", "chez-callcc",
+      "--generator", s"chez-$variant",
       "--includes", "chez/common",
       "--includes", ".",
-      "--lib", "chez/callcc"
-    ))
-    configs.verify()
-    compiler.compileFile(file.getPath, configs)
-    configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "")
-  }
-
-  def interpretCSLift(file: File): String = {
-    val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq(
-      "--Koutput", "string",
-      "--generator", "chez-lift",
-      "--includes", "chez/common",
-      "--includes", ".",
-      "--lib", "chez/lift"
+      "--lib", s"chez/$variant"
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)

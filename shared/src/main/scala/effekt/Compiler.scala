@@ -5,7 +5,7 @@ import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
-import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, Generator, JavaScript, JavaScriptLift }
+import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
@@ -44,11 +44,11 @@ trait Compiler {
   // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
   //      easily switch
   val jsGenerator: Generator = new JavaScript
-  val csGenerator: Generator = new ChezSchemeCallCC
-
-  // lift variants
   val jsLiftGenerator: Generator = new JavaScriptLift
+
+  val csCallCCGenerator: Generator = new ChezSchemeCallCC
   val csliftGenerator: Generator = new ChezSchemeLift
+  val csMonadicGenerator: Generator = new ChezSchemeMonadic
 
   // Tasks
   // =====
@@ -92,10 +92,11 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[Document] = for {
       mod <- frontend(source)
       gen = C.config.generator() match {
-        case "js"          => jsGenerator
-        case "js-lift"     => jsLiftGenerator
-        case "chez-callcc" => csGenerator
-        case "chez-lift"   => csliftGenerator
+        case "js"           => jsGenerator
+        case "js-lift"      => jsLiftGenerator
+        case "chez-callcc"  => csCallCCGenerator
+        case "chez-monadic" => csMonadicGenerator
+        case "chez-lift"    => csliftGenerator
       }
       doc <- gen.apply(source)
     } yield doc
