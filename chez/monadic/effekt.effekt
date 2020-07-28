@@ -104,4 +104,4 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // ============
 // should only be used with pure blocks
 extern def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console =
-  "(delayed (display (measure (lambda () (run ((block here)))) warmup iterations)))"
+  "(delayed (display (measure (lambda () (run (block))) warmup iterations)))"
