@@ -19,7 +19,7 @@ import effekt.util.paths._
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezScheme extends Generator {
+class ChezSchemeCallCC extends Generator {
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.

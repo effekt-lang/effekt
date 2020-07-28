@@ -64,7 +64,7 @@ class ChezSchemeTests extends AnyFunSpec {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
-      "--generator", "cs",
+      "--generator", "chez-callcc",
       "--includes", "chez/common",
       "--includes", ".",
       "--lib", "chez/callcc"
@@ -78,7 +78,7 @@ class ChezSchemeTests extends AnyFunSpec {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
-      "--generator", "cslift",
+      "--generator", "chez-lift",
       "--includes", "chez/common",
       "--includes", ".",
       "--lib", "chez/lift"

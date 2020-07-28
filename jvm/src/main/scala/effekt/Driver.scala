@@ -87,8 +87,8 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     C.config.generator() match {
-      case "js" | "jslift" => evalJS(mod)
-      case "cs" | "cslift" => evalCS(mod)
+      case gen if gen.startsWith("js")   => evalJS(mod)
+      case gen if gen.startsWith("chez") => evalCS(mod)
     }
   }
 
