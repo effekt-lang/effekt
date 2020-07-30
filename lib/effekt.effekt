@@ -66,6 +66,31 @@ extern pure def infixSub(x: Double, y: Double): Double =
 extern pure def infixDiv(x: Double, y: Double): Double =
   "(x / y)"
 
+extern pure def cos(x: Double): Double =
+  "Math.cos(x)"
+
+extern pure def sin(x: Double): Double =
+  "Math.sin(x)"
+
+extern pure def atan(x: Double): Double =
+  "Math.atan(x)"
+
+extern pure def tan(x: Double): Double =
+  "Math.tan(x)"
+
+extern pure def sqrt(x: Double): Double =
+  "Math.sqrt(x)"
+
+extern pure def log(x: Double): Double =
+  "Math.log(x)"
+
+
+// since we do not have "extern val", yet
+extern pure def _pi(): Double =
+  "Math.PI"
+
+val PI: Double = _pi()
+
 
 // Comparison ops
 // ==============
