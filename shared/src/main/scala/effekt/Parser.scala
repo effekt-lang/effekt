@@ -170,12 +170,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Numbers
    */
   lazy val digit = regex("[0-9]".r)
-  lazy val decimalInt = regex("(0|[1-9][0-9]*)".r)
+  lazy val decimalInt = regex("([-+])?(0|[1-9][0-9]*)".r)
 
   lazy val int = decimalInt ^^ { n => IntLit(n.toInt) }
   lazy val bool = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
   lazy val unit = literal("()") ^^^ UnitLit()
-  lazy val double = regex("(0|[1-9][0-9]*)[.]([0-9]+)".r) ^^ { n => DoubleLit(n.toDouble) }
+  lazy val double = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r) ^^ { n => DoubleLit(n.toDouble) }
   lazy val string = """\"([^\"]*)\"""".r ^^ {
     s => StringLit(s.substring(1, s.size - 1))
   }
