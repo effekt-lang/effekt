@@ -48,13 +48,16 @@ extern pure def infixSub(x: Int, y: Int): Int =
 extern pure def mod(x: Int, y: Int): Int =
   "(modulo x y)"
 
-extern pure def addDouble(x: Double, y: Double): Double =
+extern pure def infixAdd(x: Double, y: Double): Double =
   "(+ x y)"
 
-extern pure def mulDouble(x: Double, y: Double): Double =
+extern pure def infixMul(x: Double, y: Double): Double =
   "(* x y)"
 
-extern pure def subDouble(x: Double, y: Double): Double =
+extern pure def infixDiv(x: Double, y: Double): Double =
+  "(/ x y)"
+
+extern pure def infixSub(x: Double, y: Double): Double =
   "(- x y)"
 
 // Comparison ops

@@ -82,7 +82,7 @@ def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
     try {
       val res = prog();
       Cons(MkWeighted(current, res), empty)
-    } with Score { p => current = mulDouble(current, p); resume(()) }
+    } with Score { p => current = current * p; resume(()) }
   } with Fork { () => concat(resume(true), resume(false)) }
     with Fail { () => empty }
 }
@@ -97,7 +97,7 @@ def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: V
     resume(res);
     do get(res) match {
       case Unobserved() => ()
-      case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
+      case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
     }
   } with Disj { (x, y) =>
     val res: Ref = fresh();
@@ -116,7 +116,7 @@ def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: V
     resume(());
     do get(x) match {
       case Unobserved() => ()
-      case Observed(b) => if (b) { do Score(p) } else { do Score(subDouble(1.0, p)) }
+      case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
     }
   };
   do get(input)
