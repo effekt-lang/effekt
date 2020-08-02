@@ -28,8 +28,8 @@ extern def println[R](r: R): Unit / Console =
 extern def error[R](msg: String): R =
   "(raise msg)"
 
-extern pure def random(): Int =
-  "(random 100)"
+extern pure def random(): Double =
+  "(random 1.0)"
 
 // Math ops
 // ========
@@ -60,6 +60,45 @@ extern pure def infixDiv(x: Double, y: Double): Double =
 extern pure def infixSub(x: Double, y: Double): Double =
   "(- x y)"
 
+extern pure def cos(x: Double): Double =
+  "(cos x)"
+
+extern pure def sin(x: Double): Double =
+  "(sin x)"
+
+extern pure def atan(x: Double): Double =
+  "(atan x)"
+
+extern pure def tan(x: Double): Double =
+  "(tan x)"
+
+extern pure def sqrt(x: Double): Double =
+  "(sqrt x)"
+
+extern pure def square(x: Double): Double =
+  "(* x x)"
+
+extern pure def log(x: Double): Double =
+  "(log x)"
+
+extern pure def log1p(x: Double): Double =
+  "(log (+ x 1))"
+
+extern pure def exp(x: Double): Double =
+  "(exp x)"
+
+// since we do not have "extern val", yet
+extern pure def _pi(): Double =
+  "(* 4 (atan 1))"
+
+val PI: Double = _pi()
+
+extern pure def toInt(d: Double): Int =
+  "(round d)"
+
+extern pure def toDouble(d: Int): Double =
+  "d"
+
 // Comparison ops
 // ==============
 extern pure def infixEq[R](x: R, y: R): Boolean =
@@ -80,6 +119,17 @@ extern pure def infixGt(x: Int, y: Int): Boolean =
 extern pure def infixGte(x: Int, y: Int): Boolean =
   "(>= x y)"
 
+extern pure def infixLt(x: Double, y: Double): Boolean =
+  "(< x y)"
+
+extern pure def infixLte(x: Double, y: Double): Boolean =
+  "(<= x y)"
+
+extern pure def infixGt(x: Double, y: Double): Boolean =
+  "(> x y)"
+
+extern pure def infixGte(x: Double, y: Double): Boolean =
+  "(>= x y)"
 
 // Boolean ops
 // ===========

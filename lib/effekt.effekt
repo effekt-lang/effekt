@@ -25,8 +25,8 @@ extern pure def inspect[R](value: R): Unit =
 extern pure def error[R](msg: String): R =
   "(function() { throw msg })()"
 
-extern pure def random(): Int =
-  "Math.random() * 100"
+extern pure def random(): Double =
+  "Math.random()"
 
 
 // String ops
@@ -100,6 +100,12 @@ extern pure def _pi(): Double =
 
 val PI: Double = _pi()
 
+extern pure def toInt(d: Double): Int =
+  "Math.round(d)"
+
+extern pure def toDouble(d: Int): Double =
+  "d"
+
 
 // Comparison ops
 // ==============
@@ -112,23 +118,23 @@ extern pure def infixNeq[R](x: R, y: R): Boolean =
 extern pure def infixLt(x: Int, y: Int): Boolean =
   "x < y"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
-  "x < y"
-
 extern pure def infixLte(x: Int, y: Int): Boolean =
-  "x <= y"
-
-extern pure def infixLte(x: Double, y: Double): Boolean =
   "x <= y"
 
 extern pure def infixGt(x: Int, y: Int): Boolean =
   "x > y"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
-  "x > y"
-
 extern pure def infixGte(x: Int, y: Int): Boolean =
   "x >= y"
+
+extern pure def infixLt(x: Double, y: Double): Boolean =
+  "x < y"
+
+extern pure def infixLte(x: Double, y: Double): Boolean =
+  "x <= y"
+
+extern pure def infixGt(x: Double, y: Double): Boolean =
+  "x > y"
 
 extern pure def infixGte(x: Double, y: Double): Boolean =
   "x >= y"

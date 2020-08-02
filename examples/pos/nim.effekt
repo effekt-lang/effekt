@@ -112,7 +112,7 @@ def allResults[R] { prog: R / Choose } = try { [prog()] } with Choose { () =>
 }
 
 def coin[R] { prog: R / Choose } = try { prog() } with Choose { () =>
-  resume(random() > 50)
+  resume(random() > 0.5)
 }
 
 def deterministic[R] { prog: R / Choose } = {
