@@ -471,6 +471,14 @@ class Typer extends Phase[Module, Module] { typer =>
         C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
 
       case failed =>
+        // reraise all and abort
+        val msgs = failed.flatMap {
+          // TODO also print signature!
+          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.qualified}: ${m.label}") }
+        }.toVector
+
+        C.reraise(msgs)
+
         C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
     }
   }

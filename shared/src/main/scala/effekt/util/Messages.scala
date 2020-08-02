@@ -3,7 +3,7 @@ package util
 
 import effekt.source.Tree
 
-import org.bitbucket.inkytonik.kiama.util.{ Messaging }
+import org.bitbucket.inkytonik.kiama.util.{ Messaging, Message }
 import org.bitbucket.inkytonik.kiama.util.Messaging.{ Messages, noMessages }
 import org.bitbucket.inkytonik.kiama.util.Severities.Error
 
@@ -50,6 +50,8 @@ object messages {
     def abort(msg: String): Nothing = {
       throw FatalPhaseError(msg)
     }
+
+    def reraise(msg: Messages): Unit = buffer.append(msg)
 
     def at[T](t: Tree)(block: => T): T = {
       val before = focus
