@@ -417,7 +417,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val matchExpr: P[Expr] =
-    (callExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
+    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
   lazy val doExpr: P[Expr] =
     `do` ~/> idRef ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
