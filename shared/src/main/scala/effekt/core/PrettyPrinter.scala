@@ -88,7 +88,10 @@ class PrettyPrinter extends ParenPrettyPrinter {
         braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
       }
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
-      "handle" <+> braces(nest(line <+> toDoc(body)) <> line) <+> "with" <+> cs
+      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
+    case State(id, get, put, init, body) =>
+      "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
+
     case Match(sc, clauses) =>
       val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> "=>" <+> toDoc(b) })) <> line)
       toDoc(sc) <+> "match" <+> cs
