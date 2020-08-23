@@ -95,6 +95,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Match(sc, clauses) =>
       val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> "=>" <+> toDoc(b) })) <> line)
       toDoc(sc) <+> "match" <+> cs
+    case Hole =>
+      "<>"
     case other =>
       sys error s"Cannot pretty print $other in expression position"
   }
