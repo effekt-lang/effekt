@@ -10,18 +10,18 @@ import org.bitbucket.inkytonik.kiama.util.Memoiser
  */
 trait SymbolsDB { self: Context =>
 
-  val symbols: Memoiser[Id, Symbol] = Memoiser.makeIdMemoiser
+  val symbols: Memoiser[Id, Symbol] = Memoiser.makeIdMemoiser()
 
   // the module a symbol is defined in
-  val modules: Memoiser[Symbol, Module] = Memoiser.makeIdMemoiser
+  val modules: Memoiser[Symbol, Module] = Memoiser.makeIdMemoiser()
 
   // Databases used by the language server
 
   // for reverse lookup in LSP server
   // TODO maybe store the whole definition tree instead of the name, which requries refactoring of assignSymbol
-  val sources: Memoiser[Symbol, IdDef] = Memoiser.makeIdMemoiser
+  val sources: Memoiser[Symbol, IdDef] = Memoiser.makeIdMemoiser()
 
-  val references: Memoiser[Symbol, List[Reference]] = Memoiser.makeIdMemoiser
+  val references: Memoiser[Symbol, List[Reference]] = Memoiser.makeIdMemoiser()
 
   def assignSymbol(id: Id, d: Symbol): Unit = id match {
     case id: IdDef =>
