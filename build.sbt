@@ -55,6 +55,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     version := effektVersion
   )
   .settings(commonSettings)
+  .enablePlugins(NativeImagePlugin)
   .jvmSettings(
     mainClass in assembly := Some("effekt.Server"),
     assemblyJarName in assembly := "effekt.jar",
@@ -75,6 +76,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
 
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
+
+    // Options to compile Effekt with native-image
+    nativeImageOptions ++= List("--no-fallback"),
+    nativeImageOptions ++= List("-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler"),
 
     generateLicenses := {
       Process("mvn license:download-licenses license:add-third-party").!!
