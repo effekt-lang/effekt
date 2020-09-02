@@ -4,7 +4,12 @@ import scalariform.formatter.preferences._
 
 import scala.sys.process.Process
 
-enablePlugins(ScalaJSPlugin)
+// additional targets that can be used in sbt
+lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
+lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
+lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
+lazy val install = taskKey[Unit]("Installs the current version locally")
+lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 
 
 lazy val effektVersion = "0.1.15"
@@ -35,6 +40,7 @@ lazy val commonSettings = Seq(
     .setPreference(MaxArrowIndent, 20)
 )
 
+enablePlugins(ScalaJSPlugin)
 
 lazy val root = project.in(file("."))
   .aggregate(effekt.js, effekt.jvm)
@@ -43,11 +49,6 @@ lazy val root = project.in(file("."))
     Compile / run := (effekt.jvm / Compile / run).evaluated
   ))
 
-lazy val deploy = taskKey[Unit]("Builds the jar and moves it to the bin folder")
-lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads all licenses")
-lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
-lazy val install = taskKey[Unit]("Installs the current version locally")
-lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
@@ -57,27 +58,30 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
   .settings(commonSettings)
   .enablePlugins(NativeImagePlugin)
   .jvmSettings(
-    mainClass in assembly := Some("effekt.Server"),
-    assemblyJarName in assembly := "effekt.jar",
-    Test / parallelExecution := false,
-
     libraryDependencies ++= Seq(
       "org.rogach" %% "scallop" % "3.4.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
+      "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.4.1-SNAPSHOT",
+      "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.4.1-SNAPSHOT",
       "org.scala-sbt" %% "io" % "1.3.1" % "test",
       "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
     ),
 
+
+    // Test configuration
+    // ------------------
+    Test / parallelExecution := false,
+
+    Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt",
+
     // show duration of the tests
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
 
-    // We use the lib folder as resource directory to include it in the JAR
-    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
+    // disable tests for assembly to speed up build
+    test in assembly := {},
 
-    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
 
     // Options to compile Effekt with native-image
+    // -------------------------------------------
     nativeImageOptions ++= Seq(
       "--no-fallback",
       "--initialize-at-build-time",
@@ -88,14 +92,18 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
     ),
 
-    generateLicenses := {
-      Process("mvn license:download-licenses license:add-third-party").!!
-    },
 
-    updateVersions := {
-      Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
-      Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
-    },
+    // Assembling one big jar-file and packaging it
+    // --------------------------------------------
+    mainClass in assembly := Some("effekt.Server"),
+
+    assemblyJarName in assembly := "effekt.jar",
+
+    // we use the lib folder as resource directory to include it in the JAR
+    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
+
+    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
+
 
     assembleBinary := {
       val jarfile = assembly.value
@@ -119,12 +127,18 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       Process(s"npm install -g effekt-${effektVersion}.tgz").!!
     },
 
-    Compile / sourceGenerators += versionGenerator.taskValue,
+    generateLicenses := {
+      Process("mvn license:download-licenses license:add-third-party").!!
+    },
 
-    Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt"
+    updateVersions := {
+      Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
+      Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
+    },
+
+    Compile / sourceGenerators += versionGenerator.taskValue
   )
   .jsSettings(
-    // Add JS-specific settings here
     libraryDependencies ++= Seq(
       "org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
     ),
@@ -132,8 +146,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
 
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
-
-//    scalaJSUseMainModuleInitializer := true
   )
 
 lazy val versionGenerator = Def.task {
@@ -151,6 +163,10 @@ lazy val versionGenerator = Def.task {
   Seq(sourceFile)
 }
 
+/**
+ * This generator is used by the JS version of our compiler to bundle the
+ * Effekt standard into the JS files and make them available in the virtual fs.
+ */
 lazy val stdLibGenerator = Def.task {
 
   val baseDir = (baseDirectory in ThisBuild).value / "lib"
