@@ -78,8 +78,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
 
     // Options to compile Effekt with native-image
-    nativeImageOptions ++= List("--no-fallback"),
-    nativeImageOptions ++= List("-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler"),
+    nativeImageOptions ++= Seq(
+      "--no-fallback",
+      "--initialize-at-build-time",
+      "--report-unsupported-elements-at-runtime",
+      "-H:+ReportExceptionStackTraces",
+      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
+      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
+      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
+    ),
 
     generateLicenses := {
       Process("mvn license:download-licenses license:add-third-party").!!
