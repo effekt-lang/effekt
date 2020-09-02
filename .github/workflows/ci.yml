@@ -37,11 +37,8 @@ jobs:
       run: sbt publishLocal
       working-directory: kiama
 
-    - name: Run tests and assemble jar file
-      run: sbt clean deploy
-
-    - name: Generate npm package
-      run: npm pack
+    - name: Run tests
+      run: sbt clean test
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
