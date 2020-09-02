@@ -11,7 +11,7 @@ import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
 
-class RegressionTests extends AnyFunSpec with TestUtils {
+class JavaScriptTests extends AnyFunSpec with TestUtils {
 
   runTestsIn(examplesDir)
 
