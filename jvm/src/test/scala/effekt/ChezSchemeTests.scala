@@ -18,8 +18,13 @@ class ChezSchemeTests extends AnyFunSpec {
   lazy val ignored: List[File] = List(
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "maps.effekt",
+
+    // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
-    examplesDir / "pos" / "propagators.effekt"
+    examplesDir / "pos" / "propagators.effekt",
+
+    // the number representations differ in JS and Chez
+    examplesDir / "casestudies" / "ad.md"
   )
 
   runTestsIn(examplesDir)
