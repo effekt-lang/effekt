@@ -21,25 +21,6 @@ trait IOModuleDB extends ModuleDB { self: Context =>
     }
   }
 
-  //  object contentsOf extends Task[String, String] {
-  //
-  //    val taskName = "contentsOf"
-  //
-  //    def run(path: String)(implicit C: Context) = {
-  //      val includeFile = canonicalPath(path)
-  //
-  //      if (!includeFile.exists) {
-  //        None
-  //      } else {
-  //        Some(FileSource(includeFile.canonicalPath).content)
-  //      }
-  //    }
-  //
-  //    def fingerprint(path: String) = canonicalPath(path).lastModified
-  //
-  //    def canonicalPath(path: String) = file(module.source.name).parent / path
-  //  }
-
   /**
    * First try to find it in the includes paths, then in the bundled resources
    */
