@@ -5,19 +5,21 @@ import effekt.context.Context
 
 trait Name {
   def name: String
-  def qualified(implicit C: Context): String
+
+  // this should only be used for reporting errors, not for code generation
+  def qualified: String
   override def toString = name
   def rename(f: String => String): Name
 }
 
 case class QualifiedName(name: String, module: Module) extends Name {
-  def qualified(implicit C: Context): String = s"${module.name}.${name}"
+  def qualified: String = s"${module.name}.${name}"
   def rename(f: String => String): Name = copy(name = f(name))
 }
 
 case object NoName extends Name {
   def name = "<NoName>"
-  def qualified(implicit C: Context): String = name
+  def qualified: String = name
   def rename(f: String => String): Name = this
 }
 

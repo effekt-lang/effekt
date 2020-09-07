@@ -166,7 +166,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case _: symbols.Effect   => toDoc(id.name)
     case _: symbols.EffectOp => "op$" + id.name.toString
     case _ => id.name match {
-      case name: QualifiedName if name.module != C.module => link(name, name.qualified)
+      case name: QualifiedName if name.module != C.module => link(name, s"${name.module.name}.${name.name}")
       case name => toDoc(name)
     }
   }
