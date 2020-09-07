@@ -71,11 +71,12 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     implicit val C = context
     C.setup(config)
 
-    if (config.interpret()) {
-      C.frontend(src).map { mod => eval(mod) }
-    } else {
-      C.generate(src)
-    }
+    for {
+      doc <- C.generate(src)
+      if config.interpret()
+      mod <- C.frontend(src)
+    } eval(mod)
+
     afterCompilation(source, config)
   }
 
