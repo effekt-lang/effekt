@@ -40,15 +40,13 @@ trait Compiler {
   object transformer extends Transformer
   object lifter extends LiftInference
 
-  // This is overwritten in the JavaScript version of the compiler (to switch to another JS module system)
-  // TODO group code generation, naming conventions, and writing to files into one abstraction to be able to
-  //      easily switch
-  val jsGenerator: Generator = new JavaScript
-  val jsLiftGenerator: Generator = new JavaScriptLift
-
-  val csCallCCGenerator: Generator = new ChezSchemeCallCC
-  val csliftGenerator: Generator = new ChezSchemeLift
-  val csMonadicGenerator: Generator = new ChezSchemeMonadic
+  def generatorPhase(implicit C: Context) = C.config.generator() match {
+    case "js"           => new effekt.generator.JavaScript
+    case "js-lift"      => new effekt.generator.JavaScriptLift
+    case "chez-callcc"  => new effekt.generator.ChezSchemeCallCC
+    case "chez-monadic" => new effekt.generator.ChezSchemeMonadic
+    case "chez-lift"    => new effekt.generator.ChezSchemeLift
+  }
 
   // Tasks
   // =====
@@ -89,17 +87,8 @@ trait Compiler {
   }
 
   object generate extends SourceTask[Document]("generate") {
-    def run(source: Source)(implicit C: Context): Option[Document] = for {
-      mod <- frontend(source)
-      gen = C.config.generator() match {
-        case "js"           => jsGenerator
-        case "js-lift"      => jsLiftGenerator
-        case "chez-callcc"  => csCallCCGenerator
-        case "chez-monadic" => csMonadicGenerator
-        case "chez-lift"    => csliftGenerator
-      }
-      doc <- gen.apply(source)
-    } yield doc
+    def run(source: Source)(implicit C: Context): Option[Document] =
+      generatorPhase.apply(source)
   }
 
   /**

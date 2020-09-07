@@ -62,7 +62,7 @@ class LanguageServer extends Intelligence {
     /**
      * Don't output amdefine module declarations
      */
-    override val jsGenerator = new JavaScriptVirtual
+    override def generatorPhase(implicit C: Context) = new JavaScriptVirtual
 
     override def saveOutput(js: String, path: String)(implicit C: Context): Unit = {
       file(path).write(js)

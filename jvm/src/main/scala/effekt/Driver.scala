@@ -71,12 +71,11 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     implicit val C = context
     C.setup(config)
 
-    for {
-      doc <- C.generate(src)
-      if config.interpret()
-      mod <- C.frontend(src)
-    } eval(mod)
-
+    if (config.interpret()) {
+      C.frontend(src).map { mod => eval(mod) }
+    } else {
+      C.generate(src)
+    }
     afterCompilation(source, config)
   }
 
@@ -95,7 +94,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val jsFile = C.jsGenerator.path(mod)
+      val jsFile = C.generatorPhase.path(mod)
       val jsScript = s"require('${jsFile}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
@@ -108,7 +107,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val csFile = C.csCallCCGenerator.path(mod)
+      val csFile = C.generatorPhase.path(mod)
       val command = Process(Seq("scheme", "--script", csFile))
       C.config.output().emit(command.!!)
     } catch {
