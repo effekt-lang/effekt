@@ -493,7 +493,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case _ => Context.panic("Cannot extract type")
   }
 
-
   /**
    * Returns the binders that will be introduced to check the corresponding body
    */

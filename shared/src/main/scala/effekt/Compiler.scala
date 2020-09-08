@@ -79,6 +79,7 @@ trait Compiler {
     case "chez-callcc"  => new effekt.generator.ChezSchemeCallCC
     case "chez-monadic" => new effekt.generator.ChezSchemeMonadic
     case "chez-lift"    => new effekt.generator.ChezSchemeLift
+    case "llvm"         => new effekt.generator.LLVM
   }
 
   // Tasks

@@ -27,6 +27,7 @@ lazy val commonSettings = Seq(
     "-unchecked",
     // "-Xlint",
     "-Xfatal-warnings",
+    "-Ypatmat-exhaust-depth", "40",
     "-feature",
     "-language:existentials",
     "-language:higherKinds",

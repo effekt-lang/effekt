@@ -86,12 +86,13 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
+      case gen if gen.startsWith("llvm") => evalLLVM(mod)
     }
   }
 
   def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
-      C.checkMain(mod)
+      val _ = C.checkMain(mod)
       val jsFile = C.codeGenerator.path(mod)
       val jsScript = s"require('${jsFile}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
@@ -104,9 +105,21 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
 
   def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
-      C.checkMain(mod)
+      val _ = C.checkMain(mod)
       val csFile = C.codeGenerator.path(mod)
       val command = Process(Seq("scheme", "--script", csFile))
+      C.config.output().emit(command.!!)
+    } catch {
+      case FatalPhaseError(e) =>
+        C.error(e)
+    }
+  }
+
+  def evalLLVM(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+    try {
+      val _ = C.checkMain(mod)
+      val executableFile = C.codeGenerator.path(mod)
+      val command = Process(Seq(executableFile))
       C.config.output().emit(command.!!)
     } catch {
       case FatalPhaseError(e) =>
