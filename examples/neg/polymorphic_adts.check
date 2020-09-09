@@ -3,7 +3,7 @@
                                 ^
 [error] examples/neg/polymorphic_adts.effekt:36:38: Cannot typecheck call. There are multiple overloads, which all fail to check.
         case Pair2(n, t) => if (t) { n + 1 } else { 0 }
-                                     ^
+                                     ^^^^^^
 [error] examples/neg/polymorphic_adts.effekt:36:38: Possible overload $effekt.infixAdd$1: Expected Double, but got Boolean
         case Pair2(n, t) => if (t) { n + 1 } else { 0 }
                                      ^

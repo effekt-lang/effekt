@@ -80,10 +80,10 @@ object subtitutions {
         // TODO also consider type parameters here
         case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
 
-          if (args1.size != args2.size)
+          if (args1.size != args2.size) {
             report.error(s"Section count does not match $f1 vs. $f2")
-
-          (args1 zip args2).foldLeft(unify(ret1.tpe, ret2.tpe)) {
+            Substitution.empty
+          } else (args1 zip args2).foldLeft(unify(ret1.tpe, ret2.tpe)) {
             case (u, (as1, as2)) =>
               if (as1.size != as2.size)
                 report.error(s"Argument count does not match $f1 vs. $f2")

@@ -1,3 +1,3 @@
 [error] examples/neg/blocks_in_value_pos.effekt:7:12: Blocks have to be fully applied and can't be used as values.
     resume(prog);
-           ^
+           ^^^^

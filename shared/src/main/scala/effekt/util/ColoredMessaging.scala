@@ -2,7 +2,7 @@ package effekt
 package util
 
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
-import org.bitbucket.inkytonik.kiama.util.{ Message, Messaging, Positions, Severities }
+import org.bitbucket.inkytonik.kiama.util.{ Message, Messaging, Positions, Position, Severities }
 
 class ColoredMessaging(positions: Positions) extends Messaging(positions) {
 
@@ -17,15 +17,27 @@ class ColoredMessaging(positions: Positions) extends Messaging(positions) {
     }
 
   override def formatMessage(message: Message): String =
-    start(message) match {
-      case Some(pos) =>
-        val severity = severityToWord(message.severity)
-        val context = util.Highlight(pos.optContext.getOrElse(""))
-        s"[$severity] ${pos.format} ${homogenizePath(message.label)}\n$context\n"
-      case None =>
+    (start(message), finish(message)) match {
+      case (Some(from), Some(to)) if from.line == to.line => formatMessage(message, from, to)
+      case (Some(from), _) => formatMessage(message, from)
+      case (None, _) =>
         val severity = severityToWord(message.severity)
         s"[$severity] ${homogenizePath(message.label)}\n"
     }
+
+  def formatMessage(message: Message, from: Position): String = {
+    val severity = severityToWord(message.severity)
+    val context = util.Highlight(from.optContext.getOrElse(""))
+    s"[$severity] ${from.format} ${homogenizePath(message.label)}\n$context\n"
+  }
+
+  def formatMessage(message: Message, from: Position, to: Position): String = {
+    val severity = severityToWord(message.severity)
+    val context = util.Highlight(from.source.optLineContents(from.line).map { src =>
+      src + "\n" + (" " * (from.column - 1)) + ("^" * (to.column - from.column))
+    }.getOrElse(""))
+    s"[$severity] ${from.format} ${homogenizePath(message.label)}\n$context\n"
+  }
 
   /**
    * To allow uniform testing on all platforms, we homogenize the paths to Unix-style.
