@@ -184,7 +184,7 @@ package object symbols {
 
     override def dealias: ValueType = tpe match {
       case TypeAlias(name, tparams, tpe) =>
-        (tparams zip args).toMap.substitute(tpe).dealias
+        Unifier((tparams zip args).toMap).substitute(tpe).dealias
       case other => TypeApp(other.dealias, args.map { _.dealias })
     }
   }

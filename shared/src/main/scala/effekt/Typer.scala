@@ -220,9 +220,8 @@ class Typer extends Phase[Module, Module] { typer =>
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
-      val skolems = rigids.filterNot { subst.isDefinedAt }
-      if (skolems.nonEmpty) {
-        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
+      if (subst.skolems(rigids).nonEmpty) {
+        Context.error(s"Unbound type variables in constructor ${id}: ${subst.skolems(rigids).map(_.underlying).mkString(", ")}")
       }
 
       // (7) refine parameter types of constructor
@@ -498,12 +497,16 @@ class Typer extends Phase[Module, Module] { typer =>
       Context.abort(s"Wrong number of type arguments ${targs.size}")
 
     // (2) Compute substitutions from provided type arguments (if any)
-    var subst: Substitutions = if (targs.nonEmpty) { (rigids zip targs).toMap } else { Map.empty }
+    var subst: Unifier = if (targs.nonEmpty) {
+      Unifier(((rigids: List[TypeVar]) zip targs).toMap)
+    } else {
+      Unifier.empty
+    }
 
     // (3) refine substitutions by matching return type against expected type
     expected.foreach { expectedReturn =>
       val refinedReturn = subst substitute ret
-      subst = subst union Substitution.unify(refinedReturn, expectedReturn)
+      subst = (subst union Substitution.unify(refinedReturn, expectedReturn)).getUnifier
     }
 
     var effs = retEffs
@@ -540,7 +543,7 @@ class Typer extends Phase[Module, Module] { typer =>
       // Update substitution with new information
       // TODO Trying to unify here yields the same type error as the previous line, again.
       // For now we have to live with this duplicated messages
-      subst = subst union Substitution.unify(tpe1, tpe2)
+      subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
 
       effs = effs ++ exprEffs
     }
@@ -560,7 +563,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
-      subst = subst union Substitution.unify(tpe1, tpe2)
+      subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
       effs = (effs ++ (stmtEffs -- handled))
     }
 
@@ -577,7 +580,7 @@ class Typer extends Phase[Module, Module] { typer =>
     //                  |""".stripMargin
     //    )
 
-    subst.checkFullyDefined(rigids)
+    subst.checkFullyDefined(rigids).getUnifier
 
     (subst substitute ret) / effs
   }
