@@ -21,10 +21,10 @@ class ColoredMessaging(positions: Positions) extends Messaging(positions) {
       case Some(pos) =>
         val severity = severityToWord(message.severity)
         val context = util.Highlight(pos.optContext.getOrElse(""))
-        s"[$severity] ${pos.format} ${homogenizePath(message.label)}\n$context\n"
+        s"[$severity] ${homogenizePath(pos.format)} ${message.label}\n$context\n"
       case None =>
         val severity = severityToWord(message.severity)
-        s"[$severity] ${homogenizePath(message.label)}\n"
+        s"[$severity] ${message.label}\n"
     }
 
   /**
