@@ -13,10 +13,11 @@ import immutable/list
 import mutable/heap
 ```
 
-## Representing Derivable Expressions
-Like Wang et al. we start by defining our own representation of derivable expressions.
-We represent the language of derivable expressions by an effect `AD`, which operates
-on `Num`. The effect `AD` can be thought of as an embedded DSL.
+## Representing Differentiable Expressions
+Like Wang et al. we start by defining our own representation of differentiable
+expressions. We represent the language of differentiable expressions by an
+effect `AD`, which operates on `Num`. The effect `AD` can be thought of as an
+embedded DSL.
 ```
 record Num(value: Double, d: Ref[Double])
 
@@ -26,8 +27,9 @@ effect AD {
   def mul(x: Num, y: Num): Num
 }
 ```
-If Effekt would support polymorphic effects (or abstract type members on effects) we could abstract over the domain `Num`, which is hard-coded above to contain a double value
-and a mutable reference.
+If Effekt would support polymorphic effects (or abstract type members on
+effects) we could abstract over the domain `Num`, which is hard-coded above to
+contain a double value and a mutable reference.
 We make use of operator overloading by defining `infixAdd` and `infixMul`, whch are
 special-cased in the Effekt compiler.
 ```
@@ -40,16 +42,18 @@ We can use the number DSL to express an example program.
 def prog(x: Num): Num / AD =
   (num(3.0) * x) + (x * x * x)
 ```
+This program uses effect operations for multiplication, addition, and for embedding
+constant literals.
 
 ## Forwards Propagation
 To compute the derivative of an expression like `prog`, we start with
-forwards propagation. A derivable function has type `Num => Num / AD`
+forwards propagation. A differentiable function has type `Num => Num / AD`
 and computing the derivative is expressed as a handler.
 
 For forwards propagation, we do not use the fact that the derivative stored
-in `Num` is a mutable box. This is only necessary for backwards propagation/
+in `Num` is a mutable box. This is only necessary for backwards propagation.
 ```
-def forwards(in: Double) { prog: Num => Num / AD } =
+def forwards(in: Double) { prog: Num => Num / AD }: Double =
   try { prog(Num(in, fresh(1.0))).d.get } with AD {
     def num(v)    = resume(Num(v, fresh(0.0)))
     def add(x, y) = resume(Num(
@@ -64,13 +68,13 @@ Except for the wrapping and unwrapping of the references, the definition
 of `add` and `mul` are exactly the ones we would expect from a text book.
 
 ## Backwards Propagation
-We can use the same derivable expression and compute its derivative
+We can use the same differentiable expression and compute its derivative
 by using _backwards propagation_. Since we modeled the DSL as an effect,
 we automatically get access to the continuation in the implementation of
 `add` and `mul`. We thus do not have to use `shift` and `reset`.
 Otherwise the implementation closely follows the one by Wang et al.
 ```
-def backwards(in: Double) { prog: Num => Num / AD } = {
+def backwards(in: Double) { prog: Num => Num / AD }: Double = {
   // the representation of our input
   val input = Num(in, fresh(0.0))
 
@@ -127,7 +131,7 @@ def main() = {
   }
   println(result2)
 
-  // this is also proposed by Rompf as a solution to pertubation confusion
+  // this is proposed by Wang et al. as a solution to pertubation confusion
   val result3 = backwards(1.0) { x =>
     val shouldBeOne = forwards(1.0) { y => x + y }
     val z = num(shouldBeOne)
