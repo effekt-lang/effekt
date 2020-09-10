@@ -66,7 +66,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
   override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
-    case BlockDef(ps, body) =>
+    case BlockLit(ps, body) =>
       schemeLambda(ps map toDoc, toDoc(body, false))
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))
@@ -93,7 +93,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case Val(id, binding, body) =>
       schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))
 
-    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
       defineFunction(nameDef(id), List(nameDef(sc)),
         schemeLambda(ps map toDoc, toDoc(body, false))) <> emptyline <> toDoc(rest, toplevel)
 

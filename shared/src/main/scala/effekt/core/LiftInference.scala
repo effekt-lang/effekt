@@ -15,7 +15,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
   // [[ a -> b ]] = [ev] -> a -> b
   def transform(tree: Block, self: Option[Symbol] = None)(implicit env: Environment, C: Context): Block = tree match {
-    case BlockDef(params, body) =>
+    case BlockLit(params, body) =>
       val id = ScopeId()
 
       val ownBindings = self.map { sym => env.bind(sym) }.getOrElse { env }
@@ -25,7 +25,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
         case (env, BlockParam(p)) => env.bind(p)
         case (env, ValueParam(p)) => env
       }
-      ScopeAbs(id, BlockDef(params, transform(body)(extendedEnv, C)))
+      ScopeAbs(id, BlockLit(params, transform(body)(extendedEnv, C)))
     case Member(body, id) => ??? // Member(transform(body), id)
     case e                => e
   }
@@ -87,9 +87,9 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
    * Don't transform the block itself, but only the body. Used for local abstractions like match clauses where
    * we know the evidence is Here.
    */
-  def transformBody(tree: BlockDef)(implicit env: Environment, C: Context): BlockDef = tree match {
-    case BlockDef(params, body) =>
-      BlockDef(params, transform(body))
+  def transformBody(tree: BlockLit)(implicit env: Environment, C: Context): BlockLit = tree match {
+    case BlockLit(params, body) =>
+      BlockLit(params, transform(body))
   }
 
   // apply lifts to the arguments if it is block variables
@@ -108,7 +108,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       Handler(id, clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
-        case (op, BlockDef(params, body)) => (op, BlockDef(params, transform(body)))
+        case (op, BlockLit(params, body)) => (op, BlockLit(params, transform(body)))
       })
   }
 
@@ -123,7 +123,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
         case s :: Nil => s
         case scopes   => Nested(scopes)
       }
-      case b: BlockDef   => Here()
+      case b: BlockLit   => Here()
       case Member(b, id) => evidenceFor(b)
       case b: Extern     => sys error "Cannot provide scope evidence for built in function"
       case b: Lifted     => sys error "Should not happen"

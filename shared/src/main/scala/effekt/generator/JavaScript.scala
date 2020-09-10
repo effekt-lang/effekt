@@ -54,7 +54,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
-    case BlockDef(ps, body) =>
+    case BlockLit(ps, body) =>
       jsLambda(ps map toDoc, toDoc(body))
     case Member(b, id) =>
       toDoc(b) <> "." <> nameDef(id)
@@ -218,7 +218,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, BlockDef(ps, body), rest) =>
+    case Def(id, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
     case Def(id, Extern(ps, body), rest) =>
@@ -257,7 +257,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Val(id, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
-    case Def(id, BlockDef(ps, body), rest) =>
+    case Def(id, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
     case Def(id, Extern(ps, body), rest) =>

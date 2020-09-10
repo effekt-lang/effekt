@@ -67,7 +67,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
   override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
-    case BlockDef(ps, body) =>
+    case BlockLit(ps, body) =>
       schemeLambda(ps map toDoc, toDoc(body, false))
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))
@@ -156,7 +156,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       parens("while" <+> toDocInBlock(cond) <+> toDoc(body, false))
 
     // definitions can *only* occur at the top of a (begin ...)
-    case Def(id, BlockDef(ps, body), rest) =>
+    case Def(id, BlockLit(ps, body), rest) =>
       defineFunction(nameDef(id), ps map toDoc, toDoc(body, false)) <> emptyline <> toDoc(rest, toplevel)
 
     // we can't use the unique id here, since we do not know it in the extern string.
@@ -213,7 +213,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       val clauses: List[Doc] = cls map {
 
         // curry the block
-        case (pattern, b: BlockDef) =>
+        case (pattern, b: BlockLit) =>
           brackets(toDoc(pattern) <+> b.params.foldRight(schemeLambda(Nil, toDoc(b.body, false))) {
             case (p, body) => schemeLambda(List(nameDef(p.id)), body)
           })

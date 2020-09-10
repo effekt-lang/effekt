@@ -67,7 +67,7 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
   override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
-    case BlockDef(ps, body) =>
+    case BlockLit(ps, body) =>
       schemeLambda(ps map toDoc, toDoc(body, false))
     case Member(b, id) =>
       schemeCall(nameRef(id), toDoc(b))

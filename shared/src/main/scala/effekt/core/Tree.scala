@@ -54,7 +54,7 @@ case class ScopeAbs(scope: Symbol, body: Block) extends Block
 case class ScopeApp(b: Block, evidence: Scope) extends Block
 case class Lifted(s: Scope, b: Block) extends Block
 
-case class BlockDef(params: List[Param], body: Stmt) extends Block
+case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: Symbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 
@@ -73,7 +73,7 @@ case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
 case class Exports(path: String, exports: List[Symbol]) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockDef)]) extends Stmt
+case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree
 case class IgnorePattern() extends Pattern
@@ -88,7 +88,7 @@ case object Hole extends Stmt
 case class State(id: Symbol, get: Symbol, put: Symbol, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: Symbol, clauses: List[(Symbol, BlockDef)])
+case class Handler(id: Symbol, clauses: List[(Symbol, BlockLit)])
 
 /**
  * Explicit Lifts

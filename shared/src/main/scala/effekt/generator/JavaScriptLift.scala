@@ -58,7 +58,7 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
-    case BlockDef(ps, body) =>
+    case BlockLit(ps, body) =>
       jsLambda(ps map toDoc, toDoc(body))
     case Member(b, id) =>
       toDoc(b) <> "." <> nameDef(id)
@@ -126,14 +126,14 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
   }
 
   override def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
       jsFunction(nameDef(id), List(nameDef(sc)),
         "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocStmt(rest)
     case _ => super.toDocStmt(s)
   }
 
   override def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, ScopeAbs(sc, BlockDef(ps, body)), rest) =>
+    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
       jsFunction(nameDef(id), List(nameDef(sc)),
         "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocTopLevel(rest)
     case _ => super.toDocTopLevel(s)

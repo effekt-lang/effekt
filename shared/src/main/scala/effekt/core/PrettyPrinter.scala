@@ -22,7 +22,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v) => v.name.toString
-    case BlockDef(ps, body) =>
+    case BlockLit(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
