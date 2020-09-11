@@ -278,7 +278,16 @@ class Typer extends Phase[Module, Module] { typer =>
       Context.assignType(d.symbol, d.symbol.toType)
 
     case d @ source.EffDef(id, ops) =>
-      d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
+      d.symbol.ops.foreach { op =>
+        println("" + op + " " + op.toType)
+        Context.assignType(op, op.toType)
+        // if (op.ret.map(_.effects.effects.length).getOrElse(0) >= 1) {
+        //   Context.assignType(op, op.toType)
+        // }
+        // else {
+        //   Context.assignType(op, op.toType)
+        // }
+      }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>

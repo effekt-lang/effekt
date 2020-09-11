@@ -115,8 +115,11 @@ class Namer extends Phase[Module, Module] { namer =>
             val tps = tparams map resolve
             // val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
             val effs = ret.eff.effs map resolve
-            val tpe = Effectful(resolve(ret.tpe), Effects(effectSym :: effs))
+            val tpe = Effectful(resolve(ret.tpe) /*ここを関数型にする*/ , Effects(List(effectSym)))
             val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+            // case class EffectOp(
+            //   name: Name, tparams: List[TypeVar], params: List[List[ValueParam]],
+            //   ret: Option[Effectful], effect: UserEffect) extends Fun
             Context.define(id, op)
             op
           }

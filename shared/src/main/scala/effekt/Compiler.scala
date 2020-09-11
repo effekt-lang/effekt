@@ -1,8 +1,9 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{ LiftInference, Transformer }
+import effekt.core.{ LiftInference, Transformer, PrettyPrinter }
 import effekt.namer.Namer
+import effekt.desugarer.Desugarer
 import effekt.source.ModuleDecl
 import effekt.symbols.Module
 import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
@@ -33,6 +34,7 @@ trait Compiler {
   // compared.
   def parser = new Parser(positions)
   object namer extends Namer
+  object desugarer extends Desugarer
   object typer extends Typer
 
   // Backend phases
@@ -64,6 +66,7 @@ trait Compiler {
       mod = Module(ast, source)
       _ <- C.using(module = mod, focus = ast) {
         for {
+          // _ <- desugarer(mod)
           _ <- namer(mod)
           _ <- typer(mod)
         } yield ()
@@ -75,6 +78,7 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
+      _ <- Some(println(prettyCore.format(core)))
     } yield core
   }
 
