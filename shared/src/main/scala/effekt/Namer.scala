@@ -109,19 +109,27 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.EffDef(id, ops) =>
       val effectSym = Context.resolveType(id).asUserEffect
       effectSym.ops = ops.map {
-        case source.Operation(id, tparams, params, ret) =>
+        case source.Operation(id, tparams, params, ret, isEffectful) =>
           val name = Context.freshTermName(id)
           Context scoped {
             val tps = tparams map resolve
-            // val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
-            val effs = ret.eff.effs map resolve
-            val tpe = Effectful(resolve(ret.tpe) /*ここを関数型にする*/ , Effects(List(effectSym)))
-            val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+            if (isEffectful) {
+              val effs = ret.eff.effs map resolve
+              // I want tpe to be (() => ret.tpe / ret.eff) / {effectSym} instead of ret.tpe / {effectSym}.
+              val tpe = Effectful(resolve(ret.tpe), Effects(List(effectSym)))
+              val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+              Context.define(id, op)
+              op
+            }
+            else {
+              val tpe = Effectful(resolve(ret.tpe), Effects(List(effectSym)))
+              val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+              Context.define(id, op)
+              op
+            }
             // case class EffectOp(
             //   name: Name, tparams: List[TypeVar], params: List[List[ValueParam]],
             //   ret: Option[Effectful], effect: UserEffect) extends Fun
-            Context.define(id, op)
-            op
           }
       }
       effectSym.ops.foreach { op => Context.bind(op) }
