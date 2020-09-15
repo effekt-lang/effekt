@@ -340,6 +340,10 @@ class Typer extends Phase[Module, Module] { typer =>
         Context.define(d.symbol, t)
         t / effBinding
 
+      case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
+        Context.define(d.symbol.params)
+        TUnit / Pure
+
       // all other defintions have already been prechecked
       case d => TUnit / Pure
     }
