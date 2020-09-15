@@ -159,14 +159,14 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val capabilities = effects.toList.map { BlockVar }
 
       val as: List[Control[List[Argument]]] = (args zip params) map {
-        case (source.ValueArgs(as), _) => traverse(as.map(transform))
+        case (source.ValueArgs(as), _) => sequence(as.map(transform))
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
           val params = ps.params.map { v => core.ValueParam(v.symbol) }
           val caps = p.ret.effects.userDefined.toList.map { core.BlockParam }
           pure { List(BlockLit(params ++ caps, transform(body))) }
       }
 
-      val as2: Control[List[Argument]] = traverse(as).map { ls => ls.flatten }
+      val as2: Control[List[Argument]] = sequence(as).map { ls => ls.flatten }
 
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
@@ -215,14 +215,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case p @ source.TagPattern(id, ps) =>
       val (patterns, params) = ps.map(transform).unzip
       (core.TagPattern(p.definition, patterns), params.flatten)
-  }
-
-  def traverse[R](ar: List[Control[R]])(implicit C: TransformerContext): Control[List[R]] = ar match {
-    case Nil => pure { Nil }
-    case (r :: rs) => for {
-      rv <- r
-      rsv <- traverse(rs)
-    } yield rv :: rsv
   }
 
   def transform(exprs: List[source.Expr])(implicit C: TransformerContext): Control[List[Expr]] = exprs match {

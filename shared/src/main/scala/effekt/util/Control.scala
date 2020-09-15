@@ -27,7 +27,16 @@ package object control {
 
     def apply[R](k: MetaCont[A, R]): Result[R]
   }
+
   def pure[A](v: A): Control[A] = new Trivial(v)
+
+  def sequence[R](ar: List[Control[R]]): Control[List[R]] = ar match {
+    case Nil => pure { Nil }
+    case (r :: rs) => for {
+      rv <- r
+      rsv <- sequence(rs)
+    } yield rv :: rsv
+  }
 
   private[control] final class Trivial[+A](a: A) extends Control[A] {
     def apply[R](k: MetaCont[A, R]): Result[R] = k(a)
