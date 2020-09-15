@@ -165,6 +165,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           val params = ps.params.map { v => core.ValueParam(v.symbol) }
           val caps = p.ret.effects.userDefined.toList.map { core.BlockParam }
           pure { List(BlockLit(params ++ caps, transform(body))) }
+        case (source.BlockArg(ps, body), _) if sym.name.name == "resume" =>
+          val params = ps.params.map { v => core.ValueParam(v.symbol) }
+          pure { List(BlockLit(params, transform(body))) }
       }
 
       val as2: Control[List[Argument]] = sequence(as).map { ls => ls.flatten }

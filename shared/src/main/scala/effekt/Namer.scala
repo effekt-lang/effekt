@@ -113,23 +113,11 @@ class Namer extends Phase[Module, Module] { namer =>
           val name = Context.freshTermName(id)
           Context scoped {
             val tps = tparams map resolve
-            if (isEffectful) {
-              val effs = ret.eff.effs map resolve
-              // I want tpe to be (() => ret.tpe / ret.eff) / {effectSym} instead of ret.tpe / {effectSym}.
-              val tpe = Effectful(resolve(ret.tpe), Effects(List(effectSym)))
-              val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
-              Context.define(id, op)
-              op
-            }
-            else {
-              val tpe = Effectful(resolve(ret.tpe), Effects(List(effectSym)))
-              val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
-              Context.define(id, op)
-              op
-            }
-            // case class EffectOp(
-            //   name: Name, tparams: List[TypeVar], params: List[List[ValueParam]],
-            //   ret: Option[Effectful], effect: UserEffect) extends Fun
+            val effs = ret.eff.effs map resolve
+            val tpe = Effectful(resolve(ret.tpe), Effects(List(effectSym) ::: effs))
+            val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+            Context.define(id, op)
+            op
           }
       }
       effectSym.ops.foreach { op => Context.bind(op) }
