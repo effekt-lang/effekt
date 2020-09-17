@@ -48,7 +48,8 @@ trait TypesDB { self: ErrorReporter =>
 
   // Assignment of Types to Trees
   // ============================
-  // Can be used by LSP server to display type information for type-checked trees
+  // Important for finding the types of temporary variables introduced by transformation
+  // Can also be used by LSP server to display type information for type-checked trees
   private val types: Memoiser[Tree, Effectful] = Memoiser.makeIdMemoiser()
 
   def assignType(t: Tree, eff: Effectful): Unit = types.put(t, eff)
