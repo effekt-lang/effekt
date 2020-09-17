@@ -23,8 +23,8 @@ package object symbols {
   sealed trait TermSymbol extends Symbol
 
   // the two universes of values and blocks
-  sealed trait ValueSymbol extends TermSymbol
-  sealed trait BlockSymbol extends TermSymbol
+  trait ValueSymbol extends TermSymbol
+  trait BlockSymbol extends TermSymbol
 
   sealed trait Synthetic extends Symbol {
     override def synthetic = true

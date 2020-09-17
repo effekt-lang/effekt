@@ -9,8 +9,8 @@ import effekt.symbols._
 import effekt.util.{ Task, control }
 import effekt.util.control._
 
-case class Wildcard(module: Module) extends Symbol { val name = Name("_", module) }
-case class Tmp(module: Module) extends Symbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
+case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
@@ -93,8 +93,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.DefStmt(d, rest) =>
       transform(d, transform(rest))
 
-    case source.ExprStmt(e, rest) =>
-      Val(Wildcard(C.module), ANF { transform(e).map(Ret) }, transform(rest))
+    case source.ExprStmt(e, rest) => {
+      Val(freshWildcardFor(tree), ANF { transform(e).map(Ret) }, transform(rest))
+    }
 
     case source.Return(e) =>
       ANF { transform(e).map(Ret) }
@@ -114,23 +115,23 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def transform(tree: source.Expr)(implicit C: TransformerContext): Control[Expr] = (tree match {
     case v: source.Var => v.definition match {
-      case sym: VarBinder => bind(App(Member(BlockVar(C.state(sym).effect), C.state(sym).get), Nil))
+      case sym: VarBinder => bind(freshTmpFor(tree), App(Member(BlockVar(C.state(sym).effect), C.state(sym).get), Nil))
       case sym            => pure { ValueVar(sym) }
     }
 
     case a @ source.Assign(id, expr) =>
       transform(expr).flatMap { e =>
         val state = C.state(a.definition)
-        bind(App(Member(BlockVar(state.effect), state.put), List(e)))
+        bind(freshTmpFor(tree), App(Member(BlockVar(state.effect), state.put), List(e)))
       }
 
     case l: source.Literal[t] => pure { transformLit(l) }
 
     case source.If(cond, thn, els) =>
-      transform(cond).flatMap { c => bind(If(c, transform(thn), transform(els))) }
+      transform(cond).flatMap { c => bind(freshTmpFor(tree), If(c, transform(thn), transform(els))) }
 
     case source.While(cond, body) =>
-      bind(While(ANF { transform(cond) map Ret }, transform(body)))
+      bind(freshTmpFor(tree), While(ANF { transform(cond) map Ret }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
 
@@ -139,7 +140,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           val (p, ps) = transform(pattern)
           (p, BlockLit(ps, transform(body)))
       }
-      transform(sc).flatMap { scrutinee => bind(Match(scrutinee, cs)) }
+      transform(sc).flatMap { scrutinee => bind(freshTmpFor(tree), Match(scrutinee, cs)) }
 
     // assumption: typer removed all ambiguous references, so there is exactly one
     case c @ source.Call(fun, _, args) =>
@@ -176,11 +177,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         case _: Record =>
           as2.map { args => PureApp(BlockVar(sym), args ++ capabilities) }
         case f: EffectOp =>
-          as2.flatMap { args => bind(App(Member(BlockVar(f.effect), f), args ++ capabilities)) }
+          as2.flatMap { args => bind(freshTmpFor(tree), App(Member(BlockVar(f.effect), f), args ++ capabilities)) }
         case f: Field =>
           as2.map { case List(arg: Expr) => Select(arg, f) }
         case f =>
-          as2.flatMap { args => bind(App(BlockVar(sym), args ++ capabilities)) }
+          as2.flatMap { args => bind(freshTmpFor(tree), App(BlockVar(sym), args ++ capabilities)) }
       }
 
     case source.TryHandle(prog, handlers) =>
@@ -201,10 +202,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           })
       }
 
-      bind(Handle(body, hs))
+      bind(freshTmpFor(tree), Handle(body, hs))
 
     case source.Hole(stmts) =>
-      bind(Hole)
+      bind(freshTmpFor(tree), Hole)
 
   }).map { _.inheritPosition(tree) }
 
@@ -235,11 +236,28 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     StateEffect(eff, get, put)
   }
 
+  def freshTmpFor(e: source.Tree)(implicit C: TransformerContext): Tmp = {
+    val x = Tmp(C.module)
+    C.typeOf(e) match {
+      case Some(t / _) => C.assignType(x, t)
+      case _           => C.abort("Internal Error: Missing type of source expression.")
+    }
+    x
+  }
+
+  def freshWildcardFor(e: source.Tree)(implicit C: TransformerContext): Wildcard = {
+    val x = Wildcard(C.module)
+    C.typeOf(e) match {
+      case Some(t / _) => C.assignType(x, t)
+      case _           => C.abort("Internal Error: Missing type of source expression.")
+    }
+    x
+  }
+
   private val delimiter: Cap[Stmt] = new Capability { type Res = Stmt }
 
   def ANF(e: Control[Stmt]): Stmt = control.handle(delimiter)(e).run()
-  def bind(e: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
-    val x = Tmp(C.module)
+  def bind(x: Tmp, e: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
     k.apply(ValueVar(x)).map {
       case Ret(ValueVar(y)) if x == y => e
       case body => Val(x, e, body)
