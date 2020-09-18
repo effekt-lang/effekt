@@ -88,7 +88,7 @@ case object Hole extends Stmt
 case class State(id: Symbol, get: Symbol, put: Symbol, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: Symbol, clauses: List[(Symbol, BlockLit)])
+case class Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) extends Tree
 
 /**
  * Explicit Lifts
@@ -102,3 +102,177 @@ case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
 case class ScopeId() extends Symbol { val name = QualifiedName(s"ev${id}", effekt.symbols.builtins.prelude) }
+
+object Tree {
+
+  // Generic traversal of trees, applying the partial function `f` to every contained
+  // element of type Tree.
+  def visit(obj: Any)(f: PartialFunction[Tree, Unit]): Unit = obj match {
+    case t: Iterable[t] => t.foreach { t => visit(t)(f) }
+    case p: Product => p.productIterator.foreach {
+      case t: Tree => f(t)
+      case other   => ()
+    }
+    case leaf => Set.empty
+  }
+
+  // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
+  trait Rewrite {
+    // Hooks to override
+    def expr: PartialFunction[Expr, Expr] = t => t
+    def stmt: PartialFunction[Stmt, Stmt] = t => t
+    def param: PartialFunction[Param, Param] = t => t
+    def block: PartialFunction[Block, Block] = t => t
+    def pattern: PartialFunction[Pattern, Pattern] = t => t
+    def handler: PartialFunction[Handler, Handler] = t => t
+
+    // Entrypoints to use the traversal on, defined in terms of the above hooks
+    def rewrite(e: Expr): Expr = e match {
+      case e if expr.isDefinedAt(e) => expr(e)
+      case PureApp(b, args) =>
+        PureApp(rewrite(b), args map rewrite)
+      case Select(target, field) =>
+        Select(rewrite(target), field)
+      case v: ValueVar   => v
+      case l: Literal[_] => l
+    }
+    def rewrite(e: Stmt): Stmt = e match {
+      case e if stmt.isDefinedAt(e) => stmt(e)
+      case Def(id, block, rest) =>
+        Def(id, rewrite(block), rewrite(rest))
+      case Val(id, binding, body) =>
+        Val(id, rewrite(binding), rewrite(body))
+      case Data(id, ctors, rest) =>
+        Data(id, ctors, rewrite(rest))
+      case Record(id, fields, rest) =>
+        Record(id, fields, rewrite(rest))
+      case App(b, args) =>
+        App(rewrite(b), args map rewrite)
+      case If(cond, thn, els) =>
+        If(rewrite(cond), rewrite(thn), rewrite(els))
+      case While(cond, body) =>
+        While(rewrite(cond), rewrite(body))
+      case Ret(e: Expr) =>
+        Ret(rewrite(e))
+      case Include(contents, rest) =>
+        Include(contents, rewrite(rest))
+      case State(id, get, put, init, body) =>
+        State(id, get, put, rewrite(init), rewrite(body))
+      case Handle(body, handler) =>
+        Handle(rewrite(body), handler map rewrite)
+      case Match(scrutinee, clauses) =>
+        Match(rewrite(scrutinee), clauses map {
+          case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
+        })
+      case e: Exports   => e
+      case h: Hole.type => h
+    }
+    def rewrite(e: Param): Param = e match {
+      case e if param.isDefinedAt(e) => param(e)
+      case e => e
+    }
+    def rewrite(e: Block): Block = e match {
+      case e if block.isDefinedAt(e) => block(e)
+      case ScopeAbs(scope, body) =>
+        ScopeAbs(scope, rewrite(body))
+      case ScopeApp(b, evidence) =>
+        ScopeApp(rewrite(b), evidence)
+      case Lifted(s, b) =>
+        Lifted(s, rewrite(b))
+      case BlockLit(params, body) =>
+        BlockLit(params map rewrite, rewrite(body))
+      case Member(b, field) =>
+        Member(rewrite(b), field)
+      case Extern(params, body) =>
+        Extern(params map rewrite, body)
+      case b: BlockVar => b
+    }
+    def rewrite(e: Pattern): Pattern = e match {
+      case e if pattern.isDefinedAt(e) => pattern(e)
+      case TagPattern(tag, patterns: List[Pattern]) =>
+        TagPattern(tag, patterns map rewrite)
+      case LiteralPattern(l) =>
+        LiteralPattern(rewrite(l).asInstanceOf[Literal[_]])
+      case p => p
+    }
+    def rewrite(e: Handler): Handler = e match {
+      case e if handler.isDefinedAt(e) => handler(e)
+      case Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) => Handler(id, clauses map {
+        case (s, b) => (s, rewrite(b).asInstanceOf[BlockLit])
+      })
+    }
+
+    def rewrite(e: Argument): Argument = e match {
+      case e: Expr  => rewrite(e)
+      case e: Block => rewrite(e)
+    }
+  }
+
+  trait Query[T] {
+    // Monoid
+    def concat(x: T, y: T): T
+    def unit: T
+
+    def expr: PartialFunction[Expr, T]
+    def stmt: PartialFunction[Stmt, T]
+    def param: PartialFunction[Param, T]
+    def block: PartialFunction[Block, T]
+    def pattern: PartialFunction[Pattern, T]
+    def handler: PartialFunction[Handler, T]
+
+    def run(e: Expr): T = e match {
+      case e if expr.isDefinedAt(e) => expr(e)
+      case e => runGeneric(e)
+    }
+    def run(e: Stmt): T = e match {
+      case e if stmt.isDefinedAt(e) => stmt(e)
+      case e => runGeneric(e)
+    }
+    def run(e: Param): T = e match {
+      case e if param.isDefinedAt(e) => param(e)
+      case e => runGeneric(e)
+    }
+    def run(e: Block): T = e match {
+      case e if block.isDefinedAt(e) => block(e)
+      case e => runGeneric(e)
+    }
+    def run(e: Pattern): T = e match {
+      case e if pattern.isDefinedAt(e) => pattern(e)
+      case e => runGeneric(e)
+    }
+    def run(e: Handler): T = e match {
+      case e if handler.isDefinedAt(e) => handler(e)
+      case e => runGeneric(e)
+    }
+
+    def run(e: Tree): T = e match {
+      case e: Expr    => run(e)
+      case s: Stmt    => run(s)
+      case p: Param   => run(p)
+      case b: Block   => run(b)
+      case b: Pattern => run(b)
+      case b: Handler => run(b)
+      case other      => runGeneric(other) // TODO explicitly expand
+    }
+
+    def runGeneric(e: Any): T = e match {
+      case t: Iterable[t] => t.map(runGeneric).fold(unit)(concat)
+      case p: Product => p.productIterator.map {
+        case t: Tree => runGeneric(t)
+        case other   => unit
+      }.fold(unit)(concat)
+      case leaf => unit
+    }
+  }
+
+  trait Visit extends Query[Unit] {
+    def concat(x: Unit, y: Unit) = ()
+
+    def expr: PartialFunction[Expr, Unit] = x => ()
+    def stmt: PartialFunction[Stmt, Unit] = x => ()
+    def param: PartialFunction[Param, Unit] = x => ()
+    def block: PartialFunction[Block, Unit] = x => ()
+    def pattern: PartialFunction[Pattern, Unit] = x => ()
+    def handler: PartialFunction[Handler, Unit] = x => ()
+  }
+}
