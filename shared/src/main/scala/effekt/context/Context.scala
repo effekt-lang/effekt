@@ -27,10 +27,10 @@ abstract class Context(val positions: Positions)
     with TypesDB
     with TyperOps
     // Util
-    with ErrorReporter { self =>
+    with ErrorReporter {
 
   // bring the context itself in scope
-  implicit val context: Context = self
+  implicit val context: Context = this
 
   // the currently processed module
   var module: Module = _
@@ -66,8 +66,8 @@ abstract class Context(val positions: Positions)
   def typerState_=(st: TyperState): Unit = _typerState = st
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
-    self.module = module
-    self.focus = focus
+    this.module = module
+    this.focus = focus
     block
   }
 
