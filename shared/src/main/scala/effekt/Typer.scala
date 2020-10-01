@@ -543,7 +543,7 @@ class Typer extends Phase[Module, Module] { typer =>
         (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
       case (List(bt: BlockType), arg: source.BlockArg) =>
-        checkBlockArgument(bt, arg)
+        checkBlockArgument(bt, arg, false)
 
       case (_, _) =>
         Context.error("Wrong type of argument section")
@@ -566,7 +566,7 @@ class Typer extends Phase[Module, Module] { typer =>
     //   BlockArg: foo { n => println("hello" + n) }
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
+    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg, isResume: Boolean): Unit = Context.at(arg) {
       val BlockType(Nil, params, tpe1 / handled) = subst substitute tpe
 
       // TODO make blockargs also take multiple argument sections.
@@ -577,14 +577,16 @@ class Typer extends Phase[Module, Module] { typer =>
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
       subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
-      effs = (effs ++ (stmtEffs -- handled))
+      if (!isResume) {
+        effs = (effs ++ (stmtEffs -- handled))
+      }
     }
 
     (params zip args) foreach {
       // Special case - treat 1st param type T as () => T
       case (List(ptpe: ValueType), as @ source.BlockArg(_, _)) if sym.name.name == "resume" =>
         val blockType = BlockType(Nil, List(Nil), Effectful(ptpe, Effects(Nil)))
-        checkBlockArgument(blockType, as)
+        checkBlockArgument(blockType, as, true)
 
       case (ps, as) => checkArgumentSection(ps, as)
     }
