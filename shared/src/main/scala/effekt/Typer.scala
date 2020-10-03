@@ -115,7 +115,10 @@ class Typer extends Phase[Module, Module] { typer =>
               val effectOp = d.definition
               val bt = Context.blockTypeOf(effectOp)
               val ps = checkAgainstDeclaration(op.name, bt.params, params)
-              val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
+              // val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
+              val effs = effectOp.ret.get.effects - effectOp.effect
+              val resumeArgType = BlockType(Nil, List(Nil), Effectful(effectOp.ret.get.tpe, effs))
+              val resumeType = BlockType(Nil, List(List(resumeArgType)), ret / Pure)
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret
@@ -584,9 +587,9 @@ class Typer extends Phase[Module, Module] { typer =>
 
     (params zip args) foreach {
       // Special case - treat 1st param type T as () => T
-      case (List(ptpe: ValueType), as @ source.BlockArg(_, _)) if sym.name.name == "resume" =>
+      /*case (List(ptpe: ValueType), as @ source.BlockArg(_, _)) if sym.name.name == "resume" =>
         val blockType = BlockType(Nil, List(Nil), Effectful(ptpe, Effects(Nil)))
-        checkBlockArgument(blockType, as, true)
+        checkBlockArgument(blockType, as, true)*/
 
       case (ps, as) => checkArgumentSection(ps, as)
     }
