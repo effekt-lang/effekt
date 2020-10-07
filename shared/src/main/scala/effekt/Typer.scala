@@ -586,11 +586,10 @@ class Typer extends Phase[Module, Module] { typer =>
     }
 
     (params zip args) foreach {
-      // Special case - treat 1st param type T as () => T
-      /*case (List(ptpe: ValueType), as @ source.BlockArg(_, _)) if sym.name.name == "resume" =>
-        val blockType = BlockType(Nil, List(Nil), Effectful(ptpe, Effects(Nil)))
-        checkBlockArgument(blockType, as, true)*/
-
+      // Special case - treat 1st param type () => T as T
+      case (List(bt: BlockType), arg @ source.ValueArgs(_)) if sym.name.name == "resume" => {
+        checkArgumentSection(List(bt.ret.tpe), arg)
+      }
       case (ps, as) => checkArgumentSection(ps, as)
     }
 
