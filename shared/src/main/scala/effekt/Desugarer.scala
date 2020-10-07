@@ -6,7 +6,7 @@ package desugarer
  */
 import effekt.context.Context
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ Def, Id, Tree, ModuleDecl }
+import effekt.source._
 import effekt.symbols._
 import effekt.util.Task
 import scopes._
@@ -27,56 +27,80 @@ class Desugarer extends Phase[Module, Module] { namer =>
   def desugar(mod: Module)(implicit C: Context): Module = {
     val module = mod.decl
 
-    val newdefs = Context in {
+    val newDefs = Context in {
       module.defs.map { d =>
-        Context.focusing(d) {
-          case d @ source.EffDef(id, ops) => {
-            val newops = ops.map { op =>
-              if (op.ret.eff.effs.length >= 1) {
-                println(ops)
-                op
-              } else {
-                op
-              }
-            }
-            source.EffDef(id, newops)
-          }
-          case d => d
+        Context.focusing(d) { d =>
+          desugar(d)
         }
       }
     }
 
-    Module(ModuleDecl(module.path, module.imports, newdefs), mod.source)
+    mod.clone(ModuleDecl(module.path, module.imports, newDefs), mod.source)
   }
 
-  // def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
-  //     case d @ source.FunDef(id, tparams, params, ret, body) =>
-  //       d.symbol.ret.foreach { annot => Context.assignType(d.symbol, d.symbol.toType) }
-  //
-  //     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-  //       Context.assignType(d.symbol, d.symbol.toType)
-  //
-  //     case d @ source.EffDef(id, ops) =>
-  //       d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
-  //
-  //     case source.DataDef(id, tparams, ctors) =>
-  //       ctors.foreach { ctor =>
-  //         val sym = ctor.symbol
-  //         Context.assignType(sym, sym.toType)
-  //
-  //         sym.fields.foreach { field =>
-  //           Context.assignType(field, field.toType)
-  //         }
-  //       }
-  //
-  //     case d @ source.RecordDef(id, tparams, fields) =>
-  //       val rec = d.symbol
-  //       Context.assignType(rec, rec.toType)
-  //       rec.fields.foreach { field =>
-  //         Context.assignType(field, field.toType)
-  //       }
-  //
-  //     case d => ()
-  //   }
-  //
+  def desugar(defi: Def)(implicit C: Context): Def = defi match {
+    case fun @ FunDef(id, tparams, params, ret, body) => {
+      val newBody = desugar(body)
+      FunDef(id, tparams, params, ret, newBody)
+    }
+    case d => d
+  }
+
+  def desugar(stmt: Stmt)(implicit C: Context): Stmt = stmt match {
+    case DefStmt(d, rest) => DefStmt(desugar(d), desugar(rest))
+    case ExprStmt(e, rest) => {
+      // ここでeにresume(x)を含むなら、
+      // DefStmt(ValDef("temp", None, x),
+      // ExprStmt(<e内のresume(x)をresume{temp}に置き換えたExpr>,
+      // rest))
+      // を返す
+      ExprStmt(desugar(e), desugar(rest))
+    }
+    case Return(e)    => Return(desugar(e))
+    case BlockStmt(b) => BlockStmt(desugar(b))
+  }
+
+  def desugar(expr: Expr)(implicit C: Context): Expr = expr match {
+    case v: Var             => v
+    case Assign(id, expr)   => Assign(id, desugar(expr))
+    case l: Literal[t]      => l
+    case If(cond, thn, els) => If(desugar(cond), desugar(thn), desugar(els))
+    case While(cond, body)  => While(desugar(cond), desugar(body))
+    case MatchExpr(sc, clauses) =>
+      val newClauses = clauses.map {
+        case MatchClause(pattern, body) =>
+          MatchClause(pattern, desugar(body))
+      }
+      MatchExpr(desugar(sc), newClauses)
+    case Call(fun, targs, args) =>
+      val newArgs = if (fun.name == "resume") {
+        val newArg0 = args(0) match {
+          // The number of arguments of resume must be 1.
+          case ValueArgs(List(arg)) => {
+            // TODO: Move arg to outer expr
+            println("replced")
+            BlockArg(ValueParams(Nil), Return(desugar(arg)))
+          }
+          case BlockArg(params, body) => BlockArg(params, desugar(body))
+        }
+        List(newArg0)
+      } else {
+        args.map {
+          case ValueArgs(args)        => ValueArgs(args map desugar)
+          case BlockArg(params, body) => BlockArg(params, desugar(body))
+        }
+      }
+      Call(fun, targs, newArgs)
+    case TryHandle(prog, handlers) =>
+      val newHandlers = handlers.map {
+        case Handler(id, clauses) =>
+          val newClauses = clauses.map {
+            case OpClause(id, params, body, resume) =>
+              OpClause(id, params, desugar(body), resume)
+          }
+          Handler(id, newClauses)
+      }
+      TryHandle(desugar(prog), newHandlers)
+    case Hole(stmts) => Hole(desugar(stmts))
+  }
 }

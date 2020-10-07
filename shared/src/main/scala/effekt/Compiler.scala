@@ -64,14 +64,15 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[Module] = for {
       ast <- getAST(source)
       mod = Module(ast, source)
-      _ <- C.using(module = mod, focus = ast) {
+      dmod <- C.using(module = mod, focus = ast) {
         for {
-          // _ <- desugarer(mod)
-          _ <- namer(mod)
-          _ <- typer(mod)
-        } yield ()
+          dmod <- Some(mod)
+          // dmod <- desugarer(mod)
+          _ <- namer(dmod)
+          _ <- typer(dmod)
+        } yield dmod
       }
-    } yield mod
+    } yield dmod
   }
 
   object lower extends SourceTask[core.ModuleDecl]("lower") {

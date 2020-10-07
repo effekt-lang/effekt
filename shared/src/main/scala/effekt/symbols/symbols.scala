@@ -60,6 +60,10 @@ package object symbols {
       case e: Effect => e
     })
 
+    def clone(decl: ModuleDecl, source: Source) = {
+      Module(decl, source).export(imports, terms, types)
+    }
+
     /**
      * It is actually possible, that exports is invoked on a single module multiple times:
      * The dependencies of a module might change, which triggers frontend on the same module
