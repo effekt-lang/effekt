@@ -109,7 +109,7 @@ class Namer extends Phase[Module, Module] { namer =>
     case source.EffDef(id, ops) =>
       val effectSym = Context.resolveType(id).asUserEffect
       effectSym.ops = ops.map {
-        case source.Operation(id, tparams, params, ret, isEffectful) =>
+        case source.Operation(id, tparams, params, ret) =>
           val name = Context.freshTermName(id)
           Context scoped {
             val tps = tparams map resolve
