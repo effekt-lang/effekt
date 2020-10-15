@@ -115,7 +115,6 @@ class Typer extends Phase[Module, Module] { typer =>
               val effectOp = d.definition
               val bt = Context.blockTypeOf(effectOp)
               val ps = checkAgainstDeclaration(op.name, bt.params, params)
-              // val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
               val effs = effectOp.ret.get.effects - effectOp.effect
               val resumeArgType = BlockType(Nil, List(Nil), Effectful(effectOp.ret.get.tpe, effs))
               val resumeType = BlockType(Nil, List(List(resumeArgType)), ret / Pure)
@@ -281,16 +280,7 @@ class Typer extends Phase[Module, Module] { typer =>
       Context.assignType(d.symbol, d.symbol.toType)
 
     case d @ source.EffDef(id, ops) =>
-      d.symbol.ops.foreach { op =>
-        println("" + op + " " + op.toType)
-        Context.assignType(op, op.toType)
-        // if (op.ret.map(_.effects.effects.length).getOrElse(0) >= 1) {
-        //   Context.assignType(op, op.toType)
-        // }
-        // else {
-        //   Context.assignType(op, op.toType)
-        // }
-      }
+      d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
@@ -587,7 +577,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
     (params zip args) foreach {
       // Special case - treat 1st param type () => T as T
-      case (List(bt: BlockType), arg @ source.ValueArgs(_)) if sym.name.name == "resume" => {
+      case (List(bt: BlockType), arg @ source.ValueArgs(_)) if sym.isInstanceOf[ResumeParam] => {
         checkArgumentSection(List(bt.ret.tpe), arg)
       }
       case (ps, as) => checkArgumentSection(ps, as)
