@@ -4,7 +4,7 @@ package effekt
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
 import effekt.source.{ ToplevelDecl, Tree }
-import effekt.symbols.Module
+import effekt.symbols.Toplevel
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
 import effekt.util.paths._
@@ -81,14 +81,14 @@ trait Driver extends CompilerWithConfig[Tree, ToplevelDecl, EffektConfig] { oute
     report(source, C.buffer.get, config)
   }
 
-  def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def eval(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
     }
   }
 
-  def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalJS(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val jsFile = C.generatorPhase.path(mod)
@@ -101,7 +101,7 @@ trait Driver extends CompilerWithConfig[Tree, ToplevelDecl, EffektConfig] { oute
     }
   }
 
-  def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalCS(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val csFile = C.generatorPhase.path(mod)

@@ -31,13 +31,13 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Phase[Module, Module] { namer =>
+class Namer extends Phase[Toplevel, Toplevel] { namer =>
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+  def run(mod: Toplevel)(implicit C: Context): Option[Toplevel] = {
     Some(resolve(mod))
   }
 
-  def resolve(mod: Module)(implicit C: Context): Module = {
+  def resolve(mod: Toplevel)(implicit C: Context): Toplevel = {
 
     var scope: Scope = toplevel(builtins.rootTypes)
 

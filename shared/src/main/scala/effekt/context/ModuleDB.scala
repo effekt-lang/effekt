@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.symbols.Module
+import effekt.symbols.Toplevel
 import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.util.Source
 
@@ -34,13 +34,13 @@ trait ModuleDB { self: Context =>
    *
    * Used by Namer and Evaluator to resolve imports
    */
-  def moduleOf(path: String): Module =
+  def moduleOf(path: String): Toplevel =
     moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
 
   /**
    * Tries to find a module for the given source, will run compiler on demand
    */
-  def moduleOf(source: Source): Module = {
+  def moduleOf(source: Source): Toplevel = {
     tryModuleOf(source).getOrElse {
       abort(s"Cannot compile dependency: ${source.name}")
     }
@@ -49,14 +49,14 @@ trait ModuleDB { self: Context =>
   /**
    * Tries to find a module for the given source, will run compiler on demand
    */
-  def tryModuleOf(source: Source): Option[Module] = for {
+  def tryModuleOf(source: Source): Option[Toplevel] = for {
     mod <- frontend(source)(this)
   } yield mod
 
   /**
    * Util to check whether main exists on the given module
    */
-  def checkMain(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def checkMain(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
     val mains = mod.terms.getOrElse("main", Set())
 
     if (mains.isEmpty) {

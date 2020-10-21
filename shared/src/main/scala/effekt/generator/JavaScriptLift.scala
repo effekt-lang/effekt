@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, QualifiedName, Symbol, moduleName }
+import effekt.symbols.{ Toplevel, Name, QualifiedName, Symbol, moduleName }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -21,7 +21,7 @@ class JavaScriptLift extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: Toplevel)(implicit C: Context): String =
     (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
 
   /**
@@ -37,7 +37,7 @@ class JavaScriptLift extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: Toplevel)(implicit C: Context): Option[Document] = for {
     core <- C.inferLifts(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }

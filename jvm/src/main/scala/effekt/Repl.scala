@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, Toplevel, ValueSymbol }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
@@ -248,7 +248,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     report(source, context.buffer.get, config)
   }
 
-  private def runFrontend(source: Source, ast: ToplevelDecl, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runFrontend(source: Source, ast: ToplevelDecl, config: EffektConfig)(f: Toplevel => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.frontend(src) map { f } getOrElse {
@@ -256,7 +256,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
   }
 
-  private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runParsingFrontend(source: Source, config: EffektConfig)(f: Toplevel => Unit): Unit = {
     context.setup(config)
     context.frontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)

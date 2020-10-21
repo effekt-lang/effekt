@@ -190,17 +190,19 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // format: OFF
 
   lazy val program: P[ToplevelDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => ToplevelDecl(name, Import("effekt") :: imports, defs)
-      case name ~ imports ~ defs => ToplevelDecl(name, imports, defs)
+    ( many(importDecl) ~ many(definition) ^^ {
+      case imports ~ defs => ToplevelDecl("", Import("effekt") :: imports, defs)
+      //case imports ~ defs => ToplevelDecl("", imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )
 
+  /*
   lazy val moduleDecl: P[String] =
     ( `module` ~/> moduleName
     | defaultModulePath
     )
+   */
 
   lazy val importDecl: P[Import] =
     `import` ~/> moduleName ^^ Import

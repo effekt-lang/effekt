@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core._
-import effekt.symbols.Module
+import effekt.symbols.Toplevel
 import effekt.symbols.{ Name, Symbol }
 
 import org.bitbucket.inkytonik.kiama
@@ -24,7 +24,7 @@ class ChezSchemeLift extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: Toplevel)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 
   /**
@@ -43,7 +43,7 @@ class ChezSchemeLift extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: Toplevel)(implicit C: Context): Option[Document] = for {
     core <- C.inferLifts(mod.source)
     doc = ChezSchemeLiftPrinter.format(core)
   } yield doc
@@ -51,7 +51,7 @@ class ChezSchemeLift extends Generator {
 
 object ChezSchemeLiftPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Module, core: ToplevelDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: Toplevel, core: ToplevelDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
       val main = mod.terms("main").toList.head

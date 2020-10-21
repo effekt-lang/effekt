@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.source.{ Id, IdDef, IdRef, Reference, FunDef }
-import effekt.symbols.{ Symbol, Module, Effectful }
+import effekt.symbols.{ Symbol, Toplevel, Effectful }
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
 /**
@@ -13,7 +13,7 @@ trait SymbolsDB { self: Context =>
   val symbols: Memoiser[Id, Symbol] = Memoiser.makeIdMemoiser()
 
   // the module a symbol is defined in
-  val modules: Memoiser[Symbol, Module] = Memoiser.makeIdMemoiser()
+  val modules: Memoiser[Symbol, Toplevel] = Memoiser.makeIdMemoiser()
 
   // Databases used by the language server
 
@@ -38,7 +38,7 @@ trait SymbolsDB { self: Context =>
   }
   def symbolOption(id: Id): Option[Symbol] = symbols.get(id)
 
-  def owner(sym: Symbol): Module = modules(sym)
+  def owner(sym: Symbol): Toplevel = modules(sym)
 
   // Searching the defitions for a Reference
   // =======================================

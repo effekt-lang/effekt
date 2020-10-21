@@ -12,7 +12,7 @@ trait Name {
   def rename(f: String => String): Name
 }
 
-case class QualifiedName(name: String, module: Module) extends Name {
+case class QualifiedName(name: String, module: Toplevel) extends Name {
   def qualified: String = s"${module.name}.${name}"
   def rename(f: String => String): Name = copy(name = f(name))
 }
@@ -25,5 +25,5 @@ case object NoName extends Name {
 
 object Name {
   def apply(id: Id)(implicit C: Context): Name = QualifiedName(id.name, C.module)
-  def apply(name: String, module: Module) = QualifiedName(name, module)
+  def apply(name: String, module: Toplevel) = QualifiedName(name, module)
 }

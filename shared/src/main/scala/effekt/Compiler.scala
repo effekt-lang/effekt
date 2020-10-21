@@ -4,7 +4,7 @@ import effekt.context.Context
 import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.source.ToplevelDecl
-import effekt.symbols.Module
+import effekt.symbols.Toplevel
 import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
@@ -58,10 +58,10 @@ trait Compiler {
     }
   }
 
-  object frontend extends SourceTask[Module]("frontend") {
-    def run(source: Source)(implicit C: Context): Option[Module] = for {
+  object frontend extends SourceTask[Toplevel]("frontend") {
+    def run(source: Source)(implicit C: Context): Option[Toplevel] = for {
       ast <- getAST(source)
-      mod = Module(ast, source)
+      mod = Toplevel(ast, source)
       _ <- C.using(module = mod, focus = ast) {
         for {
           _ <- namer(mod)

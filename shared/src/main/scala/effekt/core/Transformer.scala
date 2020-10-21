@@ -9,15 +9,15 @@ import effekt.symbols._
 import effekt.util.{ Task, control }
 import effekt.util.control._
 
-case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+case class Wildcard(module: Toplevel) extends ValueSymbol { val name = Name("_", module) }
+case class Tmp(module: Toplevel) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-class Transformer extends Phase[Module, core.ToplevelDecl] {
+class Transformer extends Phase[Toplevel, core.ToplevelDecl] {
 
-  def run(mod: Module)(implicit C: Context): Option[ToplevelDecl] =
+  def run(mod: Toplevel)(implicit C: Context): Option[ToplevelDecl] =
     Some(transform(mod)(TransformerContext(C)))
 
-  def transform(mod: Module)(implicit C: TransformerContext): ToplevelDecl = {
+  def transform(mod: Toplevel)(implicit C: TransformerContext): ToplevelDecl = {
     val source.ToplevelDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
