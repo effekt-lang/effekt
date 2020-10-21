@@ -235,7 +235,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case _ => ()
   }
 
-  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
+  private def runCompiler(source: Source, ast: ToplevelDecl, config: EffektConfig): Unit = {
     context.setup(config)
 
     val src = VirtualSource(ast, source)
@@ -248,7 +248,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     report(source, context.buffer.get, config)
   }
 
-  private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runFrontend(source: Source, ast: ToplevelDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.frontend(src) map { f } getOrElse {
@@ -316,16 +316,16 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     /**
      * Create a module declaration using the given expression as body of main
      */
-    def make(expr: Expr): ModuleDecl = {
+    def make(expr: Expr): ToplevelDecl = {
 
       val body = Return(expr)
 
-      ModuleDecl("lib/interactive", Import("effekt") :: imports,
+      ToplevelDecl("lib/interactive", Import("effekt") :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
           body))
     }
 
-    def makeEval(expr: Expr): ModuleDecl =
+    def makeEval(expr: Expr): ToplevelDecl =
       make(Call(IdRef("println"), Nil, List(ValueArgs(List(expr)))))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)

@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ Def, FunDef, ToplevelDecl, ValDef, VarDef }
 import effekt.context.TypesDB
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
@@ -42,7 +42,7 @@ package object symbols {
    * Symbols and types are stored globally in CompilerContext.
    */
   case class Module(
-    decl: ModuleDecl,
+    decl: ToplevelDecl,
     source: Source
   ) extends Symbol {
     val name = Name(moduleName(decl.path), this)

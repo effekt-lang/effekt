@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.{ ToplevelDecl, Tree }
 
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Position
@@ -10,7 +10,7 @@ trait Intelligence {
 
   import effekt.symbols._
 
-  type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
+  type EffektTree = kiama.relation.Tree[Tree, ToplevelDecl]
 
   case class SymbolInfo(
     symbol: Symbol,

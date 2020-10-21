@@ -68,7 +68,7 @@ class Namer extends Phase[Module, Module] { namer =>
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
+    case source.ToplevelDecl(path, imports, decls) =>
       decls foreach { resolve }
       resolveAll(decls)
 

@@ -51,7 +51,7 @@ class ChezSchemeLift extends Generator {
 
 object ChezSchemeLiftPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: Module, core: ToplevelDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
       val main = mod.terms("main").toList.head

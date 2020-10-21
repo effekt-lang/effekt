@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
-import effekt.source.ModuleDecl
+import effekt.source.ToplevelDecl
 import effekt.symbols.Module
 import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
@@ -51,8 +51,8 @@ trait Compiler {
   // Tasks
   // =====
 
-  object getAST extends SourceTask[ModuleDecl]("ast") {
-    def run(source: Source)(implicit C: Context): Option[ModuleDecl] = source match {
+  object getAST extends SourceTask[ToplevelDecl]("ast") {
+    def run(source: Source)(implicit C: Context): Option[ToplevelDecl] = source match {
       case VirtualSource(decl, _) => Some(decl)
       case _ => parser(source)
     }
@@ -71,15 +71,15 @@ trait Compiler {
     } yield mod
   }
 
-  object lower extends SourceTask[core.ModuleDecl]("lower") {
-    def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
+  object lower extends SourceTask[core.ToplevelDecl]("lower") {
+    def run(source: Source)(implicit C: Context): Option[core.ToplevelDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
     } yield core
   }
 
-  object inferLifts extends SourceTask[core.ModuleDecl]("lifts") {
-    def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
+  object inferLifts extends SourceTask[core.ToplevelDecl]("lifts") {
+    def run(source: Source)(implicit C: Context): Option[core.ToplevelDecl] = for {
       mod <- frontend(source)
       core <- lower(source)
       lifted <- C.using(module = mod) { lifter(core) }

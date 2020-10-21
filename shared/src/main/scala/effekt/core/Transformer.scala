@@ -12,13 +12,13 @@ import effekt.util.control._
 case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
 case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-class Transformer extends Phase[Module, core.ModuleDecl] {
+class Transformer extends Phase[Module, core.ToplevelDecl] {
 
-  def run(mod: Module)(implicit C: Context): Option[ModuleDecl] =
+  def run(mod: Module)(implicit C: Context): Option[ToplevelDecl] =
     Some(transform(mod)(TransformerContext(C)))
 
-  def transform(mod: Module)(implicit C: TransformerContext): ModuleDecl = {
-    val source.ModuleDecl(path, imports, defs) = mod.decl
+  def transform(mod: Module)(implicit C: TransformerContext): ToplevelDecl = {
+    val source.ToplevelDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
@@ -27,7 +27,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
     }.toList)
 
-    ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {
+    ToplevelDecl(path, imports.map { _.path }, defs.foldRight(exports) {
       case (d, r) =>
         transform(d, r)(C)
     }).inheritPosition(mod.decl)

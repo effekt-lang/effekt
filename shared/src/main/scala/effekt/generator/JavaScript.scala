@@ -124,21 +124,21 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
-  def format(t: ModuleDecl)(implicit C: Context): Document =
+  def format(t: ToplevelDecl)(implicit C: Context): Document =
     pretty(commonjs(t))
 
   val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
 
   val emptyline: Doc = line <> line
 
-  def amdefine(m: ModuleDecl)(implicit C: Context): Doc = {
+  def amdefine(m: ToplevelDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
       parens(imports <> comma <+> jsFunction("", deps.map { d => moduleName(d) }, toDoc(m)))
   }
 
-  def commonjs(m: ModuleDecl)(implicit C: Context): Doc = {
+  def commonjs(m: ToplevelDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
       "const" <+> moduleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
@@ -147,7 +147,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     imports <> emptyline <> toDoc(m)
   }
 
-  def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
+  def toDoc(m: ToplevelDecl)(implicit C: Context): Doc =
     "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
 
   def toDoc(b: Block)(implicit C: Context): Doc
