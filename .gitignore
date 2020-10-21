@@ -1,5 +1,9 @@
 .idea/
 *.code-workspace
+.vscode/
+.bloop/
+.metals/
+project/
 build/
 out/
 project/target/
