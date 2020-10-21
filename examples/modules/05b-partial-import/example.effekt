@@ -1,4 +1,4 @@
-import hello.world.{greet goodbye}
+import hello.world.{greet, goodbye}
 
 def main() = {
     greet()
