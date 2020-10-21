@@ -1,0 +1,15 @@
+module hello {
+    def greet(name: String) = {
+        println(concat("Hello ", name))
+    }
+}
+
+module hello.world {
+    def greet() = {
+        greet("World")
+    }
+}
+
+def main() = {
+    hello.world.greet()
+}

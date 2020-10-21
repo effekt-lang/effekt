@@ -1,0 +1,9 @@
+module hello {
+    def greet(name: String) = {
+        println(concat("Hello ", name))
+    }
+}
+
+def main() = {
+    hello.greet("Modules")
+}
