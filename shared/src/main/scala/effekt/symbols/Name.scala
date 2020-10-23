@@ -53,7 +53,7 @@ sealed abstract class ModuleName extends Name {
     *
     * @param localName local name of the submodule. Might be a nested name.
     */
-  def submodule(localName: String): ModuleName.Nested = {
+  def submodule(localName: String): ModuleName = {
     assert(localName.nonEmpty, "Submodule name cannot be empty.")
     return localName.split(".").foldLeft(this)((module, name) => Nested(module, name))
   }
@@ -68,11 +68,11 @@ sealed abstract class ModuleName extends Name {
     val localName = segments.last
     val module = segments.dropRight(1).foldLeft(this)((module, name) => Nested(module, name))
 
-    return SymbolName(module, localName)
+    return SymbolName(Some(module), localName)
   }
 
   // Compare module names by their qualified name.
-  override def equals(obj: Object): Boolean = obj match {
+  override def equals(obj: Any): Boolean = obj match {
     case m: ModuleName => m.qualified == this.qualified
     case _ => false
   }
@@ -93,7 +93,7 @@ sealed abstract class ModuleName extends Name {
   /**
     * @note Do not use the constructor of this type directly. Instead call the `submodule(name)` function of an existing ModuleName.
     */
-  case class Nested private (parent: ModuleName, name: Name) extends ModuleName {
+  case class Nested private (parent: ModuleName, name: String) extends ModuleName {
     def qualified: String = parent.qualified + "." + name
 
     def rename(f: String => String): Name = copy(name = f(name))
