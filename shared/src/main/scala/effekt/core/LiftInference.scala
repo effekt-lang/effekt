@@ -4,13 +4,13 @@ package core
 import effekt.symbols.Symbol
 import effekt.context.Context
 
-class LiftInference extends Phase[ToplevelDecl, ToplevelDecl] {
+class LiftInference extends Phase[LegacyModuleDecl, LegacyModuleDecl] {
 
-  def run(mod: ToplevelDecl)(implicit C: Context): Option[ToplevelDecl] =
+  def run(mod: LegacyModuleDecl)(implicit C: Context): Option[LegacyModuleDecl] =
     Some(transform(mod)(Environment(Map.empty), C))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
-  def transform(mod: ToplevelDecl)(implicit env: Environment, C: Context): ToplevelDecl =
+  def transform(mod: LegacyModuleDecl)(implicit env: Environment, C: Context): LegacyModuleDecl =
     mod.copy(defs = transform(mod.defs))
 
   // [[ a -> b ]] = [ev] -> a -> b

@@ -1,6 +1,6 @@
 package effekt.symbols
 
-import effekt.source.ToplevelDecl
+import effekt.source.LegacyModuleDecl
 import org.bitbucket.inkytonik.kiama.util.StringSource
 
 /**
@@ -10,7 +10,7 @@ object builtins {
 
   // a dummy module for built in types. Can be dropped, once they are
   // defined in the prelude
-  lazy val prelude = Toplevel(ToplevelDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
+  lazy val prelude = LegacyModule(LegacyModuleDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
 
   private def name(s: String) = Name(s, prelude)
 

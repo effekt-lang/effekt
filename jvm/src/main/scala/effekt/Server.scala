@@ -99,7 +99,7 @@ trait LSPServer extends Driver with Intelligence {
 
   def getSymbolKind(sym: Symbol): Option[SymbolKind] =
     sym match {
-      case _: Toplevel =>
+      case _: LegacyModule =>
         Some(SymbolKind.Class)
       case _: Fun =>
         Some(SymbolKind.Method)

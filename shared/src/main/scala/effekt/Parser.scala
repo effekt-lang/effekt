@@ -12,9 +12,9 @@ import scala.language.implicitConversions
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ToplevelDecl] {
+class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, LegacyModuleDecl] {
 
-  def run(source: Source)(implicit C: Context): Option[ToplevelDecl] =
+  def run(source: Source)(implicit C: Context): Option[LegacyModuleDecl] =
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
@@ -189,10 +189,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // turn scalariform formatting off!
   // format: OFF
 
-  lazy val program: P[ToplevelDecl] =
+  lazy val program: P[LegacyModuleDecl] =
     ( many(importDecl) ~ many(definition) ^^ {
-      case imports ~ defs => ToplevelDecl("", Import("effekt") :: imports, defs)
-      //case imports ~ defs => ToplevelDecl("", imports, defs)
+      case imports ~ defs => LegacyModuleDecl("", Import("effekt") :: imports, defs)
+      //case imports ~ defs => LegacyModuleDecl("", imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )

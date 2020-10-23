@@ -14,7 +14,7 @@ sealed trait Tree extends Product {
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ToplevelDecl(path: String, imports: List[String], defs: Stmt) extends Tree
+case class LegacyModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks

@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, ToplevelDecl, ValDef, VarDef }
+import effekt.source.{ Def, FunDef, LegacyModuleDecl, ValDef, VarDef }
 import effekt.context.TypesDB
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
@@ -41,8 +41,8 @@ package object symbols {
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
    */
-  case class Toplevel(
-    decl: ToplevelDecl,
+  case class LegacyModule(
+    decl: LegacyModuleDecl,
     source: Source
   ) extends Symbol {
     val name = Name(moduleName(decl.path), this)
@@ -55,12 +55,12 @@ package object symbols {
     private var _types: Map[String, TypeSymbol] = _
     def types = _types
 
-    private var _imports: List[Toplevel] = _
+    private var _imports: List[LegacyModule] = _
     def imports = _imports
 
     // a topological ordering of all transitive dependencies
     // this is the order in which the modules need to be compiled / loaded
-    lazy val dependencies: List[Toplevel] = imports.flatMap { im => im.dependencies :+ im }.distinct
+    lazy val dependencies: List[LegacyModule] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
     // toplevle declared effects
     def effects: Effects = Effects(types.values.collect {
@@ -73,7 +73,7 @@ package object symbols {
      * again. It is the same, since the source and AST did not change.
      */
     def export(
-      imports: List[Toplevel],
+      imports: List[LegacyModule],
       terms: Map[String, Set[TermSymbol]],
       types: Map[String, TypeSymbol]
     ): this.type = {
@@ -87,7 +87,7 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
-  case class ResumeParam(module: Toplevel) extends Param with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(module: LegacyModule) extends Param with BlockSymbol { val name = Name("resume", module) }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.

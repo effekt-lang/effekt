@@ -26,9 +26,9 @@ case class TyperState(
   effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
 )
 
-class Typer extends Phase[Toplevel, Toplevel] { typer =>
+class Typer extends Phase[LegacyModule, LegacyModule] { typer =>
 
-  def run(mod: Toplevel)(implicit C: Context): Option[Toplevel] = {
+  def run(mod: LegacyModule)(implicit C: Context): Option[LegacyModule] = {
 
     val module = mod.decl
 

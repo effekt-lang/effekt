@@ -31,13 +31,13 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Phase[Toplevel, Toplevel] { namer =>
+class Namer extends Phase[LegacyModule, LegacyModule] { namer =>
 
-  def run(mod: Toplevel)(implicit C: Context): Option[Toplevel] = {
+  def run(mod: LegacyModule)(implicit C: Context): Option[LegacyModule] = {
     Some(resolve(mod))
   }
 
-  def resolve(mod: Toplevel)(implicit C: Context): Toplevel = {
+  def resolve(mod: LegacyModule)(implicit C: Context): LegacyModule = {
 
     var scope: Scope = toplevel(builtins.rootTypes)
 
@@ -68,7 +68,7 @@ class Namer extends Phase[Toplevel, Toplevel] { namer =>
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ToplevelDecl(path, imports, decls) =>
+    case source.LegacyModuleDecl(path, imports, decls) =>
       decls foreach { resolve }
       resolveAll(decls)
 

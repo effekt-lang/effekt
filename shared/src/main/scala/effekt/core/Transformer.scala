@@ -9,16 +9,16 @@ import effekt.symbols._
 import effekt.util.{ Task, control }
 import effekt.util.control._
 
-case class Wildcard(module: Toplevel) extends ValueSymbol { val name = Name("_", module) }
-case class Tmp(module: Toplevel) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+case class Wildcard(module: LegacyModule) extends ValueSymbol { val name = Name("_", module) }
+case class Tmp(module: LegacyModule) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-class Transformer extends Phase[Toplevel, core.ToplevelDecl] {
+class Transformer extends Phase[LegacyModule, core.LegacyModuleDecl] {
 
-  def run(mod: Toplevel)(implicit C: Context): Option[ToplevelDecl] =
+  def run(mod: LegacyModule)(implicit C: Context): Option[LegacyModuleDecl] =
     Some(transform(mod)(TransformerContext(C)))
 
-  def transform(mod: Toplevel)(implicit C: TransformerContext): ToplevelDecl = {
-    val source.ToplevelDecl(path, imports, defs) = mod.decl
+  def transform(mod: LegacyModule)(implicit C: TransformerContext): LegacyModuleDecl = {
+    val source.LegacyModuleDecl(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
@@ -27,7 +27,7 @@ class Transformer extends Phase[Toplevel, core.ToplevelDecl] {
       }
     }.toList)
 
-    ToplevelDecl(path, imports.map { _.path }, defs.foldRight(exports) {
+    LegacyModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {
       case (d, r) =>
         transform(d, r)(C)
     }).inheritPosition(mod.decl)

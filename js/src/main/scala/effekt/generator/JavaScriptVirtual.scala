@@ -1,7 +1,7 @@
 package effekt.generator
 
 import effekt.context.Context
-import effekt.core.ToplevelDecl
+import effekt.core.LegacyModuleDecl
 import effekt.symbols.moduleName
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
@@ -12,10 +12,10 @@ class JavaScriptVirtual extends JavaScript {
 }
 
 trait JSVirtualPrinter extends JavaScriptPrinter {
-  override def format(t: ToplevelDecl)(implicit C: Context): Document =
+  override def format(t: LegacyModuleDecl)(implicit C: Context): Document =
     pretty(virtual(t))
 
-  def virtual(m: ToplevelDecl)(implicit C: Context): Doc = {
+  def virtual(m: LegacyModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
       "const" <+> moduleName(i) <+> "=" <+> jsCall("load", "'" + i + "'")

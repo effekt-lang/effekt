@@ -3,8 +3,8 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ToplevelDecl, Tree }
-import effekt.symbols.Toplevel
+import effekt.source.{ LegacyModuleDecl, Tree }
+import effekt.symbols.LegacyModule
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
 import effekt.util.paths._
@@ -21,7 +21,7 @@ import scala.sys.process.Process
 /**
  * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
  */
-trait Driver extends CompilerWithConfig[Tree, ToplevelDecl, EffektConfig] { outer =>
+trait Driver extends CompilerWithConfig[Tree, LegacyModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -81,14 +81,14 @@ trait Driver extends CompilerWithConfig[Tree, ToplevelDecl, EffektConfig] { oute
     report(source, C.buffer.get, config)
   }
 
-  def eval(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
+  def eval(mod: LegacyModule)(implicit C: Context): Unit = C.at(mod.decl) {
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
     }
   }
 
-  def evalJS(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalJS(mod: LegacyModule)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val jsFile = C.generatorPhase.path(mod)
@@ -101,7 +101,7 @@ trait Driver extends CompilerWithConfig[Tree, ToplevelDecl, EffektConfig] { oute
     }
   }
 
-  def evalCS(mod: Toplevel)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalCS(mod: LegacyModule)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val csFile = C.generatorPhase.path(mod)
@@ -120,12 +120,12 @@ trait Driver extends CompilerWithConfig[Tree, ToplevelDecl, EffektConfig] { oute
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
    * Not used anymore
    */
-  override def process(source: Source, ast: ToplevelDecl, config: EffektConfig): Unit = ???
+  override def process(source: Source, ast: LegacyModuleDecl, config: EffektConfig): Unit = ???
 
   /**
    * Originally called by kiama, not used anymore.
    */
-  override def parse(source: Source): ParseResult[ToplevelDecl] = ???
+  override def parse(source: Source): ParseResult[LegacyModuleDecl] = ???
 
-  def format(m: ToplevelDecl): Document = ???
+  def format(m: LegacyModuleDecl): Document = ???
 }

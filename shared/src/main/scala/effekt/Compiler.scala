@@ -3,8 +3,8 @@ package effekt
 import effekt.context.Context
 import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
-import effekt.source.ToplevelDecl
-import effekt.symbols.Toplevel
+import effekt.source.LegacyModuleDecl
+import effekt.symbols.LegacyModule
 import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
@@ -51,17 +51,17 @@ trait Compiler {
   // Tasks
   // =====
 
-  object getAST extends SourceTask[ToplevelDecl]("ast") {
-    def run(source: Source)(implicit C: Context): Option[ToplevelDecl] = source match {
+  object getAST extends SourceTask[LegacyModuleDecl]("ast") {
+    def run(source: Source)(implicit C: Context): Option[LegacyModuleDecl] = source match {
       case VirtualSource(decl, _) => Some(decl)
       case _ => parser(source)
     }
   }
 
-  object frontend extends SourceTask[Toplevel]("frontend") {
-    def run(source: Source)(implicit C: Context): Option[Toplevel] = for {
+  object frontend extends SourceTask[LegacyModule]("frontend") {
+    def run(source: Source)(implicit C: Context): Option[LegacyModule] = for {
       ast <- getAST(source)
-      mod = Toplevel(ast, source)
+      mod = LegacyModule(ast, source)
       _ <- C.using(module = mod, focus = ast) {
         for {
           _ <- namer(mod)
@@ -71,15 +71,15 @@ trait Compiler {
     } yield mod
   }
 
-  object lower extends SourceTask[core.ToplevelDecl]("lower") {
-    def run(source: Source)(implicit C: Context): Option[core.ToplevelDecl] = for {
+  object lower extends SourceTask[core.LegacyModuleDecl]("lower") {
+    def run(source: Source)(implicit C: Context): Option[core.LegacyModuleDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
     } yield core
   }
 
-  object inferLifts extends SourceTask[core.ToplevelDecl]("lifts") {
-    def run(source: Source)(implicit C: Context): Option[core.ToplevelDecl] = for {
+  object inferLifts extends SourceTask[core.LegacyModuleDecl]("lifts") {
+    def run(source: Source)(implicit C: Context): Option[core.LegacyModuleDecl] = for {
       mod <- frontend(source)
       core <- lower(source)
       lifted <- C.using(module = mod) { lifter(core) }

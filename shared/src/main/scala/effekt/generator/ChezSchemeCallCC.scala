@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core._
-import effekt.symbols.Toplevel
+import effekt.symbols.LegacyModule
 import effekt.symbols.{ Name, Symbol }
 
 import org.bitbucket.inkytonik.kiama
@@ -24,7 +24,7 @@ class ChezSchemeCallCC extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Toplevel)(implicit C: Context): String =
+  def path(m: LegacyModule)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 
   /**
@@ -43,7 +43,7 @@ class ChezSchemeCallCC extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Toplevel)(implicit C: Context): Option[Document] = for {
+  def compile(mod: LegacyModule)(implicit C: Context): Option[Document] = for {
     core <- C.lower(mod.source)
     doc = ChezSchemeCallCCPrinter.format(core)
   } yield doc
@@ -51,7 +51,7 @@ class ChezSchemeCallCC extends Generator {
 
 object ChezSchemeCallCCPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Toplevel, core: ToplevelDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: LegacyModule, core: LegacyModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
       val main = mod.terms("main").toList.head
@@ -103,14 +103,14 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
   def moduleFile(path: String): String = path.replace('/', '_') + ".ss"
 
-  def format(t: ToplevelDecl)(implicit C: Context): Document =
+  def format(t: LegacyModuleDecl)(implicit C: Context): Document =
     pretty(module(t))
 
   val emptyline: Doc = line <> line
 
-  def module(m: ToplevelDecl)(implicit C: Context): Doc = toDoc(m)
+  def module(m: LegacyModuleDecl)(implicit C: Context): Doc = toDoc(m)
 
-  def toDoc(m: ToplevelDecl)(implicit C: Context): Doc =
+  def toDoc(m: LegacyModuleDecl)(implicit C: Context): Doc =
     toDoc(m.defs, true)
 
   def toDoc(b: Block)(implicit C: Context): Doc
