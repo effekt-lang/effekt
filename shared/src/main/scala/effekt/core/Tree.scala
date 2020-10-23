@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ NoName, QualifiedName, Symbol }
+import effekt.symbols.{ NoName, LegacyName, Symbol }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -101,7 +101,7 @@ case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
-case class ScopeId() extends Symbol { val name = QualifiedName(s"ev${id}", effekt.symbols.builtins.prelude) }
+case class ScopeId() extends Symbol { val name = LegacyName(s"ev${id}", effekt.symbols.builtins.prelude) }
 
 object Tree {
 
