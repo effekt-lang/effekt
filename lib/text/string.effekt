@@ -29,6 +29,3 @@ extern pure def unsafeCharAt(str: String)(n: Int): String =
 
 extern pure def unsafeToInt(str: String): Int =
   "Number.isNaN(parseInt(str)) ? undefined : parseInt(str)"
-
-extern pure def concat(str1: String, str2: String): String =
-  "str1.concat(str2)"
