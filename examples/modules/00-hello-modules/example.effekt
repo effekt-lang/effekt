@@ -1,9 +1,9 @@
 module hello {
-    def greet(name: String) = {
-        println(infixConcat("Hello ", name))
+    def modules() = {
+        println("Hello Modules")
     }
 }
 
 def main() = {
-    hello.greet("Modules")
+    hello.modules()
 }
