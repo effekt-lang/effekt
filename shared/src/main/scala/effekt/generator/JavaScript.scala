@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, QualifiedName, Symbol, moduleName }
+import effekt.symbols.{ Module, Name, Symbol, moduleName }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -13,6 +13,7 @@ import kiama.util.Source
 import effekt.util.paths._
 
 import scala.language.implicitConversions
+import effekt.symbols.NestedName
 
 class JavaScript extends Generator {
 
@@ -166,7 +167,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case _: symbols.Effect   => toDoc(id.name)
     case _: symbols.EffectOp => "op$" + id.name.toString
     case _ => id.name match {
-      case name: QualifiedName if name.module != C.module => link(name, s"${name.module.name}.${name.name}")
+      case name: NestedName if name.parent != C.module.name => link(name, s"${name.parent.localName}.${name.localName}")
       case name => toDoc(name)
     }
   }

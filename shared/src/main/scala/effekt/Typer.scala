@@ -477,7 +477,7 @@ class Typer extends Phase[Module, Module] { typer =>
         // reraise all and abort
         val msgs = failed.flatMap {
           // TODO also print signature!
-          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.qualified}: ${m.label}") }
+          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.qualifiedName}: ${m.label}") }
         }.toVector
 
         C.reraise(msgs)

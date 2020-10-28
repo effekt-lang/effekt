@@ -456,9 +456,9 @@ trait NamerOps { self: Context =>
     scope.define(id.name, s)
   }
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.localName, s)
 
   private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
