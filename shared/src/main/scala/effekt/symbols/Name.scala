@@ -23,7 +23,7 @@ trait Name {
   /**
    * @return The parent of this name or `None` if this name represents a top-level name.
    */
-  def parentOption: Option[Name] 
+  def parentOption: Option[Name]
 
   /**
    * @return The qualified name of the parent or `None` if this name doesn't have a parent.
@@ -109,13 +109,11 @@ object Name {
    */
   def apply(name: String): Name = {
     assert(name.nonEmpty, "Name cannot be empty.")
-    println(s"Convert name $name")
 
     // Is nested?
-    if (name.contains(".")) {
-      val segments = name.split(".")
+    if (name.contains('.')) {
+      val segments = name.split('.')
       val top: Name = ToplevelName(segments.head)
-      println(s"Segments: ${segments.length}")
       segments.drop(1).foldLeft(top)((parent, segment) => parent.nested(segment))
     } else {
       ToplevelName(name)
