@@ -35,7 +35,7 @@ package object symbols {
    *
    * TODO this is JS dependent and should be customized in the generator, not hard-coded here!
    */
-  def moduleName(path: String): String = "$" + path.replace('/', '_')
+  //def moduleName(path: String): String = "$" + path.replace('/', '_')
 
   /**
    * The result of running the frontend on a module.
@@ -45,7 +45,7 @@ package object symbols {
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
-    val name = Name(moduleName(decl.path), this)
+    val name = Name.module(decl.path) //Name(moduleName(decl.path), this)
 
     def path = decl.path
 

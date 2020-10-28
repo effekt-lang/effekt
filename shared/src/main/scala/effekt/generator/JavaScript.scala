@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol, moduleName }
+import effekt.symbols.{ Module, Name, Symbol }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -112,7 +112,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Exports(path, exports) =>
       jsCall(
         "module.exports = Object.assign",
-        moduleName(path),
+        jsModuleName(path),
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )
 
@@ -136,20 +136,20 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     val deps = m.imports
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
-      parens(imports <> comma <+> jsFunction("", deps.map { d => moduleName(d) }, toDoc(m)))
+      parens(imports <> comma <+> jsFunction("", deps.map { d => jsModuleName(d) }, toDoc(m)))
   }
 
   def commonjs(m: ModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
-      "const" <+> moduleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
+      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
     }, semi)
 
     imports <> emptyline <> toDoc(m)
   }
 
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    "var" <+> moduleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
+    "var" <+> jsModuleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
 
   def toDoc(b: Block)(implicit C: Context): Doc
 
@@ -167,7 +167,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case _: symbols.Effect   => toDoc(id.name)
     case _: symbols.EffectOp => "op$" + id.name.toString
     case _ => id.name match {
-      case name: NestedName if name.parent != C.module.name => link(name, s"${name.parent.localName}.${name.localName}")
+      case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
       case name => toDoc(name)
     }
   }
@@ -276,6 +276,10 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case other => "return" <+> toDocExpr(other)
   }
+
+  def jsModuleName(path: String): String = jsModuleName(Name.module(path))
+
+  def jsModuleName(name: Name): String = "$" + name.qualifiedName.replace('.', '_')
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

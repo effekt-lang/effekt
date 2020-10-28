@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol, moduleName }
+import effekt.symbols.{ Module, Name, Symbol }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -117,7 +117,7 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
     case Exports(path, exports) =>
       jsCall(
         "module.exports = Object.assign",
-        moduleName(path),
+        jsModuleName(path),
         jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
       )
 
