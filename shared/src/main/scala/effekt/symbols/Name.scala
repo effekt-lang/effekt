@@ -16,20 +16,14 @@ trait Name {
    * @return A String containing the local part of this name prefixed by their parent name. Components are separated by the point character (`.`).
    *
    * @note this should only be used for reporting errors, not for code generation.
-   * @note Note to the previous note: Is this still true for the new module-system?
+   * @note Note to the previous note: Is this still true for the new module-systemte?
    */
-  def qualifiedName: String = this match {
-    case ToplevelName(name)       => name
-    case NestedName(parent, name) => s"${parent.qualifiedName}.$localName"
-  }
+  def qualifiedName: String
 
   /**
    * @return The parent of this name or `None` if this name represents a top-level name.
    */
-  def parentOption: Option[Name] = this match {
-    case ToplevelName(_)       => None
-    case NestedName(parent, _) => Some(parent)
-  }
+  def parentOption: Option[Name] 
 
   /**
    * @return The qualified name of the parent or `None` if this name doesn't have a parent.
@@ -41,10 +35,7 @@ trait Name {
    * @param f rename function.
    * @return A Name with local name euqal to `f(this.localName)`.
    */
-  def rename(f: String => String): Name = this match {
-    case ToplevelName(name)  => ToplevelName(f(name))
-    case NestedName(p, name) => NestedName(p, f(name))
-  }
+  def rename(f: String => String): Name
 
   /**
    * Creates a new `NestedName` with this name as the parent.
@@ -60,7 +51,13 @@ trait Name {
  * A Name without a parent, e.g. the name of a global symbol.
  * @param localName the local name which is also the qualified name.
  */
-case class ToplevelName(localName: String) extends Name
+case class ToplevelName(localName: String) extends Name {
+  def qualifiedName: String = localName
+
+  def parentOption: Option[Name] = None
+
+  def rename(f: String => String): Name = ToplevelName(f(localName))
+}
 
 /**
  * A Name which is a child of a other name, e.g. the name of a nested module.
@@ -70,7 +67,12 @@ case class ToplevelName(localName: String) extends Name
  * @param parent The parent of this name.
  * @param localName The local name relative to the parent.
  */
-case class NestedName(parent: Name, localName: String) extends Name
+case class NestedName(parent: Name, localName: String) extends Name {
+  def parentOption: Some[Name] = Some(parent)
+  def qualifiedName: String = s"${parent.qualifiedName}.$localName"
+
+  def rename(f: String => String): Name = NestedName(parent, f(localName))
+}
 
 // Pseudo-constructors to safely convert ids and strings into names.
 object Name {
@@ -107,11 +109,13 @@ object Name {
    */
   def apply(name: String): Name = {
     assert(name.nonEmpty, "Name cannot be empty.")
+    println(s"Convert name $name")
 
     // Is nested?
     if (name.contains(".")) {
       val segments = name.split(".")
       val top: Name = ToplevelName(segments.head)
+      println(s"Segments: ${segments.length}")
       segments.drop(1).foldLeft(top)((parent, segment) => parent.nested(segment))
     } else {
       ToplevelName(name)
