@@ -86,9 +86,8 @@ case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
 /**
  * Global (and later, local) definitions
  */
-sealed trait Def extends Definition {
-  def id: IdDef
-}
+sealed trait Def extends Definition
+
 case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
