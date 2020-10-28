@@ -94,10 +94,7 @@ object Name {
    *
    * @example The name `"baz"` inside the module with the path `"foo/bar"` is parsed as qualified name `"foo.bar.baz"`
    */
-  def apply(name: String, module: Module): Name = {
-    val moduleName = Name(module.path.replace("/", "."))
-    moduleName.nested(name)
-  }
+  def apply(name: String, module: Module): Name = module.name.nested(name)
 
   /**
    * Parses a [[Name]] from a String which might be a qualified name.
@@ -119,4 +116,12 @@ object Name {
       ToplevelName(name)
     }
   }
+
+  /**
+   * Convert a module path into a valid name.
+   *
+   * @param path the module path where each segment is separated by a slash character (`'/'`).
+   * @return
+   */
+  def module(path: String): Name = Name(path.replace("/", "."))
 }
