@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core.ModuleDecl
-import effekt.symbols.moduleName
+import effekt.symbols.Name
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
@@ -18,7 +18,7 @@ trait JSVirtualPrinter extends JavaScriptPrinter {
   def virtual(m: ModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
-      "const" <+> moduleName(i) <+> "=" <+> jsCall("load", "'" + i + "'")
+      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("load", "'" + i + "'")
     }, semi)
 
     imports <> emptyline <> toDoc(m)
