@@ -1,0 +1,5 @@
+import hello.world as hw
+
+def main() = {
+    hw.greet()
+}

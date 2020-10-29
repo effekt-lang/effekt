@@ -1,0 +1,6 @@
+import hello.world.greet
+
+def main() = {
+    greet()
+    hello.world.goodbye()
+}

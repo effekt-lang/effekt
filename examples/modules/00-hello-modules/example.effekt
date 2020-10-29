@@ -1,0 +1,9 @@
+module hello {
+    def modules() = {
+        println("Hello Modules")
+    }
+}
+
+def main() = {
+    hello.modules()
+}
