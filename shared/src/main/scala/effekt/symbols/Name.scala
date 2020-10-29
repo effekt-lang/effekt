@@ -3,7 +3,6 @@ package effekt.symbols
 import effekt.source.Id
 import effekt.context.Context
 
-
 trait Name {
   /**
    * The local part of the name relative to its potential parent.
@@ -49,9 +48,9 @@ trait Name {
 
 /**
  * A Name without a parent, e.g. the name of a global symbol.
- * @param localName the local name which is also the qualified name. 
+ * @param localName the local name which is also the qualified name.
  * The local name should not contain point characters (`'.'`). This could lead to unexpected behavior.
- * 
+ *
  * @note Don't use the constructor of this type directly. Instead use [[Name(qualifiedName)]] to safely convert strings to names.
  */
 case class ToplevelName(localName: String) extends Name {
@@ -68,7 +67,7 @@ case class ToplevelName(localName: String) extends Name {
  * @param parent The parent of this name.
  * @param localName The local name relative to the parent.
  * The local name should not contain point characters (`'.'`). This could lead to unexpected behavior.
- * 
+ *
  * @note Creation of [[NestedName]] via the [[Name.nested()]] method is prefered.
  */
 case class NestedName(parent: Name, localName: String) extends Name {
@@ -112,14 +111,9 @@ object Name {
   def apply(name: String): Name = {
     assert(name.nonEmpty, "Name cannot be empty.")
 
-    // Is nested?
-    if (name.contains('.')) {
-      val segments = name.split('.')
-      val top: Name = ToplevelName(segments.head)
-      segments.drop(1).foldLeft(top)((parent, segment) => parent.nested(segment))
-    } else {
-      ToplevelName(name)
-    }
+    val segments = name.split('.')
+    val top: Name = ToplevelName(segments.head)
+    segments.drop(1).foldLeft(top)((parent, segment) => parent.nested(segment))
   }
 
   /**
@@ -127,7 +121,7 @@ object Name {
    *
    * @param path the module path where each segment is separated by a slash character (`'/'`).
    * @return a qualified name with the same name components as the input path.
-   * 
+   *
    * @example `module("foo/bar/baz") == Name("foo.bar.baz")`
    * @note this method might be removed in the future because module paths don't exists in the new module-system.
    */
