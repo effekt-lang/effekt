@@ -3,6 +3,7 @@ package effekt.symbols
 import effekt.source.Id
 import effekt.context.Context
 
+
 trait Name {
   /**
    * The local part of the name relative to its potential parent.
@@ -13,15 +14,14 @@ trait Name {
 
   /**
    * Computes the qualified version of this name.
-   * @return A String containing the local part of this name prefixed by their parent name. Components are separated by the point character (`.`).
+   * @return a String containing the local part of this name prefixed by their parent name. Components are separated by the point character (`.`).
    *
    * @note this should only be used for reporting errors, not for code generation.
-   * @note Note to the previous note: Is this still true for the new module-systemte?
    */
   def qualifiedName: String
 
   /**
-   * @return The parent of this name or `None` if this name represents a top-level name.
+   * @return The parent of this name or [[None]] if this name represents a top-level name.
    */
   def parentOption: Option[Name]
 
@@ -33,14 +33,14 @@ trait Name {
   /**
    * Creates a new name with the same parent as this name and the changed local name.
    * @param f rename function.
-   * @return A Name with local name euqal to `f(this.localName)`.
+   * @return A Name with local name equal to `f(this.localName)`.
    */
   def rename(f: String => String): Name
 
   /**
-   * Creates a new `NestedName` with this name as the parent.
+   * Creates a new [[NestedName]] with this name as the parent.
    * @param name the local name of the nested name.
-   * @return A `NestedName` with this Name as parent.
+   * @return A [[NestedName]] with this Name as parent.
    */
   def nested(name: String) = NestedName(this, name)
 
@@ -49,12 +49,15 @@ trait Name {
 
 /**
  * A Name without a parent, e.g. the name of a global symbol.
- * @param localName the local name which is also the qualified name.
+ * @param localName the local name which is also the qualified name. 
+ * The local name should not contain point characters (`'.'`). This could lead to unexpected behavior.
+ * 
+ * @note Don't use the constructor of this type directly. Instead use [[Name(qualifiedName)]] to safely convert strings to names.
  */
 case class ToplevelName(localName: String) extends Name {
-  def qualifiedName: String = localName
-
   def parentOption: Option[Name] = None
+
+  def qualifiedName: String = localName
 
   def rename(f: String => String): Name = ToplevelName(f(localName))
 }
@@ -62,13 +65,15 @@ case class ToplevelName(localName: String) extends Name {
 /**
  * A Name which is a child of a other name, e.g. the name of a nested module.
  *
- * Creation of `NestedName` via the [[Name.nested()]] method is prefered.
- *
  * @param parent The parent of this name.
  * @param localName The local name relative to the parent.
+ * The local name should not contain point characters (`'.'`). This could lead to unexpected behavior.
+ * 
+ * @note Creation of [[NestedName]] via the [[Name.nested()]] method is prefered.
  */
 case class NestedName(parent: Name, localName: String) extends Name {
   def parentOption: Some[Name] = Some(parent)
+
   def qualifiedName: String = s"${parent.qualifiedName}.$localName"
 
   def rename(f: String => String): Name = NestedName(parent, f(localName))
@@ -121,7 +126,10 @@ object Name {
    * Convert a module path into a valid name.
    *
    * @param path the module path where each segment is separated by a slash character (`'/'`).
-   * @return
+   * @return a qualified name with the same name components as the input path.
+   * 
+   * @example `module("foo/bar/baz") == Name("foo.bar.baz")`
+   * @note this method might be removed in the future because module paths don't exists in the new module-system.
    */
   def module(path: String): Name = Name(path.replace("/", "."))
 }

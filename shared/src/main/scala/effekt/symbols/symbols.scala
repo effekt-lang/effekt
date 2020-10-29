@@ -31,13 +31,6 @@ package object symbols {
   }
 
   /**
-   * path should be an include Effekt-path (foo/bar), not a system dependent file path
-   *
-   * TODO this is JS dependent and should be customized in the generator, not hard-coded here!
-   */
-  //def moduleName(path: String): String = "$" + path.replace('/', '_')
-
-  /**
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
    */
@@ -45,7 +38,7 @@ package object symbols {
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
-    val name = Name.module(decl.path) //Name(moduleName(decl.path), this)
+    val name = Name.module(decl.path)
 
     def path = decl.path
 
@@ -153,9 +146,7 @@ package object symbols {
   /**
    * Types
    */
-
-  sealed trait Type {
-  }
+  sealed trait Type
 
   // like Params but without name binders
   type Sections = List[List[Type]]
