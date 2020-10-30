@@ -113,11 +113,17 @@ class Typer extends Phase[Module, Module] { typer =>
           h.clauses foreach {
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition
-              val bt = Context.blockTypeOf(effectOp)
-              val ps = checkAgainstDeclaration(op.name, bt.params, params)
-              val effs = effectOp.ret.get.effects - effectOp.effect
-              val resumeArgType = BlockType(Nil, List(Nil), Effectful(effectOp.ret.get.tpe, effs))
-              val resumeType = BlockType(Nil, List(List(resumeArgType)), ret / Pure)
+
+              val BlockType(_, pms, tpe / effs) = Context.blockTypeOf(effectOp)
+              val ps = checkAgainstDeclaration(op.name, pms, params)
+
+              val resumeType = if (effectOp.isBidirectional) {
+                // resume { e }
+                BlockType(Nil, List(List(BlockType(Nil, List(Nil), tpe / effectOp.otherEffects))), ret / Pure)
+              } else {
+                // resume(v)
+                BlockType(Nil, List(List(tpe)), ret / Pure)
+              }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret
@@ -536,7 +542,7 @@ class Typer extends Phase[Module, Module] { typer =>
         (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
       case (List(bt: BlockType), arg: source.BlockArg) =>
-        checkBlockArgument(bt, arg, false)
+        checkBlockArgument(bt, arg)
 
       case (_, _) =>
         Context.error("Wrong type of argument section")
@@ -559,7 +565,7 @@ class Typer extends Phase[Module, Module] { typer =>
     //   BlockArg: foo { n => println("hello" + n) }
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg, isResume: Boolean): Unit = Context.at(arg) {
+    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
       val BlockType(Nil, params, tpe1 / handled) = subst substitute tpe
 
       // TODO make blockargs also take multiple argument sections.
@@ -570,9 +576,6 @@ class Typer extends Phase[Module, Module] { typer =>
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
       subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
-      if (!isResume) {
-        effs = (effs ++ (stmtEffs -- handled))
-      }
     }
 
     (params zip args) foreach {
