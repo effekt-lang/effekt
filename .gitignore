@@ -20,3 +20,5 @@ sbt-microsite-docs
 .vscode/
 project/metals.sbt
 project/project/
+*.odg
+*.odg#
