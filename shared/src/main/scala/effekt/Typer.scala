@@ -576,6 +576,7 @@ class Typer extends Phase[Module, Module] { typer =>
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
       subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
+      effs = (effs ++ (stmtEffs -- handled))
     }
 
     (params zip args) foreach {
