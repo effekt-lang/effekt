@@ -579,13 +579,7 @@ class Typer extends Phase[Module, Module] { typer =>
       effs = (effs ++ (stmtEffs -- handled))
     }
 
-    (params zip args) foreach {
-      // Special case - treat 1st param type () => T as T
-      case (List(bt: BlockType), arg @ source.ValueArgs(_)) if sym.isInstanceOf[ResumeParam] => {
-        checkArgumentSection(List(bt.ret.tpe), arg)
-      }
-      case (ps, as) => checkArgumentSection(ps, as)
-    }
+    (params zip args) foreach { case (ps, as) => checkArgumentSection(ps, as) }
 
     //    println(
     //      s"""|Results of checking application of ${sym.name}
