@@ -86,8 +86,9 @@ case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
 /**
  * Global (and later, local) definitions
  */
-sealed trait Def extends Definition
-
+sealed trait Def extends Definition {
+  def id: IdDef
+}
 case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
@@ -100,7 +101,7 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class EffDef(id: IdDef, ops: List[Operation]) extends Def {
   type symbol = symbols.UserEffect
 }
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
+case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
   type symbol = symbols.EffectOp
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
