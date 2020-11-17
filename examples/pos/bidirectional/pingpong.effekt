@@ -1,4 +1,4 @@
-module pingpong
+module examples/pos/bidirectional/pingpong
 
 effect Ping(): Unit / { Pong }
 effect Pong(): Unit / { Ping }
@@ -45,4 +45,3 @@ def main() = {
     resume { ponger() }
   }
 }
-

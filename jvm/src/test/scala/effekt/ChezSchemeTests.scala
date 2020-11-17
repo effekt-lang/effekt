@@ -20,7 +20,8 @@ class ChezSchemeTests extends AnyFunSpec {
     examplesDir / "pos" / "maps.effekt",
 
     // bidirectional effects are not yet supported in our Chez backend
-    examplesDir / "pos" / "bidirectional.effekt",
+    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
+    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
