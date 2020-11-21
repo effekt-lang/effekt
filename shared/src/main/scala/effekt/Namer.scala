@@ -115,7 +115,7 @@ class Namer extends Phase[Module, Module] { namer =>
             val tps = tparams map resolve
             val Effectful(tpe, otherEffs) = resolve(ret)
             val retResolved = Effectful(tpe, otherEffs + effectSym)
-            val op = EffectOp(Name(id), tps, params map resolve, Some(retResolved), effectSym)
+            val op = EffectOp(Name(id), tps, params map resolve, Some(retResolved), effectSym, otherEffs.nonEmpty)
             Context.define(id, op)
             op
           }

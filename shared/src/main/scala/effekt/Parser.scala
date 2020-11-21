@@ -426,7 +426,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val resumeExpr: P[Expr] =
-(`resume` ^^^ IdRef("resume")) ~ args ^^ { case r ~ args => Call(r, Nil, List(args)) withPositionOf r }
+    (`resume` ^^^ IdRef("resume")) ~ args ^^ { case r ~ args => Call(r, Nil, List(args)) withPositionOf r }
 
   lazy val handleExpr: P[Expr] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
