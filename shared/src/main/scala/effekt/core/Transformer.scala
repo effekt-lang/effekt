@@ -230,8 +230,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   def synthesizeStateEffect(binder: VarBinder)(implicit C: Context): StateEffect = {
     val tpe = C.valueTypeOf(binder)
     val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff, false)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff, false)
+    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff, Pure)
+    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff, Pure)
     eff.ops = List(get, put)
     StateEffect(eff, get, put)
   }
