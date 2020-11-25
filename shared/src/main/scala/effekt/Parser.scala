@@ -34,7 +34,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val nameFirst = """[a-zA-Z$_]""".r
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
-  lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
+
+  lazy val modulePath = "%s([/]%s)*\\b".format(name, name).r
+  lazy val moduleName = "%s([.]%s)*\\b".format(name, name).r
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
@@ -198,12 +200,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val moduleDecl: P[String] =
-    ( `module` ~/> moduleName
+    ( `module` ~/> modulePath
     | defaultModulePath
     )
 
   lazy val importDecl: P[Import] =
-    `import` ~/> moduleName ^^ Import
+    `import` ~/> modulePath ^^ Import
 
 
   /**
