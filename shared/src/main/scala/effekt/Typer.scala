@@ -113,9 +113,17 @@ class Typer extends Phase[Module, Module] { typer =>
           h.clauses foreach {
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition
-              val bt = Context.blockTypeOf(effectOp)
-              val ps = checkAgainstDeclaration(op.name, bt.params, params)
-              val resumeType = BlockType(Nil, List(List(effectOp.ret.get.tpe)), ret / Pure)
+
+              val BlockType(_, pms, tpe / effs) = Context.blockTypeOf(effectOp)
+              val ps = checkAgainstDeclaration(op.name, pms, params)
+
+              val resumeType = if (effectOp.isBidirectional) {
+                // resume { e }
+                BlockType(Nil, List(List(BlockType(Nil, List(Nil), tpe / effectOp.otherEffects))), ret / Pure)
+              } else {
+                // resume(v)
+                BlockType(Nil, List(List(tpe)), ret / Pure)
+              }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret

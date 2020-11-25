@@ -243,7 +243,10 @@ package object symbols {
   }
 
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun
+  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun {
+    def otherEffects: Effects = ret.get.effects - effect
+    def isBidirectional: Boolean = otherEffects.nonEmpty
+  }
 
   /**
    * symbols.Effects is like source.Effects, but with resolved effects
