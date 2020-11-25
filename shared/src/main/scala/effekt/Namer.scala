@@ -68,7 +68,7 @@ class Namer extends Phase[Module, Module] { namer =>
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
+    case source.SourceScope(path, imports, decls) =>
       decls foreach { resolve }
       resolveAll(decls)
 
@@ -362,6 +362,10 @@ class Namer extends Phase[Module, Module] { namer =>
         val tpe = resolve(ret)
         BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
       })
+    }
+
+    case source.ModuleScope(id, imports, defs) => {
+      C.abort("TODO: Implement ModuleScope handling in Namer.")
     }
 
     case d @ source.ExternInclude(path) =>

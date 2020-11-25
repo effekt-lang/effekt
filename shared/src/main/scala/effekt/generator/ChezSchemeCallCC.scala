@@ -51,7 +51,7 @@ class ChezSchemeCallCC extends Generator {
 
 object ChezSchemeCallCCPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: Module, core: SourceScope, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
       val main = mod.terms("main").toList.head
@@ -103,14 +103,14 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
   def moduleFile(path: String): String = path.replace('/', '_') + ".ss"
 
-  def format(t: ModuleDecl)(implicit C: Context): Document =
+  def format(t: SourceScope)(implicit C: Context): Document =
     pretty(module(t))
 
   val emptyline: Doc = line <> line
 
-  def module(m: ModuleDecl)(implicit C: Context): Doc = toDoc(m)
+  def module(m: SourceScope)(implicit C: Context): Doc = toDoc(m)
 
-  def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
+  def toDoc(m: SourceScope)(implicit C: Context): Doc =
     toDoc(m.defs, true)
 
   def toDoc(b: Block)(implicit C: Context): Doc

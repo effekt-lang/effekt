@@ -3,7 +3,7 @@ package context
 
 import effekt.namer.{ NamerOps, NamerState }
 import effekt.typer.{ TyperOps, TyperState }
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.{ SourceScope, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages

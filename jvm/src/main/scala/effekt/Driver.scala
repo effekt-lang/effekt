@@ -3,7 +3,7 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.{ SourceScope, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
@@ -21,7 +21,7 @@ import scala.sys.process.Process
 /**
  * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
  */
-trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
+trait Driver extends CompilerWithConfig[Tree, SourceScope, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -120,12 +120,12 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
    * Not used anymore
    */
-  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
+  override def process(source: Source, ast: SourceScope, config: EffektConfig): Unit = ???
 
   /**
    * Originally called by kiama, not used anymore.
    */
-  override def parse(source: Source): ParseResult[ModuleDecl] = ???
+  override def parse(source: Source): ParseResult[SourceScope] = ???
 
-  def format(m: ModuleDecl): Document = ???
+  def format(m: SourceScope): Document = ???
 }

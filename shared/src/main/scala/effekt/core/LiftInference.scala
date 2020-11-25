@@ -4,13 +4,13 @@ package core
 import effekt.symbols.Symbol
 import effekt.context.Context
 
-class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
+class LiftInference extends Phase[SourceScope, SourceScope] {
 
-  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
+  def run(mod: SourceScope)(implicit C: Context): Option[SourceScope] =
     Some(transform(mod)(Environment(Map.empty), C))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
-  def transform(mod: ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =
+  def transform(mod: SourceScope)(implicit env: Environment, C: Context): SourceScope =
     mod.copy(defs = transform(mod.defs))
 
   // [[ a -> b ]] = [ev] -> a -> b
