@@ -1,4 +1,7 @@
+module example
+
 module hello {
+
     def modules() = {
         println("Hello Modules")
     }
