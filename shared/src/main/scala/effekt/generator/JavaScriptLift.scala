@@ -65,9 +65,10 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
 
-    case ScopeApp(b, sc) => jsCall(toDoc(b), List(toDoc(sc)))
-    case ScopeAbs(id, b) => jsLambda(List(nameDef(id)), toDoc(b))
-    case Lifted(ev, b)   => jsCall("$effekt.liftBlock", List(toDoc(ev), toDoc(b)))
+    // TODO delete
+    // case ScopeApp(b, sc) => jsCall(toDoc(b), List(toDoc(sc)))
+    // case ScopeAbs(id, b) => jsLambda(List(nameDef(id)), toDoc(b))
+    // case Lifted(ev, b)   => jsCall("$effekt.liftBlock", List(toDoc(ev), toDoc(b)))
   })
 
   // pretty print the statement in a javascript expression context
@@ -126,16 +127,16 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
   }
 
   override def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
-      jsFunction(nameDef(id), List(nameDef(sc)),
-        "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocStmt(rest)
+    case Def(id, BlockLit(ps, body), rest) =>
+      jsFunction(nameDef(id), ps map toDoc, toDoc(body)) <>
+        emptyline <> toDocStmt(rest)
     case _ => super.toDocStmt(s)
   }
 
   override def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
-      jsFunction(nameDef(id), List(nameDef(sc)),
-        "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocTopLevel(rest)
+    case Def(id, BlockLit(ps, body), rest) =>
+      jsFunction(nameDef(id), ps map toDoc, toDoc(body)) <>
+        emptyline <> toDocTopLevel(rest)
     case _ => super.toDocTopLevel(s)
   }
 

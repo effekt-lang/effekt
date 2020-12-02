@@ -60,7 +60,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
         "(let () " <+> emptyline <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
-        "(run ((" <> nameRef(main) <> " here))))"
+        "(run (" <> nameRef(main) <> " here)))"
     }
 
   override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
@@ -73,9 +73,10 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
 
-    case ScopeApp(b, sc) => schemeCall(toDoc(b), List(toDoc(sc)))
-    case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
-    case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
+    // TODO delete
+    // case ScopeApp(b, sc) => schemeCall(toDoc(b), List(toDoc(sc)))
+    // case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
+    // case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
@@ -93,14 +94,19 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case Val(id, binding, body) =>
       schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))
 
-    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
-      defineFunction(nameDef(id), List(nameDef(sc)),
-        schemeLambda(ps map toDoc, toDoc(body, false))) <> emptyline <> toDoc(rest, toplevel)
+    case Def(id, BlockLit(ps, body), rest) =>
+      defineFunction(nameDef(id), ps map toDoc, toDoc(body, false)) <>
+        emptyline <> toDoc(rest, toplevel)
 
     case State(eff, get, put, init, block) =>
       schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
 
     case other => super.toDoc(s, toplevel)
+  }
+
+  override def toDoc(e: Expr)(implicit C: Context): Doc = e match {
+    case e: Scope => toDoc(e)
+    case other    => super.toDoc(e)
   }
 
   def toDoc(a: Scope)(implicit C: Context): Doc = a match {

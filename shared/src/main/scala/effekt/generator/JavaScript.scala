@@ -185,6 +185,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Select(b, field) =>
       toDoc(b) <> "." <> nameDef(field)
+
+    case e: Scope => ???
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

@@ -26,10 +26,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
-    case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
-    case Lifted(ev, b)    => "lift" <> parens(toDoc(ev) <> comma <+> toDoc(b))
-    case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
-    case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
+    case Extern(ps, body) =>
+      "extern" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
@@ -49,6 +47,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
+    case e: Scope => toDoc(e)
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -56,7 +55,11 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def toDoc(s: Scope): Doc = ???
+  def toDoc(e: Scope): Doc = e match {
+    case Here()       => "00"
+    case Nested(es)   => parens(hsep(es.map(toDoc), "(+)"))
+    case ScopeVar(id) => id.name.toString
+  }
 
   def toDoc(s: Stmt): Doc =
     if (requiresBlock(s))

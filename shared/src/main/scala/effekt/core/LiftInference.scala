@@ -13,21 +13,41 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
   def transform(mod: ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =
     mod.copy(defs = transform(mod.defs))
 
-  // [[ a -> b ]] = [ev] -> a -> b
+  // [[ a -> b ]] = [ev] -> a -> b if a is value
+  // [[ a -> b ]] = [ev] -> a -> [ev] -> b if a is block
   def transform(tree: Block, self: Option[Symbol] = None)(implicit env: Environment, C: Context): Block = tree match {
     case BlockLit(params, body) =>
-      val id = ScopeId()
 
-      val ownBindings = self.map { sym => env.bind(sym) }.getOrElse { env }
+      val selfExtendedEnv = self.map { sym => env.bind(sym) }.getOrElse { env }
+      val (extendedParams, extendedEnv) = transform(params, env)
 
-      // recursive functions need to bind the own id
-      val extendedEnv = params.foldLeft(ownBindings.adapt(ScopeVar(id))) {
-        case (env, BlockParam(p)) => env.bind(p)
-        case (env, ValueParam(p)) => env
-      }
-      ScopeAbs(id, BlockLit(params, transform(body)(extendedEnv, C)))
-    case Member(body, id) => ??? // Member(transform(body), id)
-    case e                => e
+      BlockLit(extendedParams, transform(body)(extendedEnv, C))
+
+    case Member(body, field) => Member(transform(body), field)
+    case Extern(params, body) =>
+      // For extern functions we don't want to add an evidence parameter.
+      // Except for `measure`, which takes a block and will be called with evidence
+      // for this block
+      val (extendedParams, _) = transform(params, env)
+      Extern(extendedParams.tail, body)
+    case e => e
+  }
+
+  def transform(params: List[Param], env: Environment): (List[Param], Environment) = {
+    val emptyParams: List[Param] = Nil
+    val selfScope = ScopeId()
+    val adaptedEnv = env.adapt(ScopeVar(selfScope))
+
+    val (extendedParams, extendedEnv) = params.foldRight((emptyParams, adaptedEnv)) {
+      case (BlockParam(p), (params, env)) =>
+        val paramScope = ScopeId();
+        (BlockParam(p) :: ScopeParam(paramScope) :: params, env.bind(p, ScopeVar(paramScope)))
+      case (ValueParam(p), (params, env)) =>
+        (ValueParam(p) :: params, env)
+      case (ScopeParam(_), _) =>
+        sys error "should not happen"
+    }
+    (ScopeParam(selfScope) :: extendedParams, extendedEnv)
   }
 
   def transform(tree: Stmt)(implicit env: Environment, C: Context): Stmt = tree match {
@@ -37,8 +57,17 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     case Val(id, binding, body) =>
       Val(id, transform(binding), transform(body))
 
-    case State(id, get, put, init, body) =>
-      State(id, get, put, transform(init), transform(body))
+    case State(id, get, put, init, bodyBlock) => bodyBlock match {
+      case BlockLit(params, body) =>
+        val stateScope = ScopeId()
+        val adaptedEnv = env.adapt(ScopeVar(stateScope))
+        val extendedEnv = params.foldRight(adaptedEnv) { (p, e) =>
+          e.bind(p.id)
+        }
+        val transformedBody = transform(body)(extendedEnv, C)
+        State(id, get, put, transform(init), BlockLit(ScopeParam(stateScope) :: params, transformedBody))
+      case _ => ???
+    }
 
     case Data(id, ctors, rest) =>
       Data(id, ctors, transform(rest))
@@ -46,23 +75,34 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     case Record(id, fields, rest) =>
       Record(id, fields, transform(rest))
 
-    case Handle(body, handler) =>
-      val transformedBody = transform(body) // lift is provided by the handler runtime
-      val transformedHandler = handler.map { transform }
-      Handle(transformedBody, transformedHandler)
-
-    case App(b: Block, args: List[Argument]) => b match {
-      case b: Extern => App(b, liftArguments(args))
-      // TODO also for "pure" and "toplevel" functions
-      case b: BlockVar if b.id.builtin => App(b, liftArguments(args))
-
-      // [[ Eff.op(arg) ]] = Eff(ev).op(arg)
-      case Member(b, field) => App(Member(ScopeApp(transform(b), env.evidenceFor(b)), field), liftArguments(args))
-      case b => App(ScopeApp(transform(b), env.evidenceFor(b)), liftArguments(args))
+    case Handle(bodyBlock, handler) => bodyBlock match {
+      case BlockLit(params, body) => {
+        val handlerScope = ScopeId()
+        val adaptedEnv = env.adapt(ScopeVar(handlerScope))
+        val extendedEnv = params.foldRight(adaptedEnv) { (p, e) =>
+          e.bind(p.id)
+        }
+        val transformedBody = transform(body)(extendedEnv, C)
+        // lift is provided by the handler runtime
+        val transformedHandler = handler.map { transform }
+        Handle(
+          BlockLit(ScopeParam(handlerScope) :: params, transformedBody),
+          transformedHandler
+        )
+      }
+      case _ => ???
     }
 
-    // TODO either the implementation of match should provide evidence
-    // or we should not abstract over evidence!
+    case App(b: Block, args: List[Argument]) => b match {
+      case b: Extern => App(b, expandArguments(args))
+      // TODO also for "pure" and "toplevel" functions
+      case b: BlockVar if b.id.builtin => App(b, expandArguments(args))
+
+      // [[ Eff.op(arg) ]] = Eff.op(ev,arg)
+      // [[ fun(arg) ]] = fun(ev,arg)
+      case b => App(transform(b), env.evidenceFor(b) :: expandArguments(args))
+    }
+
     case Match(scrutinee, clauses) =>
       Match(scrutinee, clauses.map { case (p, b) => (p, transformBody(b)) })
 
@@ -92,23 +132,21 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       BlockLit(params, transform(body))
   }
 
-  // apply lifts to the arguments if it is block variables
-  // this is the same as eta expanding them, since then the lifts would be composed for the call
-  def liftArguments(args: List[Argument])(implicit env: Environment, C: Context): List[Argument] = args map {
-    case b: BlockVar => env.evidenceFor(b) match {
-      case Here() => b
-      case ev     => Lifted(ev, b)
+  // expand the list of arguments to also pass evidence
+  def expandArguments(args: List[Argument])(implicit env: Environment, C: Context): List[Argument] = {
+    val emptyArgs: List[Argument] = Nil
+    args.foldRight(emptyArgs) {
+      case (b: BlockVar, args) => b :: env.evidenceFor(b) :: args
+      case (b: Block, args)    => transform(b) :: env.evidenceFor(b) :: args
+      case (other, args)       => other :: args
     }
-    case b: Block => transform(b)
-    case other    => other
   }
 
   def transform(h: Handler)(implicit env: Environment, C: Context): Handler = h match {
     case Handler(id, clauses) =>
       Handler(id, clauses.map {
-        // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
-        // their definition context.
-        case (op, BlockLit(params, body)) => (op, BlockLit(params, transform(body)))
+        case (op, BlockLit(params, body)) =>
+          (op, BlockLit(ScopeParam(ScopeId()) :: params, transform(body)))
       })
   }
 
@@ -126,9 +164,6 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case b: BlockLit   => Here()
       case Member(b, id) => evidenceFor(b)
       case b: Extern     => sys error "Cannot provide scope evidence for built in function"
-      case b: Lifted     => sys error "Should not happen"
-      case b: ScopeApp   => sys error "Should not happen"
-      case b: ScopeAbs   => sys error "Should not happen"
     }
   }
 }

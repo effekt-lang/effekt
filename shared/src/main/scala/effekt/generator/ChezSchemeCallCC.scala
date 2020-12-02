@@ -73,10 +73,6 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
-
-    case ScopeApp(b, sc) => ???
-    case ScopeAbs(id, b) => ???
-    case Lifted(ev, b)   => ???
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
@@ -140,6 +136,8 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
     case Select(b, field) =>
       schemeCall(nameRef(field), toDoc(b))
+    case e: Scope =>
+      ???
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

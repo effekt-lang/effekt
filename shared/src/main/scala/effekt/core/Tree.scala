@@ -45,14 +45,11 @@ case class Select(target: Expr, field: Symbol) extends Expr
 sealed trait Param extends Tree { def id: Symbol }
 case class ValueParam(id: Symbol) extends Param
 case class BlockParam(id: Symbol) extends Param
+// introduced by lift inference only
+case class ScopeParam(id: Symbol) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: Symbol) extends Block
-
-// introduced by lift inference only
-case class ScopeAbs(scope: Symbol, body: Block) extends Block
-case class ScopeApp(b: Block, evidence: Scope) extends Block
-case class Lifted(s: Scope, b: Block) extends Block
 
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: Symbol) extends Block
@@ -96,7 +93,7 @@ case class Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) extends Tree
  * introduced by lift inference only
  * TODO maybe add a separate core language with explicit lifts
  */
-sealed trait Scope extends Tree
+sealed trait Scope extends Expr
 case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
@@ -173,12 +170,6 @@ object Tree {
     }
     def rewrite(e: Block): Block = e match {
       case e if block.isDefinedAt(e) => block(e)
-      case ScopeAbs(scope, body) =>
-        ScopeAbs(scope, rewrite(body))
-      case ScopeApp(b, evidence) =>
-        ScopeApp(rewrite(b), evidence)
-      case Lifted(s, b) =>
-        Lifted(s, rewrite(b))
       case BlockLit(params, body) =>
         BlockLit(params map rewrite, rewrite(body))
       case Member(b, field) =>
