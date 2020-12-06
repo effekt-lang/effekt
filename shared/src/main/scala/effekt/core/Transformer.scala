@@ -193,17 +193,17 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       // later we can have effect inference to learn which ones are pure.
       sym match {
         case f: BuiltinFunction if f.pure =>
-          as2.map { args => PureApp(BlockVar(sym), args ++ capabilityArgs) }
-        case _: Record =>
-          as2.map { args => PureApp(BlockVar(sym), args ++ capabilityArgs) }
+          as2.map { args => PureApp(BlockVar(f), args ++ capabilityArgs) }
+        case r: Record =>
+          as2.map { args => PureApp(BlockVar(r), args ++ capabilityArgs) }
         case f: EffectOp =>
           as2.flatMap { args =>
             bind(freshTmpFor(tree), App(Member(C.resolveCapability(f.effect), f), args ++ capabilityArgs))
           }
         case f: Field =>
           as2.map { case List(arg: Expr) => Select(arg, f) }
-        case f =>
-          as2.flatMap { args => bind(freshTmpFor(tree), App(BlockVar(sym), args ++ capabilityArgs)) }
+        case f: BlockSymbol =>
+          as2.flatMap { args => bind(freshTmpFor(tree), App(BlockVar(f), args ++ capabilityArgs)) }
       }
 
     case source.TryHandle(prog, handlers) =>
@@ -288,6 +288,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }
 
   case class TransformerContext(context: Context) {
+    /**
+     * Synthesized state effects for var-definitions
+     */
     private var stateEffects = mutable.Map.empty[VarBinder, StateEffect]
     def state(binder: VarBinder): StateEffect =
       stateEffects.getOrElseUpdate(binder, synthesizeStateEffect(binder)(context))
