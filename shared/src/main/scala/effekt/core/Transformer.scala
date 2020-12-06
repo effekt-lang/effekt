@@ -210,9 +210,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }).map { _.inheritPosition(tree) }
 
   def transform(tree: source.MatchPattern)(implicit C: TransformerContext): (Pattern, List[core.ValueParam]) = tree match {
-    case source.IgnorePattern()   => (core.IgnorePattern(), Nil)
-    case source.LiteralPattern(l) => (core.LiteralPattern(transformLit(l)), Nil)
-    case source.AnyPattern(id)    => (core.AnyPattern(), List(core.ValueParam(id.symbol)))
+    case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
+    case source.LiteralPattern(l)  => (core.LiteralPattern(transformLit(l)), Nil)
+    case p @ source.AnyPattern(id) => (core.AnyPattern(), List(core.ValueParam(p.symbol)))
     case p @ source.TagPattern(id, ps) =>
       val (patterns, params) = ps.map(transform).unzip
       (core.TagPattern(p.definition, patterns), params.flatten)
