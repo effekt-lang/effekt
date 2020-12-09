@@ -31,13 +31,18 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Phase[Module, Module] { namer =>
+// TODO Temp
+object Temp {
+  var moduleScope: Option[Scope] = None
+}
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+class Namer extends Phase[SourceModule, SourceModule] { namer =>
+
+  def run(mod: SourceModule)(implicit C: Context): Option[SourceModule] = {
     Some(resolve(mod))
   }
 
-  def resolve(mod: Module)(implicit C: Context): Module = {
+  def resolve(mod: SourceModule)(implicit C: Context): SourceModule = {
 
     var scope: Scope = toplevel(builtins.rootTypes)
 
@@ -68,7 +73,7 @@ class Namer extends Phase[Module, Module] { namer =>
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.SourceScope(path, imports, decls) =>
+    case source.SourceModuleDef(path, imports, decls) =>
       decls foreach { resolve }
       resolveAll(decls)
 
@@ -216,10 +221,22 @@ class Namer extends Phase[Module, Module] { namer =>
     case tpe: source.ValueType => resolve(tpe)
     case tpe: source.BlockType => resolve(tpe)
 
-    // THIS COULD ALSO BE A TYPE!
-    case id: Id                => Context.resolveTerm(id)
+    case source.LocalModuleDef(id, defs) =>
+      println(s"resolveGeneric(Module: $id, $defs)")
+      defs.foreach(d => {
+        resolve(d)
+        //resolveGeneric(d)
+      })
 
-    case other                 => resolveAll(other)
+      resolveAll(defs)
+
+      // TODO: What must be done?
+      println("Resolved generic")
+
+    // THIS COULD ALSO BE A TYPE!
+    case id: Id => Context.resolveTerm(id)
+
+    case other  => resolveAll(other)
   }
 
   // TODO move away
@@ -364,8 +381,17 @@ class Namer extends Phase[Module, Module] { namer =>
       })
     }
 
-    case source.ModuleScope(id, imports, defs) => {
-      C.abort("TODO: Implement ModuleScope handling in Namer.")
+    case source.LocalModuleDef(id, defs) => {
+      println("Define Module")
+
+      // Open Block scope
+      Context.define(id, Context scoped {
+        // Create Symbol
+        //resolveAll(defs)
+        LocalModule(id.name, Context.module)
+      })
+
+      println("Module defined!")
     }
 
     case d @ source.ExternInclude(path) =>
@@ -461,6 +487,13 @@ trait NamerOps { self: Context =>
     scope.define(id.name, s)
   }
 
+  private[namer] def define(id: Id, module: LocalModule): Unit = {
+    assignSymbol(id, module)
+    scope.define(id.name, module)
+    // TODO Remove this
+    Temp.moduleScope = Some(scope)
+  }
+
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)
 
   private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.localName, s)
@@ -484,12 +517,29 @@ trait NamerOps { self: Context =>
    * Resolves a potentially overloaded call target
    */
   private[namer] def resolveCalltarget(id: Id): BlockSymbol = at(id) {
-    val syms = scope.lookupOverloaded(id.name) map {
+    var syms = scope.lookupOverloaded(id.name) map {
       _ collect {
         case b: BlockParam  => b
         case b: ResumeParam => b
         case b: Fun         => b
         case _              => abort("Expected callable")
+      }
+    }
+
+    if (syms.isEmpty) {
+      println(s"Resolve function with module: ${Temp.moduleScope}")
+      Temp.moduleScope match {
+        case Some(scope) => {
+          syms = scope.lookupOverloaded(id.name) map {
+            _ collect {
+              case b: BlockParam  => b
+              case b: ResumeParam => b
+              case b: Fun         => b
+              case _              => abort("Expected callable")
+            }
+          }
+        }
+        case None => syms = List.empty
       }
     }
 

@@ -68,7 +68,7 @@ sealed trait Reference extends Tree {
  * A module declartion, the path should be an Effekt include path, not a system dependent file path
  *
  */
-//case class SourceScope(path: String, imports: List[Import], defs: List[Def]) extends Tree
+//case class SourceModuleDef(path: String, imports: List[Import], defs: List[Def]) extends Tree
 case class Import(path: String) extends Tree
 
 /**
@@ -83,13 +83,15 @@ sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
 
-sealed trait Scope extends Tree {
-  def imports: List[Import]
+sealed trait ModuleDef extends Tree {
+  //def imports: List[Import]
   def defs: List[Def]
 }
 
-case class SourceScope(path: String, imports: List[Import], defs: List[Def]) extends Scope
-case class ModuleScope(id: IdDef, imports: List[Import], defs: List[Def]) extends Scope with Def
+case class SourceModuleDef(path: String, imports: List[Import], defs: List[Def]) extends ModuleDef
+case class LocalModuleDef(id: IdDef, defs: List[Def]) extends ModuleDef with Def {
+  type symbol = symbols.LocalModule
+}
 
 /**
  * Global (and later, local) definitions

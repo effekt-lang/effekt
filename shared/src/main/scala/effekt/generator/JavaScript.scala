@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol }
+import effekt.symbols.{ SourceModule, Name, Symbol }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -22,7 +22,7 @@ class JavaScript extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: SourceModule)(implicit C: Context): String =
     (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
 
   /**
@@ -38,7 +38,7 @@ class JavaScript extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: SourceModule)(implicit C: Context): Option[Document] = for {
     core <- C.lower(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }
@@ -125,21 +125,21 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def moduleFile(path: String): String = path.replace('/', '_') + ".js"
 
-  def format(t: SourceScope)(implicit C: Context): Document =
+  def format(t: SourceModuleDef)(implicit C: Context): Document =
     pretty(commonjs(t))
 
   val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
 
   val emptyline: Doc = line <> line
 
-  def amdefine(m: SourceScope)(implicit C: Context): Doc = {
+  def amdefine(m: SourceModuleDef)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
     prelude <> line <> "define" <>
       parens(imports <> comma <+> jsFunction("", deps.map { d => jsModuleName(d) }, toDoc(m)))
   }
 
-  def commonjs(m: SourceScope)(implicit C: Context): Doc = {
+  def commonjs(m: SourceModuleDef)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
       "const" <+> jsModuleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
@@ -148,7 +148,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     imports <> emptyline <> toDoc(m)
   }
 
-  def toDoc(m: SourceScope)(implicit C: Context): Doc =
+  def toDoc(m: SourceModuleDef)(implicit C: Context): Doc =
     "var" <+> jsModuleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
 
   def toDoc(b: Block)(implicit C: Context): Doc

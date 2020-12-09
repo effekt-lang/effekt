@@ -9,16 +9,16 @@ import effekt.symbols._
 import effekt.util.{ Task, control }
 import effekt.util.control._
 
-case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+case class Wildcard(module: SourceModule) extends ValueSymbol { val name = Name("_", module) }
+case class Tmp(module: SourceModule) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-class Transformer extends Phase[Module, core.SourceScope] {
+class Transformer extends Phase[SourceModule, core.SourceModuleDef] {
 
-  def run(mod: Module)(implicit C: Context): Option[SourceScope] =
+  def run(mod: SourceModule)(implicit C: Context): Option[SourceModuleDef] =
     Some(transform(mod)(TransformerContext(C)))
 
-  def transform(mod: Module)(implicit C: TransformerContext): SourceScope = {
-    val source.SourceScope(path, imports, defs) = mod.decl
+  def transform(mod: SourceModule)(implicit C: TransformerContext): SourceModuleDef = {
+    val source.SourceModuleDef(path, imports, defs) = mod.decl
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
@@ -27,7 +27,7 @@ class Transformer extends Phase[Module, core.SourceScope] {
       }
     }.toList)
 
-    SourceScope(path, imports.map { _.path }, defs.foldRight(exports) {
+    SourceModuleDef(path, imports.map { _.path }, defs.foldRight(exports) {
       case (d, r) =>
         transform(d, r)(C)
     }).inheritPosition(mod.decl)
@@ -85,9 +85,19 @@ class Transformer extends Phase[Module, core.SourceScope] {
     case e: source.ExternEffect =>
       rest
 
-    case d @ source.ModuleScope(id, imports, defs) =>
-      // TODO
-      throw new RuntimeException("TODO: Implement Handling in Transformer")
+    case d @ source.LocalModuleDef(id, defs) =>
+      defs.foldRight(rest) { (d, r) =>
+        transform(d, r)
+      }
+
+    // TODO: Übersetzte Module zu core.LocalModule
+    // foldRight
+    // transform(def, rest?) auf alles defs aufrufen
+
+    // Plan: Module -> Stmt und das zurück geben
+    // Rest behalten
+
+    //throw new RuntimeException("TODO: Implement Handling in Transformer")
 
     case d @ source.EffDef(id, ops) =>
       core.Record(d.symbol, ops.map { e => e.symbol }, rest)

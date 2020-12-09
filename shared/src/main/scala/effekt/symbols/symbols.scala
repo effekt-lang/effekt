@@ -1,11 +1,11 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, SourceScope, ValDef, VarDef }
+import effekt.source.{ Def, FunDef, SourceModuleDef, ValDef, VarDef }
 import effekt.context.TypesDB
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
-import effekt.symbols.{ TypeSymbol, ValueType }
+import effekt.symbols.{ TypeSymbol, ValueType, Name }
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -31,11 +31,85 @@ package object symbols {
   }
 
   /**
+   * Trait for a Symbol which represents a module.
+   */
+  sealed trait Module extends Symbol {
+    def source: Source
+    def ownerOption: Option[Module]
+  }
+
+  case class SourceModule(decl: SourceModuleDef, source: Source) extends Module {
+    def ownerOption: Option[Module] = None
+    val name: Name = Name.module(decl.path)
+
+    def path = decl.path
+
+    private var _terms: Map[String, Set[TermSymbol]] = _
+    def terms = _terms
+
+    private var _types: Map[String, TypeSymbol] = _
+    def types = _types
+
+    private var _imports: List[SourceModule] = _
+    def imports = _imports
+
+    // a topological ordering of all transitive dependencies
+    // this is the order in which the modules need to be compiled / loaded
+    lazy val dependencies: List[SourceModule] = imports.flatMap { im => im.dependencies :+ im }.distinct
+
+    // toplevle declared effects
+    def effects: Effects = Effects(types.values.collect {
+      case e: Effect => e
+    })
+
+    /**
+     * It is actually possible, that exports is invoked on a single module multiple times:
+     * The dependencies of a module might change, which triggers frontend on the same module
+     * again. It is the same, since the source and AST did not change.
+     */
+    def export(
+      imports: List[SourceModule],
+      terms: Map[String, Set[TermSymbol]],
+      types: Map[String, TypeSymbol]
+    ): this.type = {
+      _imports = imports
+      _terms = terms
+      _types = types
+      this
+    }
+  }
+
+  case class LocalModule(localName: String, owner: Module) extends Module {
+    def ownerOption: Some[Module] = Some(owner)
+
+    // Computes the qualified name of the module.
+    val name: Name = owner match {
+      case SourceModule(_, _)  => Name(localName)
+      case parent: LocalModule => parent.name.nested(localName)
+    }
+
+    // Walks up the parent chain until the root (source module) is found.
+    def source: Source = owner match {
+      case SourceModule(_, source) => source
+      case parent: LocalModule     => parent.source
+    }
+  }
+
+  /**
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
+   *
+   * 1. Jedes Modul steht in einer Source Datei
+   *   - source
+   *   - => User Modules kennen auch ihre Source
+   * 2. Gegeben ein Modulsymbol
+   *   - Owner ist entweder: Source oder anderes Modul
+   * 3. Module haben ids
+   *
    */
+  /*
   case class Module(
-    decl: SourceScope,
+    decl: SourceModuleDef,
     source: Source
   ) extends Symbol {
     val name = Name.module(decl.path)
@@ -76,6 +150,7 @@ package object symbols {
       this
     }
   }
+  */
 
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol

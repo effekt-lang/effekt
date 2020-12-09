@@ -3,8 +3,8 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ SourceScope, Tree }
-import effekt.symbols.Module
+import effekt.source.{ SourceModuleDef, Tree }
+import effekt.symbols.SourceModule
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
 import effekt.util.paths._
@@ -21,7 +21,7 @@ import scala.sys.process.Process
 /**
  * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
  */
-trait Driver extends CompilerWithConfig[Tree, SourceScope, EffektConfig] { outer =>
+trait Driver extends CompilerWithConfig[Tree, SourceModuleDef, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -81,14 +81,14 @@ trait Driver extends CompilerWithConfig[Tree, SourceScope, EffektConfig] { outer
     report(source, C.buffer.get, config)
   }
 
-  def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def eval(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
     }
   }
 
-  def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalJS(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val jsFile = C.generatorPhase.path(mod)
@@ -101,7 +101,7 @@ trait Driver extends CompilerWithConfig[Tree, SourceScope, EffektConfig] { outer
     }
   }
 
-  def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalCS(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val csFile = C.generatorPhase.path(mod)
@@ -120,12 +120,12 @@ trait Driver extends CompilerWithConfig[Tree, SourceScope, EffektConfig] { outer
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
    * Not used anymore
    */
-  override def process(source: Source, ast: SourceScope, config: EffektConfig): Unit = ???
+  override def process(source: Source, ast: SourceModuleDef, config: EffektConfig): Unit = ???
 
   /**
    * Originally called by kiama, not used anymore.
    */
-  override def parse(source: Source): ParseResult[SourceScope] = ???
+  override def parse(source: Source): ParseResult[SourceModuleDef] = ???
 
-  def format(m: SourceScope): Document = ???
+  def format(m: SourceModuleDef): Document = ???
 }

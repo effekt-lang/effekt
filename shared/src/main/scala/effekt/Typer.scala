@@ -26,9 +26,9 @@ case class TyperState(
   effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
 )
 
-class Typer extends Phase[Module, Module] { typer =>
+class Typer extends Phase[SourceModule, SourceModule] { typer =>
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+  def run(mod: SourceModule)(implicit C: Context): Option[SourceModule] = {
 
     val module = mod.decl
 
@@ -351,6 +351,25 @@ class Typer extends Phase[Module, Module] { typer =>
       case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
         Context.define(d.symbol.params)
         TUnit / Pure
+
+      case d @ source.LocalModuleDef(id, defs) => {
+        println("Check Module Def")
+
+        Context in {
+          defs.foreach { d => precheckDef(d) }
+          defs.foreach { d =>
+
+            val (_ / effs) = synthDef(d)
+
+            if (effs.nonEmpty)
+              Context.at(d) {
+                Context.error("Unhandled effects: " + effs)
+              }
+          }
+        }
+
+        TUnit / Pure
+      }
 
       // all other defintions have already been prechecked
       case d => TUnit / Pure

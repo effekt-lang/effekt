@@ -14,7 +14,10 @@ sealed trait Tree extends Product {
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class SourceScope(path: String, imports: List[String], defs: Stmt) extends Tree
+case class SourceModuleDef(path: String, imports: List[String], defs: Stmt) extends Tree
+
+// TODO: LocalModule hinzufügen
+// Transformer:
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -66,6 +69,11 @@ case class Def(id: Symbol, block: Block, rest: Stmt) extends Stmt
 case class Val(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
+
+// TODO: LocalModule hinzufügen (Module: Stmt)
+// Body = Stmt
+// Rest = Stmt
+// Ähnlich zu Def
 
 case class App(b: Block, args: List[Argument]) extends Stmt
 

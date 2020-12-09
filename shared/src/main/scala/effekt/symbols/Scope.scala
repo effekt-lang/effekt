@@ -15,6 +15,7 @@ object scopes {
 
     val terms: mutable.HashMap[String, Set[TermSymbol]] = mutable.HashMap.empty
     val types: mutable.HashMap[String, TypeSymbol] = mutable.HashMap.empty
+    val modules: mutable.HashMap[String, LocalModule] = mutable.HashMap.empty
 
     /**
      * Searches the nested scopes to find the first term.
@@ -39,6 +40,8 @@ object scopes {
 
     def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
       types.update(key, sym)
+
+    def define(key: String, mod: LocalModule): Unit = modules.update(key, mod)
 
     def enter: Scope = BlockScope(this)
 

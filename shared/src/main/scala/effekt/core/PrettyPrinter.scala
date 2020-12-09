@@ -10,12 +10,12 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
-  def format(t: SourceScope): Document =
+  def format(t: SourceModuleDef): Document =
     pretty(toDoc(t), 4)
 
   val emptyline: Doc = line <> line
 
-  def toDoc(m: SourceScope): Doc = {
+  def toDoc(m: SourceModuleDef): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
       emptyline <> toDocStmt(m.defs)
   }

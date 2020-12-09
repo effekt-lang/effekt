@@ -1,12 +1,16 @@
 module example
 
 module hello {
-
-    def modules() = {
+    def modules(x: Int) = {
         println("Hello Modules")
+    }
+
+    def bar() = {
+        modules(5)
     }
 }
 
 def main() = {
-    hello.modules()
+    //hello.modules()
+    println(5)
 }

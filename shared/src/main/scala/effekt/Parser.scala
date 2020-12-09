@@ -12,9 +12,9 @@ import scala.language.implicitConversions
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, SourceScope] {
+class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, SourceModuleDef] {
 
-  def run(source: Source)(implicit C: Context): Option[SourceScope] =
+  def run(source: Source)(implicit C: Context): Option[SourceModuleDef] =
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
@@ -191,21 +191,23 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // turn scalariform formatting off!
   // format: OFF
 
-  lazy val program: P[SourceScope] =
-    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => SourceScope(name, Import("effekt") :: imports, defs)
-      case name ~ imports ~ defs => SourceScope(name, imports, defs)
+  lazy val program: P[SourceModuleDef] =
+    ( legacyModule ~ many(importDecl) ~ many(definition) ^^ {
+      case name ~ imports ~ defs if name != "effekt" => SourceModuleDef(name, Import("effekt") :: imports, defs)
+      case name ~ imports ~ defs => SourceModuleDef(name, imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )
 
-  lazy val moduleDecl: P[String] =
+  lazy val legacyModule: P[String] =
     ( `module` ~/> modulePath
     | defaultModulePath
     )
 
   lazy val importDecl: P[Import] =
     `import` ~/> modulePath ^^ Import
+
+
 
 
   /**
@@ -217,7 +219,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDef
+    ( moduleDef
+    | valDef
     | funDef
     | effectDef
     | typeDef
@@ -230,6 +233,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | externInclude
     | failure("Expected a definition")
     )
+
+  lazy val moduleDef: P[Def] =
+    //`module` ~/> idDef ~ (`{` ~> many(importDecl)) ~ (many(definition) <~ `}`) ^^ ModuleScope
+    `module` ~/> idDef ~ (`{` ~> many(definition) <~ `}`) ^^ LocalModuleDef
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef

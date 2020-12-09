@@ -3,8 +3,8 @@ package effekt
 import effekt.context.Context
 import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
-import effekt.source.SourceScope
-import effekt.symbols.Module
+import effekt.source.SourceModuleDef
+import effekt.symbols.SourceModule
 import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
@@ -51,17 +51,17 @@ trait Compiler {
   // Tasks
   // =====
 
-  object getAST extends SourceTask[SourceScope]("ast") {
-    def run(source: Source)(implicit C: Context): Option[SourceScope] = source match {
+  object getAST extends SourceTask[SourceModuleDef]("ast") {
+    def run(source: Source)(implicit C: Context): Option[SourceModuleDef] = source match {
       case VirtualSource(decl, _) => Some(decl)
       case _ => parser(source)
     }
   }
 
-  object frontend extends SourceTask[Module]("frontend") {
-    def run(source: Source)(implicit C: Context): Option[Module] = for {
+  object frontend extends SourceTask[SourceModule]("frontend") {
+    def run(source: Source)(implicit C: Context): Option[SourceModule] = for {
       ast <- getAST(source)
-      mod = Module(ast, source)
+      mod = SourceModule(ast, source)
       _ <- C.using(module = mod, focus = ast) {
         for {
           _ <- namer(mod)
@@ -71,15 +71,15 @@ trait Compiler {
     } yield mod
   }
 
-  object lower extends SourceTask[core.SourceScope]("lower") {
-    def run(source: Source)(implicit C: Context): Option[core.SourceScope] = for {
+  object lower extends SourceTask[core.SourceModuleDef]("lower") {
+    def run(source: Source)(implicit C: Context): Option[core.SourceModuleDef] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
     } yield core
   }
 
-  object inferLifts extends SourceTask[core.SourceScope]("lifts") {
-    def run(source: Source)(implicit C: Context): Option[core.SourceScope] = for {
+  object inferLifts extends SourceTask[core.SourceModuleDef]("lifts") {
+    def run(source: Source)(implicit C: Context): Option[core.SourceModuleDef] = for {
       mod <- frontend(source)
       core <- lower(source)
       lifted <- C.using(module = mod) { lifter(core) }

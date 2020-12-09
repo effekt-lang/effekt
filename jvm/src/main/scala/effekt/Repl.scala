@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, SourceModule, ValueSymbol }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
@@ -235,7 +235,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case _ => ()
   }
 
-  private def runCompiler(source: Source, ast: SourceScope, config: EffektConfig): Unit = {
+  private def runCompiler(source: Source, ast: SourceModuleDef, config: EffektConfig): Unit = {
     context.setup(config)
 
     val src = VirtualSource(ast, source)
@@ -248,7 +248,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     report(source, context.buffer.get, config)
   }
 
-  private def runFrontend(source: Source, ast: SourceScope, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runFrontend(source: Source, ast: SourceModuleDef, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.frontend(src) map { f } getOrElse {
@@ -256,7 +256,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
   }
 
-  private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runParsingFrontend(source: Source, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     context.frontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
@@ -316,16 +316,16 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     /**
      * Create a module declaration using the given expression as body of main
      */
-    def make(expr: Expr): SourceScope = {
+    def make(expr: Expr): SourceModuleDef = {
 
       val body = Return(expr)
 
-      SourceScope("lib/interactive", Import("effekt") :: imports,
+      SourceModuleDef("lib/interactive", Import("effekt") :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
           body))
     }
 
-    def makeEval(expr: Expr): SourceScope =
+    def makeEval(expr: Expr): SourceModuleDef =
       make(Call(IdRef("println"), Nil, List(ValueArgs(List(expr)))))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)

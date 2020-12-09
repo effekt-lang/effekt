@@ -1,14 +1,14 @@
 package effekt
 package util
 
-import effekt.source.SourceScope
+import effekt.source.SourceModuleDef
 import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
  * Use by the REPL with synthesized modules. "input" contains the last REPL entry,
  * not the whole source.
  */
-case class VirtualSource(virtualModule: SourceScope, input: Source) extends Source {
+case class VirtualSource(virtualModule: SourceModuleDef, input: Source) extends Source {
   val name = input.name
   val content = input.content
 
