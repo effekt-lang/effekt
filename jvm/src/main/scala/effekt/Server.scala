@@ -5,7 +5,14 @@ import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, Tree }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
-import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
+import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.CodeLens
+import org.eclipse.lsp4j.Command
+import scala.collection.immutable.Vector0
+import org.bitbucket.inkytonik.kiama.util.StringSource
+import effekt.source.NoSource
+import java.util.ArrayList
+import java.util.concurrent.CompletableFuture
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -108,6 +115,76 @@ trait LSPServer extends Driver with Intelligence {
       case _ =>
         None
     }
+
+  def getLensSyms(documentsymbols: Option[Vector[DocumentSymbol]]): Option[Vector[DocumentSymbol]] = documentsymbols match {
+    case None => None
+    case Some(vec) => vec match {
+      case head +: tail => Some(
+        for {
+          e <- vec
+          if e.getKind() == SymbolKind.Method
+        } yield e
+      )
+      case _ => None
+    }
+  }
+
+  def getSource(uri: String) = {
+    val src = sources.get(uri);
+    src match {
+      case None         => new StringSource("")
+      case Some(source) => source
+    }
+  }
+
+  override def executeCommand(executeCommandParams: ExecuteCommandParams): Any = executeCommandParams.getCommand() match {
+    case "println" => {
+      executeCommandParams.getArguments().forEach((x) => logMessage(x.toString()))
+      //return CompletableFuture.runAsync(executeCommandParams.getArguments().forEach((x) => println(x.toString())))
+      new CompletableFuture[Unit] { executeCommandParams.getArguments().forEach((x) => println(x.toString())) }
+    }
+    case _ => {
+      logMessage("No arguments given.")
+      return null
+    }
+  }
+
+  override def getCodeLenses(uri: String): Option[Vector[TreeLens]] = lens(getSymbols(getSource(uri)))(context)
+
+  def lens(documentsymbols: Option[Vector[DocumentSymbol]])(implicit C: Context): Option[Vector[TreeLens]] = documentsymbols match {
+    case Some(vec) => vec match {
+      case tail :+ head => Some(
+        vec.flatMap(s => getLens(s)(C))
+      )
+      case _ => None
+    }
+    case None => None
+  }
+
+  def getLens(symbol: DocumentSymbol)(implicit C: Context): Option[TreeLens] = symbol.getKind() match {
+    case SymbolKind.Method => {
+      val args = new ArrayList[Object]();
+      args.add("Foo")
+      this.registerCapability("Infer or remove return type and effects", "println", args)
+
+      Some(new TreeLens(
+        "Fix or unfix function by adding or removing inferred return type and effects.",
+        new Command("Infer / remove ret-type & effects", "println", args),
+        //      new Command("Fix/unfix return type and effects", "testCommand"),
+        symbol.getRange()
+      ))
+    }
+    case _ => None
+  }
+
+  /*
+  def functionLens(f: FunDef)(implicit C: Context): Option[TreeLens] = for {
+    action <- inferEffectsAction(f)(C)
+  } yield TreeLens(
+    "Fix or unfix function by adding or removing inferred return type and effects.",
+    new Command("Fix/unfix return type and effects", "testCommand")
+  )
+  */
 
   override def getCodeActions(position: Position): Option[Vector[TreeAction]] =
     Some(for {
