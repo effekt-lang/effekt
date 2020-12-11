@@ -113,8 +113,9 @@ class Namer extends Phase[Module, Module] { namer =>
           val name = Context.freshTermName(id)
           Context scoped {
             val tps = tparams map resolve
-            val tpe = Effectful(resolve(ret), Effects(List(effectSym)))
-            val op = EffectOp(Name(id), tps, params map resolve, Some(tpe), effectSym)
+            val Effectful(tpe, otherEffs) = resolve(ret)
+            val retResolved = Effectful(tpe, otherEffs + effectSym)
+            val op = EffectOp(Name(id), tps, params map resolve, Some(retResolved), effectSym)
             Context.define(id, op)
             op
           }
@@ -469,7 +470,7 @@ trait NamerOps { self: Context =>
    * Tries to find a _unique_ term symbol in the current scope under name id.
    * Stores a binding in the symbol table
    */
-  private[namer] def resolveTerm(id: Id): TermSymbol = {
+  private[namer] def resolveTerm(id: Id): TermSymbol = at(id) {
     val sym = scope.lookupFirstTerm(id.name)
     assignSymbol(id, sym)
     sym
@@ -478,7 +479,7 @@ trait NamerOps { self: Context =>
   /**
    * Resolves a potentially overloaded call target
    */
-  private[namer] def resolveCalltarget(id: Id): BlockSymbol = {
+  private[namer] def resolveCalltarget(id: Id): BlockSymbol = at(id) {
     val syms = scope.lookupOverloaded(id.name) map {
       _ collect {
         case b: BlockParam  => b
@@ -505,7 +506,7 @@ trait NamerOps { self: Context =>
     case other         => other
   }
 
-  private[namer] def resolveType(id: Id): TypeSymbol = {
+  private[namer] def resolveType(id: Id): TypeSymbol = at(id) {
     val sym = scope.lookupType(id.name)
     assignSymbol(id, sym)
     sym

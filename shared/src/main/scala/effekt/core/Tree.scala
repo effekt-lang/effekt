@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Effect, EffectOp }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -25,7 +25,7 @@ sealed trait Argument extends Tree
  * Expressions
  */
 sealed trait Expr extends Tree with Argument
-case class ValueVar(id: Symbol) extends Expr
+case class ValueVar(id: ValueSymbol) extends Expr
 
 sealed trait Literal[T] extends Expr {
   def value: T
@@ -42,12 +42,12 @@ case class Select(target: Expr, field: Symbol) extends Expr
 /**
  * Blocks
  */
-sealed trait Param extends Tree { def id: Symbol }
-case class ValueParam(id: Symbol) extends Param
-case class BlockParam(id: Symbol) extends Param
+sealed trait Param extends Tree { def id: TermSymbol }
+case class ValueParam(id: ValueSymbol) extends Param
+case class BlockParam(id: BlockSymbol) extends Param
 
 sealed trait Block extends Tree with Argument
-case class BlockVar(id: Symbol) extends Block
+case class BlockVar(id: BlockSymbol) extends Block
 
 // introduced by lift inference only
 case class ScopeAbs(scope: Symbol, body: Block) extends Block
@@ -55,15 +55,15 @@ case class ScopeApp(b: Block, evidence: Scope) extends Block
 case class Lifted(s: Scope, b: Block) extends Block
 
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: Symbol) extends Block
+case class Member(b: Block, field: EffectOp) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 
 /**
  * Statements
  */
 sealed trait Stmt extends Tree
-case class Def(id: Symbol, block: Block, rest: Stmt) extends Stmt
-case class Val(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
+case class Def(id: BlockSymbol, block: Block, rest: Stmt) extends Stmt
+case class Val(id: ValueSymbol, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
@@ -85,10 +85,10 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: Symbol, get: Symbol, put: Symbol, init: Stmt, body: Block) extends Stmt
+case class State(id: Effect, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) extends Tree
+case class Handler(id: Effect, clauses: List[(EffectOp, BlockLit)]) extends Tree
 
 /**
  * Explicit Lifts

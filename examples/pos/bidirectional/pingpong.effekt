@@ -1,0 +1,47 @@
+module examples/pos/bidirectional/pingpong
+
+effect Ping(): Unit / { Pong }
+effect Pong(): Unit / { Ping }
+
+def pinger(i: Int, N: Int) : Unit / { Ping, Console } = {
+  println("enter pinger")
+
+  println(i)
+
+  try {
+    if (i < N) do Ping()
+    else ()
+  }
+  with Pong {
+    println("enter Pong handler")
+
+    resume {
+      pinger(i + 1, N)
+    }
+  }
+}
+
+def ponger(): Unit / { Pong, Console } = {
+  println("enter ponger")
+  try {
+    do Pong()
+  }
+  with Ping {
+    println("enter Ping handler")
+
+    resume {
+      ponger()
+    }
+  }
+}
+
+def main() = {
+  try {
+    pinger(0, 10)
+  }
+  with Ping {
+    println("enter Ping handler@main")
+
+    resume { ponger() }
+  }
+}

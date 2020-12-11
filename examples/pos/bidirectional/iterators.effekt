@@ -1,0 +1,56 @@
+module examples/pos/bidirectional/iterators
+
+import immutable/list
+
+// specialized to Int, since ATM type parameters on effects are not
+// yet implemented.
+effect Yield {
+    // uppercase, since yield is still a keyword.
+    def Yield(value: Int): Unit / { Replace, Behead }
+}
+
+// this is a shorthand syntax for singleton effects, like Yield
+effect Replace(value: Int): Unit
+effect Behead(): Unit
+
+// we do not have mutable lists, yet...
+def iter(l: List[Int]): List[Int] / { Yield, Behead } = {
+    var in: List[Int] = l;
+    var out: List[Int] = Nil();
+
+    while (not(in.isEmpty)) {
+        val hd = in.head;
+        val tl = in.tail;
+        try { Yield(hd); in = tl }
+        with Replace { n =>
+            out = Cons(n, out);
+            // in Effekt we distinguish between value arguments and block arguments
+            // so conceptually, there is two forms of resume:
+            //   resume(value)
+            // and
+            //   resume { block }
+            // that shouldn't be confused.
+            resume(())
+        }
+        with Behead { resume(()) }
+    };
+
+    out.reverse
+}
+
+// prints Cons(0, Cons(2, Cons(6, Cons(18, Nil()))))
+def main() = {
+    var lst = [0, 1, 3, 0 - 2, 0 - 8, 9];
+
+    val res = try { lst.iter }
+    with Yield { x =>
+      resume { if (x < 0) Behead() else Replace(x * 2) }
+    }
+    with Behead { () =>
+        println("beheading in client?");
+        lst = lst.tail;
+        resume(())
+    };
+
+    println(res)
+}
