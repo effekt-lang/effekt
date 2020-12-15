@@ -12,7 +12,7 @@ lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 
 
-lazy val effektVersion = "0.1.15"
+lazy val effektVersion = "0.1.16"
 
 lazy val noPublishSettings = Seq(
   publish := {},

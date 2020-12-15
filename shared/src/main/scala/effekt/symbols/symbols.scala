@@ -79,6 +79,12 @@ package object symbols {
     }
   }
 
+  // TODO: Module können auch in fun bodys definiert werden
+  // Owner beschreibt grob die Herkunft
+  // TODO: => Typ Name droppen
+  // Statt Name String verwenden
+  // Dynamisch berechnen aus Owner-Struktur?
+  // => Overload Resolution im Typer (einzige Verwendung von qualified Name)
   case class LocalModule(localName: String, owner: Module) extends Module {
     def ownerOption: Some[Module] = Some(owner)
 

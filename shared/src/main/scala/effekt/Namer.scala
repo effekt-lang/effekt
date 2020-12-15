@@ -212,9 +212,17 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
     // (2) === Bound Occurrences ===
 
     case source.Call(id, targs, args) =>
+      // idRef oder Access?
+      // Erstmal nur ein Punkt berücksichtigen (IdRef, IdRef)
       // Hier Modul abfangen
       // id enthält func name ("modules"")
       // args enthält module name ("hello")
+
+      if (id.name == "modules") {
+        // Example abfangen
+        // TODO: Was muss getan werten um die Resolution umzuleiten?
+        // Ziel: Soll Funtkion "modules" aus dem module "hello" aufrufen
+      }
 
       Context.resolveCalltarget(id)
 

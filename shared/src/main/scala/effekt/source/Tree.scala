@@ -36,6 +36,8 @@ case class IdDef(name: String) extends Id {
     copy
   }
 }
+
+// TODO: parentOption: ref?
 case class IdRef(name: String) extends Id {
   def clone(implicit C: Context): Id = {
     val copy = IdRef(name)
@@ -155,7 +157,7 @@ case class ExternInclude(path: String) extends Def {
   var contents: String = ""
 }
 
-// TODO Access extends Expr
+// TODO Access //extends IdRef?
 
 sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
@@ -187,6 +189,7 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
+// TODO: Bei id IdRef und Access erlauben
 case class Call(id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
   type symbol = symbols.BlockSymbol
 }

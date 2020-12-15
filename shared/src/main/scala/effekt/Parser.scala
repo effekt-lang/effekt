@@ -414,6 +414,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val addExpr: P[Expr] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
   lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
+  // TODO: Neue Syntax für
+  // lazy val access
+
   lazy val accessExpr: P[Expr] =
     callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
