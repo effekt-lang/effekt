@@ -155,6 +155,8 @@ case class ExternInclude(path: String) extends Def {
   var contents: String = ""
 }
 
+// TODO Access extends Expr
+
 sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
 case class ExprStmt(d: Expr, rest: Stmt) extends Stmt

@@ -6,6 +6,7 @@ import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseR
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
+import effekt.symbols.ToplevelName
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
@@ -101,8 +102,18 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     }
       | failure("Expected an identifier"))
 
+  lazy val moduleIdent =
+    (not(anyKeyword) ~> moduleName ^^ { n =>
+      if (additionalKeywords.contains(n)) { "_" + n } else { n }
+    }
+      | failure("Expected an identifier"))
+
   lazy val idDef: P[IdDef] = ident ^^ IdDef
   lazy val idRef: P[IdRef] = ident ^^ IdRef
+  lazy val moduleRef: P[IdRef] = moduleIdent ^^ IdRef
+  lazy val anyRef: P[IdRef] =
+    (idRef
+      | moduleRef)
 
   lazy val path = someSep(ident, `/`)
 
@@ -421,6 +432,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | handleExpr
     | primExpr
     )
+
 
   lazy val funCall: P[Expr] =
     idRef ~ maybeTypeArgs ~ some(args) ^^ Call

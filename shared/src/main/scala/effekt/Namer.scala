@@ -212,7 +212,12 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
     // (2) === Bound Occurrences ===
 
     case source.Call(id, targs, args) =>
+      // Hier Modul abfangen
+      // id enthält func name ("modules"")
+      // args enthält module name ("hello")
+
       Context.resolveCalltarget(id)
+
       targs foreach resolve
       resolveAll(args)
 
@@ -234,9 +239,10 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
       println("Resolved generic")
 
     // THIS COULD ALSO BE A TYPE!
-    case id: Id => Context.resolveTerm(id)
+    case id: Id =>
+      Context.resolveTerm(id)
 
-    case other  => resolveAll(other)
+    case other => resolveAll(other)
   }
 
   // TODO move away
@@ -508,6 +514,7 @@ trait NamerOps { self: Context =>
    * Stores a binding in the symbol table
    */
   private[namer] def resolveTerm(id: Id): TermSymbol = at(id) {
+    println(s"Resolve Term: $id")
     val sym = scope.lookupFirstTerm(id.name)
     assignSymbol(id, sym)
     sym
@@ -525,6 +532,8 @@ trait NamerOps { self: Context =>
         case _              => abort("Expected callable")
       }
     }
+
+    println(s"resolveCalltarget($id)")
 
     if (syms.isEmpty) {
       println(s"Resolve function with module: ${Temp.moduleScope}")

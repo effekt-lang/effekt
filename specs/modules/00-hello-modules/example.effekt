@@ -11,6 +11,6 @@ module hello {
 }
 
 def main() = {
-    //hello.modules()
-    println(5)
+    hello.modules()
+    //println(5)
 }

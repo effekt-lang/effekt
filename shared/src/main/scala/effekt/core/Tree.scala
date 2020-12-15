@@ -15,6 +15,7 @@ sealed trait Tree extends Product {
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
 case class SourceModuleDef(path: String, imports: List[String], defs: Stmt) extends Tree
+case class LocalModuleDef(name: Name, defs: Stmt) extends Tree
 
 // TODO: LocalModule hinzufügen
 // Transformer:
