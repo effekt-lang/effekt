@@ -12,10 +12,6 @@ import effekt.util.control._
 case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
 case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-// TODO we should associate this capability symbol with the function / handler that introduces it
-//      to admit good errors.
-case class CapabilitySymbol(effect: Effect) extends BlockSymbol { val name = effect.name }
-
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def run(mod: Module)(implicit C: Context): Option[ModuleDecl] =

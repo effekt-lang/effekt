@@ -145,6 +145,11 @@ package object symbols {
 
 
   /**
+   * A symbol that represents a termlevel capability
+   */
+  case class CapabilitySymbol(effect: Effect) extends BlockSymbol { val name = effect.name }
+
+  /**
    * Types
    */
   sealed trait Type
