@@ -79,7 +79,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "yield", "if", "while",
-    "match", "module", "import", "extern", "resume"
+    "match", "module", "import", "extern"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -405,7 +405,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val callExpr: P[Expr] =
     ( ifExpr
     | whileExpr
-    | resumeExpr
     | funCall
     | doExpr
     | yieldExpr
@@ -419,15 +418,19 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
+  // TODO deprecate doExpr
   lazy val doExpr: P[Expr] =
     `do` ~/> idRef ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
 
   lazy val yieldExpr: P[Expr] =
     idRef ~ maybeTypeArgs ~ some(args) ^^ Call
 
+<<<<<<< HEAD
   lazy val resumeExpr: P[Expr] =
 (`resume` ^^^ IdRef("resume")) ~ args ^^ { case r ~ args => Call(r, Nil, List(args)) withPositionOf r }
 
+=======
+>>>>>>> 75c0be8... Drop resume expressions
   lazy val handleExpr: P[Expr] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
