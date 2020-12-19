@@ -141,14 +141,17 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
+
 
   /**
    * Types
    */
   sealed trait Type
 
-  // like Params but without name binders
+  /**
+   * like Params but without name binders
+   */
   type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type {
@@ -233,16 +236,18 @@ package object symbols {
     val ret = Some(Effectful(tpe, Pure))
   }
 
-  sealed trait Effect extends TypeSymbol {
+  sealed trait Effect {
+    def name: Name
+    def builtin: Boolean
     // invariant: no EffectAlias in this list
     def dealias: List[Effect] = List(this)
   }
 
-  case class EffectAlias(name: Name, effs: Effects) extends Effect {
+  case class EffectAlias(name: Name, effs: Effects) extends Effect with TypeSymbol {
     override def dealias: List[Effect] = effs.dealias
   }
 
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun {
     def otherEffects: Effects = ret.get.effects - effect
     def isBidirectional: Boolean = otherEffects.nonEmpty

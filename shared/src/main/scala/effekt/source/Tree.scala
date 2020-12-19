@@ -248,7 +248,7 @@ case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
 }
 
 case class Effect(id: IdRef) extends Tree with Reference {
-  type symbol = symbols.Effect
+  type symbol = symbols.UserEffect
 }
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
