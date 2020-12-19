@@ -111,6 +111,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val idDef: P[IdDef] = ident ^^ IdDef
   lazy val idRef: P[IdRef] = ident ^^ IdRef
   lazy val moduleRef: P[IdRef] = moduleIdent ^^ IdRef
+  lazy val moduleAccess: P[ModuleAccess] = idRef ~ (`:` ~/> idRef) ^^ ModuleAccess
   lazy val anyRef: P[IdRef] =
     (idRef
       | moduleRef)
@@ -436,9 +437,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
+  lazy val callerId: P[CallerId] = 
+    ( moduleAccess
+    | idRef
+    )
 
   lazy val funCall: P[Expr] =
-    idRef ~ maybeTypeArgs ~ some(args) ^^ Call
+    callerId ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr

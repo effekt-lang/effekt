@@ -17,6 +17,14 @@ case object NoSource extends Tree
 // only used by the lexer
 case class Comment() extends Tree
 
+// Datatype for the left part of a function call
+sealed trait CallerId extends Id
+// An access to a module member
+case class ModuleAccess(moduleId: IdRef, memberId: IdRef) extends CallerId {
+  def name: String = memberId.name
+  def clone(implicit C: Context): Id = ModuleAccess(moduleId.clone(C), memberId.clone(C))
+}
+
 /**
  * We distinguish between identifiers corresponding to
  * - binding sites (IdDef)
@@ -27,8 +35,8 @@ sealed trait Id extends Tree {
   def name: String
   def symbol(implicit db: SymbolsDB): Symbol = db.symbolOf(this)
   def clone(implicit C: Context): Id
-
 }
+
 case class IdDef(name: String) extends Id {
   def clone(implicit C: Context): Id = {
     val copy = IdDef(name)
@@ -38,8 +46,8 @@ case class IdDef(name: String) extends Id {
 }
 
 // TODO: parentOption: ref?
-case class IdRef(name: String) extends Id {
-  def clone(implicit C: Context): Id = {
+case class IdRef(name: String) extends Id with CallerId {
+  def clone(implicit C: Context): IdRef = {
     val copy = IdRef(name)
     C.positions.dupPos(this, copy)
     copy
@@ -189,8 +197,12 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
-// TODO: Bei id IdRef und Access erlauben
-case class Call(id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+case class Call(caller: CallerId, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+  def id: IdRef = caller match {
+    case ref: IdRef        => ref
+    case mod: ModuleAccess => mod.memberId
+  }
+
   type symbol = symbols.BlockSymbol
 }
 
