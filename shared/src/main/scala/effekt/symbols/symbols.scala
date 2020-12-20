@@ -153,15 +153,15 @@ package object symbols {
   }
   case class UserCapability(effect: UserEffect) extends Capability
 
-  case class StateEffect(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability
-  object StateEffect {
-    def apply(binder: VarBinder)(implicit C: Context): StateEffect = {
+  case class StateCapability(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability
+  object StateCapability {
+    def apply(binder: VarBinder)(implicit C: Context): StateCapability = {
       val tpe = C.valueTypeOf(binder)
       val eff = UserEffect(binder.name, Nil)
       val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
       val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
       eff.ops = List(get, put)
-      StateEffect(eff, get, put)
+      StateCapability(eff, get, put)
     }
   }
 

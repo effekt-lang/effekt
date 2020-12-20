@@ -277,9 +277,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     /**
      * Synthesized state effects for var-definitions
      */
-    private var stateEffects = mutable.Map.empty[VarBinder, StateEffect]
-    def state(binder: VarBinder): StateEffect =
-      stateEffects.getOrElseUpdate(binder, StateEffect(binder)(context))
+    private var stateEffects = mutable.Map.empty[VarBinder, StateCapability]
+    def state(binder: VarBinder): StateCapability =
+      stateEffects.getOrElseUpdate(binder, StateCapability(binder)(context))
 
     /**
      * Used to map each lexically scoped capability to its termsymbol
