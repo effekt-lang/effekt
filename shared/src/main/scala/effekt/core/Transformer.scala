@@ -40,7 +40,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
 
-      val effs = sym.effects.userDefined.toList
+      val effs = sym.effects.userEffects
 
       C.bindingCapabilities(effs) { caps =>
         val ps = params.flatMap {
@@ -177,7 +177,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
           val params = ps.params.map { v => core.ValueParam(v.symbol) }
           pure {
-            C.bindingCapabilities(p.ret.effects.userDefined.toList) { caps =>
+            C.bindingCapabilities(p.ret.effects.userEffects) { caps =>
               List(BlockLit(params ++ caps, transform(body)))
             }
           }
@@ -273,7 +273,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     x
   }
 
-  private val delimiter: Cap[Stmt] = new Capability { type Res = Stmt }
+  private val delimiter: Cap[Stmt] = new control.Capability { type Res = Stmt }
 
   def ANF(e: Control[Stmt]): Stmt = control.handle(delimiter)(e).run()
   def bind(x: Tmp, e: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
@@ -294,16 +294,16 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     /**
      * Used to map each lexically scoped capability to its termsymbol
      */
-    private var capabilities = Map.empty[Effect, CapabilitySymbol]
+    private var capabilities = Map.empty[Effect, symbols.Capability]
 
     /**
      * runs the given block, binding the provided capabilities, so that
      * "resolveCapability" will find them.
      */
-    def bindingCapabilities[R](effs: List[Effect])(block: List[core.BlockParam] => R): R = {
+    def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
       val before = capabilities;
       // create a fresh cabability-symbol for each bound effect
-      val caps = effs.map { CapabilitySymbol }
+      val caps = effs.map { Capability }
       // additional block parameters for capabilities
       val params = caps.map { core.BlockParam }
 

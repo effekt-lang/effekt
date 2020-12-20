@@ -147,7 +147,10 @@ package object symbols {
   /**
    * A symbol that represents a termlevel capability
    */
-  case class CapabilitySymbol(effect: Effect) extends BlockSymbol { val name = effect.name }
+  //  trait Capability extends BlockSymbol {
+  //    def effect: UserEffect
+  //  }
+  case class Capability(effect: UserEffect) extends BlockSymbol { val name = effect.name }
 
   /**
    * Types
@@ -241,6 +244,8 @@ package object symbols {
     val ret = Some(Effectful(tpe, Pure))
   }
 
+  /** Effects */
+
   sealed trait Effect {
     def name: Name
     def builtin: Boolean
@@ -296,6 +301,11 @@ package object symbols {
     def userDefined: Effects =
       filterNot(_.builtin)
 
+    def userEffects: List[UserEffect] =
+      effects collect {
+        case u: UserEffect => u
+      }
+
     def dealias: List[Effect] = effects.flatMap { _.dealias }
 
     override def toString: String = toList match {
@@ -314,6 +324,7 @@ package object symbols {
   }
 
   lazy val Pure = new Effects(Nil)
+
   case class Effectful(tpe: ValueType, effects: Effects) {
     override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
   }
