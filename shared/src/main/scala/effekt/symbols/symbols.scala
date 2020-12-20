@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
-import effekt.context.TypesDB
+import effekt.context.{ Context, TypesDB }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
@@ -147,10 +147,23 @@ package object symbols {
   /**
    * A symbol that represents a termlevel capability
    */
-  //  trait Capability extends BlockSymbol {
-  //    def effect: UserEffect
-  //  }
-  case class Capability(effect: UserEffect) extends BlockSymbol { val name = effect.name }
+  trait Capability extends BlockSymbol {
+    def effect: UserEffect
+    val name = effect.name
+  }
+  case class UserCapability(effect: UserEffect) extends Capability
+
+  case class StateEffect(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability
+  object StateEffect {
+    def apply(binder: VarBinder)(implicit C: Context): StateEffect = {
+      val tpe = C.valueTypeOf(binder)
+      val eff = UserEffect(binder.name, Nil)
+      val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
+      val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
+      eff.ops = List(get, put)
+      StateEffect(eff, get, put)
+    }
+  }
 
   /**
    * Types

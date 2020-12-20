@@ -245,16 +245,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     } yield ev :: rv
   }
 
-  case class StateEffect(effect: UserEffect, get: EffectOp, put: EffectOp)
-  def synthesizeStateEffect(binder: VarBinder)(implicit C: Context): StateEffect = {
-    val tpe = C.valueTypeOf(binder)
-    val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
-    eff.ops = List(get, put)
-    StateEffect(eff, get, put)
-  }
-
   def freshTmpFor(e: source.Tree)(implicit C: TransformerContext): Tmp = {
     val x = Tmp(C.module)
     C.typeOf(e) match {
@@ -289,7 +279,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
      */
     private var stateEffects = mutable.Map.empty[VarBinder, StateEffect]
     def state(binder: VarBinder): StateEffect =
-      stateEffects.getOrElseUpdate(binder, synthesizeStateEffect(binder)(context))
+      stateEffects.getOrElseUpdate(binder, StateEffect(binder)(context))
 
     /**
      * Used to map each lexically scoped capability to its termsymbol
@@ -303,7 +293,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
       val before = capabilities;
       // create a fresh cabability-symbol for each bound effect
-      val caps = effs.map { Capability }
+      val caps = effs.map { UserCapability }
       // additional block parameters for capabilities
       val params = caps.map { core.BlockParam }
 
