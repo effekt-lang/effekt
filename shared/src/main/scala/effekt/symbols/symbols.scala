@@ -143,7 +143,6 @@ package object symbols {
    */
   case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
 
-
   /**
    * A symbol that represents a termlevel capability
    */
