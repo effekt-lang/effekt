@@ -1,7 +1,6 @@
 package effekt
 package context
 
-import effekt.symbols.{ Capability, StateCapability, Symbol }
 import effekt.util.messages.ErrorReporter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
 
@@ -35,7 +34,7 @@ class Annotations private (annotations: Annotations.DB) {
   def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
-  def annotation[K, V](ann: Annotation[K, V], key: K)(implicit C: Context): V =
+  def annotation[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
     annotationOption(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} for '${key}'") }
 
   def commit()(implicit global: AnnotationsDB): Unit =
