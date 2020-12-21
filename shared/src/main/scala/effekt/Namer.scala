@@ -11,6 +11,8 @@ import effekt.symbols._
 import effekt.util.Task
 import scopes._
 import org.bitbucket.inkytonik.kiama.util.Source
+import effekt.source.IdRef
+import effekt.source.ModuleAccess
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -218,16 +220,34 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
       // id enthält func name ("modules"")
       // args enthält module name ("hello")
 
-      if (id.name == "modules") {
-        // Example abfangen
-        // TODO: Was muss getan werten um die Resolution umzuleiten?
-        // Ziel: Soll Funtkion "modules" aus dem module "hello" aufrufen
+      id match {
+        case IdRef(name) => {
+          Context.resolveCalltarget(id)
+
+          targs foreach resolve
+          resolveAll(args)
+        }
+
+        case ModuleAccess(moduleId, memberId) => {
+          println(s"Module Access: $moduleId, $memberId")
+
+          val scope = Temp.moduleScope.get
+
+          println(s"Lookup member symbol")
+          val syms = scope.lookupOverloaded(memberId.name) map {
+            _ collect {
+              case b: BlockParam  => b
+              case b: ResumeParam => b
+              case b: Fun         => b
+              case _              => Context.abort("Expected callable")
+            }
+          }
+
+          println(s"Create CallTarget(${Name(memberId)}, $syms)")
+          val target = new CallTarget(Name(memberId), syms)
+          Context.assignSymbol(memberId, target)
+        }
       }
-
-      Context.resolveCalltarget(id)
-
-      targs foreach resolve
-      resolveAll(args)
 
     case source.Var(id)        => Context.resolveVar(id)
 
@@ -532,31 +552,12 @@ trait NamerOps { self: Context =>
    * Resolves a potentially overloaded call target
    */
   private[namer] def resolveCalltarget(id: Id): BlockSymbol = at(id) {
-    var syms = scope.lookupOverloaded(id.name) map {
+    val syms = scope.lookupOverloaded(id.name) map {
       _ collect {
         case b: BlockParam  => b
         case b: ResumeParam => b
         case b: Fun         => b
         case _              => abort("Expected callable")
-      }
-    }
-
-    println(s"resolveCalltarget($id)")
-
-    if (syms.isEmpty) {
-      println(s"Resolve function with module: ${Temp.moduleScope}")
-      Temp.moduleScope match {
-        case Some(scope) => {
-          syms = scope.lookupOverloaded(id.name) map {
-            _ collect {
-              case b: BlockParam  => b
-              case b: ResumeParam => b
-              case b: Fun         => b
-              case _              => abort("Expected callable")
-            }
-          }
-        }
-        case None => syms = List.empty
       }
     }
 
