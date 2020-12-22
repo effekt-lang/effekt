@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Naturalistic DSLs
-permalink: docs/casestudies/dsls
+permalink: docs/casestudies/naturalisticdsls
 ---
 
 # Naturalistic DSLs

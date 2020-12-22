@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Build System
-permalink: docs/casestudies/build-system
+permalink: docs/casestudies/buildsystem
 ---
 
 # Build System

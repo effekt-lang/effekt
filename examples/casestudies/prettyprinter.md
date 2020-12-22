@@ -1,7 +1,7 @@
 ---
 layout: docs
 title: Pretty Printer
-permalink: docs/casestudies/pretty
+permalink: docs/casestudies/prettyprinter
 ---
 
 # Pretty Printer
