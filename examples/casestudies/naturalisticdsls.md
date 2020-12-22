@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Naturalistic DSLs
+permalink: docs/casestudies/naturalisticdsls
+---
+
 # Naturalistic DSLs
 This document is based on Chapter 7. Discussion from the PhD Thesis:
 

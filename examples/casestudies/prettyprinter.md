@@ -1,4 +1,10 @@
-# Pretty Printing
+---
+layout: docs
+title: Pretty Printer
+permalink: docs/casestudies/prettyprinter
+---
+
+# Pretty Printer
 In this case study, we implement a (naive) pretty printer library that performs
 backtracking to find the first layout that matches the screen width.
 We build on the work by
@@ -19,7 +25,7 @@ import immutable/list
 import text/string
 ```
 
-Similar to the [parser case study](parser.md), the pretty printing library is based
+Similar to the [parser case study](parser), the pretty printing library is based
 on a non-deterministic description of layouts. In particular, to fill the horizontal
 space as best as possible, we first try to  pretty print _horizontally_ and fall
 back to _vertical_ mode, if not enough space is available. For example, the
@@ -162,7 +168,7 @@ effect LayoutChoice {
 }
 ```
 
-The `LayoutChoice` effect is very similar to the `Nondet` effect in the [parser case study](parser.md).
+The `LayoutChoice` effect is very similar to the `Nondet` effect in the [parser case study](parser).
 
 We define the following effect alias for pretty printing documents that depend on layout choices:
 ```
@@ -265,7 +271,7 @@ def searchLayout[R] { p : R / LayoutChoice }: Option[R] =
     def choice() = resume(Horizontal()).orElse { resume(Vertical()) }
   }
 ```
-The handler is essentially the same as the backtracking implementation of the [parser case study](parser.md) but
+The handler is essentially the same as the backtracking implementation of the [parser case study](parser) but
 using optional values to indicate success or failure of a layouting attempt. If layouting horizontally fails
 for a particular choice-point, we resume a second time with `Vertical`.
 
@@ -335,7 +341,7 @@ def braces { p: Unit }: Unit / Pretty = {
 }
 ```
 
-and write a pretty printer for the example `Tree` from the [parser case study](parser.md):
+and write a pretty printer for the example `Tree` from the [parser case study](parser):
 
 ```
 def toDoc(t: Tree): Unit / Pretty = t match {
@@ -360,7 +366,7 @@ def toDoc(t: Tree): Unit / Pretty = t match {
 }
 ```
 
-We can first use the parser from the [parser case study](parser.md) to obtain
+We can first use the parser from the [parser case study](parser) to obtain
 a parse tree, which we then pretty print:
 
 ```

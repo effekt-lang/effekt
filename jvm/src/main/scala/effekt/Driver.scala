@@ -11,11 +11,13 @@ import effekt.util.paths._
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util.{ CompilerWithConfig, IO, Source }
-import java.io.{ File => JFile }
+import kiama.util.{ Client, CompilerWithConfig, IO, Services, Source }
+import java.io.{ InputStream, OutputStream, PrintWriter, File => JFile }
 
 import effekt.util.messages.FatalPhaseError
+import org.eclipse.lsp4j.jsonrpc.Launcher
 
+import scala.concurrent.ExecutionException
 import scala.sys.process.Process
 
 /**
@@ -26,6 +28,49 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   val name = "effekt"
 
   override val messaging = new ColoredMessaging(positions)
+
+  def launch(config: EffektConfig, in: InputStream, out: OutputStream): Unit = {
+    val services = new Services(this, config)
+    val launcherBase =
+      new Launcher.Builder[Client]()
+        .setLocalService(services)
+        .setRemoteInterface(classOf[Client])
+        .setInput(in)
+        .setOutput(out)
+    val launcher = launcherBase.create()
+    val client = launcher.getRemoteProxy()
+    connect(client)
+    launcher.startListening()
+  }
+
+  override def launch(config: EffektConfig): Unit = {
+    if (config.debug()) {
+      import java.net.{ InetSocketAddress, SocketAddress }
+      import java.nio.channels.{ AsynchronousServerSocketChannel, AsynchronousSocketChannel, Channels }
+
+      val port = 5007
+      val addr = new InetSocketAddress("localhost", port)
+      val socket = AsynchronousServerSocketChannel.open().bind(addr);
+
+      try {
+        println(s"Waiting on port ${port} for LSP clients to connect")
+        val ch = socket.accept().get();
+        println(s"Connected to LSP client")
+        val in = Channels.newInputStream(ch)
+        val out = Channels.newOutputStream(ch)
+        launch(config, in, out)
+      } catch {
+        case e: InterruptedException =>
+          e.printStackTrace()
+        case e: ExecutionException =>
+          e.printStackTrace()
+      } finally {
+        socket.close()
+      }
+    } else {
+      launch(config, System.in, System.out)
+    }
+  }
 
   // Compiler context
   // ================

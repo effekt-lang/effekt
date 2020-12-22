@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Automatic Differentiation
+permalink: docs/casestudies/ad
+---
+
 # Automatic Differentiation
 In this case study we reimplement automatic differentiation as presented in
 

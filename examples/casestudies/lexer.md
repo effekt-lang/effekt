@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Lexer
+permalink: docs/casestudies/lexer
+---
+
 # Pull-based Lexing
 In this case study, we show how to implement a _pull-based_ lexer
 in terms of effect handlers.
