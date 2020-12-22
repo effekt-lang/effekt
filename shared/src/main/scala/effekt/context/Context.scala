@@ -26,6 +26,7 @@ abstract class Context(val positions: Positions)
     // Typer
     with TypesDB
     with TyperOps
+    with AnnotationsDB
     // Util
     with ErrorReporter {
 

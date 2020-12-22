@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.Context
+import effekt.context.{ Context, Annotations }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchClause, MatchPattern, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
@@ -23,12 +23,22 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  */
 
 case class TyperState(
-  effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
+  /**
+   * the effects, whose declarations are _lexically_ in scope
+   */
+  effects: Effects = Pure,
+
+  /**
+   * Annotations added by typer
+   *
+   * The annotations are immutable and can be backtracked.
+   */
+  annotations: Annotations = Annotations.empty
 )
 
 class Typer extends Phase[Module, Module] { typer =>
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+  def run(mod: Module)(implicit C: Context): Option[Module] = try {
 
     val module = mod.decl
 
@@ -54,6 +64,10 @@ class Typer extends Phase[Module, Module] { typer =>
     } else {
       Some(mod)
     }
+  } finally {
+    // Store the backtrackable annotations into the global DB
+    // This is done regardless of errors, since
+    Context.typerState.annotations.commit()
   }
 
   //<editor-fold desc="expressions">
@@ -325,6 +339,7 @@ class Typer extends Phase[Module, Module] { typer =>
             Context.wellscoped(effs) // check they are in scope
             Context.assignType(sym, sym.toType(tpe / effs))
             Context.assignType(d, tpe / effs)
+
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
@@ -641,6 +656,7 @@ class Typer extends Phase[Module, Module] { typer =>
       val (got / effs) = f(t)
       expected foreach { Substitution.unify(_, got) }
       Context.assignType(t, got / effs)
+
       got / effs
     }
 
@@ -660,6 +676,11 @@ trait TyperOps { self: Context =>
 
   private[typer] def withEffect(e: Effect): Context = {
     typerState = typerState.copy(effects = typerState.effects + e);
+    this
+  }
+
+  private[typer] def assignType(t: Tree, e: Effectful): Context = {
+    typerState.annotations.annotate(Annotations.TypeAndEffect, t, e)
     this
   }
 

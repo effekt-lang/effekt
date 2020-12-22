@@ -45,13 +45,4 @@ trait TypesDB { self: ErrorReporter =>
     case s: ValueSymbol => values.get(s)
     case _              => abort(s"Trying to find a value type for non-value '${s}'")
   }
-
-  // Assignment of Types to Trees
-  // ============================
-  // Important for finding the types of temporary variables introduced by transformation
-  // Can also be used by LSP server to display type information for type-checked trees
-  private val types: Memoiser[Tree, Effectful] = Memoiser.makeIdMemoiser()
-
-  def assignType(t: Tree, eff: Effectful): Unit = types.put(t, eff)
-  def typeOf(t: Tree): Option[Effectful] = types.get(t)
 }
