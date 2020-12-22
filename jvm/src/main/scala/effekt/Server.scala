@@ -13,6 +13,7 @@ import org.bitbucket.inkytonik.kiama.util.StringSource
 import effekt.source.NoSource
 import java.util.ArrayList
 import java.util.concurrent.CompletableFuture
+import scala.concurrent.Future
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -27,6 +28,8 @@ trait LSPServer extends Driver with Intelligence {
   import effekt.symbols._
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+
+  implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
   override def getDefinition(position: Position): Option[Tree] =
     getDefinitionAt(position)(context)
@@ -137,17 +140,19 @@ trait LSPServer extends Driver with Intelligence {
     }
   }
 
-  override def executeCommand(executeCommandParams: ExecuteCommandParams): Any = executeCommandParams.getCommand() match {
-    case "println" => {
-      executeCommandParams.getArguments().forEach((x) => logMessage(x.toString()))
-      //return CompletableFuture.runAsync(executeCommandParams.getArguments().forEach((x) => println(x.toString())))
-      new CompletableFuture[Unit] { executeCommandParams.getArguments().forEach((x) => println(x.toString())) }
+  override def executeCommand(executeCommandParams: ExecuteCommandParams): Any =
+    executeCommandParams.getCommand() match {
+      case "println" => {
+        executeCommandParams.getArguments().forEach((x) => logMessage(x.toString()))
+        //return CompletableFuture.runAsync(executeCommandParams.getArguments().forEach((x) => println(x.toString())))
+        return Future { executeCommandParams.getArguments.forEach((x) => println(x.toString())) }
+        // ( () -> executeCommandParams.getArguments().forEach((x) => println(x.toString())) )
+      }
+      case _ => {
+        logMessage("No arguments given.")
+        return null
+      }
     }
-    case _ => {
-      logMessage("No arguments given.")
-      return null
-    }
-  }
 
   override def getCodeLenses(uri: String): Option[Vector[TreeLens]] = lens(getSymbols(getSource(uri)))(context)
 
