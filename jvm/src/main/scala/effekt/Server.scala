@@ -71,11 +71,11 @@ trait LSPServer extends Driver with Intelligence {
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
-    sym <- context.sources.keys
+    sym <- context.allSymbols
     if !sym.synthetic
     mod = context.owner(sym)
     if mod.source == source
-    id <- context.sources.get(sym)
+    id <- context.definitionTreeOf(sym)
     decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
     kind <- getSymbolKind(sym)
     detail <- getInfoOf(sym)(context)
@@ -84,9 +84,9 @@ trait LSPServer extends Driver with Intelligence {
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
       (tree, sym) <- getSymbolAt(position)(context)
-      refs = context.references.getOrDefault(sym, Nil).distinctBy(r => System.identityHashCode(r))
+      refs = context.distinctReferences(sym)
       allRefs = if (includeDecl) tree :: refs else refs
-    } yield refs.toVector
+    } yield allRefs.toVector
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {

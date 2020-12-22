@@ -20,7 +20,6 @@ abstract class Context(val positions: Positions)
     // Compiler phases
     extends Compiler
     // Namer
-    with SymbolsDB
     with NamerOps
     with ModuleDB
     // Typer
