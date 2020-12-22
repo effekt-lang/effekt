@@ -104,7 +104,7 @@ class Typer extends Phase[Module, Module] { typer =>
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
-        checkOverloadedCall(fun, c.definition, targs map { resolveValueType }, args, expected)
+        checkOverloadedCall(c, targs map { resolveValueType }, args, expected)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -438,14 +438,13 @@ class Typer extends Phase[Module, Module] { typer =>
    *   - if there is no without errors: report all possible solutions with corresponding errors
    */
   def checkOverloadedCall(
-    fun: source.Id,
-    target: BlockSymbol,
+    call: source.Call,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val scopes = target match {
+    val scopes = call.definition match {
       // an overloaded call target
       case CallTarget(name, syms) => syms
       // already resolved by a previous attempt to typecheck
@@ -460,7 +459,7 @@ class Typer extends Phase[Module, Module] { typer =>
       scope.toList.map { sym =>
         sym -> Try {
           C.typerState = stateBefore.deepCopy()
-          val r = checkCallTo(sym, targs, args, expected)
+          val r = checkCallTo(call, sym, targs, args, expected)
           (r, C.typerState.deepCopy())
         }
       }
@@ -478,7 +477,7 @@ class Typer extends Phase[Module, Module] { typer =>
         // use the typer state after this checking pass
         C.typerState = st
         // reassign symbol of fun to resolved calltarget
-        C.assignSymbol(fun, sym)
+        C.assignSymbol(call.id, sym)
 
         return tpe
 
@@ -490,7 +489,7 @@ class Typer extends Phase[Module, Module] { typer =>
         }.mkString("\n")
 
         val explanation =
-          s"""| Ambiguous reference to ${target.name}. The following blocks would typecheck:
+          s"""| Ambiguous reference to ${call.id}. The following blocks would typecheck:
               |
               |${sucMsgs}
               |""".stripMargin
@@ -525,6 +524,7 @@ class Typer extends Phase[Module, Module] { typer =>
   }
 
   def checkCallTo(
+    call: source.Call,
     sym: BlockSymbol,
     targs: List[ValueType],
     args: List[source.ArgSection],
@@ -623,6 +623,10 @@ class Typer extends Phase[Module, Module] { typer =>
     //    )
 
     subst.checkFullyDefined(rigids).getUnifier
+
+    // annotate call node with inferred type arguments
+    val inferredTypeArgs = rigids.map(subst.substitute)
+    Context.typerState.annotations.annotate(Annotations.TypeArguments, call, inferredTypeArgs)
 
     (subst substitute ret) / effs
   }

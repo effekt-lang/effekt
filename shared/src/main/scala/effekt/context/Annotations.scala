@@ -63,14 +63,17 @@ object Annotations {
   }
 
   /**
-   * Assignment of Types to Trees
-   * ============================
    * The type and effect as inferred by typer at a given position in the tree
    *
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
   val TypeAndEffect = Annotation[source.Tree, symbols.Effectful]("TypeAndEffect", "the inferred type and effect")
+
+  /**
+   * Type arguments of a _function call_ as inferred by typer
+   */
+  val TypeArguments = Annotation[source.Call, List[symbols.Type]]("TyperArguments", "the inferred or annotated type arguments")
 }
 
 trait AnnotationsDB { self: ErrorReporter =>
