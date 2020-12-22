@@ -84,7 +84,15 @@ abstract class Context(val positions: Positions)
     // we purposefully do not include the reset into `finally` to preserve the
     // state at the error position
     namerState = namerBefore
-    typerState = typerBefore
+
+    // TODO cleanup
+    // the dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
+    // not the "state" components. For those, we manually perform backup and restore in typer.
+    typerState = if (typerState != null) {
+      val annos = typerState.annotations
+      if (typerBefore != null) { typerBefore.copy(annotations = annos) } else typerBefore
+    } else { typerBefore }
+
     focus = focusBefore
     module = moduleBefore
     result

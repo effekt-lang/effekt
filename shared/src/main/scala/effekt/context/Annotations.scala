@@ -45,6 +45,8 @@ class Annotations private (private var annotations: Annotations.DB) {
       case (k, annos) =>
         global.annotate(k.key, annos)
     }
+
+  override def toString = s"Annotations(${annotations})"
 }
 object Annotations {
 

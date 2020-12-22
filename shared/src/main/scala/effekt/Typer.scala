@@ -34,7 +34,9 @@ case class TyperState(
    * The annotations are immutable and can be backtracked.
    */
   annotations: Annotations = Annotations.empty
-)
+) {
+  def deepCopy(): TyperState = TyperState(effects, annotations.copy)
+}
 
 class Typer extends Phase[Module, Module] { typer =>
 
@@ -84,6 +86,7 @@ class Typer extends Phase[Module, Module] { typer =>
         val (cndTpe / cndEffs) = cond checkAgainst TBoolean
         val (thnTpe / thnEffs) = checkStmt(thn, expected)
         val (elsTpe / elsEffs) = els checkAgainst thnTpe
+
         thnTpe / (cndEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, block) =>
@@ -101,7 +104,7 @@ class Typer extends Phase[Module, Module] { typer =>
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
-        checkCall(fun, c.definition, targs map { resolveValueType }, args, expected)
+        checkOverloadedCall(fun, c.definition, targs map { resolveValueType }, args, expected)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -434,7 +437,7 @@ class Typer extends Phase[Module, Module] { typer =>
    *   - if there is multiple without errors: Report ambiguity
    *   - if there is no without errors: report all possible solutions with corresponding errors
    */
-  def checkCall(
+  def checkOverloadedCall(
     fun: source.Id,
     target: BlockSymbol,
     targs: List[ValueType],
@@ -450,8 +453,17 @@ class Typer extends Phase[Module, Module] { typer =>
     }
 
     // TODO improve: stop typechecking if one scope was successful
+
+    val stateBefore = C.typerState.deepCopy()
+
     val results = scopes map { scope =>
-      scope.toList.map { sym => sym -> Try { checkCallTo(sym, targs, args, expected) } }
+      scope.toList.map { sym =>
+        sym -> Try {
+          C.typerState = stateBefore.deepCopy()
+          val r = checkCallTo(sym, targs, args, expected)
+          (r, C.typerState.deepCopy())
+        }
+      }
     }
 
     val successes = results.map { scope => scope.collect { case (sym, Right(r)) => sym -> r } }
@@ -462,9 +474,12 @@ class Typer extends Phase[Module, Module] { typer =>
       case Nil => ()
 
       // Exactly one successful result in the current scope
-      case List((sym, tpe)) =>
+      case List((sym, (tpe, st))) =>
+        // use the typer state after this checking pass
+        C.typerState = st
         // reassign symbol of fun to resolved calltarget
         C.assignSymbol(fun, sym)
+
         return tpe
 
       // Ambiguous reference
@@ -655,8 +670,7 @@ class Typer extends Phase[Module, Module] { typer =>
     Context.at(t) {
       val (got / effs) = f(t)
       expected foreach { Substitution.unify(_, got) }
-      Context.assignType(t, got / effs)
-
+      C.assignType(t, got / effs)
       got / effs
     }
 
