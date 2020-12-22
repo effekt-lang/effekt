@@ -24,7 +24,6 @@ abstract class Context(val positions: Positions)
     with NamerOps
     with ModuleDB
     // Typer
-    with TypesDB
     with TyperOps
     with AnnotationsDB
     // Util

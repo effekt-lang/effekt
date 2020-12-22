@@ -74,6 +74,16 @@ object Annotations {
    * Type arguments of a _function call_ as inferred by typer
    */
   val TypeArguments = Annotation[source.Call, List[symbols.Type]]("TyperArguments", "the inferred or annotated type arguments")
+
+  /**
+   * Value type of symbols like value binders or value parameters
+   */
+  val ValueType = Annotation[symbols.ValueSymbol, symbols.ValueType]("ValueType", "the type of a value symbol")
+
+  /**
+   * Block type of symbols like function definitions, block parameters, or continuations
+   */
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType]("BlockType", "the type of a block symbol")
 }
 
 trait AnnotationsDB { self: ErrorReporter =>
@@ -105,6 +115,41 @@ trait AnnotationsDB { self: ErrorReporter =>
 
   // Customized Accessors
   // --------------------
+  import symbols.{ Symbol, Type, ValueType, BlockType, ValueSymbol, BlockSymbol, Effectful }
 
-  def typeOf(t: source.Tree): Option[symbols.Effectful] = annotationOption(Annotations.TypeAndEffect, t)
+  def typeOf(t: source.Tree): Option[Effectful] =
+    annotationOption(Annotations.TypeAndEffect, t)
+
+  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
+    case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
+    case _              => abort(s"Trying to store a block type for non block '${s}'")
+  }
+
+  def assignType(s: Symbol, tpe: ValueType): Unit = s match {
+    case b: ValueSymbol => annotate(Annotations.ValueType, b, tpe)
+    case _              => abort(s"Trying to store a value type for non value '${s}'")
+  }
+
+  def typeOf(s: Symbol): Type = s match {
+    case s: ValueSymbol => valueTypeOf(s)
+    case s: BlockSymbol => blockTypeOf(s)
+    case _              => abort(s"Cannot find a type for symbol '${s}'")
+  }
+
+  def blockTypeOf(s: Symbol): BlockType =
+    blockTypeOption(s) getOrElse { abort(s"Cannot find type for block '${s}'") }
+
+  def blockTypeOption(s: Symbol): Option[BlockType] =
+    s match {
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b)
+      case _              => abort(s"Trying to find a block type for non block '${s}'")
+    }
+
+  def valueTypeOf(s: Symbol): ValueType =
+    valueTypeOption(s) getOrElse { abort(s"Cannot find value binder for ${s}") }
+
+  def valueTypeOption(s: Symbol): Option[ValueType] = s match {
+    case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
+    case _              => abort(s"Trying to find a value type for non-value '${s}'")
+  }
 }
