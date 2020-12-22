@@ -139,6 +139,18 @@ object Annotations {
   )
 }
 
+/**
+ * A global annotations database
+ *
+ * This database is mixed into the compiler `Context` and is
+ * globally visible across all phases. If you want to hide changes in
+ * subsequent phases, consider using an instance of `Annotions`, instead.
+ *
+ * Calling `Annotations.commit` transfers all annotations into this global DB.
+ *
+ * The DB is also "global" in the sense, that modifications cannot be backtracked.
+ * It should thus only be used to store a "ground" truth that will not be changed again.
+ */
 trait AnnotationsDB { self: Context =>
 
   private type Annotations = Map[Annotation[_, _], Any]
@@ -176,7 +188,7 @@ trait AnnotationsDB { self: Context =>
   // Types
   // -----
 
-  def typeOf(t: source.Tree): Option[Effectful] =
+  def inferredTypeOf(t: source.Tree): Option[Effectful] =
     annotationOption(Annotations.TypeAndEffect, t)
 
   // TODO maybe move to TyperOps
@@ -215,15 +227,24 @@ trait AnnotationsDB { self: Context =>
 
   // Symbols
   // -------
-  // TODO maybe move to NamerOps
-  def assignSymbol(id: source.Id, d: Symbol): Unit = id match {
+
+  /**
+   * Stores symbol `sym` as the corresponding symbol for `id`
+   *
+   * Almost all calls to this method are performed by Namer, which
+   * resolves identifier and then assigns the symbols.
+   *
+   * Typer also calls this method to resolve overloads and store
+   * the result of overload resolution.
+   */
+  def assignSymbol(id: source.Id, sym: Symbol): Unit = id match {
     case id: source.IdDef =>
-      annotate(Annotations.DefinitionTree, d, id)
-      annotate(Annotations.Symbol, id, d)
-      annotate(Annotations.SourceModule, d, module)
+      annotate(Annotations.DefinitionTree, sym, id)
+      annotate(Annotations.Symbol, id, sym)
+      annotate(Annotations.SourceModule, sym, module)
     case _ =>
-      annotate(Annotations.Symbol, id, d)
-      annotate(Annotations.SourceModule, d, module)
+      annotate(Annotations.Symbol, id, sym)
+      annotate(Annotations.SourceModule, sym, module)
   }
 
   def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
@@ -232,7 +253,7 @@ trait AnnotationsDB { self: Context =>
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)
 
-  def owner(sym: Symbol): Module =
+  def sourceModuleOf(sym: Symbol): Module =
     annotation(Annotations.SourceModule, sym)
 
   /**
@@ -259,7 +280,7 @@ trait AnnotationsDB { self: Context =>
   /**
    * Searching the definition for a symbol
    */
-  def definitionTreeOf(s: Symbol): Option[source.IdDef] =
+  def definitionTreeOption(s: Symbol): Option[source.IdDef] =
     annotationOption(Annotations.DefinitionTree, s)
 
   /**
@@ -267,7 +288,7 @@ trait AnnotationsDB { self: Context =>
    *
    * Used by the LSP server to generate outline
    */
-  def allSymbols: Vector[Symbol] =
+  def sourceSymbols: Vector[Symbol] =
     annotations.keys.collect {
       case s: Symbol if hasAnnotation(Annotations.SourceModule, s) => s
     }
@@ -277,7 +298,7 @@ trait AnnotationsDB { self: Context =>
    *
    * Used by the LSP server for reverse lookup
    */
-  def distinctReferences(sym: Symbol): List[source.Reference] =
+  def distinctReferencesTo(sym: Symbol): List[source.Reference] =
     annotationOption(Annotations.References, sym)
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))

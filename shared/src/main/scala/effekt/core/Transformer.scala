@@ -247,7 +247,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def freshTmpFor(e: source.Tree)(implicit C: TransformerContext): Tmp = {
     val x = Tmp(C.module)
-    C.typeOf(e) match {
+    C.inferredTypeOf(e) match {
       case Some(t / _) => C.assignType(x, t)
       case _           => C.abort("Internal Error: Missing type of source expression.")
     }
@@ -256,7 +256,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def freshWildcardFor(e: source.Tree)(implicit C: TransformerContext): Wildcard = {
     val x = Wildcard(C.module)
-    C.typeOf(e) match {
+    C.inferredTypeOf(e) match {
       case Some(t / _) => C.assignType(x, t)
       case _           => C.abort("Internal Error: Missing type of source expression.")
     }

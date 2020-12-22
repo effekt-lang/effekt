@@ -71,11 +71,11 @@ trait LSPServer extends Driver with Intelligence {
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
-    sym <- context.allSymbols
+    sym <- context.sourceSymbols
     if !sym.synthetic
-    mod = context.owner(sym)
+    mod = context.sourceModuleOf(sym)
     if mod.source == source
-    id <- context.definitionTreeOf(sym)
+    id <- context.definitionTreeOption(sym)
     decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
     kind <- getSymbolKind(sym)
     detail <- getInfoOf(sym)(context)
@@ -84,7 +84,7 @@ trait LSPServer extends Driver with Intelligence {
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
       (tree, sym) <- getSymbolAt(position)(context)
-      refs = context.distinctReferences(sym)
+      refs = context.distinctReferencesTo(sym)
       allRefs = if (includeDecl) tree :: refs else refs
     } yield allRefs.toVector
 
@@ -133,7 +133,7 @@ trait LSPServer extends Driver with Intelligence {
     pos <- positions.getStart(fun)
     ret <- fun.ret
     // the inferred type
-    tpe <- C.typeOf(fun)
+    tpe <- C.inferredTypeOf(fun)
     // the annotated type
     ann = fun.symbol.ret
     if ann.map { a => needsUpdate(a, tpe) }.getOrElse(true)
@@ -146,8 +146,8 @@ trait LSPServer extends Driver with Intelligence {
 
   def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
     pos <- positions.getStart(hole)
-    (holeTpe / _) <- C.typeOf(hole)
-    (contentTpe / _) <- C.typeOf(hole.stmts)
+    (holeTpe / _) <- C.inferredTypeOf(hole)
+    (contentTpe / _) <- C.inferredTypeOf(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {
