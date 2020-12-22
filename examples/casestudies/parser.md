@@ -1,6 +1,12 @@
+---
+layout: docs
+title: Parser
+permalink: docs/casestudies/parser
+---
+
 # Parsing
 In this case study, we show how to implement a parser, using the lexer from the
-[Lexer case study](lexer.md).
+[Lexer case study](lexer).
 
 ---
 
@@ -207,7 +213,7 @@ def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
   Failure(msg)
 }
 ```
-The handler reuses the lexer implementation of the [Lexer case study](lexer.md). The lexer
+The handler reuses the lexer implementation of the [Lexer case study](lexer). The lexer
 raises a `LexerError` in case of an unexpected enf of the input stream or if it cannot
 recognize a token. Those lexer errors are simply converted into failures, which the
 parser can backtrack. To establish the backtracking behavior, it is important that the

@@ -1,3 +1,9 @@
+---
+layout: docs
+title: ANF Transformation
+permalink: docs/casestudies/anf
+---
+
 # ANF Transformation
 In this case study we implement a simple ANF transformation by using an effect to
 non-locally insert binders for non-trivial expressions.
@@ -5,7 +11,7 @@ non-locally insert binders for non-trivial expressions.
 ## Source Language
 
 The source language of our transformation is the `Tree` data type from the
-[parser case study](parser.md).
+[parser case study](parser).
 
 ```
 module examples/casestudies/anf

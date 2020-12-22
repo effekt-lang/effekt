@@ -1,3 +1,9 @@
+---
+layout: docs
+title: Build System
+permalink: docs/casestudies/build-system
+---
+
 # Build System
 
 In this case study, we start reproducing the build systems from:
