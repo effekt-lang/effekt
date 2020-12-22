@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
-import effekt.context.TypesDB
+import effekt.context.{ Context, TypesDB }
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
@@ -141,14 +141,37 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
+
+  /**
+   * A symbol that represents a termlevel capability
+   */
+  trait Capability extends BlockSymbol {
+    def effect: UserEffect
+    val name = effect.name
+  }
+  case class UserCapability(effect: UserEffect) extends Capability
+
+  case class StateCapability(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability
+  object StateCapability {
+    def apply(binder: VarBinder)(implicit C: Context): StateCapability = {
+      val tpe = C.valueTypeOf(binder)
+      val eff = UserEffect(binder.name, Nil)
+      val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
+      val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
+      eff.ops = List(get, put)
+      StateCapability(eff, get, put)
+    }
+  }
 
   /**
    * Types
    */
   sealed trait Type
 
-  // like Params but without name binders
+  /**
+   * like Params but without name binders
+   */
   type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type {
@@ -233,16 +256,20 @@ package object symbols {
     val ret = Some(Effectful(tpe, Pure))
   }
 
-  sealed trait Effect extends TypeSymbol {
+  /** Effects */
+
+  sealed trait Effect {
+    def name: Name
+    def builtin: Boolean
     // invariant: no EffectAlias in this list
     def dealias: List[Effect] = List(this)
   }
 
-  case class EffectAlias(name: Name, effs: Effects) extends Effect {
+  case class EffectAlias(name: Name, effs: Effects) extends Effect with TypeSymbol {
     override def dealias: List[Effect] = effs.dealias
   }
 
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun {
     def otherEffects: Effects = ret.get.effects - effect
     def isBidirectional: Boolean = otherEffects.nonEmpty
@@ -286,6 +313,11 @@ package object symbols {
     def userDefined: Effects =
       filterNot(_.builtin)
 
+    def userEffects: List[UserEffect] =
+      effects collect {
+        case u: UserEffect => u
+      }
+
     def dealias: List[Effect] = effects.flatMap { _.dealias }
 
     override def toString: String = toList match {
@@ -304,6 +336,7 @@ package object symbols {
   }
 
   lazy val Pure = new Effects(Nil)
+
   case class Effectful(tpe: ValueType, effects: Effects) {
     override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
   }

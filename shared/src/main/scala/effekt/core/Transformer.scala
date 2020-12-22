@@ -12,10 +12,6 @@ import effekt.util.control._
 case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
 case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
-// TODO we should associate this capability symbol with the function / handler that introduces it
-//      to admit good errors.
-case class CapabilitySymbol(effect: Effect) extends BlockSymbol { val name = effect.name }
-
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def run(mod: Module)(implicit C: Context): Option[ModuleDecl] =
@@ -44,7 +40,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
 
-      val effs = sym.effects.userDefined.toList
+      val effs = sym.effects.userEffects
 
       C.bindingCapabilities(effs) { caps =>
         val ps = params.flatMap {
@@ -181,7 +177,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
           val params = ps.params.map { v => core.ValueParam(v.symbol) }
           pure {
-            C.bindingCapabilities(p.ret.effects.userDefined.toList) { caps =>
+            C.bindingCapabilities(p.ret.effects.userEffects) { caps =>
               List(BlockLit(params ++ caps, transform(body)))
             }
           }
@@ -249,16 +245,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     } yield ev :: rv
   }
 
-  case class StateEffect(effect: UserEffect, get: EffectOp, put: EffectOp)
-  def synthesizeStateEffect(binder: VarBinder)(implicit C: Context): StateEffect = {
-    val tpe = C.valueTypeOf(binder)
-    val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
-    eff.ops = List(get, put)
-    StateEffect(eff, get, put)
-  }
-
   def freshTmpFor(e: source.Tree)(implicit C: TransformerContext): Tmp = {
     val x = Tmp(C.module)
     C.typeOf(e) match {
@@ -277,7 +263,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     x
   }
 
-  private val delimiter: Cap[Stmt] = new Capability { type Res = Stmt }
+  private val delimiter: Cap[Stmt] = new control.Capability { type Res = Stmt }
 
   def ANF(e: Control[Stmt]): Stmt = control.handle(delimiter)(e).run()
   def bind(x: Tmp, e: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
@@ -291,23 +277,28 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     /**
      * Synthesized state effects for var-definitions
      */
-    private var stateEffects = mutable.Map.empty[VarBinder, StateEffect]
-    def state(binder: VarBinder): StateEffect =
-      stateEffects.getOrElseUpdate(binder, synthesizeStateEffect(binder)(context))
+    private var stateEffects = Map.empty[VarBinder, StateCapability]
+    def state(binder: VarBinder): StateCapability = stateEffects.get(binder) match {
+      case Some(v) => v
+      case None =>
+        val cap = StateCapability(binder)(context)
+        stateEffects = stateEffects + (binder -> cap)
+        cap
+    }
 
     /**
      * Used to map each lexically scoped capability to its termsymbol
      */
-    private var capabilities = Map.empty[Effect, CapabilitySymbol]
+    private var capabilities = Map.empty[Effect, symbols.Capability]
 
     /**
      * runs the given block, binding the provided capabilities, so that
      * "resolveCapability" will find them.
      */
-    def bindingCapabilities[R](effs: List[Effect])(block: List[core.BlockParam] => R): R = {
+    def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
       val before = capabilities;
       // create a fresh cabability-symbol for each bound effect
-      val caps = effs.map { CapabilitySymbol }
+      val caps = effs.map { UserCapability }
       // additional block parameters for capabilities
       val params = caps.map { core.BlockParam }
 
