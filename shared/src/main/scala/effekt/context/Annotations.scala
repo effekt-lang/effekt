@@ -10,7 +10,7 @@ case class Annotation[K, V](name: String, description: String) {
 }
 
 /**
- * "local" annotatations that can be backtracked
+ * "local" annotations that can be backtracked
  *
  * Local annotations can be backed-up and restored to allow backtracking
  * (mostly for typer and overload resolution).
