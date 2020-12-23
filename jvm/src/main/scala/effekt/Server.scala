@@ -133,7 +133,7 @@ trait LSPServer extends Driver with Intelligence {
     pos <- positions.getStart(fun)
     ret <- fun.ret
     // the inferred type
-    tpe <- C.inferredTypeOf(fun)
+    tpe <- C.inferredTypeOption(fun)
     // the annotated type
     ann = fun.symbol.ret
     if ann.map { a => needsUpdate(a, tpe) }.getOrElse(true)
@@ -146,8 +146,8 @@ trait LSPServer extends Driver with Intelligence {
 
   def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
     pos <- positions.getStart(hole)
-    (holeTpe / _) <- C.inferredTypeOf(hole)
-    (contentTpe / _) <- C.inferredTypeOf(hole.stmts)
+    (holeTpe / _) <- C.inferredTypeOption(hole)
+    (contentTpe / _) <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {

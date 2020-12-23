@@ -188,8 +188,13 @@ trait AnnotationsDB { self: Context =>
   // Types
   // -----
 
-  def inferredTypeOf(t: source.Tree): Option[Effectful] =
+  def inferredTypeOption(t: source.Tree): Option[Effectful] =
     annotationOption(Annotations.TypeAndEffect, t)
+
+  def inferredTypeOf(t: source.Tree): Effectful =
+    inferredTypeOption(t).getOrElse {
+      abort(s"Internal Error: Missing type of source expression: '${t}'")
+    }
 
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: BlockType): Unit = s match {

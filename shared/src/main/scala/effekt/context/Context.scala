@@ -1,6 +1,7 @@
 package effekt
 package context
 
+import effekt.core.{ TransformerOps, TransformerState }
 import effekt.namer.{ NamerOps, NamerState }
 import effekt.typer.{ TyperOps, TyperState }
 import effekt.source.{ ModuleDecl, Tree }
@@ -24,9 +25,11 @@ abstract class Context(val positions: Positions)
     with ModuleDB
     // Typer
     with TyperOps
-    with AnnotationsDB
+    // Transformer
+    with TransformerOps
     // Util
-    with ErrorReporter {
+    with ErrorReporter
+    with AnnotationsDB {
 
   // bring the context itself in scope
   implicit val context: Context = this
@@ -64,6 +67,13 @@ abstract class Context(val positions: Positions)
   def typerState: TyperState = _typerState
   def typerState_=(st: TyperState): Unit = _typerState = st
 
+  /**
+   * The state of the transformer phase
+   */
+  private var _transformerState: TransformerState = _
+  def transformerState: TransformerState = _transformerState
+  def transformerState_=(st: TransformerState): Unit = _transformerState = st
+
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
     this.module = module
     this.focus = focus
@@ -76,6 +86,8 @@ abstract class Context(val positions: Positions)
   def in[T](block: => T): T = {
     val namerBefore = namerState
     val typerBefore = typerState
+    val transformerBefore = transformerState
+
     val focusBefore = focus
     val moduleBefore = module
     val result = block
@@ -95,6 +107,7 @@ abstract class Context(val positions: Positions)
       typerBefore.copy(annotations = annos)
     } else { typerBefore }
 
+    transformerState = transformerBefore
     focus = focusBefore
     module = moduleBefore
     result

@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import scala.collection.mutable
+import scala.collection.mutable.ListBuffer
 
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
@@ -11,6 +11,23 @@ import effekt.util.control._
 
 case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
 case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+
+case class TransformerState(
+  /**
+   * Synthesized state effects for var-definitions
+   */
+  stateEffects: Map[VarBinder, StateCapability],
+
+  /**
+   * Used to map each lexically scoped capability to its termsymbol
+   */
+  capabilities: Map[Effect, symbols.Capability] = Map.empty,
+
+  /**
+   * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
+   */
+  bindings: ListBuffer[(Tmp, symbols.ValueType, Stmt)] = ListBuffer()
+)
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
@@ -128,23 +145,23 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
         val state = C.state(sym)
-        bind(freshTmpFor(tree), App(Member(C.resolveCapability(state.effect), state.get), Nil))
+        bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(state.effect), state.get), Nil))
       case sym => pure { ValueVar(sym) }
     }
 
     case a @ source.Assign(id, expr) =>
       transform(expr).flatMap { e =>
         val state = C.state(a.definition)
-        bind(freshTmpFor(tree), App(Member(C.resolveCapability(state.effect), state.put), List(e)))
+        bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(state.effect), state.put), List(e)))
       }
 
     case l: source.Literal[t] => pure { transformLit(l) }
 
     case source.If(cond, thn, els) =>
-      transform(cond).flatMap { c => bind(freshTmpFor(tree), If(c, transform(thn), transform(els))) }
+      transform(cond).flatMap { c => bind(C.inferredTypeOf(tree).tpe, If(c, transform(thn), transform(els))) }
 
     case source.While(cond, body) =>
-      bind(freshTmpFor(tree), While(ANF { transform(cond) map Ret }, transform(body)))
+      bind(C.inferredTypeOf(tree).tpe, While(ANF { transform(cond) map Ret }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
 
@@ -153,7 +170,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           val (p, ps) = transform(pattern)
           (p, BlockLit(ps, transform(body)))
       }
-      transform(sc).flatMap { scrutinee => bind(freshTmpFor(tree), Match(scrutinee, cs)) }
+      transform(sc).flatMap { scrutinee => bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs)) }
 
     // assumption: typer removed all ambiguous references, so there is exactly one
     case c @ source.Call(fun, _, args) =>
@@ -194,12 +211,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           as2.map { args => PureApp(BlockVar(r), args ++ capabilityArgs) }
         case f: EffectOp =>
           as2.flatMap { args =>
-            bind(freshTmpFor(tree), App(Member(C.resolveCapability(f.effect), f), args ++ capabilityArgs))
+            bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(f.effect), f), args ++ capabilityArgs))
           }
         case f: Field =>
           as2.map { case List(arg: Expr) => Select(arg, f) }
         case f: BlockSymbol =>
-          as2.flatMap { args => bind(freshTmpFor(tree), App(BlockVar(f), args ++ capabilityArgs)) }
+          as2.flatMap { args => bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), args ++ capabilityArgs)) }
       }
 
     case source.TryHandle(prog, handlers) =>
@@ -221,10 +238,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           })
       }
 
-      bind(freshTmpFor(tree), Handle(body, hs))
+      bind(C.inferredTypeOf(tree).tpe, Handle(body, hs))
 
     case source.Hole(stmts) =>
-      bind(freshTmpFor(tree), Hole)
+      bind(C.inferredTypeOf(tree).tpe, Hole)
 
   }).map { _.inheritPosition(tree) }
 
@@ -245,18 +262,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     } yield ev :: rv
   }
 
-  def freshTmpFor(e: source.Tree)(implicit C: TransformerContext): Tmp = {
-    val x = Tmp(C.module)
-    C.inferredTypeOf(e) match {
-      case Some(t / _) => C.assignType(x, t)
-      case _           => C.abort("Internal Error: Missing type of source expression.")
-    }
-    x
-  }
-
   def freshWildcardFor(e: source.Tree)(implicit C: TransformerContext): Wildcard = {
     val x = Wildcard(C.module)
-    C.inferredTypeOf(e) match {
+    C.inferredTypeOption(e) match {
       case Some(t / _) => C.assignType(x, t)
       case _           => C.abort("Internal Error: Missing type of source expression.")
     }
@@ -266,10 +274,22 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   private val delimiter: Cap[Stmt] = new control.Capability { type Res = Stmt }
 
   def ANF(e: Control[Stmt]): Stmt = control.handle(delimiter)(e).run()
-  def bind(x: Tmp, e: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
+
+  /**
+   * Introduces a binding for the given statement.
+   *
+   * @param tpe the type of the bound statement
+   * @param s the statement to be bound
+   */
+  def bind(tpe: symbols.ValueType, s: Stmt)(implicit C: TransformerContext): Control[Expr] = control.use(delimiter) { k =>
+
+    // create a fresh symbol and assign the type
+    val x = Tmp(C.module)
+    C.assignType(x, tpe)
+
     k.apply(ValueVar(x)).map {
-      case Ret(ValueVar(y)) if x == y => e
-      case body => Val(x, e, body)
+      case Ret(ValueVar(y)) if x == y => s
+      case body => Val(x, s, body)
     }
   }
 
@@ -315,4 +335,77 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }
   private implicit def asContext(C: TransformerContext): Context = C.context
   private implicit def getContext(implicit C: TransformerContext): Context = C.context
+}
+trait TransformerOps { Context: Context =>
+
+  def state(binder: VarBinder): StateCapability = {
+    val stateEffects = transformerState.stateEffects
+    stateEffects.get(binder) match {
+      case Some(v) => v
+      case None =>
+        val cap = StateCapability(binder)
+        // TODO move to TransformerState
+        transformerState = transformerState.copy(stateEffects = stateEffects + (binder -> cap))
+        cap
+    }
+  }
+
+  /**
+   * runs the given block, binding the provided capabilities, so that
+   * "resolveCapability" will find them.
+   */
+  def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
+    val before = transformerState.capabilities;
+    // create a fresh cabability-symbol for each bound effect
+    val caps = effs.map { UserCapability }
+    // additional block parameters for capabilities
+    val params = caps.map { core.BlockParam }
+
+    Context in {
+      // update state with capabilities
+      transformerState = transformerState.copy(
+        capabilities = before ++ caps.map { c => (c.effect -> c) }.toMap
+      )
+      // run block
+      block(params)
+    }
+  }
+
+  def resolveCapability(e: Effect): core.BlockVar =
+    transformerState.capabilities.get(e).map { core.BlockVar }.getOrElse(
+      Context.abort(s"Compiler error: cannot find capability for ${e}")
+    )
+
+  /**
+   * Introduces a binding for the given statement.
+   *
+   * @param tpe the type of the bound statement
+   * @param s the statement to be bound
+   */
+  def bind(tpe: symbols.ValueType, s: Stmt): Expr = {
+
+    // create a fresh symbol and assign the type
+    val x = Tmp(module)
+    assignType(x, tpe)
+
+    val binding = (x, tpe, s)
+    transformerState.bindings += binding
+
+    ValueVar(x)
+  }
+
+  // TODO rename
+  def ANF(stmt: => Stmt): Stmt = Context in {
+    transformerState = transformerState.copy(
+      bindings = ListBuffer()
+    )
+    val body = stmt
+    val bindings = transformerState.bindings
+
+    bindings.foldRight(body) {
+      // optimization: remove unnecessary binds
+      case ((x, tpe, b), Ret(ValueVar(y))) if x == y => b
+      case ((x, tpe, b), body) => Val(x, b, body)
+    }
+  }
 }
