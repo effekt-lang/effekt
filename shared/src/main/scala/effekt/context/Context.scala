@@ -83,12 +83,16 @@ abstract class Context(val positions: Positions)
     // state at the error position
     namerState = namerBefore
 
-    // TODO cleanup
-    // the dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
+    // TyperState has two kinds of components:
+    // - reader-like (like effects that are in scope)
+    // - state-like (like annotations and unification constraints)
+    //
+    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
     // not the "state" components. For those, we manually perform backup and restore in typer.
-    typerState = if (typerState != null) {
+    typerState = if (typerBefore != null) {
       val annos = typerState.annotations
-      if (typerBefore != null) { typerBefore.copy(annotations = annos) } else typerBefore
+      // keep the annotations
+      typerBefore.copy(annotations = annos)
     } else { typerBefore }
 
     focus = focusBefore
