@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.Context
+import effekt.context.{ Context, Annotations }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchClause, MatchPattern, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
@@ -23,12 +23,24 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  */
 
 case class TyperState(
-  effects: Effects = Pure // the effects, whose declarations are _lexically_ in scope
-)
+  /**
+   * the effects, whose declarations are _lexically_ in scope
+   */
+  effects: Effects = Pure,
+
+  /**
+   * Annotations added by typer
+   *
+   * The annotations are immutable and can be backtracked.
+   */
+  annotations: Annotations = Annotations.empty
+) {
+  def deepCopy(): TyperState = TyperState(effects, annotations.copy)
+}
 
 class Typer extends Phase[Module, Module] { typer =>
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+  def run(mod: Module)(implicit C: Context): Option[Module] = try {
 
     val module = mod.decl
 
@@ -54,6 +66,10 @@ class Typer extends Phase[Module, Module] { typer =>
     } else {
       Some(mod)
     }
+  } finally {
+    // Store the backtrackable annotations into the global DB
+    // This is done regardless of errors, since
+    Context.typerState.annotations.commit()
   }
 
   //<editor-fold desc="expressions">
@@ -70,6 +86,7 @@ class Typer extends Phase[Module, Module] { typer =>
         val (cndTpe / cndEffs) = cond checkAgainst TBoolean
         val (thnTpe / thnEffs) = checkStmt(thn, expected)
         val (elsTpe / elsEffs) = els checkAgainst thnTpe
+
         thnTpe / (cndEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, block) =>
@@ -87,7 +104,7 @@ class Typer extends Phase[Module, Module] { typer =>
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
-        checkCall(fun, c.definition, targs map { resolveValueType }, args, expected)
+        checkOverloadedCall(c, targs map { resolveValueType }, args, expected)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -325,6 +342,7 @@ class Typer extends Phase[Module, Module] { typer =>
             Context.wellscoped(effs) // check they are in scope
             Context.assignType(sym, sym.toType(tpe / effs))
             Context.assignType(d, tpe / effs)
+
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
@@ -419,15 +437,14 @@ class Typer extends Phase[Module, Module] { typer =>
    *   - if there is multiple without errors: Report ambiguity
    *   - if there is no without errors: report all possible solutions with corresponding errors
    */
-  def checkCall(
-    fun: source.Id,
-    target: BlockSymbol,
+  def checkOverloadedCall(
+    call: source.Call,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val scopes = target match {
+    val scopes = call.definition match {
       // an overloaded call target
       case CallTarget(name, syms) => syms
       // already resolved by a previous attempt to typecheck
@@ -435,8 +452,17 @@ class Typer extends Phase[Module, Module] { typer =>
     }
 
     // TODO improve: stop typechecking if one scope was successful
+
+    val stateBefore = C.typerState.deepCopy()
+
     val results = scopes map { scope =>
-      scope.toList.map { sym => sym -> Try { checkCallTo(sym, targs, args, expected) } }
+      scope.toList.map { sym =>
+        sym -> Try {
+          C.typerState = stateBefore.deepCopy()
+          val r = checkCallTo(call, sym, targs, args, expected)
+          (r, C.typerState.deepCopy())
+        }
+      }
     }
 
     val successes = results.map { scope => scope.collect { case (sym, Right(r)) => sym -> r } }
@@ -447,9 +473,12 @@ class Typer extends Phase[Module, Module] { typer =>
       case Nil => ()
 
       // Exactly one successful result in the current scope
-      case List((sym, tpe)) =>
+      case List((sym, (tpe, st))) =>
+        // use the typer state after this checking pass
+        C.typerState = st
         // reassign symbol of fun to resolved calltarget
-        C.assignSymbol(fun, sym)
+        C.assignSymbol(call.id, sym)
+
         return tpe
 
       // Ambiguous reference
@@ -460,7 +489,7 @@ class Typer extends Phase[Module, Module] { typer =>
         }.mkString("\n")
 
         val explanation =
-          s"""| Ambiguous reference to ${target.name}. The following blocks would typecheck:
+          s"""| Ambiguous reference to ${call.id}. The following blocks would typecheck:
               |
               |${sucMsgs}
               |""".stripMargin
@@ -495,6 +524,7 @@ class Typer extends Phase[Module, Module] { typer =>
   }
 
   def checkCallTo(
+    call: source.Call,
     sym: BlockSymbol,
     targs: List[ValueType],
     args: List[source.ArgSection],
@@ -594,6 +624,10 @@ class Typer extends Phase[Module, Module] { typer =>
 
     subst.checkFullyDefined(rigids).getUnifier
 
+    // annotate call node with inferred type arguments
+    val inferredTypeArgs = rigids.map(subst.substitute)
+    Context.typerState.annotations.annotate(Annotations.TypeArguments, call, inferredTypeArgs)
+
     (subst substitute ret) / effs
   }
 
@@ -640,7 +674,7 @@ class Typer extends Phase[Module, Module] { typer =>
     Context.at(t) {
       val (got / effs) = f(t)
       expected foreach { Substitution.unify(_, got) }
-      Context.assignType(t, got / effs)
+      C.assignType(t, got / effs)
       got / effs
     }
 
@@ -660,6 +694,11 @@ trait TyperOps { self: Context =>
 
   private[typer] def withEffect(e: Effect): Context = {
     typerState = typerState.copy(effects = typerState.effects + e);
+    this
+  }
+
+  private[typer] def assignType(t: Tree, e: Effectful): Context = {
+    typerState.annotations.annotate(Annotations.TypeAndEffect, t, e)
     this
   }
 

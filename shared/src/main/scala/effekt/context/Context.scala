@@ -20,12 +20,11 @@ abstract class Context(val positions: Positions)
     // Compiler phases
     extends Compiler
     // Namer
-    with SymbolsDB
     with NamerOps
     with ModuleDB
     // Typer
-    with TypesDB
     with TyperOps
+    with AnnotationsDB
     // Util
     with ErrorReporter {
 
@@ -83,7 +82,19 @@ abstract class Context(val positions: Positions)
     // we purposefully do not include the reset into `finally` to preserve the
     // state at the error position
     namerState = namerBefore
-    typerState = typerBefore
+
+    // TyperState has two kinds of components:
+    // - reader-like (like effects that are in scope)
+    // - state-like (like annotations and unification constraints)
+    //
+    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
+    // not the "state" components. For those, we manually perform backup and restore in typer.
+    typerState = if (typerBefore != null) {
+      val annos = typerState.annotations
+      // keep the annotations
+      typerBefore.copy(annotations = annos)
+    } else { typerBefore }
+
     focus = focusBefore
     module = moduleBefore
     result

@@ -1,7 +1,7 @@
 package effekt
 package source
 
-import effekt.context.{ SymbolsDB, Context }
+import effekt.context.Context
 import effekt.symbols.Symbol
 
 /**
@@ -25,7 +25,7 @@ case class Comment() extends Tree
  */
 sealed trait Id extends Tree {
   def name: String
-  def symbol(implicit db: SymbolsDB): Symbol = db.symbolOf(this)
+  def symbol(implicit C: Context): Symbol = C.symbolOf(this)
   def clone(implicit C: Context): Id
 
 }
@@ -49,7 +49,7 @@ sealed trait Definition extends Tree {
   def id: IdDef
   type symbol <: Symbol
 
-  def symbol(implicit db: SymbolsDB): symbol = db.symbolOf(this)
+  def symbol(implicit C: Context): symbol = C.symbolOf(this)
 }
 
 // Something that later can be looked up in the symbol table
@@ -57,7 +57,7 @@ sealed trait Reference extends Tree {
   def id: IdRef
   type symbol <: Symbol
 
-  def definition(implicit db: SymbolsDB): symbol = db.symbolOf(this)
+  def definition(implicit C: Context): symbol = C.symbolOf(this)
 }
 
 /**
