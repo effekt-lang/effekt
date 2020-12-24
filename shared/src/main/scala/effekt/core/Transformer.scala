@@ -5,10 +5,6 @@ import scala.collection.mutable.ListBuffer
 
 import effekt.context.Context
 import effekt.symbols._
-import effekt.util.Task
-
-case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
 
 case class TransformerState(
   /**
@@ -30,6 +26,7 @@ case class TransformerState(
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
+    // initialize transformer state
     C.transformerState = TransformerState()
     Some(transform(mod))
   }
@@ -39,21 +36,22 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym if sym.isInstanceOf[Fun] && !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
-        case sym if sym.isInstanceOf[ValBinder] => sym
+        case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+        case sym: ValBinder => sym
       }
     }.toList)
 
-    ModuleDecl(path, imports.map { _.path }, defs.foldRight(exports) {
-      case (d, r) =>
-        transform(d, r)(C)
-    }).inheritPosition(mod.decl)
+    val transformed = defs.foldRight(exports) {
+      case (d, r) => transform(d, r)
+    }
+
+    ModuleDecl(path, imports.map { _.path }, transformed).inheritPosition(mod.decl)
   }
 
   /**
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
-  def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = (d match {
+  def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
 
@@ -63,9 +61,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         val ps = params.flatMap {
           case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
           case v @ source.ValueParams(ps)   => ps.map { p => core.ValueParam(p.symbol) }
-        } ++ caps
+        }
 
-        Def(sym, BlockLit(ps, transform(body)), rest)
+        Def(sym, BlockLit(ps ++ caps, transform(body)), rest)
       }
 
     case d @ source.DataDef(id, _, ctors) =>
@@ -115,25 +113,24 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case d @ source.EffDef(id, ops) =>
       core.Record(d.symbol, ops.map { e => e.symbol }, rest)
-  }).inheritPosition(d)
+  }
 
-  def transform(tree: source.Stmt)(implicit C: Context): Stmt = (tree match {
+  def transform(tree: source.Stmt)(implicit C: Context): Stmt = withPosition(tree) {
     case source.DefStmt(d, rest) =>
       transform(d, transform(rest))
 
-    case source.ExprStmt(e, rest) => {
-      Val(freshWildcardFor(tree), C.ANF { Ret(transform(e)) }, transform(rest))
-    }
+    // { e; stmt } --> { val _ = e; stmt }
+    case source.ExprStmt(e, rest) =>
+      Val(freshWildcardFor(e), insertBindings { Ret(transform(e)) }, transform(rest))
 
     case source.Return(e) =>
-      C.ANF { Ret(transform(e)) }
+      insertBindings { Ret(transform(e)) }
 
     case source.BlockStmt(b) =>
       transform(b)
+  }
 
-  }).inheritPosition(tree)
-
-  def transformLit[T](tree: source.Literal[T])(implicit C: Context): Literal[T] = tree match {
+  def transformLit[T](tree: source.Literal[T])(implicit C: Context): Literal[T] = withPosition(tree) {
     case source.UnitLit()         => UnitLit()
     case source.IntLit(value)     => IntLit(value)
     case source.BooleanLit(value) => BooleanLit(value)
@@ -141,36 +138,40 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.StringLit(value)  => StringLit(value)
   }
 
-  def transform(tree: source.Expr)(implicit C: Context): Expr = (tree match {
+  def transform(tree: source.Expr)(implicit C: Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
         val state = C.state(sym)
-        C.bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(state.effect), state.get), Nil))
+        val get = App(Member(C.resolveCapability(state.effect), state.get), Nil)
+        C.bind(C.valueTypeOf(sym), get)
       case sym => ValueVar(sym)
     }
 
     case a @ source.Assign(id, expr) =>
       val e = transform(expr)
       val state = C.state(a.definition)
-      C.bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(state.effect), state.put), List(e)))
+      val put = App(Member(C.resolveCapability(state.effect), state.put), List(e))
+      C.bind(builtins.TUnit, put)
 
     case l: source.Literal[t] => transformLit(l)
 
     case source.If(cond, thn, els) =>
       val c = transform(cond)
-      C.bind(C.inferredTypeOf(tree).tpe, If(c, transform(thn), transform(els)))
+      val exprTpe = C.inferredTypeOf(tree).tpe
+      C.bind(exprTpe, If(c, transform(thn), transform(els)))
 
     case source.While(cond, body) =>
-      C.bind(C.inferredTypeOf(tree).tpe, While(C.ANF { Ret(transform(cond)) }, transform(body)))
+      val exprTpe = C.inferredTypeOf(tree).tpe
+      C.bind(exprTpe, While(insertBindings { Ret(transform(cond)) }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
+      val scrutinee = transform(sc)
 
       val cs: List[(Pattern, BlockLit)] = clauses.map {
         case cl @ source.MatchClause(pattern, body) =>
           val (p, ps) = transform(pattern)
           (p, BlockLit(ps, transform(body)))
       }
-      val scrutinee = transform(sc)
       C.bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs))
 
     // assumption: typer removed all ambiguous references, so there is exactly one
@@ -191,7 +192,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val capabilityArgs = effects.toList.map { C.resolveCapability }
 
       val as: List[Argument] = (args zip params).flatMap {
-        case (source.ValueArgs(as), _) => as.map(transform)
+        case (source.ValueArgs(as), _) =>
+          as.map(transform)
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
           val params = ps.params.map { v => core.ValueParam(v.symbol) }
           C.bindingCapabilities(p.ret.effects.userEffects) { caps =>
@@ -230,7 +232,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
             case op @ source.OpClause(id, params, body, resume) =>
               val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
-              (op.definition, BlockLit(ps :+ core.BlockParam(resume.symbol.asInstanceOf[BlockSymbol]), transform(body)))
+              val opBlock = BlockLit(ps :+ core.BlockParam(resume.symbol.asInstanceOf[BlockSymbol]), transform(body))
+              (op.definition, opBlock)
           })
       }
 
@@ -239,7 +242,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.Hole(stmts) =>
       C.bind(C.inferredTypeOf(tree).tpe, Hole)
 
-  }).inheritPosition(tree)
+  }
 
   def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
     case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
@@ -260,6 +263,21 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       case _           => C.abort("Internal Error: Missing type of source expression.")
     }
     x
+  }
+
+  def withPosition[T <: source.Tree, R <: core.Tree](t: T)(block: T => R)(implicit C: Context): R =
+    block(t).inheritPosition(t)
+
+  def insertBindings(stmt: => Stmt)(implicit C: Context): Stmt = Context in {
+    val bindings = ListBuffer.empty[(Tmp, symbols.ValueType, Stmt)]
+    C.transformerState = C.transformerState.copy(bindings = bindings)
+    val body = stmt
+
+    bindings.foldRight(body) {
+      // optimization: remove unnecessary binds
+      case ((x, tpe, b), Ret(ValueVar(y))) if x == y => b
+      case ((x, tpe, b), body) => Val(x, b, body)
+    }
   }
 }
 trait TransformerOps { Context: Context =>
@@ -318,20 +336,5 @@ trait TransformerOps { Context: Context =>
     transformerState.bindings += binding
 
     ValueVar(x)
-  }
-
-  // TODO rename
-  def ANF(stmt: => Stmt): Stmt = Context in {
-    transformerState = transformerState.copy(
-      bindings = ListBuffer()
-    )
-    val body = stmt
-    val bindings = transformerState.bindings
-
-    bindings.foldRight(body) {
-      // optimization: remove unnecessary binds
-      case ((x, tpe, b), Ret(ValueVar(y))) if x == y => b
-      case ((x, tpe, b), body) => Val(x, b, body)
-    }
   }
 }

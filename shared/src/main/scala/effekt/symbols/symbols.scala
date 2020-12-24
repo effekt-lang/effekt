@@ -143,6 +143,12 @@ package object symbols {
   case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
 
   /**
+   * Introduced by Transformer
+   */
+  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
+  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+
+  /**
    * A symbol that represents a termlevel capability
    */
   trait Capability extends BlockSymbol {
