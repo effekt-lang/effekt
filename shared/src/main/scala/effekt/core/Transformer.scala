@@ -2,8 +2,7 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-
-import effekt.context.Context
+import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 
 case class TransformerState(
@@ -280,9 +279,24 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     }
   }
 }
-trait TransformerOps { Context: Context =>
+trait TransformerOps extends ContextOps { Context: Context =>
 
-  def state(binder: VarBinder): StateCapability = {
+  /**
+   * The state of the transformer phase
+   */
+  private[core] var transformerState: TransformerState = _
+
+  /**
+   * Override the dynamically scoped `in` to also reset transformer state
+   */
+  override def in[T](block: => T): T = {
+    val before = transformerState
+    val result = super.in(block)
+    transformerState = before
+    result
+  }
+
+  private[core] def state(binder: VarBinder): StateCapability = {
     val stateEffects = transformerState.stateEffects
     stateEffects.get(binder) match {
       case Some(v) => v
@@ -298,7 +312,7 @@ trait TransformerOps { Context: Context =>
    * runs the given block, binding the provided capabilities, so that
    * "resolveCapability" will find them.
    */
-  def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
+  private[core] def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
     val before = transformerState.capabilities;
     // create a fresh cabability-symbol for each bound effect
     val caps = effs.map { UserCapability }
@@ -315,7 +329,7 @@ trait TransformerOps { Context: Context =>
     }
   }
 
-  def resolveCapability(e: Effect): core.BlockVar =
+  private[core] def resolveCapability(e: Effect): core.BlockVar =
     transformerState.capabilities.get(e).map { core.BlockVar }.getOrElse(
       Context.abort(s"Compiler error: cannot find capability for ${e}")
     )
@@ -326,7 +340,7 @@ trait TransformerOps { Context: Context =>
    * @param tpe the type of the bound statement
    * @param s the statement to be bound
    */
-  def bind(tpe: symbols.ValueType, s: Stmt): Expr = {
+  private[core] def bind(tpe: symbols.ValueType, s: Stmt): Expr = {
 
     // create a fresh symbol and assign the type
     val x = Tmp(module)

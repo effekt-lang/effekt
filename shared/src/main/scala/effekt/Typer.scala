@@ -4,13 +4,12 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context, Annotations }
-import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchClause, MatchPattern, Stmt, TagPattern, Tree }
+import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.assertions.{ SymbolAssertions }
+import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
-import effekt.util.Task
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
@@ -686,7 +685,34 @@ class Typer extends Phase[Module, Module] { typer =>
     }
 }
 
-trait TyperOps { self: Context =>
+trait TyperOps extends ContextOps { self: Context =>
+
+  /**
+   * The state of the typer phase
+   */
+  private[typer] var typerState: TyperState = _
+
+  /**
+   * Override the dynamically scoped `in` to also reset typer state
+   */
+  override def in[T](block: => T): T = {
+    val before = typerState
+    val result = super.in(block)
+
+    // TyperState has two kinds of components:
+    // - reader-like (like effects that are in scope)
+    // - state-like (like annotations and unification constraints)
+    //
+    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
+    // not the "state" components. For those, we manually perform backup and restore in typer.
+    typerState = if (before != null) {
+      val annos = typerState.annotations
+      // keep the annotations
+      before.copy(annotations = annos)
+    } else { before }
+
+    result
+  }
 
   // State Access
   // ============

@@ -4,11 +4,30 @@ package context
 import effekt.core.{ TransformerOps, TransformerState }
 import effekt.namer.{ NamerOps, NamerState }
 import effekt.typer.{ TyperOps, TyperState }
-import effekt.source.{ ModuleDecl, Tree }
+import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Positions
+
+/**
+ * Phases like Typer can add operations to the context by extending this trait
+ *
+ * For example, see TyperOps
+ */
+trait ContextOps
+    extends ErrorReporter
+    with AnnotationsDB { self: Context =>
+
+  /**
+   * Used throughout the compiler to create a new "scope"
+   *
+   * Each XOps slice can define what a new "scope" means and
+   * backup and restore state accordingly. Overriding definitions
+   * should call `super.in(block)`.
+   */
+  def in[T](block: => T): T = block
+}
 
 /**
  * The compiler context consists of
@@ -26,10 +45,7 @@ abstract class Context(val positions: Positions)
     // Typer
     with TyperOps
     // Transformer
-    with TransformerOps
-    // Util
-    with ErrorReporter
-    with AnnotationsDB {
+    with TransformerOps {
 
   // bring the context itself in scope
   implicit val context: Context = this
@@ -53,27 +69,6 @@ abstract class Context(val positions: Positions)
     _config = cfg
   }
 
-  /**
-   * The state of the namer phase
-   */
-  private var _namerState: NamerState = _
-  def namerState: NamerState = _namerState
-  def namerState_=(st: NamerState): Unit = _namerState = st
-
-  /**
-   * The state of the typer phase
-   */
-  private var _typerState: TyperState = _
-  def typerState: TyperState = _typerState
-  def typerState_=(st: TyperState): Unit = _typerState = st
-
-  /**
-   * The state of the transformer phase
-   */
-  private var _transformerState: TransformerState = _
-  def transformerState: TransformerState = _transformerState
-  def transformerState_=(st: TransformerState): Unit = _transformerState = st
-
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
     this.module = module
     this.focus = focus
@@ -83,31 +78,13 @@ abstract class Context(val positions: Positions)
   /**
    * This is useful to write code like: reporter in { ... implicitly uses reporter ... }
    */
-  def in[T](block: => T): T = {
-    val namerBefore = namerState
-    val typerBefore = typerState
-    val transformerBefore = transformerState
-
+  override def in[T](block: => T): T = {
     val focusBefore = focus
     val moduleBefore = module
-    val result = block
+    val result = super.in(block)
+
     // we purposefully do not include the reset into `finally` to preserve the
     // state at the error position
-    namerState = namerBefore
-
-    // TyperState has two kinds of components:
-    // - reader-like (like effects that are in scope)
-    // - state-like (like annotations and unification constraints)
-    //
-    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
-    // not the "state" components. For those, we manually perform backup and restore in typer.
-    typerState = if (typerBefore != null) {
-      val annos = typerState.annotations
-      // keep the annotations
-      typerBefore.copy(annotations = annos)
-    } else { typerBefore }
-
-    transformerState = transformerBefore
     focus = focusBefore
     module = moduleBefore
     result

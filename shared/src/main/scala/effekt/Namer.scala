@@ -4,7 +4,7 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.Context
+import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
 import effekt.source.{ Def, Id, Tree }
 import effekt.symbols._
@@ -31,7 +31,7 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Phase[Module, Module] { namer =>
+class Namer extends Phase[Module, Module] {
 
   def run(mod: Module)(implicit C: Context): Option[Module] = {
     Some(resolve(mod))
@@ -429,7 +429,22 @@ class Namer extends Phase[Module, Module] { namer =>
  * The kiama environment uses immutable binding since they thread the environment through
  * their attributes.
  */
-trait NamerOps { self: Context =>
+trait NamerOps extends ContextOps { self: Context =>
+
+  /**
+   * The state of the namer phase
+   */
+  private[namer] var namerState: NamerState = _
+
+  /**
+   * Override the dynamically scoped `in` to also reset namer state
+   */
+  override def in[T](block: => T): T = {
+    val before = namerState
+    val result = super.in(block)
+    namerState = before
+    result
+  }
 
   // State Access
   // ============
