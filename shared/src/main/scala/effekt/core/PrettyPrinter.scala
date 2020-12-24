@@ -42,7 +42,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => id.name.toString
 
-    case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
+    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
@@ -67,11 +67,11 @@ class PrettyPrinter extends ParenPrettyPrinter {
   // pretty print the statement in a javascript expression context
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt): Doc = s match {
-    case Val(Wildcard(_), binding, body) =>
+    case Val(Wildcard(_), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <> toDoc(body)
-    case Val(id, binding, body) =>
+    case Val(id, tpe, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
-    case App(b, args) =>
+    case App(b, targs, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> toDocExpr(thn) <+> "else" <+> toDocExpr(els)
@@ -89,7 +89,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
       }
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
       "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
-    case State(id, get, put, init, body) =>
+    case State(id, tpe, get, put, init, body) =>
       "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
 
     case Match(sc, clauses) =>
@@ -109,11 +109,11 @@ class PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt): Doc = s match {
-    case Def(id, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(ps, body), rest) =>
       "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+>
         braces(nest(body) <> line) <> emptyline <> toDocStmt(rest)
 
-    case Def(id, b, rest) =>
+    case Def(id, tpe, b, rest) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
@@ -133,7 +133,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
-    case Def(id, d, rest) => true
+    case Def(id, tpe, d, rest) => true
     case _ => false
   }
 

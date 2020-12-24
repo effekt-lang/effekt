@@ -77,21 +77,21 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
-    case Val(Wildcard(_), binding, body) if toplevel =>
+    case Val(Wildcard(_), tpe, binding, body) if toplevel =>
       "(run " <> toDoc(binding, false) <> ")" <> emptyline <> toDoc(body, toplevel)
 
-    case Val(id, binding, body) if toplevel =>
+    case Val(id, tpe, binding, body) if toplevel =>
       defineValue(nameDef(id), "(run " <> toDoc(binding, false) <> ")") <> emptyline <> toDoc(body, toplevel)
 
-    case Val(Wildcard(_), binding, body) =>
+    case Val(Wildcard(_), tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), "_", toDoc(body, false))
 
     case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
-    case Val(id, binding, body) =>
+    case Val(id, tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))
 
-    case State(eff, get, put, init, block) =>
+    case State(eff, tpe, get, put, init, block) =>
       schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
 
     case other => super.toDoc(s, toplevel)

@@ -80,7 +80,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
-    case State(eff, get, put, init, block) =>
+    case State(eff, tpe, get, put, init, block) =>
       defineValue(nameDef(get), "getter") <> line <>
         defineValue(nameDef(put), "setter") <> line <>
         schemeCall("state", toDoc(init, false), toDoc(block))
@@ -133,7 +133,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
 
-    case PureApp(b, args) => schemeCall(toDoc(b), args map {
+    case PureApp(b, targs, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     })
@@ -156,11 +156,11 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       parens("while" <+> toDocInBlock(cond) <+> toDoc(body, false))
 
     // definitions can *only* occur at the top of a (begin ...)
-    case Def(id, BlockLit(ps, body), rest) =>
+    case Def(id, tpe, BlockLit(ps, body), rest) =>
       defineFunction(nameDef(id), ps map toDoc, toDoc(body, false)) <> emptyline <> toDoc(rest, toplevel)
 
     // we can't use the unique id here, since we do not know it in the extern string.
-    case Def(id, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(ps, body), rest) =>
       defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest, toplevel)
 
     case Data(did, ctors, rest) =>
@@ -173,21 +173,21 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDoc(rest, toplevel)
 
-    case App(b, args) => schemeCall(toDoc(b), args map {
+    case App(b, targs, args) => schemeCall(toDoc(b), args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     })
 
-    case Val(Wildcard(_), binding, body) if toplevel =>
+    case Val(Wildcard(_), tpe, binding, body) if toplevel =>
       "(run (thunk " <> toDoc(binding, false) <> "))" <> line <> toDoc(body, true)
 
-    case Val(id, binding, body) if toplevel =>
+    case Val(id, tpe, binding, body) if toplevel =>
       defineValue(nameDef(id), "(run (thunk " <> toDocInBlock(binding) <> "))") <> line <> toDoc(body, toplevel)
 
-    case Val(Wildcard(_), binding, body) =>
+    case Val(Wildcard(_), tpe, binding, body) =>
       toDoc(binding, false) <> line <> toDocInBlock(body)
 
-    case Val(id, binding, body) =>
+    case Val(id, tpe, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
 
     case Ret(e) => toDoc(e)

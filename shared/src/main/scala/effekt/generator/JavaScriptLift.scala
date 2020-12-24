@@ -74,13 +74,13 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
 
-    case Val(Wildcard(_), binding, body) =>
+    case Val(Wildcard(_), tpe, binding, body) =>
       "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(Nil, toDoc(body)))
 
-    case Val(id, binding, body) =>
+    case Val(id, tpe, binding, body) =>
       "$effekt.then" <> parens(toDocExpr(binding)) <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
 
-    case App(b, args) =>
+    case App(b, targs, args) =>
       jsCall(toDoc(b), args map argToDoc)
 
     case If(cond, thn, els) =>
@@ -94,7 +94,7 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(id, get, put, init, body) =>
+    case State(id, tpe, get, put, init, body) =>
       "$effekt.state" <> parens(toDocExpr(init)) <> parens(toDoc(body))
 
     case Handle(body, hs) =>
@@ -126,14 +126,14 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
   }
 
   override def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
+    case Def(id, tpe, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
       jsFunction(nameDef(id), List(nameDef(sc)),
         "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocStmt(rest)
     case _ => super.toDocStmt(s)
   }
 
   override def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
+    case Def(id, tpe, ScopeAbs(sc, BlockLit(ps, body)), rest) =>
       jsFunction(nameDef(id), List(nameDef(sc)),
         "return" <+> jsLambda(ps map toDoc, toDoc(body))) <> emptyline <> toDocTopLevel(rest)
     case _ => super.toDocTopLevel(s)

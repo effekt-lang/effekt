@@ -188,6 +188,9 @@ trait AnnotationsDB { self: Context =>
   // Types
   // -----
 
+  def typeArguments(c: source.Call): List[symbols.Type] =
+    annotation(Annotations.TypeArguments, c)
+
   def inferredTypeOption(t: source.Tree): Option[Effectful] =
     annotationOption(Annotations.TypeAndEffect, t)
 

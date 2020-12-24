@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -36,15 +36,15 @@ case class BooleanLit(value: Boolean) extends Literal[Boolean]
 case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
-case class PureApp(b: Block, args: List[Argument]) extends Expr
+case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 
 /**
  * Blocks
  */
 sealed trait Param extends Tree { def id: TermSymbol }
-case class ValueParam(id: ValueSymbol) extends Param
-case class BlockParam(id: BlockSymbol) extends Param
+case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
+case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: BlockSymbol) extends Block
@@ -54,6 +54,7 @@ case class ScopeAbs(scope: Symbol, body: Block) extends Block
 case class ScopeApp(b: Block, evidence: Scope) extends Block
 case class Lifted(s: Scope, b: Block) extends Block
 
+// TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: EffectOp) extends Block
 case class Extern(params: List[Param], body: String) extends Block
@@ -62,12 +63,12 @@ case class Extern(params: List[Param], body: String) extends Block
  * Statements
  */
 sealed trait Stmt extends Tree
-case class Def(id: BlockSymbol, block: Block, rest: Stmt) extends Stmt
-case class Val(id: ValueSymbol, binding: Stmt, body: Stmt) extends Stmt
+case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
+case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
-case class App(b: Block, args: List[Argument]) extends Stmt
+case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
@@ -85,7 +86,7 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: UserEffect, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
+case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
@@ -129,8 +130,8 @@ object Tree {
     // Entrypoints to use the traversal on, defined in terms of the above hooks
     def rewrite(e: Expr): Expr = e match {
       case e if expr.isDefinedAt(e) => expr(e)
-      case PureApp(b, args) =>
-        PureApp(rewrite(b), args map rewrite)
+      case PureApp(b, targs, args) =>
+        PureApp(rewrite(b), targs, args map rewrite)
       case Select(target, field) =>
         Select(rewrite(target), field)
       case v: ValueVar   => v
@@ -138,16 +139,16 @@ object Tree {
     }
     def rewrite(e: Stmt): Stmt = e match {
       case e if stmt.isDefinedAt(e) => stmt(e)
-      case Def(id, block, rest) =>
-        Def(id, rewrite(block), rewrite(rest))
-      case Val(id, binding, body) =>
-        Val(id, rewrite(binding), rewrite(body))
+      case Def(id, tpe, block, rest) =>
+        Def(id, tpe, rewrite(block), rewrite(rest))
+      case Val(id, tpe, binding, body) =>
+        Val(id, tpe, rewrite(binding), rewrite(body))
       case Data(id, ctors, rest) =>
         Data(id, ctors, rewrite(rest))
       case Record(id, fields, rest) =>
         Record(id, fields, rewrite(rest))
-      case App(b, args) =>
-        App(rewrite(b), args map rewrite)
+      case App(b, targs, args) =>
+        App(rewrite(b), targs, args map rewrite)
       case If(cond, thn, els) =>
         If(rewrite(cond), rewrite(thn), rewrite(els))
       case While(cond, body) =>
@@ -156,8 +157,8 @@ object Tree {
         Ret(rewrite(e))
       case Include(contents, rest) =>
         Include(contents, rewrite(rest))
-      case State(id, get, put, init, body) =>
-        State(id, get, put, rewrite(init), rewrite(body))
+      case State(id, tpe, get, put, init, body) =>
+        State(id, tpe, get, put, rewrite(init), rewrite(body))
       case Handle(body, handler) =>
         Handle(rewrite(body), handler map rewrite)
       case Match(scrutinee, clauses) =>

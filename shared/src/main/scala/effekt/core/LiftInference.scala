@@ -22,8 +22,8 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
       // recursive functions need to bind the own id
       val extendedEnv = params.foldLeft(ownBindings.adapt(ScopeVar(id))) {
-        case (env, BlockParam(p)) => env.bind(p)
-        case (env, ValueParam(p)) => env
+        case (env, BlockParam(p, tpe)) => env.bind(p)
+        case (env, ValueParam(p, tpe)) => env
       }
       ScopeAbs(id, BlockLit(params, transform(body)(extendedEnv, C)))
     case Member(body, id) => ??? // Member(transform(body), id)
@@ -31,14 +31,14 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def transform(tree: Stmt)(implicit env: Environment, C: Context): Stmt = tree match {
-    case Def(id, block, rest) =>
-      Def(id, transform(block, Some(id)), transform(rest)(env.bind(id), C))
+    case Def(id, tpe, block, rest) =>
+      Def(id, tpe, transform(block, Some(id)), transform(rest)(env.bind(id), C))
 
-    case Val(id, binding, body) =>
-      Val(id, transform(binding), transform(body))
+    case Val(id, tpe, binding, body) =>
+      Val(id, tpe, transform(binding), transform(body))
 
-    case State(id, get, put, init, body) =>
-      State(id, get, put, transform(init), transform(body))
+    case State(id, tpe, get, put, init, body) =>
+      State(id, tpe, get, put, transform(init), transform(body))
 
     case Data(id, ctors, rest) =>
       Data(id, ctors, transform(rest))
@@ -51,14 +51,14 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       val transformedHandler = handler.map { transform }
       Handle(transformedBody, transformedHandler)
 
-    case App(b: Block, args: List[Argument]) => b match {
-      case b: Extern => App(b, liftArguments(args))
+    case App(b: Block, targs, args: List[Argument]) => b match {
+      case b: Extern => App(b, targs, liftArguments(args))
       // TODO also for "pure" and "toplevel" functions
-      case b: BlockVar if b.id.builtin => App(b, liftArguments(args))
+      case b: BlockVar if b.id.builtin => App(b, targs, liftArguments(args))
 
       // [[ Eff.op(arg) ]] = Eff(ev).op(arg)
-      case Member(b, field) => App(Member(ScopeApp(transform(b), env.evidenceFor(b)), field), liftArguments(args))
-      case b => App(ScopeApp(transform(b), env.evidenceFor(b)), liftArguments(args))
+      case Member(b, field) => App(Member(ScopeApp(transform(b), env.evidenceFor(b)), field), targs, liftArguments(args))
+      case b => App(ScopeApp(transform(b), env.evidenceFor(b)), targs, liftArguments(args))
     }
 
     // TODO either the implementation of match should provide evidence

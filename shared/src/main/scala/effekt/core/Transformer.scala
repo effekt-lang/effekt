@@ -58,11 +58,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
       C.bindingCapabilities(effs) { caps =>
         val ps = params.flatMap {
-          case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
-          case v @ source.ValueParams(ps)   => ps.map { p => core.ValueParam(p.symbol) }
+          case b @ source.BlockParam(id, _) => List(BlockParam(b.symbol))
+          case v @ source.ValueParams(ps)   => ps.map { p => ValueParam(p.symbol) }
         }
-
-        Def(sym, BlockLit(ps ++ caps, transform(body)), rest)
+        // TODO also change the annotated type to include the added capabilities!
+        Def(sym, C.blockTypeOf(sym), BlockLit(ps ++ caps, transform(body)), rest)
       }
 
     case d @ source.DataDef(id, _, ctors) =>
@@ -76,10 +76,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       Val(v.symbol, transform(binding), rest)
 
     case v @ source.VarDef(id, _, binding) =>
-      val eff = C.state(v.symbol)
+      val sym = v.symbol
+      val eff = C.state(sym)
       val b = transform(binding)
       val res = C.bindingCapabilities(List(eff.effect)) { caps =>
-        State(eff.effect, eff.get, eff.put, b, BlockLit(caps, rest))
+        State(eff.effect, C.valueTypeOf(sym), eff.get, eff.put, b, BlockLit(caps, rest))
       }
       res
 
@@ -93,16 +94,17 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       rest
 
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
+      val sym = f.symbol
       // C&P from FunDef
       // usually extern funs do not have userdefined capabilities
-      if (f.symbol.effects.userDefined.nonEmpty) {
+      if (sym.effects.userDefined.nonEmpty) {
         C.abort("User defined effects on extern defs not allowed")
       }
       val ps = params.flatMap {
-        case b @ source.BlockParam(id, _) => List(core.BlockParam(b.symbol))
-        case v @ source.ValueParams(ps)   => ps.map { p => core.ValueParam(p.symbol) }
+        case b @ source.BlockParam(id, _) => List(BlockParam(b.symbol))
+        case v @ source.ValueParams(ps)   => ps.map { p => ValueParam(p.symbol) }
       }
-      Def(f.symbol, Extern(ps, body), rest)
+      Def(sym, C.blockTypeOf(sym), Extern(ps, body), rest)
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest)
@@ -141,7 +143,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
         val state = C.state(sym)
-        val get = App(Member(C.resolveCapability(state.effect), state.get), Nil)
+        val get = App(Member(C.resolveCapability(state.effect), state.get), Nil, Nil)
         C.bind(C.valueTypeOf(sym), get)
       case sym => ValueVar(sym)
     }
@@ -149,7 +151,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case a @ source.Assign(id, expr) =>
       val e = transform(expr)
       val state = C.state(a.definition)
-      val put = App(Member(C.resolveCapability(state.effect), state.put), List(e))
+      val put = App(Member(C.resolveCapability(state.effect), state.put), Nil, List(e))
       C.bind(builtins.TUnit, put)
 
     case l: source.Literal[t] => transformLit(l)
@@ -194,26 +196,29 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         case (source.ValueArgs(as), _) =>
           as.map(transform)
         case (source.BlockArg(ps, body), List(p: BlockType)) =>
-          val params = ps.params.map { v => core.ValueParam(v.symbol) }
+          val params = ps.params.map { v => ValueParam(v.symbol) }
           C.bindingCapabilities(p.ret.effects.userEffects) { caps =>
             List(BlockLit(params ++ caps, transform(body)))
           }
       }
 
+      // the type arguments, inferred by typer
+      val targs = C.typeArguments(c)
+
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
       sym match {
         case f: BuiltinFunction if f.pure =>
-          PureApp(BlockVar(f), as ++ capabilityArgs)
+          PureApp(BlockVar(f), targs, as ++ capabilityArgs)
         case r: Record =>
-          PureApp(BlockVar(r), as ++ capabilityArgs)
+          PureApp(BlockVar(r), targs, as ++ capabilityArgs)
         case f: EffectOp =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(f.effect), f), as ++ capabilityArgs))
+          C.bind(C.inferredTypeOf(tree).tpe, App(Member(C.resolveCapability(f.effect), f), targs, as ++ capabilityArgs))
         case f: Field =>
           val List(arg: Expr) = as
           Select(arg, f)
         case f: BlockSymbol =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), as ++ capabilityArgs))
+          C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as ++ capabilityArgs))
       }
 
     case source.TryHandle(prog, handlers) =>
@@ -230,8 +235,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
             case op @ source.OpClause(id, params, body, resume) =>
-              val ps = params.flatMap { _.params.map { v => core.ValueParam(v.symbol) } }
-              val opBlock = BlockLit(ps :+ core.BlockParam(resume.symbol.asInstanceOf[BlockSymbol]), transform(body))
+              val ps = params.flatMap { _.params.map { v => ValueParam(v.symbol) } }
+              val opBlock = BlockLit(ps :+ BlockParam(resume.symbol.asInstanceOf[BlockSymbol]), transform(body))
               (op.definition, opBlock)
           })
       }
@@ -246,7 +251,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
     case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
     case source.LiteralPattern(l)  => (core.LiteralPattern(transformLit(l)), Nil)
-    case p @ source.AnyPattern(id) => (core.AnyPattern(), List(core.ValueParam(p.symbol)))
+    case p @ source.AnyPattern(id) => (core.AnyPattern(), List(ValueParam(p.symbol)))
     case p @ source.TagPattern(id, ps) =>
       val (patterns, params) = ps.map(transform).unzip
       (core.TagPattern(p.definition, patterns), params.flatten)
@@ -278,6 +283,16 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       case ((x, tpe, b), body) => Val(x, b, body)
     }
   }
+
+  // Helpers to constructed typed trees
+  def ValueParam(id: ValueSymbol)(implicit C: Context): core.ValueParam =
+    core.ValueParam(id, C.valueTypeOf(id))
+
+  def BlockParam(id: BlockSymbol)(implicit C: Context): core.BlockParam =
+    core.BlockParam(id, C.blockTypeOf(id))
+
+  def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(implicit C: Context): core.Val =
+    core.Val(id, C.valueTypeOf(id), binding, body)
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
@@ -317,7 +332,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
     // create a fresh cabability-symbol for each bound effect
     val caps = effs.map { UserCapability }
     // additional block parameters for capabilities
-    val params = caps.map { core.BlockParam }
+    // TODO we need to come up with a block type for capabilities here!
+    //      however, blocks right now don't admit selection and are specialized
+    //      to one observation, only.
+    val params = caps.map { sym => core.BlockParam(sym, null) }
 
     Context in {
       // update state with capabilities

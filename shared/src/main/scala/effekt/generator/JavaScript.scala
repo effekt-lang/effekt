@@ -67,13 +67,13 @@ trait JavaScriptPrinter extends JavaScriptBase {
   // pretty print the statement in a javascript expression context
   // not all statement types can be printed in this context!
   def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
-    case Val(Wildcard(_), binding, body) =>
+    case Val(Wildcard(_), tpe, binding, body) =>
       toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
 
-    case Val(id, binding, body) =>
+    case Val(id, tpe, binding, body) =>
       toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
 
-    case App(b, args) =>
+    case App(b, targs, args) =>
       jsCall(toDoc(b), args map argToDoc)
 
     case If(cond, thn, els) =>
@@ -89,7 +89,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(id, get, put, init, body) =>
+    case State(id, tpe, get, put, init, body) =>
       toDocDelayed(init) <> ".state" <> parens(toDoc(body))
 
     case Handle(body, hs) =>
@@ -180,7 +180,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => nameRef(id)
 
-    case PureApp(b, args) => toDoc(b) <> parens(hsep(args map {
+    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
@@ -221,10 +221,10 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, BlockLit(ps, body), rest) =>
+    case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
-    case Def(id, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
@@ -257,13 +257,13 @@ trait JavaScriptBase extends ParenPrettyPrinter {
    * as variables, instead of using the monadic bind.
    */
   def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
-    case Val(id, binding, body) =>
+    case Val(id, tpe, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
-    case Def(id, BlockLit(ps, body), rest) =>
+    case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
-    case Def(id, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
@@ -309,7 +309,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
     case Record(did, fields, rest) => true
-    case Def(id, d, rest) => true
+    case Def(id, tpe, d, rest) => true
     case _ => false
   }
 }
