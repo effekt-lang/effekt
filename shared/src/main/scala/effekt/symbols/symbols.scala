@@ -227,6 +227,9 @@ package object symbols {
       if (tparams.isEmpty) { tpe } else { sys error "Cannot delias unapplied type constructor" }
   }
 
+  /**
+   * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
+   */
   trait TypeConstructor extends TypeSymbol with ValueType
   object TypeConstructor {
     def unapply(t: ValueType): Option[TypeConstructor] = t match {
