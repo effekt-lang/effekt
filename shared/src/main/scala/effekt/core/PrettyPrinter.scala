@@ -70,7 +70,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Val(Wildcard(_), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <> toDoc(body)
     case Val(id, tpe, binding, body) =>
-      "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+      "val" <+> toDoc(id.name) <+> ":" <+> tpe.toString <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
     case App(b, targs, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
     case If(cond, thn, els) =>
