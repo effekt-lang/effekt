@@ -7,7 +7,12 @@ import effekt.symbols.Symbol
 /**
  * We extend product to allow reflective copying by Kiama.
  */
-sealed trait Tree extends Product
+sealed trait Tree extends Product {
+  def inheritPosition(from: Tree)(implicit C: Context): this.type = {
+    C.positions.dupPos(from, this);
+    this
+  }
+}
 
 /**
  * Used for builtin and synthesized trees
