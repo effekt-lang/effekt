@@ -9,7 +9,19 @@ import org.bitbucket.inkytonik.kiama.util.Severities.Error
 
 object messages {
 
+  /**
+   * Error that aborts a compilation phase
+   *
+   * Messages are part of the reporting pipeline and can be backtracked by Typer
+   */
   case class FatalPhaseError(msg: String) extends Exception
+
+  /**
+   * Error that aborts the whole compilation and shows a stack trace
+   *
+   * Should be used for unexpected internal compiler errors
+   */
+  case class CompilerPanic(msg: String, position: AnyRef) extends Exception
 
   /**
    * Stores messages in a mutable field
@@ -41,15 +53,16 @@ object messages {
     def error(msg: String): Unit = error(focus, msg)
     def error(at: AnyRef, msg: String): Unit = buffer append Messaging.error(at, msg)
 
+    def panic(msg: String): Nothing = panic(focus, msg)
+    def panic(at: AnyRef, msg: String): Nothing = throw CompilerPanic(msg, at)
+
     def warning(msg: String): Unit = warning(focus, msg)
     def warning(at: AnyRef, msg: String): Unit = buffer append Messaging.warning(at, msg)
 
     def info(msg: String): Unit = info(focus, msg)
     def info(at: AnyRef, msg: String): Unit = buffer append Messaging.info(at, msg)
 
-    def abort(msg: String): Nothing = {
-      throw FatalPhaseError(msg)
-    }
+    def abort(msg: String): Nothing = throw FatalPhaseError(msg)
 
     def reraise(msg: Messages): Unit = buffer.append(msg)
 

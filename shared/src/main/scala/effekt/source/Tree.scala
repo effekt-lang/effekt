@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.symbols.Symbol
 
 /**
- * We extend product to allow reflective copying by Kiama.
+ * We extend product to allow reflective access by Kiama.
  */
 sealed trait Tree extends Product {
   def inheritPosition(from: Tree)(implicit C: Context): this.type = {
@@ -82,14 +82,20 @@ case class Import(path: String) extends Tree
 sealed trait ParamSection extends Tree
 case class ValueParams(params: List[ValueParam]) extends ParamSection
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
+
+// TODO fuse into one kind of parameter
 case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
+case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection with Definition { type symbol = symbols.CapabilityParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
+case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
+  type symbol = symbols.CapabilityParam
+}
 
 /**
- * Global (and later, local) definitions
+ * Global and local definitions
  */
 sealed trait Def extends Definition {
   def id: IdDef

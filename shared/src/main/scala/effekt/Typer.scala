@@ -106,7 +106,7 @@ class Typer extends Phase[Module, Module] { typer =>
         checkOverloadedCall(c, targs map { resolveValueType }, args, expected)
 
       case c @ source.MethodCall(b, fun, targs, args) =>
-        ???
+        Context.panic("Method call syntax not allowed in source programs.")
 
       case source.TryHandle(prog, handlers) =>
 
@@ -267,7 +267,7 @@ class Typer extends Phase[Module, Module] { typer =>
             case (pat, par: ValueType) =>
               bindings ++= checkPattern(par, pat)
             case _ =>
-              sys error "Should not happen, since constructors can only take value parameters"
+              Context.panic("Should not happen, since constructors can only take value parameters")
           }
       }
       bindings
@@ -398,7 +398,7 @@ class Typer extends Phase[Module, Module] { typer =>
   def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
     case BlockParam(_, tpe) => tpe
     case ValueParam(_, Some(tpe)) => tpe
-    case _ => Context.abort("Cannot extract type")
+    case _ => Context.panic("Cannot extract type")
   }
 
   /**
@@ -416,7 +416,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
       case (List(b1: BlockType), b2: source.BlockParam) =>
-        Context.at(b2) { Context.abort("Internal Compiler Error: Not yet supported") }
+        Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
         ???
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
@@ -751,7 +751,7 @@ trait TyperOps extends ContextOps { self: Context =>
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => define(v, t)
       case (v: BlockSymbol, t: BlockType) => define(v, t)
-      case other => abort(s"Internal Error: wrong combination of symbols and types: ${other}")
+      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
     }; this
   }
 
@@ -759,7 +759,7 @@ trait TyperOps extends ContextOps { self: Context =>
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
       case s @ BlockParam(name, tpe) => define(s, tpe)
-      case s => abort(s"Internal Error: Cannot add $s to context.")
+      case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
   }
