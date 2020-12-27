@@ -34,11 +34,11 @@ trait Compiler {
   def parser = new Parser(positions)
   object namer extends Namer
   object typer extends Typer
+  object capabilityPassing extends CapabilityPassing
 
   // Backend phases
   // ==============
   object transformer extends Transformer
-  object capabilityPassing extends CapabilityPassing
   object lifter extends LiftInference
 
   def generatorPhase(implicit C: Context) = C.config.generator() match {

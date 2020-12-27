@@ -5,76 +5,34 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
+import effekt.source.Tree.Rewrite
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
  *
  * That is, block parameters are introduced to bind capabilities and arguments are introduced at
  * the call sites.
- *
- * TODO also transfer annotations!
  */
-class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] {
+class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = Context in {
-    Some(transform(mod))
+    Some(rewrite(mod))
   }
 
-  def transform(mod: ModuleDecl)(implicit C: Context): ModuleDecl = withAttributes(mod) {
-    case ModuleDecl(path, imports, defs) =>
-      ModuleDecl(path, imports, defs.map { d => transform(d) })
-  }
-
-  // TODO also change the annotated type to include the added capabilities!
-  def transform(d: Def)(implicit C: Context): Def = withAttributes(d) {
+  override def defn(implicit C: Context) = {
     case f @ FunDef(id, tparams, params, ret, body) =>
       val sym = f.symbol
       val effs = sym.effects.userEffects
 
       C.withCapabilities(effs) { caps =>
-        f.copy(params = params ++ caps, body = transform(body))
+        f.copy(params = params ++ caps, body = rewrite(body))
       }
-
-    case v @ ValDef(id, _, binding) =>
-      val annot = ValueTypeTree(C.valueTypeOf(v.symbol))
-      ValDef(id, Some(annot), transform(binding))
-
-    case v @ VarDef(id, _, binding) =>
-      val annot = ValueTypeTree(C.valueTypeOf(v.symbol))
-      VarDef(id, Some(annot), transform(binding))
-
-    case d => d
   }
 
-  def transform(tree: Expr)(implicit C: Context): Expr = withAttributes(tree) {
-    case v: source.Var =>
-      v
-
-    case a @ source.Assign(id, expr) =>
-      source.Assign(id, transform(expr))
-
-    case l: source.Literal[t] => l
-
-    case source.If(cond, thn, els) =>
-      source.If(transform(cond), transform(thn), transform(els))
-
-    case source.While(cond, body) =>
-      source.While(transform(cond), transform(body))
-
-    case source.MatchExpr(sc, clauses) =>
-      source.MatchExpr(transform(sc), clauses.map { cl =>
-        withAttributes(cl) {
-          case cl @ source.MatchClause(pattern, body) =>
-            source.MatchClause(pattern, transform(body))
-        }
-      })
-
-    // shouldn't exist in source right now
-    case c @ source.MethodCall(block, op, _, args) =>
-      C.panic("Shouldn't exist in source program")
+  override def expr(implicit C: Context) = {
 
     // an effect call -- translate to method call
-    case c @ source.Call(fun, targs, args) if c.definition.isInstanceOf[EffectOp] =>
+    case c @ Call(fun, targs, args) if c.definition.isInstanceOf[EffectOp] =>
       val op = c.definition.asEffectOp
 
       // if this is an effect call, we do not want to provide capabilities for the effect itself
@@ -85,84 +43,67 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] {
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
       val effects = (effs -- ownEffect).userDefined
-      val transformedArgs = (args zip params).map { case (a, p) => transform(a, p) }
+      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       val receiver = C.capabilityReferenceFor(op.effect)
 
-      source.MethodCall(receiver, fun, targs, transformedArgs ++ capabilityArgs)
+      MethodCall(receiver, fun, targs, transformedArgs ++ capabilityArgs)
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
-    case c @ source.Call(fun, targs, args) =>
+    case c @ Call(fun, targs, args) =>
 
       val sym: Symbol = c.definition
       val BlockType(tparams, params, ret / effs) = C.blockTypeOf(sym)
 
       val effects = effs.userDefined
-      val transformedArgs = (args zip params).map { case (a, p) => transform(a, p) }
+      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
-      source.Call(fun, targs, transformedArgs ++ capabilityArgs)
+      Call(fun, targs, transformedArgs ++ capabilityArgs)
 
-    case source.TryHandle(prog, handlers) =>
+    case TryHandle(prog, handlers) =>
 
       val effects = handlers.map(_.definition)
       val (caps, body) = C.withCapabilities(effects) { caps =>
-        (caps, transform(prog))
+        (caps, rewrite(prog))
       }
       val hs = (handlers zip caps).map {
-        case (h, cap) => withAttributes(h) {
-          case h @ source.Handler(eff, _, clauses) =>
+        case (h, cap) => visit(h) {
+          case h @ Handler(eff, _, clauses) =>
             val cls = clauses.map { cl =>
-              withAttributes(cl) {
+              visit(cl) {
                 case OpClause(id, params, body, resume: IdDef) =>
 
-                  // OpClause also binds a block parameter for resume, which is not annotated here
-                  OpClause(id, params, transform(body), resume)
+                  // OpClause also binds a block parameter for resume, which is _not_ annotated here
+                  OpClause(id, params, rewrite(body), resume)
               }
             }
 
             // here we annotate the synthesized capability
-            source.Handler(eff, Some(cap), cls)
+            Handler(eff, Some(cap), cls)
         }
       }
-      source.TryHandle(body, hs)
-
-    case source.Hole(stmts) =>
-      source.Hole(transform(stmts))
-
+      TryHandle(body, hs)
   }
 
-  def transform(arg: ArgSection, param: List[symbols.Type])(implicit C: Context): ArgSection = withAttributes(arg) { arg =>
-    (arg, param) match {
-      case (source.ValueArgs(as), _) =>
-        source.ValueArgs(as.map(transform))
-      case (source.BlockArg(ps, body), List(p: BlockType)) =>
-        C.withCapabilities(p.ret.effects.userEffects) { caps =>
-          source.BlockArg(ps ++ caps, transform(body))
-        }
+  def rewrite(arg: ArgSection, param: List[symbols.Type])(implicit C: Context): ArgSection =
+    visit(arg) { arg =>
+      (arg, param) match {
+        case (ValueArgs(as), _) =>
+          ValueArgs(as.map(rewrite))
+        case (BlockArg(ps, body), List(p: BlockType)) =>
+          C.withCapabilities(p.ret.effects.userEffects) { caps =>
+            BlockArg(ps ++ caps, rewrite(body))
+          }
+      }
     }
-  }
-
-  def transform(tree: Stmt)(implicit C: Context): Stmt = withAttributes(tree) {
-    case source.DefStmt(d, rest) =>
-      source.DefStmt(transform(d), transform(rest))
-
-    case source.ExprStmt(e, rest) =>
-      source.ExprStmt(transform(e), transform(rest))
-
-    case source.Return(e) =>
-      source.Return(transform(e))
-
-    case source.BlockStmt(b) =>
-      source.BlockStmt(transform(b))
-  }
 
   /**
    * Copies all annotations and position information from source to target
    */
-  def withAttributes[T <: Tree, R <: Tree](source: T)(block: T => R)(implicit C: Context): R = {
+  override def visit[T <: Tree](source: T)(block: T => T)(implicit C: Context): T = {
     val target = block(source)
     target.inheritPosition(source)
     C.copyAnnotations(source, target)
@@ -221,6 +162,6 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
       //Var(id)
       id
     } getOrElse {
-      Context.abort(s"Compiler error: cannot find capability for ${e}")
+      Context.panic(s"Compiler error: cannot find capability for ${e}")
     }
 }
