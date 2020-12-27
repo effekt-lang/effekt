@@ -89,7 +89,7 @@ case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection 
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
-case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
+case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
 case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
   type symbol = symbols.CapabilityParam
 }
@@ -197,13 +197,16 @@ case class MethodCall(receiver: IdRef, id: IdRef, targs: List[ValueType], args: 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-// currently, the source language does not allow us to explicitly bind the capabilities
-// the capabilities here are annotated by the capability-passing transformation
-case class TryHandle( /* capabilities: List[CapabilityParam] = Nil, */ prog: Stmt, handlers: List[Handler]) extends Expr
-case class Handler(id: IdRef, clauses: List[OpClause]) extends Reference {
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+
+/**
+ * Currently, the source language does not allow us to explicitly bind the capabilities.
+ * The capability parameter here is annotated by the capability-passing transformation
+ */
+case class Handler(id: IdRef, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
   type symbol = symbols.UserEffect
 }
-case class OpClause(id: IdRef, params: List[ValueParams], body: Stmt, resume: IdDef) extends Reference {
+case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.EffectOp
 }
 

@@ -169,7 +169,7 @@ class Namer extends Phase[Module, Module] {
       Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
 
-    case source.Handler(name, clauses) =>
+    case source.Handler(name, _, clauses) =>
       val eff = Context.at(name) { Context.resolveType(name) }.asUserEffect
 
       clauses.foreach {
@@ -198,9 +198,9 @@ class Namer extends Phase[Module, Module] {
       }
 
     case source.BlockArg(params, stmt) =>
-      val ps = resolve(params)
+      val ps = params.map(resolve)
       Context scoped {
-        Context.bind(List(ps))
+        Context.bind(ps)
         resolveGeneric(stmt)
       }
 

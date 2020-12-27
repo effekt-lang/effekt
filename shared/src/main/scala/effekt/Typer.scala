@@ -303,6 +303,9 @@ class Typer extends Phase[Module, Module] { typer =>
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
+      if (d.symbol.effects.userDefined.nonEmpty) {
+        Context.abort("User defined effects on extern defs not allowed")
+      }
 
     case d @ source.EffDef(id, ops) =>
       d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
@@ -417,7 +420,6 @@ class Typer extends Phase[Module, Module] { typer =>
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
       case (List(b1: BlockType), b2: source.BlockParam) =>
         Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
-        ???
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
         if (ps1.size != ps2.size)
@@ -603,7 +605,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
       // TODO make blockargs also take multiple argument sections.
       Context.define {
-        checkAgainstDeclaration("block", params, List(arg.params))
+        checkAgainstDeclaration("block", params, arg.params)
       }
 
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1

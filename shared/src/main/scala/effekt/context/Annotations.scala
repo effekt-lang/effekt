@@ -158,6 +158,15 @@ trait AnnotationsDB { self: Context =>
   private def annotationsAt(key: Any): Annotations = annotations.getOrDefault(key, Map.empty)
 
   /**
+   * Copies annotations, keeping existing annotations at `to`
+   */
+  def copyAnnotations(from: Any, to: Any): Unit = {
+    val existing = annotationsAt(to)
+    val source = annotationsAt(from)
+    annotate(to, source ++ existing)
+  }
+
+  /**
    * Bulk annotating the key
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB

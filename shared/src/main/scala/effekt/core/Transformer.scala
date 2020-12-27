@@ -57,11 +57,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val effs = sym.effects.userEffects
 
       C.bindingCapabilities(effs) { caps =>
-        val ps = params.flatMap {
-          case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
-          case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
-          case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
-        }
+        val ps = transformParams(params)
         // TODO also change the annotated type to include the added capabilities!
         Def(sym, C.blockTypeOf(sym), BlockLit(ps ++ caps, transform(body)), rest)
       }
@@ -101,11 +97,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       if (sym.effects.userDefined.nonEmpty) {
         C.abort("User defined effects on extern defs not allowed")
       }
-      val ps = params.flatMap {
-        case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
-        case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
-        case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
-      }
+      val ps = transformParams(params)
       Def(sym, C.blockTypeOf(sym), Extern(ps, body), rest)
 
     case e @ source.ExternInclude(path) =>
@@ -198,10 +190,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val as: List[Argument] = (args zip params).flatMap {
         case (source.ValueArgs(as), _) =>
           as.map(transform)
-        case (source.BlockArg(ps, body), List(p: BlockType)) =>
-          val params = ps.params.map { v => ValueParam(v.symbol) }
+        case (source.BlockArg(params, body), List(p: BlockType)) =>
+          val ps = transformParams(params)
           C.bindingCapabilities(p.ret.effects.userEffects) { caps =>
-            List(BlockLit(params ++ caps, transform(body)))
+            List(BlockLit(ps ++ caps, transform(body)))
           }
       }
 
@@ -233,12 +225,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
-        case h @ source.Handler(eff, cls) =>
+        case h @ source.Handler(eff, cap, cls) =>
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
             case op @ source.OpClause(id, params, body, resume) =>
-              val ps = params.flatMap { _.params.map { v => ValueParam(v.symbol) } }
+              val ps = transformParams(params)
               val opBlock = BlockLit(ps :+ BlockParam(resume.symbol.asInstanceOf[BlockSymbol]), transform(body))
               (op.definition, opBlock)
           })
@@ -250,6 +242,13 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       C.bind(C.inferredTypeOf(tree).tpe, Hole)
 
   }
+
+  def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =
+    ps.flatMap {
+      case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
+      case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
+      case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
+    }
 
   def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
     case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
