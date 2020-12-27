@@ -58,8 +58,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
       C.bindingCapabilities(effs) { caps =>
         val ps = params.flatMap {
-          case b @ source.BlockParam(id, _) => List(BlockParam(b.symbol))
-          case v @ source.ValueParams(ps)   => ps.map { p => ValueParam(p.symbol) }
+          case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
+          case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
+          case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
         }
         // TODO also change the annotated type to include the added capabilities!
         Def(sym, C.blockTypeOf(sym), BlockLit(ps ++ caps, transform(body)), rest)
@@ -101,8 +102,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         C.abort("User defined effects on extern defs not allowed")
       }
       val ps = params.flatMap {
-        case b @ source.BlockParam(id, _) => List(BlockParam(b.symbol))
-        case v @ source.ValueParams(ps)   => ps.map { p => ValueParam(p.symbol) }
+        case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
+        case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
+        case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
       }
       Def(sym, C.blockTypeOf(sym), Extern(ps, body), rest)
 
@@ -176,6 +178,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       C.bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs))
 
     // assumption: typer removed all ambiguous references, so there is exactly one
+    case c @ source.MethodCall(block, op, _, args) => ???
     case c @ source.Call(fun, _, args) =>
       val sym: Symbol = c.definition
 
@@ -330,12 +333,12 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bindingCapabilities[R](effs: List[UserEffect])(block: List[core.BlockParam] => R): R = {
     val before = transformerState.capabilities;
     // create a fresh cabability-symbol for each bound effect
-    val caps = effs.map { UserCapability }
+    val caps = effs.map { eff => CapabilityParam(eff.name, CapabilityType(eff)) }
     // additional block parameters for capabilities
     // TODO we need to come up with a block type for capabilities here!
     //      however, blocks right now don't admit selection and are specialized
     //      to one observation, only.
-    val params = caps.map { sym => core.BlockParam(sym, null) }
+    val params = caps.map { sym => core.BlockParam(sym, sym.tpe) }
 
     Context in {
       // update state with capabilities

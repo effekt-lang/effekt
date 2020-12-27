@@ -105,6 +105,9 @@ class Typer extends Phase[Module, Module] { typer =>
       case c @ source.Call(fun, targs, args) =>
         checkOverloadedCall(c, targs map { resolveValueType }, args, expected)
 
+      case c @ source.MethodCall(b, fun, targs, args) =>
+        ???
+
       case source.TryHandle(prog, handlers) =>
 
         val (ret / effs) = checkStmt(prog, expected)
@@ -384,6 +387,7 @@ class Typer extends Phase[Module, Module] { typer =>
   def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id)       => t.definition
+    case source.ValueTypeTree(tpe)    => tpe
   }
 
   /**
@@ -739,7 +743,7 @@ trait TyperOps extends ContextOps { self: Context =>
     assignType(s, t); this
   }
 
-  private[typer] def define(s: Symbol, t: BlockType): Context = {
+  private[typer] def define(s: Symbol, t: InterfaceType): Context = {
     assignType(s, t); this
   }
 

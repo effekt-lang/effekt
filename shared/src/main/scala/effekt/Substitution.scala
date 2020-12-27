@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, Effectful, TypeApp, Sections }
+import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, CapabilityType, InterfaceType, Effectful, TypeApp, Sections }
 import effekt.symbols.builtins.THole
 
 import effekt.util.messages.ErrorReporter
@@ -48,8 +48,9 @@ object subtitutions {
       rigids.filterNot { substitutions.isDefinedAt }
 
     def substitute(t: Type): Type = t match {
-      case t: ValueType => substitute(t)
-      case b: BlockType => substitute(b)
+      case t: ValueType      => substitute(t)
+      case b: BlockType      => substitute(b)
+      case b: CapabilityType => b
     }
 
     def substitute(t: ValueType): ValueType = t match {
@@ -64,7 +65,8 @@ object subtitutions {
       case Effectful(tpe, effs) => Effectful(substitute(tpe), effs)
     }
 
-    def substitute(t: BlockType): BlockType = t match {
+    def substitute(t: InterfaceType): InterfaceType = t match {
+      case b: CapabilityType => b
       case BlockType(tps, ps, ret) =>
         val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) })
         BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
@@ -72,8 +74,8 @@ object subtitutions {
 
     def substitute(t: Sections): Sections = t map {
       _ map {
-        case v: ValueType => substitute(v)
-        case b: BlockType => substitute(b)
+        case v: ValueType     => substitute(v)
+        case b: InterfaceType => substitute(b)
       }
     }
   }

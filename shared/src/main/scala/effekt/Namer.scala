@@ -266,6 +266,10 @@ class Namer extends Phase[Module, Module] {
       val sym = BlockParam(Name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
+    case source.CapabilityParam(id, tpe) =>
+      val sym = CapabilityParam(Name(id), resolve(tpe))
+      Context.assignSymbol(id, sym)
+      List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
@@ -400,10 +404,14 @@ class Namer extends Phase[Module, Module] {
       TypeApp(data, args.map(resolve))
     case source.TypeVar(id) =>
       Context.resolveType(id).asValueType
+    case source.ValueTypeTree(tpe) => tpe
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
     BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+
+  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType =
+    CapabilityType(tpe.eff)
 
   def resolve(tpe: source.Effect)(implicit C: Context): Effect =
     Context.resolveType(tpe.id).asEffect

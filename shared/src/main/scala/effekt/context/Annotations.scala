@@ -92,7 +92,7 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.InterfaceType](
     "BlockType",
     "the type of block symbol"
   )
@@ -183,7 +183,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
 
   // Types
   // -----
@@ -200,7 +200,7 @@ trait AnnotationsDB { self: Context =>
     }
 
   // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
+  def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
     case _              => abort(s"Trying to store a block type for non block '${s}'")
   }
@@ -221,8 +221,11 @@ trait AnnotationsDB { self: Context =>
 
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b)
-      case _              => abort(s"Trying to find a block type for non block '${s}'")
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
+        case b: BlockType => Some(b)
+        case _            => None
+      }
+      case _ => abort(s"Trying to find a block type for non block '${s}'")
     }
 
   def valueTypeOf(s: Symbol): ValueType =

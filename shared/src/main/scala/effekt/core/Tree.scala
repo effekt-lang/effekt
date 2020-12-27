@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -44,7 +44,7 @@ case class Select(target: Expr, field: Symbol) extends Expr
  */
 sealed trait Param extends Tree { def id: TermSymbol }
 case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
-case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
+case class BlockParam(id: BlockSymbol, tpe: InterfaceType) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: BlockSymbol) extends Block

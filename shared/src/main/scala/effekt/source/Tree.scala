@@ -179,14 +179,21 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
+// TODO should we have one Call-node and a selector tree, or multiple different call nodes?
 case class Call(id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
   type symbol = symbols.BlockSymbol
+}
+
+case class MethodCall(receiver: IdRef, id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+  type symbol = symbols.EffectOp
 }
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+// currently, the source language does not allow us to explicitly bind the capabilities
+// the capabilities here are annotated by the capability-passing transformation
+case class TryHandle( /* capabilities: List[CapabilityParam] = Nil, */ prog: Stmt, handlers: List[Handler]) extends Expr
 case class Handler(id: IdRef, clauses: List[OpClause]) extends Reference {
   type symbol = symbols.UserEffect
 }
@@ -241,6 +248,11 @@ sealed trait ValueType extends Type {
   type symbol <: symbols.ValueType
 }
 
+/**
+ * Trees that represent inferred or synthesized types
+ */
+case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
+
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
   type symbol = symbols.Symbol with symbols.ValueType
@@ -248,6 +260,9 @@ case class TypeVar(id: IdRef) extends ValueType with Reference {
 case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Reference {
   type symbol = symbols.DataType
 }
+
+// for now those are not user definable and thus refer to symbols.Effect
+case class CapabilityType(eff: symbols.Effect) extends Type
 case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type symbol = symbols.BlockType
 }

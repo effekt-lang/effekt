@@ -79,6 +79,9 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
+  case class CapabilityParam(name: Name, tpe: CapabilityType) extends Param with Capability {
+    def effect = tpe.eff
+  }
   case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
 
   /**
@@ -90,9 +93,10 @@ package object symbols {
   def paramsToTypes(ps: Params): Sections =
     ps map {
       _ map {
-        case BlockParam(_, tpe) => tpe
-        case v: ValueParam      => v.tpe.get
-        case r: ResumeParam     => sys error "Internal Error: No type annotated on resumption parameter"
+        case BlockParam(_, tpe)      => tpe
+        case CapabilityParam(_, tpe) => tpe
+        case v: ValueParam           => v.tpe.get
+        case r: ResumeParam          => sys error "Internal Error: No type annotated on resumption parameter"
       }
     }
 
@@ -152,12 +156,12 @@ package object symbols {
    * A symbol that represents a termlevel capability
    */
   trait Capability extends BlockSymbol {
-    def effect: UserEffect
+    def effect: Effect
+  }
+
+  case class StateCapability(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability {
     val name = effect.name
   }
-  case class UserCapability(effect: UserEffect) extends Capability
-
-  case class StateCapability(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability
   object StateCapability {
     def apply(binder: VarBinder)(implicit C: Context): StateCapability = {
       val tpe = C.valueTypeOf(binder)
@@ -208,7 +212,10 @@ package object symbols {
     }
   }
 
-  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
+  sealed trait InterfaceType extends Type
+  case class CapabilityType(eff: Effect) extends InterfaceType
+
+  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends InterfaceType {
     override def toString: String = {
       val ps = params.map {
         case List(b: BlockType)             => s"{${b.toString}}"
