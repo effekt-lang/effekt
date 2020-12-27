@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
-import effekt.source.ModuleDecl
+import effekt.source.{ CapabilityPassing, ModuleDecl }
 import effekt.symbols.Module
 import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
@@ -38,6 +38,7 @@ trait Compiler {
   // Backend phases
   // ==============
   object transformer extends Transformer
+  object capabilityPassing extends CapabilityPassing
   object lifter extends LiftInference
 
   def generatorPhase(implicit C: Context) = C.config.generator() match {

@@ -1,10 +1,10 @@
 package effekt
 package context
 
-import effekt.core.{ TransformerOps, TransformerState }
+import effekt.core.{ TransformerOps }
 import effekt.namer.{ NamerOps, NamerState }
 import effekt.typer.{ TyperOps, TyperState }
-import effekt.source.Tree
+import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
@@ -45,6 +45,7 @@ abstract class Context(val positions: Positions)
     // Typer
     with TyperOps
     // Transformer
+    with CapabilityPassingOps
     with TransformerOps {
 
   // bring the context itself in scope

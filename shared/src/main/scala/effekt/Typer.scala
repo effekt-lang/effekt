@@ -538,7 +538,9 @@ class Typer extends Phase[Module, Module] { typer =>
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(Context.blockTypeOf(sym))
+    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(Context.blockTypeOption(sym).getOrElse {
+      Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+    })
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")

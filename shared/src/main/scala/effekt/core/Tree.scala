@@ -63,7 +63,7 @@ case class Extern(params: List[Param], body: String) extends Block
  * Statements
  */
 sealed trait Stmt extends Tree
-case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
+case class Def(id: BlockSymbol, tpe: InterfaceType, block: Block, rest: Stmt) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt

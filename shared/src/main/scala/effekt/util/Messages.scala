@@ -21,7 +21,9 @@ object messages {
    *
    * Should be used for unexpected internal compiler errors
    */
-  case class CompilerPanic(msg: String, position: AnyRef) extends Exception
+  case class CompilerPanic(msg: String, position: AnyRef) extends Exception {
+    override def toString = msg
+  }
 
   /**
    * Stores messages in a mutable field
