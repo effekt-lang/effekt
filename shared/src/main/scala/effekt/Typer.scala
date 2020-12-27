@@ -464,7 +464,10 @@ class Typer extends Phase[Module, Module] { typer =>
       scope.toList.map { sym =>
         sym -> Try {
           C.typerState = stateBefore.deepCopy()
-          val r = checkCallTo(call, sym, targs, args, expected)
+          val tpe = Context.blockTypeOption(sym).getOrElse {
+            Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+          }
+          val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
           (r, C.typerState.deepCopy())
         }
       }
@@ -530,7 +533,8 @@ class Typer extends Phase[Module, Module] { typer =>
 
   def checkCallTo(
     call: source.Call,
-    sym: BlockSymbol,
+    name: String,
+    funTpe: BlockType,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
@@ -538,9 +542,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(Context.blockTypeOption(sym).getOrElse {
-      Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
-    })
+    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -561,12 +563,12 @@ class Typer extends Phase[Module, Module] { typer =>
     var effs = retEffs
 
     if (params.size != args.size)
-      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
+      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${name} expects ${params.size}.")
 
     def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
       case (ps: List[Type], source.ValueArgs(as)) =>
         if (ps.size != as.size)
-          Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
+          Context.error(s"Wrong number of arguments. Argument section of ${name} requires ${ps.size}, but ${as.size} given.")
 
         // check that types are actually value types
         val vps = ps map {
