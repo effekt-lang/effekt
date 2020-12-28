@@ -6,12 +6,12 @@ import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 import effekt.source.Tree.Rewrite
-
+``
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
  *
  * That is, block parameters are introduced to bind capabilities and arguments are introduced at
- * the call sites.
+ * the call sites. Resume is currently _not_ introduced as a block parameter.
  */
 class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 

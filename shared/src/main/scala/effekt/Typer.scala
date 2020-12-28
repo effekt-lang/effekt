@@ -436,7 +436,7 @@ class Typer extends Phase[Module, Module] { typer =>
   }
 
   /**
-   * Attempts to check the call to sym, not reporting any errors but returning them instead.
+   * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
    *
    * This is necessary for overload resolution by trying all alternatives.
    *   - if there is multiple without errors: Report ambiguity
@@ -592,8 +592,6 @@ class Typer extends Phase[Module, Module] { typer =>
       val (tpe2 / exprEffs) = arg checkAgainst tpe1
 
       // Update substitution with new information
-      // TODO Trying to unify here yields the same type error as the previous line, again.
-      // For now we have to live with this duplicated messages
       subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
 
       effs = effs ++ exprEffs
@@ -607,7 +605,6 @@ class Typer extends Phase[Module, Module] { typer =>
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
       val BlockType(Nil, params, tpe1 / handled) = subst substitute tpe
 
-      // TODO make blockargs also take multiple argument sections.
       Context.define {
         checkAgainstDeclaration("block", params, arg.params)
       }

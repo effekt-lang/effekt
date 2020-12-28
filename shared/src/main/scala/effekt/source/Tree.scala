@@ -163,7 +163,7 @@ case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
- * Effectful calls, if, while,
+ * Effectful calls, if, while, ...
  */
 sealed trait Expr extends Tree
 
@@ -202,6 +202,12 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
  * The capability parameter here is annotated by the capability-passing transformation
+ *
+ *   try {
+ *     <prog>
+ *   } with <eff> : <Effect> { ... }
+ *
+ * Here eff is the capability parameter, as introduced by the transformation.
  */
 case class Handler(id: IdRef, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
   type symbol = symbols.UserEffect
