@@ -24,3 +24,10 @@ trait Phase[In, Out] {
    */
   def Context(implicit ctx: Context): Context = ctx
 }
+
+object Phase {
+  def run[A](a: A, phases: List[Phase[A, A]])(implicit C: Context): Option[A] =
+    phases.foldLeft[Option[A]](Some(a)) {
+      case (prev, phase) => prev.flatMap { a => phase(a) }
+    }
+}

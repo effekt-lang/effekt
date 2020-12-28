@@ -6,7 +6,7 @@ import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 import effekt.source.Tree.Rewrite
-``
+
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
  *

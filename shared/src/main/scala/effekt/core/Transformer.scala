@@ -14,10 +14,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }
 
   def transform(mod: Module)(implicit C: Context): ModuleDecl = {
-    // use capability passing transform
-    val Some(modCPS) = C.capabilityPassing(mod.decl)
-
-    val source.ModuleDecl(path, imports, defs) = modCPS
+    val source.ModuleDecl(path, imports, defs) = mod.ast
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly

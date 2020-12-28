@@ -5,8 +5,8 @@ package typer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.context.assertions.{ SymbolAssertions }
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, Stmt, TagPattern, Tree }
+import effekt.context.assertions.SymbolAssertions
+import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -37,11 +37,10 @@ case class TyperState(
   def deepCopy(): TyperState = TyperState(effects, annotations.copy)
 }
 
-class Typer extends Phase[Module, Module] { typer =>
+class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = try {
-
-    val module = mod.decl
+  def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
+    val mod = Context.module
 
     // Effects that are lexically in scope at the top level
     val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
@@ -63,7 +62,7 @@ class Typer extends Phase[Module, Module] { typer =>
     if (C.buffer.hasErrors) {
       None
     } else {
-      Some(mod)
+      Some(module)
     }
   } finally {
     // Store the backtrackable annotations into the global DB

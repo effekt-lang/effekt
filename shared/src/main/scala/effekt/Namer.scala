@@ -6,7 +6,7 @@ package namer
  */
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ Def, Id, Tree }
+import effekt.source.{ Def, Id, Tree, ModuleDecl }
 import effekt.symbols._
 import effekt.util.Task
 import scopes._
@@ -31,18 +31,17 @@ case class NamerState(
   scope: Scope
 )
 
-class Namer extends Phase[Module, Module] {
+class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Some(resolve(mod))
   }
 
-  def resolve(mod: Module)(implicit C: Context): Module = {
-
+  def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
     var scope: Scope = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
-    val imports = mod.decl.imports map {
+    val imports = decl.imports map {
       case im @ source.Import(path) => Context.at(im) {
         val modImport = Context.moduleOf(path)
         scope.defineAll(modImport.terms, modImport.types)
@@ -55,9 +54,10 @@ class Namer extends Phase[Module, Module] {
 
     Context.namerState = NamerState(scope)
 
-    resolveGeneric(mod.decl)
+    resolveGeneric(decl)
 
-    mod.export(imports, scope.terms.toMap, scope.types.toMap)
+    Context.module.export(imports, scope.terms.toMap, scope.types.toMap)
+    decl
   }
 
   /**

@@ -32,9 +32,12 @@ trait Compiler {
   // new input sources. Even though the contents differ, two sources are considered equal since only the paths are
   // compared.
   def parser = new Parser(positions)
-  object namer extends Namer
-  object typer extends Typer
-  object capabilityPassing extends CapabilityPassing
+
+  val frontendPhases: List[Phase[ModuleDecl, ModuleDecl]] = List(
+    new Namer,
+    new Typer,
+    new CapabilityPassing
+  )
 
   // Backend phases
   // ==============
@@ -63,13 +66,10 @@ trait Compiler {
     def run(source: Source)(implicit C: Context): Option[Module] = for {
       ast <- getAST(source)
       mod = Module(ast, source)
-      _ <- C.using(module = mod, focus = ast) {
-        for {
-          _ <- namer(mod)
-          _ <- typer(mod)
-        } yield ()
+      transformedAst <- C.using(module = mod, focus = ast) {
+        Phase.run(ast, frontendPhases)
       }
-    } yield mod
+    } yield mod.setAst(transformedAst)
   }
 
   object lower extends SourceTask[core.ModuleDecl]("lower") {

@@ -54,10 +54,22 @@ package object symbols {
     // this is the order in which the modules need to be compiled / loaded
     lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
-    // toplevle declared effects
+    // toplevel declared effects
     def effects: Effects = Effects(types.values.collect {
       case e: Effect => e
     })
+
+    // the transformed ast after frontend
+    private var _ast = decl
+    def ast = _ast
+
+    /**
+     * Should be called once after frontend
+     */
+    def setAst(ast: ModuleDecl): this.type = {
+      _ast = ast
+      this
+    }
 
     /**
      * It is actually possible, that exports is invoked on a single module multiple times:
