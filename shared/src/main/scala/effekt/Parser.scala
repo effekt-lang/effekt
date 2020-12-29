@@ -410,7 +410,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | whileExpr
     | funCall
     | doExpr
-    | yieldExpr
     | handleExpr
     | primExpr
     )
@@ -427,9 +426,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // TODO deprecate doExpr
   lazy val doExpr: P[Expr] =
     `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
-
-  lazy val yieldExpr: P[Expr] =
-    callTarget ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val handleExpr: P[Expr] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
