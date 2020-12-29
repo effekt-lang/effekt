@@ -200,8 +200,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
     // (2) === Bound Occurrences ===
 
-    case source.Call(id, targs, args) =>
-      Context.resolveCalltarget(id)
+    case source.Call(target, targs, args) =>
+      resolve(target)
       targs foreach resolve
       resolveAll(args)
 
@@ -271,6 +271,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context.assignSymbol(p.id, sym)
       sym
     }
+
+  def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
+    case source.IdTarget(id) => Context.resolveCalltarget(id)
+    case source.MemberTarget(recv, id) =>
+      Context.resolveTerm(recv)
+      Context.resolveCalltarget(id)
+  }
 
   /**
    * To allow mutually recursive definitions, here we only resolve the declarations,

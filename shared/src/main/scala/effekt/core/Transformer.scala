@@ -139,16 +139,16 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
       C.bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs))
 
-    case c @ source.MethodCall(block, op, _, args) =>
+    case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
 
       val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
       C.bind(C.inferredTypeOf(tree).tpe, app)
 
-    case c @ source.Call(fun, _, args) =>
+    case c @ source.Call(fun: source.IdTarget, _, args) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
-      val sym: Symbol = c.definition
+      val sym: Symbol = fun.definition
 
       val as = args.flatMap(transform)
 

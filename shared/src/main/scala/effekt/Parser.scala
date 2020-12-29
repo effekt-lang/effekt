@@ -347,11 +347,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
           (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ args ~ body =>
-          Return(Call(id, tps, args :+ BlockArg(List(params), body)) withPositionOf params)
+          val tgt = IdTarget(id) withPositionOf(id)
+          Return(Call(tgt, tps, args :+ BlockArg(List(params), body)) withPositionOf params)
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ args ~ body =>
-          Return(Call(id, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
+          val tgt = IdTarget(id) withPositionOf(id)
+          Return(Call(tgt, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
        }
     )
 
@@ -397,8 +399,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val accessExpr: P[Expr] =
     callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
-        case (firstArg, name ~ targs ~ otherArgs) =>
-          Call(name, targs, ValueArgs(List(firstArg)).withPositionOf(firstArg) :: otherArgs)
+        case (firstArg, id ~ targs ~ otherArgs) =>
+          val tgt = IdTarget(id) withPositionOf id
+          Call(tgt, targs, ValueArgs(List(firstArg)).withPositionOf(firstArg) :: otherArgs)
       }
     }
 
@@ -412,18 +415,21 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
+  lazy val callTarget: P[CallTarget] =
+    idRef ^^ IdTarget
+
   lazy val funCall: P[Expr] =
-    idRef ~ maybeTypeArgs ~ some(args) ^^ Call
+    callTarget ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
   // TODO deprecate doExpr
   lazy val doExpr: P[Expr] =
-    `do` ~/> idRef ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
+    `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
 
   lazy val yieldExpr: P[Expr] =
-    idRef ~ maybeTypeArgs ~ some(args) ^^ Call
+    callTarget ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val handleExpr: P[Expr] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
@@ -490,13 +496,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Expr =
-    Call(IdRef("Nil"), Nil, List(ValueArgs(Nil)))
+    Call(IdTarget(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
 
   private def ConsTree(el: Expr, rest: Expr): Expr =
-    Call(IdRef("Cons"), Nil, List(ValueArgs(List(el, rest))))
+    Call(IdTarget(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
 
   private def TupleTree(args: List[Expr]): Expr =
-    Call(IdRef(s"Tuple${args.size}"), Nil, List(ValueArgs(args)))
+    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
 
   /**
    * Types and Effects
@@ -534,7 +540,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // === AST Helpers ===
 
   private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
-     Call(IdRef(opName(op)), Nil, List(ValueArgs(List(lhs, rhs))))
+     Call(IdTarget(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
 
   private def opName(op: String): String = op match {
     case "||" => "infixOr"

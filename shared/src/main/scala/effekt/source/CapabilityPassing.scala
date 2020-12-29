@@ -31,8 +31,8 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
   override def expr(implicit C: Context) = {
 
     // an effect call -- translate to method call
-    case c @ Call(fun, targs, args) if c.definition.isInstanceOf[EffectOp] =>
-      val op = c.definition.asEffectOp
+    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
+      val op = fun.definition.asEffectOp
 
       // if this is an effect call, we do not want to provide capabilities for the effect itself
       val ownEffect = Effects(List(op.effect))
@@ -47,13 +47,13 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       val receiver = C.capabilityReferenceFor(op.effect)
 
-      MethodCall(receiver, fun, targs, transformedArgs ++ capabilityArgs)
+      Call(MemberTarget(receiver, fun.id), targs, transformedArgs ++ capabilityArgs)
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
-    case c @ Call(fun, targs, args) =>
+    case c @ Call(fun: IdTarget, targs, args) =>
 
-      val sym: Symbol = c.definition
+      val sym: Symbol = fun.definition
       val BlockType(tparams, params, ret / effs) = C.blockTypeOf(sym)
 
       val effects = effs.userDefined

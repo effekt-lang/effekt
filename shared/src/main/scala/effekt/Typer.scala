@@ -83,10 +83,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
         TUnit / eff
 
-      case c @ source.Call(fun, targs, args) =>
-        checkOverloadedCall(c, targs map { resolveValueType }, args, expected)
+      case c @ source.Call(t: source.IdTarget, targs, args) =>
+        checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
 
-      case c @ source.MethodCall(b, fun, targs, args) =>
+      case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
         Context.panic("Method call syntax not allowed in source programs.")
 
       case source.TryHandle(prog, handlers) =>
@@ -426,12 +426,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
    */
   def checkOverloadedCall(
     call: source.Call,
+    target: source.IdTarget,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
   )(implicit C: Context): Effectful = {
 
-    val scopes = call.definition match {
+    val scopes = target.definition match {
       // an overloaded call target
       case CallTarget(name, syms) => syms
       // already resolved by a previous attempt to typecheck
@@ -467,7 +468,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         // use the typer state after this checking pass
         C.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget
-        C.assignSymbol(call.id, sym)
+        C.assignSymbol(target.id, sym)
 
         return tpe
 
@@ -479,7 +480,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         }.mkString("\n")
 
         val explanation =
-          s"""| Ambiguous reference to ${call.id}. The following blocks would typecheck:
+          s"""| Ambiguous reference to ${target.id}. The following blocks would typecheck:
               |
               |${sucMsgs}
               |""".stripMargin

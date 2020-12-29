@@ -57,7 +57,6 @@ import effekt.symbols.Symbol
  *   |  |  |- StringLit
  *   |  |
  *   |  |- Call
- *   |  |- MethodCall (*)
  *   |  |- If
  *   |  |- While
  *   |  |- TryHandle
@@ -261,11 +260,14 @@ case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
-case class Call(id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
-  type symbol = symbols.BlockSymbol
-}
+case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Expr
 
-case class MethodCall(receiver: IdRef, id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+sealed trait CallTarget extends Tree
+case class IdTarget(id: IdRef) extends CallTarget with Reference {
+  // can refer to either a block OR a term symbol
+  type symbol = symbols.TermSymbol
+}
+case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.EffectOp
 }
 
@@ -417,9 +419,6 @@ object Tree {
 
       case MatchExpr(sc, clauses) =>
         MatchExpr(rewrite(sc), clauses.map(rewrite))
-
-      case MethodCall(block, op, targs, args) =>
-        MethodCall(block, op, targs, args.map(rewrite))
 
       case Call(fun, targs, args) =>
         Call(fun, targs, args.map(rewrite))
