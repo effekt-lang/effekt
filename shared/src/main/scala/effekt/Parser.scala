@@ -66,6 +66,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
+  lazy val `fun` = keyword("fun")
   lazy val `resume` = keyword("resume")
   lazy val `match` = keyword("match")
   lazy val `def` = keyword("def")
@@ -78,13 +79,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "with", "case", "do", "yield", "if", "while",
-    "match", "module", "import", "extern"
+    "effect", "try", "with", "case", "do", "if", "while",
+    "match", "module", "import", "extern", "fun"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
-    "catch", "in", "finally", "switch", "case", "this"
+    "catch", "in", "finally", "switch", "case", "this", "yield"
   )
 
   def keyword(s: String): Parser[String] =
@@ -411,11 +412,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | funCall
     | doExpr
     | handleExpr
+    | lambdaExpr
     | primExpr
     )
 
   lazy val callTarget: P[CallTarget] =
-    idRef ^^ IdTarget
+    ( idRef ^^ IdTarget
+    | `(` ~> expr <~ `)` ^^ ExprTarget
+    )
 
   lazy val funCall: P[Expr] =
     callTarget ~ maybeTypeArgs ~ some(args) ^^ Call
@@ -484,6 +488,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
+
+  lazy val lambdaExpr: P[Lambda] =
+    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Lambda(IdDef("<lambda>"), List(ps), body) }
 
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }

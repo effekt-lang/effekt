@@ -65,6 +65,7 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
     case ScopeApp(b, sc) => jsCall(toDoc(b), List(toDoc(sc)))
     case ScopeAbs(id, b) => jsLambda(List(nameDef(id)), toDoc(b))
     case Lifted(ev, b)   => jsCall("$effekt.liftBlock", List(toDoc(ev), toDoc(b)))
+    case Unbox(e)        => toDoc(e)
   })
 
   // pretty print the statement in a javascript expression context

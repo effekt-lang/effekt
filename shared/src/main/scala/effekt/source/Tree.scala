@@ -56,6 +56,7 @@ import effekt.symbols.Symbol
  *   |  |  |- DoubleLit
  *   |  |  |- StringLit
  *   |  |
+ *   |  |- Lambda
  *   |  |- Call
  *   |  |- If
  *   |  |- While
@@ -258,6 +259,16 @@ case class BooleanLit(value: Boolean) extends Literal[Boolean]
 case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
+/**
+ * Represents a first-class function
+ *
+ * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
+ * its parameter symbols.
+ */
+case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Expr with Definition {
+  type symbol = symbols.Lambda
+}
+
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
 case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Expr
@@ -270,6 +281,7 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.EffectOp
 }
+case class ExprTarget(receiver: Expr) extends CallTarget
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
@@ -344,6 +356,11 @@ sealed trait ValueType extends Type {
  * Trees that represent inferred or synthesized types
  */
 case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
+
+/**
+ * Types of first-class functions
+ */
+case class FunType(tpe: BlockType /*, region: Region */ ) extends ValueType
 
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {

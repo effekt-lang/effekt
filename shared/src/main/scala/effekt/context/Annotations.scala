@@ -242,7 +242,10 @@ trait AnnotationsDB { self: Context =>
         case b: BlockType => Some(b)
         case _            => None
       }
-      case _ => panic(s"Trying to find a block type for non block '${s}'")
+      case v: ValueSymbol => valueTypeOption(v).flatMap {
+        case symbols.FunType(tpe) => Some(tpe)
+        case _                    => None
+      }
     }
 
   def interfaceTypeOf(s: Symbol): InterfaceType =

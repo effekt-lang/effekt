@@ -83,8 +83,41 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
         TUnit / eff
 
+      // TODO share code with FunDef
+      case l @ source.Lambda(id, params, body) =>
+        val sym = l.symbol
+        // expects params to be annotated
+        Context.define(sym.params)
+
+        expected match {
+          case Some(FunType(tpe)) =>
+            ???
+          case Some(other) =>
+            Context.abort(s"Cannot type check a lambda where a value of type ${other} is expected.")
+          case None =>
+            val (ret / effs) = checkStmt(body, None)
+            Context.wellscoped(effs)
+            Context.assignType(sym, sym.toType(ret / effs))
+            Context.assignType(l, ret / effs)
+
+            val ps = extractAllTypes(sym.params)
+            val tpe = BlockType(Nil, ps, ret / effs)
+            val funTpe = FunType(tpe)
+
+            funTpe / Pure // all effects are handled by the function itself (since they are inferred)
+        }
+
       case c @ source.Call(t: source.IdTarget, targs, args) =>
         checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
+
+      case c @ source.Call(source.ExprTarget(e), targs, args) =>
+        val (funTpe / funEffs) = checkExpr(e, None) // TODO expect a function type here.
+
+        val tpe: BlockType = funTpe match {
+          case f: FunType => f.tpe
+          case _          => Context.abort(s"Expected function type, but got ${funTpe}")
+        }
+        checkCallTo(c, "function", tpe, targs map { resolveValueType }, args, expected)
 
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
         Context.panic("Method call syntax not allowed in source programs.")
@@ -373,7 +406,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id)       => t.definition
     case source.ValueTypeTree(tpe)    => tpe
+    case source.FunType(tpe)          => FunType(resolveBlockType(tpe))
   }
+
+  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
+    case source.BlockType(params, ret) => BlockType(Nil, List(params.map(resolveValueType)), resolveEffectful(ret))
+  }
+
+  def resolveEffectful(effectful: source.Effectful)(implicit C: Context): Effectful =
+    Effectful(resolveValueType(effectful.tpe), Effects(effectful.eff.effs.map(_.definition)))
 
   /**
    * Invariant: Only call this on declarations that are fully annotated
@@ -448,7 +489,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         sym -> Try {
           C.restoreTyperstate(stateBefore)
           val tpe = Context.blockTypeOption(sym).getOrElse {
-            Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+            if (sym.isInstanceOf[ValueSymbol]) {
+              Context.abort(s"Expected a function type.")
+            } else {
+              Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+            }
           }
           val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
           (r, C.backupTyperstate())

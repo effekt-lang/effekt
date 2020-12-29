@@ -198,6 +198,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(stmt)
       }
 
+    case l @ source.Lambda(id, params, stmt) =>
+      val ps = params.map(resolve)
+      Context scoped {
+        Context.bind(ps)
+        resolveGeneric(stmt)
+      }
+      val sym = Lambda(ps)
+      Context.define(id, sym)
+
     // (2) === Bound Occurrences ===
 
     case source.Call(target, targs, args) =>
@@ -277,6 +286,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
       Context.resolveCalltarget(id)
+    case source.ExprTarget(expr) => resolveGeneric(expr)
   }
 
   /**
@@ -406,6 +416,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.TypeVar(id) =>
       Context.resolveType(id).asValueType
     case source.ValueTypeTree(tpe) => tpe
+    case source.FunType(tpe)       => FunType(resolve(tpe))
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
@@ -499,23 +510,15 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded call target
    */
-  private[namer] def resolveCalltarget(id: Id): BlockSymbol = at(id) {
-    val syms = scope.lookupOverloaded(id.name) map {
-      _ collect {
-        case b: BlockParam  => b
-        case b: ResumeParam => b
-        case b: Fun         => b
-        case _              => abort("Expected callable")
-      }
-    }
+  private[namer] def resolveCalltarget(id: Id): Unit = at(id) {
+
+    val syms = scope.lookupOverloaded(id.name)
 
     if (syms.isEmpty) {
       abort(s"Cannot resolve function ${id.name}")
     }
 
-    val target = new CallTarget(Name(id), syms)
-    assignSymbol(id, target)
-    target
+    assignSymbol(id, new CallTarget(Name(id), syms))
   }
 
   /**

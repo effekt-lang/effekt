@@ -138,6 +138,16 @@ package object symbols {
     decl: FunDef
   ) extends Fun
 
+  case class Lambda(params: Params) extends Fun {
+    val name = Name("Anonymous function")
+
+    // Lambdas currently do not have an annotated return type
+    def ret = None
+
+    // Lambdas currently do not take type parameters
+    def tparams = Nil
+  }
+
   /**
    * Binders represent local value and variable binders
    *
@@ -155,7 +165,7 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[TermSymbol]]) extends Synthetic with BlockSymbol
 
   /**
    * Introduced by Transformer
@@ -183,6 +193,13 @@ package object symbols {
   sealed trait ValueType extends Type {
     def /(effs: Effects): Effectful = Effectful(this, effs)
     def dealias: ValueType = this
+  }
+
+  /**
+   * Types of first-class functions
+   */
+  case class FunType(tpe: BlockType /*, region: Region */ ) extends ValueType {
+    override def toString = tpe.toString
   }
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
@@ -242,6 +259,7 @@ package object symbols {
       case t: TypeConstructor => Some(t)
       case TypeApp(tpe, args) => unapply(tpe)
       case t: BuiltinType     => None
+      case t: FunType         => None
     }
   }
 

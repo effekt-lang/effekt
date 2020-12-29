@@ -64,6 +64,14 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       Call(fun, targs, transformedArgs ++ capabilityArgs)
 
+    case f @ source.Lambda(id, params, body) =>
+      val sym = f.symbol
+      val effs = sym.effects.userEffects
+
+      C.withCapabilities(effs) { caps =>
+        f.copy(params = params ++ caps, body = rewrite(body))
+      }
+
     case TryHandle(prog, handlers) =>
 
       val effects = handlers.map(_.definition)

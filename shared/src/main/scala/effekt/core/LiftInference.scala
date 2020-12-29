@@ -133,6 +133,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case b: Lifted     => sys error "Should not happen"
       case b: ScopeApp   => sys error "Should not happen"
       case b: ScopeAbs   => sys error "Should not happen"
+      case b: Unbox      => ???
     }
   }
 }
