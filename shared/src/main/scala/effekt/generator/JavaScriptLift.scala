@@ -1,12 +1,9 @@
 package effekt.generator
 
 import effekt.context.Context
-import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol, Wildcard }
-import effekt.symbols
+import effekt.symbols.{ Module, Wildcard }
 import org.bitbucket.inkytonik.kiama
-import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 

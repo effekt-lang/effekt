@@ -2,10 +2,7 @@ package effekt
 package context
 
 import effekt.symbols.Module
-import effekt.util.Task
 import org.bitbucket.inkytonik.kiama.util.Source
-
-import scala.collection.mutable
 
 /**
  * The ModuleDB depends on three things:

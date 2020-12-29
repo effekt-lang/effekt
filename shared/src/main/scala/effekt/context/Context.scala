@@ -1,9 +1,10 @@
 package effekt
 package context
 
-import effekt.core.{ TransformerOps }
-import effekt.namer.{ NamerOps, NamerState }
-import effekt.typer.{ TyperOps, TyperState }
+import effekt.namer.NamerOps
+import effekt.typer.TyperOps
+import effekt.core.TransformerOps
+
 import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module

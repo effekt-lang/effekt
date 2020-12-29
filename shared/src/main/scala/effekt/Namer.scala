@@ -5,12 +5,10 @@ package namer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Context, ContextOps }
-import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
+import effekt.context.assertions.SymbolAssertions
 import effekt.source.{ Def, Id, Tree, ModuleDecl }
 import effekt.symbols._
-import effekt.util.Task
 import scopes._
-import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
  * The output of this phase: a mapping from source identifier to symbol

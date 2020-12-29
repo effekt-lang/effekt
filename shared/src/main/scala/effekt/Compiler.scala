@@ -5,7 +5,6 @@ import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.source.{ CapabilityPassing, ModuleDecl }
 import effekt.symbols.Module
-import effekt.generator.{ ChezSchemeCallCC, ChezSchemeLift, ChezSchemeMonadic, Generator, JavaScript, JavaScriptLift }
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
@@ -37,7 +36,6 @@ import kiama.util.{ Positions, Source }
 trait Compiler {
 
   val positions: Positions
-
 
   /**
    * (1) Parser

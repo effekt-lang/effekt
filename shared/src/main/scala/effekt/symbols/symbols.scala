@@ -1,8 +1,7 @@
 package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
-import effekt.context.{ Context }
-import effekt.util.messages.{ ErrorReporter }
+import effekt.context.Context
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
 

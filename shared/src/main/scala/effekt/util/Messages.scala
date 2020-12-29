@@ -3,7 +3,7 @@ package util
 
 import effekt.source.Tree
 
-import org.bitbucket.inkytonik.kiama.util.{ Messaging, Message }
+import org.bitbucket.inkytonik.kiama.util.Messaging
 import org.bitbucket.inkytonik.kiama.util.Messaging.{ Messages, noMessages }
 import org.bitbucket.inkytonik.kiama.util.Severities.Error
 

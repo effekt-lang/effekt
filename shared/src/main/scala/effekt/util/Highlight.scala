@@ -3,7 +3,6 @@ package util
 
 import org.bitbucket.inkytonik.kiama.util.Positions
 
-import scala.annotation.tailrec
 import scala.util.matching._
 
 object Highlight {

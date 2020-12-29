@@ -4,7 +4,7 @@ import java.io.File
 
 import effekt.util.paths.file
 import org.bitbucket.inkytonik.kiama.util.REPLConfig
-import org.rogach.scallop.{ ScallopOption, ValueConverter }
+import org.rogach.scallop.ScallopOption
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
