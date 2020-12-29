@@ -151,7 +151,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
         val (tpeCases / effsCases) = tpes.reduce[Effectful] {
           case (tpe1 / effs1, tpe2 / effs2) =>
-            Substitution.unify(tpe1, tpe2)
+            Unification.unify(tpe1, tpe2)
             tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
@@ -215,10 +215,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, BlockType(_, pms, ret / _)) = Substitution.instantiate(sym.toType)
+      val (rigids, BlockType(_, pms, ret / _)) = Unification.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      val subst = Substitution.unify(ret, sc)
+      val subst = Unification.unify(ret, sc)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
@@ -403,7 +403,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
             annotType.foreach { t =>
-              Context.at(p) { Substitution.unify(decl, t) }
+              Context.at(p) { Unification.unify(decl, t) }
             }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
@@ -517,7 +517,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(funTpe)
+    val (rigids, BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -532,7 +532,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     // (3) refine substitutions by matching return type against expected type
     expected.foreach { expectedReturn =>
       val refinedReturn = subst substitute ret
-      subst = (subst union Substitution.unify(refinedReturn, expectedReturn)).getUnifier
+      subst = (subst union Unification.unify(refinedReturn, expectedReturn)).getUnifier
     }
 
     var effs = retEffs
@@ -567,7 +567,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       val (tpe2 / exprEffs) = arg checkAgainst tpe1
 
       // Update substitution with new information
-      subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
+      subst = (subst union Unification.unify(tpe1, tpe2)).getUnifier
 
       effs = effs ++ exprEffs
     }
@@ -586,7 +586,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
-      subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
+      subst = (subst union Unification.unify(tpe1, tpe2)).getUnifier
       effs = (effs ++ (stmtEffs -- handled))
     }
 
@@ -654,7 +654,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
-      expected foreach { Substitution.unify(_, got) }
+      expected foreach { Unification.unify(_, got) }
       C.assignType(t, got / effs)
       got / effs
     }

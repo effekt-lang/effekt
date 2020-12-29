@@ -94,7 +94,7 @@ object subtitutions {
     def checkFullyDefined(rigids: List[RigidVar]) = this
   }
 
-  object Substitution {
+  object Unification {
 
     // just for backwards compat
     def unify(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): Unifier =
