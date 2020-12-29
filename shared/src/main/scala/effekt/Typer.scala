@@ -13,30 +13,6 @@ import effekt.symbols.builtins._
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
-// We add a dependency to driver to resolve types of symbols from other modules
-/**
- * Output: the types we inferred for function like things are written into "types"
- *   - Blocks
- *   - Functions
- *   - Resumptions
- */
-
-case class TyperState(
-  /**
-   * the effects, whose declarations are _lexically_ in scope
-   */
-  effects: Effects = Pure,
-
-  /**
-   * Annotations added by typer
-   *
-   * The annotations are immutable and can be backtracked.
-   */
-  annotations: Annotations = Annotations.empty
-) {
-  def deepCopy(): TyperState = TyperState(effects, annotations.copy)
-}
-
 class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
@@ -44,7 +20,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
     // Effects that are lexically in scope at the top level
     val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
-    Context.typerState = TyperState(toplevelEffects)
+    Context.initTyperstate(toplevelEffects)
 
     Context in {
       // We split the type-checking of definitions into "pre-check" and "check"
@@ -67,7 +43,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
   } finally {
     // Store the backtrackable annotations into the global DB
     // This is done regardless of errors, since
-    Context.typerState.annotations.commit()
+    Context.commitTypeAnnotations()
   }
 
   //<editor-fold desc="expressions">
@@ -457,17 +433,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
     // TODO improve: stop typechecking if one scope was successful
 
-    val stateBefore = C.typerState.deepCopy()
+    val stateBefore = C.backupTyperstate()
 
     val results = scopes map { scope =>
       scope.toList.map { sym =>
         sym -> Try {
-          C.typerState = stateBefore.deepCopy()
+          C.restoreTyperstate(stateBefore)
           val tpe = Context.blockTypeOption(sym).getOrElse {
             Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
           }
           val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
-          (r, C.typerState.deepCopy())
+          (r, C.backupTyperstate())
         }
       }
     }
@@ -482,7 +458,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       // Exactly one successful result in the current scope
       case List((sym, (tpe, st))) =>
         // use the typer state after this checking pass
-        C.typerState = st
+        C.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget
         C.assignSymbol(call.id, sym)
 
@@ -631,7 +607,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
     // annotate call node with inferred type arguments
     val inferredTypeArgs = rigids.map(subst.substitute)
-    Context.typerState.annotations.annotate(Annotations.TypeArguments, call, inferredTypeArgs)
+    Context.annotateTypeArgs(call, inferredTypeArgs)
 
     (subst substitute ret) / effs
   }
@@ -691,12 +667,40 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     }
 }
 
+/**
+ * Output: the types we inferred for function like things are written into "types"
+ *   - Blocks
+ *   - Functions
+ *   - Resumptions
+ */
+
+case class TyperState(
+  /**
+   * the effects, whose declarations are _lexically_ in scope
+   */
+  effects: Effects = Pure,
+
+  /**
+   * Annotations added by typer
+   *
+   * The annotations are immutable and can be backtracked.
+   */
+  annotations: Annotations = Annotations.empty,
+
+  /**
+   * Unification constraints
+   */
+  unifier: Unifier = Unifier.empty
+) {
+  def deepCopy(): TyperState = TyperState(effects, annotations.copy)
+}
+
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
    * The state of the typer phase
    */
-  private[typer] var typerState: TyperState = _
+  private var typerState: TyperState = _
 
   /**
    * Override the dynamically scoped `in` to also reset typer state
@@ -720,6 +724,15 @@ trait TyperOps extends ContextOps { self: Context =>
     result
   }
 
+  private[typer] def initTyperstate(effects: Effects): Unit =
+    typerState = TyperState(effects)
+
+  private[typer] def backupTyperstate(): TyperState = typerState.deepCopy()
+  private[typer] def restoreTyperstate(st: TyperState): Unit = typerState = st.deepCopy()
+
+  private[typer] def commitTypeAnnotations(): Unit =
+    typerState.annotations.commit()
+
   // State Access
   // ============
   private[typer] def effects: Effects = typerState.effects
@@ -731,6 +744,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def assignType(t: Tree, e: Effectful): Context = {
     typerState.annotations.annotate(Annotations.TypeAndEffect, t, e)
+    this
+  }
+
+  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.Type]): Context = {
+    typerState.annotations.annotate(Annotations.TypeArguments, call, targs)
     this
   }
 
