@@ -130,6 +130,21 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
    * server on port 5007 instead of stdin and out. This way a modified
    * vscode client can connect to the running server, aiding development
    * of the language server and clients.
+   *
+   * In a vscode extension, the vscode client can connect to the server using
+   * the following example code:
+   *
+   *   let serverOptions = () => {
+   *     // Connect to language server via socket
+   *     let socket: any = net.connect({ port: 5007 });
+   *     let result: StreamInfo = {
+   *       writer: socket,
+   *       reader: socket
+   *     };
+   *     return Promise.resolve(result);
+   *   };
+   *
+   * @see https://github.com/microsoft/language-server-protocol/issues/160
    */
   override def launch(config: EffektConfig): Unit = {
     if (config.debug()) {
