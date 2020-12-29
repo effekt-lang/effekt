@@ -136,7 +136,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val jsFile = C.generatorPhase.path(mod)
+      val jsFile = C.codeGenerator.path(mod)
       val jsScript = s"require('${jsFile}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
@@ -149,7 +149,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val csFile = C.generatorPhase.path(mod)
+      val csFile = C.codeGenerator.path(mod)
       val command = Process(Seq("scheme", "--script", csFile))
       C.config.output().emit(command.!!)
     } catch {

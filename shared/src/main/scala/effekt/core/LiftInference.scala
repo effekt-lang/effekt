@@ -7,7 +7,11 @@ import effekt.context.Context
 class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
-    Some(transform(mod)(Environment(Map.empty), C))
+    if (C.config.requiresLift()) {
+      Some(transform(mod)(Environment(Map.empty), C))
+    } else {
+      Some(mod)
+    }
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =

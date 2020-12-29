@@ -35,7 +35,7 @@ class ChezSchemeLift extends Generator {
     mod <- C.frontend(src)
     _ = C.checkMain(mod)
     deps = mod.dependencies.flatMap(dep => compile(dep))
-    core <- C.inferLifts(src)
+    core <- C.backend(mod.source)
     result = ChezSchemeLiftPrinter.compilationUnit(mod, core, deps)
     _ = C.saveOutput(result.layout, path(mod))
   } yield result
@@ -44,7 +44,7 @@ class ChezSchemeLift extends Generator {
    * Compiles only the given module, does not compile dependencies
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.inferLifts(mod.source)
+    core <- C.backend(mod.source)
     doc = ChezSchemeLiftPrinter.format(core)
   } yield doc
 }

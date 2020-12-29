@@ -91,6 +91,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   def requiresCompilation(): Boolean = !server()
 
+  def requiresLift(): Boolean = generator().endsWith("lift")
+
   def interpret(): Boolean = !server() && !compile()
 
   validateFilesIsDirectory(includePath)
