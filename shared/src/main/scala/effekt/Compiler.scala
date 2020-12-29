@@ -50,8 +50,11 @@ trait Compiler {
    * (2) Frontend
    */
   val frontendPhases: List[Phase[ModuleDecl, ModuleDecl]] = List(
+    // performs name analysis and associates Id-trees with symbols
     new Namer,
+    // type checks and annotates trees with inferred types and effects
     new Typer,
+    // uses annotated effects to translate to explicit capability passing
     new CapabilityPassing
   )
 
@@ -60,6 +63,7 @@ trait Compiler {
    */
   object transformer extends Transformer
   val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List(
+    // optional phase, only run for `Config.requiresLift`
     new LiftInference
   )
 
