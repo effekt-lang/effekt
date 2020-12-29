@@ -25,10 +25,6 @@ import scopes._
  * 2. look at the bodies of effect declarations and type definitions
  * 3. look into the bodies of functions
  */
-case class NamerState(
-  scope: Scope
-)
-
 class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
@@ -50,7 +46,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     // create new scope for the current module
     scope = scope.enter
 
-    Context.namerState = NamerState(scope)
+    Context.initNamerstate(scope)
 
     resolveGeneric(decl)
 
@@ -432,29 +428,25 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
 /**
  * Environment Utils -- we use a mutable cell to express adding definitions more easily
- * The kiama environment uses immutable binding since they thread the environment through
- * their attributes.
  */
-trait NamerOps extends ContextOps { self: Context =>
+trait NamerOps extends ContextOps { Context: Context =>
 
   /**
    * The state of the namer phase
    */
-  private[namer] var namerState: NamerState = _
+  private var scope: Scope = scopes.EmptyScope()
+
+  private[namer] def initNamerstate(s: Scope): Unit = scope = s
 
   /**
    * Override the dynamically scoped `in` to also reset namer state
    */
   override def in[T](block: => T): T = {
-    val before = namerState
+    val before = scope
     val result = super.in(block)
-    namerState = before
+    scope = before
     result
   }
-
-  // State Access
-  // ============
-  private[namer] def scope: Scope = namerState.scope
 
   // TODO we only want to add a seed to a name under the following conditions:
   // - there is already another instance of that name in the same
@@ -533,11 +525,8 @@ trait NamerOps extends ContextOps { self: Context =>
     sym
   }
 
-  private[namer] def scoped[R](block: => R): R = {
-    val before = namerState
-    namerState = before.copy(scope = before.scope.enter)
-    val result = block
-    namerState = before
-    result
+  private[namer] def scoped[R](block: => R): R = Context in {
+    scope = scope.enter
+    block
   }
 }
