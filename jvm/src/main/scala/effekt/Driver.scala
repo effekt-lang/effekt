@@ -28,49 +28,6 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
 
   override val messaging = new ColoredMessaging(positions)
 
-  def launch(config: EffektConfig, in: InputStream, out: OutputStream): Unit = {
-    val services = new Services(this, config)
-    val launcherBase =
-      new Launcher.Builder[Client]()
-        .setLocalService(services)
-        .setRemoteInterface(classOf[Client])
-        .setInput(in)
-        .setOutput(out)
-    val launcher = launcherBase.create()
-    val client = launcher.getRemoteProxy()
-    connect(client)
-    launcher.startListening()
-  }
-
-  override def launch(config: EffektConfig): Unit = {
-    if (config.debug()) {
-      import java.net.{ InetSocketAddress, SocketAddress }
-      import java.nio.channels.{ AsynchronousServerSocketChannel, AsynchronousSocketChannel, Channels }
-
-      val port = 5007
-      val addr = new InetSocketAddress("localhost", port)
-      val socket = AsynchronousServerSocketChannel.open().bind(addr);
-
-      try {
-        println(s"Waiting on port ${port} for LSP clients to connect")
-        val ch = socket.accept().get();
-        println(s"Connected to LSP client")
-        val in = Channels.newInputStream(ch)
-        val out = Channels.newOutputStream(ch)
-        launch(config, in, out)
-      } catch {
-        case e: InterruptedException =>
-          e.printStackTrace()
-        case e: ExecutionException =>
-          e.printStackTrace()
-      } finally {
-        socket.close()
-      }
-    } else {
-      launch(config, System.in, System.out)
-    }
-  }
-
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
@@ -165,6 +122,57 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
    * Not used anymore
    */
   override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
+
+  /**
+   * Modified copy of kiama.ServerWithConfig.launch()
+   *
+   * When the --debug flag is used together with --server, we open the
+   * server on port 5007 instead of stdin and out. This way a modified
+   * vscode client can connect to the running server, aiding development
+   * of the language server and clients.
+   */
+  override def launch(config: EffektConfig): Unit = {
+    if (config.debug()) {
+      import java.net.InetSocketAddress
+      import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
+
+      val port = 5007
+      val addr = new InetSocketAddress("localhost", port)
+      val socket = AsynchronousServerSocketChannel.open().bind(addr);
+
+      try {
+        println(s"Waiting on port ${port} for LSP clients to connect")
+        val ch = socket.accept().get();
+        println(s"Connected to LSP client")
+        val in = Channels.newInputStream(ch)
+        val out = Channels.newOutputStream(ch)
+        launch(config, in, out)
+      } catch {
+        case e: InterruptedException =>
+          e.printStackTrace()
+        case e: ExecutionException =>
+          e.printStackTrace()
+      } finally {
+        socket.close()
+      }
+    } else {
+      launch(config, System.in, System.out)
+    }
+  }
+
+  private def launch(config: EffektConfig, in: InputStream, out: OutputStream): Unit = {
+    val services = new Services(this, config)
+    val launcherBase =
+      new Launcher.Builder[Client]()
+        .setLocalService(services)
+        .setRemoteInterface(classOf[Client])
+        .setInput(in)
+        .setOutput(out)
+    val launcher = launcherBase.create()
+    val client = launcher.getRemoteProxy()
+    connect(client)
+    launcher.startListening()
+  }
 
   /**
    * Originally called by kiama, not used anymore.
