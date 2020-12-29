@@ -512,20 +512,26 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
 
   lazy val valueType: P[ValueType] =
-    ( idRef ~ typeArgs ^^ TypeApp
-    | idRef ^^ TypeVar
+    ( funType ^^ FunType
+    | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
+    | idRef ~ typeArgs ^^ TypeApp
+    | idRef ^^ TypeVar
     | failure("Expected a type")
     )
 
+  // for now function types need to be parenthesized
+  lazy val funType: P[BlockType] =
+    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType
+
   lazy val blockType: P[BlockType] =
-    ( (`(` ~/> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~> effectful) ^^ BlockType
-    | valueType ~ (`=>` ~> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType
+    | valueType ~ (`=>` ~/> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
     | effectful ^^ { e => BlockType(Nil, e) }
     )
 
   lazy val effectful: P[Effectful] =
-    valueType ~ (`/` ~> effects).? ^^ {
+    valueType ~ (`/` ~/> effects).? ^^ {
       case t ~ Some(es) => Effectful(t, es)
       case t ~ None => Effectful(t, Effects.Pure)
     }

@@ -90,8 +90,22 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         Context.define(sym.params)
 
         expected match {
-          case Some(FunType(tpe)) =>
-            ???
+          case Some(FunType(tpe @ BlockType(_, ps, ret / effs))) =>
+            checkAgainstDeclaration("lambda", ps, params)
+            val (retGot / effsGot) = body checkAgainst ret
+            Context.unify(retGot, ret)
+
+            val diff = effsGot -- effs
+
+            if (diff.nonEmpty) {
+              Context.abort(s"All effects used by a lambda need to be mentioned in its type. The lambda uses effects $diff but is only allowed to use $effs")
+            }
+
+            Context.assignType(sym, sym.toType(ret / effs))
+            Context.assignType(l, ret / effs)
+            val funTpe = FunType(tpe)
+
+            funTpe / Pure
           case Some(other) =>
             Context.abort(s"Cannot type check a lambda where a value of type ${other} is expected.")
           case None =>
