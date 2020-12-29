@@ -19,6 +19,9 @@ object subtitutions {
 
     def getUnifier(implicit error: ErrorReporter): Unifier = this
 
+    def addAll(unifier: Map[TypeVar, ValueType]): Unifier =
+      Unifier(substitutions ++ unifier)
+
     def add(k: TypeVar, v: ValueType): UnificationResult = {
       substitutions.get(k).foreach { v2 =>
         if (v != v2) {
