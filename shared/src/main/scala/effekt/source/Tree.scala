@@ -5,6 +5,81 @@ import effekt.context.Context
 import effekt.symbols.Symbol
 
 /**
+ * Data type representing source program trees.
+ *
+ * Terms:
+ *
+ *   Tree
+ *   |- Id
+ *   |  |- IdDef
+ *   |  |- IdRef
+ *   |
+ *   |- ModuleDecl
+ *   |
+ *   |- ParamSection
+ *   |  |- ValueParams
+ *   |  |- BlockParam
+ *   |  |- CapabilityParam (*)
+ *   |
+ *   |- ArgSection
+ *   |  |- ValueArgs
+ *   |  |- BlockArg
+ *   |  |- CapabilityArg (*)
+ *   |
+ *   |- Def
+ *   |  |- FunDef
+ *   |  |- ValDef
+ *   |  |- VarDef
+ *   |  |- EffDef
+ *   |  |- DataDef
+ *   |  |- RecordDef
+ *   |  |- TypeDef
+ *   |  |- EffectDef
+ *   |  |- ExternType
+ *   |  |- ExternEffect
+ *   |  |- ExternFun
+ *   |  |- ExternInclude
+ *   |
+ *   |- Stmt
+ *   |  |- DefStmt
+ *   |  |- ExprStmt
+ *   |  |- BlockStmt
+ *   |  |- Return
+ *   |
+ *   |- Expr
+ *   |  |- Var
+ *   |  |- Assign
+ *   |  |- Literal
+ *   |  |  |- UnitLit
+ *   |  |  |- IntLit
+ *   |  |  |- BooleanLit
+ *   |  |  |- DoubleLit
+ *   |  |  |- StringLit
+ *   |  |
+ *   |  |- Call
+ *   |  |- MethodCall (*)
+ *   |  |- If
+ *   |  |- While
+ *   |  |- TryHandle
+ *   |  |- MatchExpr
+ *   |  |- Hole
+ *   |
+ *
+ * Types
+ *   ...
+ *   |- Type
+ *   |  |- ValueType
+ *   |  |  |- ValueTypeTree (*)
+ *   |  |  |- TypeVar
+ *   |  |  |- TypeApp
+ *   |  |
+ *   |  |- CapabilityType
+ *   |  |- BlockType
+ *   |
+ *   |- Effect
+ *   |- Effectful
+ *   |- Effects
+ *
  * We extend product to allow reflective access by Kiama.
  */
 sealed trait Tree extends Product {
