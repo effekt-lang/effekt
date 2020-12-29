@@ -64,6 +64,17 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       Call(fun, targs, transformedArgs ++ capabilityArgs)
 
+    // TODO share code with Call case above
+    case c @ Call(ExprTarget(expr), targs, args) =>
+      val transformedExpr = rewrite(expr)
+      val (FunType(BlockType(tparams, params, ret / effs)) / _) = C.inferredTypeOf(expr)
+
+      val effects = effs.userDefined
+      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
+      val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+
+      Call(ExprTarget(transformedExpr), targs, transformedArgs ++ capabilityArgs)
+
     case f @ source.Lambda(id, params, body) =>
       val sym = f.symbol
       val effs = sym.effects.userEffects
