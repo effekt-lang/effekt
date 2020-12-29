@@ -181,6 +181,10 @@ trait Intelligence {
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value parameter", signature, None)
 
+    case c: ValBinder =>
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Value binder", signature, None)
+
     case c: VarBinder =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
 
