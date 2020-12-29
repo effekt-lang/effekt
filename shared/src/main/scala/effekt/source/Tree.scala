@@ -5,9 +5,14 @@ import effekt.context.Context
 import effekt.symbols.Symbol
 
 /**
- * We extend product to allow reflective copying by Kiama.
+ * We extend product to allow reflective access by Kiama.
  */
-sealed trait Tree extends Product
+sealed trait Tree extends Product {
+  def inheritPosition(from: Tree)(implicit C: Context): this.type = {
+    C.positions.dupPos(from, this);
+    this
+  }
+}
 
 /**
  * Used for builtin and synthesized trees
@@ -77,14 +82,20 @@ case class Import(path: String) extends Tree
 sealed trait ParamSection extends Tree
 case class ValueParams(params: List[ValueParam]) extends ParamSection
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
+
+// TODO fuse into one kind of parameter
 case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
+case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection with Definition { type symbol = symbols.CapabilityParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
-case class BlockArg(params: ValueParams, body: Stmt) extends ArgSection
+case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
+case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
+  type symbol = symbols.CapabilityParam
+}
 
 /**
- * Global (and later, local) definitions
+ * Global and local definitions
  */
 sealed trait Def extends Definition {
   def id: IdDef
@@ -152,7 +163,7 @@ case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
- * Effectful calls, if, while,
+ * Effectful calls, if, while, ...
  */
 sealed trait Expr extends Tree
 
@@ -174,18 +185,34 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 // maybe replace `fun: Id` here with BlockVar
+// TODO should we have one Call-node and a selector tree, or multiple different call nodes?
 case class Call(id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
   type symbol = symbols.BlockSymbol
+}
+
+case class MethodCall(receiver: IdRef, id: IdRef, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
+  type symbol = symbols.EffectOp
 }
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
 case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
-case class Handler(id: IdRef, clauses: List[OpClause]) extends Reference {
+
+/**
+ * Currently, the source language does not allow us to explicitly bind the capabilities.
+ * The capability parameter here is annotated by the capability-passing transformation
+ *
+ *   try {
+ *     <prog>
+ *   } with <eff> : <Effect> { ... }
+ *
+ * Here eff is the capability parameter, as introduced by the transformation.
+ */
+case class Handler(id: IdRef, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
   type symbol = symbols.UserEffect
 }
-case class OpClause(id: IdRef, params: List[ValueParams], body: Stmt, resume: IdDef) extends Reference {
+case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.EffectOp
 }
 
@@ -236,6 +263,11 @@ sealed trait ValueType extends Type {
   type symbol <: symbols.ValueType
 }
 
+/**
+ * Trees that represent inferred or synthesized types
+ */
+case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
+
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
   type symbol = symbols.Symbol with symbols.ValueType
@@ -243,6 +275,9 @@ case class TypeVar(id: IdRef) extends ValueType with Reference {
 case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Reference {
   type symbol = symbols.DataType
 }
+
+// for now those are not user definable and thus refer to symbols.Effect
+case class CapabilityType(eff: symbols.Effect) extends Type
 case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type symbol = symbols.BlockType
 }
@@ -257,4 +292,129 @@ object Effects {
   val Pure: Effects = Effects()
   def apply(effs: Effect*): Effects = Effects(effs.toSet)
   def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
+}
+
+object Tree {
+
+  // Generic traversal of trees, applying the partial function `f` to every contained
+  // element of type Tree.
+  def visit(obj: Any)(f: PartialFunction[Tree, Unit]): Unit = obj match {
+    case t: Iterable[t] => t.foreach { t => visit(t)(f) }
+    case p: Product => p.productIterator.foreach {
+      case t: Tree => f(t)
+      case other   => ()
+    }
+    case leaf => ()
+  }
+
+  // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
+  trait Rewrite {
+    // Hooks to override
+    def expr(implicit C: Context): PartialFunction[Expr, Expr] = PartialFunction.empty
+    def stmt(implicit C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def defn(implicit C: Context): PartialFunction[Def, Def] = PartialFunction.empty
+
+    /**
+     * Hook that can be overriden to perform an action at every node in the tree
+     */
+    def visit[T <: Tree](t: T)(visitor: T => T)(implicit C: Context): T = visitor(t)
+
+    //
+    // Entrypoints to use the traversal on, defined in terms of the above hooks
+    def rewrite(e: ModuleDecl)(implicit C: Context): ModuleDecl = visit(e) {
+      case ModuleDecl(path, imports, defs) =>
+        ModuleDecl(path, imports, defs.map(rewrite))
+    }
+
+    def rewrite(e: Expr)(implicit C: Context): Expr = visit(e) {
+      case e if expr.isDefinedAt(e) => expr(C)(e)
+      case v: Var                   => v
+      case l: Literal[t]            => l
+
+      case Assign(id, expr) =>
+        Assign(id, rewrite(expr))
+
+      case If(cond, thn, els) =>
+        If(rewrite(cond), rewrite(thn), rewrite(els))
+
+      case While(cond, body) =>
+        While(rewrite(cond), rewrite(body))
+
+      case MatchExpr(sc, clauses) =>
+        MatchExpr(rewrite(sc), clauses.map(rewrite))
+
+      case MethodCall(block, op, targs, args) =>
+        MethodCall(block, op, targs, args.map(rewrite))
+
+      case Call(fun, targs, args) =>
+        Call(fun, targs, args.map(rewrite))
+
+      case TryHandle(prog, handlers) =>
+        TryHandle(rewrite(prog), handlers.map(rewrite))
+
+      case Hole(stmts) =>
+        Hole(rewrite(stmts))
+    }
+
+    def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
+      case t if defn.isDefinedAt(t) => defn(C)(t)
+
+      case FunDef(id, tparams, params, ret, body) =>
+        FunDef(id, tparams, params, ret, rewrite(body))
+
+      case ValDef(id, annot, binding) =>
+        ValDef(id, annot, rewrite(binding))
+
+      case VarDef(id, annot, binding) =>
+        VarDef(id, annot, rewrite(binding))
+
+      case d: EffDef        => d
+      case d: DataDef       => d
+      case d: RecordDef     => d
+      case d: TypeDef       => d
+      case d: EffectDef     => d
+
+      case d: ExternType    => d
+      case d: ExternEffect  => d
+      case d: ExternFun     => d
+      case d: ExternInclude => d
+    }
+
+    def rewrite(t: Stmt)(implicit C: Context): Stmt = visit(t) {
+      case s if stmt.isDefinedAt(s) => stmt(C)(s)
+
+      case DefStmt(d, rest) =>
+        DefStmt(rewrite(d), rewrite(rest))
+
+      case ExprStmt(e, rest) =>
+        ExprStmt(rewrite(e), rewrite(rest))
+
+      case Return(e) =>
+        Return(rewrite(e))
+
+      case BlockStmt(b) =>
+        BlockStmt(rewrite(b))
+    }
+
+    def rewrite(t: ArgSection)(implicit C: Context): ArgSection = visit(t) {
+      case ValueArgs(as)      => ValueArgs(as.map(rewrite))
+      case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
+      case CapabilityArg(id)  => t
+    }
+
+    def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
+      case Handler(id, capability, clauses) =>
+        Handler(id, capability, clauses.map(rewrite))
+    }
+
+    def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {
+      case OpClause(id, params, body, resume) =>
+        OpClause(id, params, rewrite(body), resume)
+    }
+
+    def rewrite(c: MatchClause)(implicit C: Context): MatchClause = visit(c) {
+      case MatchClause(pattern, body) =>
+        MatchClause(pattern, rewrite(body))
+    }
+  }
 }

@@ -2,7 +2,6 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core.ModuleDecl
-import effekt.symbols.Name
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions

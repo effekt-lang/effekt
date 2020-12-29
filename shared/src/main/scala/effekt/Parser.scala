@@ -301,16 +301,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val blockArg: P[BlockArg] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ BlockArg
+    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockArg(List(ps), body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
       BlockArg(
-        ValueParams(List(ValueParam(IdDef(name), None))),
+        List(ValueParams(List(ValueParam(IdDef(name), None)))),
         Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => BlockArg(ValueParams(Nil), s) }
+    | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
     )
 
   lazy val lambdaArgs: P[ValueParams] =
@@ -347,11 +347,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
           (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ args ~ body =>
-          Return(Call(id, tps, args :+ BlockArg(params, body)) withPositionOf params)
+          Return(Call(id, tps, args :+ BlockArg(List(params), body)) withPositionOf params)
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ args ~ body =>
-          Return(Call(id, tps, args :+ BlockArg(ValueParams(Nil), body)) withPositionOf id)
+          Return(Call(id, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
        }
     )
 
@@ -429,10 +429,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
   lazy val handler: P[Handler] =
-    ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ Handler
+    ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+      case effectId ~ clauses =>
+        Handler(effectId, None, clauses)
+      }
     | `with` ~> idRef ~ implicitResume ~ blockArg ^^ {
       case effectId ~ resume ~ BlockArg(params, body) =>
-        Handler(effectId, List(OpClause(IdRef(effectId.name), List(params), body, resume) withPositionOf effectId))
+        Handler(effectId, None, List(OpClause(IdRef(effectId.name), params, body, resume) withPositionOf effectId))
       }
     )
 

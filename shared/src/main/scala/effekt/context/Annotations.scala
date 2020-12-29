@@ -92,7 +92,7 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.InterfaceType](
     "BlockType",
     "the type of block symbol"
   )
@@ -158,6 +158,15 @@ trait AnnotationsDB { self: Context =>
   private def annotationsAt(key: Any): Annotations = annotations.getOrDefault(key, Map.empty)
 
   /**
+   * Copies annotations, keeping existing annotations at `to`
+   */
+  def copyAnnotations(from: Any, to: Any): Unit = {
+    val existing = annotationsAt(to)
+    val source = annotationsAt(from)
+    annotate(to, source ++ existing)
+  }
+
+  /**
    * Bulk annotating the key
    *
    * Used by Annotations.commit to commit all temporary annotations to the DB
@@ -176,53 +185,76 @@ trait AnnotationsDB { self: Context =>
     annotationsAt(key).get(ann).asInstanceOf[Option[V]]
 
   def annotation[K, V](ann: Annotation[K, V], key: K): V =
-    annotationOption(ann, key).getOrElse { abort(s"Cannot find ${ann.description} for '${key}'") }
+    annotationOption(ann, key).getOrElse { panic(s"Cannot find ${ann.description} for '${key}'") }
 
   def hasAnnotation[K, V](ann: Annotation[K, V], key: K): Boolean =
     annotationsAt(key).isDefinedAt(ann)
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
 
   // Types
   // -----
 
-  def inferredTypeOf(t: source.Tree): Option[Effectful] =
+  def typeArguments(c: source.Call): List[symbols.Type] =
+    annotation(Annotations.TypeArguments, c)
+
+  def inferredTypeOption(t: source.Tree): Option[Effectful] =
     annotationOption(Annotations.TypeAndEffect, t)
 
+  def inferredTypeOf(t: source.Tree): Effectful =
+    inferredTypeOption(t).getOrElse {
+      panic(s"Internal Error: Missing type of source expression: '${t}'")
+    }
+
   // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
+  def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
-    case _              => abort(s"Trying to store a block type for non block '${s}'")
+    case _              => panic(s"Trying to store a block type for non block '${s}'")
   }
 
   def assignType(s: Symbol, tpe: ValueType): Unit = s match {
     case b: ValueSymbol => annotate(Annotations.ValueType, b, tpe)
-    case _              => abort(s"Trying to store a value type for non value '${s}'")
+    case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
-    case s: BlockSymbol => blockTypeOf(s)
-    case _              => abort(s"Cannot find a type for symbol '${s}'")
+    case s: BlockSymbol => interfaceTypeOf(s)
+    case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
   def blockTypeOf(s: Symbol): BlockType =
-    blockTypeOption(s) getOrElse { abort(s"Cannot find type for block '${s}'") }
+    blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
 
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b)
-      case _              => abort(s"Trying to find a block type for non block '${s}'")
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
+        case b: BlockType => Some(b)
+        case _            => None
+      }
+      case _ => panic(s"Trying to find a block type for non block '${s}'")
+    }
+
+  def interfaceTypeOf(s: Symbol): InterfaceType =
+    interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
+
+  def interfaceTypeOption(s: Symbol): Option[InterfaceType] =
+    s match {
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
+        case b: InterfaceType => Some(b)
+        case _                => None
+      }
+      case _ => panic(s"Trying to find a interface type for non block '${s}'")
     }
 
   def valueTypeOf(s: Symbol): ValueType =
-    valueTypeOption(s) getOrElse { abort(s"Cannot find value binder for ${s}") }
+    valueTypeOption(s) getOrElse { panic(s"Cannot find value binder for ${s}") }
 
   def valueTypeOption(s: Symbol): Option[ValueType] = s match {
     case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
-    case _              => abort(s"Trying to find a value type for non-value '${s}'")
+    case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
 
   // Symbols
@@ -248,7 +280,7 @@ trait AnnotationsDB { self: Context =>
   }
 
   def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
-    abort(s"Internal Compiler Error: Cannot find symbol for ${id}")
+    panic(s"Internal Compiler Error: Cannot find symbol for ${id}")
   }
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)

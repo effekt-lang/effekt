@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source, StringSource }
+import org.bitbucket.inkytonik.kiama.util.{ FileSource, Source }
 
 /**
  * PathUtils independent of Java as a host platform.

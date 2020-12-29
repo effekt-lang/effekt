@@ -4,49 +4,29 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context, Annotations }
-import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchClause, MatchPattern, Stmt, TagPattern, Tree }
+import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.assertions.SymbolAssertions
+import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
-import effekt.util.Task
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
-// We add a dependency to driver to resolve types of symbols from other modules
 /**
  * Output: the types we inferred for function like things are written into "types"
  *   - Blocks
  *   - Functions
  *   - Resumptions
  */
+class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
-case class TyperState(
-  /**
-   * the effects, whose declarations are _lexically_ in scope
-   */
-  effects: Effects = Pure,
-
-  /**
-   * Annotations added by typer
-   *
-   * The annotations are immutable and can be backtracked.
-   */
-  annotations: Annotations = Annotations.empty
-) {
-  def deepCopy(): TyperState = TyperState(effects, annotations.copy)
-}
-
-class Typer extends Phase[Module, Module] { typer =>
-
-  def run(mod: Module)(implicit C: Context): Option[Module] = try {
-
-    val module = mod.decl
+  def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
+    val mod = Context.module
 
     // Effects that are lexically in scope at the top level
     val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
-    Context.typerState = TyperState(toplevelEffects)
+    Context.initTyperstate(toplevelEffects)
 
     Context in {
       // We split the type-checking of definitions into "pre-check" and "check"
@@ -64,12 +44,12 @@ class Typer extends Phase[Module, Module] { typer =>
     if (C.buffer.hasErrors) {
       None
     } else {
-      Some(mod)
+      Some(module)
     }
   } finally {
     // Store the backtrackable annotations into the global DB
     // This is done regardless of errors, since
-    Context.typerState.annotations.commit()
+    Context.commitTypeAnnotations()
   }
 
   //<editor-fold desc="expressions">
@@ -105,6 +85,9 @@ class Typer extends Phase[Module, Module] { typer =>
 
       case c @ source.Call(fun, targs, args) =>
         checkOverloadedCall(c, targs map { resolveValueType }, args, expected)
+
+      case c @ source.MethodCall(b, fun, targs, args) =>
+        Context.panic("Method call syntax not allowed in source programs.")
 
       case source.TryHandle(prog, handlers) =>
 
@@ -174,7 +157,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
         val (tpeCases / effsCases) = tpes.reduce[Effectful] {
           case (tpe1 / effs1, tpe2 / effs2) =>
-            Substitution.unify(tpe1, tpe2)
+            Unification.unify(tpe1, tpe2)
             tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
@@ -238,20 +221,21 @@ class Typer extends Phase[Module, Module] { typer =>
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, BlockType(_, pms, ret / _)) = Substitution.instantiate(sym.toType)
+      val (rigids, BlockType(_, pms, ret / _)) = Unification.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      val subst = Substitution.unify(ret, sc)
+      Context.unify(ret, sc)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
-      if (subst.skolems(rigids).nonEmpty) {
-        Context.error(s"Unbound type variables in constructor ${id}: ${subst.skolems(rigids).map(_.underlying).mkString(", ")}")
+      val skolems = Context.skolems(rigids)
+      if (skolems.nonEmpty) {
+        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
       }
 
       // (7) refine parameter types of constructor
       // i.e. `(Int, List[Int])`
-      val constructorParams = subst substitute pms
+      val constructorParams = Context.unifier substitute pms
 
       // (8) check nested patterns
       var bindings = Map.empty[Symbol, ValueType]
@@ -265,7 +249,7 @@ class Typer extends Phase[Module, Module] { typer =>
             case (pat, par: ValueType) =>
               bindings ++= checkPattern(par, pat)
             case _ =>
-              sys error "Should not happen, since constructors can only take value parameters"
+              Context.panic("Should not happen, since constructors can only take value parameters")
           }
       }
       bindings
@@ -301,6 +285,9 @@ class Typer extends Phase[Module, Module] { typer =>
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
+      if (d.symbol.effects.userDefined.nonEmpty) {
+        Context.abort("User defined effects on extern defs not allowed")
+      }
 
     case d @ source.EffDef(id, ops) =>
       d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
@@ -385,6 +372,7 @@ class Typer extends Phase[Module, Module] { typer =>
   def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id)       => t.definition
+    case source.ValueTypeTree(tpe)    => tpe
   }
 
   /**
@@ -395,7 +383,7 @@ class Typer extends Phase[Module, Module] { typer =>
   def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
     case BlockParam(_, tpe) => tpe
     case ValueParam(_, Some(tpe)) => tpe
-    case _ => Context.abort("Cannot extract type")
+    case _ => Context.panic("Cannot extract type")
   }
 
   /**
@@ -413,8 +401,7 @@ class Typer extends Phase[Module, Module] { typer =>
 
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
       case (List(b1: BlockType), b2: source.BlockParam) =>
-        Context.at(b2) { Context.abort("Internal Compiler Error: Not yet supported") }
-        ???
+        Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
         if (ps1.size != ps2.size)
@@ -423,7 +410,7 @@ class Typer extends Phase[Module, Module] { typer =>
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
             annotType.foreach { t =>
-              Context.at(p) { Substitution.unify(decl, t) }
+              Context.at(p) { Unification.unify(decl, t) }
             }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
@@ -431,7 +418,7 @@ class Typer extends Phase[Module, Module] { typer =>
   }
 
   /**
-   * Attempts to check the call to sym, not reporting any errors but returning them instead.
+   * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
    *
    * This is necessary for overload resolution by trying all alternatives.
    *   - if there is multiple without errors: Report ambiguity
@@ -453,14 +440,17 @@ class Typer extends Phase[Module, Module] { typer =>
 
     // TODO improve: stop typechecking if one scope was successful
 
-    val stateBefore = C.typerState.deepCopy()
+    val stateBefore = C.backupTyperstate()
 
     val results = scopes map { scope =>
       scope.toList.map { sym =>
         sym -> Try {
-          C.typerState = stateBefore.deepCopy()
-          val r = checkCallTo(call, sym, targs, args, expected)
-          (r, C.typerState.deepCopy())
+          C.restoreTyperstate(stateBefore)
+          val tpe = Context.blockTypeOption(sym).getOrElse {
+            Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+          }
+          val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
+          (r, C.backupTyperstate())
         }
       }
     }
@@ -475,7 +465,7 @@ class Typer extends Phase[Module, Module] { typer =>
       // Exactly one successful result in the current scope
       case List((sym, (tpe, st))) =>
         // use the typer state after this checking pass
-        C.typerState = st
+        C.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget
         C.assignSymbol(call.id, sym)
 
@@ -525,7 +515,8 @@ class Typer extends Phase[Module, Module] { typer =>
 
   def checkCallTo(
     call: source.Call,
-    sym: BlockSymbol,
+    name: String,
+    funTpe: BlockType,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
@@ -533,33 +524,31 @@ class Typer extends Phase[Module, Module] { typer =>
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Substitution.instantiate(Context.blockTypeOf(sym))
+    val (rigids, BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
 
     // (2) Compute substitutions from provided type arguments (if any)
-    var subst: Unifier = if (targs.nonEmpty) {
-      Unifier(((rigids: List[TypeVar]) zip targs).toMap)
-    } else {
-      Unifier.empty
+    if (targs.nonEmpty) {
+      Context.addToUnifier(((rigids: List[TypeVar]) zip targs).toMap)
     }
 
     // (3) refine substitutions by matching return type against expected type
     expected.foreach { expectedReturn =>
-      val refinedReturn = subst substitute ret
-      subst = (subst union Substitution.unify(refinedReturn, expectedReturn)).getUnifier
+      val refinedReturn = Context.unifier substitute ret
+      Context.unify(refinedReturn, expectedReturn)
     }
 
     var effs = retEffs
 
     if (params.size != args.size)
-      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${sym.name} expects ${params.size}.")
+      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${name} expects ${params.size}.")
 
     def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
       case (ps: List[Type], source.ValueArgs(as)) =>
         if (ps.size != as.size)
-          Context.error(s"Wrong number of arguments. Argument section of ${sym.name} requires ${ps.size}, but ${as.size} given.")
+          Context.error(s"Wrong number of arguments. Argument section of ${name} requires ${ps.size}, but ${as.size} given.")
 
         // check that types are actually value types
         val vps = ps map {
@@ -579,13 +568,11 @@ class Typer extends Phase[Module, Module] { typer =>
     }
 
     def checkValueArgument(tpe: ValueType, arg: source.Expr): Unit = Context.at(arg) {
-      val tpe1 = subst substitute tpe // apply what we already know.
+      val tpe1 = Context.unifier substitute tpe // apply what we already know.
       val (tpe2 / exprEffs) = arg checkAgainst tpe1
 
       // Update substitution with new information
-      // TODO Trying to unify here yields the same type error as the previous line, again.
-      // For now we have to live with this duplicated messages
-      subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
+      Context.unify(tpe1, tpe2)
 
       effs = effs ++ exprEffs
     }
@@ -596,16 +583,15 @@ class Typer extends Phase[Module, Module] { typer =>
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val BlockType(Nil, params, tpe1 / handled) = subst substitute tpe
+      val BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
 
-      // TODO make blockargs also take multiple argument sections.
       Context.define {
-        checkAgainstDeclaration("block", params, List(arg.params))
+        checkAgainstDeclaration("block", params, arg.params)
       }
 
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
 
-      subst = (subst union Substitution.unify(tpe1, tpe2)).getUnifier
+      Context.unify(tpe1, tpe2)
       effs = (effs ++ (stmtEffs -- handled))
     }
 
@@ -622,13 +608,13 @@ class Typer extends Phase[Module, Module] { typer =>
     //                  |""".stripMargin
     //    )
 
-    subst.checkFullyDefined(rigids).getUnifier
+    Context.checkFullyDefined(rigids)
 
     // annotate call node with inferred type arguments
-    val inferredTypeArgs = rigids.map(subst.substitute)
-    Context.typerState.annotations.annotate(Annotations.TypeArguments, call, inferredTypeArgs)
+    val inferredTypeArgs = rigids.map(Context.unifier.substitute)
+    Context.annotateTypeArgs(call, inferredTypeArgs)
 
-    (subst substitute ret) / effs
+    (Context.unifier substitute ret) / effs
   }
 
   /**
@@ -673,7 +659,7 @@ class Typer extends Phase[Module, Module] { typer =>
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
-      expected foreach { Substitution.unify(_, got) }
+      expected foreach { Unification.unify(_, got) }
       C.assignType(t, got / effs)
       got / effs
     }
@@ -686,19 +672,71 @@ class Typer extends Phase[Module, Module] { typer =>
     }
 }
 
-trait TyperOps { self: Context =>
+/**
+ * Instances of this class represent an immutable backup of the typer state
+ */
+private[typer] case class TyperState(effects: Effects, annotations: Annotations, unifier: Unifier)
 
-  // State Access
-  // ============
-  private[typer] def effects: Effects = typerState.effects
+trait TyperOps extends ContextOps { self: Context =>
 
-  private[typer] def withEffect(e: Effect): Context = {
-    typerState = typerState.copy(effects = typerState.effects + e);
-    this
+  /**
+   * the effects, whose declarations are _lexically_ in scope
+   */
+  private var lexicalEffects: Effects = Pure
+
+  /**
+   * Annotations added by typer
+   *
+   * The annotations are immutable and can be backtracked.
+   */
+  private var annotations: Annotations = Annotations.empty
+
+  /**
+   * Computed _unifier for type variables in this module
+   */
+  private var currentUnifier: Unifier = Unifier.empty
+
+  /**
+   * Override the dynamically scoped `in` to also reset typer state
+   */
+  override def in[T](block: => T): T = {
+    val effectsBefore = lexicalEffects
+    val result = super.in(block)
+
+    // TyperState has two kinds of components:
+    // - reader-like (like lexicalEffects that are in scope)
+    // - state-like (like annotations and unification constraints)
+    //
+    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
+    // not the "state" components. For those, we manually perform backup and restore in typer.
+    lexicalEffects = effectsBefore
+    result
   }
 
-  private[typer] def assignType(t: Tree, e: Effectful): Context = {
-    typerState.annotations.annotate(Annotations.TypeAndEffect, t, e)
+  private[typer] def initTyperstate(effects: Effects): Unit = {
+    lexicalEffects = effects
+    annotations = Annotations.empty
+    currentUnifier = Unifier.empty
+  }
+
+  private[typer] def backupTyperstate(): TyperState =
+    TyperState(lexicalEffects, annotations.copy, currentUnifier)
+
+  private[typer] def restoreTyperstate(st: TyperState): Unit = {
+    lexicalEffects = st.effects
+    annotations = st.annotations.copy
+    currentUnifier = st.unifier
+  }
+
+  private[typer] def commitTypeAnnotations(): Unit =
+    annotations.commit()
+
+  // Effects that are in the lexical scope
+  // =====================================
+  private[typer] def effects: Effects = lexicalEffects
+
+  private[typer] def withEffect(e: Effect): Context = {
+    lexicalEffects += e
     this
   }
 
@@ -709,11 +747,23 @@ trait TyperOps { self: Context =>
     }
   }
 
+  // Inferred types
+  // ==============
+  private[typer] def assignType(t: Tree, e: Effectful): Context = {
+    annotations.annotate(Annotations.TypeAndEffect, t, e)
+    this
+  }
+
+  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.Type]): Context = {
+    annotations.annotate(Annotations.TypeArguments, call, targs)
+    this
+  }
+
   private[typer] def define(s: Symbol, t: ValueType): Context = {
     assignType(s, t); this
   }
 
-  private[typer] def define(s: Symbol, t: BlockType): Context = {
+  private[typer] def define(s: Symbol, t: InterfaceType): Context = {
     assignType(s, t); this
   }
 
@@ -721,7 +771,7 @@ trait TyperOps { self: Context =>
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => define(v, t)
       case (v: BlockSymbol, t: BlockType) => define(v, t)
-      case other => abort(s"Internal Error: wrong combination of symbols and types: ${other}")
+      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
     }; this
   }
 
@@ -729,8 +779,24 @@ trait TyperOps { self: Context =>
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
       case s @ BlockParam(name, tpe) => define(s, tpe)
-      case s => abort(s"Internal Error: Cannot add $s to context.")
+      case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
   }
+
+  // Unification
+  // ===========
+  private[typer] def unifier: Unifier = currentUnifier
+
+  private[typer] def addToUnifier(map: Map[TypeVar, ValueType]): Unit =
+    currentUnifier = currentUnifier.addAll(map)
+
+  private[typer] def unify(tpe1: Type, tpe2: Type): Unit =
+    currentUnifier = (currentUnifier union Unification.unify(tpe1, tpe2)).getUnifier
+
+  private[typer] def skolems(rigids: List[RigidVar]): List[RigidVar] =
+    currentUnifier.skolems(rigids)
+
+  private[typer] def checkFullyDefined(rigids: List[RigidVar]): Unit =
+    currentUnifier.checkFullyDefined(rigids).getUnifier
 }

@@ -4,13 +4,11 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.Context
-import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ Def, Id, Tree }
+import effekt.context.{ Context, ContextOps }
+import effekt.context.assertions.SymbolAssertions
+import effekt.source.{ Def, Id, Tree, ModuleDecl }
 import effekt.symbols._
-import effekt.util.Task
 import scopes._
-import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -27,22 +25,17 @@ import org.bitbucket.inkytonik.kiama.util.Source
  * 2. look at the bodies of effect declarations and type definitions
  * 3. look into the bodies of functions
  */
-case class NamerState(
-  scope: Scope
-)
+class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
-class Namer extends Phase[Module, Module] { namer =>
-
-  def run(mod: Module)(implicit C: Context): Option[Module] = {
+  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Some(resolve(mod))
   }
 
-  def resolve(mod: Module)(implicit C: Context): Module = {
-
+  def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
     var scope: Scope = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
-    val imports = mod.decl.imports map {
+    val imports = decl.imports map {
       case im @ source.Import(path) => Context.at(im) {
         val modImport = Context.moduleOf(path)
         scope.defineAll(modImport.terms, modImport.types)
@@ -53,11 +46,12 @@ class Namer extends Phase[Module, Module] { namer =>
     // create new scope for the current module
     scope = scope.enter
 
-    Context.namerState = NamerState(scope)
+    Context.initNamerstate(scope)
 
-    resolveGeneric(mod.decl)
+    resolveGeneric(decl)
 
-    mod.export(imports, scope.terms.toMap, scope.types.toMap)
+    Context.module.export(imports, scope.terms.toMap, scope.types.toMap)
+    decl
   }
 
   /**
@@ -169,7 +163,7 @@ class Namer extends Phase[Module, Module] { namer =>
       Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
 
-    case source.Handler(name, clauses) =>
+    case source.Handler(name, _, clauses) =>
       val eff = Context.at(name) { Context.resolveType(name) }.asUserEffect
 
       clauses.foreach {
@@ -198,9 +192,9 @@ class Namer extends Phase[Module, Module] { namer =>
       }
 
     case source.BlockArg(params, stmt) =>
-      val ps = resolve(params)
+      val ps = params.map(resolve)
       Context scoped {
-        Context.bind(List(ps))
+        Context.bind(ps)
         resolveGeneric(stmt)
       }
 
@@ -264,6 +258,10 @@ class Namer extends Phase[Module, Module] { namer =>
     case ps: source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(Name(id), resolve(tpe))
+      Context.assignSymbol(id, sym)
+      List(sym)
+    case source.CapabilityParam(id, tpe) =>
+      val sym = CapabilityParam(Name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
   }
@@ -400,10 +398,14 @@ class Namer extends Phase[Module, Module] { namer =>
       TypeApp(data, args.map(resolve))
     case source.TypeVar(id) =>
       Context.resolveType(id).asValueType
+    case source.ValueTypeTree(tpe) => tpe
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
     BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+
+  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType =
+    CapabilityType(tpe.eff)
 
   def resolve(tpe: source.Effect)(implicit C: Context): Effect =
     Context.resolveType(tpe.id).asEffect
@@ -426,14 +428,25 @@ class Namer extends Phase[Module, Module] { namer =>
 
 /**
  * Environment Utils -- we use a mutable cell to express adding definitions more easily
- * The kiama environment uses immutable binding since they thread the environment through
- * their attributes.
  */
-trait NamerOps { self: Context =>
+trait NamerOps extends ContextOps { Context: Context =>
 
-  // State Access
-  // ============
-  private[namer] def scope: Scope = namerState.scope
+  /**
+   * The state of the namer phase
+   */
+  private var scope: Scope = scopes.EmptyScope()
+
+  private[namer] def initNamerstate(s: Scope): Unit = scope = s
+
+  /**
+   * Override the dynamically scoped `in` to also reset namer state
+   */
+  override def in[T](block: => T): T = {
+    val before = scope
+    val result = super.in(block)
+    scope = before
+    result
+  }
 
   // TODO we only want to add a seed to a name under the following conditions:
   // - there is already another instance of that name in the same
@@ -512,11 +525,8 @@ trait NamerOps { self: Context =>
     sym
   }
 
-  private[namer] def scoped[R](block: => R): R = {
-    val before = namerState
-    namerState = before.copy(scope = before.scope.enter)
-    val result = block
-    namerState = before
-    result
+  private[namer] def scoped[R](block: => R): R = Context in {
+    scope = scope.enter
+    block
   }
 }

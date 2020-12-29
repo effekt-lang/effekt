@@ -80,7 +80,11 @@ object assertions {
     }
     def asTermSymbol: TermSymbol = s match {
       case t: TermSymbol => t
-      case _ => reporter.abort("Expected a term symbol")
+      case _ => reporter.panic("Expected a term symbol")
+    }
+    def asBlockSymbol: BlockSymbol = s match {
+      case t: BlockSymbol => t
+      case _ => reporter.panic("Expected a term symbol")
     }
   }
 
