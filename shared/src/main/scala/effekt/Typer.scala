@@ -674,81 +674,81 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
  *   - Resumptions
  */
 
-case class TyperState(
+/**
+ * Instances of this class represent an immutable backup of the typer state
+ */
+private[typer] case class TyperState(effects: Effects, annotations: Annotations, unifier: Unifier)
+
+trait TyperOps extends ContextOps { self: Context =>
+
   /**
    * the effects, whose declarations are _lexically_ in scope
    */
-  effects: Effects = Pure,
+  private var lexicalEffects: Effects = Pure
 
   /**
    * Annotations added by typer
    *
    * The annotations are immutable and can be backtracked.
    */
-  annotations: Annotations = Annotations.empty,
+  private var annotations: Annotations = Annotations.empty
 
   /**
-   * Unification constraints
+   * Computed unifier for type variables in this module
    */
-  unifier: Unifier = Unifier.empty
-) {
-  def deepCopy(): TyperState = TyperState(effects, annotations.copy)
-}
-
-trait TyperOps extends ContextOps { self: Context =>
-
-  /**
-   * The state of the typer phase
-   */
-  private var typerState: TyperState = _
+  private var unifier: Unifier = Unifier.empty
 
   /**
    * Override the dynamically scoped `in` to also reset typer state
    */
   override def in[T](block: => T): T = {
-    val before = typerState
+    val effectsBefore = lexicalEffects
     val result = super.in(block)
 
     // TyperState has two kinds of components:
-    // - reader-like (like effects that are in scope)
+    // - reader-like (like lexicalEffects that are in scope)
     // - state-like (like annotations and unification constraints)
     //
     // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
     // not the "state" components. For those, we manually perform backup and restore in typer.
-    typerState = if (before != null) {
-      val annos = typerState.annotations
-      // keep the annotations
-      before.copy(annotations = annos)
-    } else { before }
-
+    lexicalEffects = effectsBefore
     result
   }
 
-  private[typer] def initTyperstate(effects: Effects): Unit =
-    typerState = TyperState(effects)
+  private[typer] def initTyperstate(effects: Effects): Unit = {
+    lexicalEffects = effects
+    annotations = Annotations.empty
+    unifier = Unifier.empty
+  }
 
-  private[typer] def backupTyperstate(): TyperState = typerState.deepCopy()
-  private[typer] def restoreTyperstate(st: TyperState): Unit = typerState = st.deepCopy()
+  private[typer] def backupTyperstate(): TyperState =
+    TyperState(lexicalEffects, annotations.copy, unifier)
+
+  private[typer] def restoreTyperstate(st: TyperState): Unit = {
+    lexicalEffects = st.effects
+    annotations = st.annotations.copy
+    unifier = st.unifier
+  }
 
   private[typer] def commitTypeAnnotations(): Unit =
-    typerState.annotations.commit()
+    annotations.commit()
 
   // State Access
   // ============
-  private[typer] def effects: Effects = typerState.effects
+  private[typer] def effects: Effects = lexicalEffects
 
   private[typer] def withEffect(e: Effect): Context = {
-    typerState = typerState.copy(effects = typerState.effects + e);
+    lexicalEffects += e
     this
   }
 
   private[typer] def assignType(t: Tree, e: Effectful): Context = {
-    typerState.annotations.annotate(Annotations.TypeAndEffect, t, e)
+    annotations.annotate(Annotations.TypeAndEffect, t, e)
     this
   }
 
   private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.Type]): Context = {
-    typerState.annotations.annotate(Annotations.TypeArguments, call, targs)
+    annotations.annotate(Annotations.TypeArguments, call, targs)
     this
   }
 
