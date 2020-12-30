@@ -13,4 +13,6 @@ trait EffektConfig {
   def generator(): String = "js"
 
   def outputPath(): String = "out"
+
+  def requiresLift(): Boolean = false
 }

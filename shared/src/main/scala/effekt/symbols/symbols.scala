@@ -1,11 +1,9 @@
 package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
-import effekt.context.{ Context, TypesDB }
-import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
+import effekt.context.Context
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
-import effekt.symbols.{ TypeSymbol, ValueType }
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -55,10 +53,22 @@ package object symbols {
     // this is the order in which the modules need to be compiled / loaded
     lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
-    // toplevle declared effects
+    // toplevel declared effects
     def effects: Effects = Effects(types.values.collect {
       case e: Effect => e
     })
+
+    // the transformed ast after frontend
+    private var _ast = decl
+    def ast = _ast
+
+    /**
+     * Should be called once after frontend
+     */
+    def setAst(ast: ModuleDecl): this.type = {
+      _ast = ast
+      this
+    }
 
     /**
      * It is actually possible, that exports is invoked on a single module multiple times:
@@ -80,6 +90,9 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
+  case class CapabilityParam(name: Name, tpe: CapabilityType) extends Param with Capability {
+    def effect = tpe.eff
+  }
   case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
 
   /**
@@ -91,9 +104,10 @@ package object symbols {
   def paramsToTypes(ps: Params): Sections =
     ps map {
       _ map {
-        case BlockParam(_, tpe) => tpe
-        case v: ValueParam      => v.tpe.get
-        case r: ResumeParam     => sys error "Internal Error: No type annotated on resumption parameter"
+        case BlockParam(_, tpe)      => tpe
+        case CapabilityParam(_, tpe) => tpe
+        case v: ValueParam           => v.tpe.get
+        case r: ResumeParam          => sys error "Internal Error: No type annotated on resumption parameter"
       }
     }
 
@@ -106,9 +120,9 @@ package object symbols {
     def toType: BlockType = BlockType(tparams, paramsToTypes(params), ret.get)
     def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
 
-    def effects(implicit db: TypesDB with ErrorReporter): Effects =
-      ret.orElse { db.blockTypeOption(this).map { _.ret } }.getOrElse {
-        db.abort(s"Result type of recursive function ${name} needs to be annotated")
+    def effects(implicit C: Context): Effects =
+      ret.orElse { C.blockTypeOption(this).map { _.ret } }.getOrElse {
+        C.abort(s"Result type of recursive function ${name} needs to be annotated")
       }.effects
   }
 
@@ -144,24 +158,16 @@ package object symbols {
   case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
 
   /**
+   * Introduced by Transformer
+   */
+  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
+  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+
+  /**
    * A symbol that represents a termlevel capability
    */
   trait Capability extends BlockSymbol {
-    def effect: UserEffect
-    val name = effect.name
-  }
-  case class UserCapability(effect: UserEffect) extends Capability
-
-  case class StateCapability(effect: UserEffect, get: EffectOp, put: EffectOp) extends Capability
-  object StateCapability {
-    def apply(binder: VarBinder)(implicit C: Context): StateCapability = {
-      val tpe = C.valueTypeOf(binder)
-      val eff = UserEffect(binder.name, Nil)
-      val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
-      val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
-      eff.ops = List(get, put)
-      StateCapability(eff, get, put)
-    }
+    def effect: Effect
   }
 
   /**
@@ -203,7 +209,10 @@ package object symbols {
     }
   }
 
-  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends Type {
+  sealed trait InterfaceType extends Type
+  case class CapabilityType(eff: Effect) extends InterfaceType
+
+  case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends InterfaceType {
     override def toString: String = {
       val ps = params.map {
         case List(b: BlockType)             => s"{${b.toString}}"
@@ -222,6 +231,9 @@ package object symbols {
       if (tparams.isEmpty) { tpe } else { sys error "Cannot delias unapplied type constructor" }
   }
 
+  /**
+   * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
+   */
   trait TypeConstructor extends TypeSymbol with ValueType
   object TypeConstructor {
     def unapply(t: ValueType): Option[TypeConstructor] = t match {

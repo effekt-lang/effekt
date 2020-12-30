@@ -42,7 +42,7 @@ trait LSPServer extends Driver with Intelligence {
    */
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     super.afterCompilation(source, config)
-    for (mod <- C.frontend(source); core <- C.lower(source); js <- C.generate(source)) {
+    for (mod <- C.frontend(source); core <- C.backend(source); js <- C.generate(source)) {
 
       if (C.config.server() && settingBool("showCore")) {
         publishProduct(source, "target", "effekt", prettyCore.format(core))
@@ -81,11 +81,11 @@ trait LSPServer extends Driver with Intelligence {
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
-    sym <- context.sources.keys
+    sym <- context.sourceSymbols
     if !sym.synthetic
-    mod = context.owner(sym)
+    mod = context.sourceModuleOf(sym)
     if mod.source == source
-    id <- context.sources.get(sym)
+    id <- context.definitionTreeOption(sym)
     decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
     kind <- getSymbolKind(sym)
     detail <- getInfoOf(sym)(context)
@@ -94,9 +94,9 @@ trait LSPServer extends Driver with Intelligence {
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
       (tree, sym) <- getSymbolAt(position)(context)
-      refs = context.references.getOrDefault(sym, Nil).distinctBy(r => System.identityHashCode(r))
+      refs = context.distinctReferencesTo(sym)
       allRefs = if (includeDecl) tree :: refs else refs
-    } yield refs.toVector
+    } yield allRefs.toVector
 
   // settings might be null
   override def setSettings(settings: Object): Unit = {
@@ -215,7 +215,7 @@ trait LSPServer extends Driver with Intelligence {
     pos <- positions.getStart(fun)
     ret <- fun.ret
     // the inferred type
-    tpe <- C.typeOf(fun)
+    tpe <- C.inferredTypeOption(fun)
     // the annotated type
     ann = fun.symbol.ret
     if ann.map { a => needsUpdate(a, tpe) }.getOrElse(true)
@@ -228,8 +228,8 @@ trait LSPServer extends Driver with Intelligence {
 
   def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
     pos <- positions.getStart(hole)
-    (holeTpe / _) <- C.typeOf(hole)
-    (contentTpe / _) <- C.typeOf(hole.stmts)
+    (holeTpe / _) <- C.inferredTypeOption(hole)
+    (contentTpe / _) <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {

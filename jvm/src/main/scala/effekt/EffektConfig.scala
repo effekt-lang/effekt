@@ -4,7 +4,7 @@ import java.io.File
 
 import effekt.util.paths.file
 import org.bitbucket.inkytonik.kiama.util.REPLConfig
-import org.rogach.scallop.{ ScallopOption, ValueConverter }
+import org.rogach.scallop.ScallopOption
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
@@ -90,6 +90,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def includes() = libPath :: includePath()
 
   def requiresCompilation(): Boolean = !server()
+
+  def requiresLift(): Boolean = generator().endsWith("lift")
 
   def interpret(): Boolean = !server() && !compile()
 

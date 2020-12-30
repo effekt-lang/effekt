@@ -75,8 +75,8 @@ trait Intelligence {
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
-    case d: EffectOp     => C.definitionTreeOf(d.effect)
-    case u               => C.definitionTreeOf(u)
+    case d: EffectOp     => C.definitionTreeOption(d.effect)
+    case u               => C.definitionTreeOption(u)
   }
 
   // For now, only show the first call target
@@ -86,8 +86,8 @@ trait Intelligence {
   }
 
   def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
-    outerTpe <- C.typeOf(hole)
-    innerTpe <- C.typeOf(hole.stmts)
+    outerTpe <- C.inferredTypeOption(hole)
+    innerTpe <- C.inferredTypeOption(hole.stmts)
   } yield s"""| | Outside       | Inside        |
               | |:------------- |:------------- |
               | | `${outerTpe}` | `${innerTpe}` |
@@ -180,6 +180,10 @@ trait Intelligence {
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value parameter", signature, None)
+
+    case c: ValBinder =>
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Value binder", signature, None)
 
     case c: VarBinder =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
