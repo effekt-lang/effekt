@@ -416,7 +416,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.TypeVar(id) =>
       Context.resolveType(id).asValueType
     case source.ValueTypeTree(tpe) => tpe
-    case source.FunType(tpe)       => FunType(resolve(tpe))
+
+    // if no region is annotated, then use the toplevel region
+    case source.FunType(tpe)       => FunType(resolve(tpe), regions.Region.empty)
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =

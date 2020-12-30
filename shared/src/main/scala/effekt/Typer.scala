@@ -6,6 +6,7 @@ package typer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
+import effekt.regions.Region
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.subtitutions._
 import effekt.symbols._
@@ -18,6 +19,9 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  *   - Blocks
  *   - Functions
  *   - Resumptions
+ *
+ *  Also annotates every lambda with a fresh region variable and collects equality constraints
+ *  between regions
  */
 class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
@@ -50,6 +54,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     // Store the backtrackable annotations into the global DB
     // This is done regardless of errors, since
     Context.commitTypeAnnotations()
+
   }
 
   //<editor-fold desc="expressions">
@@ -90,33 +95,48 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         Context.define(sym.params)
 
         expected match {
-          case Some(FunType(tpe @ BlockType(_, ps, ret / effs))) =>
+          case Some(exp @ FunType(BlockType(_, ps, ret / effs), reg)) =>
             checkAgainstDeclaration("lambda", ps, params)
             val (retGot / effsGot) = body checkAgainst ret
             Context.unify(retGot, ret)
 
             val diff = effsGot -- effs
 
-            if (diff.nonEmpty) {
-              Context.abort(s"All effects used by a lambda need to be mentioned in its type. The lambda uses effects $diff but is only allowed to use $effs")
-            }
+            //            if (diff.nonEmpty) {
+            //              Context.abort(s"All effects used by a lambda need to be mentioned in its type. The lambda uses effects $diff but is only allowed to use $effs")
+            //            }
+
+            val reg = Region.fresh(l)
+            val got = FunType(BlockType(Nil, ps, retGot / effs), reg)
+
+            Context.unify(got, exp)
 
             Context.assignType(sym, sym.toType(ret / effs))
             Context.assignType(l, ret / effs)
-            val funTpe = FunType(tpe)
+            Context.annotateRegions(sym, reg)
 
-            funTpe / Pure
-          case Some(other) =>
-            Context.abort(s"Cannot type check a lambda where a value of type ${other} is expected.")
-          case None =>
+            got / diff
+          //          case Some(t: TypeVar) =>
+          //            Context.abort(s"Using a lambda in a polymorphic position requires a type annotation")
+          //          case Some(other) =>
+          //            Context.abort(s"Cannot type check a lambda where a value of type ${other} is expected.")
+          case _ =>
             val (ret / effs) = checkStmt(body, None)
             Context.wellscoped(effs)
-            Context.assignType(sym, sym.toType(ret / effs))
-            Context.assignType(l, ret / effs)
-
             val ps = extractAllTypes(sym.params)
             val tpe = BlockType(Nil, ps, ret / effs)
-            val funTpe = FunType(tpe)
+
+            // we make up a fresh region variable that will be checked later by the region checker
+            val reg = Region.fresh(l)
+            val funTpe = FunType(tpe, reg)
+
+            Context.assignType(sym, sym.toType(ret / effs))
+            Context.assignType(l, ret / effs)
+            Context.annotateRegions(sym, reg)
+
+            expected.foreach { exp =>
+              Context.unify(funTpe, exp)
+            }
 
             funTpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
@@ -420,7 +440,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id)       => t.definition
     case source.ValueTypeTree(tpe)    => tpe
-    case source.FunType(tpe)          => FunType(resolveBlockType(tpe))
+    case source.FunType(tpe)          => FunType(resolveBlockType(tpe), Region.empty)
   }
 
   def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
@@ -791,8 +811,10 @@ trait TyperOps extends ContextOps { self: Context =>
     currentUnifier = st.unifier
   }
 
-  private[typer] def commitTypeAnnotations(): Unit =
+  private[typer] def commitTypeAnnotations(): Unit = {
     annotations.commit()
+    annotate(Annotations.Unifier, module, currentUnifier)
+  }
 
   // Effects that are in the lexical scope
   // =====================================

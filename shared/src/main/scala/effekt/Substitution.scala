@@ -1,8 +1,8 @@
 package effekt
 
-import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, CapabilityType, InterfaceType, Effectful, TypeApp, Sections }
+import effekt.regions.Region
+import effekt.symbols.{ BlockType, CapabilityType, Effectful, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType, FunType }
 import effekt.symbols.builtins.THole
-
 import effekt.util.messages.ErrorReporter
 
 object subtitutions {
@@ -14,13 +14,21 @@ object subtitutions {
     def union(other: UnificationResult): UnificationResult
     def checkFullyDefined(rigids: List[RigidVar]): UnificationResult
     def getUnifier(implicit error: ErrorReporter): Unifier
+    def equalRegions(r1: Region, r2: Region): UnificationResult
   }
-  case class Unifier(substitutions: Map[TypeVar, ValueType]) extends UnificationResult {
+
+  // Equality constraint on regions
+
+  case class RegionEq(r1: Region, r2: Region) {
+    override def toString = s"$r1 =!= $r2"
+  }
+
+  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq]) extends UnificationResult {
 
     def getUnifier(implicit error: ErrorReporter): Unifier = this
 
     def addAll(unifier: Map[TypeVar, ValueType]): Unifier =
-      Unifier(substitutions ++ unifier)
+      Unifier(substitutions ++ unifier, constraints)
 
     def add(k: TypeVar, v: ValueType): UnificationResult = {
       substitutions.get(k).foreach { v2 =>
@@ -33,11 +41,17 @@ object subtitutions {
       // Do we need an occurs check?
       val newUnifier = Unifier(k -> v)
       val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newUnifier substitute tpe) }
-      Unifier(improvedSubst + (k -> Unifier(improvedSubst).substitute(v)))
+      Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
     }
 
-    def union(other: UnificationResult): UnificationResult =
-      substitutions.foldLeft(other) { case (u, (k, v)) => u.add(k, v) }
+    def equalRegions(r1: Region, r2: Region): Unifier = this.copy(constraints = constraints + RegionEq(r1, r2))
+
+    def union(other: UnificationResult): UnificationResult = other match {
+      case Unifier(subst, constr) =>
+        val bothConstraints: UnificationResult = Unifier(subst, constr ++ constraints)
+        substitutions.foldLeft(bothConstraints) { case (u, (k, v)) => u.add(k, v) }
+      case err: UnificationError => err
+    }
 
     def checkFullyDefined(rigids: List[RigidVar]): UnificationResult = {
       rigids.foreach { tpe =>
@@ -71,7 +85,7 @@ object subtitutions {
     def substitute(t: InterfaceType): InterfaceType = t match {
       case b: CapabilityType => b
       case BlockType(tps, ps, ret) =>
-        val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) })
+        val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) }, constraints)
         BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
     }
 
@@ -83,8 +97,8 @@ object subtitutions {
     }
   }
   object Unifier {
-    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType])
-    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify))
+    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType], Set.empty)
+    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify), Set.empty)
   }
   case class UnificationError(msg: String) extends UnificationResult {
     // TODO currently we only return an empty unifier for backwards compatibility
@@ -95,6 +109,7 @@ object subtitutions {
     def add(k: TypeVar, v: ValueType) = this
     def union(other: UnificationResult) = this
     def checkFullyDefined(rigids: List[RigidVar]) = this
+    def equalRegions(r1: Region, r2: Region) = this
   }
 
   object Unification {
@@ -155,6 +170,9 @@ object subtitutions {
         case (THole, _) | (_, THole) =>
           Unifier.empty
 
+        case (FunType(tpe1, reg1), FunType(tpe2, reg2)) =>
+          unifyTypes(tpe1, tpe2).equalRegions(reg1, reg2)
+
         case (t, s) =>
           UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
       }
@@ -167,7 +185,7 @@ object subtitutions {
     def instantiate(tpe: BlockType): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
-      val unifier = Unifier(subst)
+      val unifier = Unifier(subst, Set.empty)
       val rigids = subst.values.toList
 
       (rigids, BlockType(Nil, unifier.substitute(params), unifier.substitute(ret)))

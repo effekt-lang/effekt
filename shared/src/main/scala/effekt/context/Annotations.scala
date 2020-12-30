@@ -145,6 +145,22 @@ object Annotations {
     "TargetType",
     "the blocktype for calltarget"
   )
+
+  /*
+   * The region a given symbol can be used in
+   */
+  val Regions = Annotation[symbols.Symbol, regions.Region](
+    "Regions",
+    "the regions associated with symbol"
+  )
+
+  /**
+   * The unifier as computed by typer when type checking the module
+   */
+  val Unifier = Annotation[symbols.Module, subtitutions.Unifier](
+    "Unifier",
+    "the unifier for module"
+  )
 }
 
 /**
@@ -243,8 +259,8 @@ trait AnnotationsDB { self: Context =>
         case _            => None
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap {
-        case symbols.FunType(tpe) => Some(tpe)
-        case _                    => None
+        case symbols.FunType(tpe, _) => Some(tpe)
+        case _ => None
       }
     }
 
@@ -354,4 +370,10 @@ trait AnnotationsDB { self: Context =>
     annotationOption(Annotations.References, sym)
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
+
+  def annotateRegions(sym: Symbol, r: regions.Region): Unit =
+    annotate(Annotations.Regions, sym, r)
+
+  def regionOf(sym: Symbol): regions.Region =
+    annotation(Annotations.Regions, sym)
 }

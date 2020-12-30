@@ -2,6 +2,7 @@ package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
+import effekt.regions.Region
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.subtitutions._
 
@@ -92,6 +93,7 @@ package object symbols {
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
   case class CapabilityParam(name: Name, tpe: CapabilityType) extends Param with Capability {
     def effect = tpe.eff
+    override def toString = s"@${tpe.eff.name}"
   }
   case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
 
@@ -198,8 +200,9 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class FunType(tpe: BlockType /*, region: Region */ ) extends ValueType {
-    override def toString = tpe.toString
+  case class FunType(tpe: BlockType, region: Region) extends ValueType {
+    // TODO render region variables properly
+    override def toString = s"${tpe.toString} at $region"
   }
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
@@ -221,7 +224,8 @@ package object symbols {
 
     override def dealias: ValueType = tpe match {
       case TypeAlias(name, tparams, tpe) =>
-        Unifier((tparams zip args).toMap).substitute(tpe).dealias
+        // TODO clean up and move to substitution
+        Unifier((tparams zip args).toMap, Set.empty).substitute(tpe).dealias
       case other => TypeApp(other.dealias, args.map { _.dealias })
     }
   }
