@@ -421,7 +421,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(implicit C: Context): Effectful =
-    Effectful(resolve(e.tpe), resolve(e.eff))
+    Effectful(e.tpes.map(resolve), resolve(e.eff))
 
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)

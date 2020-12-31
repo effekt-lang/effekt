@@ -108,7 +108,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       case sym: VarBinder =>
         val state = C.state(sym)
         val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
-        C.bind(C.valueTypeOf(sym), get)
+        C.bind(List(C.valueTypeOf(sym)), get)
       case sym => ValueVar(sym)
     }
 
@@ -116,18 +116,19 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val e = transform(expr)
       val state = C.state(a.definition)
       val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
-      C.bind(builtins.TUnit, put)
+      // TODO make this return nullary
+      C.bind(List(builtins.TUnit), put)
 
     case l: source.Literal[t] => transformLit(l)
 
     case source.If(cond, thn, els) =>
       val c = transform(cond)
-      val exprTpe = C.inferredTypeOf(tree).tpe
-      C.bind(exprTpe, If(c, transform(thn), transform(els)))
+      val exprTpes = C.inferredTypeOf(tree).tpes
+      C.bind(exprTpes, If(c, transform(thn), transform(els)))
 
     case source.While(cond, body) =>
-      val exprTpe = C.inferredTypeOf(tree).tpe
-      C.bind(exprTpe, While(insertBindings { Ret(transform(cond)) }, transform(body)))
+      val exprTpes = C.inferredTypeOf(tree).tpes
+      C.bind(exprTpes, While(insertBindings { Ret(transform(cond)) }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
       val scrutinee = transform(sc)
@@ -137,14 +138,14 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           val (p, ps) = transform(pattern)
           (p, BlockLit(ps, transform(body)))
       }
-      C.bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs))
+      C.bind(C.inferredTypeOf(tree).tpes, Match(scrutinee, cs))
 
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
 
       val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
-      C.bind(C.inferredTypeOf(tree).tpe, app)
+      C.bind(C.inferredTypeOf(tree).tpes, app)
 
     case c @ source.Call(fun: source.IdTarget, _, args) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
@@ -168,7 +169,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           val List(arg: Expr) = as
           Select(arg, f)
         case f: BlockSymbol =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
+          C.bind(C.inferredTypeOf(tree).tpes, App(BlockVar(f), targs, as))
       }
 
     case source.TryHandle(prog, handlers) =>
@@ -197,10 +198,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           })
       }
 
-      C.bind(C.inferredTypeOf(tree).tpe, Handle(body, hs))
+      C.bind(C.inferredTypeOf(tree).tpes, Handle(body, hs))
 
     case source.Hole(stmts) =>
-      C.bind(C.inferredTypeOf(tree).tpe, Hole)
+      C.bind(C.inferredTypeOf(tree).tpes, Hole)
 
   }
 
@@ -232,8 +233,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   def freshWildcardFor(e: source.Tree)(implicit C: Context): Wildcard = {
     val x = Wildcard(C.module)
     C.inferredTypeOption(e) match {
-      case Some(t / _) => C.assignType(x, t)
-      case _           => C.abort("Internal Error: Missing type of source expression.")
+      case Some(List(t) / _) => C.assignType(x, t)
+      case Some(t / _)       => C.abort("Internal Error: Expected a singleton return type for wildcard.")
+      case _                 => C.abort("Internal Error: Missing type of source expression.")
     }
     x
   }
@@ -317,16 +319,23 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * @param tpe the type of the bound statement
    * @param s the statement to be bound
    */
-  private[core] def bind(tpe: symbols.ValueType, s: Stmt): Expr = {
+  private[core] def bind(tpes: List[symbols.ValueType], s: Stmt): Expr = {
 
-    // create a fresh symbol and assign the type
-    val x = Tmp(module)
-    assignType(x, tpe)
+    // TODO handle case of multiple bindings
 
-    val binding = (x, tpe, s)
-    bindings += binding
+    tpes match {
+      case List(tpe) =>
+        // create a fresh symbol and assign the type
+        val x = Tmp(module)
+        assignType(x, tpe)
 
-    ValueVar(x)
+        val binding = (x, tpe, s)
+        bindings += binding
+
+        ValueVar(x)
+      case _ =>
+        panic("TODO handle binding of multiple returns")
+    }
   }
 
   private[core] def withBindings[R](block: => R): (R, ListBuffer[(Tmp, symbols.ValueType, Stmt)]) = Context in {

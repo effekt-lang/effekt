@@ -54,7 +54,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): Effectful =
+  // TODO make this expected only one type?
+  def checkExpr(expr: Expr, expected: Option[List[ValueType]])(implicit C: Context): Effectful =
     checkAgainst(expr, expected) {
       case source.IntLit(n)     => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
@@ -63,15 +64,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       case source.StringLit(s)  => TString / Pure
 
       case source.If(cond, thn, els) =>
-        val (cndTpe / cndEffs) = cond checkAgainst TBoolean
+        val (cndTpe / cndEffs) = cond checkAgainst List(TBoolean)
         val (thnTpe / thnEffs) = checkStmt(thn, expected)
         val (elsTpe / elsEffs) = els checkAgainst thnTpe
 
         thnTpe / (cndEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, block) =>
-        val (_ / condEffs) = cond checkAgainst TBoolean
-        val (_ / blockEffs) = block checkAgainst TUnit
+        val (_ / condEffs) = cond checkAgainst List(TBoolean)
+        // TODO remove TUnit
+        val (_ / blockEffs) = block checkAgainst List(TUnit)
+        // TODO remove TUnit
         TUnit / (condEffs ++ blockEffs)
 
       case v: source.Var =>
@@ -80,7 +83,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
+        val (_ / eff) = expr checkAgainst List(Context.valueTypeOf(sym))
         TUnit / eff
 
       case c @ source.Call(t: source.IdTarget, targs, args) =>
@@ -114,15 +117,16 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition
 
-              val BlockType(_, pms, tpe / effs) = Context.blockTypeOf(effectOp)
+              val BlockType(_, pms, tpes / effs) = Context.blockTypeOf(effectOp)
               val ps = checkAgainstDeclaration(op.name, pms, params)
 
               val resumeType = if (effectOp.isBidirectional) {
                 // resume { e }
-                BlockType(Nil, List(List(BlockType(Nil, List(Nil), tpe / effectOp.otherEffects))), ret / Pure)
+                BlockType(Nil, List(List(BlockType(Nil, List(Nil), tpes / effectOp.otherEffects))), ret / Pure)
               } else {
+                // TODO resume with multiple
                 // resume(v)
-                BlockType(Nil, List(List(tpe)), ret / Pure)
+                BlockType(Nil, List(tpes), ret / Pure)
               }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
@@ -143,7 +147,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
-        val (tpe / effs) = checkExpr(sc, None)
+        // TODO multi-match
+        // TODO properly report error
+        val (List(tpe) / effs) = checkExpr(sc, None)
 
         // (2) check exhaustivity
         checkExhaustivity(tpe, clauses.map { _.pattern })
@@ -156,15 +162,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         }
 
         val (tpeCases / effsCases) = tpes.reduce[Effectful] {
-          case (tpe1 / effs1, tpe2 / effs2) =>
-            Unification.unify(tpe1, tpe2)
-            tpe1 / (effs1 ++ effs2)
+          case (tpes1 / effs1, tpes2 / effs2) =>
+            // TODO can we use Context.unify here?
+            (tpes1 zip tpes2) map {
+              case (tpe1, tpe2) =>
+                Unification.unify(tpe1, tpe2)
+            }
+            tpes1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
 
       case source.Hole(stmt) =>
         val tpe / effs = checkStmt(stmt, None)
-        expected.getOrElse(THole) / Pure
+        expected.getOrElse(List(THole)) / Pure
     }
 
   //</editor-fold>
@@ -205,11 +215,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     }
   }
 
-  def checkPattern(sc: ValueType, pattern: MatchPattern)(implicit C: Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
+  def checkPattern(scrutineeType: ValueType, pattern: MatchPattern)(implicit C: Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
-    case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
+    case p @ source.AnyPattern(id) => Map(p.symbol -> scrutineeType)
     case p @ source.LiteralPattern(lit) =>
-      lit.checkAgainst(sc)
+      lit.checkAgainst(List(scrutineeType))
       Map.empty
     case p @ source.TagPattern(id, patterns) =>
 
@@ -221,10 +231,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, BlockType(_, pms, ret / _)) = Unification.instantiate(sym.toType)
+      val (rigids, BlockType(_, pms, List(ret) / _)) = Unification.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      Context.unify(ret, sc)
+      Context.unify(ret, scrutineeType)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
@@ -259,7 +269,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): Effectful =
+  def checkStmt(stmt: Stmt, expected: Option[List[ValueType]])(implicit C: Context): Effectful =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -338,19 +348,36 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         TUnit / Pure
 
       case d @ source.ValDef(id, annot, binding) =>
+        // TODO what is going on here? annot is not used
+        // The namer stores the resolved annotation at the id's symbol
+        // The symbol is associated to the definition itself, not the id
         val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
+          case Some(t) => binding checkAgainst List(t)
           case None    => checkStmt(binding, None)
         }
-        Context.define(d.symbol, t)
+        // TODO the definition in context is overwritten?
+        t match {
+          case List(t) =>
+            Context.define(d.symbol, t)
+          case _ =>
+            // TODO properly do something
+            C.panic("Right hand side of value binding with multiple returns.")
+        }
         t / effBinding
 
       case d @ source.VarDef(id, annot, binding) =>
+        // TODO same as above... why would the type be already at the symbol?
         val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
+          case Some(t) => binding checkAgainst List(t)
           case None    => checkStmt(binding, None)
         }
-        Context.define(d.symbol, t)
+        t match {
+          case List(t) =>
+            Context.define(d.symbol, t)
+          case _ =>
+            // TODO properly do something
+            C.panic("Right hand side of value binding with multiple returns.")
+        }
         t / effBinding
 
       case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
@@ -429,7 +456,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     target: source.IdTarget,
     targs: List[ValueType],
     args: List[source.ArgSection],
-    expected: Option[Type]
+    expected: Option[List[Type]]
   )(implicit C: Context): Effectful = {
 
     val scopes = target.definition match {
@@ -520,12 +547,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     funTpe: BlockType,
     targs: List[ValueType],
     args: List[source.ArgSection],
-    expected: Option[Type]
+    expected: Option[List[Type]]
   )(implicit C: Context): Effectful = {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
+    val (rigids, BlockType(_, params, retTpes / retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -536,9 +563,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     }
 
     // (3) refine substitutions by matching return type against expected type
-    expected.foreach { expectedReturn =>
-      val refinedReturn = Context.unifier substitute ret
-      Context.unify(refinedReturn, expectedReturn)
+    expected.foreach { expectedTpes =>
+      val refinedReturnTypes = retTpes.map(Context.unifier substitute _)
+      Context.unifyList(refinedReturnTypes, expectedTpes)
     }
 
     var effs = retEffs
@@ -570,7 +597,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
     def checkValueArgument(tpe: ValueType, arg: source.Expr): Unit = Context.at(arg) {
       val tpe1 = Context.unifier substitute tpe // apply what we already know.
-      val (tpe2 / exprEffs) = arg checkAgainst tpe1
+      // TODO properly report error
+      val (List(tpe2) / exprEffs) = arg checkAgainst List(tpe1)
 
       // Update substitution with new information
       Context.unify(tpe1, tpe2)
@@ -584,15 +612,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
+      val BlockType(Nil, params, tpes1 / handled) = Context.unifier substitute tpe
 
       Context.define {
         checkAgainstDeclaration("block", params, arg.params)
       }
 
-      val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
+      val (tpes2 / stmtEffs) = arg.body checkAgainst tpes1
 
-      Context.unify(tpe1, tpe2)
+      Context.unifyList(tpes1, tpes2)
       effs = (effs ++ (stmtEffs -- handled))
     }
 
@@ -615,7 +643,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     Context.annotateTypeArgs(call, inferredTypeArgs)
 
-    (Context.unifier substitute ret) / effs
+    retTpes.map(Context.unifier substitute _) / effs
   }
 
   /**
@@ -645,24 +673,30 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
   //</editor-fold>
 
   private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
+    def checkAgainst(tpe: List[ValueType])(implicit C: Context): Effectful =
       checkExpr(expr, Some(tpe))
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
+    def checkAgainst(tpe: List[ValueType])(implicit C: Context): Effectful =
       checkStmt(stmt, Some(tpe))
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
+  def checkAgainst[T <: Tree](t: T, expected: Option[List[Type]])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
-      val (got / effs) = f(t)
-      expected foreach { Unification.unify(_, got) }
-      C.assignType(t, got / effs)
-      got / effs
+      val (inferredTpes / effs) = f(t)
+      // TODO can we use Context.unify here?
+      expected foreach { expectedTpes =>
+        (expectedTpes zip inferredTpes).map {
+          case (expectedTpe, inferredTpe) =>
+            Unification.unify(expectedTpe, inferredTpe)
+        }
+      }
+      C.assignType(t, inferredTpes / effs)
+      inferredTpes / effs
     }
 
   def check[T <: Tree](t: T)(f: T => Effectful)(implicit C: Context): Effectful =
@@ -794,6 +828,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def unify(tpe1: Type, tpe2: Type): Unit =
     currentUnifier = (currentUnifier union Unification.unify(tpe1, tpe2)).getUnifier
+
+  private[typer] def unifyList(tpes1: List[Type], tpes2: List[Type]): Unit =
+    (tpes1 zip tpes2).map { case (tpe1, tpe2) => unify(tpe1, tpe2) }
 
   private[typer] def skolems(rigids: List[RigidVar]): List[RigidVar] =
     currentUnifier.skolems(rigids)

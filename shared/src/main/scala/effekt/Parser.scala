@@ -518,9 +518,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val effectful: P[Effectful] =
+    // TODO valueType -> valueTypes
     valueType ~ (`/` ~> effects).? ^^ {
-      case t ~ Some(es) => Effectful(t, es)
-      case t ~ None => Effectful(t, Effects.Pure)
+      case t ~ Some(es) => Effectful(List(t), es)
+      case t ~ None => Effectful(List(t), Effects.Pure)
     }
 
   lazy val effects: P[Effects] =

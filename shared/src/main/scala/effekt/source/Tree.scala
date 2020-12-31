@@ -362,7 +362,11 @@ case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
 case class Effect(id: IdRef) extends Tree with Reference {
   type symbol = symbols.UserEffect
 }
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+// TODO rename eff to effs
+case class Effectful(tpes: List[ValueType], eff: Effects) extends Tree
+
+// No top-level type aliases in Scala
+// type ReturnTypes = List[ValueType]
 
 case class Effects(effs: List[Effect]) extends Tree
 object Effects {

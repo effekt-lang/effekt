@@ -65,7 +65,7 @@ object subtitutions {
     }
 
     def substitute(e: Effectful): Effectful = e match {
-      case Effectful(tpe, effs) => Effectful(substitute(tpe), effs)
+      case Effectful(tpes, effs) => Effectful(tpes.map(substitute(_)), effs)
     }
 
     def substitute(t: InterfaceType): InterfaceType = t match {
@@ -118,7 +118,7 @@ object subtitutions {
             return UnificationError(s"Section count does not match $f1 vs. $f2")
           }
 
-          (args1 zip args2).foldLeft(unifyTypes(ret1.tpe, ret2.tpe)) {
+          (args1 zip args2).foldLeft(unifyEffectfuls(ret1, ret2)) {
             case (u, (as1, as2)) =>
               if (as1.size != as2.size)
                 return UnificationError(s"Argument count does not match $f1 vs. $f2")
@@ -128,6 +128,11 @@ object subtitutions {
 
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")
+      }
+
+    def unifyEffectfuls(ret1: Effectful, ret2: Effectful): UnificationResult =
+      (ret1.tpes zip ret2.tpes).foldLeft(Unifier.empty: UnificationResult) {
+        case (u, (tpe1, tpe2)) => u union unifyTypes(tpe1, tpe2)
       }
 
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): UnificationResult =

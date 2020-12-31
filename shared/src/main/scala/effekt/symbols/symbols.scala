@@ -181,7 +181,8 @@ package object symbols {
   type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type {
-    def /(effs: Effects): Effectful = Effectful(this, effs)
+    // TODO delete this slash
+    def /(effs: Effects): Effectful = Effectful(List(this), effs)
     def dealias: ValueType = this
   }
 
@@ -253,7 +254,7 @@ package object symbols {
   case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Fun with Synthetic {
     // Parameter and return type of the constructor:
     lazy val params = List(fields.map { f => f.param })
-    def ret = Some(Effectful(tpe, Pure))
+    def ret = Some(Effectful(List(tpe), Pure))
   }
 
   /**
@@ -265,7 +266,7 @@ package object symbols {
     val tparams = rec.tparams
     val tpe = param.tpe.get
     val params = List(List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))
-    val ret = Some(Effectful(tpe, Pure))
+    val ret = Some(Effectful(List(tpe), Pure))
   }
 
   /** Effects */
@@ -349,12 +350,18 @@ package object symbols {
 
   lazy val Pure = new Effects(Nil)
 
-  case class Effectful(tpe: ValueType, effects: Effects) {
-    override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
+  // TODO rename effects to effs
+  case class Effectful(tpes: List[ValueType], effects: Effects) {
+    // TODO prettier toString
+    override def toString = if (effects.isEmpty) tpes.toString else s"$tpes / $effects"
   }
 
   object / {
-    def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
+    def unapply(e: Effectful): Option[(List[ValueType], Effects)] = Some(e.tpes, e.effects)
+  }
+
+  implicit class SlashEffectful(tpes: List[ValueType]) {
+    def /(eff: Effects): Effectful = Effectful(tpes, eff)
   }
 
   /**
