@@ -7,27 +7,37 @@ import effekt.subtitutions.RegionEq
 import effekt.symbols.{ BlockSymbol, Symbol, ValueSymbol, Effectful }
 
 sealed trait Region {
+
+  /**
+   * Is this region a concrete region set? That is, will `asRegionSet`
+   * be successful without errors?
+   */
+  def isConcrete: Boolean
+
+  /**
+   * View this region as a concrete region set
+   */
   def asRegionSet(implicit C: Context): RegionSet
+
+  /**
+   * View this region as a region variable
+   */
   def asRegionVar(implicit C: Context): RegionVar
 }
 
 /**
+ * A region variable introduced by unification
+ *
  * source is the tree at which position this region variable has been introduced
  * we use it mainly for error reporting
- *
- * TODO maybe make RegionVar a subtype of Regions, not Region. In this case we would need
- * to substitute before taking the union.
  */
-case class RegionVar(id: Int, source: Tree) extends Region {
+class RegionVar(val id: Int, val source: Tree) extends Region {
 
   private var _region: Option[RegionSet] = None
 
-  def region(implicit C: Context): RegionSet = _region match {
-    case None    => ??? // lookup in Context and use substitution
-    case Some(r) => r
-  }
+  def isInstantiated: Boolean = _region.isDefined
 
-  def isDefined: Boolean = _region.isDefined
+  def isConcrete = isInstantiated
 
   /**
    * Once we know the actual region this variable represents, we
@@ -41,11 +51,13 @@ case class RegionVar(id: Int, source: Tree) extends Region {
   }
 
   override def equals(a: Any): Boolean = a match {
-    case RegionVar(otherId, _) => id == otherId
-    case _                     => false
+    case r: RegionVar => id == r.id
+    case _            => false
   }
   override def asRegionSet(implicit C: Context): RegionSet =
-    C.panic(s"Required a concrete region set, but got: ${this}")
+    _region.getOrElse {
+      C.panic(s"Cannot find region for unification variable ${this}")
+    }
   override def asRegionVar(implicit C: Context): RegionVar = this
 }
 
@@ -56,16 +68,12 @@ case class RegionVar(id: Int, source: Tree) extends Region {
  */
 class RegionSet(val regions: Set[Symbol]) extends Region {
 
+  def isConcrete = true
+
   def contains(r: Symbol): Boolean = regions.contains(r)
 
   def ++(other: RegionSet): RegionSet = new RegionSet(regions ++ other.regions)
   def --(other: RegionSet): RegionSet = new RegionSet(regions -- other.regions)
-
-  //  def subst(unifier: Map[RegionVar, RegionSet]): RegionSet =
-  //    new RegionSet(regions.flatMap { r => unifier.getOrElse(r, RegionSet(r)).regions
-  //      case r: RegionVar    => unifier.getOrElse(r, RegionSet(r)).regions
-  //      case s: SymbolRegion => Set(s)
-  //    })
 
   override def equals(other: Any): Boolean = other match {
     case r: RegionSet => r.regions == regions
@@ -93,7 +101,7 @@ object Region {
 
   def fresh(source: Tree): RegionVar = {
     lastId += 1
-    RegionVar(lastId, source)
+    new RegionVar(lastId, source)
   }
 }
 
@@ -145,7 +153,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val inferredReg = bodyRegion -- boundRegions
 
       // check that myRegion >: inferredReg
-      val reg = Context.regionInstantation(myRegion) match {
+      val reg = Context.constraintRegion(myRegion) match {
         case Some(allowed) =>
           if (!inferredReg.subsetOf(allowed)) {
             Context.abort(s"Region not allowed here: ${inferredReg}")
@@ -156,7 +164,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       // safe inferred region on the function symbol
       Context.annotateRegions(id.symbol, reg)
-      myRegion.instantiate(reg)
+      Context.instantiate(myRegion, reg)
       reg
 
     case TryHandle(body, handlers) => {
@@ -253,9 +261,12 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 trait RegionCheckerOps extends ContextOps { self: Context =>
 
   private[regions] var currentRegion: RegionSet = Region.empty
+  private[regions] var constraints: List[RegionEq] = Nil
 
-  def initRegionstate(): Unit =
+  def initRegionstate(): Unit = {
     currentRegion = Region.empty
+    constraints = annotation(Annotations.Unifier, module).constraints
+  }
 
   def inRegion[T](r: RegionSet)(block: => T): T = {
     val before = currentRegion
@@ -265,46 +276,57 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     res
   }
 
-  def regionInstantation(r: RegionVar): Option[RegionSet] =
+  def instantiate(x: RegionVar, r: RegionSet): Unit = {
+    x.instantiate(r)
+    simplifyConstraints()
+  }
+
+  def constraintRegion(r: RegionVar): Option[RegionSet] =
     regionUnifier(constraints.toList).get(r) match {
-      case Some(r: RegionVar) if r.isDefined => Some(r.region)
+      case Some(r: RegionVar) if r.isInstantiated => Some(r.asRegionSet)
       case Some(r: RegionSet) => Some(r)
       case _ => None
     }
 
-  def constraints: Set[RegionEq] =
-    annotation(Annotations.Unifier, module).constraints
+  /**
+   * Simplifies onstraints and replaces the constraint set with the simplified one
+   */
+  def simplifyConstraints(): Unit =
+    constraints = simplifyConstraints(constraints)
 
-  // TODO just a first quick draft...
-  // Union find?
-  def regionUnifier(cs: List[RegionEq]): Map[RegionVar, Region] = cs match {
+  /**
+   * Simplify the constraints and replace region variables by their region set if
+   * instantiated.
+   */
+  def simplifyConstraints(cs: List[RegionEq]): List[RegionEq] = cs match {
 
-    case RegionEq(x: RegionVar, y: RegionVar) :: rest if x.isDefined && y.isDefined =>
-      if (x.region != y.region) {
-        abort(s"Region mismatch: ${x.region} is not equal to ${y.region}")
-      } else {
-        regionUnifier(rest)
-      }
+    case RegionEq(x: RegionVar, y: RegionVar) :: rest if x.isInstantiated && y.isInstantiated =>
+      simplifyConstraints(RegionEq(x.asRegionSet, y.asRegionSet) :: rest)
 
     case RegionEq(r1: Region, r2: Region) :: rest if r1 == r2 =>
-      regionUnifier(rest)
+      simplifyConstraints(rest)
 
-    case RegionEq(x: RegionVar, r) :: rest if !x.isDefined =>
-      val remainder = regionUnifier(substConstraints(x, r, rest))
-      remainder + (x -> r)
+    case (c @ RegionEq(x: RegionVar, r)) :: rest if !x.isInstantiated =>
+      c :: simplifyConstraints(substConstraints(x, r, rest))
 
-    case RegionEq(r, x: RegionVar) :: rest if !x.isDefined =>
-      val remainder = regionUnifier(substConstraints(x, r, rest))
-      remainder + (x -> r)
+    case (c @ RegionEq(r, x: RegionVar)) :: rest if !x.isInstantiated =>
+      c :: simplifyConstraints(substConstraints(x, r, rest))
 
     case RegionEq(r1: RegionSet, r2: RegionSet) :: rest if (r1 != r2) =>
       abort(s"Region mismatch: $r1 is not equal to $r2")
 
     case RegionEq(r1: RegionSet, r2: RegionSet) :: rest =>
-      regionUnifier(rest)
+      simplifyConstraints(rest)
 
-    case Nil => Map.empty
+    case Nil => Nil
   }
+
+  def regionUnifier(cs: List[RegionEq]): Map[RegionVar, Region] =
+    simplifyConstraints(cs).map {
+      case RegionEq(x: RegionVar, r) if !x.isInstantiated => (x -> r)
+      case RegionEq(r, x: RegionVar) if !x.isInstantiated => (x -> r)
+      case _ => panic("wrong constraint")
+    }.toMap
 
   private def substConstraints(x: RegionVar, r: Region, cs: List[RegionEq]): List[RegionEq] =
     cs.map {

@@ -23,7 +23,7 @@ object subtitutions {
     override def toString = s"$r1 =!= $r2"
   }
 
-  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq]) extends UnificationResult {
+  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: List[RegionEq]) extends UnificationResult {
 
     def getUnifier(implicit error: ErrorReporter): Unifier = this
 
@@ -44,7 +44,7 @@ object subtitutions {
       Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
     }
 
-    def equalRegions(r1: Region, r2: Region): Unifier = this.copy(constraints = constraints + RegionEq(r1, r2))
+    def equalRegions(r1: Region, r2: Region): Unifier = this.copy(constraints = RegionEq(r1, r2) :: constraints)
 
     def union(other: UnificationResult): UnificationResult = other match {
       case Unifier(subst, constr) =>
@@ -97,8 +97,8 @@ object subtitutions {
     }
   }
   object Unifier {
-    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType], Set.empty)
-    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify), Set.empty)
+    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType], Nil)
+    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify), Nil)
   }
   case class UnificationError(msg: String) extends UnificationResult {
     // TODO currently we only return an empty unifier for backwards compatibility
@@ -185,7 +185,7 @@ object subtitutions {
     def instantiate(tpe: BlockType): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
-      val unifier = Unifier(subst, Set.empty)
+      val unifier = Unifier(subst, Nil)
       val rigids = subst.values.toList
 
       (rigids, BlockType(Nil, unifier.substitute(params), unifier.substitute(ret)))
