@@ -140,27 +140,36 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       //
       // This is a conservative approximation that can be refined, later, potentially
       // by using region variables and collecting constraints.
-      Context.annotateRegions(sym, C.currentRegion)
+      Context.annotateRegions(sym, C.staticRegion)
 
       // regions of parameters introduced by this function
       val boundRegions: RegionSet = bindRegions(params)
 
-      val bodyRegion = check(body)
+      val selfRegion = Region(sym)
+      val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
       val reg = bodyRegion -- boundRegions
 
       log(s"inferred region for function ${id}: ${reg}")
+
+      // check that the self region (used by resume and variables) does not escape the scope
+      val tpe = Context.blockTypeOf(sym)
+      val escapes = freeRegionVariables(tpe.ret) intersect selfRegion
+      if (escapes.nonEmpty) {
+        Context.abort(s"Continuation escaping current scope")
+      }
 
       // safe inferred region on the function symbol
       Context.annotateRegions(id.symbol, reg)
       reg
 
-    case Lambda(id, params, body) =>
-      val sym = id.symbol
+    case l @ Lambda(id, params, body) =>
+      val sym = l.symbol
       // annotated by typer
       val myRegion = Context.regionOf(sym).asRegionVar
       val boundRegions: RegionSet = bindRegions(params)
 
-      val bodyRegion = check(body)
+      val selfRegion = Region(sym)
+      val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
 
       val inferredReg = bodyRegion -- boundRegions
 
@@ -172,6 +181,14 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
           }
           allowed
         case None => inferredReg
+      }
+
+      // check that the self region does not escape as part of the lambdas type
+      val tpe = Context.blockTypeOf(sym)
+      val escapes = freeRegionVariables(tpe.ret) intersect selfRegion
+      if (escapes.nonEmpty) {
+        // TODO better error messages
+        Context.abort(s"Continuation escaping from lambda")
       }
 
       // safe inferred region on the function symbol
@@ -187,7 +204,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       val bodyRegion = Context.inRegion(boundRegions) { check(body) }
 
-      val reg = bodyRegion -- boundRegions
+      var reg = bodyRegion -- boundRegions
 
       // check that boundRegions do not escape as part of an inferred type
       val Effectful(tpe, _) = C.inferredTypeOf(body)
@@ -195,6 +212,16 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val escapes = freeRegionVariables(tpe) intersect boundRegions
       if (escapes.nonEmpty) {
         Context.abort(s"The following regions leave their defining scope ${escapes}")
+      }
+
+      handlers.foreach {
+        case Handler(id, cap, clauses) => clauses.foreach {
+          case OpClause(id, params, body, resumeId) =>
+            val resumeSym = resumeId.symbol
+            val resumeReg = Context.dynamicRegion
+            Context.annotateRegions(resumeSym, resumeReg)
+            reg ++= check(body)
+        }
       }
       reg
     }
@@ -211,8 +238,21 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         reg.asRegionSet
     }
 
+    case VarDef(id, _, binding) =>
+      Context.annotateRegions(id.symbol, Context.dynamicRegion)
+      val reg = check(binding)
+      // associate the mutable variable binding with the current scope
+      reg
+
+    case Var(id) if id.symbol.isInstanceOf[symbols.VarBinder] =>
+      Context.regionOf(id.symbol).asRegionSet
+
+    case Assign(id, expr) =>
+      check(expr) ++ Context.regionOf(id.symbol).asRegionSet
+
+    // TODO implement
     case ExprTarget(e) =>
-      Context.currentRegion // should be annotated in the type!
+      Context.staticRegion // should be annotated in the type!
 
     // TODO eventually we want to change the representation of block types to admit region polymorphism
     // everywhere where blocktypes are allowed. For now, we only support region polymorphism on known functions.
@@ -243,8 +283,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case e: ExternFun =>
       Context.annotateRegions(e.symbol, Region.empty)
       Region.empty
-
-    // TODO also special case state
   }
 
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
@@ -317,19 +355,36 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
 trait RegionCheckerOps extends ContextOps { self: Context =>
 
-  private[regions] var currentRegion: RegionSet = Region.empty
+  // the current lexical region
+  private[regions] var staticRegion: RegionSet = Region.empty
+
+  // the current dynamical region (as approximated by the owner handler / lambda / function symbol )
+  // only used for continuations!
+  private[regions] var dynamicRegion: RegionSet = Region.empty
+
   private[regions] var constraints: List[RegionEq] = Nil
 
   def initRegionstate(): Unit = {
-    currentRegion = Region.empty
+    staticRegion = Region.empty
     constraints = annotation(Annotations.Unifier, module).constraints
   }
 
   def inRegion[T](r: RegionSet)(block: => T): T = {
-    val before = currentRegion
-    currentRegion = r
+    val staticBefore = staticRegion
+    val dynamicBefore = dynamicRegion
+    staticRegion = r
+    dynamicRegion = r
     val res = block
-    currentRegion = before
+    staticRegion = staticBefore
+    dynamicRegion = dynamicBefore
+    res
+  }
+
+  def inDynamicRegion[T](r: RegionSet)(block: => T): T = {
+    val dynamicBefore = dynamicRegion
+    dynamicRegion = r
+    val res = block
+    dynamicRegion = dynamicBefore
     res
   }
 
