@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.context.Context
 import effekt.regions.Region
 import effekt.symbols.{ BlockType, CapabilityType, Effectful, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType, FunType }
 import effekt.symbols.builtins.THole
@@ -187,16 +188,66 @@ object subtitutions {
      * Instantiate a typescheme with fresh, rigid type variables
      *
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-     *
-     * TODO also instantiate region variables with fresh copies
      */
-    def instantiate(tpe: BlockType): (List[RigidVar], BlockType) = {
+    def instantiate(tpe: BlockType)(implicit C: Context): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
       val unifier = Unifier(subst, Nil)
       val rigids = subst.values.toList
 
-      (rigids, BlockType(Nil, unifier.substitute(params), unifier.substitute(ret)))
+      val substitutedParams = unifier.substitute(params)
+
+      // here we also replace all region variables by copies to allow
+      // substitution in RegionChecker.
+      val substitutedReturn = unifier.substitute(freshRegions(ret))
+      (rigids, BlockType(Nil, substitutedParams, substitutedReturn))
+    }
+
+    /**
+     * Replaces all regions with fresh region variables and instantiates
+     * them with the underlying variable.
+     */
+    def freshRegions[T](t: T)(implicit C: Context): T = {
+
+      def generic[T](t: T): T = t match {
+        case t: ValueType => visitValueType(t).asInstanceOf[T]
+        case b: BlockType => visitBlockType(b).asInstanceOf[T]
+        case b: Effectful => visitEffectful(b).asInstanceOf[T]
+        case s: List[List[Type] @unchecked] => visitSections(s).asInstanceOf[T]
+        case other => C.panic(s"Don't know how to traverse ${t}")
+      }
+
+      def visitValueType(t: ValueType): ValueType = t match {
+        case x: TypeVar => x
+        case TypeApp(t, args) =>
+          TypeApp(t, args.map { visitValueType })
+        case FunType(tpe, reg) =>
+          // this is the **only** interesting case...
+          // vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+          val copy = Region.fresh(C.focus)
+          copy.instantiate(reg)
+          // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          FunType(visitBlockType(tpe), copy)
+        case other => other
+      }
+
+      def visitEffectful(e: Effectful): Effectful = e match {
+        case Effectful(tpe, effs) => Effectful(visitValueType(tpe), effs)
+      }
+
+      def visitBlockType(t: BlockType): BlockType = t match {
+        case BlockType(tps, ps, ret) =>
+          BlockType(tps, visitSections(ps), visitEffectful(ret))
+      }
+
+      def visitSections(t: Sections): Sections = t map {
+        _ map {
+          case v: ValueType      => visitValueType(v)
+          case b: BlockType      => visitBlockType(b)
+          case b: CapabilityType => b
+        }
+      }
+      generic(t)
     }
   }
 }

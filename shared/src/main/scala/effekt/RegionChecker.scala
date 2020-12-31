@@ -14,7 +14,7 @@ sealed trait Region {
    * Is this region a concrete region set? That is, will `asRegionSet`
    * be successful without errors?
    */
-  def isConcrete: Boolean
+  def isInstantiated: Boolean
 
   /**
    * View this region as a concrete region set
@@ -25,6 +25,8 @@ sealed trait Region {
    * View this region as a region variable
    */
   def asRegionVar(implicit C: Context): RegionVar
+
+  def isEmpty: Boolean
 }
 
 /**
@@ -35,17 +37,18 @@ sealed trait Region {
  */
 class RegionVar(val id: Int, val source: Tree) extends Region {
 
-  private var _region: Option[RegionSet] = None
+  private var _region: Option[Region] = None
 
-  def isInstantiated: Boolean = _region.isDefined
+  def isInstantiated: Boolean = _region.map { r => r.isInstantiated }.getOrElse(false)
 
-  def isConcrete = isInstantiated
+  // we approximate emptiness conservatively
+  def isEmpty = _region.map { r => r.isEmpty }.getOrElse(false)
 
   /**
    * Once we know the actual region this variable represents, we
    * can instantiate it (this way we do not need to implement substitution).
    */
-  def instantiate(r: RegionSet): Unit = _region = Some(r)
+  def instantiate(r: Region): Unit = _region = Some(r)
 
   override def toString = _region match {
     case None    => s"?r${id}"
@@ -57,7 +60,7 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
     case _            => false
   }
   override def asRegionSet(implicit C: Context): RegionSet =
-    _region.getOrElse {
+    _region.map { r => r.asRegionSet } getOrElse {
       C.panic(s"Cannot find region for unification variable ${this}")
     }
   override def asRegionVar(implicit C: Context): RegionVar = this
@@ -70,7 +73,7 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
  */
 class RegionSet(val regions: Set[Symbol]) extends Region {
 
-  def isConcrete = true
+  def isInstantiated = true
 
   def contains(r: Symbol): Boolean = regions.contains(r)
 
@@ -125,7 +128,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     Some(input)
   }
 
-  def log(msg: String)(implicit C: Context) = () // C.info(msg) // println(msg)
+  def log(msg: String)(implicit C: Context) = () // C.info(msg + s"\n ${C.constraints}") // println(msg)
 
   // A traversal with the side effect to annotate all functions with their region
   // it returns a _concrete_ region set, all region variables have to be resolved
@@ -174,7 +177,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val inferredReg = bodyRegion -- boundRegions
 
       // check that myRegion >: inferredReg
-      val reg = Context.constraintRegion(myRegion) match {
+      val reg = Context.constrainedRegion(myRegion) match {
         case Some(allowed) =>
           if (!inferredReg.subsetOf(allowed)) {
             Context.abort(s"Region not allowed here: ${inferredReg}")
@@ -331,6 +334,14 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   def substitute(x: Symbol, r: RegionSet, o: Any)(implicit C: Context): Unit = o match {
     case y: RegionVar =>
       val reg = y.asRegionSet.substitute(x, r)
+
+      //      val reg = if (y.isInstantiated) {
+      //        y.asRegionSet.substitute(x, r)
+      //      } else {
+      //        C.constrainedRegion(y)
+      //          .getOrElse { C.panic(s"Region should be instantiated ${y}") }
+      //          .substitute(x, r)
+      //      }
       // overwrite instantiation with substituted set
       y.instantiate(reg)
     case t: Iterable[t] =>
@@ -342,16 +353,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   }
 
 }
-
-// 1) Constraints introduced by typer:
-//    {?r1} =:= {?r2}
-//    {?r1} =:= {}
-//    {}    =:= {}
-//    {?r1} =:= { x, y, z }
-//    NOT {?r1} =:= { x, ?r2, z }
-
-// EQUALITY constraints collected by typer (between singleton unification sets AND annotated regions)
-//
 
 trait RegionCheckerOps extends ContextOps { self: Context =>
 
@@ -393,7 +394,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     simplifyConstraints()
   }
 
-  def constraintRegion(r: RegionVar): Option[RegionSet] =
+  def constrainedRegion(r: RegionVar): Option[RegionSet] =
     regionUnifier(constraints.toList).get(r) match {
       case Some(r: RegionVar) if r.isInstantiated => Some(r.asRegionSet)
       case Some(r: RegionSet) => Some(r)
