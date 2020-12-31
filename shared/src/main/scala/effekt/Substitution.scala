@@ -187,6 +187,8 @@ object subtitutions {
      * Instantiate a typescheme with fresh, rigid type variables
      *
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+     *
+     * TODO also instantiate region variables with fresh copies
      */
     def instantiate(tpe: BlockType): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe

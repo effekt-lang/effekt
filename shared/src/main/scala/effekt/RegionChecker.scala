@@ -133,13 +133,14 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   def checkTree(implicit C: Context): PartialFunction[Tree, RegionSet] = {
 
     case FunDef(id, tparams, params, ret, body) =>
+      val sym = id.symbol
 
       // Since this function might be (mutally) recursive, annotate it with the current region
       // before checking.
       //
       // This is a conservative approximation that can be refined, later, potentially
       // by using region variables and collecting constraints.
-      Context.annotateRegions(id.symbol, C.currentRegion)
+      Context.annotateRegions(sym, C.currentRegion)
 
       // regions of parameters introduced by this function
       val boundRegions: RegionSet = bindRegions(params)
@@ -154,9 +155,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       reg
 
     case Lambda(id, params, body) =>
+      val sym = id.symbol
       // annotated by typer
-      val myRegion = Context.regionOf(id.symbol).asRegionVar
+      val myRegion = Context.regionOf(sym).asRegionVar
       val boundRegions: RegionSet = bindRegions(params)
+
       val bodyRegion = check(body)
 
       val inferredReg = bodyRegion -- boundRegions
@@ -172,7 +175,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       }
 
       // safe inferred region on the function symbol
-      Context.annotateRegions(id.symbol, reg)
+      Context.annotateRegions(sym, reg)
       Context.instantiate(myRegion, reg)
       reg
 
@@ -343,7 +346,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     }
 
   /**
-   * Simplifies onstraints and replaces the constraint set with the simplified one
+   * Simplifies constraints and replaces the constraint set with the simplified one
    */
   def simplifyConstraints(): Unit =
     constraints = simplifyConstraints(constraints)
