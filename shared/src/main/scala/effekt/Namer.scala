@@ -419,7 +419,14 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.ValueTypeTree(tpe) => tpe
 
     // if no region is annotated, then use the toplevel region
-    case source.FunType(tpe, reg)  => FunType(resolve(tpe), Region(reg.map(r => C.resolveTerm(r))))
+    case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs))), reg) =>
+      // here we can find out which entry in effs is a term variable and which is a type variable
+      // random decision: term variables take precedence.
+      val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
+      val effects = types.map(_.asEffect)
+      val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
+
+      FunType(btpe, Region(terms))
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
@@ -506,6 +513,12 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private[namer] def resolveTerm(id: Id): TermSymbol = at(id) {
     val sym = scope.lookupFirstTerm(id.name)
+    assignSymbol(id, sym)
+    sym
+  }
+
+  private[namer] def resolveAny(id: Id): Symbol = at(id) {
+    val sym = scope.lookupFirst(id.name)
     assignSymbol(id, sym)
     sym
   }
