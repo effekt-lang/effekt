@@ -82,6 +82,10 @@ class RegionSet(val regions: Set[Symbol]) extends Region {
 
   def subsetOf(other: RegionSet): Boolean = regions.subsetOf(other.regions)
 
+  def isEmpty: Boolean = regions.isEmpty
+  def nonEmpty: Boolean = regions.nonEmpty
+  def intersect(other: RegionSet): RegionSet = new RegionSet(regions.intersect(other.regions))
+
   override def toString = s"{${regions.map(_.toString).mkString(", ")}}"
 
   override def asRegionSet(implicit C: Context): RegionSet = this
@@ -176,9 +180,14 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val bodyRegion = Context.inRegion(boundRegions) { check(body) }
 
       val reg = bodyRegion -- boundRegions
-      // TODO check that boundRegions do not escape as part of an inferred type
 
+      // check that boundRegions do not escape as part of an inferred type
       val Effectful(tpe, _) = C.inferredTypeOf(body)
+
+      val escapes = freeRegionVariables(tpe) intersect boundRegions
+      if (escapes.nonEmpty) {
+        Context.abort(s"The following regions leave their defining scope ${escapes}")
+      }
 
       // CHECK that boundRegions do not appear in tpe OR in region unification variables that
       // COULD unify with boundRegions.
@@ -244,6 +253,20 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case p: Product =>
       p.productIterator.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
     case leaf =>
+      Region.empty
+  }
+
+  /**
+   * A generic traversal to collects all free region variables
+   */
+  def freeRegionVariables(o: Any)(implicit C: Context): RegionSet = o match {
+    case symbols.FunType(tpe, reg) =>
+      freeRegionVariables(tpe) ++ reg.asRegionSet
+    case t: Iterable[t] =>
+      t.foldLeft(Region.empty) { case (r, t) => r ++ freeRegionVariables(t) }
+    case p: Product =>
+      p.productIterator.foldLeft(Region.empty) { case (r, t) => r ++ freeRegionVariables(t) }
+    case _ =>
       Region.empty
   }
 }
