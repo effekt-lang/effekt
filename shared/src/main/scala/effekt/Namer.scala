@@ -6,7 +6,8 @@ package namer
  */
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
-import effekt.source.{ Def, Id, Tree, ModuleDecl }
+import effekt.regions.Region
+import effekt.source.{ Def, Id, ModuleDecl, Tree }
 import effekt.symbols._
 import scopes._
 
@@ -305,13 +306,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val uniqueId = Context.freshTermName(id)
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
-        UserFunction(
-          uniqueId,
-          tparams map resolve,
-          params map resolve,
-          annot map resolve,
-          f
-        )
+        val tps = tparams map resolve
+        val ps = params map resolve
+        val ret = Context scoped {
+          Context.bind(ps)
+          annot map resolve
+        }
+        UserFunction(uniqueId, tps, ps, ret, f)
       }
       Context.define(id, sym)
 
@@ -418,7 +419,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.ValueTypeTree(tpe) => tpe
 
     // if no region is annotated, then use the toplevel region
-    case source.FunType(tpe)       => FunType(resolve(tpe), regions.Region.empty)
+    case source.FunType(tpe, reg)  => FunType(resolve(tpe), Region(reg.map(r => C.resolveTerm(r))))
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =

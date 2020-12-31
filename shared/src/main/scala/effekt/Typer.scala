@@ -440,7 +440,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id)       => t.definition
     case source.ValueTypeTree(tpe)    => tpe
-    case source.FunType(tpe)          => FunType(resolveBlockType(tpe), Region.empty)
+    case source.FunType(tpe, reg)     => FunType(resolveBlockType(tpe), resolveRegion(reg))
   }
 
   def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
@@ -449,6 +449,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
   def resolveEffectful(effectful: source.Effectful)(implicit C: Context): Effectful =
     Effectful(resolveValueType(effectful.tpe), Effects(effectful.eff.effs.map(_.definition)))
+
+  def resolveRegion(reg: List[source.Id])(implicit C: Context): Region = Region(reg.map(_.symbol))
 
   /**
    * Invariant: Only call this on declarations that are fully annotated

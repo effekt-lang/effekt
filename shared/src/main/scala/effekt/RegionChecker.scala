@@ -39,7 +39,11 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
 
   private var _region: Option[Region] = None
 
-  def isInstantiated: Boolean = _region.map { r => r.isInstantiated }.getOrElse(false)
+  // do not treat region variables that point to other variables as instantiated
+  def isInstantiated: Boolean = _region.map {
+    case r: RegionVar => false //r.isInstantiated
+    case r: RegionSet => true
+  }.getOrElse(false)
 
   // we approximate emptiness conservatively
   def isEmpty = _region.map { r => r.isEmpty }.getOrElse(false)
@@ -52,7 +56,7 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
 
   override def toString = _region match {
     case None    => s"?r${id}"
-    case Some(r) => r.toString
+    case Some(r) => r.toString // s"?r${id} -> ${r.toString}"
   }
 
   override def equals(a: Any): Boolean = a match {
@@ -277,6 +281,9 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
           substitute(param, argReg, tpe)
         case (param, arg: CapabilityArg) => ()
       }
+      // check constraints again after substitution
+      C.simplifyConstraints()
+
       reg
 
     // calls to unknown functions (block arguments, lambdas, etc.)
@@ -334,15 +341,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   def substitute(x: Symbol, r: RegionSet, o: Any)(implicit C: Context): Unit = o match {
     case y: RegionVar =>
       val reg = y.asRegionSet.substitute(x, r)
-
-      //      val reg = if (y.isInstantiated) {
-      //        y.asRegionSet.substitute(x, r)
-      //      } else {
-      //        C.constrainedRegion(y)
-      //          .getOrElse { C.panic(s"Region should be instantiated ${y}") }
-      //          .substitute(x, r)
-      //      }
-      // overwrite instantiation with substituted set
       y.instantiate(reg)
     case t: Iterable[t] =>
       t.foreach { t => substitute(x, r, t) }
@@ -413,23 +411,20 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
    */
   def simplifyConstraints(cs: List[RegionEq]): List[RegionEq] = cs match {
 
-    case RegionEq(x: RegionVar, y: RegionVar) :: rest if x.isInstantiated && y.isInstantiated =>
-      simplifyConstraints(RegionEq(x.asRegionSet, y.asRegionSet) :: rest)
-
-    case RegionEq(r1: Region, r2: Region) :: rest if r1 == r2 =>
-      simplifyConstraints(rest)
+    case RegionEq(x: Region, y: Region) :: rest if x.isInstantiated && y.isInstantiated =>
+      if (x.asRegionSet != y.asRegionSet) {
+        abort(s"Region mismatch: $x is not equal to $y")
+      } else {
+        simplifyConstraints(rest)
+      }
 
     case (c @ RegionEq(x: RegionVar, r)) :: rest if !x.isInstantiated =>
-      c :: simplifyConstraints(substConstraints(x, r, rest))
+      val r2 = if (r.isInstantiated) r.asRegionSet else r
+      RegionEq(x, r2) :: simplifyConstraints(substConstraints(x, r, rest))
 
     case (c @ RegionEq(r, x: RegionVar)) :: rest if !x.isInstantiated =>
-      c :: simplifyConstraints(substConstraints(x, r, rest))
-
-    case RegionEq(r1: RegionSet, r2: RegionSet) :: rest if (r1 != r2) =>
-      abort(s"Region mismatch: $r1 is not equal to $r2")
-
-    case RegionEq(r1: RegionSet, r2: RegionSet) :: rest =>
-      simplifyConstraints(rest)
+      val r2 = if (r.isInstantiated) r.asRegionSet else r
+      RegionEq(x, r2) :: simplifyConstraints(substConstraints(x, r, rest))
 
     case Nil => Nil
   }
