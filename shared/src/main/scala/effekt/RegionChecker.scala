@@ -82,6 +82,9 @@ class RegionSet(val regions: Set[Symbol]) extends Region {
 
   def subsetOf(other: RegionSet): Boolean = regions.subsetOf(other.regions)
 
+  def substitute(x: Symbol, r: RegionSet): RegionSet =
+    if (contains(x)) { new RegionSet((regions - x) ++ r.regions) } else this
+
   def isEmpty: Boolean = regions.isEmpty
   def nonEmpty: Boolean = regions.nonEmpty
   def intersect(other: RegionSet): RegionSet = new RegionSet(regions.intersect(other.regions))
@@ -269,6 +272,20 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case _ =>
       Region.empty
   }
+
+  def substitute(x: Symbol, r: RegionSet, o: Any)(implicit C: Context): Unit = o match {
+    case y: RegionVar =>
+      val reg = y.asRegionSet.substitute(x, r)
+      // overwrite instantiation with substituted set
+      y.instantiate(reg)
+    case t: Iterable[t] =>
+      t.foreach { t => substitute(x, r, t) }
+    case p: Product =>
+      p.productIterator.foreach { t => substitute(x, r, t) }
+    case _ =>
+      ()
+  }
+
 }
 
 // 1) Constraints introduced by typer:

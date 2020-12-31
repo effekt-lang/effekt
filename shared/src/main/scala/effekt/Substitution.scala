@@ -75,6 +75,8 @@ object subtitutions {
         substitutions.getOrElse(x, x)
       case TypeApp(t, args) =>
         TypeApp(t, args.map { substitute })
+      case FunType(tpe, reg) =>
+        FunType(substitute(tpe), reg)
       case other => other
     }
 
@@ -84,6 +86,10 @@ object subtitutions {
 
     def substitute(t: InterfaceType): InterfaceType = t match {
       case b: CapabilityType => b
+      case b: BlockType      => substitute(b)
+    }
+
+    def substitute(t: BlockType): BlockType = t match {
       case BlockType(tps, ps, ret) =>
         val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) }, constraints)
         BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
