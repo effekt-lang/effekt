@@ -79,8 +79,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val (_ / blockEffs) = block checkAgainst TUnit
         TUnit / (condEffs ++ blockEffs)
 
-      case v: source.Var =>
-        Context.valueTypeOf(v.definition) / Pure
+      // the variable now can also be a block variable
+      case source.Var(id) => id.symbol match {
+        case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
+        case e: ValueSymbol => Context.valueTypeOf(e) / Pure
+      }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
@@ -151,7 +154,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
           case f: FunType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
-        checkCallTo(c, "function", tpe, targs map { resolveValueType }, args, expected)
+        val (t / eff) = checkCallTo(c, "function", tpe, targs map { resolveValueType }, args, expected)
+        t / (eff ++ funEffs)
 
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
         Context.panic("Method call syntax not allowed in source programs.")

@@ -128,6 +128,12 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     val subst = C.regionUnifier(C.constraints.toList)
     log(s"Got the following constraints: $subst")
     log(C.constraints.toString)
+
+    input.defs.foreach {
+      case f: FunDef =>
+        Context.annotateRegions(f.symbol, C.staticRegion)
+      case _ => ()
+    }
     check(input)
     Some(input)
   }
@@ -154,7 +160,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       val selfRegion = Region(sym)
       val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
-      val reg = bodyRegion -- boundRegions
+      val reg = bodyRegion -- boundRegions -- selfRegion
 
       log(s"inferred region for function ${id}: ${reg}")
 
@@ -178,7 +184,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val selfRegion = Region(sym)
       val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
 
-      val inferredReg = bodyRegion -- boundRegions
+      val inferredReg = bodyRegion -- boundRegions -- selfRegion
 
       // check that myRegion >: inferredReg
       val reg = Context.constrainedRegion(myRegion) match {
@@ -287,8 +293,13 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       reg
 
     // calls to unknown functions (block arguments, lambdas, etc.)
-    case Call(target, _, args) =>
-      args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
+    case c @ Call(target, _, args) =>
+      val Effectful(tpe, _) = Context.inferredTypeOf(c)
+      val regs = args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
+      // like in the polymorphic case above, we need to instantiate eventual region variables
+      // introduced by typer for this call
+      instantiateAll(tpe)
+      regs
 
     case e: ExternFun =>
       Context.annotateRegions(e.symbol, Region.empty)
@@ -316,6 +327,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   def check(obj: Any)(implicit C: Context): RegionSet = obj match {
     case t: Tree if checkTree.isDefinedAt(t) =>
       C.at(t) { checkTree(C)(t) }
+    case s: Symbol => Region.empty // don't follow symbols
     case t: Iterable[t] =>
       t.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
     case p: Product =>
@@ -346,6 +358,17 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       t.foreach { t => substitute(x, r, t) }
     case p: Product =>
       p.productIterator.foreach { t => substitute(x, r, t) }
+    case _ =>
+      ()
+  }
+
+  def instantiateAll(o: Any)(implicit C: Context): Unit = o match {
+    case y: RegionVar =>
+      y.instantiate(y.asRegionSet)
+    case t: Iterable[t] =>
+      t.foreach { t => instantiateAll(t) }
+    case p: Product =>
+      p.productIterator.foreach { t => instantiateAll(t) }
     case _ =>
       ()
   }
