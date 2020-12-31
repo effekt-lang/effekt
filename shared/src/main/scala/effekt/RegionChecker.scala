@@ -6,6 +6,8 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.subtitutions.RegionEq
 import effekt.symbols.{ BlockSymbol, Symbol, ValueSymbol, Effectful }
 
+import effekt.context.assertions.SymbolAssertions
+
 sealed trait Region {
 
   /**
@@ -191,10 +193,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       if (escapes.nonEmpty) {
         Context.abort(s"The following regions leave their defining scope ${escapes}")
       }
-
-      // CHECK that boundRegions do not appear in tpe OR in region unification variables that
-      // COULD unify with boundRegions.
-
       reg
     }
 
@@ -202,26 +200,42 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case MemberTarget(cap, op) =>
       Context.regionOf(cap.symbol).asRegionSet
 
-    case IdTarget(id) => id.symbol match {
-      case b: BlockSymbol => Context.regionOf(b).asRegionSet
-      case t: ValueSymbol => Context.currentRegion // should be annotated in the type!
+    case tgt @ IdTarget(id) => id.symbol match {
+      case b: BlockSymbol =>
+        Context.regionOf(b).asRegionSet
+      case t: ValueSymbol =>
+        val symbols.FunType(tpe, reg) = Context.valueTypeOf(t)
+        reg.asRegionSet
     }
 
     case ExprTarget(e) =>
       Context.currentRegion // should be annotated in the type!
 
-    case Call(target, _, args) =>
-      val reg = check(target)
+    // TODO eventually we want to change the representation of block types to admit region polymorphism
+    // everywhere where blocktypes are allowed. For now, we only support region polymorphism on known functions.
+    // This restriction is fine, since we do only allow second-order blocks anyway.
 
-      args.map { arg => check(arg) }
+    // calls to known functions
+    case c @ Call(id: IdTarget, _, args) if id.definition.isInstanceOf[symbols.Fun] =>
+      var reg = check(id)
+      val fun = id.definition.asFun
+      val Effectful(tpe, _) = Context.inferredTypeOf(c)
 
-      // after checking the args, we need to run unification again to see
-      // whether there are now any conflicts.
-      log(C.constraints.toString)
-      C.regionUnifier(C.constraints.toList)
+      (fun.params zip args).foreach {
+        case (param, arg: ValueArgs) => reg ++= check(args)
+        case (List(param: symbols.BlockParam), arg: BlockArg) =>
+          val argReg = check(arg)
+          reg ++= argReg
 
-      // Zip params and args, infer region for block args and substitute
+          // here we substitute the inferred region for the block parameter in the return type.
+          substitute(param, argReg, tpe)
+        case (param, arg: CapabilityArg) => ()
+      }
       reg
+
+    // calls to unknown functions (block arguments, lambdas, etc.)
+    case Call(target, _, args) =>
+      args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
 
     case e: ExternFun =>
       Context.annotateRegions(e.symbol, Region.empty)
