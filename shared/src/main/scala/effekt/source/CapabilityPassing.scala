@@ -37,7 +37,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       // if this is an effect call, we do not want to provide capabilities for the effect itself
       val ownEffect = Effects(List(op.effect))
 
-      val BlockType(tparams, params, ret / effs) = C.blockTypeOf(op)
+      val tpe @ BlockType(tparams, params, ret / effs) = C.blockTypeOf(op)
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
@@ -47,7 +47,9 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       val receiver = C.capabilityReferenceFor(op.effect)
 
-      Call(MemberTarget(receiver, fun.id), targs, transformedArgs ++ capabilityArgs)
+      val target = MemberTarget(receiver, fun.id)
+      C.annotateCalltarget(target, tpe)
+      Call(target, targs, transformedArgs ++ capabilityArgs)
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one

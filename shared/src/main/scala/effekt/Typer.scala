@@ -467,7 +467,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       case List((sym, (tpe, st))) =>
         // use the typer state after this checking pass
         C.restoreTyperstate(st)
-        // reassign symbol of fun to resolved calltarget
+        // reassign symbol of fun to resolved calltarget symbol
         C.assignSymbol(target.id, sym)
 
         return tpe
@@ -614,6 +614,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     // annotate call node with inferred type arguments
     val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     Context.annotateTypeArgs(call, inferredTypeArgs)
+
+    // annotate the calltarget tree with the resolved blocktype
+    C.annotateTarget(call.target, funTpe)
 
     (Context.unifier substitute ret) / effs
   }
@@ -783,6 +786,10 @@ trait TyperOps extends ContextOps { self: Context =>
       case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
+  }
+
+  private[typer] def annotateTarget(t: source.CallTarget, tpe: BlockType): Unit = {
+    annotations.annotate(Annotations.TargetType, t, tpe)
   }
 
   // Unification

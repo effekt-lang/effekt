@@ -137,6 +137,14 @@ object Annotations {
     "Symbol",
     "the symbol for identifier"
   )
+
+  /**
+   * The blocktype of a calltarget as annotated by typer
+   */
+  val TargetType = Annotation[source.CallTarget, symbols.BlockType](
+    "TargetType",
+    "the blocktype for calltarget"
+  )
 }
 
 /**
@@ -256,6 +264,15 @@ trait AnnotationsDB { self: Context =>
     case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
+
+  // Calltargets
+  // -----------
+
+  def annotateCalltarget(t: source.CallTarget, tpe: BlockType): Unit =
+    annotate(Annotations.TargetType, t, tpe)
+
+  def blockTypeOf(t: source.CallTarget): BlockType =
+    annotation(Annotations.TargetType, t)
 
   // Symbols
   // -------
