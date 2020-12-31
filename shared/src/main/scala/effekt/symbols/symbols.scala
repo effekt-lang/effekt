@@ -202,7 +202,7 @@ package object symbols {
    */
   case class FunType(tpe: BlockType, region: Region) extends ValueType {
     // TODO render region variables properly
-    override def toString = s"${tpe.toString} at $region"
+    override def toString = if (region.isEmpty) tpe.toString else s"${tpe.toString} at $region"
   }
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
