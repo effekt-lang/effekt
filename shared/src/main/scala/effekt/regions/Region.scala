@@ -19,9 +19,9 @@ sealed trait Region {
   def asRegionSet(implicit C: Context): RegionSet
 
   /**
-   * The list of symbols, if this is a concrete region set or an instantiated variable,
+   * Variant of asRegionSet that does not raise errors
    */
-  def toList: Option[List[Symbol]]
+  def getRegionSet: Option[RegionSet]
 
   /**
    * View this region as a region variable
@@ -31,10 +31,24 @@ sealed trait Region {
   /**
    * Runs the given block if this region is instantiated
    */
-  def withRegion[T](block: RegionSet => T)(implicit C: Context): Option[T] =
-    if (isInstantiated) Some(block(asRegionSet)) else None
+  def withRegion[T](block: RegionSet => T): Option[T] =
+    getRegionSet.map(block)
 
-  def isEmpty: Boolean
+}
+object Region {
+  // user facing, we use lists
+  def apply(regs: List[Symbol]): RegionSet = new RegionSet(regs.toSet)
+  def unapply(regs: RegionSet): Option[List[Symbol]] = Some(regs.regions.toList)
+
+  val empty: RegionSet = Region(Nil)
+  def apply(s: Symbol): RegionSet = Region(List(s))
+
+  private var lastId = 0
+
+  def fresh(source: Tree): RegionVar = {
+    lastId += 1
+    new RegionVar(lastId, source)
+  }
 }
 
 /**
@@ -48,15 +62,10 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
   private var _region: Option[Region] = None
 
   // do not treat region variables that point to other variables as instantiated
-  def isInstantiated: Boolean = _region.map {
-    case r: RegionVar => false //r.isInstantiated
-    case r: RegionSet => true
-  }.getOrElse(false)
-
-  // we approximate emptiness conservatively
-  def isEmpty = _region.map { r => r.isEmpty }.getOrElse(false)
-
-  def toList = _region flatMap { _.toList }
+  def isInstantiated: Boolean = _region match {
+    case Some(r: RegionSet) => true
+    case _                  => false
+  }
 
   /**
    * Once we know the actual region this variable represents, we
@@ -78,6 +87,11 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
       C.panic(s"Cannot find region for unification variable ${this}")
     }
   override def asRegionVar(implicit C: Context): RegionVar = this
+
+  def getRegionSet: Option[RegionSet] = _region.flatMap {
+    case r: RegionSet => Some(r)
+    case r: RegionVar => r.getRegionSet
+  }
 }
 
 /**
@@ -90,8 +104,6 @@ class RegionSet(val regions: Set[Symbol]) extends Region {
   def isInstantiated = true
 
   def contains(r: Symbol): Boolean = regions.contains(r)
-
-  def toList = Some(regions.toList)
 
   def ++(other: RegionSet): RegionSet = new RegionSet(regions ++ other.regions)
   def --(other: RegionSet): RegionSet = new RegionSet(regions -- other.regions)
@@ -115,20 +127,13 @@ class RegionSet(val regions: Set[Symbol]) extends Region {
   override def asRegionSet(implicit C: Context): RegionSet = this
   override def asRegionVar(implicit C: Context): RegionVar =
     C.panic(s"Required a region variable, but got: ${this}")
+
+  override def getRegionSet: Option[RegionSet] = Some(this)
 }
+object RegionSet {
 
-object Region {
-  // user facing, we use lists
-  def apply(regs: List[Symbol]): RegionSet = new RegionSet(regs.toSet)
-  def unapply(regs: RegionSet): Option[List[Symbol]] = Some(regs.regions.toList)
-
-  val empty: RegionSet = Region(Nil)
-  def apply(s: Symbol): RegionSet = Region(List(s))
-
-  private var lastId = 0
-
-  def fresh(source: Tree): RegionVar = {
-    lastId += 1
-    new RegionVar(lastId, source)
-  }
+  /**
+   * Extracts the underlying region set for instantiated region variables
+   */
+  def unapply(r: Region): Option[RegionSet] = r.getRegionSet
 }

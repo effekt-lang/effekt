@@ -23,7 +23,7 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  *  Also annotates every lambda with a fresh region variable and collects equality constraints
  *  between regions
  */
-class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
+class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
     val mod = Context.module
@@ -94,7 +94,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       // TODO share code with FunDef
       case l @ source.Lambda(id, params, body) =>
         val sym = l.symbol
-        // expects params to be annotated
+        // currently expects params to be fully annotated
         Context.define(sym.params)
 
         expected match {
@@ -104,10 +104,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
             Context.unify(retGot, ret)
 
             val diff = effsGot -- effs
-
-            //            if (diff.nonEmpty) {
-            //              Context.abort(s"All effects used by a lambda need to be mentioned in its type. The lambda uses effects $diff but is only allowed to use $effs")
-            //            }
 
             val reg = Region.fresh(l)
             val got = FunType(BlockType(Nil, ps, retGot / effs), reg)
@@ -119,10 +115,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
             Context.annotateRegions(sym, reg)
 
             got / diff
-          //          case Some(t: TypeVar) =>
-          //            Context.abort(s"Using a lambda in a polymorphic position requires a type annotation")
-          //          case Some(other) =>
-          //            Context.abort(s"Cannot type check a lambda where a value of type ${other} is expected.")
+
           case _ =>
             val (ret / effs) = checkStmt(body, None)
             Context.wellscoped(effs)
@@ -148,7 +141,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
-        val (funTpe / funEffs) = checkExpr(e, None) // TODO expect a function type here.
+        val (funTpe / funEffs) = checkExpr(e, None)
 
         val tpe: BlockType = funTpe match {
           case f: FunType => f.tpe

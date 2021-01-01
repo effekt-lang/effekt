@@ -416,12 +416,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       TypeApp(data, args.map(resolve))
     case source.TypeVar(id) =>
       Context.resolveType(id).asValueType
-    case source.ValueTypeTree(tpe) => tpe
-
-    // if no region is annotated, then use the toplevel region
+    case source.ValueTypeTree(tpe) =>
+      tpe
     case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs))), reg) =>
-      // here we can find out which entry in effs is a term variable and which is a type variable
-      // random decision: term variables take precedence.
+      // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
       val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
       val effects = types.map(_.asEffect)
       val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))

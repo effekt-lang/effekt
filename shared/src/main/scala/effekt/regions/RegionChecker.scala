@@ -35,8 +35,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     Some(input)
   }
 
-  def log(msg: String)(implicit C: Context) = () // C.info(msg + s"\n ${C.constraints}") // println(msg)
-
   // A traversal with the side effect to annotate all functions with their region
   // it returns a _concrete_ region set, all region variables have to be resolved
   // at that point.
@@ -58,8 +56,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val selfRegion = Region(sym)
       val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
       val reg = bodyRegion -- boundRegions -- selfRegion
-
-      log(s"inferred region for function ${id}: ${reg}")
 
       // check that the self region (used by resume and variables) does not escape the scope
       val tpe = Context.blockTypeOf(sym)
@@ -104,12 +100,12 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       Context.instantiate(myRegion, reg)
       reg
 
-    case b @ BlockArg(params, body) =>
+    case BlockArg(params, body) =>
       val boundRegions: RegionSet = bindRegions(params)
       val bodyRegion = check(body)
       bodyRegion -- boundRegions
 
-    case TryHandle(body, handlers) => {
+    case TryHandle(body, handlers) =>
 
       // regions for all the capabilities
       val caps = handlers.flatMap { h => h.capability }
@@ -137,7 +133,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         }
       }
       reg
-    }
 
     // capability call
     case MemberTarget(cap, op) =>
@@ -167,7 +162,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
     case Assign(id, expr) =>
       val res = check(expr) ++ Context.regionOf(id.symbol).asRegionSet
-      //      C.simplifyConstraints()
       res
 
     // TODO eventually we want to change the representation of block types to admit region polymorphism
@@ -200,12 +194,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     // calls to unknown functions (block arguments, lambdas, etc.)
     case c @ Call(target, _, args) =>
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
-      val regs = args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
-      // like in the polymorphic case above, we need to instantiate eventual region variables
-      // introduced by typer for this call
-      instantiateAll(tpe)
-      regs
-
+      args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
   }
 
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
@@ -227,13 +216,13 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def check(obj: Any)(implicit C: Context): RegionSet = obj match {
+    case _: Symbol | _: String => Region.empty
     case t: Tree if checkTree.isDefinedAt(t) =>
       C.at(t) { checkTree(C)(t) }
-    case s: Symbol => Region.empty // don't follow symbols
-    case t: Iterable[t] =>
-      t.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
     case p: Product =>
       p.productIterator.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
+    case t: Iterable[t] =>
+      t.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
     case leaf =>
       Region.empty
   }
@@ -242,7 +231,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
    * A generic traversal to collects all free region variables
    */
   def freeRegionVariables(o: Any)(implicit C: Context): RegionSet = o match {
-    case s: Symbol => Region.empty // don't follow symbols
+    case _: Symbol | _: String => Region.empty // don't follow symbols
     case symbols.FunType(tpe, reg) =>
       freeRegionVariables(tpe) ++ reg.asRegionSet
     case t: Iterable[t] =>
@@ -254,7 +243,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def substitute(x: Symbol, r: RegionSet, o: Any)(implicit C: Context): Unit = o match {
-    case s: Symbol => () // don't follow symbols
+    case _: Symbol | _: String => ()
     case y: RegionVar =>
       val reg = y.asRegionSet.substitute(x, r)
       y.instantiate(reg)
@@ -265,19 +254,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case _ =>
       ()
   }
-
-  def instantiateAll(o: Any)(implicit C: Context): Unit = o match {
-    case s: Symbol => () // don't follow symbols
-    case y: RegionVar =>
-      y.instantiate(y.asRegionSet)
-    case t: Iterable[t] =>
-      t.foreach { t => instantiateAll(t) }
-    case p: Product =>
-      p.productIterator.foreach { t => instantiateAll(t) }
-    case _ =>
-      ()
-  }
-
 }
 
 trait RegionCheckerOps extends ContextOps { self: Context =>
@@ -293,7 +269,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
 
   private[regions] def initRegionstate(): Unit = {
     staticRegion = Region.empty
-    constraints = annotation(Annotations.Unifier, module).constraints
+    constraints = annotation(Annotations.Unifier, module).constraints.toList
   }
 
   private[regions] def inRegion[T](r: RegionSet)(block: => T): T = {
@@ -326,26 +302,26 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
   private def unifyAndSubstitute(cs: List[RegionEq]): List[RegionEq] = cs.distinct match {
 
     // if both are instantiated -> compare their sets
-    case RegionEq(x: Region, y: Region) :: rest if x.isInstantiated && y.isInstantiated =>
-      if (x.asRegionSet != y.asRegionSet) {
+    case RegionEq(RegionSet(x), RegionSet(y)) :: rest =>
+      if (x != y) {
         abort(s"Region mismatch: $x is not equal to $y")
       } else {
         unifyAndSubstitute(rest)
       }
 
-    // if one is a variable, instantiate or keep constraint
-    case (c @ RegionEq(x: RegionVar, r)) :: rest if !x.isInstantiated =>
-      val cs = unifyAndSubstitute(rest)
-      if (r.isInstantiated) {
-        x.instantiate(r.asRegionSet)
-        cs
-      } else {
-        RegionEq(x, r) :: cs
-      }
+    // if one is a variable -> instantiate
+    case RegionEq(x: RegionVar, RegionSet(r)) :: rest =>
+      x.instantiate(r);
+      unifyAndSubstitute(rest)
 
-    // symmetric case -> swap and retry
-    case (c @ RegionEq(r, x: RegionVar)) :: rest if !x.isInstantiated =>
-      unifyAndSubstitute(RegionEq(x, r) :: rest)
+    // if one is a variable -> instantiate
+    case RegionEq(RegionSet(r), x: RegionVar) :: rest =>
+      x.instantiate(r);
+      unifyAndSubstitute(rest)
+
+    // if both are variables -> keep constraint
+    case RegionEq(x: RegionVar, y: RegionVar) :: rest =>
+      RegionEq(x, y) :: unifyAndSubstitute(rest)
 
     case Nil => Nil
   }

@@ -40,7 +40,7 @@ object subtitutions {
     }
 
     def equalRegions(r1: Region, r2: Region): Unifier =
-      this.copy(constraints = (RegionEq(r1, r2) :: constraints).distinct)
+      this.copy(constraints = constraints + RegionEq(r1, r2))
 
     def union(other: UnificationResult): UnificationResult = other match {
       case Unifier(subst, constr) =>
@@ -99,8 +99,8 @@ object subtitutions {
     }
   }
   object Unifier {
-    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType], Nil)
-    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify), Nil)
+    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType])
+    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify))
   }
   case class UnificationError(msg: String) extends UnificationResult {
     // TODO currently we only return an empty unifier for backwards compatibility
@@ -187,7 +187,7 @@ object subtitutions {
     def instantiate(tpe: BlockType)(implicit C: Context): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
-      val unifier = Unifier(subst, Nil)
+      val unifier = Unifier(subst)
       val rigids = subst.values.toList
 
       val substitutedParams = unifier.substitute(params)
