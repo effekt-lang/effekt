@@ -66,7 +66,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
-  lazy val `at` = keyword("at")
   lazy val `fun` = keyword("fun")
   lazy val `resume` = keyword("resume")
   lazy val `match` = keyword("match")
@@ -81,7 +80,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "at"
+    "match", "module", "import", "extern", "fun"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -523,14 +522,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // for now function types need to be parenthesized
   lazy val funType: P[FunType] =
-    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ~ region ^^ {
-      case params ~ ret ~ reg => FunType(BlockType(params, ret), reg)
+    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ {
+      case params ~ ret => FunType(BlockType(params, ret))
     }
-
-  lazy val region: P[List[IdRef]] =
-    ( (`at` ~/ `{`) ~>  manySep(idRef, `,`) <~ `}`
-    | success(Nil)
-    )
 
   lazy val blockType: P[BlockType] =
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType

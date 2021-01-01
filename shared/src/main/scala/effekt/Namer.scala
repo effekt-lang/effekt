@@ -418,7 +418,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context.resolveType(id).asValueType
     case source.ValueTypeTree(tpe) =>
       tpe
-    case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs))), reg) =>
+    case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
       // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
       val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
       val effects = types.map(_.asEffect)

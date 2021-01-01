@@ -437,7 +437,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
     case t @ source.TypeVar(id)       => t.definition
     case source.ValueTypeTree(tpe)    => tpe
-    case source.FunType(tpe, reg)     => FunType(resolveBlockType(tpe), resolveRegion(reg))
+    // TODO fixme! This is broken: some of the effects in tpe are regions, not effects
+    case source.FunType(tpe)          => FunType(resolveBlockType(tpe), ???)
   }
 
   def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
