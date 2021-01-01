@@ -3,7 +3,6 @@ package regions
 
 import effekt.source._
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.subtitutions.RegionEq
 import effekt.symbols.{ BlockSymbol, Symbol, ValueSymbol, Effectful }
 
 import effekt.context.assertions.SymbolAssertions

@@ -1,8 +1,8 @@
 package effekt
 
 import effekt.context.Context
-import effekt.regions.Region
-import effekt.symbols.{ BlockType, CapabilityType, Effectful, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType, FunType }
+import effekt.regions.{ Region, RegionEq }
+import effekt.symbols.{ BlockType, CapabilityType, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -18,21 +18,7 @@ object subtitutions {
     def equalRegions(r1: Region, r2: Region): UnificationResult
   }
 
-  // Equality constraint on regions
-
-  case class RegionEq(r1: Region, r2: Region) {
-    override def toString = s"$r1 =!= $r2"
-
-    // constraints are symmetric
-    override def equals(other: Any): Boolean = other match {
-      case RegionEq(r3, r4) => (r1 == r3 && r2 == r4) || (r1 == r4 && r2 == r3)
-      case _                => false
-    }
-
-    override def hashCode(): Int = r1.hashCode() + r2.hashCode()
-  }
-
-  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: List[RegionEq]) extends UnificationResult {
+  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq] = Set.empty) extends UnificationResult {
 
     def getUnifier(implicit error: ErrorReporter): Unifier = this
 
