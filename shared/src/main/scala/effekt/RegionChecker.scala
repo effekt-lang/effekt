@@ -133,9 +133,22 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     Context.initRegionstate()
     Context.unifyAndSubstitute()
 
+    // this should go into a precheck method
     input.defs.foreach {
       case f: FunDef =>
         Context.annotateRegions(f.symbol, C.staticRegion)
+      case f: ExternFun =>
+        Context.annotateRegions(f.symbol, Region.empty)
+      case d: DataDef =>
+        d.ctors.foreach { c =>
+          Context.annotateRegions(c.symbol, Region.empty)
+        }
+      case d: RecordDef =>
+        val sym = d.symbol
+        Context.annotateRegions(sym, Region.empty)
+        sym.fields.foreach { f =>
+          Context.annotateRegions(f, Region.empty)
+        }
       case _ => ()
     }
     check(input)
@@ -211,6 +224,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       Context.instantiate(myRegion, reg)
       reg
 
+    case b @ BlockArg(params, body) =>
+      val boundRegions: RegionSet = bindRegions(params)
+      val bodyRegion = check(body)
+      bodyRegion -- boundRegions
+
     case TryHandle(body, handlers) => {
 
       // regions for all the capabilities
@@ -276,6 +294,8 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     // This restriction is fine, since we do only allow second-order blocks anyway.
 
     // calls to known functions
+
+    // TODO check: resumptions can take block arguments (with bidirectional effects), but are not "known functions"
     case c @ Call(id: IdTarget, _, args) if id.definition.isInstanceOf[symbols.Fun] =>
       var reg = check(id)
       val fun = id.definition.asFun
@@ -305,9 +325,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       instantiateAll(tpe)
       regs
 
-    case e: ExternFun =>
-      Context.annotateRegions(e.symbol, Region.empty)
-      Region.empty
   }
 
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
@@ -344,6 +361,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
    * A generic traversal to collects all free region variables
    */
   def freeRegionVariables(o: Any)(implicit C: Context): RegionSet = o match {
+    case s: Symbol => Region.empty // don't follow symbols
     case symbols.FunType(tpe, reg) =>
       freeRegionVariables(tpe) ++ reg.asRegionSet
     case t: Iterable[t] =>
@@ -355,6 +373,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def substitute(x: Symbol, r: RegionSet, o: Any)(implicit C: Context): Unit = o match {
+    case s: Symbol => () // don't follow symbols
     case y: RegionVar =>
       val reg = y.asRegionSet.substitute(x, r)
       y.instantiate(reg)
@@ -367,6 +386,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def instantiateAll(o: Any)(implicit C: Context): Unit = o match {
+    case s: Symbol => () // don't follow symbols
     case y: RegionVar =>
       y.instantiate(y.asRegionSet)
     case t: Iterable[t] =>
