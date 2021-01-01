@@ -61,7 +61,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val tpe = Context.blockTypeOf(sym)
       val escapes = freeRegionVariables(tpe.ret) intersect selfRegion
       if (escapes.nonEmpty) {
-        Context.abort(s"Continuation escaping current scope")
+        Context.abort(s"A value that is introduced in '${id.name}' leaves its scope.")
       }
 
       // safe inferred region on the function symbol
@@ -92,7 +92,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val escapes = freeRegionVariables(tpe.ret) intersect selfRegion
       if (escapes.nonEmpty) {
         // TODO better error messages
-        Context.abort(s"Continuation escaping from lambda")
+        Context.abort(s"A value that is introduced in this lambda leaves its scope.")
       }
 
       // safe inferred region on the function symbol
