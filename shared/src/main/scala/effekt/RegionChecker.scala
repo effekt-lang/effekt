@@ -271,6 +271,12 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         reg.asRegionSet
     }
 
+    case ExprTarget(e) =>
+      val reg = check(e)
+      val Effectful(symbols.FunType(tpe, funReg), _) = Context.inferredTypeOf(e)
+      reg ++ funReg.asRegionSet
+
+
     case VarDef(id, _, binding) =>
       Context.annotateRegions(id.symbol, Context.dynamicRegion)
       val reg = check(binding)
@@ -284,10 +290,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val res = check(expr) ++ Context.regionOf(id.symbol).asRegionSet
       //      C.simplifyConstraints()
       res
-
-    // TODO implement
-    case ExprTarget(e) =>
-      Context.staticRegion // should be annotated in the type!
 
     // TODO eventually we want to change the representation of block types to admit region polymorphism
     // everywhere where blocktypes are allowed. For now, we only support region polymorphism on known functions.
