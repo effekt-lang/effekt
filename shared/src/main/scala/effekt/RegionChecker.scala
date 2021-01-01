@@ -22,6 +22,11 @@ sealed trait Region {
   def asRegionSet(implicit C: Context): RegionSet
 
   /**
+   * The list of symbols, if this is a concrete region set or an instantiated variable,
+   */
+  def toList: Option[List[Symbol]]
+
+  /**
    * View this region as a region variable
    */
   def asRegionVar(implicit C: Context): RegionVar
@@ -53,6 +58,8 @@ class RegionVar(val id: Int, val source: Tree) extends Region {
 
   // we approximate emptiness conservatively
   def isEmpty = _region.map { r => r.isEmpty }.getOrElse(false)
+
+  def toList = _region flatMap { _.toList }
 
   /**
    * Once we know the actual region this variable represents, we
@@ -86,6 +93,8 @@ class RegionSet(val regions: Set[Symbol]) extends Region {
   def isInstantiated = true
 
   def contains(r: Symbol): Boolean = regions.contains(r)
+
+  def toList = Some(regions.toList)
 
   def ++(other: RegionSet): RegionSet = new RegionSet(regions ++ other.regions)
   def --(other: RegionSet): RegionSet = new RegionSet(regions -- other.regions)
@@ -275,7 +284,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val reg = check(e)
       val Effectful(symbols.FunType(tpe, funReg), _) = Context.inferredTypeOf(e)
       reg ++ funReg.asRegionSet
-
 
     case VarDef(id, _, binding) =>
       Context.annotateRegions(id.symbol, Context.dynamicRegion)
