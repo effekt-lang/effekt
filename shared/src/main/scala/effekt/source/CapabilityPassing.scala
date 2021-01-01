@@ -1,7 +1,7 @@
 package effekt
 package source
 
-import effekt.context.{ Context, ContextOps }
+import effekt.context.{ Context, ContextOps, Annotations }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 import effekt.source.Tree.Rewrite
@@ -50,6 +50,18 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val target = MemberTarget(receiver, fun.id)
       C.annotateCalltarget(target, tpe)
       Call(target, targs, transformedArgs ++ capabilityArgs)
+
+    // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
+    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[VarBinder] =>
+
+      val target = visit[source.CallTarget](fun) { _ =>
+        val access = Var(fun.id).inheritPosition(fun)
+        // heal the missing type
+        // TODO refactor this
+        C.annotate(Annotations.TypeAndEffect, access, Effectful(C.valueTypeOf(fun.definition), Pure))
+        ExprTarget(access)
+      }
+      rewrite(Call(target, targs, args))
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
