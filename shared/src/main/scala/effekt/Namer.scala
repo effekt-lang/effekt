@@ -410,28 +410,38 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
-    case source.TypeApp(id, args) =>
-      val data = Context.resolveType(id).asValueType
-      TypeApp(data, args.map(resolve))
-    case source.TypeVar(id) =>
-      Context.resolveType(id).asValueType
-    case source.ValueTypeTree(tpe) =>
-      tpe
-    case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
-      // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
-      val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
-      val effects = types.map(_.asEffect)
-      val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
+  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = {
+    val res = tpe match {
+      case source.TypeApp(id, args) =>
+        val data = Context.resolveType(id).asValueType
+        TypeApp(data, args.map(resolve))
+      case source.TypeVar(id) =>
+        Context.resolveType(id).asValueType
+      case source.ValueTypeTree(tpe) =>
+        tpe
+      case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
+        // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
+        val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
+        val effects = types.map(_.asEffect)
+        val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
 
-      FunType(btpe, Region(terms))
+        FunType(btpe, Region(terms))
+    }
+    C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.symbol])
+    res
   }
 
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
-    BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
+    val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+    C.annotateResolvedType(tpe)(res)
+    res
+  }
 
-  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType =
-    CapabilityType(tpe.eff)
+  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
+    val res = CapabilityType(tpe.eff)
+    C.annotateResolvedType(tpe)(res)
+    res
+  }
 
   def resolve(tpe: source.Effect)(implicit C: Context): Effect =
     Context.resolveType(tpe.id).asEffect

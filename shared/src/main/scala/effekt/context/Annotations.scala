@@ -139,6 +139,16 @@ object Annotations {
   )
 
   /**
+   * The resolved type for a type tree that appears in the source program
+   *
+   * Resolved and annotated by namer and used by typer.
+   */
+  val Type = Annotation[source.Type, symbols.Type](
+    "Type",
+    "the resolved type for"
+  )
+
+  /**
    * The blocktype of a calltarget as annotated by typer
    */
   val TargetType = Annotation[source.CallTarget, symbols.BlockType](
@@ -242,6 +252,12 @@ trait AnnotationsDB { self: Context =>
     case b: ValueSymbol => annotate(Annotations.ValueType, b, tpe)
     case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
+
+  def annotateResolvedType(tree: source.Type)(tpe: tree.symbol): Unit =
+    annotate(Annotations.Type, tree, tpe)
+
+  def resolvedType(tree: source.Type): tree.symbol =
+    annotation(Annotations.Type, tree).asInstanceOf[tree.symbol]
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)

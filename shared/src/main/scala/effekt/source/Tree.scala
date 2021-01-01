@@ -371,7 +371,9 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 }
 
 // for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.Effect) extends Type
+case class CapabilityType(eff: symbols.Effect) extends Type {
+  type symbol = symbols.CapabilityType
+}
 case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type symbol = symbols.BlockType
 }

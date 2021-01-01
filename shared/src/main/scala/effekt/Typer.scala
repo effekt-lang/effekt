@@ -430,25 +430,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-  // TODO we can remove this duplication, once every phase can write to every table.
-  // then the namer phase can already store the resolved type symbol for the param.
 
-  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
-    case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
-    case t @ source.TypeVar(id)       => t.definition
-    case source.ValueTypeTree(tpe)    => tpe
-    // TODO fixme! This is broken: some of the effects in tpe are regions, not effects
-    case source.FunType(tpe)          => FunType(resolveBlockType(tpe), ???)
-  }
+  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = C.resolvedType(tpe)
 
-  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
-    case source.BlockType(params, ret) => BlockType(Nil, List(params.map(resolveValueType)), resolveEffectful(ret))
-  }
-
-  def resolveEffectful(effectful: source.Effectful)(implicit C: Context): Effectful =
-    Effectful(resolveValueType(effectful.tpe), Effects(effectful.eff.effs.map(_.definition)))
-
-  def resolveRegion(reg: List[source.Id])(implicit C: Context): Region = Region(reg.map(_.symbol))
+  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = C.resolvedType(tpe)
 
   /**
    * Invariant: Only call this on declarations that are fully annotated
