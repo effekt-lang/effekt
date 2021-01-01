@@ -22,6 +22,14 @@ object subtitutions {
 
   case class RegionEq(r1: Region, r2: Region) {
     override def toString = s"$r1 =!= $r2"
+
+    // constraints are symmetric
+    override def equals(other: Any): Boolean = other match {
+      case RegionEq(r3, r4) => (r1 == r3 && r2 == r4) || (r1 == r4 && r2 == r3)
+      case _                => false
+    }
+
+    override def hashCode(): Int = r1.hashCode() + r2.hashCode()
   }
 
   case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: List[RegionEq]) extends UnificationResult {
@@ -45,7 +53,8 @@ object subtitutions {
       Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
     }
 
-    def equalRegions(r1: Region, r2: Region): Unifier = this.copy(constraints = RegionEq(r1, r2) :: constraints)
+    def equalRegions(r1: Region, r2: Region): Unifier =
+      this.copy(constraints = (RegionEq(r1, r2) :: constraints).distinct)
 
     def union(other: UnificationResult): UnificationResult = other match {
       case Unifier(subst, constr) =>

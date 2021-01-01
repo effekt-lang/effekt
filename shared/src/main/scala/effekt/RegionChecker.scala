@@ -26,6 +26,12 @@ sealed trait Region {
    */
   def asRegionVar(implicit C: Context): RegionVar
 
+  /**
+   * Runs the given block if this region is instantiated
+   */
+  def withRegion[T](block: RegionSet => T)(implicit C: Context): Option[T] =
+    if (isInstantiated) Some(block(asRegionSet)) else None
+
   def isEmpty: Boolean
 }
 
@@ -125,9 +131,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
   def run(input: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Context.initRegionstate()
-    val subst = C.regionUnifier(C.constraints.toList)
-    log(s"Got the following constraints: $subst")
-    log(C.constraints.toString)
+    Context.unifyAndSubstitute()
 
     input.defs.foreach {
       case f: FunDef =>
@@ -187,14 +191,12 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val inferredReg = bodyRegion -- boundRegions -- selfRegion
 
       // check that myRegion >: inferredReg
-      val reg = Context.constrainedRegion(myRegion) match {
-        case Some(allowed) =>
-          if (!inferredReg.subsetOf(allowed)) {
-            Context.abort(s"Region not allowed here: ${inferredReg}")
-          }
-          allowed
-        case None => inferredReg
-      }
+      val reg = myRegion.withRegion { allowed =>
+        if (!inferredReg.subsetOf(allowed)) {
+          Context.abort(s"Region not allowed here: ${inferredReg}")
+        }
+        allowed
+      }.getOrElse { inferredReg }
 
       // check that the self region does not escape as part of the lambdas type
       val tpe = Context.blockTypeOf(sym)
@@ -261,7 +263,9 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       Context.regionOf(id.symbol).asRegionSet
 
     case Assign(id, expr) =>
-      check(expr) ++ Context.regionOf(id.symbol).asRegionSet
+      val res = check(expr) ++ Context.regionOf(id.symbol).asRegionSet
+      //      C.simplifyConstraints()
+      res
 
     // TODO implement
     case ExprTarget(e) =>
@@ -288,7 +292,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         case (param, arg: CapabilityArg) => ()
       }
       // check constraints again after substitution
-      C.simplifyConstraints()
+      C.unifyAndSubstitute()
 
       reg
 
@@ -412,55 +416,36 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
 
   def instantiate(x: RegionVar, r: RegionSet): Unit = {
     x.instantiate(r)
-    simplifyConstraints()
+    unifyAndSubstitute()
   }
 
-  def constrainedRegion(r: RegionVar): Option[RegionSet] =
-    regionUnifier(constraints.toList).get(r) match {
-      case Some(r: RegionVar) if r.isInstantiated => Some(r.asRegionSet)
-      case Some(r: RegionSet) => Some(r)
-      case _ => None
-    }
+  def unifyAndSubstitute(): Unit =
+    constraints = unifyAndSubstitute(constraints)
 
-  /**
-   * Simplifies constraints and replaces the constraint set with the simplified one
-   */
-  def simplifyConstraints(): Unit =
-    constraints = simplifyConstraints(constraints)
+  def unifyAndSubstitute(cs: List[RegionEq]): List[RegionEq] = cs.distinct match {
 
-  /**
-   * Simplify the constraints and replace region variables by their region set if
-   * instantiated.
-   */
-  def simplifyConstraints(cs: List[RegionEq]): List[RegionEq] = cs match {
-
+    // if both are instantiated -> compare their sets
     case RegionEq(x: Region, y: Region) :: rest if x.isInstantiated && y.isInstantiated =>
       if (x.asRegionSet != y.asRegionSet) {
         abort(s"Region mismatch: $x is not equal to $y")
       } else {
-        simplifyConstraints(rest)
+        unifyAndSubstitute(rest)
       }
 
+    // if one is a variable, instantiate or keep constraint
     case (c @ RegionEq(x: RegionVar, r)) :: rest if !x.isInstantiated =>
-      val r2 = if (r.isInstantiated) r.asRegionSet else r
-      RegionEq(x, r2) :: simplifyConstraints(substConstraints(x, r, rest))
+      val cs = unifyAndSubstitute(rest)
+      if (r.isInstantiated) {
+        x.instantiate(r.asRegionSet)
+        cs
+      } else {
+        RegionEq(x, r) :: cs
+      }
 
+    // symmetric case -> swap and retry
     case (c @ RegionEq(r, x: RegionVar)) :: rest if !x.isInstantiated =>
-      val r2 = if (r.isInstantiated) r.asRegionSet else r
-      RegionEq(x, r2) :: simplifyConstraints(substConstraints(x, r, rest))
+      unifyAndSubstitute(RegionEq(x, r) :: rest)
 
     case Nil => Nil
   }
-
-  def regionUnifier(cs: List[RegionEq]): Map[RegionVar, Region] =
-    simplifyConstraints(cs).map {
-      case RegionEq(x: RegionVar, r) if !x.isInstantiated => (x -> r)
-      case RegionEq(r, x: RegionVar) if !x.isInstantiated => (x -> r)
-      case _ => panic("wrong constraint")
-    }.toMap
-
-  private def substConstraints(x: RegionVar, r: Region, cs: List[RegionEq]): List[RegionEq] =
-    cs.map {
-      case RegionEq(r1, r2) => RegionEq(if (r1 == x) r else r1, if (r2 == x) r else r2)
-    }
 }

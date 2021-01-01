@@ -228,7 +228,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
         val (tpeCases / effsCases) = tpes.reduce[Effectful] {
           case (tpe1 / effs1, tpe2 / effs2) =>
-            Unification.unify(tpe1, tpe2)
+            Context.unify(tpe1, tpe2)
             tpe1 / (effs1 ++ effs2)
         }
         tpeCases / (effsCases ++ effs)
@@ -491,7 +491,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
             annotType.foreach { t =>
-              Context.at(p) { Unification.unify(decl, t) }
+              Context.at(p) { Context.unify(decl, t) }
             }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
@@ -748,7 +748,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
-      expected foreach { Unification.unify(_, got) }
+      expected foreach { Context.unify(_, got) }
       C.assignType(t, got / effs)
       got / effs
     }
