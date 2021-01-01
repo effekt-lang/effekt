@@ -30,7 +30,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
         case (env, ValueParam(p, tpe)) => env
       }
       ScopeAbs(id, BlockLit(params, transform(body)(extendedEnv, C)))
-    case Member(body, id) => ??? // Member(transform(body), id)
+    case Member(body, id) => Member(transform(body), id)
     case e                => e
   }
 
@@ -68,16 +68,16 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     // TODO either the implementation of match should provide evidence
     // or we should not abstract over evidence!
     case Match(scrutinee, clauses) =>
-      Match(scrutinee, clauses.map { case (p, b) => (p, transformBody(b)) })
+      Match(transform(scrutinee), clauses.map { case (p, b) => (p, transformBody(b)) })
 
     case If(cond, thn, els) =>
-      If(cond, transform(thn), transform(els))
+      If(transform(cond), transform(thn), transform(els))
 
     case While(cond, body) =>
       While(transform(cond), transform(body))
 
     case Ret(e) =>
-      Ret(e)
+      Ret(transform(e))
 
     case Exports(path, exports) =>
       Exports(path, exports)
@@ -85,6 +85,14 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
     case Include(contents, rest) => Include(contents, transform(rest))
 
     case Hole                    => Hole
+  }
+
+  def transform(tree: Expr)(implicit env: Environment, C: Context): Expr = tree match {
+    case l: Literal[_] => l
+    case v: ValueVar => v
+    case PureApp(b: Block, targs, args: List[Argument]) => tree // we did not change them before -- why now?
+    case Select(target: Expr, field: Symbol) => Select(transform(target), field)
+    case Closure(b: Block) => Closure(transform(b))
   }
 
   /**
@@ -104,7 +112,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case ev     => Lifted(ev, b)
     }
     case b: Block => transform(b)
-    case other    => other
+    case e: Expr  => transform(e)
   }
 
   def transform(h: Handler)(implicit env: Environment, C: Context): Handler = h match {
@@ -133,7 +141,8 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case b: Lifted     => sys error "Should not happen"
       case b: ScopeApp   => sys error "Should not happen"
       case b: ScopeAbs   => sys error "Should not happen"
-      case b: Unbox      => ???
+      // TODO check whether this makes any sense
+      case b: Unbox      => Here()
     }
   }
 }

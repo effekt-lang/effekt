@@ -201,7 +201,6 @@ package object symbols {
    * Types of first-class functions
    */
   case class FunType(tpe: BlockType, region: Region) extends ValueType {
-    // TODO render region variables properly
     override def toString: String = {
 
       val BlockType(_, params, Effectful(ret, effs)) = tpe

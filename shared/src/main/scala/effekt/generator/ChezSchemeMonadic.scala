@@ -71,7 +71,8 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
-    case _ => sys error "Lifts not supported"
+    case Unbox(e) => toDoc(e)
+    case _        => sys error "Lifts not supported"
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {

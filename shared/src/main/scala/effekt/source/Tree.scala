@@ -360,7 +360,7 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 /**
  * Types of first-class functions
  */
-case class FunType(tpe: BlockType, region: List[IdRef]) extends ValueType
+case class FunType(tpe: BlockType) extends ValueType
 
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
