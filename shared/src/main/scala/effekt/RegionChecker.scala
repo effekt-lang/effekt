@@ -292,12 +292,12 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
 
   private[regions] var constraints: List[RegionEq] = Nil
 
-  def initRegionstate(): Unit = {
+  private[regions] def initRegionstate(): Unit = {
     staticRegion = Region.empty
     constraints = annotation(Annotations.Unifier, module).constraints
   }
 
-  def inRegion[T](r: RegionSet)(block: => T): T = {
+  private[regions] def inRegion[T](r: RegionSet)(block: => T): T = {
     val staticBefore = staticRegion
     val dynamicBefore = dynamicRegion
     staticRegion = r
@@ -308,7 +308,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     res
   }
 
-  def inDynamicRegion[T](r: RegionSet)(block: => T): T = {
+  private[regions] def inDynamicRegion[T](r: RegionSet)(block: => T): T = {
     val dynamicBefore = dynamicRegion
     dynamicRegion = r
     val res = block
@@ -316,15 +316,15 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     res
   }
 
-  def instantiate(x: RegionVar, r: RegionSet): Unit = {
+  private[regions] def instantiate(x: RegionVar, r: RegionSet): Unit = {
     x.instantiate(r)
     unifyAndSubstitute()
   }
 
-  def unifyAndSubstitute(): Unit =
+  private[regions] def unifyAndSubstitute(): Unit =
     constraints = unifyAndSubstitute(constraints)
 
-  def unifyAndSubstitute(cs: List[RegionEq]): List[RegionEq] = cs.distinct match {
+  private def unifyAndSubstitute(cs: List[RegionEq]): List[RegionEq] = cs.distinct match {
 
     // if both are instantiated -> compare their sets
     case RegionEq(x: Region, y: Region) :: rest if x.isInstantiated && y.isInstantiated =>
