@@ -202,7 +202,27 @@ package object symbols {
    */
   case class FunType(tpe: BlockType, region: Region) extends ValueType {
     // TODO render region variables properly
-    override def toString = if (region.isEmpty) tpe.toString else s"${tpe.toString} at $region"
+    override def toString: String = {
+
+      val BlockType(_, params, Effectful(ret, effs)) = tpe
+      // copy and paste from BlockType.toString
+      val ps = params.map {
+        case List(b: BlockType)             => s"{${b.toString}}"
+        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+      }.mkString("")
+
+      val effects = effs.toList
+      val regs = region match {
+        case RegionSet(r) => r.regions.toList
+        // to not confuse users, we render uninstantiated region variables as ?
+        case e            => List("?")
+      }
+      val both: List[String] = (effects ++ regs).map { _.toString }
+
+      val tpeString = if (both.isEmpty) ret.toString else s"$ret / { ${both.mkString(", ")} }"
+
+      s"$ps ⟹ $tpeString"
+    }
   }
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
