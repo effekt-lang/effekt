@@ -9,6 +9,9 @@ import effekt.util.messages.FatalPhaseError
  * input to produce a new output. They do not track dependencies.
  */
 trait Phase[In, Out] {
+
+  val phaseName: String
+
   def run(input: In)(implicit C: Context): Option[Out]
 
   def apply(input: In)(implicit C: Context): Option[Out] = try {

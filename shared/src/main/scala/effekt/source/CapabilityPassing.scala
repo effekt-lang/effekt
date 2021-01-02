@@ -14,6 +14,8 @@ import effekt.source.Tree.Rewrite
  */
 class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
+  val phaseName = "capability-passing"
+
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = Context in {
     Some(rewrite(mod))
   }

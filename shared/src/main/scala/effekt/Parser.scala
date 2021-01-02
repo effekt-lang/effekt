@@ -14,6 +14,8 @@ import scala.language.implicitConversions
  */
 class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
 
+  val phaseName = "parser"
+
   def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parseAll(program, source) match {
       case Success(ast, _) =>

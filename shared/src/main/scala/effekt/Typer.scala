@@ -25,6 +25,8 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  */
 class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
+  val phaseName = "typer"
+
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
     val mod = Context.module
 

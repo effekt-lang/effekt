@@ -6,6 +6,8 @@ import effekt.context.Context
 
 class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
 
+  val phaseName = "lift-inference"
+
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
     if (C.config.requiresLift()) {
       Some(transform(mod)(Environment(Map.empty), C))

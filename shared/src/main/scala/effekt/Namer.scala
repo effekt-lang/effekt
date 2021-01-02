@@ -28,6 +28,8 @@ import scopes._
  */
 class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
+  val phaseName = "namer"
+
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Some(resolve(mod))
   }

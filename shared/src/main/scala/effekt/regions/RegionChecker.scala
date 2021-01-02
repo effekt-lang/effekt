@@ -9,6 +9,8 @@ import effekt.context.assertions.SymbolAssertions
 
 class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
+  val phaseName = "region-checker"
+
   def run(input: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Context.initRegionstate()
     Context.unifyAndSubstitute()

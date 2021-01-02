@@ -8,6 +8,8 @@ import effekt.context.assertions.SymbolAssertions
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
+  val phaseName = "transformer"
+
   def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
     Some(transform(mod))
