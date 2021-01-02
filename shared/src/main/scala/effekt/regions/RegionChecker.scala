@@ -71,7 +71,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case l @ Lambda(id, params, body) =>
       val sym = l.symbol
       // annotated by typer
-      val myRegion = Context.regionOf(sym).asRegionVar
+      val expected = Context.regionOf(sym)
       val boundRegions: RegionSet = bindRegions(params)
 
       val selfRegion = Region(sym)
@@ -79,8 +79,8 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       val inferredReg = bodyRegion -- boundRegions -- selfRegion
 
-      // check that myRegion >: inferredReg
-      val reg = myRegion.withRegion { allowed =>
+      // check that expected >: inferredReg
+      val reg = expected.withRegion { allowed =>
         if (!inferredReg.subsetOf(allowed)) {
           Context.abort(s"Region not allowed here: ${inferredReg}")
         }
@@ -97,7 +97,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       // safe inferred region on the function symbol
       Context.annotateRegions(sym, reg)
-      Context.instantiate(myRegion, reg)
+
+      // if expected was a variable, instantiate it.
+      if (!expected.isInstantiated) {
+        Context.instantiate(expected.asRegionVar, reg)
+      }
       reg
 
     case BlockArg(params, body) =>
