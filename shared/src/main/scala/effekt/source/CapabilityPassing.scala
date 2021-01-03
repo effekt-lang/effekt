@@ -49,7 +49,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       val receiver = C.capabilityReferenceFor(op.effect)
 
-      val target = MemberTarget(receiver, fun.id)
+      val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
       C.annotateCalltarget(target, tpe)
       Call(target, targs, transformedArgs ++ capabilityArgs)
 

@@ -63,6 +63,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val tpe = Context.blockTypeOf(sym)
       val escapes = freeRegionVariables(tpe.ret) intersect selfRegion
       if (escapes.nonEmpty) {
+        explain(sym, body).map(_.report)
         Context.abort(s"A value that is introduced in '${id.name}' leaves its scope.")
       }
 
@@ -93,7 +94,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val tpe = Context.blockTypeOf(sym)
       val escapes = freeRegionVariables(tpe.ret) intersect selfRegion
       if (escapes.nonEmpty) {
-        // TODO better error messages
+        explain(sym, body).map(_.report)
         Context.abort(s"A value that is introduced in this lambda leaves its scope.")
       }
 
@@ -126,7 +127,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       val escapes = freeRegionVariables(tpe) intersect boundRegions
       if (escapes.nonEmpty) {
-        Context.abort(s"The following regions leave their defining scope ${escapes}")
+        val traces = escapes.regions.toList.map { sym =>
+          TraceItem(s"The return type mentions capability ${sym}", body, explain(sym, body))
+        }
+        traces.foreach(_.report)
+        Context.abort(s"The value returned from this handler has type ${tpe}. \nAs part of this type, the following capabilities leave their defining scope ${escapes}.")
       }
 
       handlers.foreach {
@@ -202,6 +207,73 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
       args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
   }
+
+  /**
+   * When a region error occurs, explanations are gathered in form of a trace
+   */
+  case class TraceItem(msg: String, tree: Tree, subtrace: Trace = Nil) {
+
+    def report(implicit C: Context): Unit = {
+      C.info(tree, msg)
+      subtrace.foreach { t => t.report }
+    }
+
+    def render(implicit C: Context): String = {
+      val pos = C.positions.getStart(tree).map { p => s"(line ${p.line}) " }.getOrElse("")
+      val sub = if (subtrace.isEmpty) "" else {
+        "\n" + subtrace.map(_.render).mkString("\n").linesIterator.map("  " + _).mkString("\n")
+      }
+      s"- ${pos}${msg}${sub}"
+    }
+  }
+  type Trace = List[TraceItem]
+  def explainEscape(reg: Symbol)(implicit C: Context): PartialFunction[Tree, Trace] = {
+    case f @ FunDef(id, tparams, params, ret, body) if uses(f, reg) =>
+      TraceItem(s"Function '${id.name}' closes over '$reg'", body, explain(reg, body)) :: Nil
+
+    case l @ Lambda(id, params, body) if uses(l, reg) =>
+      TraceItem(s"The lambda closes over '$reg'", l, explain(reg, body)) :: Nil
+
+    case m @ MemberTarget(cap, op) if C.symbolOf(cap) == reg =>
+      TraceItem(s"The problematic effect is used here", m) :: Nil
+
+    case tgt @ IdTarget(id) if uses(tgt, reg) =>
+      TraceItem(s"Function ${id.name} is called, which closes over '${reg}'", tgt) :: Nil
+
+    case v @ Return(e) =>
+      val Effectful(tpe, _) = Context.inferredTypeOf(e)
+      if (freeRegionVariables(tpe).contains(reg)) {
+        TraceItem(s"A value is returned that mentions '${reg}' in its inferred type ($tpe)", e, explain(reg, e)) :: Nil
+      } else {
+        explain(reg, e)
+      }
+  }
+
+  def render(l: List[TraceItem])(implicit C: Context): String =
+    if (l.isEmpty) "" else s"\n\nExplanation:\n------------\n${l.map(_.render).mkString("\n")}"
+
+  def explain(escapingRegion: Symbol, obj: Any)(implicit C: Context): Trace = obj match {
+    case _: Symbol | _: String => Nil
+    case t: Tree =>
+      C.at(t) {
+        if (explainEscape(escapingRegion).isDefinedAt(t)) {
+          explainEscape(escapingRegion)(C)(t)
+        } else if (C.inferredRegionOption(t).exists(_.contains(escapingRegion))) {
+          t.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explain(escapingRegion, t) }
+        } else {
+          Nil
+        }
+      }
+    case p: Product =>
+      p.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explain(escapingRegion, t) }
+    case t: Iterable[t] =>
+      t.foldLeft(Nil: Trace) { case (r, t) => r ++ explain(escapingRegion, t) }
+    case leaf =>
+      Nil
+  }
+
+  def uses(t: Tree, reg: Symbol)(implicit C: Context): Boolean =
+    C.inferredRegion(t).contains(reg)
 
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
     var regs: RegionSet = Region.empty

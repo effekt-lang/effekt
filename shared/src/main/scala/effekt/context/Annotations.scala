@@ -250,6 +250,12 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
+  def inferredRegion(t: source.Tree): regions.RegionSet =
+    annotation(Annotations.InferredRegion, t)
+
+  def inferredRegionOption(t: source.Tree): Option[regions.RegionSet] =
+    annotationOption(Annotations.InferredRegion, t)
+
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)

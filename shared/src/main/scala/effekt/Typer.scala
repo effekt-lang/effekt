@@ -432,7 +432,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-
   def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = C.resolvedType(tpe)
 
   def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = C.resolvedType(tpe)
