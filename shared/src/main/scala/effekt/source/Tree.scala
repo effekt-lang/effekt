@@ -124,19 +124,20 @@ case class IdRef(name: String) extends Id {
   }
 }
 
-// Something that later will be stored in the symbol table
-sealed trait Definition extends Tree {
-  def id: IdDef
+sealed trait Named extends Tree {
+  def id: Id
   type symbol <: Symbol
+}
 
+// Something that later will be stored in the symbol table
+sealed trait Definition extends Named {
+  def id: IdDef
   def symbol(implicit C: Context): symbol = C.symbolOf(this)
 }
 
 // Something that later can be looked up in the symbol table
-sealed trait Reference extends Tree {
+sealed trait Reference extends Named {
   def id: IdRef
-  type symbol <: Symbol
-
   def definition(implicit C: Context): symbol = C.symbolOf(this)
 }
 

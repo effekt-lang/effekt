@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
 import effekt.regions.Region
-import effekt.source.{ Def, Id, ModuleDecl, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
 

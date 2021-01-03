@@ -5,33 +5,6 @@ As part of this type, the following capabilities leave their defining scope {@Ra
 [info] examples/neg/lambdas/simpleescape.effekt:6:7: The return type mentions capability @Raise
   try {
       ^
-[info] examples/neg/lambdas/simpleescape.effekt:7:41: Function 'block' closes over '@Raise'
-    def block(msg: String): Unit / {} = { do Raise(msg) }
-                                        ^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:7:46: The problematic effect is used here
-    def block(msg: String): Unit / {} = { do Raise(msg) }
-                                             ^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:8:13: A value is returned that mentions '@Raise' in its inferred type (() ⟹ Unit / { @Raise })
-    val f = if (do Flip()) {
-            ^
-[info] examples/neg/lambdas/simpleescape.effekt:9:7: A value is returned that mentions '@Raise' in its inferred type (() ⟹ Unit / { @Raise })
-      fun() { block("first") }
-      ^^^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:9:7: The lambda closes over '@Raise'
-      fun() { block("first") }
-      ^^^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:9:15: Function block is called, which closes over '@Raise'
-      fun() { block("first") }
-              ^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:11:7: A value is returned that mentions '@Raise' in its inferred type (() ⟹ Unit / { @Raise })
-      fun() { block("second") }
-      ^^^^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:11:7: The lambda closes over '@Raise'
-      fun() { block("second") }
-      ^^^^^^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:11:15: Function block is called, which closes over '@Raise'
-      fun() { block("second") }
-              ^^^^^
-[info] examples/neg/lambdas/simpleescape.effekt:13:5: A value is returned that mentions '@Raise' in its inferred type (() ⟹ Unit / { @Raise })
+[info] examples/neg/lambdas/simpleescape.effekt:13:5: A value is returned that mentions '@Raise' in its inferred type
     f
     ^

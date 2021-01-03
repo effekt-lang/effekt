@@ -3,8 +3,7 @@ package regions
 
 import effekt.source._
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.symbols.{ BlockSymbol, Symbol, ValueSymbol, Effectful }
-
+import effekt.symbols.{ Binder, BlockSymbol, Effectful, Symbol, UserFunction, ValueSymbol }
 import effekt.context.assertions.SymbolAssertions
 
 class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
@@ -410,54 +409,78 @@ trait RegionReporter { self: Context =>
 
   type Trace = List[TraceItem]
 
-  def explainEscape(reg: Symbol): PartialFunction[Tree, Trace] = {
+  /**
+   * The seen set is used to avoid nontermination
+   *
+   * TODO is it problematic to refer to the trees that are not transformed by capability passing?
+   */
+  def explainEscape(reg: Symbol, seen: Set[Symbol]): PartialFunction[Tree, Trace] = {
     case f @ FunDef(id, tparams, params, ret, body) if uses(f, reg) =>
-      TraceItem(s"Function '${id.name}' closes over '$reg'", body, explainEscape(reg, body)) :: Nil
+      TraceItem(s"Function '${id.name}' closes over '$reg'", body, explainEscape(reg, body, seen + f.symbol)) :: Nil
 
     case l @ Lambda(id, params, body) if uses(l, reg) =>
-      TraceItem(s"The lambda closes over '$reg'", l, explainEscape(reg, body)) :: Nil
+      TraceItem(s"The lambda closes over '$reg'", l, explainEscape(reg, body, seen + l.symbol)) :: Nil
 
     case m @ MemberTarget(cap, op) if symbolOf(cap) == reg =>
       TraceItem(s"The problematic effect is used here", m) :: Nil
 
     case tgt @ IdTarget(id) if uses(tgt, reg) =>
-      TraceItem(s"Function ${id.name} is called, which closes over '${reg}'", tgt) :: Nil
+      val rest = tgt.definition match {
+        // TODO here we could follow to the definition.
+        // however, like below, it is a _source tree_, before capability passing.
+        case fun: UserFunction if !seen.contains(fun) => Nil // explainEscape(reg, fun.decl, seen)
+        case _ => Nil
+      }
+      TraceItem(s"Function ${id.name} is called, which closes over '${reg}'", tgt, rest) :: Nil
+
+    case DefStmt(d, rest) =>
+      explainEscape(reg, rest, seen)
+
+    // here we could follow value and variable binders
+    // however, the declaration is a _source_ tree, before capability passing.
+    //    case x @ Var(id) if x.definition.isInstanceOf[Binder] && mentionsInType(x, reg) =>
+    //      val tree = x.definition.asBinder.decl
+    //      TraceItem(s"Reference to a variable that captures '${reg}'", x, explainEscape(reg, tree, seen)) :: Nil
 
     case v @ Return(e) =>
-      val Effectful(tpe, _) = inferredTypeOf(e)
-      if (freeRegionVariables(tpe).contains(reg)) {
-        TraceItem(s"A value is returned that mentions '${reg}' in its inferred type ($tpe)", e, explainEscape(reg, e)) :: Nil
+      if (mentionsInType(e, reg)) {
+        TraceItem(s"A value is returned that mentions '${reg}' in its inferred type", e, explainEscape(reg, e, seen)) :: Nil
       } else {
-        explainEscape(reg, e)
+        explainEscape(reg, e, seen)
       }
   }
 
   def explain(escapingRegion: Symbol, tree: Tree): Unit =
-    explainEscape(escapingRegion, tree).foreach { _.report }
+    explainEscape(escapingRegion, tree, Set.empty).foreach { _.report }
 
   def explain(msg: String, escapingRegion: Symbol, tree: Tree): Unit =
-    TraceItem(msg, tree, explainEscape(escapingRegion, tree)).report
+    TraceItem(msg, tree, explainEscape(escapingRegion, tree, Set.empty)).report
 
-  def explainEscape(escapingRegion: Symbol, obj: Any): Trace = obj match {
+  def explainEscape(escapingRegion: Symbol, obj: Any, seen: Set[Symbol]): Trace = obj match {
     case _: Symbol | _: String => Nil
     case t: Tree =>
       at(t) {
-        if (explainEscape(escapingRegion).isDefinedAt(t)) {
-          explainEscape(escapingRegion)(t)
+        if (explainEscape(escapingRegion, seen).isDefinedAt(t)) {
+          explainEscape(escapingRegion, seen)(t)
         } else if (inferredRegionOption(t).forall(_.contains(escapingRegion))) {
-          t.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explainEscape(escapingRegion, t) }
+          t.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explainEscape(escapingRegion, t, seen) }
         } else {
           Nil
         }
       }
     case p: Product =>
-      p.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explainEscape(escapingRegion, t) }
+      p.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explainEscape(escapingRegion, t, seen) }
     case t: Iterable[t] =>
-      t.foldLeft(Nil: Trace) { case (r, t) => r ++ explainEscape(escapingRegion, t) }
+      t.foldLeft(Nil: Trace) { case (r, t) => r ++ explainEscape(escapingRegion, t, seen) }
     case leaf =>
       Nil
   }
 
-  private def uses(t: Tree, reg: Symbol)(implicit C: Context): Boolean =
-    C.inferredRegionOption(t).exists(_.contains(reg))
+  private def mentionsInType(t: Tree, reg: Symbol): Boolean = {
+    val Effectful(tpe, _) = inferredTypeOf(t)
+    freeRegionVariables(tpe).contains(reg)
+  }
+
+  private def uses(t: Tree, reg: Symbol): Boolean =
+    inferredRegionOption(t).exists(_.contains(reg))
 }
