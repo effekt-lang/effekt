@@ -116,7 +116,9 @@ object subtitutions {
 
   object Unification {
 
-    // just for backwards compat
+    /**
+     * For error reporting, we assume the second argument (tpe1) is the type expected by the context
+     */
     def unify(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): Unifier =
       unifyTypes(tpe1, tpe2).getUnifier
 
@@ -176,7 +178,7 @@ object subtitutions {
           unifyTypes(tpe1, tpe2).equalRegions(reg1, reg2)
 
         case (t, s) =>
-          UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
+          UnificationError(s"Expected ${t}, but got ${s}")
       }
 
     /**

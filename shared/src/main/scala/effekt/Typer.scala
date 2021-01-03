@@ -103,14 +103,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case Some(exp @ FunType(BlockType(_, ps, ret / effs), reg)) =>
             checkAgainstDeclaration("lambda", ps, params)
             val (retGot / effsGot) = body checkAgainst ret
-            Context.unify(retGot, ret)
+            Context.unify(ret, retGot)
 
             val diff = effsGot -- effs
 
             val reg = Region.fresh(l)
             val got = FunType(BlockType(Nil, ps, retGot / effs), reg)
 
-            Context.unify(got, exp)
+            Context.unify(exp, got)
 
             Context.assignType(sym, sym.toType(ret / effs))
             Context.assignType(l, ret / effs)
@@ -133,7 +133,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.annotateRegions(sym, reg)
 
             expected.foreach { exp =>
-              Context.unify(funTpe, exp)
+              Context.unify(exp, funTpe)
             }
 
             funTpe / Pure // all effects are handled by the function itself (since they are inferred)
@@ -214,17 +214,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // (2) check exhaustivity
         checkExhaustivity(tpe, clauses.map { _.pattern })
 
-        val tpes = clauses.map {
+        // (3) infer types for all clauses
+        val (fstTpe, _) :: tpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
             Context.define(checkPattern(tpe, p)) in {
-              checkStmt(body, expected)
+              (checkStmt(body, expected), body)
             }
         }
 
-        val (tpeCases / effsCases) = tpes.reduce[Effectful] {
-          case (tpe1 / effs1, tpe2 / effs2) =>
-            Context.unify(tpe1, tpe2)
-            tpe1 / (effs1 ++ effs2)
+        // (4) unify clauses and collect effects
+        val (tpeCases / effsCases) = tpes.foldLeft(fstTpe) {
+          case (expected / effs, (clauseTpe / clauseEffs, tree)) =>
+            Context.at(tree) { Context.unify(expected, clauseTpe) }
+            expected / (effs ++ clauseEffs)
         }
         tpeCases / (effsCases ++ effs)
 
@@ -603,7 +605,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     // (3) refine substitutions by matching return type against expected type
     expected.foreach { expectedReturn =>
       val refinedReturn = Context.unifier substitute ret
-      Context.unify(refinedReturn, expectedReturn)
+      Context.unify(expectedReturn, refinedReturn)
     }
 
     var effs = retEffs
