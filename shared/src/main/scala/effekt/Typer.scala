@@ -8,7 +8,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
 import effekt.regions.Region
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
-import effekt.subtitutions._
+import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.util.messages.FatalPhaseError

@@ -6,7 +6,7 @@ import effekt.symbols.{ BlockType, CapabilityType, Effectful, FunType, Interface
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
-object subtitutions {
+object substitutions {
 
   type Substitutions = Map[TypeVar, ValueType]
 

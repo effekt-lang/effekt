@@ -167,7 +167,7 @@ object Annotations {
   /**
    * The unifier as computed by typer when type checking the module
    */
-  val Unifier = Annotation[symbols.Module, subtitutions.Unifier](
+  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
     "Unifier",
     "the unifier for module"
   )

@@ -4,7 +4,7 @@ import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
-import effekt.subtitutions._
+import effekt.substitutions._
 
 /**
  * The symbol table contains things that can be pointed to:
