@@ -8,6 +8,8 @@ import effekt.context.assertions.SymbolAssertions
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
+  val phaseName = "transformer"
+
   def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
     Some(transform(mod))
@@ -120,6 +122,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case l: source.Literal[t] => transformLit(l)
 
+    case l @ source.Lambda(id, params, body) =>
+      val tpe = C.blockTypeOf(l.symbol)
+      val effs = tpe.ret.effects.userEffects
+      val ps = transformParams(params)
+      Closure(BlockLit(ps, transform(body)))
+
     case source.If(cond, thn, els) =>
       val c = transform(cond)
       val exprTpe = C.inferredTypeOf(tree).tpe
@@ -138,6 +146,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           (p, BlockLit(ps, transform(body)))
       }
       C.bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs))
+
+    case c @ source.Call(source.ExprTarget(expr), _, args) =>
+      val e = transform(expr)
+      val as = args.flatMap(transform)
+      C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
 
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
@@ -169,6 +182,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           Select(arg, f)
         case f: BlockSymbol =>
           C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
+        case f: ValueSymbol =>
+          C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(ValueVar(f)), targs, as))
       }
 
     case source.TryHandle(prog, handlers) =>

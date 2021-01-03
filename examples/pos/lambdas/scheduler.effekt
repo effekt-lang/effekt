@@ -1,0 +1,61 @@
+module examples/pos/lambdas/scheduler
+
+import immutable/dequeue
+import immutable/option
+
+effect Proc {
+  def yield(): Unit
+  def fork(): Boolean
+  def exit(): Unit
+}
+
+def scheduler { prog: Unit / Proc } = {
+  var queue: Dequeue[() => Unit / {scheduler}] = emptyQueue();
+
+  def run(): Unit = queue.popBack match {
+    case None() => ()
+    case Some((k, q)) =>
+      queue = q
+      k();
+      run()
+  }
+  try { prog() } with Proc {
+    def yield() = {
+      queue = queue.pushFront(fun() { resume(()) })
+    }
+    def fork() = {
+      queue = queue
+        .pushFront(fun() { resume(true) })
+        .pushFront(fun() { resume(false) })
+    }
+    def exit() = ()
+  }
+
+  run()
+}
+
+def fork { b1: Unit / Proc } { b2: Unit / Proc } =
+  if (fork()) { b1() } else { b2() }
+
+def main() = {
+  println("Example 1")
+  scheduler {
+    fork {
+      println("hello 1")
+      yield()
+      println(1)
+      yield()
+      println(2)
+      exit()
+      println(3)
+    } {
+      println("hello 2")
+      yield()
+      println(4)
+      yield()
+      println(5)
+      yield()
+      println(6)
+    }
+  }
+}

@@ -30,6 +30,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Lifted(ev, b)    => "lift" <> parens(toDoc(ev) <> comma <+> toDoc(b))
     case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
     case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
+    case Unbox(e)         => toDoc(e)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
@@ -49,6 +50,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
+
+    case Closure(b) => toDoc(b)
   }
 
   def argToDoc(e: Argument): Doc = e match {

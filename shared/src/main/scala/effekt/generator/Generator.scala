@@ -9,6 +9,8 @@ import kiama.util.Source
 
 trait Generator extends Phase[Source, Document] {
 
+  val phaseName = "generator"
+
   /**
    * A Unix path that is *not* platform dependent.
    */

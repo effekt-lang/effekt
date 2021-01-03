@@ -38,6 +38,7 @@ case class StringLit(value: String) extends Literal[String]
 
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
+case class Closure(b: Block) extends Expr
 
 /**
  * Blocks
@@ -58,6 +59,7 @@ case class Lifted(s: Scope, b: Block) extends Block
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: EffectOp) extends Block
 case class Extern(params: List[Param], body: String) extends Block
+case class Unbox(e: Expr) extends Block
 
 /**
  * Statements

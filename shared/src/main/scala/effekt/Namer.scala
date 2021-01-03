@@ -6,7 +6,8 @@ package namer
  */
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
-import effekt.source.{ Def, Id, Tree, ModuleDecl }
+import effekt.regions.Region
+import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
 
@@ -26,6 +27,8 @@ import scopes._
  * 3. look into the bodies of functions
  */
 class Namer extends Phase[ModuleDecl, ModuleDecl] {
+
+  val phaseName = "namer"
 
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Some(resolve(mod))
@@ -198,6 +201,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(stmt)
       }
 
+    case l @ source.Lambda(id, params, stmt) =>
+      val ps = params.map(resolve)
+      Context scoped {
+        Context.bind(ps)
+        resolveGeneric(stmt)
+      }
+      val sym = Lambda(ps)
+      Context.define(id, sym)
+
     // (2) === Bound Occurrences ===
 
     case source.Call(target, targs, args) =>
@@ -277,6 +289,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
       Context.resolveCalltarget(id)
+    case source.ExprTarget(expr) => resolveGeneric(expr)
   }
 
   /**
@@ -295,13 +308,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val uniqueId = Context.freshTermName(id)
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
-        UserFunction(
-          uniqueId,
-          tparams map resolve,
-          params map resolve,
-          annot map resolve,
-          f
-        )
+        val tps = tparams map resolve
+        val ps = params map resolve
+        val ret = Context scoped {
+          Context.bind(ps)
+          annot map resolve
+        }
+        UserFunction(uniqueId, tps, ps, ret, f)
       }
       Context.define(id, sym)
 
@@ -399,20 +412,38 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
-    case source.TypeApp(id, args) =>
-      val data = Context.resolveType(id).asValueType
-      TypeApp(data, args.map(resolve))
-    case source.TypeVar(id) =>
-      Context.resolveType(id).asValueType
-    case source.ValueTypeTree(tpe) => tpe
+  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = {
+    val res = tpe match {
+      case source.TypeApp(id, args) =>
+        val data = Context.resolveType(id).asValueType
+        TypeApp(data, args.map(resolve))
+      case source.TypeVar(id) =>
+        Context.resolveType(id).asValueType
+      case source.ValueTypeTree(tpe) =>
+        tpe
+      case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
+        // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
+        val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
+        val effects = types.map(_.asEffect)
+        val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
+
+        FunType(btpe, Region(terms))
+    }
+    C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.symbol])
+    res
   }
 
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType =
-    BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
+    val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+    C.annotateResolvedType(tpe)(res)
+    res
+  }
 
-  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType =
-    CapabilityType(tpe.eff)
+  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
+    val res = CapabilityType(tpe.eff)
+    C.annotateResolvedType(tpe)(res)
+    res
+  }
 
   def resolve(tpe: source.Effect)(implicit C: Context): Effect =
     Context.resolveType(tpe.id).asEffect
@@ -496,26 +527,24 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
+  private[namer] def resolveAny(id: Id): Symbol = at(id) {
+    val sym = scope.lookupFirst(id.name)
+    assignSymbol(id, sym)
+    sym
+  }
+
   /**
    * Resolves a potentially overloaded call target
    */
-  private[namer] def resolveCalltarget(id: Id): BlockSymbol = at(id) {
-    val syms = scope.lookupOverloaded(id.name) map {
-      _ collect {
-        case b: BlockParam  => b
-        case b: ResumeParam => b
-        case b: Fun         => b
-        case _              => abort("Expected callable")
-      }
-    }
+  private[namer] def resolveCalltarget(id: Id): Unit = at(id) {
+
+    val syms = scope.lookupOverloaded(id.name)
 
     if (syms.isEmpty) {
       abort(s"Cannot resolve function ${id.name}")
     }
 
-    val target = new CallTarget(Name(id), syms)
-    assignSymbol(id, target)
-    target
+    assignSymbol(id, new CallTarget(Name(id), syms))
   }
 
   /**

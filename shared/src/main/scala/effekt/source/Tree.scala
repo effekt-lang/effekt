@@ -56,6 +56,7 @@ import effekt.symbols.Symbol
  *   |  |  |- DoubleLit
  *   |  |  |- StringLit
  *   |  |
+ *   |  |- Lambda
  *   |  |- Call
  *   |  |- If
  *   |  |- While
@@ -123,19 +124,20 @@ case class IdRef(name: String) extends Id {
   }
 }
 
-// Something that later will be stored in the symbol table
-sealed trait Definition extends Tree {
-  def id: IdDef
+sealed trait Named extends Tree {
+  def id: Id
   type symbol <: Symbol
+}
 
+// Something that later will be stored in the symbol table
+sealed trait Definition extends Named {
+  def id: IdDef
   def symbol(implicit C: Context): symbol = C.symbolOf(this)
 }
 
 // Something that later can be looked up in the symbol table
-sealed trait Reference extends Tree {
+sealed trait Reference extends Named {
   def id: IdRef
-  type symbol <: Symbol
-
   def definition(implicit C: Context): symbol = C.symbolOf(this)
 }
 
@@ -258,6 +260,16 @@ case class BooleanLit(value: Boolean) extends Literal[Boolean]
 case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
+/**
+ * Represents a first-class function
+ *
+ * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
+ * its parameter symbols.
+ */
+case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Expr with Definition {
+  type symbol = symbols.Lambda
+}
+
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
 case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Expr
@@ -270,6 +282,7 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.EffectOp
 }
+case class ExprTarget(receiver: Expr) extends CallTarget
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
@@ -345,6 +358,11 @@ sealed trait ValueType extends Type {
  */
 case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 
+/**
+ * Types of first-class functions
+ */
+case class FunType(tpe: BlockType) extends ValueType
+
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
   type symbol = symbols.Symbol with symbols.ValueType
@@ -354,7 +372,9 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 }
 
 // for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.Effect) extends Type
+case class CapabilityType(eff: symbols.Effect) extends Type {
+  type symbol = symbols.CapabilityType
+}
 case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type symbol = symbols.BlockType
 }

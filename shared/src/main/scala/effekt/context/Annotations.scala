@@ -139,11 +139,45 @@ object Annotations {
   )
 
   /**
+   * The resolved type for a type tree that appears in the source program
+   *
+   * Resolved and annotated by namer and used by typer.
+   */
+  val Type = Annotation[source.Type, symbols.Type](
+    "Type",
+    "the resolved type for"
+  )
+
+  /**
    * The blocktype of a calltarget as annotated by typer
    */
   val TargetType = Annotation[source.CallTarget, symbols.BlockType](
     "TargetType",
     "the blocktype for calltarget"
+  )
+
+  /*
+   * The region a given symbol can be used in
+   */
+  val Regions = Annotation[symbols.Symbol, regions.Region](
+    "Regions",
+    "the regions associated with symbol"
+  )
+
+  /**
+   * The unifier as computed by typer when type checking the module
+   */
+  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
+    "Unifier",
+    "the unifier for module"
+  )
+
+  /**
+   * Similar to TypeAndEffect: the region of a program inferred by RegionChecker
+   */
+  val InferredRegion = Annotation[source.Tree, regions.RegionSet](
+    "InferredRegion",
+    "the inferred region for source tree"
   )
 }
 
@@ -216,6 +250,12 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
+  def inferredRegion(t: source.Tree): regions.RegionSet =
+    annotation(Annotations.InferredRegion, t)
+
+  def inferredRegionOption(t: source.Tree): Option[regions.RegionSet] =
+    annotationOption(Annotations.InferredRegion, t)
+
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
@@ -226,6 +266,12 @@ trait AnnotationsDB { self: Context =>
     case b: ValueSymbol => annotate(Annotations.ValueType, b, tpe)
     case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
+
+  def annotateResolvedType(tree: source.Type)(tpe: tree.symbol): Unit =
+    annotate(Annotations.Type, tree, tpe)
+
+  def resolvedType(tree: source.Type): tree.symbol =
+    annotation(Annotations.Type, tree).asInstanceOf[tree.symbol]
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
@@ -242,7 +288,10 @@ trait AnnotationsDB { self: Context =>
         case b: BlockType => Some(b)
         case _            => None
       }
-      case _ => panic(s"Trying to find a block type for non block '${s}'")
+      case v: ValueSymbol => valueTypeOption(v).flatMap {
+        case symbols.FunType(tpe, _) => Some(tpe)
+        case _ => None
+      }
     }
 
   def interfaceTypeOf(s: Symbol): InterfaceType =
@@ -351,4 +400,10 @@ trait AnnotationsDB { self: Context =>
     annotationOption(Annotations.References, sym)
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
+
+  def annotateRegions(sym: Symbol, r: regions.Region): Unit =
+    annotate(Annotations.Regions, sym, r)
+
+  def regionOf(sym: Symbol): regions.Region =
+    annotation(Annotations.Regions, sym)
 }

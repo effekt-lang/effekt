@@ -74,6 +74,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case ScopeApp(b, sc) => schemeCall(toDoc(b), List(toDoc(sc)))
     case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
     case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
+    case Unbox(e)        => toDoc(e)
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
