@@ -385,15 +385,22 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
   private[regions] def annotateRegion(t: Tree, r: RegionSet): Unit =
     annotate(Annotations.InferredRegion, t, r)
 
-  private[regions] def unifyAndSubstitute(): Unit =
-    constraints = unifyAndSubstitute(constraints)
+  private[regions] def unifyAndSubstitute(): Unit = unifyAndSubstitute(constraints) match {
+    case Left(RegionEq(RegionSet(x), RegionSet(y))) =>
+      abort(s"Region mismatch: $x is not equal to $y")
+    case Right(cs) => constraints = cs
+  }
 
-  private def unifyAndSubstitute(cs: List[RegionEq]): List[RegionEq] = cs.distinct match {
+  /**
+   * If unification is successful returns a new list of remaining constraints: Right(List[RegionEq])
+   * If unification fails, returns the conflicting constraint.
+   */
+  private def unifyAndSubstitute(cs: List[RegionEq]): Either[RegionEq, List[RegionEq]] = cs.distinct match {
 
     // if both are instantiated -> compare their sets
-    case RegionEq(RegionSet(x), RegionSet(y)) :: rest =>
+    case (r @ RegionEq(RegionSet(x), RegionSet(y))) :: rest =>
       if (x != y) {
-        abort(s"Region mismatch: $x is not equal to $y")
+        Left(r)
       } else {
         unifyAndSubstitute(rest)
       }
@@ -410,8 +417,8 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
 
     // if both are variables -> keep constraint
     case RegionEq(x: RegionVar, y: RegionVar) :: rest =>
-      RegionEq(x, y) :: unifyAndSubstitute(rest)
+      unifyAndSubstitute(rest).map(RegionEq(x, y) :: _)
 
-    case Nil => Nil
+    case Nil => Right(Nil)
   }
 }
