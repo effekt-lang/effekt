@@ -84,7 +84,13 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       // check that expected >: inferredReg
       val reg = expected.withRegion { allowed =>
-        if (!inferredReg.subsetOf(allowed)) {
+        val forbidden = inferredReg -- allowed
+
+        if (!forbidden.isEmpty) {
+          forbidden.regions.foreach { sym =>
+            explain(sym, body).map(_.report)
+          }
+
           Context.abort(s"Region not allowed here: ${inferredReg}")
         }
         allowed
@@ -103,7 +109,8 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
       // if expected was a variable, instantiate it.
       if (!expected.isInstantiated) {
-        Context.instantiate(expected.asRegionVar, reg)
+        expected.asRegionVar.instantiate(reg)
+        unifyAndExplain(body)
       }
       reg
 
@@ -198,7 +205,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         case (param, arg: CapabilityArg) => ()
       }
       // check constraints again after substitution
-      C.unifyAndSubstitute()
+      unifyAndExplain(c)
 
       reg
 
@@ -207,6 +214,19 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
       args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
   }
+
+  def unifyAndExplain(body: Tree)(implicit C: Context): Unit =
+    Context.tryUnifyAndSubstitute().foreach {
+      // error case...
+      case RegionEq(RegionSet(exp), RegionSet(got), tree) =>
+        val notAllowed = got -- exp
+        notAllowed.regions.foreach { sym =>
+          TraceItem(s"Not allowed: ${sym}", tree, explain(sym, body)).report
+        }
+        Context.at(tree) {
+          Context.abort(s"Region mismatch: expected $exp but got $got")
+        }
+    }
 
   /**
    * When a region error occurs, explanations are gathered in form of a trace
@@ -258,7 +278,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       C.at(t) {
         if (explainEscape(escapingRegion).isDefinedAt(t)) {
           explainEscape(escapingRegion)(C)(t)
-        } else if (C.inferredRegionOption(t).exists(_.contains(escapingRegion))) {
+        } else if (C.inferredRegionOption(t).forall(_.contains(escapingRegion))) {
           t.productIterator.foldLeft(Nil: Trace) { case (r, t) => r ++ explain(escapingRegion, t) }
         } else {
           Nil
@@ -273,7 +293,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def uses(t: Tree, reg: Symbol)(implicit C: Context): Boolean =
-    C.inferredRegion(t).contains(reg)
+    C.inferredRegionOption(t).exists(_.contains(reg))
 
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
     var regs: RegionSet = Region.empty
@@ -377,18 +397,23 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     res
   }
 
-  private[regions] def instantiate(x: RegionVar, r: RegionSet): Unit = {
-    x.instantiate(r)
-    unifyAndSubstitute()
-  }
-
   private[regions] def annotateRegion(t: Tree, r: RegionSet): Unit =
     annotate(Annotations.InferredRegion, t, r)
 
-  private[regions] def unifyAndSubstitute(): Unit = unifyAndSubstitute(constraints) match {
-    case Left(RegionEq(RegionSet(x), RegionSet(y))) =>
-      abort(s"Region mismatch: $x is not equal to $y")
-    case Right(cs) => constraints = cs
+  /**
+   * Returns the failed constraint or None if successful
+   */
+  private[regions] def tryUnifyAndSubstitute(): Option[RegionEq] = unifyAndSubstitute(constraints) match {
+    case Left(r) => Some(r)
+    case Right(cs) =>
+      constraints = cs
+      None
+  }
+
+  private[regions] def unifyAndSubstitute(): Unit = tryUnifyAndSubstitute().foreach {
+    case RegionEq(RegionSet(exp), RegionSet(got), tree) => at(tree) {
+      abort(s"Region mismatch: expected $exp but got $got")
+    }
   }
 
   /**
@@ -398,7 +423,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
   private def unifyAndSubstitute(cs: List[RegionEq]): Either[RegionEq, List[RegionEq]] = cs.distinct match {
 
     // if both are instantiated -> compare their sets
-    case (r @ RegionEq(RegionSet(x), RegionSet(y))) :: rest =>
+    case (r @ RegionEq(RegionSet(x), RegionSet(y), _)) :: rest =>
       if (x != y) {
         Left(r)
       } else {
@@ -406,18 +431,18 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
       }
 
     // if one is a variable -> instantiate
-    case RegionEq(x: RegionVar, RegionSet(r)) :: rest =>
+    case RegionEq(x: RegionVar, RegionSet(r), _) :: rest =>
       x.instantiate(r);
       unifyAndSubstitute(rest)
 
     // if one is a variable -> instantiate
-    case RegionEq(RegionSet(r), x: RegionVar) :: rest =>
+    case RegionEq(RegionSet(r), x: RegionVar, _) :: rest =>
       x.instantiate(r);
       unifyAndSubstitute(rest)
 
     // if both are variables -> keep constraint
-    case RegionEq(x: RegionVar, y: RegionVar) :: rest =>
-      unifyAndSubstitute(rest).map(RegionEq(x, y) :: _)
+    case (r @ RegionEq(x: RegionVar, y: RegionVar, _)) :: rest =>
+      unifyAndSubstitute(rest).map(r :: _)
 
     case Nil => Right(Nil)
   }

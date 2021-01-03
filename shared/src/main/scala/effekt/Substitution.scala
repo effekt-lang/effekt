@@ -15,7 +15,7 @@ object subtitutions {
     def union(other: UnificationResult): UnificationResult
     def checkFullyDefined(rigids: List[RigidVar]): UnificationResult
     def getUnifier(implicit error: ErrorReporter): Unifier
-    def equalRegions(r1: Region, r2: Region): UnificationResult
+    def equalRegions(r1: Region, r2: Region)(implicit C: Context): UnificationResult
   }
 
   case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq] = Set.empty) extends UnificationResult {
@@ -39,8 +39,8 @@ object subtitutions {
       Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
     }
 
-    def equalRegions(r1: Region, r2: Region): Unifier =
-      this.copy(constraints = constraints + RegionEq(r1, r2))
+    def equalRegions(r1: Region, r2: Region)(implicit C: Context): Unifier =
+      this.copy(constraints = constraints + RegionEq(r1, r2, C.focus))
 
     def union(other: UnificationResult): UnificationResult = other match {
       case Unifier(subst, constr) =>
@@ -111,7 +111,7 @@ object subtitutions {
     def add(k: TypeVar, v: ValueType) = this
     def union(other: UnificationResult) = this
     def checkFullyDefined(rigids: List[RigidVar]) = this
-    def equalRegions(r1: Region, r2: Region) = this
+    def equalRegions(r1: Region, r2: Region)(implicit C: Context) = this
   }
 
   object Unification {
@@ -119,12 +119,12 @@ object subtitutions {
     /**
      * For error reporting, we assume the second argument (tpe1) is the type expected by the context
      */
-    def unify(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): Unifier =
+    def unify(tpe1: Type, tpe2: Type)(implicit C: Context): Unifier =
       unifyTypes(tpe1, tpe2).getUnifier
 
     // The lhs can contain rigid vars that we can compute a mapping for
     // i.e. unify(List[?A], List[Int]) = Map(?A -> Int)
-    def unifyTypes(tpe1: Type, tpe2: Type): UnificationResult =
+    def unifyTypes(tpe1: Type, tpe2: Type)(implicit C: Context): UnificationResult =
       (tpe1, tpe2) match {
 
         case (t: ValueType, s: ValueType) =>
@@ -149,7 +149,7 @@ object subtitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
-    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): UnificationResult =
+    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit C: Context): UnificationResult =
       (tpe1.dealias, tpe2.dealias) match {
 
         case (t, s) if t == s =>
