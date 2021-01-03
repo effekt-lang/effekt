@@ -506,6 +506,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
     val stateBefore = C.backupTyperstate()
 
+    // TODO try to avoid duplicate error messages
     val results = scopes map { scope =>
       scope.toList.map { sym =>
         sym -> Try {
