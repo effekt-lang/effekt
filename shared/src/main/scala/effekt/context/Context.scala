@@ -4,7 +4,7 @@ package context
 import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
-import effekt.regions.RegionCheckerOps
+import effekt.regions.{ RegionCheckerOps, RegionReporter }
 import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
@@ -44,6 +44,7 @@ abstract class Context(val positions: Positions)
     with TyperOps
     with CapabilityPassingOps
     with RegionCheckerOps
+    with RegionReporter
     with TransformerOps {
 
   // bring the context itself in scope
