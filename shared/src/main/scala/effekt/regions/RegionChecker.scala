@@ -223,8 +223,16 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
   def check(obj: Any)(implicit C: Context): RegionSet = obj match {
     case _: Symbol | _: String => Region.empty
-    case t: Tree if checkTree.isDefinedAt(t) =>
-      C.at(t) { checkTree(C)(t) }
+    case t: Tree =>
+      C.at(t) {
+        val reg = if (checkTree.isDefinedAt(t)) {
+          checkTree(C)(t)
+        } else {
+          t.productIterator.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
+        }
+        C.annotateRegion(t, reg)
+        reg
+      }
     case p: Product =>
       p.productIterator.foldLeft(Region.empty) { case (r, t) => r ++ check(t) }
     case t: Iterable[t] =>
@@ -301,6 +309,9 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     x.instantiate(r)
     unifyAndSubstitute()
   }
+
+  private[regions] def annotateRegion(t: Tree, r: RegionSet): Unit =
+    annotate(Annotations.InferredRegion, t, r)
 
   private[regions] def unifyAndSubstitute(): Unit =
     constraints = unifyAndSubstitute(constraints)

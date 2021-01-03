@@ -171,6 +171,14 @@ object Annotations {
     "Unifier",
     "the unifier for module"
   )
+
+  /**
+   * Similar to TypeAndEffect: the region of a program inferred by RegionChecker
+   */
+  val InferredRegion = Annotation[source.Tree, regions.RegionSet](
+    "InferredRegion",
+    "the inferred region for source tree"
+  )
 }
 
 /**
