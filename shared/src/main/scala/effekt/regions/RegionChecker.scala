@@ -11,7 +11,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
   val phaseName = "region-checker"
 
-  def run(input: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
+  def run(input: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
     Context.initRegionstate()
     Context.unifyAndSubstitute()
 
@@ -35,6 +35,8 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     }
     check(input)
     Some(input)
+  } finally {
+    Context.commitConstraints()
   }
 
   // A traversal with the side effect to annotate all functions with their region
@@ -376,6 +378,11 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
   private[regions] def initRegionstate(): Unit = {
     staticRegion = Region.empty
     constraints = annotation(Annotations.Unifier, module).constraints.toList
+  }
+
+  private[regions] def commitConstraints(): Unit = {
+    val unifier = annotation(Annotations.Unifier, module)
+    annotate(Annotations.Unifier, module, unifier.copy(constraints = constraints.toSet))
   }
 
   private[regions] def inRegion[T](r: RegionSet)(block: => T): T = {
