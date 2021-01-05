@@ -9,7 +9,7 @@ type List[A] {
 
 def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
   case Nil() => l2
-  case Cons(a, rest) => concat(rest, Cons(a, l2))
+  case Cons(a, rest) => Cons(a, concat(rest, l2))
 }
 
 def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
@@ -57,6 +57,9 @@ def heap[R] { prog: => R / Heap } = {
 }
 
 effect Flip(prob: Double): Ref
+effect Cond(x: Ref, p: Double, q: Double): Ref
+effect Cond2(x: Ref, y: Ref, p1: Double, p2: Double, p3: Double, p4: Double): Ref
+effect Conj(x: Ref, y: Ref): Ref
 effect Disj(x: Ref, y: Ref): Ref
 effect Prior(x: Ref, prob: Double): Unit
 
@@ -70,8 +73,15 @@ def obs(r: Ref, a: Bool) =
     case Observed(y) => if (a == y) { () } else { do Fail() }
   }
 
-def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
+def choose2[R] { x: R } { y: R } : R / Fork =
+  if (do Fork()) { x() } else { y() }
+def choose3[R] { x: R } { y: R } { z: R } : R / Fork =
   if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
+def choose4[R] { w: R } { x: R } { y: R } { z: R } : R / Fork =
+  if (do Fork()) { w() }
+  else if (do Fork()) { x() }
+  else if (do Fork()) { y() }
+  else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
@@ -87,9 +97,33 @@ def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
     with Fail[A] { () => empty }
 }
 
+def collectProbs(b: Boolean, l: List[Weighted[Var]]): Double = {
+  var res = 0.0;
+  l match {
+    case Nil() => 0.0
+    case Cons(hd,tl) => hd match {
+      case MkWeighted(w, Observed(out)) => if (out == b) {
+        res + w + collectProbs(b,tl)
+      } else {
+        res + collectProbs(b,tl)
+      }
+      case MkWeighted(w, Unobserved()) => res + collectProbs(b,tl)
+    }
+  }
+}
+
+def posterior(res: List[Weighted[Var]]): List[Weighted[Boolean]] = {
+  val resTru = collectProbs(true, res);
+  val resFls = collectProbs(false, res);
+  val modelEvi = resTru + resFls;
+  val pstTru = MkWeighted(resTru/modelEvi, true);
+  val pstFls = MkWeighted(resFls/modelEvi, false);
+  Cons(pstTru, Cons(pstFls, Nil()))
+}
+
 def fresh(): Ref / Heap = do empty(Unobserved())
 
-def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Cond, Cond2, Conj, Disj, Prior } }: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
   with Flip { p =>
@@ -98,6 +132,66 @@ def handleLang(expected: Bool) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var 
     do get(res) match {
       case Unobserved() => ()
       case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
+    }
+  } with Cond { (x, p, q) =>
+    val res: Ref = fresh();
+    resume(res);
+    do get(res) match {
+      case Unobserved() => ()
+      case Observed(b) => if (b) {
+        choose2 {
+          obs(x, true); do Score(p)
+        } {
+          obs(x, false); do Score(q)
+        }
+      } else {
+        choose2 {
+          obs(x, true); do Score(1.0 - p)
+        } {
+          obs(x, false); do Score(1.0 - q)
+        }
+      }
+    }
+  } with Cond2 { (x, y, ptt, ptf, pft, pff) =>
+    val res: Ref = fresh();
+    resume(res);
+    do get(res) match {
+      case Unobserved() => ()
+      case Observed(b) => if (b) {
+        choose4 {
+          obs(x, true); obs(y, true); do Score(ptt)
+        } {
+          obs(x, true); obs(y, false); do Score(ptf)
+        } {
+          obs(x, false); obs(y, true); do Score(pft)
+        } {
+          obs(x, false); obs(y, false); do Score(pff)
+        }
+      } else {
+        choose4 {
+          obs(x, true); obs(y, true); do Score(1.0 - ptt)
+        } {
+          obs(x, true); obs(y, false); do Score(1.0 - ptf)
+        } {
+          obs(x, false); obs(y, true); do Score(1.0 - pft)
+        } {
+          obs(x, false); obs(y, false); do Score(1.0 - pff)
+        }
+      }
+    }
+  } with Conj { (x, y) =>
+    val res: Ref = fresh();
+    resume(res);
+    do get(res) match {
+      case Unobserved() => ()
+      case Observed(b) => if (b) { obs(x, true); obs(y, true) }
+      else { choose3 {
+        obs(x, false); obs(y, true)
+      } {
+        obs(x, true); obs(y, false)
+      } {
+        obs(x, false); obs(y, false)
+      } }
     }
   } with Disj { (x, y) =>
     val res: Ref = fresh();
@@ -138,6 +232,40 @@ def test() = {
   }
 }
 
+def grass_model(rain: Ref) = {
+  do Prior(rain, 0.2);
+  val sprinkler = do Flip(0.1);
+  val grass_is_wet = do Disj(do Disj(
+    do Conj(do Flip(0.8),rain),
+    do Conj(do Flip(0.95),sprinkler)),
+    do Flip(0.01));
+  grass_is_wet
+}
+
+def grass_model_Cond(rain: Ref) = {
+  do Prior(rain, 0.2);
+  val sprinkler = do Flip(0.1);
+  val grass_is_wet = do Cond2(rain, sprinkler, 0.99, 0.70, 0.90, 0.01);
+  grass_is_wet
+}
+
+def grass_model_CondSpr(rain: Ref) = {
+  do Prior(rain, 0.2);
+  val sprinkler = do Cond(rain, 0.01, 0.4);
+  val grass_is_wet = do Cond2(rain, sprinkler, 0.99, 0.80, 0.90, 0.0);
+  grass_is_wet
+}
+
+def print_grass_model(res: List[Weighted[Var]]): Unit / Console = {
+  val pri = 0.2;
+  val priTru = MkWeighted(pri, true);
+  val priFls = MkWeighted(1.0 - pri, false);
+  println("prior rain true/false");
+  println(Cons(priTru, Cons(priFls, Nil())));
+  println("posterior rain true/false conditioned grass is wet");
+  println(posterior(res))
+}
+
 def heapTest() = heap {
   val r1 = do empty(Unobserved());
   val r2 = do empty(Unobserved());
@@ -175,6 +303,34 @@ def main() = {
       }
     };
     println(res)
-  }
+  };
 
+  println("grass model:")
+  catch {
+    val res = handleProb {
+      handleLang(true) { r =>
+        grass_model(r)
+      }
+    };
+    print_grass_model(res)
+  };
+
+  println("grass model Cond:")
+  catch {
+    val res = handleProb {
+      handleLang(true) { r =>
+        grass_model_Cond(r) }
+    };
+    print_grass_model(res)
+  };
+
+  println("grass model Cond sprinkler:")
+  catch {
+    val res = handleProb {
+      handleLang(true) { r =>
+        grass_model_CondSpr(r)
+      }
+    };
+    print_grass_model(res)
+  }
 }
