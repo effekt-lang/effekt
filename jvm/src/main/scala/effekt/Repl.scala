@@ -318,7 +318,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
      */
     def make(expr: Expr): ModuleDecl = {
 
-      val body = Return(expr)
+      val body = Return(List(expr))
 
       ModuleDecl("lib/interactive", Import("effekt") :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,

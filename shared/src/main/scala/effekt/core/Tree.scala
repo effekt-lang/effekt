@@ -64,7 +64,7 @@ case class Extern(params: List[Param], body: String) extends Block
  */
 sealed trait Stmt extends Tree
 case class Def(id: BlockSymbol, tpe: InterfaceType, block: Block, rest: Stmt) extends Stmt
-case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
+case class Val(id: Symbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
@@ -72,7 +72,7 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
-case class Ret(e: Expr) extends Stmt
+case class Ret(es: List[Expr]) extends Stmt
 case class Exports(path: String, exports: List[Symbol]) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
@@ -153,8 +153,8 @@ object Tree {
         If(rewrite(cond), rewrite(thn), rewrite(els))
       case While(cond, body) =>
         While(rewrite(cond), rewrite(body))
-      case Ret(e: Expr) =>
-        Ret(rewrite(e))
+      case Ret(es: List[Expr]) =>
+        Ret(es map rewrite)
       case Include(contents, rest) =>
         Include(contents, rewrite(rest))
       case State(id, tpe, get, put, init, body) =>

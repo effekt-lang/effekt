@@ -174,7 +174,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val int = decimalInt ^^ { n => IntLit(n.toInt) }
   lazy val bool = `true` ^^^ BooleanLit(true) | `false` ^^^ BooleanLit(false)
-  lazy val unit = literal("()") ^^^ UnitLit()
+  // TODO delete
+  // lazy val unit = literal("()") ^^^ UnitLit()
   lazy val double = regex("([-+])?(0|[1-9][0-9]*)[.]([0-9]+)".r) ^^ { n => DoubleLit(n.toDouble) }
   lazy val string = """\"([^\"]*)\"""".r ^^ {
     s => StringLit(s.substring(1, s.size - 1))
@@ -308,7 +309,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
       val name = "__tmpRes"
       BlockArg(
         List(ValueParams(List(ValueParam(IdDef(name), None)))),
-        Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
+        Return(List(MatchExpr(Var(IdRef(name)), cs)))) withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
     )
@@ -325,8 +326,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val maybeTypeArgs: P[List[ValueType]] =
     typeArgs.? ^^ { o => o.getOrElse(Nil) }
 
+  lazy val returnExprs: P[List[Expr]] =
+    ( `(` ~> manySep(expr, `,`) <~ `)`
+    | expr ^^ { case e => List(e) }
+    )
+
   lazy val stmt: P[Stmt] =
-    ( expr ^^ Return
+    // TODO this overlaps with a parenthesized single expression?
+    ( returnExprs ^^ Return
     | `{` ~/> stmts <~ `}` ^^ BlockStmt
     | failure("Expected a statement")
     )
@@ -336,10 +343,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
   lazy val stmts: P[Stmt] =
     ( withStmt
-    | (expr <~ `;`) ~ stmts ^^ ExprStmt
+       // TODO expr commits on the first opening parenthesis so we have to prevent cuts here.
+    | (nocut(expr) <~ `;`) ~ stmts ^^ ExprStmt
     | (definition <~ `;`) ~ stmts ^^ DefStmt
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt
-    | (expr <~ `;`) ^^ Return
+    | (returnExprs <~ `;`) ^^ Return
     | matchDef
     )
 
@@ -348,12 +356,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
           (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ args ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, args :+ BlockArg(List(params), body)) withPositionOf params)
+          Return(List(Call(tgt, tps, args :+ BlockArg(List(params), body)) withPositionOf params))
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ args ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
+          Return(List(Call(tgt, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id))
        }
     )
 
@@ -367,7 +375,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
        case p ~ sc ~ body =>
-        Return(MatchExpr(sc, List(MatchClause(p, body)))) withPositionOf p
+        Return(List(MatchExpr(sc, List(MatchClause(p, body))))) withPositionOf p
      }
 
   lazy val typeDef: P[TypeDef] =
@@ -454,9 +462,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
-    | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
-        TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
-      }
+       // TODO delete
+    // | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
+    //     TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
+    //   }
     )
 
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
@@ -472,24 +481,25 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
   lazy val primExpr: P[Expr] =
-    variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
+    variable | literals | listLiteral | hole | `(` ~/> expr <~ `)`
 
   lazy val variable: P[Expr] =
     idRef ^^ Var
 
   lazy val hole: P[Expr] =
-    ( `<>` ^^^ Hole(Return(UnitLit()))
+    ( `<>` ^^^ Hole(Return(List()))
     | `<{` ~> stmts <~ `}>` ^^ Hole
     )
 
   lazy val literals: P[Literal[_]] =
-    double | int | bool | unit | string
+    double | int | bool | string
 
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
 
-  lazy val tupleLiteral: P[Expr] =
-    `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
+  // TODO delete
+  // lazy val tupleLiteral: P[Expr] =
+  //   `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Expr =
     Call(IdTarget(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
@@ -497,8 +507,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   private def ConsTree(el: Expr, rest: Expr): Expr =
     Call(IdTarget(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
 
-  private def TupleTree(args: List[Expr]): Expr =
-    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
+  // TODO delete
+  // private def TupleTree(args: List[Expr]): Expr =
+  //   Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
 
   /**
    * Types and Effects
@@ -507,7 +518,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val valueType: P[ValueType] =
     ( idRef ~ typeArgs ^^ TypeApp
     | idRef ^^ TypeVar
-    | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | failure("Expected a type")
     )
 
@@ -517,11 +527,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | effectful ^^ { e => BlockType(Nil, e) }
     )
 
+  lazy val returnTypes: P[List[ValueType]] =
+    ( `(` ~/> manySep(valueType, `,`) <~ `)`
+    | valueType ^^  { case t  => List(t) }
+    | failure("Expected return type(s)")
+    )
+
   lazy val effectful: P[Effectful] =
-    // TODO valueType -> valueTypes
-    valueType ~ (`/` ~> effects).? ^^ {
-      case t ~ Some(es) => Effectful(List(t), es)
-      case t ~ None => Effectful(List(t), Effects.Pure)
+    returnTypes ~ (`/` ~> effects).? ^^ {
+      case ts ~ Some(es) => Effectful(ts, es)
+      case ts ~ None => Effectful(ts, Effects.Pure)
     }
 
   lazy val effects: P[Effects] =
@@ -555,8 +570,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     case "++" => "infixConcat"
   }
 
-  private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    TypeApp(IdRef(s"Tuple${tps.size}"), tps)
+  // TODO delete
+  // private def TupleTypeTree(tps: List[ValueType]): ValueType =
+  //   TypeApp(IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

@@ -86,10 +86,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
-      Val(freshWildcardFor(e), insertBindings { Ret(transform(e)) }, transform(rest))
+      Val(freshWildcardFor(e), insertBindings { Ret(List(transform(e))) }, transform(rest))
 
-    case source.Return(e) =>
-      insertBindings { Ret(transform(e)) }
+    case source.Return(es) =>
+      insertBindings { Ret(es.map(transform)) }
 
     case source.BlockStmt(b) =>
       transform(b)
@@ -128,7 +128,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case source.While(cond, body) =>
       val exprTpes = C.inferredTypeOf(tree).tpes
-      C.bind(exprTpes, While(insertBindings { Ret(transform(cond)) }, transform(body)))
+      C.bind(exprTpes, While(insertBindings { Ret(List(transform(cond))) }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
       val scrutinee = transform(sc)
@@ -248,7 +248,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
-      case ((x, tpe, b), Ret(ValueVar(y))) if x == y => b
+      // TODO generalize to work with multiple returns
+      case ((x, tpe, b), Ret(List(ValueVar(y)))) if x == y => b
       case ((x, tpe, b), body) => Val(x, b, body)
     }
   }

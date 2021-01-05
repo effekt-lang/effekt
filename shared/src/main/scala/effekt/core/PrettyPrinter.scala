@@ -77,8 +77,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
       "if" <+> parens(toDoc(cond)) <+> toDocExpr(thn) <+> "else" <+> toDocExpr(els)
     case While(cond, body) =>
       "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
-    case Ret(e) =>
-      toDoc(e)
+    case Ret(exprs) =>
+      parens(hsep(exprs map toDoc, comma))
     // don't print exports for now
     case Exports(path, exports) =>
       emptyDoc

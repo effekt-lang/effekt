@@ -232,7 +232,7 @@ case class ExternInclude(path: String) extends Def {
 sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
 case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
-case class Return(d: Expr) extends Stmt
+case class Return(d: List[Expr]) extends Stmt
 case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
@@ -467,8 +467,8 @@ object Tree {
       case ExprStmt(e, rest) =>
         ExprStmt(rewrite(e), rewrite(rest))
 
-      case Return(e) =>
-        Return(rewrite(e))
+      case Return(es) =>
+        Return(es.map(rewrite(_)))
 
       case BlockStmt(b) =>
         BlockStmt(rewrite(b))

@@ -86,7 +86,9 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case Val(Wildcard(_), tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), "_", toDoc(body, false))
 
-    case Ret(e) => schemeCall("pure", List(toDoc(e)))
+    case Ret(es) =>
+      // TODO do we need multiple versions of `pure`?
+      schemeCall("pure", es map toDoc)
 
     case Val(id, tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))

@@ -190,7 +190,13 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case Val(id, tpe, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
 
-    case Ret(e) => toDoc(e)
+    case Ret(es) => es match {
+      case List(e) =>
+        toDoc(e)
+      case _ =>
+        // TODO make this work
+        C.abort("multiple returns in direct-style chez-scheme?")
+    }
 
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>

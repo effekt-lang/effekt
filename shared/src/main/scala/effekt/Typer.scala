@@ -282,10 +282,46 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val (r / eff2) = checkStmt(rest, expected)
         r / (eff1 ++ eff2)
 
-      case source.Return(e)        => checkExpr(e, expected)
+      case source.Return(es) =>
+        // TODO this is a stupid hack for a singleton expression in return position
+        es match {
+          case List(e) => checkExpr(e, expected)
+          case _       => checkReturnExprs(es, expected)
+        }
 
       case source.BlockStmt(stmts) => checkStmt(stmts, expected)
     }
+
+  // TODO can we reuse this for value param sections?
+  def checkReturnExprs(exprs: List[Expr], expected: Option[List[ValueType]])(implicit C: Context): Effectful = {
+    exprs match {
+      case e :: es => expected match {
+        case Some(t :: ts) =>
+          // TODO really throw away result of checking?
+          val (_ / effs) = checkExpr(e, Some(List(t)))
+          val (_ / effss) = checkReturnExprs(es, Some(ts))
+          ((t :: ts) / (effs ++ effss))
+        case Some(Nil) =>
+          // TODO actual error message
+          println(e);
+          C.abort(s"More return expressions than expected: ${expected}")
+        case None =>
+          // TODO error if list is not singleton
+          val (List(t) / effs) = checkExpr(e, None)
+          val (ts / effss) = checkReturnExprs(es, None)
+          ((t :: ts) / (effs ++ effss))
+      }
+      case Nil => expected match {
+        case Some(t :: ts) =>
+          // TODO actual error message
+          C.abort(s"Fewer return expressions than expected: ${expected}")
+        case Some(Nil) =>
+          (Nil / Pure)
+        case None =>
+          (Nil / Pure)
+      }
+    }
+  }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
@@ -328,19 +364,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val sym = d.symbol
         Context.define(sym.params)
         sym.ret match {
-          case Some(tpe / funEffs) =>
-            val (_ / effs) = body checkAgainst tpe
+          case Some(tpes / funEffs) =>
+            val (_ / effs) = body checkAgainst tpes
             Context.wellscoped(effs)
-            Context.assignType(d, tpe / effs)
+            Context.assignType(d, tpes / effs)
 
-            tpe / (effs -- funEffs) // the declared effects are considered as bound
+            tpes / (effs -- funEffs) // the declared effects are considered as bound
           case None =>
-            val (tpe / effs) = checkStmt(body, None)
+            val (tpes / effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
-            Context.assignType(sym, sym.toType(tpe / effs))
-            Context.assignType(d, tpe / effs)
+            Context.assignType(sym, sym.toType(tpes / effs))
+            Context.assignType(d, tpes / effs)
 
-            tpe / Pure // all effects are handled by the function itself (since they are inferred)
+            tpes / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
       case d @ source.EffDef(id, ops) =>

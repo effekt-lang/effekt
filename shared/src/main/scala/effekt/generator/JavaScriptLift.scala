@@ -88,8 +88,8 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
         "$effekt._while", toDocExpr(cond), toDocExpr(body)
       )
 
-    case Ret(e) =>
-      jsCall("$effekt.pure", toDoc(e))
+    case Ret(es) =>
+      jsCall("$effekt.pure", es map toDoc)
 
     case State(id, tpe, get, put, init, body) =>
       "$effekt.state" <> parens(toDocExpr(init)) <> parens(toDoc(body))

@@ -15,10 +15,10 @@ def locally[R] { f: R }: R = f()
 
 // Side effecting ops
 // ==================
-extern def println[R](value: R): Unit / Console =
+extern def println[R](value: R): () / Console =
   "println$impl(value)"
 
-extern pure def inspect[R](value: R): Unit =
+extern pure def inspect[R](value: R): () =
   "console.log(value)"
 
 // a fatal runtime error that cannot be caught
@@ -173,15 +173,15 @@ extern def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
 
 // runs the block and returns the time in nanoseconds
-def timed { block: Unit }: Int = {
+def timed { block: () }: Int = {
   val before = currentTimeNanos()
   block()
   val after = currentTimeNanos()
   after - before
 }
 
-def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
-  def run(n: Int, report: Boolean): Unit = {
+def measure(warmup: Int, iterations: Int) { block: () }: () / Console = {
+  def run(n: Int, report: Boolean): () = {
     if (n <= 0) { () } else {
       val time = timed { block() };
       if (report) { println(time) } else { () };
