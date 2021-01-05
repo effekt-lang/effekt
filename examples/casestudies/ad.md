@@ -135,11 +135,11 @@ def main() = {
   println(backwards(0.0) { x => prog(x) })
 
 
-  println(forwards(1.0) { x => prog2(x) })
-  println(backwards(1.0) { x => prog2(x) })
+  println(forwards(1.0) { x => progExp(x) })
+  println(backwards(1.0) { x => progExp(x) })
 
-  println(forwards(0.0) { x => prog2(x) })
-  println(backwards(0.0) { x => prog2(x) })
+  println(forwards(0.0) { x => progExp(x) })
+  println(backwards(0.0) { x => progExp(x) })
 
 
   // we have the same pertubation confusion as in Lantern
