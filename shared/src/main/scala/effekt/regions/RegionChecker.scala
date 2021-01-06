@@ -194,7 +194,10 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val fun = id.definition.asFun
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
 
-      (fun.params zip args).foreach {
+      // there can be more args than params (for capability args)
+      val params = fun.params.padTo(args.size, null)
+
+      (params zip args).foreach {
         case (param, arg: ValueArgs) => reg ++= check(args)
         case (List(param: symbols.BlockParam), arg: BlockArg) =>
           val argReg = check(arg)
@@ -202,8 +205,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
           // here we substitute the inferred region for the block parameter in the return type.
           substitute(param, argReg, tpe)
-        case (param, arg: CapabilityArg) => ()
+
+        // we are using the capability, so we should only run in their region
+        case (param, arg: CapabilityArg) => reg ++= Region(arg.definition)
       }
+
       // check constraints again after substitution
       unifyAndExplain(c)
 
@@ -213,6 +219,8 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
     case c @ Call(target, _, args) =>
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
       args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
+
+    case c: CapabilityArg => Region(c.definition)
   }
 
   def unifyAndExplain(body: Tree)(implicit C: Context): Unit =

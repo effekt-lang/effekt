@@ -1,0 +1,10 @@
+[error] examples/neg/lambdas/closure.effekt:6:11: The value returned from this handler has type () ⟹ Unit / { @Yield }. 
+As part of this type, the following capabilities leave their defining scope {@Yield}.
+  val f = try {
+          ^
+[info] examples/neg/lambdas/closure.effekt:6:15: The return type mentions capability @Yield
+  val f = try {
+              ^
+[info] examples/neg/lambdas/closure.effekt:8:5: A value is returned that mentions '@Yield' in its inferred type
+    twice { g() }  //lambda als someBlock übergeben
+    ^^^^^^^^^^^^^
