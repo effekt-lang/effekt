@@ -1,16 +1,8 @@
-module probabilistic
+module examples/pos/probabilistic
+
+import immutable/list
 
 effect IndexOutOfBounds[A](): A
-
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-
-def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
-  case Nil() => l2
-  case Cons(a, rest) => Cons(a, concat(rest, l2))
-}
 
 def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
   case Nil() => do IndexOutOfBounds()
@@ -20,11 +12,6 @@ def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
 def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l match {
   case Nil() => do IndexOutOfBounds()
   case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
-}
-
-def length[A](l: List[A]): Int = l match {
-  case Nil() => 0
-  case Cons(_, rest) => 1 + length(rest)
 }
 
 type Var {
@@ -46,11 +33,11 @@ def heap[R] { prog: => R / Heap } = {
   try { prog() } with Heap {
     def empty(v) = { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
     def get(r) = r match {
-      case MkRef(idx) => resume(lookup(cells, (length(cells) - idx) - 1))
+      case MkRef(idx) => resume(lookup(cells, (size(cells) - idx) - 1))
     }
     def put(r, v) = r match {
       case MkRef(idx) =>
-        cells = updateAt(cells, (length(cells) - idx) - 1, v);
+        cells = updateAt(cells, (size(cells) - idx) - 1, v);
         resume(())
     }
   }
@@ -93,8 +80,8 @@ def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
       val res = prog();
       Cons(MkWeighted(current, res), empty)
     } with Score { p => current = current * p; resume(()) }
-  } with Fork { () => concat(resume(true), resume(false)) }
-    with Fail[A] { () => empty }
+  } with Fork { () => resume(true).append(resume(false)) }
+    with Fail { () => empty }
 }
 
 def collectProbs(b: Boolean, l: List[Weighted[Var]]): Double = {
