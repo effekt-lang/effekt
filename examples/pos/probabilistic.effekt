@@ -14,6 +14,12 @@ def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l mat
   case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
 }
 
+def pow(base: Int, exp: Int): Int = {
+  if (exp < 0) { 0 }
+  else if (exp == 0) { 1 }
+  else { base * pow(base, exp - 1) }
+}
+
 type Var {
   Unobserved();
   Observed(value: Bool)
@@ -43,9 +49,8 @@ def heap[R] { prog: => R / Heap } = {
   }
 }
 
-effect Flip(prob: Double): Ref
-effect Cond(x: Ref, p: Double, q: Double): Ref
-effect Cond2(x: Ref, y: Ref, p1: Double, p2: Double, p3: Double, p4: Double): Ref
+effect Cond(lRef: List[Ref], lProb: List[Double]): Ref
+effect Flip(prob: Double): Ref / Cond
 effect Conj(x: Ref, y: Ref): Ref
 effect Disj(x: Ref, y: Ref): Ref
 effect Prior(x: Ref, prob: Double): Unit
@@ -60,15 +65,48 @@ def obs(r: Ref, a: Bool) =
     case Observed(y) => if (a == y) { () } else { do Fail() }
   }
 
-def choose2[R] { x: R } { y: R } : R / Fork =
-  if (do Fork()) { x() } else { y() }
+def obsLst(lRef: List[Ref], lB: List[Boolean]): Unit / { Heap, Fail } = {
+  lRef match {
+    case Nil() => ()
+    case Cons(hdR, tlR) => lB match {
+      case Nil() => ()
+      case Cons(hdB, tlB) => obs(hdR, hdB); obsLst(tlR, tlB)
+    }
+  }
+}
+
+def toBoolLst(len: Int, num: Int): List[Boolean] / Console  = try {
+  if (num < 0) { do Fail() }
+  else {
+    if (len < 0) { do Fail() }
+    else if (len == 0) { Nil() }
+    else {
+      if (mod(num, 2) == 1) {
+        toBoolLst(len - 1, num / 2).append([true])
+      } else {
+        toBoolLst(len - 1, num / 2).append([false])
+      }
+    }
+  }
+} with Fail { () => println("toBoolLst: Unexpected negative number."); [] }
+
+def obsSco(idx: Int, lRef: List[Ref], lProb: List[Double]): Unit / { IndexOutOfBounds, Heap, Fail, Fork, Score, Console } = {
+  if (idx < 0) { () }
+  else if (idx >= pow(2, size(lRef))) {
+    obsSco(pow(2, size(lRef)) - 1, lRef, lProb)
+  } else if (idx == 0) {
+    obsLst(lRef, toBoolLst(size(lRef), idx));
+    do Score(lookup(lProb, idx))
+  } else {
+    if (do Fork()) {
+      obsLst(lRef, toBoolLst(size(lRef), idx));
+      do Score(lookup(lProb, idx))
+    } else { obsSco(idx - 1, lRef, lProb) }
+  }
+}
+
 def choose3[R] { x: R } { y: R } { z: R } : R / Fork =
   if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
-def choose4[R] { w: R } { x: R } { y: R } { z: R } : R / Fork =
-  if (do Fork()) { w() }
-  else if (do Fork()) { x() }
-  else if (do Fork()) { y() }
-  else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
@@ -99,73 +137,39 @@ def collectProbs(b: Boolean, l: List[Weighted[Var]]): Double = {
   }
 }
 
-def posterior(res: List[Weighted[Var]]): List[Weighted[Boolean]] = {
+def posterior(res: List[Weighted[Var]]): List[Weighted[Boolean]] / Fail = {
   val resTru = collectProbs(true, res);
   val resFls = collectProbs(false, res);
   val modelEvi = resTru + resFls;
-  val pstTru = MkWeighted(resTru/modelEvi, true);
-  val pstFls = MkWeighted(resFls/modelEvi, false);
-  Cons(pstTru, Cons(pstFls, Nil()))
+  if (modelEvi == 0.0) { do Fail() }
+  else {
+    val pstTru = MkWeighted(resTru/modelEvi, true);
+    val pstFls = MkWeighted(resFls/modelEvi, false);
+    Cons(pstTru, Cons(pstFls, Nil()))
+  }
 }
 
 def fresh(): Ref / Heap = do empty(Unobserved())
 
-def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Cond, Cond2, Conj, Disj, Prior } }: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Cond, Conj, Disj, Prior } }: Var / { IndexOutOfBounds, Score, Fail, Fork, Console } = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
   with Flip { p =>
-    val res: Ref = fresh();
-    resume(res);
-    do get(res) match {
-      case Unobserved() => ()
-      case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
-    }
-  } with Cond { (x, p, q) =>
-    val res: Ref = fresh();
-    resume(res);
-    do get(res) match {
-      case Unobserved() => ()
-      case Observed(b) => if (b) {
-        choose2 {
-          obs(x, true); do Score(p)
-        } {
-          obs(x, false); do Score(q)
-        }
-      } else {
-        choose2 {
-          obs(x, true); do Score(1.0 - p)
-        } {
-          obs(x, false); do Score(1.0 - q)
+    resume { do Cond([], [p]) }
+  } with Cond { (lRef, lProb) =>
+    val len = size(lRef);
+    if (pow(2, len) == size(lProb)) {
+      val res: Ref = fresh();
+      resume(res);
+      do get(res) match {
+        case Unobserved() => ()
+        case Observed(b) => if (b) {
+          obsSco(pow(2, len) - 1, lRef, lProb)
+        } else {
+          obsSco(pow(2, len) - 1, lRef, map(lProb) { x => 1.0 - x })
         }
       }
-    }
-  } with Cond2 { (x, y, ptt, ptf, pft, pff) =>
-    val res: Ref = fresh();
-    resume(res);
-    do get(res) match {
-      case Unobserved() => ()
-      case Observed(b) => if (b) {
-        choose4 {
-          obs(x, true); obs(y, true); do Score(ptt)
-        } {
-          obs(x, true); obs(y, false); do Score(ptf)
-        } {
-          obs(x, false); obs(y, true); do Score(pft)
-        } {
-          obs(x, false); obs(y, false); do Score(pff)
-        }
-      } else {
-        choose4 {
-          obs(x, true); obs(y, true); do Score(1.0 - ptt)
-        } {
-          obs(x, true); obs(y, false); do Score(1.0 - ptf)
-        } {
-          obs(x, false); obs(y, true); do Score(1.0 - pft)
-        } {
-          obs(x, false); obs(y, false); do Score(1.0 - pff)
-        }
-      }
-    }
+    } else { do Fail() }
   } with Conj { (x, y) =>
     val res: Ref = fresh();
     resume(res);
@@ -219,38 +223,39 @@ def test() = {
   }
 }
 
-def grass_model(rain: Ref) = {
+def grassModel(rain: Ref) = {
   do Prior(rain, 0.2);
   val sprinkler = do Flip(0.1);
-  val grass_is_wet = do Disj(do Disj(
+  val grassIsWet = do Disj(do Disj(
     do Conj(do Flip(0.8),rain),
     do Conj(do Flip(0.95),sprinkler)),
     do Flip(0.01));
-  grass_is_wet
+  grassIsWet
 }
 
-def grass_model_Cond(rain: Ref) = {
+def grassModelCond(rain: Ref) = {
   do Prior(rain, 0.2);
   val sprinkler = do Flip(0.1);
-  val grass_is_wet = do Cond2(rain, sprinkler, 0.99, 0.70, 0.90, 0.01);
-  grass_is_wet
+  val grassIsWet = do Cond([rain, sprinkler], [0.01, 0.90, 0.70, 0.99]);
+  grassIsWet
 }
 
-def grass_model_CondSpr(rain: Ref) = {
+def grassModelCondSpr(rain: Ref) = {
   do Prior(rain, 0.2);
-  val sprinkler = do Cond(rain, 0.01, 0.4);
-  val grass_is_wet = do Cond2(rain, sprinkler, 0.99, 0.80, 0.90, 0.0);
-  grass_is_wet
+  val sprinkler = do Cond([rain], [0.4, 0.01]);
+  val grassIsWet = do Cond([rain, sprinkler], [0.0, 0.90, 0.80, 0.99]);
+  grassIsWet
 }
 
-def print_grass_model(res: List[Weighted[Var]]): Unit / Console = {
+def printGrassModel(res: List[Weighted[Var]]): Unit / Console = {
   val pri = 0.2;
   val priTru = MkWeighted(pri, true);
   val priFls = MkWeighted(1.0 - pri, false);
   println("prior rain true/false");
   println(Cons(priTru, Cons(priFls, Nil())));
   println("posterior rain true/false conditioned grass is wet");
-  println(posterior(res))
+  try{ println(posterior(res)) }
+  with Fail { () => println("Bad model: model evidence is 0, cannot compute posterior.") }
 }
 
 def heapTest() = heap {
@@ -296,28 +301,28 @@ def main() = {
   catch {
     val res = handleProb {
       handleLang(true) { r =>
-        grass_model(r)
+        grassModel(r)
       }
     };
-    print_grass_model(res)
+    printGrassModel(res)
   };
 
   println("grass model Cond:")
   catch {
     val res = handleProb {
       handleLang(true) { r =>
-        grass_model_Cond(r) }
+        grassModelCond(r) }
     };
-    print_grass_model(res)
+    printGrassModel(res)
   };
 
   println("grass model Cond sprinkler:")
   catch {
     val res = handleProb {
       handleLang(true) { r =>
-        grass_model_CondSpr(r)
+        grassModelCondSpr(r)
       }
     };
-    print_grass_model(res)
+    printGrassModel(res)
   }
 }
