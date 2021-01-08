@@ -1,0 +1,20 @@
+module examples/pos/bidirectional/selfrecursion
+
+effect Loop(): Unit / Loop
+
+def main() = {
+  var n = 10
+  println("start loop")
+  try {
+    Loop();
+  } with Loop {
+    resume {
+      println(n);
+      n = n - 1;
+      if (n > 0) {
+        do Loop()
+      } else { () }
+    }
+  }
+  println("end loop")
+}
