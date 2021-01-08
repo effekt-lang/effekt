@@ -283,8 +283,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), Some(tpe / Pure), eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), Some(builtins.TUnit / Pure), eff)
+    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
+    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
 
     val param = CapabilityParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)

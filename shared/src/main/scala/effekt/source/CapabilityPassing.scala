@@ -36,14 +36,11 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
       val op = fun.definition.asEffectOp
 
-      // if this is an effect call, we do not want to provide capabilities for the effect itself
-      val ownEffect = Effects(List(op.effect))
-
       val tpe @ BlockType(tparams, params, ret / effs) = C.blockTypeOf(op)
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
-      val effects = (effs -- ownEffect).userDefined
+      val effects = op.otherEffects.userDefined
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 

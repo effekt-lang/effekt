@@ -323,8 +323,12 @@ package object symbols {
   }
 
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun {
-    def otherEffects: Effects = ret.get.effects - effect
+  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
+    // The effects as seen by typer
+    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + effect))
+
+    // The effects as seen by the capability passing transformation
+    def otherEffects: Effects = annotatedReturn.effects
     def isBidirectional: Boolean = otherEffects.nonEmpty
   }
 
