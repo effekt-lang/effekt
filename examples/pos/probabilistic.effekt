@@ -50,10 +50,11 @@ def heap[R] { prog: => R / Heap } = {
 }
 
 effect Cond(lRef: List[Ref], lProb: List[Double]): Ref
-effect Flip(prob: Double): Ref / Cond
 effect Conj(x: Ref, y: Ref): Ref
 effect Disj(x: Ref, y: Ref): Ref
 effect Prior(x: Ref, prob: Double): Unit
+
+def Flip(prob: Double) = do Cond([], [prob])
 
 effect Score(prob: Double): Unit
 effect Fork(): Bool
@@ -151,12 +152,10 @@ def posterior(res: List[Weighted[Var]]): List[Weighted[Boolean]] / Fail = {
 
 def fresh(): Ref / Heap = do empty(Unobserved())
 
-def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Cond, Conj, Disj, Prior } }: Var / { IndexOutOfBounds, Score, Fail, Fork, Console } = heap {
+def handleLang(expected: Boolean) { prog: Ref => Ref / { Cond, Conj, Disj, Prior }}: Var / { IndexOutOfBounds, Score, Fail, Fork, Console } = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
-  with Flip { p =>
-    resume { do Cond([], [p]) }
-  } with Cond { (lRef, lProb) =>
+  with Cond { (lRef, lProb) =>
     val len = size(lRef);
     if (pow(2, len) == size(lProb)) {
       val res: Ref = fresh();
@@ -225,17 +224,17 @@ def test() = {
 
 def grassModel(rain: Ref) = {
   do Prior(rain, 0.2);
-  val sprinkler = do Flip(0.1);
+  val sprinkler = Flip(0.1);
   val grassIsWet = do Disj(do Disj(
-    do Conj(do Flip(0.8),rain),
-    do Conj(do Flip(0.95),sprinkler)),
-    do Flip(0.01));
+    do Conj(Flip(0.8),rain),
+    do Conj(Flip(0.95),sprinkler)),
+    Flip(0.01));
   grassIsWet
 }
 
 def grassModelCond(rain: Ref) = {
   do Prior(rain, 0.2);
-  val sprinkler = do Flip(0.1);
+  val sprinkler = Flip(0.1);
   val grassIsWet = do Cond([rain, sprinkler], [0.01, 0.90, 0.70, 0.99]);
   grassIsWet
 }
@@ -291,7 +290,7 @@ def main() = {
   catch {
     val res = handleProb {
       handleLang(true) { r =>
-        do Disj(do Flip(0.2), r)
+        do Disj(Flip(0.2), r)
       }
     };
     println(res)
