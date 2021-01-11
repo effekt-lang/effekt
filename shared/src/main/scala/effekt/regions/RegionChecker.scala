@@ -160,7 +160,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       case b: BlockSymbol =>
         Context.regionOf(b).asRegionSet
       case t: ValueSymbol =>
-        val symbols.FunType(tpe, reg) = Context.valueTypeOf(t)
+        val symbols.FunType(tpe, reg) = Context.valueTypeOf(t).dealias
         reg.asRegionSet
     }
 

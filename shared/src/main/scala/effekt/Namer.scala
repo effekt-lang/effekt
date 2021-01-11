@@ -331,7 +331,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
     case source.EffectDef(id, effs) =>
       val alias = Context scoped {
-        EffectAlias(Name(id), resolve(effs))
+        EffectAlias(Name(id), Nil, resolve(effs))
       }
       Context.define(id, alias)
 
@@ -422,7 +422,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
         // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
         val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
-        val effects = types.map(_.asEffect)
+
+        val effects = types.map { t => t.asEffect }
         val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
 
         FunType(btpe, Region(terms))
