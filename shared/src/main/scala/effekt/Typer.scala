@@ -139,13 +139,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             funTpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
-      case c @ source.Call(t: source.IdTarget, targs, args) =>
+      case c @ source.Call(t: source.IdTarget, targs, args) => {
         checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
+      }
 
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
 
-        val tpe: BlockType = funTpe match {
+        val tpe: BlockType = funTpe.dealias match {
           case f: FunType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }

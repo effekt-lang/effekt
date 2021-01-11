@@ -35,8 +35,9 @@ object DeclPrinter extends ParenPrettyPrinter {
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       "type" <+> name.toString <> tps <+> "=" <+> tpe.toString
 
-    case EffectAlias(name, eff) =>
-      "effect" <+> name.toString <+> "=" <+> eff.toString
+    case EffectAlias(name, tparams, eff) =>
+      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
+      "effect" <+> name.toString <> tps <+> "=" <+> eff.toString
 
     case DataType(name, tparams, ctors) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"

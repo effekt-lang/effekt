@@ -318,13 +318,21 @@ package object symbols {
     def dealias: List[Effect] = List(this)
   }
 
-  case class EffectAlias(name: Name, effs: Effects) extends Effect with TypeSymbol {
+  case class EffectApp(effect: Effect, args: List[ValueType]) extends Effect {
+    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
+    override def builtin = effect.builtin
+    override def name = effect.name
+
+    // override def dealias: List[Effect] = ??? // like dealiasing of TypeApp we potentially need to substitute
+  }
+
+  case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends Effect with TypeSymbol {
     override def dealias: List[Effect] = effs.dealias
   }
 
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
-    // The effects as seen by typer
+    // TODO if UserEffect has parameters, then generate an EffectApp here.
     def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + effect))
 
     // The effects as seen by the capability passing transformation
@@ -343,16 +351,14 @@ package object symbols {
 
     lazy val toList: List[Effect] = effects.distinct
 
+    // This is only used by typer
     def +(eff: Effect): Effects = this ++ Effects(eff)
-    def -(eff: Effect): Effects = this -- Effects(eff)
 
     def ++(other: Effects): Effects = Effects((other.toList ++ this.toList).distinct)
     def --(other: Effects): Effects = Effects(this.toList.filterNot(other.contains))
 
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
-
-    def distinct: Effects = new Effects(toList)
 
     override def equals(other: Any): Boolean = other match {
       case other: Effects => this.contains(other.toList) && other.contains(this.toList)

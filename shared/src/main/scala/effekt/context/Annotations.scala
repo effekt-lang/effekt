@@ -288,9 +288,11 @@ trait AnnotationsDB { self: Context =>
         case b: BlockType => Some(b)
         case _            => None
       }
-      case v: ValueSymbol => valueTypeOption(v).flatMap {
-        case symbols.FunType(tpe, _) => Some(tpe)
-        case _ => None
+      case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
+        v.dealias match {
+          case symbols.FunType(tpe, _) => Some(tpe)
+          case _ => None
+        }
       }
     }
 
