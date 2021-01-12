@@ -331,9 +331,7 @@ package object symbols {
 
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
-    // TODO if UserEffect has parameters, then generate an EffectApp here.
-    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + appliedEffect))
-
+    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
     def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
 
     // The effects as seen by the capability passing transformation

@@ -171,17 +171,27 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
 
-    case source.Handler(name, _, clauses) =>
-      val eff = Context.at(name) { Context.resolveType(name) }.asUserEffect
+    case source.Handler(effect, _, clauses) =>
+
+      def extractUserEffect(e: Effect): UserEffect = e match {
+        case EffectApp(e, args) => extractUserEffect(e)
+        case e: UserEffect      => e
+        case b: BuiltinEffect =>
+          Context.abort(s"Cannot handle built in effects like ${b}")
+        case b: EffectAlias =>
+          Context.abort(s"Cannot only handle concrete effects, but $b is an effect alias")
+      }
+
+      val eff: UserEffect = Context.at(effect) { extractUserEffect(resolve(effect)) }
 
       clauses.foreach {
         case source.OpClause(op, params, body, resumeId) =>
 
           // try to find the operation in the handled effect:
-          eff.ops.filter { o => o.name.toString == op.name }.headOption map { opSym =>
+          eff.ops.find { o => o.name.toString == op.name } map { opSym =>
             Context.assignSymbol(op, opSym)
           } getOrElse {
-            Context.abort(s"Effect operation ${op.name} is not part of effect ${name.name}.")
+            Context.abort(s"Effect operation ${op.name} is not part of effect ${eff}.")
           }
 
           val ps = params.map(resolve)

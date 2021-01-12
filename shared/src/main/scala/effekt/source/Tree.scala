@@ -299,7 +299,8 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-case class Handler(id: IdRef, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+  def id = effect.id
   type symbol = symbols.UserEffect
 }
 case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
@@ -379,7 +380,7 @@ case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type symbol = symbols.BlockType
 }
 
-case class Effect(id: IdRef) extends Tree with Reference {
+case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Reference {
   type symbol = symbols.UserEffect
 }
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
@@ -497,8 +498,8 @@ object Tree {
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
-      case Handler(id, capability, clauses) =>
-        Handler(id, capability, clauses.map(rewrite))
+      case Handler(effect, capability, clauses) =>
+        Handler(effect, capability, clauses.map(rewrite))
     }
 
     def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {

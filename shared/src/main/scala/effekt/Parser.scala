@@ -437,13 +437,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
   lazy val handler: P[Handler] =
-    ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ {
-      case effectId ~ clauses =>
-        Handler(effectId, None, clauses)
+    ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+      case effect ~ clauses =>
+        Handler(effect, None, clauses)
       }
-    | `with` ~> idRef ~ implicitResume ~ blockArg ^^ {
-      case effectId ~ resume ~ BlockArg(params, body) =>
-        Handler(effectId, None, List(OpClause(IdRef(effectId.name), params, body, resume) withPositionOf effectId))
+    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
+      case effect ~ resume ~ BlockArg(params, body) =>
+        val synthesizedId = IdRef(effect.id.name)
+        Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
       }
     )
 
@@ -547,7 +548,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val effectType: P[Effect] =
-    idRef ^^ Effect | failure("Expected a single effect type")
+    (idRef ~ maybeTypeArgs) ^^ Effect | failure("Expected a single effect")
 
 
   // === AST Helpers ===
