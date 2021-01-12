@@ -61,7 +61,8 @@ trait JavaScriptPrinter extends JavaScriptBase {
       toDoc(b) <> "." <> nameDef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
-    case _ => sys error "Unsupported block in plain JS pretty printer"
+    case Unbox(e) => toDoc(e)
+    case _        => sys error "Unsupported block in plain JS pretty printer"
   })
 
   // pretty print the statement in a javascript expression context
@@ -187,6 +188,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Select(b, field) =>
       toDoc(b) <> "." <> nameDef(field)
+
+    case Closure(e) => toDoc(e)
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

@@ -1,7 +1,7 @@
 package effekt
 package source
 
-import effekt.context.{ Context, ContextOps }
+import effekt.context.{ Context, ContextOps, Annotations }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 import effekt.source.Tree.Rewrite
@@ -13,6 +13,8 @@ import effekt.source.Tree.Rewrite
  * the call sites. Resume is currently _not_ introduced as a block parameter.
  */
 class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
+
+  val phaseName = "capability-passing"
 
   def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = Context in {
     Some(rewrite(mod))
@@ -34,20 +36,31 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
       val op = fun.definition.asEffectOp
 
-      // if this is an effect call, we do not want to provide capabilities for the effect itself
-      val ownEffect = Effects(List(op.effect))
-
-      val BlockType(tparams, params, ret / effs) = C.blockTypeOf(op)
+      val tpe @ BlockType(tparams, params, ret / effs) = C.blockTypeOf(op)
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
-      val effects = (effs -- ownEffect).userDefined
+      val effects = op.otherEffects.userDefined
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       val receiver = C.capabilityReferenceFor(op.effect)
 
-      Call(MemberTarget(receiver, fun.id), targs, transformedArgs ++ capabilityArgs)
+      val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
+      C.annotateCalltarget(target, tpe)
+      Call(target, targs, transformedArgs ++ capabilityArgs)
+
+    // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
+    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[VarBinder] =>
+
+      val target = visit[source.CallTarget](fun) { _ =>
+        val access = Var(fun.id).inheritPosition(fun)
+        // heal the missing type
+        // TODO refactor this
+        C.annotate(Annotations.TypeAndEffect, access, Effectful(C.valueTypeOf(fun.definition), Pure))
+        ExprTarget(access)
+      }
+      rewrite(Call(target, targs, args))
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
@@ -61,6 +74,25 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       Call(fun, targs, transformedArgs ++ capabilityArgs)
+
+    // TODO share code with Call case above
+    case c @ Call(ExprTarget(expr), targs, args) =>
+      val transformedExpr = rewrite(expr)
+      val (FunType(BlockType(tparams, params, ret / effs), _) / _) = C.inferredTypeOf(expr)
+
+      val effects = effs.userDefined
+      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
+      val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+
+      Call(ExprTarget(transformedExpr), targs, transformedArgs ++ capabilityArgs)
+
+    case f @ source.Lambda(id, params, body) =>
+      val sym = f.symbol
+      val effs = sym.effects.userEffects
+
+      C.withCapabilities(effs) { caps =>
+        f.copy(params = params ++ caps, body = rewrite(body))
+      }
 
     case TryHandle(prog, handlers) =>
 

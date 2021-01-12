@@ -4,7 +4,7 @@ package context
 import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
-
+import effekt.regions.{ RegionCheckerOps, RegionReporter }
 import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
@@ -38,15 +38,13 @@ trait ContextOps
  * - error reporting (mutable focus)
  */
 abstract class Context(val positions: Positions)
-    // Compiler phases
     extends Compiler
-    // Namer
     with NamerOps
     with ModuleDB
-    // Typer
     with TyperOps
-    // Transformer
     with CapabilityPassingOps
+    with RegionCheckerOps
+    with RegionReporter
     with TransformerOps {
 
   // bring the context itself in scope

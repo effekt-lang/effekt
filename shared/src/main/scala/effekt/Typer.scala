@@ -6,8 +6,9 @@ package typer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
+import effekt.regions.Region
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
-import effekt.subtitutions._
+import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.util.messages.FatalPhaseError
@@ -18,8 +19,13 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  *   - Blocks
  *   - Functions
  *   - Resumptions
+ *
+ *  Also annotates every lambda with a fresh region variable and collects equality constraints
+ *  between regions
  */
-class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
+class Typer extends Phase[ModuleDecl, ModuleDecl] {
+
+  val phaseName = "typer"
 
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
     val mod = Context.module
@@ -50,6 +56,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     // Store the backtrackable annotations into the global DB
     // This is done regardless of errors, since
     Context.commitTypeAnnotations()
+
   }
 
   //<editor-fold desc="expressions">
@@ -74,8 +81,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val (_ / blockEffs) = block checkAgainst TUnit
         TUnit / (condEffs ++ blockEffs)
 
-      case v: source.Var =>
-        Context.valueTypeOf(v.definition) / Pure
+      // the variable now can also be a block variable
+      case source.Var(id) => id.symbol match {
+        case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
+        case e: ValueSymbol => Context.valueTypeOf(e) / Pure
+      }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
@@ -83,8 +93,64 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
         TUnit / eff
 
+      // TODO share code with FunDef
+      case l @ source.Lambda(id, params, body) =>
+        val sym = l.symbol
+        // currently expects params to be fully annotated
+        Context.define(sym.params)
+
+        expected match {
+          case Some(exp @ FunType(BlockType(_, ps, ret / effs), reg)) =>
+            checkAgainstDeclaration("lambda", ps, params)
+            val (retGot / effsGot) = body checkAgainst ret
+            Context.unify(ret, retGot)
+
+            val diff = effsGot -- effs
+
+            val reg = Region.fresh(l)
+            val got = FunType(BlockType(Nil, ps, retGot / effs), reg)
+
+            Context.unify(exp, got)
+
+            Context.assignType(sym, sym.toType(ret / effs))
+            Context.assignType(l, ret / effs)
+            Context.annotateRegions(sym, reg)
+
+            got / diff
+
+          case _ =>
+            val (ret / effs) = checkStmt(body, None)
+            Context.wellscoped(effs)
+            val ps = extractAllTypes(sym.params)
+            val tpe = BlockType(Nil, ps, ret / effs)
+
+            // we make up a fresh region variable that will be checked later by the region checker
+            val reg = Region.fresh(l)
+            val funTpe = FunType(tpe, reg)
+
+            Context.assignType(sym, sym.toType(ret / effs))
+            Context.assignType(l, ret / effs)
+            Context.annotateRegions(sym, reg)
+
+            expected.foreach { exp =>
+              Context.unify(exp, funTpe)
+            }
+
+            funTpe / Pure // all effects are handled by the function itself (since they are inferred)
+        }
+
       case c @ source.Call(t: source.IdTarget, targs, args) =>
         checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
+
+      case c @ source.Call(source.ExprTarget(e), targs, args) =>
+        val (funTpe / funEffs) = checkExpr(e, None)
+
+        val tpe: BlockType = funTpe match {
+          case f: FunType => f.tpe
+          case _          => Context.abort(s"Expected function type, but got ${funTpe}")
+        }
+        val (t / eff) = checkCallTo(c, "function", tpe, targs map { resolveValueType }, args, expected)
+        t / (eff ++ funEffs)
 
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
         Context.panic("Method call syntax not allowed in source programs.")
@@ -148,17 +214,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
         // (2) check exhaustivity
         checkExhaustivity(tpe, clauses.map { _.pattern })
 
-        val tpes = clauses.map {
+        // (3) infer types for all clauses
+        val (fstTpe, _) :: tpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
             Context.define(checkPattern(tpe, p)) in {
-              checkStmt(body, expected)
+              (checkStmt(body, expected), body)
             }
         }
 
-        val (tpeCases / effsCases) = tpes.reduce[Effectful] {
-          case (tpe1 / effs1, tpe2 / effs2) =>
-            Unification.unify(tpe1, tpe2)
-            tpe1 / (effs1 ++ effs2)
+        // (4) unify clauses and collect effects
+        val (tpeCases / effsCases) = tpes.foldLeft(fstTpe) {
+          case (expected / effs, (clauseTpe / clauseEffs, tree)) =>
+            Context.at(tree) { Context.unify(expected, clauseTpe) }
+            expected / (effs ++ clauseEffs)
         }
         tpeCases / (effsCases ++ effs)
 
@@ -366,14 +434,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
   //<editor-fold desc="arguments and parameters">
 
-  // TODO we can remove this duplication, once every phase can write to every table.
-  // then the namer phase can already store the resolved type symbol for the param.
+  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = C.resolvedType(tpe)
 
-  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = tpe match {
-    case t @ source.TypeApp(id, args) => TypeApp(t.definition, args.map(resolveValueType))
-    case t @ source.TypeVar(id)       => t.definition
-    case source.ValueTypeTree(tpe)    => tpe
-  }
+  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = C.resolvedType(tpe)
 
   /**
    * Invariant: Only call this on declarations that are fully annotated
@@ -410,7 +473,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
           case (decl, p @ source.ValueParam(id, annot)) =>
             val annotType = annot.map(resolveValueType)
             annotType.foreach { t =>
-              Context.at(p) { Unification.unify(decl, t) }
+              Context.at(p) { Context.unify(decl, t) }
             }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
@@ -443,12 +506,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
 
     val stateBefore = C.backupTyperstate()
 
+    // TODO try to avoid duplicate error messages
     val results = scopes map { scope =>
       scope.toList.map { sym =>
         sym -> Try {
           C.restoreTyperstate(stateBefore)
           val tpe = Context.blockTypeOption(sym).getOrElse {
-            Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+            if (sym.isInstanceOf[ValueSymbol]) {
+              Context.abort(s"Expected a function type.")
+            } else {
+              Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+            }
           }
           val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
           (r, C.backupTyperstate())
@@ -467,7 +535,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
       case List((sym, (tpe, st))) =>
         // use the typer state after this checking pass
         C.restoreTyperstate(st)
-        // reassign symbol of fun to resolved calltarget
+        // reassign symbol of fun to resolved calltarget symbol
         C.assignSymbol(target.id, sym)
 
         return tpe
@@ -538,7 +606,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     // (3) refine substitutions by matching return type against expected type
     expected.foreach { expectedReturn =>
       val refinedReturn = Context.unifier substitute ret
-      Context.unify(refinedReturn, expectedReturn)
+      Context.unify(expectedReturn, refinedReturn)
     }
 
     var effs = retEffs
@@ -615,6 +683,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
     val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     Context.annotateTypeArgs(call, inferredTypeArgs)
 
+    // annotate the calltarget tree with the resolved blocktype
+    C.annotateTarget(call.target, funTpe)
+
     (Context.unifier substitute ret) / effs
   }
 
@@ -660,7 +731,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] { typer =>
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
-      expected foreach { Unification.unify(_, got) }
+      expected foreach { Context.unify(_, got) }
       C.assignType(t, got / effs)
       got / effs
     }
@@ -729,8 +800,10 @@ trait TyperOps extends ContextOps { self: Context =>
     currentUnifier = st.unifier
   }
 
-  private[typer] def commitTypeAnnotations(): Unit =
+  private[typer] def commitTypeAnnotations(): Unit = {
     annotations.commit()
+    annotate(Annotations.Unifier, module, currentUnifier)
+  }
 
   // Effects that are in the lexical scope
   // =====================================
@@ -783,6 +856,10 @@ trait TyperOps extends ContextOps { self: Context =>
       case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
+  }
+
+  private[typer] def annotateTarget(t: source.CallTarget, tpe: BlockType): Unit = {
+    annotations.annotate(Annotations.TargetType, t, tpe)
   }
 
   // Unification

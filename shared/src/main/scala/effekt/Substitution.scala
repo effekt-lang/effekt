@@ -1,11 +1,12 @@
 package effekt
 
-import effekt.symbols.{ Type, ValueType, RigidVar, TypeVar, BlockType, CapabilityType, InterfaceType, Effectful, TypeApp, Sections }
+import effekt.context.Context
+import effekt.regions.{ Region, RegionEq }
+import effekt.symbols.{ BlockType, CapabilityType, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
-
 import effekt.util.messages.ErrorReporter
 
-object subtitutions {
+object substitutions {
 
   type Substitutions = Map[TypeVar, ValueType]
 
@@ -14,13 +15,15 @@ object subtitutions {
     def union(other: UnificationResult): UnificationResult
     def checkFullyDefined(rigids: List[RigidVar]): UnificationResult
     def getUnifier(implicit error: ErrorReporter): Unifier
+    def equalRegions(r1: Region, r2: Region)(implicit C: Context): UnificationResult
   }
-  case class Unifier(substitutions: Map[TypeVar, ValueType]) extends UnificationResult {
+
+  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq] = Set.empty) extends UnificationResult {
 
     def getUnifier(implicit error: ErrorReporter): Unifier = this
 
     def addAll(unifier: Map[TypeVar, ValueType]): Unifier =
-      Unifier(substitutions ++ unifier)
+      Unifier(substitutions ++ unifier, constraints)
 
     def add(k: TypeVar, v: ValueType): UnificationResult = {
       substitutions.get(k).foreach { v2 =>
@@ -33,11 +36,18 @@ object subtitutions {
       // Do we need an occurs check?
       val newUnifier = Unifier(k -> v)
       val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newUnifier substitute tpe) }
-      Unifier(improvedSubst + (k -> Unifier(improvedSubst).substitute(v)))
+      Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
     }
 
-    def union(other: UnificationResult): UnificationResult =
-      substitutions.foldLeft(other) { case (u, (k, v)) => u.add(k, v) }
+    def equalRegions(r1: Region, r2: Region)(implicit C: Context): Unifier =
+      this.copy(constraints = constraints + RegionEq(r1, r2, C.focus))
+
+    def union(other: UnificationResult): UnificationResult = other match {
+      case Unifier(subst, constr) =>
+        val bothConstraints: UnificationResult = Unifier(subst, constr ++ constraints)
+        substitutions.foldLeft(bothConstraints) { case (u, (k, v)) => u.add(k, v) }
+      case err: UnificationError => err
+    }
 
     def checkFullyDefined(rigids: List[RigidVar]): UnificationResult = {
       rigids.foreach { tpe =>
@@ -61,6 +71,8 @@ object subtitutions {
         substitutions.getOrElse(x, x)
       case TypeApp(t, args) =>
         TypeApp(t, args.map { substitute })
+      case FunType(tpe, reg) =>
+        FunType(substitute(tpe), reg)
       case other => other
     }
 
@@ -70,8 +82,12 @@ object subtitutions {
 
     def substitute(t: InterfaceType): InterfaceType = t match {
       case b: CapabilityType => b
+      case b: BlockType      => substitute(b)
+    }
+
+    def substitute(t: BlockType): BlockType = t match {
       case BlockType(tps, ps, ret) =>
-        val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) })
+        val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) }, constraints)
         BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
     }
 
@@ -95,17 +111,20 @@ object subtitutions {
     def add(k: TypeVar, v: ValueType) = this
     def union(other: UnificationResult) = this
     def checkFullyDefined(rigids: List[RigidVar]) = this
+    def equalRegions(r1: Region, r2: Region)(implicit C: Context) = this
   }
 
   object Unification {
 
-    // just for backwards compat
-    def unify(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): Unifier =
+    /**
+     * For error reporting, we assume the second argument (tpe1) is the type expected by the context
+     */
+    def unify(tpe1: Type, tpe2: Type)(implicit C: Context): Unifier =
       unifyTypes(tpe1, tpe2).getUnifier
 
     // The lhs can contain rigid vars that we can compute a mapping for
     // i.e. unify(List[?A], List[Int]) = Map(?A -> Int)
-    def unifyTypes(tpe1: Type, tpe2: Type): UnificationResult =
+    def unifyTypes(tpe1: Type, tpe2: Type)(implicit C: Context): UnificationResult =
       (tpe1, tpe2) match {
 
         case (t: ValueType, s: ValueType) =>
@@ -130,7 +149,7 @@ object subtitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
-    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): UnificationResult =
+    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit C: Context): UnificationResult =
       (tpe1.dealias, tpe2.dealias) match {
 
         case (t, s) if t == s =>
@@ -155,8 +174,11 @@ object subtitutions {
         case (THole, _) | (_, THole) =>
           Unifier.empty
 
+        case (FunType(tpe1, reg1), FunType(tpe2, reg2)) =>
+          unifyTypes(tpe1, tpe2).equalRegions(reg1, reg2)
+
         case (t, s) =>
-          UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
+          UnificationError(s"Expected ${t}, but got ${s}")
       }
 
     /**
@@ -164,13 +186,65 @@ object subtitutions {
      *
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
      */
-    def instantiate(tpe: BlockType): (List[RigidVar], BlockType) = {
+    def instantiate(tpe: BlockType)(implicit C: Context): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
       val unifier = Unifier(subst)
       val rigids = subst.values.toList
 
-      (rigids, BlockType(Nil, unifier.substitute(params), unifier.substitute(ret)))
+      val substitutedParams = unifier.substitute(params)
+
+      // here we also replace all region variables by copies to allow
+      // substitution in RegionChecker.
+      val substitutedReturn = unifier.substitute(freshRegions(ret))
+      (rigids, BlockType(Nil, substitutedParams, substitutedReturn))
+    }
+
+    /**
+     * Replaces all regions with fresh region variables and instantiates
+     * them with the underlying variable.
+     */
+    def freshRegions[T](t: T)(implicit C: Context): T = {
+
+      def generic[T](t: T): T = t match {
+        case t: ValueType => visitValueType(t).asInstanceOf[T]
+        case b: BlockType => visitBlockType(b).asInstanceOf[T]
+        case b: Effectful => visitEffectful(b).asInstanceOf[T]
+        case s: List[List[Type] @unchecked] => visitSections(s).asInstanceOf[T]
+        case other => C.panic(s"Don't know how to traverse ${t}")
+      }
+
+      def visitValueType(t: ValueType): ValueType = t match {
+        case x: TypeVar => x
+        case TypeApp(t, args) =>
+          TypeApp(t, args.map { visitValueType })
+        case FunType(tpe, reg) =>
+          // this is the **only** interesting case...
+          // vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+          val copy = Region.fresh(C.focus)
+          copy.instantiate(reg)
+          // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          FunType(visitBlockType(tpe), copy)
+        case other => other
+      }
+
+      def visitEffectful(e: Effectful): Effectful = e match {
+        case Effectful(tpe, effs) => Effectful(visitValueType(tpe), effs)
+      }
+
+      def visitBlockType(t: BlockType): BlockType = t match {
+        case BlockType(tps, ps, ret) =>
+          BlockType(tps, visitSections(ps), visitEffectful(ret))
+      }
+
+      def visitSections(t: Sections): Sections = t map {
+        _ map {
+          case v: ValueType      => visitValueType(v)
+          case b: BlockType      => visitBlockType(b)
+          case b: CapabilityType => b
+        }
+      }
+      generic(t)
     }
   }
 }

@@ -1,0 +1,13 @@
+effect Exc(): Unit
+
+def main() = {
+  val g: () => Unit / Exc = fun() { Exc() }
+
+
+  try {
+    g()
+  } with Exc {
+    println("exception!");
+    resume(())
+  }
+}

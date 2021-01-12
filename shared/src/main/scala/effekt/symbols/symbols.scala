@@ -2,8 +2,9 @@ package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
+import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
-import effekt.subtitutions._
+import effekt.substitutions._
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -92,6 +93,7 @@ package object symbols {
   case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
   case class CapabilityParam(name: Name, tpe: CapabilityType) extends Param with Capability {
     def effect = tpe.eff
+    override def toString = s"@${tpe.eff.name}"
   }
   case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
 
@@ -138,6 +140,16 @@ package object symbols {
     decl: FunDef
   ) extends Fun
 
+  case class Lambda(params: Params) extends Fun {
+    val name = Name("Anonymous function")
+
+    // Lambdas currently do not have an annotated return type
+    def ret = None
+
+    // Lambdas currently do not take type parameters
+    def tparams = Nil
+  }
+
   /**
    * Binders represent local value and variable binders
    *
@@ -155,7 +167,7 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[TermSymbol]]) extends Synthetic with BlockSymbol
 
   /**
    * Introduced by Transformer
@@ -185,6 +197,33 @@ package object symbols {
     def dealias: ValueType = this
   }
 
+  /**
+   * Types of first-class functions
+   */
+  case class FunType(tpe: BlockType, region: Region) extends ValueType {
+    override def toString: String = {
+
+      val BlockType(_, params, Effectful(ret, effs)) = tpe
+      // copy and paste from BlockType.toString
+      val ps = params.map {
+        case List(b: BlockType)             => s"{${b.toString}}"
+        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+      }.mkString("")
+
+      val effects = effs.toList
+      val regs = region match {
+        case RegionSet(r) => r.regions.toList
+        // to not confuse users, we render uninstantiated region variables as ?
+        case e            => List("?")
+      }
+      val both: List[String] = (effects ++ regs).map { _.toString }
+
+      val tpeString = if (both.isEmpty) ret.toString else s"$ret / { ${both.mkString(", ")} }"
+
+      s"$ps ⟹ $tpeString"
+    }
+  }
+
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
   object TypeVar {
     def apply(name: Name): TypeVar = new TypeVar(name)
@@ -204,6 +243,7 @@ package object symbols {
 
     override def dealias: ValueType = tpe match {
       case TypeAlias(name, tparams, tpe) =>
+        // TODO clean up and move to substitution
         Unifier((tparams zip args).toMap).substitute(tpe).dealias
       case other => TypeApp(other.dealias, args.map { _.dealias })
     }
@@ -242,6 +282,7 @@ package object symbols {
       case t: TypeConstructor => Some(t)
       case TypeApp(tpe, args) => unapply(tpe)
       case t: BuiltinType     => None
+      case t: FunType         => None
     }
   }
 
@@ -282,8 +323,12 @@ package object symbols {
   }
 
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], ret: Option[Effectful], effect: UserEffect) extends Fun {
-    def otherEffects: Effects = ret.get.effects - effect
+  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
+    // The effects as seen by typer
+    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + effect))
+
+    // The effects as seen by the capability passing transformation
+    def otherEffects: Effects = annotatedReturn.effects
     def isBidirectional: Boolean = otherEffects.nonEmpty
   }
 

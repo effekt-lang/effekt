@@ -28,6 +28,9 @@ object scopes {
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
 
+    // can be a term OR a type symbol
+    def lookupFirst(key: String)(implicit C: Context): Symbol
+
     def currentTermsFor(key: String): Set[TermSymbol] =
       terms.getOrElse(key, Set.empty)
 
@@ -63,6 +66,9 @@ object scopes {
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       C.abort(s"Could not resolve type ${key}")
 
+    def lookupFirst(key: String)(implicit C: Context): Symbol =
+      C.abort(s"Could not resolve ${key}")
+
     // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
     // the ambiguity. If it is nested, the first one that type checks should be chosen.
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
@@ -81,6 +87,18 @@ object scopes {
         else
           bindings.head
       }.getOrElse { parent.lookupFirstTerm(key) }
+
+    def lookupFirst(key: String)(implicit C: Context): Symbol =
+      (terms.get(key).map(_.toList), types.get(key)) match {
+        case (Some(List(t)), None) => t
+        case (None, Some(t)) => t
+        // give precendence to the type level effect, if an equally named effect op is in scope
+        case (Some(List(t1: EffectOp)), Some(t2: UserEffect)) => t2
+        case (Some(t1), Some(t2)) =>
+          C.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
+        case (None, None) => parent.lookupFirst(key)
+        case _            => C.abort(s"Ambiguous reference to ${key}.")
+      }
 
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       types.getOrElse(key, parent.lookupType(key))

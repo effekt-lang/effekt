@@ -31,6 +31,7 @@ effect AD {
   def num(x: Double): Num
   def add(x: Num, y: Num): Num
   def mul(x: Num, y: Num): Num
+  def exp(x: Num): Num
 }
 ```
 If Effekt would support polymorphic effects (or abstract type members on
@@ -42,13 +43,17 @@ special-cased in the Effekt compiler.
 def infixAdd(x: Num, y: Num) = add(x, y)
 def infixMul(x: Num, y: Num) = mul(x, y)
 ```
-We can use the number DSL to express an example program.
+We can use the number DSL to express two example programs.
 ```
 // d = 3 + 3x^2
 def prog(x: Num): Num / AD =
   (num(3.0) * x) + (x * x * x)
+
+// d = exp(1 + 2x) + 2x*exp(x^2)
+def progExp(x: Num): Num / AD =
+  num(0.5) * exp(num(1.0) + num(2.0) * x) + exp(x * x)
 ```
-This program uses effect operations for multiplication, addition, and for embedding
+These programs use effect operations for multiplication, addition, the exponential function, and for embedding
 constant literals.
 
 ## Forwards Propagation
@@ -68,16 +73,19 @@ def forwards(in: Double) { prog: Num => Num / AD }: Double =
     def mul(x, y) = resume(Num(
       x.value * y.value,
       fresh(x.d.get * y.value + y.d.get * x.value)))
+    def exp(x) = resume(Num(
+      exp(x.value),
+      fresh(x.d.get * exp(x.value))))
   }
 ```
 Except for the wrapping and unwrapping of the references, the definition
-of `add` and `mul` are exactly the ones we would expect from a text book.
+of `add`, `mul` and `exp` are exactly the ones we would expect from a text book.
 
 ## Backwards Propagation
 We can use the same differentiable expression and compute its derivative
 by using _backwards propagation_. Since we modeled the DSL as an effect,
 we automatically get access to the continuation in the implementation of
-`add` and `mul`. We thus do not have to use `shift` and `reset`.
+`add`, `mul` and `exp`. We thus do not have to use `shift` and `reset`.
 Otherwise the implementation closely follows the one by Wang et al.
 ```
 def backwards(in: Double) { prog: Num => Num / AD }: Double = {
@@ -101,6 +109,11 @@ def backwards(in: Double) { prog: Num => Num / AD }: Double = {
       x.push(y.value * z.d.get);
       y.push(x.value * z.d.get)
     }
+    def exp(x) = {
+      val z = Num(exp(x.value), fresh(0.0))
+      resume(z)
+      x.push(exp(x.value) * z.d.get)
+    }
   }
   // the derivative of `prog` at `in` is stored in the mutable reference
   input.d.get
@@ -120,6 +133,13 @@ def main() = {
 
   println(forwards(0.0) { x => prog(x) })
   println(backwards(0.0) { x => prog(x) })
+
+
+  println(forwards(1.0) { x => progExp(x) })
+  println(backwards(1.0) { x => progExp(x) })
+
+  println(forwards(0.0) { x => progExp(x) })
+  println(backwards(0.0) { x => progExp(x) })
 
 
   // we have the same pertubation confusion as in Lantern

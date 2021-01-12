@@ -20,22 +20,27 @@ class ChezSchemeTests extends AnyFunSpec {
     examplesDir / "pos" / "maps.effekt",
 
     // bidirectional effects are not yet supported in our Chez backend
-    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
-    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
+    examplesDir / "pos" / "bidirectional",
 
     // unsafe continuations are not yet supported in our Chez backend
     examplesDir / "pos" / "unsafe_cont.effekt",
     examplesDir / "pos" / "propagators.effekt",
 
     // the number representations differ in JS and Chez
-    examplesDir / "casestudies" / "ad.md"
+    examplesDir / "casestudies" / "ad.md",
+
+    // we do not need to run the negative tests for the other backends
+    examplesDir / "neg",
+
+    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt" // doesn't work with lift inference, yet
   )
 
   runTestsIn(examplesDir)
 
   def runTestsIn(dir: File): Unit = describe(dir.getName) {
     dir.listFiles.foreach {
-      case f if f.isDirectory => runTestsIn(f)
+      case f if f.isDirectory && !ignored.contains(f) =>
+        runTestsIn(f)
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
