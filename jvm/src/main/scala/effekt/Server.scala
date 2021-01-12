@@ -14,6 +14,9 @@ import effekt.source.NoSource
 import java.util.ArrayList
 import java.util.concurrent.CompletableFuture
 import scala.concurrent.Future
+import effekt.context.Annotations
+import org.eclipse.lsp4j.MessageType
+import scala.reflect.ClassTag
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -86,6 +89,7 @@ trait LSPServer extends Driver with Intelligence {
     mod = context.sourceModuleOf(sym)
     if mod.source == source
     id <- context.definitionTreeOption(sym)
+    _ = context.annotationOption(Annotations.TypeAndEffect, id)
     decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
     kind <- getSymbolKind(sym)
     detail <- getInfoOf(sym)(context)
@@ -140,19 +144,82 @@ trait LSPServer extends Driver with Intelligence {
     }
   }
 
+  case class TypeAnnotation(line: Int, column: Int, effects: List[Effect])
+
+  def getTypeAnnotations(uri: String): CompletableFuture[Array[TypeAnnotation]] = {
+
+    var funs = getFunDefs(getSource(uri)).toList
+    var annotations: List[TypeAnnotation] = List();
+    funs.foreach((fun) => {
+      var pos = context.positions.getStart(fun.decl)
+      var ret = fun.ret
+      pos match {
+        case Some(posval) => ret match {
+          case Some(retval) => {
+            logMessage("Appending annotation at " + posval.line + ":" + posval.column + " -> " + retval.toString())
+            annotations = (new TypeAnnotation(posval.line, posval.column, retval.effects.toList)) :: annotations
+          }
+          case None => logMessage("ret was None")
+        }
+        case None => logMessage("pos was None")
+      }
+    })
+    return CompletableFuture.completedFuture { annotations.toArray }
+    // start <- context.positions.getStart(fun)
+    // end <- context.positions.getFinish(fun)
+    // ret <- fun.ret
+    // annotation = TypeAnnotation(start, ret)
+  }
+
   override def executeCommand(executeCommandParams: ExecuteCommandParams): Any =
     executeCommandParams.getCommand() match {
       case "println" => {
-        executeCommandParams.getArguments().forEach((x) => logMessage(x.toString()))
+        //executeCommandParams.getArguments().forEach((x) => logMessage(x.toString()))
         //return CompletableFuture.runAsync(executeCommandParams.getArguments().forEach((x) => println(x.toString())))
-        return Future { executeCommandParams.getArguments.forEach((x) => println(x.toString())) }
+        //return Future { executeCommandParams.getArguments.forEach((x) => println(x.toString())) }
+        CompletableFuture.completedFuture {
+          executeCommandParams.getArguments.forEach((x) => println(x.toString()))
+        }
+        //return CompletableFuture.supplyAsync( () -> "Finished");
         // ( () -> executeCommandParams.getArguments().forEach((x) => println(x.toString())) )
       }
+      case "testfun" => {
+        return CompletableFuture.completedFuture {
+          "Hello, you called me?"
+        }
+      }
+      case "getTypeAnnotations" => {
+        val args = executeCommandParams.getArguments()
+        if (args.size() == 1) {
+          logMessage("Getting type annotations for source file: " + getSource(args.get(0).toString()).name)
+          val funs = getFunDefs(getSource(args.get(0).toString())).toList
+          for {
+            fun <- funs
+          } yield logMessage("Function: " + fun.name.localName)
+          logMessage("Found " + funs.size + " functions")
+
+          val annotations = getTypeAnnotations(args.get(0).toString())
+          return annotations
+        }
+
+      }
       case _ => {
-        logMessage("No arguments given.")
+        logMessage("Unknown command: " + executeCommandParams.getCommand())
         return null
       }
     }
+
+  def getFunDefs(source: Source): Vector[UserFunction] = {
+    val syms = context.sourceSymbols
+    syms.collect {
+      //case u: UserFunction if context.sourceModuleOf(u).source == source => u
+      case u: UserFunction => u
+    }
+  }
+
+  // override def getCodeLenses(uri: String): Option[Vector[TreeLens]] = {
+  //   val funDefs = getFunDefs(getSource(uri))
+  // }
 
   override def getCodeLenses(uri: String): Option[Vector[TreeLens]] = lens(getSymbols(getSource(uri)))(context)
 
@@ -169,7 +236,9 @@ trait LSPServer extends Driver with Intelligence {
   def getLens(symbol: DocumentSymbol)(implicit C: Context): Option[TreeLens] = symbol.getKind() match {
     case SymbolKind.Method => {
       val args = new ArrayList[Object]();
-      args.add("Foo")
+      args.add(symbol.getName())
+      showMessage(MessageType.Info, symbol.getName())
+      args.add(symbol.getRange())
       this.registerCapability("Infer or remove return type and effects", "println", args)
 
       Some(new TreeLens(
