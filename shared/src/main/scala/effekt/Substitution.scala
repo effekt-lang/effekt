@@ -10,6 +10,48 @@ object substitutions {
 
   type Substitutions = Map[TypeVar, ValueType]
 
+  // Substitution is independent of the unifier
+  implicit class SubstitutionOps(substitutions: Map[TypeVar, ValueType]) {
+    def substitute(t: ValueType): ValueType = t match {
+      case x: TypeVar =>
+        substitutions.getOrElse(x, x)
+      case TypeApp(t, args) =>
+        TypeApp(t, args.map { substitute })
+      case FunType(tpe, reg) =>
+        FunType(substitute(tpe), reg)
+      case other => other
+    }
+
+    def substitute(e: Effectful): Effectful = e match {
+      case Effectful(tpe, effs) => Effectful(substitute(tpe), substitute(effs))
+    }
+
+    def substitute(e: Effects): Effects = Effects(e.toList.map(substitute))
+
+    def substitute(e: Effect): Effect = e match {
+      case EffectApp(e, tpes) => EffectApp(substitute(e), tpes.map(substitute))
+      case e                  => e
+    }
+
+    def substitute(t: InterfaceType): InterfaceType = t match {
+      case b: CapabilityType => b
+      case b: BlockType      => substitute(b)
+    }
+
+    def substitute(t: BlockType): BlockType = t match {
+      case BlockType(tps, ps, ret) =>
+        val substWithout = substitutions.filterNot { case (t, _) => ps.contains(t) }
+        BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
+    }
+
+    def substitute(t: Sections): Sections = t map {
+      _ map {
+        case v: ValueType     => substitute(v)
+        case b: InterfaceType => substitute(b)
+      }
+    }
+  }
+
   sealed trait UnificationResult {
     def add(k: TypeVar, v: ValueType): UnificationResult
     def union(other: UnificationResult): UnificationResult
@@ -34,9 +76,9 @@ object substitutions {
 
       // Use new substitution binding to refine right-hand-sides of existing substitutions.
       // Do we need an occurs check?
-      val newUnifier = Unifier(k -> v)
-      val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newUnifier substitute tpe) }
-      Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
+      val newSubst = Map(k -> v)
+      val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
+      Unifier(improvedSubst + (k -> improvedSubst.substitute(v)), constraints)
     }
 
     def equalRegions(r1: Region, r2: Region)(implicit C: Context): Unifier =
@@ -59,49 +101,6 @@ object substitutions {
 
     def skolems(rigids: List[RigidVar]): List[RigidVar] =
       rigids.filterNot { substitutions.isDefinedAt }
-
-    def substitute(t: Type): Type = t match {
-      case t: ValueType      => substitute(t)
-      case b: BlockType      => substitute(b)
-      case b: CapabilityType => b
-    }
-
-    def substitute(t: ValueType): ValueType = t match {
-      case x: TypeVar =>
-        substitutions.getOrElse(x, x)
-      case TypeApp(t, args) =>
-        TypeApp(t, args.map { substitute })
-      case FunType(tpe, reg) =>
-        FunType(substitute(tpe), reg)
-      case other => other
-    }
-
-    def substitute(e: Effectful): Effectful = e match {
-      case Effectful(tpe, effs) => Effectful(substitute(tpe), Effects(effs.toList.map(substitute)))
-    }
-
-    def substitute(e: Effect): Effect = e match {
-      case EffectApp(e, tpes) => EffectApp(substitute(e), tpes.map(substitute))
-      case e                  => e
-    }
-
-    def substitute(t: InterfaceType): InterfaceType = t match {
-      case b: CapabilityType => b
-      case b: BlockType      => substitute(b)
-    }
-
-    def substitute(t: BlockType): BlockType = t match {
-      case BlockType(tps, ps, ret) =>
-        val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) }, constraints)
-        BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
-    }
-
-    def substitute(t: Sections): Sections = t map {
-      _ map {
-        case v: ValueType     => substitute(v)
-        case b: InterfaceType => substitute(b)
-      }
-    }
   }
   object Unifier {
     def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType])
@@ -118,6 +117,11 @@ object substitutions {
     def checkFullyDefined(rigids: List[RigidVar]) = this
     def equalRegions(r1: Region, r2: Region)(implicit C: Context) = this
   }
+
+  /**
+   * Allows using a unifier for substitution
+   */
+  implicit def toSubstitution(u: Unifier): SubstitutionOps = new SubstitutionOps(u.substitutions)
 
   object Unification {
 
@@ -205,14 +209,13 @@ object substitutions {
     def instantiate(tpe: BlockType)(implicit C: Context): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
-      val unifier = Unifier(subst)
       val rigids = subst.values.toList
 
-      val substitutedParams = unifier.substitute(params)
+      val substitutedParams = subst.substitute(params)
 
       // here we also replace all region variables by copies to allow
       // substitution in RegionChecker.
-      val substitutedReturn = unifier.substitute(freshRegions(ret))
+      val substitutedReturn = subst.substitute(freshRegions(ret))
       (rigids, BlockType(Nil, substitutedParams, substitutedReturn))
     }
 
@@ -245,7 +248,13 @@ object substitutions {
       }
 
       def visitEffectful(e: Effectful): Effectful = e match {
-        case Effectful(tpe, effs) => Effectful(visitValueType(tpe), effs)
+        case Effectful(tpe, effs) => Effectful(visitValueType(tpe), Effects(effs.toList.map(visitEffect)))
+      }
+
+      def visitEffect(e: Effect): Effect = e match {
+        // TODO do we need to dealias here?
+        case EffectApp(eff, targs) => EffectApp(eff, targs map visitValueType)
+        case e                     => e
       }
 
       def visitBlockType(t: BlockType): BlockType = t match {
