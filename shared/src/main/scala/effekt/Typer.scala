@@ -358,7 +358,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.abort("User defined effects on extern defs not allowed")
       }
 
-    case d @ source.EffDef(id, ops) =>
+    case d @ source.EffDef(id, tparams, ops) =>
       d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
 
     case source.DataDef(id, tparams, ctors) =>
@@ -402,7 +402,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
-      case d @ source.EffDef(id, ops) =>
+      case d @ source.EffDef(id, tparams, ops) =>
         Context.withEffect(d.symbol)
         TUnit / Pure
 
@@ -685,9 +685,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context.annotateTypeArgs(call, inferredTypeArgs)
 
     // annotate the calltarget tree with the resolved blocktype
-    C.annotateTarget(call.target, funTpe)
+    Context.annotateTarget(call.target, funTpe)
 
-    (Context.unifier substitute ret) / effs
+    Context.unifier.substitute(ret / effs)
   }
 
   /**
@@ -829,7 +829,7 @@ trait TyperOps extends ContextOps { self: Context =>
     this
   }
 
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.Type]): Context = {
+  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
     annotations.annotate(Annotations.TypeArguments, call, targs)
     this
   }

@@ -76,7 +76,7 @@ object Annotations {
   /**
    * Type arguments of a _function call_ as inferred by typer
    */
-  val TypeArguments = Annotation[source.Call, List[symbols.Type]](
+  val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
     "TyperArguments",
     "the inferred or annotated type arguments of"
   )
@@ -239,7 +239,7 @@ trait AnnotationsDB { self: Context =>
   // Types
   // -----
 
-  def typeArguments(c: source.Call): List[symbols.Type] =
+  def typeArguments(c: source.Call): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[Effectful] =

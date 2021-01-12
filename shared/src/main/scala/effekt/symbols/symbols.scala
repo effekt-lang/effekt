@@ -243,8 +243,7 @@ package object symbols {
 
     override def dealias: ValueType = tpe match {
       case TypeAlias(name, tparams, tpe) =>
-        // TODO clean up and move to substitution
-        Unifier((tparams zip args).toMap).substitute(tpe).dealias
+        (tparams zip args).toMap.substitute(tpe).dealias
       case other => TypeApp(other.dealias, args.map { _.dealias })
     }
   }
@@ -333,7 +332,9 @@ package object symbols {
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
     // TODO if UserEffect has parameters, then generate an EffectApp here.
-    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + effect))
+    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + appliedEffect))
+
+    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
 
     // The effects as seen by the capability passing transformation
     def otherEffects: Effects = annotatedReturn.effects
@@ -376,9 +377,11 @@ package object symbols {
     def userDefined: Effects =
       filterNot(_.builtin)
 
-    def userEffects: List[UserEffect] =
+    def userEffects: List[Effect] =
       effects collect {
         case u: UserEffect => u
+        // we assume that only UserEffects can be applied to type arguments for now
+        case u: EffectApp  => u
       }
 
     def dealias: List[Effect] = effects.flatMap { _.dealias }

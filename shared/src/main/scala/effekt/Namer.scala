@@ -103,14 +103,21 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(body)
       }
 
-    case source.EffDef(id, ops) =>
+    case source.EffDef(id, tparams, ops) =>
       val effectSym = Context.resolveType(id).asUserEffect
       effectSym.ops = ops.map {
         case source.Operation(id, tparams, params, ret) =>
           val name = Context.freshTermName(id)
           Context scoped {
+            // the parameters of the effect are in scope
+            effectSym.tparams.foreach { p => Context.bind(p) }
+
             val tps = tparams map resolve
-            val op = EffectOp(Name(id), tps, params map resolve, resolve(ret), effectSym)
+
+            // The type parameters of an effect op are:
+            //   1) all type parameters on the effect, followed by
+            //   2) the annotated type parameters on the concrete operation
+            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
             Context.define(id, op)
             op
           }
@@ -316,9 +323,14 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
       Context.define(id, sym)
 
-    case source.EffDef(id, ops) =>
+    case source.EffDef(id, tparams, ops) =>
       // we use the localName for effects, since they will be bound as capabilities
-      val effectSym = UserEffect(Name(id), Nil)
+      val effectSym = Context scoped {
+        val tps = tparams map resolve
+        // we do not resolve the effect operations here to allow them to refer to types that are defined
+        // later in the file
+        UserEffect(Name(id), tps)
+      }
       Context.define(id, effectSym)
 
     case source.TypeDef(id, tparams, tpe) =>
@@ -336,11 +348,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context.define(id, alias)
 
     case source.DataDef(id, tparams, ctors) =>
-      val (typ, tps) = Context scoped {
+      val typ = Context scoped {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
         // later in the file
-        (DataType(Name(id), tps), tps)
+        DataType(Name(id), tps)
       }
       Context.define(id, typ)
 
