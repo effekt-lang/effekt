@@ -235,7 +235,7 @@ package object symbols {
    * Should neither occur in source programs, nor in infered types
    */
   case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
-    override def toString = "?" + underlying.name + id
+    // override def toString = "?" + underlying.name + id
   }
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
@@ -310,8 +310,9 @@ package object symbols {
 
   /** Effects */
 
-  sealed trait Effect {
-    def name: Name
+  // TODO effects are only temporarily symbols to be resolved by namer
+  sealed trait Effect extends Symbol {
+    // def name: Name
     def builtin: Boolean
     // invariant: no EffectAlias in this list
     def dealias: List[Effect] = List(this)
@@ -320,9 +321,17 @@ package object symbols {
   case class EffectApp(effect: Effect, args: List[ValueType]) extends Effect {
     override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
     override def builtin = effect.builtin
-    override def name = effect.name
+    override val name = effect.name
 
     // override def dealias: List[Effect] = ??? // like dealiasing of TypeApp we potentially need to substitute
+
+    // TODO drop those, once effects are no symbols anymore
+    override def equals(other: Any): Boolean = other match {
+      case EffectApp(otherEffect, otherArgs) => effect == otherEffect && (args zip otherArgs).forall { case (a, b) => a == b }
+      case _ => false
+    }
+
+    override def hashCode: Int = args.foldLeft(effect.hashCode) { case (hash, arg) => hash + arg.hashCode }
   }
 
   case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends Effect with TypeSymbol {

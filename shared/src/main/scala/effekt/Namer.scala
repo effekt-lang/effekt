@@ -450,7 +450,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
         FunType(btpe, Region(terms))
     }
-    C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.symbol])
+    C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     res
   }
 
@@ -466,8 +466,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(tpe: source.Effect)(implicit C: Context): Effect =
-    Context.resolveType(tpe.id).asEffect
+  def resolve(eff: source.Effect)(implicit C: Context): Effect = eff match {
+    case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
+    case source.Effect(e, args) => EffectApp(Context.resolveType(e).asEffect, args.map(resolve))
+  }
 
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
     Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply

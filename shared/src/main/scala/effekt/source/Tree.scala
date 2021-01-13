@@ -343,15 +343,26 @@ case class IgnorePattern() extends MatchPattern
 case class LiteralPattern[T](l: Literal[T]) extends MatchPattern
 
 /**
+ * Something that can be resolved by namer
+ *
+ * It does not need to be a symbol
+ */
+sealed trait Resolvable extends Tree {
+  type resolved
+  def resolve(implicit C: Context): resolved
+}
+
+/**
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
  */
-sealed trait Type extends Tree {
-  type symbol <: symbols.Type
+sealed trait Type extends Tree with Resolvable {
+  type resolved <: symbols.Type
+  def resolve(implicit C: Context) = C.resolvedType(this)
 }
 sealed trait ValueType extends Type {
-  type symbol <: symbols.ValueType
+  type resolved <: symbols.ValueType
 }
 
 /**
@@ -374,14 +385,20 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 
 // for now those are not user definable and thus refer to symbols.Effect
 case class CapabilityType(eff: symbols.Effect) extends Type {
-  type symbol = symbols.CapabilityType
+  type resolved = symbols.CapabilityType
 }
 case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
-  type symbol = symbols.BlockType
+  type resolved = symbols.BlockType
 }
 
-case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Reference {
-  type symbol = symbols.UserEffect
+case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
+  // TODO we need to drop Effect <: Symbol and refactor this here
+  // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
+  type resolved = symbols.Effect
+  def resolve(implicit C: Context) = {
+    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
+    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
+  }
 }
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
