@@ -76,6 +76,10 @@ object messages {
       res
     }
 
+    def withFocus[T <: Tree, R](block: T => R): T => R = { t =>
+      at(t) { block(t) }
+    }
+
     /**
      * Sets the given tree into focus for error reporting
      */
