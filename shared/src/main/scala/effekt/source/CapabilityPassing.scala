@@ -25,7 +25,6 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
     case f @ FunDef(id, tparams, params, ret, body) =>
       val sym = f.symbol
       val effs = sym.effects.userEffects
-
       C.withCapabilities(effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
       }
@@ -79,7 +78,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
-      val effects = subst.substitute(effs.userDefined)
+      val effects = effs.userDefined.toList.map(subst.substitute)
 
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
@@ -92,7 +91,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val (FunType(BlockType(tparams, params, ret / effs), _) / _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
-      val effects = subst.substitute(effs.userDefined)
+      val effects = effs.userDefined.toList.map(subst.substitute)
 
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
@@ -109,7 +108,9 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
     case TryHandle(prog, handlers) =>
 
-      val effects = handlers.map(_.definition)
+      // here we need to use the effects on the handlers!
+      val effects = handlers.map(_.effect.resolve)
+
       val (caps, body) = C.withCapabilities(effects) { caps =>
         (caps, rewrite(prog))
       }

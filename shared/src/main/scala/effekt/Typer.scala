@@ -140,7 +140,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
 
       case c @ source.Call(t: source.IdTarget, targs, args) => {
-        checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
+        checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
       }
 
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
@@ -150,7 +150,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case f: FunType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
-        val (t / eff) = checkCallTo(c, "function", tpe, targs map { resolveValueType }, args, expected)
+        val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, args, expected)
         t / (eff ++ funEffs)
 
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
@@ -160,11 +160,23 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val (ret / effs) = checkStmt(prog, expected)
 
-        val effects = handlers.map { c => c.definition }
+        val effects: List[symbols.Effect] = handlers.map { c => c.effect.resolve }
+
         var handlerEffs = Pure
 
         handlers.foreach { h =>
-          val effect = h.definition
+          val effect: UserEffect = h.definition
+
+          val tparams = effect.tparams
+          val targs = h.effect.tparams.map(_.resolve)
+
+          // TODO move to separate kind-checker
+          if (targs.size != tparams.size) {
+            Context.error(s"Wrong number of type arguments.")
+          }
+
+          // TODO check that there are no two handlers for the same effect!
+
           val covered = h.clauses.map { _.definition }
           val notCovered = effect.ops.toSet -- covered.toSet
 
@@ -181,20 +193,35 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition
 
-              val BlockType(_, pms, tpe / effs) = Context.blockTypeOf(effectOp)
-              val ps = checkAgainstDeclaration(op.name, pms, params)
+              // (1) Instantiate block type of effect operation
+              val (rigids, BlockType(tparams, pms, tpe / effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
 
+              // (2) unify with given type arguments for effect (i.e., A, B, ...):
+              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+              Context.addToUnifier(((rigids: List[TypeVar]) zip targs).toMap)
+
+              // (3) substitute what we know so far
+              val substPms = Context.unifier substitute pms
+              val substTpe = Context.unifier substitute tpe
+              val substEffs = Context.unifier substitute effectOp.otherEffects
+
+              // (4) check parameters
+              val ps = checkAgainstDeclaration(op.name, substPms, params)
+
+              // (5) synthesize type of continuation
               val resumeType = if (effectOp.isBidirectional) {
                 // resume { e }
-                BlockType(Nil, List(List(BlockType(Nil, List(Nil), tpe / effectOp.otherEffects))), ret / Pure)
+                BlockType(Nil, List(List(BlockType(Nil, List(Nil), substTpe / substEffs))), ret / Pure)
               } else {
                 // resume(v)
-                BlockType(Nil, List(List(tpe)), ret / Pure)
+                BlockType(Nil, List(List(substTpe)), ret / Pure)
               }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
+
+                // TODO check that skolems do not escape in the return type.
               }
           }
         }
@@ -435,10 +462,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = C.resolvedType(tpe)
-
-  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = C.resolvedType(tpe)
-
   /**
    * Invariant: Only call this on declarations that are fully annotated
    */
@@ -472,7 +495,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           Context.error(s"Wrong number of arguments, given ${ps2.size}, but ${name} expects ${ps1.size}.")
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
-            val annotType = annot.map(resolveValueType)
+            val annotType = annot.map(_.resolve)
             annotType.foreach { t =>
               Context.at(p) { Context.unify(decl, t) }
             }
