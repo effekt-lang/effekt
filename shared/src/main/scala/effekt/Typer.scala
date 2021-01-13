@@ -160,14 +160,22 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val (ret / effs) = checkStmt(prog, expected)
 
-        val effects: List[symbols.Effect] = handlers.map { c => c.effect.resolve }
+        var effects: List[symbols.Effect] = Nil
 
         var handlerEffs = Pure
 
-        handlers.foreach { h =>
-          val effect: UserEffect = h.definition
+        handlers foreach Context.withFocus { h =>
+          val effect: Effect = h.effect.resolve
 
-          val tparams = effect.tparams
+          if (effects contains effect) {
+            Context.error(s"Effect ${effect} is handled twice.")
+          } else {
+            effects = effects :+ effect
+          }
+
+          val effectSymbol: UserEffect = h.definition
+
+          val tparams = effectSymbol.tparams
           val targs = h.effect.tparams.map(_.resolve)
 
           // TODO move to separate kind-checker
@@ -175,10 +183,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.error(s"Wrong number of type arguments.")
           }
 
-          // TODO check that there are no two handlers for the same effect!
-
           val covered = h.clauses.map { _.definition }
-          val notCovered = effect.ops.toSet -- covered.toSet
+          val notCovered = effectSymbol.ops.toSet -- covered.toSet
 
           if (notCovered.nonEmpty) {
             val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
@@ -189,7 +195,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.error(s"Duplicate definitions of effect operations")
           }
 
-          h.clauses foreach {
+          h.clauses foreach Context.withFocus {
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition
 
@@ -198,7 +204,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
               // (2) unify with given type arguments for effect (i.e., A, B, ...):
               //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-              Context.addToUnifier(((rigids: List[TypeVar]) zip targs).toMap)
+              //     The parameters C, D, ... are existentials
+              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
+              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
 
               // (3) substitute what we know so far
               val substPms = Context.unifier substitute pms
@@ -221,7 +229,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
 
-                // TODO check that skolems do not escape in the return type.
+                // TODO check that existentials do not escape in the return type.
               }
           }
         }
@@ -833,13 +841,18 @@ trait TyperOps extends ContextOps { self: Context =>
   // =====================================
   private[typer] def effects: Effects = lexicalEffects
 
-  private[typer] def withEffect(e: Effect): Context = {
+  private[typer] def withEffect(e: UserEffect): Context = {
     lexicalEffects += e
     this
   }
 
   private[typer] def wellscoped(a: Effects): Unit = {
-    val forbidden = a.userDefined -- effects
+    // here we only care for the effect itself, not its type arguments
+    val forbidden = Effects(a.userEffects.collect {
+      case e: UserEffect      => e
+      case EffectApp(e, args) => e
+      case e: EffectAlias     => e
+    }) -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }
