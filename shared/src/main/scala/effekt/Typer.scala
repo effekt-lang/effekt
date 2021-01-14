@@ -229,7 +229,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
 
-                // TODO check that existentials do not escape in the return type.
+                val typesInEffects = freeTypeVars(heffs)
+                existentials.foreach { t =>
+                  if (typesInEffects.contains(t)) {
+                    Context.error(s"Type variable ${t} escapes its scope as part of the effect types: $heffs")
+                  }
+                }
               }
           }
         }
@@ -746,6 +751,20 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   //</editor-fold>
+
+  private def freeTypeVars(o: Any): Set[TypeVar] = o match {
+    case t: symbols.TypeVar => Set(t)
+    case BlockType(tparams, params, ret) =>
+      freeTypeVars(params) ++ freeTypeVars(ret) -- tparams.toSet
+    case e: Effects            => freeTypeVars(e.toList)
+    case _: Symbol | _: String => Set.empty // don't follow symbols
+    case t: Iterable[t] =>
+      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+    case p: Product =>
+      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+    case _ =>
+      Set.empty
+  }
 
   private implicit class ExprOps(expr: Expr) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
