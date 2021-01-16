@@ -273,7 +273,7 @@ package object symbols {
   /**
    * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
    */
-  trait TypeConstructor extends TypeSymbol with ValueType
+  sealed trait TypeConstructor extends TypeSymbol with ValueType
   object TypeConstructor {
     def unapply(t: ValueType): Option[TypeConstructor] = t match {
       case t: TypeVar         => None

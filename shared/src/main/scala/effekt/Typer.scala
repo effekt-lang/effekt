@@ -399,7 +399,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       }
 
     case d @ source.EffDef(id, tparams, ops) =>
-      d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
+      d.symbol.ops.foreach { op =>
+        val tpe = op.toType
+        wellformed(tpe)
+        Context.assignType(op, tpe)
+      }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
@@ -407,7 +411,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.assignType(sym, sym.toType)
 
         sym.fields.foreach { field =>
-          Context.assignType(field, field.toType)
+          val tpe = field.toType
+          wellformed(tpe)
+          Context.assignType(field, tpe)
         }
       }
 
@@ -415,10 +421,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       val rec = d.symbol
       Context.assignType(rec, rec.toType)
       rec.fields.foreach { field =>
-        Context.assignType(field, field.toType)
+        val tpe = field.toType
+        wellformed(tpe)
+        Context.assignType(field, tpe)
       }
 
-    case d => ()
+    case d: source.TypeDef   => wellformedType(d.symbol.tpe)
+    case d: source.EffectDef => wellformed(d.symbol.effs)
+    case _                   => ()
   }
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
@@ -448,8 +458,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case d @ source.ValDef(id, annot, binding) =>
         val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding, None)
+          case Some(t) =>
+            binding checkAgainst t
+          case None => checkStmt(binding, None)
         }
         Context.define(d.symbol, t)
         t / effBinding
@@ -484,6 +495,92 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case BlockParam(_, tpe) => tpe
     case ValueParam(_, Some(tpe)) => tpe
     case _ => Context.panic("Cannot extract type")
+  }
+
+  // just for checking wellformedness...
+  sealed trait Kind
+  object Kind {
+    case object Type extends Kind
+    case object Effect extends Kind
+    case class Fun(params: List[Kind], res: Kind) extends Kind
+    def TypeFun(params: List[Kind]): Kind =
+      if (params.isEmpty) Kind.Type else Kind.Fun(params, Kind.Type)
+    def EffectFun(params: List[Kind]): Kind =
+      if (params.isEmpty) Kind.Effect else Kind.Fun(params, Kind.Effect)
+  }
+
+  def wellformed(tpe: Type)(implicit C: Context): Unit = tpe match {
+    case t: ValueType      => wellformedType(t)
+    case t: BlockType      => wellformed(t)
+    case t: CapabilityType => wellformedEffect(t.eff)
+  }
+
+  def wellformed(b: BlockType)(implicit C: Context): Unit = b match {
+    case BlockType(tparams, params: Sections, ret) =>
+      params.flatten.foreach { tpe => wellformed(tpe) }
+      wellformed(ret)
+  }
+  def wellformed(tpe: ValueType)(implicit C: Context): Kind = tpe match {
+    case FunType(tpe, region) =>
+      wellformed(tpe); Kind.Type
+    case _: TypeVar => Kind.Type
+    case TypeApp(tpe, args) =>
+      val Kind.Fun(params, res) = wellformed(tpe) match {
+        case t: Kind.Fun => t
+        case _           => Context.abort(s"Expected a type constructor, but got: ${tpe}")
+      }
+      if (args.size != params.size) {
+        Context.abort(s"Wrong type constructor arity. Type constructor ${tpe} expects ${params.size} parameters, but got ${args.size} arguments.")
+      }
+      args foreach { a => wellformedType(a) }
+      res
+
+    case TypeAlias(_, tparams, tpe) =>
+      wellformedType(tpe)
+      Kind.TypeFun(tparams map { p => Kind.Type })
+    case DataType(_, tparams, _)  => Kind.TypeFun(tparams map { p => Kind.Type })
+    case Record(_, tparams, _, _) => Kind.TypeFun(tparams map { p => Kind.Type })
+    case BuiltinType(_, tparams)  => Kind.TypeFun(tparams map { p => Kind.Type })
+  }
+  def wellformed(e: Effect)(implicit C: Context): Kind = e match {
+    case EffectApp(eff, args) =>
+      val Kind.Fun(params, res) = wellformed(eff) match {
+        case t: Kind.Fun => t
+        case _           => Context.abort(s"Expected an effect that takes type parameters, but got: ${eff}")
+      }
+      if (args.size != params.size) {
+        Context.abort(s"Wrong number of type arguments. Effect ${eff} expects ${params.size} parameters, but got ${args.size} arguments.")
+      }
+      args foreach { a => wellformedType(a) }
+      res
+    case EffectAlias(_, tparams, effs) =>
+      wellformed(effs)
+      Kind.EffectFun(tparams map { p => Kind.Type })
+    case UserEffect(_, tparams, _) =>
+      Kind.EffectFun(tparams map { p => Kind.Type })
+    case BuiltinEffect(_, tparams) =>
+      Kind.EffectFun(tparams map { p => Kind.Type })
+  }
+  def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { eff =>
+    wellformed(eff) match {
+      case Kind.Effect => ()
+      case _           => Context.abort(s"Expected an effect but got ${eff}")
+    }
+  }
+
+  def wellformedType(tpe: ValueType)(implicit C: Context): Unit = wellformed(tpe) match {
+    case Kind.Type => ()
+    case _         => Context.abort(s"Expected a simple type, but got: ${tpe}")
+  }
+
+  def wellformedEffect(eff: Effect)(implicit C: Context): Unit = wellformed(eff) match {
+    case Kind.Effect => ()
+    case _           => Context.abort(s"Expected a simple effect, but got: ${eff}")
+  }
+
+  def wellformed(e: Effectful)(implicit C: Context): Unit = {
+    wellformedType(e.tpe)
+    wellformed(e.effects)
   }
 
   /**
@@ -776,12 +873,27 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       checkStmt(stmt, Some(tpe))
   }
 
+  private implicit class ValueTypeOps[T <: ValueType](tpe: T) {
+    def wellformed(implicit C: Context): T = {
+      wellformedType(tpe)
+      tpe
+    }
+  }
+  private implicit class EffectOps[T <: Effect](eff: T) {
+    def wellformed(implicit C: Context): T = {
+      wellformedEffect(eff)
+      eff
+    }
+  }
+
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
+      wellformedType(got)
+      wellformed(effs)
       expected foreach { Context.unify(_, got) }
       C.assignType(t, got / effs)
       got / effs
@@ -790,6 +902,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def check[T <: Tree](t: T)(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
+      wellformedType(got)
+      wellformed(effs)
       Context.assignType(t, got / effs)
       got / effs
     }
