@@ -442,16 +442,34 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       case source.ValueTypeTree(tpe) =>
         tpe
       case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
-        // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
-        val (terms, types) = effs.map { eff => Context.resolveAny(eff.id) }.span { _.isInstanceOf[TermSymbol] }
-
-        val effects = types.map { t => t.asEffect }
+        val (terms, effects) = resolveTermsOrTypes(effs)
         val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
-
         FunType(btpe, Region(terms))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     res
+  }
+
+  // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
+  def resolveTermsOrTypes(effs: List[source.Effect])(implicit C: Context): (List[TermSymbol], List[Effect]) = {
+    var terms: List[TermSymbol] = Nil
+    var effects: List[Effect] = Nil
+
+    effs.foreach { eff =>
+      resolveTermOrType(eff) match {
+        case Left(term) => terms = terms :+ term
+        case Right(tpe) => effects = effects :+ tpe
+      }
+    }
+    (terms, effects)
+  }
+
+  def resolveTermOrType(eff: source.Effect)(implicit C: Context): Either[TermSymbol, Effect] = eff match {
+    case source.Effect(e, Nil) => Context.resolveAny(e) match {
+      case t: TermSymbol => Left(t)
+      case e: Effect     => Right(e)
+    }
+    case source.Effect(e, args) => Right(EffectApp(Context.resolveType(e).asEffect, args.map(resolve)))
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
