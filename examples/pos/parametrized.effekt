@@ -33,6 +33,7 @@ def main() = {
     def get() = resume("")
     def put(n, x) = {
       val h = x;
+      // put(fun() { resume(h) }, 42) // ERROR
       resume(h)
     }
   }
