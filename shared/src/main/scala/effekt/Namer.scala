@@ -432,7 +432,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
    */
-  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = {
+  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = Context.at(tpe) {
     val res = tpe match {
       case source.TypeApp(id, args) =>
         val data = Context.resolveType(id).asValueType
@@ -447,6 +447,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         FunType(btpe, Region(terms))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
+    // check that we resolved to a well-kinded type
+    kinds.wellformed(res)
     res
   }
 
@@ -484,9 +486,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(eff: source.Effect)(implicit C: Context): Effect = eff match {
-    case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
-    case source.Effect(e, args) => EffectApp(Context.resolveType(e).asEffect, args.map(resolve))
+  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
+    val res = eff match {
+      case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
+      case source.Effect(e, args) => EffectApp(Context.resolveType(e).asEffect, args.map(resolve))
+    }
+    kinds.wellformed(res)
+    res
   }
 
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
