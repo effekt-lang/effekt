@@ -5,17 +5,6 @@ import effekt.context.Context
 
 package object kinds {
 
-  sealed trait Kind
-  object Kind {
-    case object Type extends Kind
-    case object Effect extends Kind
-    case class Fun(params: List[Kind], res: Kind) extends Kind
-    def TypeFun(params: List[Kind]): Kind =
-      if (params.isEmpty) Kind.Type else Kind.Fun(params, Kind.Type)
-    def EffectFun(params: List[Kind]): Kind =
-      if (params.isEmpty) Kind.Effect else Kind.Fun(params, Kind.Effect)
-  }
-
   def wellformed(tpe: Type)(implicit C: Context): Unit = tpe match {
     case t: ValueType      => wellformed(t)
     case t: BlockType      => wellformed(t)
@@ -48,6 +37,17 @@ package object kinds {
     case BlockType(tparams, params: Sections, ret) =>
       params.flatten.foreach { tpe => wellformed(tpe) }
       wellformed(ret)
+  }
+
+  private sealed trait Kind
+  private object Kind {
+    case object Type extends Kind
+    case object Effect extends Kind
+    case class Fun(params: List[Kind], res: Kind) extends Kind
+    def TypeFun(params: List[Kind]): Kind =
+      if (params.isEmpty) Kind.Type else Kind.Fun(params, Kind.Type)
+    def EffectFun(params: List[Kind]): Kind =
+      if (params.isEmpty) Kind.Effect else Kind.Fun(params, Kind.Effect)
   }
 
   private def wellformedType(tpe: ValueType)(implicit C: Context): Kind = tpe match {
