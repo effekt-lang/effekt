@@ -25,6 +25,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
     case f @ FunDef(id, tparams, params, ret, body) =>
       val sym = f.symbol
       val effs = sym.effects.userEffects
+
       C.withCapabilities(effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
       }
@@ -138,8 +139,10 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       (arg, param) match {
         case (ValueArgs(as), _) =>
           ValueArgs(as.map(rewrite))
-        case (BlockArg(ps, body), List(p: BlockType)) =>
-          C.withCapabilities(p.ret.effects.userEffects) { caps =>
+        case (b @ BlockArg(ps, body), List(p: BlockType)) =>
+          // here we use the block type, as annotated on the called function (BEFORE SUBSTITUTION)
+          val blockType = C.blockTypeOf(b)
+          C.withCapabilities(blockType.ret.effects.userEffects) { caps =>
             BlockArg(ps ++ caps, rewrite(body))
           }
       }

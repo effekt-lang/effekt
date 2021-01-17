@@ -179,11 +179,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           val tparams = effectSymbol.tparams
           val targs = h.effect.tparams.map(_.resolve)
 
-          // TODO move to separate kind-checker
-          if (targs.size != tparams.size) {
-            Context.error(s"Wrong number of type arguments.")
-          }
-
           val covered = h.clauses.map { _.definition }
           val notCovered = effectSymbol.ops.toSet -- covered.toSet
 
@@ -702,7 +697,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
+      val bt @ BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
+
+      // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
+      Context.annotateBlockArgument(arg, bt)
 
       Context.define {
         checkAgainstDeclaration("block", params, arg.params)
@@ -799,15 +797,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       wellformed(effs)
       expected foreach { Context.unify(_, got) }
       C.assignType(t, got / effs)
-      got / effs
-    }
-
-  def check[T <: Tree](t: T)(f: T => Effectful)(implicit C: Context): Effectful =
-    Context.at(t) {
-      val (got / effs) = f(t)
-      wellformed(got)
-      wellformed(effs)
-      Context.assignType(t, got / effs)
       got / effs
     }
 }

@@ -77,7 +77,7 @@ object Annotations {
    * Type arguments of a _function call_ as inferred by typer
    */
   val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
-    "TyperArguments",
+    "TypeArguments",
     "the inferred or annotated type arguments of"
   )
 
@@ -156,6 +156,14 @@ object Annotations {
     "the blocktype for calltarget"
   )
 
+  /**
+   * The block type of a block argument as annotated by typer
+   */
+  val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
+    "BlockArgumentType",
+    "the inferred type for block argument"
+  )
+
   /*
    * The region a given symbol can be used in
    */
@@ -179,6 +187,7 @@ object Annotations {
     "InferredRegion",
     "the inferred region for source tree"
   )
+
 }
 
 /**
@@ -324,6 +333,12 @@ trait AnnotationsDB { self: Context =>
 
   def blockTypeOf(t: source.CallTarget): BlockType =
     annotation(Annotations.TargetType, t)
+
+  def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Unit =
+    annotate(Annotations.BlockArgumentType, t, tpe)
+
+  def blockTypeOf(t: source.BlockArg): BlockType =
+    annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
   // -------
