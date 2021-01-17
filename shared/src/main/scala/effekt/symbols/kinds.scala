@@ -11,21 +11,18 @@ package object kinds {
     case t: CapabilityType => wellformed(t.eff)
   }
 
-  def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { eff =>
-    wellformedEffect(eff) match {
-      case Kind.Effect => ()
-      case _           => C.abort(s"Expected an effect but got ${eff}")
-    }
-  }
+  def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { eff => wellformed(eff) }
 
   def wellformed(tpe: ValueType)(implicit C: Context): Unit = wellformedType(tpe) match {
     case Kind.Type => ()
-    case _         => C.abort(s"Expected a simple type, but got: ${tpe}")
+    case Kind.Fun(args, Kind.Type) => C.abort(s"${tpe} needs to be applied to ${args.size} type arguments")
+    case _ => C.abort(s"Expected a type but got ${tpe}")
   }
 
   def wellformed(eff: Effect)(implicit C: Context): Unit = wellformedEffect(eff) match {
     case Kind.Effect => ()
-    case _           => C.abort(s"Expected a simple effect, but got: ${eff}")
+    case Kind.Fun(args, Kind.Effect) => C.abort(s"${eff} needs to be applied to ${args.size} type arguments")
+    case _ => C.abort(s"Expected an effect but got a type ${eff}")
   }
 
   def wellformed(e: Effectful)(implicit C: Context): Unit = {
