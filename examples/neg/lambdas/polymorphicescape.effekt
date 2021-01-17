@@ -1,0 +1,40 @@
+effect State[T] {
+  def get(): T
+  def put[S](n: T, x: S): S
+}
+
+def foo() = {
+  get[Int]() + get();
+  get() ++ ""
+  put(1, "")
+}
+
+def bar() =
+ get[Int]()
+
+def two[A, B]() =
+  (get[A](), get[B]())
+
+def main() = {
+  try {
+    val (n1, n2) = two[Int, Int]();
+    println(n1);
+    println(n2);
+    foo();
+    (foo() ++ bar().show)
+  } with State[Int] {
+    def get() = resume(42)
+    def put(n, x) = {
+      val h = x;
+      // resume(get()) // ERROR
+      resume(h)
+    }
+  } with State[String] {
+    def get() = resume("")
+    def put(n, x) = {
+      val h = x;
+      put(fun() { resume(h) }, 42) // ERROR
+      resume(h)
+    }
+  }
+}
