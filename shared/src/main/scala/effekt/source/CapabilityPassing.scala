@@ -140,9 +140,9 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
         case (ValueArgs(as), _) =>
           ValueArgs(as.map(rewrite))
         case (b @ BlockArg(ps, body), List(p: BlockType)) =>
-          // here we use the block type, as annotated on the called function (BEFORE SUBSTITUTION)
-          val blockType = C.blockTypeOf(b)
-          C.withCapabilities(blockType.ret.effects.userEffects) { caps =>
+          // here we use the blocktype as inferred by typer (after substitution)
+          val effs = C.blockTypeOf(b).ret.effects.userEffects
+          C.withCapabilities(effs) { caps =>
             BlockArg(ps ++ caps, rewrite(body))
           }
       }
@@ -169,10 +169,8 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
    * Override the dynamically scoped `in` to also reset transformer state
    */
   override def in[T](block: => T): T = {
-    //    val effectsBefore = stateEffects
     val capsBefore = capabilities
     val result = super.in(block)
-    //    stateEffects = effectsBefore
     capabilities = capsBefore
     result
   }
