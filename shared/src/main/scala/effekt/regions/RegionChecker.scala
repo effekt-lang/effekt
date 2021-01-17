@@ -131,9 +131,9 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       var reg = bodyRegion -- boundRegions
 
       // check that boundRegions do not escape as part of an inferred type
-      val Effectful(tpe, _) = C.inferredTypeOf(body)
+      val t @ Effectful(tpe, _) = C.inferredTypeOf(body)
 
-      val escapes = Context.freeRegionVariables(tpe) intersect boundRegions
+      val escapes = Context.freeRegionVariables(t) intersect boundRegions
       if (escapes.nonEmpty) {
         escapes.regions.foreach { sym =>
           Context.explain(s"The return type mentions capability ${sym}", sym, body)
@@ -385,6 +385,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     case _: Symbol | _: String => Region.empty // don't follow symbols
     case symbols.FunType(tpe, reg) =>
       freeRegionVariables(tpe) ++ reg.asRegionSet
+    case e: symbols.Effects => freeRegionVariables(e.toList)
     case t: Iterable[t] =>
       t.foldLeft(Region.empty) { case (r, t) => r ++ freeRegionVariables(t) }
     case p: Product =>
@@ -484,10 +485,8 @@ trait RegionReporter { self: Context =>
       Nil
   }
 
-  private def mentionsInType(t: Tree, reg: Symbol): Boolean = {
-    val Effectful(tpe, _) = inferredTypeOf(t)
-    freeRegionVariables(tpe).contains(reg)
-  }
+  private def mentionsInType(t: Tree, reg: Symbol): Boolean =
+    freeRegionVariables(inferredTypeOf(t)).contains(reg)
 
   private def uses(t: Tree, reg: Symbol): Boolean =
     inferredRegionOption(t).exists(_.contains(reg))
