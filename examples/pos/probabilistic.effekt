@@ -248,16 +248,15 @@ def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
 // functions for calculating the normalized posterior from a
 // list of weighted ways through a program
 def collectProbs(b: Boolean, l: List[Weighted[Var]]): Double = {
-  var res = 0.0;
   l match {
     case Nil() => 0.0
     case Cons(hd,tl) => hd match {
       case MkWeighted(w, Observed(out)) => if (out == b) {
-        res + w + collectProbs(b,tl)
+        w + collectProbs(b,tl)
       } else {
-        res + collectProbs(b,tl)
+        collectProbs(b,tl)
       }
-      case MkWeighted(w, Unobserved()) => res + collectProbs(b,tl)
+      case MkWeighted(w, Unobserved()) => collectProbs(b,tl)
     }
   }
 }
