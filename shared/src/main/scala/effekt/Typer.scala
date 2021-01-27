@@ -353,8 +353,6 @@ class Typer extends Phase[SourceModule, SourceModule] { typer =>
         TUnit / Pure
 
       case d @ source.LocalModuleDef(id, defs) => {
-        println("Check Module Def")
-
         Context in {
           defs.foreach { d => precheckDef(d) }
           defs.foreach { d =>
