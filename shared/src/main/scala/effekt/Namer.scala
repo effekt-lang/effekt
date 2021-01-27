@@ -6,7 +6,7 @@ package namer
  */
 import effekt.context.Context
 import effekt.context.assertions.{ SymbolAssertions, TypeAssertions }
-import effekt.source.{ Def, Id, Tree }
+import effekt.source.{ Def, Id, Tree, CallerId }
 import effekt.symbols._
 import effekt.util.Task
 import scopes._
@@ -213,41 +213,35 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
 
     // (2) === Bound Occurrences ===
 
-    case source.Call(id, targs, args) =>
+    case source.Call(cref, targs, args) =>
       // idRef oder Access?
       // Erstmal nur ein Punkt berücksichtigen (IdRef, IdRef)
       // Hier Modul abfangen
       // id enthält func name ("modules"")
       // args enthält module name ("hello")
 
-      id match {
-        case IdRef(name) => {
+      cref match {
+        case effekt.source.Global(id) => {
           Context.resolveCalltarget(id)
-
-          targs foreach resolve
-          resolveAll(args)
         }
 
         case ModuleAccess(moduleId, memberId) => {
-          println(s"Module Access: $moduleId, $memberId")
+          // Lookup symbol of referenced module
+          val modSym = Context.resolveModule(moduleId)
 
-          val scope = Temp.moduleScope.get
+          // Create temporary scope to lookup member Symbol
+          val memberSym = Context.scoped {
+            // Import everything which was defined inside this module
+            Context.importModule(modSym)
 
-          println(s"Lookup member symbol")
-          val syms = scope.lookupOverloaded(memberId.name) map {
-            _ collect {
-              case b: BlockParam  => b
-              case b: ResumeParam => b
-              case b: Fun         => b
-              case _              => Context.abort("Expected callable")
-            }
+            // Resolve the call to the member
+            Context.resolveCalltarget(memberId)
           }
-
-          println(s"Create CallTarget(${Name(memberId)}, $syms)")
-          val target = new CallTarget(Name(memberId), syms)
-          Context.assignSymbol(memberId, target)
         }
       }
+
+      targs foreach resolve
+      resolveAll(args)
 
     case source.Var(id)        => Context.resolveVar(id)
 
@@ -255,16 +249,17 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
     case tpe: source.BlockType => resolve(tpe)
 
     case source.LocalModuleDef(id, defs) =>
-      println(s"resolveGeneric(Module: $id, $defs)")
-      defs.foreach(d => {
-        resolve(d)
-        //resolveGeneric(d)
-      })
+      // Create scope to collect everythin inside the module
+      Context.scoped {
+        // Resolve every def
+        defs.foreach(d => { resolve(d) })
+        resolveAll(defs)
 
-      resolveAll(defs)
-
-      // TODO: What must be done?
-      println("Resolved generic")
+        // Export everything the to module symbol
+        val sym = Context.resolveModule(id)
+        sym.terms = Context.scope.terms.toMap
+        sym.types = Context.scope.types.toMap
+      }
 
     // THIS COULD ALSO BE A TYPE!
     case id: Id =>
@@ -416,16 +411,12 @@ class Namer extends Phase[SourceModule, SourceModule] { namer =>
     }
 
     case source.LocalModuleDef(id, defs) => {
-      println("Define Module")
-
       // Open Block scope
       Context.define(id, Context scoped {
         // Create Symbol
         //resolveAll(defs)
         LocalModule(id.name, Context.module)
       })
-
-      println("Module defined!")
     }
 
     case d @ source.ExternInclude(path) =>
@@ -524,17 +515,25 @@ trait NamerOps { self: Context =>
   private[namer] def define(id: Id, module: LocalModule): Unit = {
     assignSymbol(id, module)
     scope.define(id.name, module)
-    // TODO Remove this
-    Temp.moduleScope = Some(scope)
   }
 
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)
 
   private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.localName, s)
 
+  private[namer] def importModule(mod: Module): Unit = {
+    scope.importModule(mod)
+  }
+
   private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
     this
+  }
+
+  private[namer] def resolveModule(id: Id): LocalModule = {
+    val sym = scope.lookupModule(id.name)
+    assignSymbol(id, sym)
+    sym
   }
 
   /**
@@ -542,7 +541,6 @@ trait NamerOps { self: Context =>
    * Stores a binding in the symbol table
    */
   private[namer] def resolveTerm(id: Id): TermSymbol = at(id) {
-    println(s"Resolve Term: $id")
     val sym = scope.lookupFirstTerm(id.name)
     assignSymbol(id, sym)
     sym

@@ -18,12 +18,10 @@ case object NoSource extends Tree
 case class Comment() extends Tree
 
 // Datatype for the left part of a function call
-sealed trait CallerId extends Id
+sealed trait CallerId extends Tree
+case class Global(id: IdRef) extends CallerId
 // An access to a module member
-case class ModuleAccess(moduleId: IdRef, memberId: IdRef) extends CallerId {
-  def name: String = memberId.name
-  def clone(implicit C: Context): Id = ModuleAccess(moduleId.clone(C), memberId.clone(C))
-}
+case class ModuleAccess(moduleId: IdRef, memberId: IdRef) extends CallerId
 
 /**
  * We distinguish between identifiers corresponding to
@@ -46,7 +44,7 @@ case class IdDef(name: String) extends Id {
 }
 
 // TODO: parentOption: ref?
-case class IdRef(name: String) extends Id with CallerId {
+case class IdRef(name: String) extends Id {
   def clone(implicit C: Context): IdRef = {
     val copy = IdRef(name)
     C.positions.dupPos(this, copy)
@@ -199,7 +197,7 @@ case class StringLit(value: String) extends Literal[String]
 // maybe replace `fun: Id` here with BlockVar
 case class Call(caller: CallerId, targs: List[ValueType], args: List[ArgSection]) extends Expr with Reference {
   def id: IdRef = caller match {
-    case ref: IdRef        => ref
+    case g: Global         => g.id
     case mod: ModuleAccess => mod.memberId
   }
 

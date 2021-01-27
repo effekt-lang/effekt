@@ -29,6 +29,8 @@ object scopes {
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
 
+    def lookupModule(key: String)(implicit C: Context): LocalModule
+
     def currentTermsFor(key: String): Set[TermSymbol] =
       terms.getOrElse(key, Set.empty)
 
@@ -50,6 +52,10 @@ object scopes {
       tps.foreach { case (n, sym) => define(n, sym) }
     }
 
+    def importModule(mod: Module)(implicit C: Context) = {
+      defineAll(mod.terms, mod.types)
+    }
+
     def enterWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
       val scope = BlockScope(this)
       scope.defineAll(tms, tps)
@@ -57,9 +63,25 @@ object scopes {
     }
 
     def leave(implicit C: Context): Scope
+
+    def dump() = {
+      println("scope {")
+      println("  types:")
+      types.foreach({ entry =>
+        println(s"    ${entry._1} = ${entry._2}")
+      })
+      println("  terms:")
+      terms.foreach({ entry =>
+        println(s"    ${entry._1} = ${entry._2}")
+      })
+      println("}")
+    }
   }
 
   case class EmptyScope() extends Scope {
+    def lookupModule(key: String)(implicit C: Context): LocalModule =
+      C.abort(s"Could not resolve module $key")
+
     def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
       C.abort(s"Could not resolve term ${key}")
 
@@ -87,6 +109,9 @@ object scopes {
 
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       types.getOrElse(key, parent.lookupType(key))
+
+    def lookupModule(key: String)(implicit C: Context): LocalModule =
+      modules.getOrElse(key, parent.lookupModule(key))
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
       terms.get(key).map { _ :: parent.lookupOverloaded(key) }.getOrElse {

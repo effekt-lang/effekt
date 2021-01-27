@@ -87,7 +87,7 @@ class Typer extends Phase[SourceModule, SourceModule] { typer =>
         TUnit / eff
 
       case c @ source.Call(fun, targs, args) =>
-        checkCall(fun, c.definition, targs map { resolveValueType }, args, expected)
+        checkCall(c.id, c.definition, targs map { resolveValueType }, args, expected)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -323,8 +323,8 @@ class Typer extends Phase[SourceModule, SourceModule] { typer =>
           case None =>
             val (tpe / effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
-            Context.assignType(sym, sym.toType(tpe / effs))
-            Context.assignType(d, tpe / effs)
+            Context.assignType(sym, sym.toType(tpe / effs)) // TODO: Hier wird quasi die "Sigantur" berechnet
+            Context.assignType(d, tpe / effs) // TODO: Hier wird auch der def baum annotiert mit dem Type, wird im Transformer gebraucht und etc
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 

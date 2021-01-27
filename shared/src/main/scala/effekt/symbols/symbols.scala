@@ -30,12 +30,18 @@ package object symbols {
     override def synthetic = true
   }
 
+  type TermSymbols = Map[String, Set[TermSymbol]]
+  type TypeSymbols = Map[String, TypeSymbol]
+
   /**
    * Trait for a Symbol which represents a module.
    */
   sealed trait Module extends Symbol {
     def source: Source
     def ownerOption: Option[Module]
+
+    def terms: TermSymbols
+    def types: TypeSymbols
   }
 
   case class SourceModule(decl: SourceModuleDef, source: Source) extends Module {
@@ -87,6 +93,9 @@ package object symbols {
   // => Overload Resolution im Typer (einzige Verwendung von qualified Name)
   case class LocalModule(localName: String, owner: Module) extends Module {
     def ownerOption: Some[Module] = Some(owner)
+
+    var terms: TermSymbols = Map.empty
+    var types: TypeSymbols = Map.empty
 
     // Computes the qualified name of the module.
     val name: Name = owner match {
