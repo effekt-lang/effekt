@@ -59,6 +59,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `false` = keyword("false")
   lazy val `val` = keyword("val")
   lazy val `var` = keyword("var")
+  lazy val `for` = keyword("for")
   lazy val `if` = keyword("if")
   lazy val `else` = keyword("else")
   lazy val `while` = keyword("while")
@@ -82,12 +83,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun"
+    "match", "module", "import", "extern", "fun", "for"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
-    "catch", "in", "finally", "switch", "case", "this", "yield"
+    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield"
   )
 
   def keyword(s: String): Parser[String] =
