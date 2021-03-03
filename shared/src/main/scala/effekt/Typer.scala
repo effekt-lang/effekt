@@ -638,7 +638,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
+    val (rigids, bt @ BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -732,7 +732,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context.annotateTypeArgs(call, inferredTypeArgs)
 
     // annotate the calltarget tree with the resolved blocktype
-    Context.annotateTarget(call.target, funTpe)
+    Context.annotateTarget(call.target, Context.unifier.substitute(bt))
 
     Context.unifier.substitute(ret / effs)
   }

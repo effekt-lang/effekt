@@ -334,6 +334,9 @@ trait AnnotationsDB { self: Context =>
   def blockTypeOf(t: source.CallTarget): BlockType =
     annotation(Annotations.TargetType, t)
 
+  def blockTypeOption(t: source.CallTarget): Option[BlockType] =
+    annotationOption(Annotations.TargetType, t)
+
   def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Unit =
     annotate(Annotations.BlockArgumentType, t, tpe)
 
