@@ -890,6 +890,12 @@ trait TyperOps extends ContextOps { self: Context =>
     this
   }
 
+  // this also needs to be backtrackable to interact correctly with overload resolution
+  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Context = {
+    annotations.annotate(Annotations.BlockArgumentType, t, tpe)
+    this
+  }
+
   private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
     annotations.annotate(Annotations.TypeArguments, call, targs)
     this
