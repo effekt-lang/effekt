@@ -25,9 +25,9 @@ expressions. We represent the language of differentiable expressions by an
 effect `AD`, which operates on `Num`. The effect `AD` can be thought of as an
 embedded DSL.
 ```
-record Num(value: Double, d: Ref[Double])
+def mathExp(d: Double): Double = exp(d)
 
-effect AD {
+effect AD[Num] {
   def num(x: Double): Num
   def add(x: Num, y: Num): Num
   def mul(x: Num, y: Num): Num
@@ -37,21 +37,16 @@ effect AD {
 If Effekt would support polymorphic effects (or abstract type members on
 effects) we could abstract over the domain `Num`, which is hard-coded above to
 contain a double value and a mutable reference.
-We make use of operator overloading by defining `infixAdd` and `infixMul`, whch are
-special-cased in the Effekt compiler.
-```
-def infixAdd(x: Num, y: Num) = add(x, y)
-def infixMul(x: Num, y: Num) = mul(x, y)
-```
+
 We can use the number DSL to express two example programs.
 ```
 // d = 3 + 3x^2
-def prog(x: Num): Num / AD =
-  (num(3.0) * x) + (x * x * x)
+def prog[Num](x: Num): Num / AD[Num] =
+  add(mul(num(3.0), x), mul(mul(x, x), x))
 
 // d = exp(1 + 2x) + 2x*exp(x^2)
-def progExp(x: Num): Num / AD =
-  num(0.5) * exp(num(1.0) + num(2.0) * x) + exp(x * x)
+def progExp[Num](x: Num): Num / AD[Num] =
+  add(mul(num(0.5), exp(add(num(1.0), mul(num(2.0), x)))), exp(mul(x, x)))
 ```
 These programs use effect operations for multiplication, addition, the exponential function, and for embedding
 constant literals.
@@ -64,18 +59,33 @@ and computing the derivative is expressed as a handler.
 For forwards propagation, we do not use the fact that the derivative stored
 in `Num` is a mutable box. This is only necessary for backwards propagation.
 ```
-def forwards(in: Double) { prog: Num => Num / AD }: Double =
-  try { prog(Num(in, fresh(1.0))).d.get } with AD {
-    def num(v)    = resume(Num(v, fresh(0.0)))
-    def add(x, y) = resume(Num(
-      x.value + y.value,
-      fresh(x.d.get + y.d.get)))
-    def mul(x, y) = resume(Num(
-      x.value * y.value,
-      fresh(x.d.get * y.value + y.d.get * x.value)))
-    def exp(x) = resume(Num(
-      exp(x.value),
-      fresh(x.d.get * exp(x.value))))
+record NumF(value: Double, d: Double)
+def forwards(in: Double) { prog: NumF => NumF / AD[NumF] }: Double =
+  try { prog(NumF(in, 1.0)).d } with AD[NumF] {
+    def num(v)    = resume(NumF(v, 0.0))
+    def add(x, y) = resume(NumF(x.value + y.value, x.d + y.d))
+    def mul(x, y) = resume(NumF(x.value * y.value, x.d * y.value + y.d * x.value))
+    def exp(x) = resume(NumF(mathExp(x.value), x.d * mathExp(x.value)))
+  }
+
+
+record NumH[N](value: N, d: N)
+def forwardsHigher[N](in: N) { prog: NumH[N] => NumH[N] / AD[NumH[N]] }: N / AD[N] =
+  try { prog(NumH(in, num(1.0))).d } with AD[NumH[N]] {
+    def num(v)    = resume(NumH(num(v), num(0.0)))
+    def add(x, y) = resume(NumH(add(x.value, y.value), add(x.d, y.d)))
+    def mul(x, y) = resume(NumH(mul(x.value, y.value), add(mul(x.d, y.value), mul(y.d, x.value))))
+    def exp(x) = resume(NumH(exp(x.value), mul(x.d, exp(x.value))))
+  }
+
+def showString { prog: String => String / AD[String] } =
+  try { prog("x") } with AD[String] {
+    def num(v)    = resume(v.show)
+    def add(x, y) =
+      if (x == "0") resume(y) else if (y == "0") resume(x) else resume("(" ++ x ++ " + " ++ y ++ ")")
+    def mul(x, y) =
+      if (x == "0" || y == "0") { resume("0") } else if (x == "1") { resume(y) } else { resume("(" ++ x ++ " * " ++ y ++ ")") }
+    def exp(x) = resume("exp(" ++ x ++ ")")
   }
 ```
 Except for the wrapping and unwrapping of the references, the definition
@@ -88,31 +98,32 @@ we automatically get access to the continuation in the implementation of
 `add`, `mul` and `exp`. We thus do not have to use `shift` and `reset`.
 Otherwise the implementation closely follows the one by Wang et al.
 ```
-def backwards(in: Double) { prog: Num => Num / AD }: Double = {
+record NumB(value: Double, d: Ref[Double])
+def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
   // the representation of our input
-  val input = Num(in, fresh(0.0))
+  val input = NumB(in, fresh(0.0))
 
   // a helper function to update the derivative of a given number by adding v
-  def push(n: Num)(v: Double): Unit = n.d.put(n.d.get + v)
+  def push(n: NumB)(v: Double): Unit = n.d.put(n.d.get + v)
 
-  try { prog(input).push(1.0) } with AD {
-    def num(v) = resume(Num(v, fresh(0.0)))
+  try { prog(input).push(1.0) } with AD[NumB] {
+    def num(v) = resume(NumB(v, fresh(0.0)))
     def add(x, y) = {
-      val z = Num(x.value + y.value, fresh(0.0))
+      val z = NumB(x.value + y.value, fresh(0.0))
       resume(z)
       x.push(z.d.get);
       y.push(z.d.get)
     }
     def mul(x, y) = {
-      val z = Num(x.value * y.value, fresh(0.0))
+      val z = NumB(x.value * y.value, fresh(0.0))
       resume(z)
       x.push(y.value * z.d.get);
       y.push(x.value * z.d.get)
     }
     def exp(x) = {
-      val z = Num(exp(x.value), fresh(0.0))
+      val z = NumB(mathExp(x.value), fresh(0.0))
       resume(z)
-      x.push(exp(x.value) * z.d.get)
+      x.push(mathExp(x.value) * z.d.get)
     }
   }
   // the derivative of `prog` at `in` is stored in the mutable reference
@@ -141,27 +152,27 @@ def main() = {
   println(forwards(0.0) { x => progExp(x) })
   println(backwards(0.0) { x => progExp(x) })
 
+  println(showString { x => forwardsHigher(x) { x => forwardsHigher(x) { y => forwardsHigher(y) { z => prog(z) } }} })
 
   // we have the same pertubation confusion as in Lantern
   val result = forwards(1.0) { x =>
-    val shouldBeOne = forwards(1.0) { y => x + y }
-    val z = num(shouldBeOne)
-    x * z
+    val shouldBeOne = forwards(1.0) { y => add(x, y) }
+    val z = num[NumF](shouldBeOne)
+    mul(x, z)
   }
   println(result)
 
   val result2 = backwards(1.0) { x =>
-    val shouldBeOne = backwards(1.0) { y => x + y }
-    val z = num(shouldBeOne)
-    x * z
+    val shouldBeOne = backwards(1.0) { y => add(x, y) }
+    val z = num[NumB](shouldBeOne)
+    mul(x, z)
   }
   println(result2)
 
   // this is proposed by Wang et al. as a solution to pertubation confusion
   val result3 = backwards(1.0) { x =>
-    val shouldBeOne = forwards(1.0) { y => x + y }
-    val z = num(shouldBeOne)
-    x * z
+    val shouldBeOne = forwards(1.0) { y => add(num(x.value), y) }
+    mul(x, num(shouldBeOne))
   }
   println(result3)
 }
