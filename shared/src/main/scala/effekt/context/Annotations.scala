@@ -76,8 +76,8 @@ object Annotations {
   /**
    * Type arguments of a _function call_ as inferred by typer
    */
-  val TypeArguments = Annotation[source.Call, List[symbols.Type]](
-    "TyperArguments",
+  val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
+    "TypeArguments",
     "the inferred or annotated type arguments of"
   )
 
@@ -156,6 +156,14 @@ object Annotations {
     "the blocktype for calltarget"
   )
 
+  /**
+   * The block type of a block argument as annotated by typer
+   */
+  val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
+    "BlockArgumentType",
+    "the inferred type for block argument"
+  )
+
   /*
    * The region a given symbol can be used in
    */
@@ -179,6 +187,7 @@ object Annotations {
     "InferredRegion",
     "the inferred region for source tree"
   )
+
 }
 
 /**
@@ -239,7 +248,7 @@ trait AnnotationsDB { self: Context =>
   // Types
   // -----
 
-  def typeArguments(c: source.Call): List[symbols.Type] =
+  def typeArguments(c: source.Call): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[Effectful] =
@@ -267,11 +276,11 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
 
-  def annotateResolvedType(tree: source.Type)(tpe: tree.symbol): Unit =
+  def annotateResolvedType(tree: source.Type)(tpe: tree.resolved): Unit =
     annotate(Annotations.Type, tree, tpe)
 
-  def resolvedType(tree: source.Type): tree.symbol =
-    annotation(Annotations.Type, tree).asInstanceOf[tree.symbol]
+  def resolvedType(tree: source.Type): tree.resolved =
+    annotation(Annotations.Type, tree).asInstanceOf[tree.resolved]
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
@@ -288,9 +297,11 @@ trait AnnotationsDB { self: Context =>
         case b: BlockType => Some(b)
         case _            => None
       }
-      case v: ValueSymbol => valueTypeOption(v).flatMap {
-        case symbols.FunType(tpe, _) => Some(tpe)
-        case _ => None
+      case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
+        v.dealias match {
+          case symbols.FunType(tpe, _) => Some(tpe)
+          case _ => None
+        }
       }
     }
 
@@ -317,11 +328,18 @@ trait AnnotationsDB { self: Context =>
   // Calltargets
   // -----------
 
+  // annotated by capability passing
   def annotateCalltarget(t: source.CallTarget, tpe: BlockType): Unit =
     annotate(Annotations.TargetType, t, tpe)
 
   def blockTypeOf(t: source.CallTarget): BlockType =
     annotation(Annotations.TargetType, t)
+
+  def blockTypeOption(t: source.CallTarget): Option[BlockType] =
+    annotationOption(Annotations.TargetType, t)
+
+  def blockTypeOf(t: source.BlockArg): BlockType =
+    annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
   // -------

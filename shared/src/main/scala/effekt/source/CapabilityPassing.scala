@@ -5,6 +5,7 @@ import effekt.context.{ Context, ContextOps, Annotations }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 import effekt.source.Tree.Rewrite
+import effekt.substitutions._
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
@@ -36,15 +37,22 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
       val op = fun.definition.asEffectOp
 
-      val tpe @ BlockType(tparams, params, ret / effs) = C.blockTypeOf(op)
+      val tpe @ BlockType(tparams, params, ret / _) = C.blockTypeOf(op)
+
+      val (_ / effs) = C.inferredTypeOf(c)
+
+      // substitution of type params to inferred type arguments
+      val subst = (tparams zip C.typeArguments(c)).toMap
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
-      val effects = op.otherEffects.userDefined
-      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
-      val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val self = subst.substitute(op.appliedEffect)
+      val others = subst.substitute(op.otherEffects.userDefined)
 
-      val receiver = C.capabilityReferenceFor(op.effect)
+      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
+
+      val capabilityArgs = others.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val receiver = C.capabilityReferenceFor(self)
 
       val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
       C.annotateCalltarget(target, tpe)
@@ -60,7 +68,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
         C.annotate(Annotations.TypeAndEffect, access, Effectful(C.valueTypeOf(fun.definition), Pure))
         ExprTarget(access)
       }
-      rewrite(Call(target, targs, args))
+      rewrite(visit(c) { c => Call(target, targs, args) })
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
@@ -69,7 +77,10 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val sym: Symbol = fun.definition
       val BlockType(tparams, params, ret / effs) = C.blockTypeOf(sym)
 
-      val effects = effs.userDefined
+      // substitution of type params to inferred type arguments
+      val subst = (tparams zip C.typeArguments(c)).toMap
+      val effects = effs.userDefined.toList.map(subst.substitute)
+
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
@@ -80,7 +91,9 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val transformedExpr = rewrite(expr)
       val (FunType(BlockType(tparams, params, ret / effs), _) / _) = C.inferredTypeOf(expr)
 
-      val effects = effs.userDefined
+      val subst = (tparams zip C.typeArguments(c)).toMap
+      val effects = effs.userDefined.toList.map(subst.substitute)
+
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
@@ -96,7 +109,9 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
     case TryHandle(prog, handlers) =>
 
-      val effects = handlers.map(_.definition)
+      // here we need to use the effects on the handlers!
+      val effects = handlers.map(_.effect.resolve)
+
       val (caps, body) = C.withCapabilities(effects) { caps =>
         (caps, rewrite(prog))
       }
@@ -124,8 +139,10 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       (arg, param) match {
         case (ValueArgs(as), _) =>
           ValueArgs(as.map(rewrite))
-        case (BlockArg(ps, body), List(p: BlockType)) =>
-          C.withCapabilities(p.ret.effects.userEffects) { caps =>
+        case (b @ BlockArg(ps, body), List(p: BlockType)) =>
+          // here we use the blocktype as inferred by typer (after substitution)
+          val effs = C.blockTypeOf(b).ret.effects.userEffects
+          C.withCapabilities(effs) { caps =>
             BlockArg(ps ++ caps, rewrite(body))
           }
       }
@@ -152,10 +169,8 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
    * Override the dynamically scoped `in` to also reset transformer state
    */
   override def in[T](block: => T): T = {
-    //    val effectsBefore = stateEffects
     val capsBefore = capabilities
     val result = super.in(block)
-    //    stateEffects = effectsBefore
     capabilities = capsBefore
     result
   }
@@ -164,7 +179,7 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
    * runs the given block, binding the provided capabilities, so that
    * "resolveCapability" will find them.
    */
-  private[source] def withCapabilities[R](effs: List[UserEffect])(block: List[source.CapabilityParam] => R): R = Context in {
+  private[source] def withCapabilities[R](effs: List[Effect])(block: List[source.CapabilityParam] => R): R = Context in {
 
     // create a fresh cabability-symbol for each bound effect
     val caps = effs.map { eff =>

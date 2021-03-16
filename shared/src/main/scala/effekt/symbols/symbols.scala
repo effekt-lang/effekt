@@ -235,7 +235,7 @@ package object symbols {
    * Should neither occur in source programs, nor in infered types
    */
   case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
-    override def toString = "?" + underlying.name + id
+    // override def toString = "?" + underlying.name + id
   }
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
@@ -243,8 +243,7 @@ package object symbols {
 
     override def dealias: ValueType = tpe match {
       case TypeAlias(name, tparams, tpe) =>
-        // TODO clean up and move to substitution
-        Unifier((tparams zip args).toMap).substitute(tpe).dealias
+        (tparams zip args).toMap.substitute(tpe).dealias
       case other => TypeApp(other.dealias, args.map { _.dealias })
     }
   }
@@ -274,7 +273,7 @@ package object symbols {
   /**
    * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
    */
-  trait TypeConstructor extends TypeSymbol with ValueType
+  sealed trait TypeConstructor extends TypeSymbol with ValueType
   object TypeConstructor {
     def unapply(t: ValueType): Option[TypeConstructor] = t match {
       case t: TypeVar         => None
@@ -311,6 +310,7 @@ package object symbols {
 
   /** Effects */
 
+  // TODO effects are only temporarily symbols to be resolved by namer
   sealed trait Effect {
     def name: Name
     def builtin: Boolean
@@ -318,14 +318,23 @@ package object symbols {
     def dealias: List[Effect] = List(this)
   }
 
-  case class EffectAlias(name: Name, effs: Effects) extends Effect with TypeSymbol {
+  case class EffectApp(effect: Effect, args: List[ValueType]) extends Effect {
+    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
+    override def builtin = effect.builtin
+    override val name = effect.name
+
+    // override def dealias: List[Effect] = ??? // like dealiasing of TypeApp we potentially need to substitute
+
+  }
+
+  case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends Effect with TypeSymbol {
     override def dealias: List[Effect] = effs.dealias
   }
 
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
-    // The effects as seen by typer
-    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, annotatedReturn.effects + effect))
+    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
+    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
 
     // The effects as seen by the capability passing transformation
     def otherEffects: Effects = annotatedReturn.effects
@@ -343,16 +352,14 @@ package object symbols {
 
     lazy val toList: List[Effect] = effects.distinct
 
+    // This is only used by typer
     def +(eff: Effect): Effects = this ++ Effects(eff)
-    def -(eff: Effect): Effects = this -- Effects(eff)
 
     def ++(other: Effects): Effects = Effects((other.toList ++ this.toList).distinct)
     def --(other: Effects): Effects = Effects(this.toList.filterNot(other.contains))
 
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
-
-    def distinct: Effects = new Effects(toList)
 
     override def equals(other: Any): Boolean = other match {
       case other: Effects => this.contains(other.toList) && other.contains(this.toList)
@@ -370,9 +377,11 @@ package object symbols {
     def userDefined: Effects =
       filterNot(_.builtin)
 
-    def userEffects: List[UserEffect] =
+    def userEffects: List[Effect] =
       effects collect {
         case u: UserEffect => u
+        // we assume that only UserEffects can be applied to type arguments for now
+        case u: EffectApp  => u
       }
 
     def dealias: List[Effect] = effects.flatMap { _.dealias }

@@ -1,0 +1,24 @@
+[error] examples/neg/lambdas/polymorphicescape.effekt:18:1: A value that is introduced in 'main' leaves its scope.
+def main() = {
+^
+[info] examples/neg/lambdas/polymorphicescape.effekt:19:3: A value is returned that mentions 'main' in its inferred type
+  try {
+  ^
+[info] examples/neg/lambdas/polymorphicescape.effekt:26:17: Function resume is called, which closes over 'main'
+    def get() = resume(42)
+                ^^^^^^
+[info] examples/neg/lambdas/polymorphicescape.effekt:30:7: Function resume is called, which closes over 'main'
+      resume(h)
+      ^^^^^^
+[info] examples/neg/lambdas/polymorphicescape.effekt:33:17: Function resume is called, which closes over 'main'
+    def get() = resume("")
+                ^^^^^^
+[info] examples/neg/lambdas/polymorphicescape.effekt:36:11: The lambda closes over 'main'
+      put(fun() { resume(h) }, 42) // ERROR
+          ^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/lambdas/polymorphicescape.effekt:36:19: Function resume is called, which closes over 'main'
+      put(fun() { resume(h) }, 42) // ERROR
+                  ^^^^^^
+[info] examples/neg/lambdas/polymorphicescape.effekt:37:7: Function resume is called, which closes over 'main'
+      resume(h)
+      ^^^^^^

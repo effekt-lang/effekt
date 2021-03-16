@@ -2,13 +2,55 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ BlockType, CapabilityType, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ BlockType, CapabilityType, Effect, Effects, EffectApp, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
 object substitutions {
 
   type Substitutions = Map[TypeVar, ValueType]
+
+  // Substitution is independent of the unifier
+  implicit class SubstitutionOps(substitutions: Map[TypeVar, ValueType]) {
+    def substitute(t: ValueType): ValueType = t match {
+      case x: TypeVar =>
+        substitutions.getOrElse(x, x)
+      case TypeApp(t, args) =>
+        TypeApp(t, args.map { substitute })
+      case FunType(tpe, reg) =>
+        FunType(substitute(tpe), reg)
+      case other => other
+    }
+
+    def substitute(e: Effectful): Effectful = e match {
+      case Effectful(tpe, effs) => Effectful(substitute(tpe), substitute(effs))
+    }
+
+    def substitute(e: Effects): Effects = Effects(e.toList.map(substitute))
+
+    def substitute(e: Effect): Effect = e match {
+      case EffectApp(e, tpes) => EffectApp(substitute(e), tpes.map(substitute))
+      case e                  => e
+    }
+
+    def substitute(t: InterfaceType): InterfaceType = t match {
+      case b: CapabilityType => b
+      case b: BlockType      => substitute(b)
+    }
+
+    def substitute(t: BlockType): BlockType = t match {
+      case BlockType(tps, ps, ret) =>
+        val substWithout = substitutions.filterNot { case (t, _) => ps.contains(t) }
+        BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
+    }
+
+    def substitute(t: Sections): Sections = t map {
+      _ map {
+        case v: ValueType     => substitute(v)
+        case b: InterfaceType => substitute(b)
+      }
+    }
+  }
 
   sealed trait UnificationResult {
     def add(k: TypeVar, v: ValueType): UnificationResult
@@ -34,9 +76,9 @@ object substitutions {
 
       // Use new substitution binding to refine right-hand-sides of existing substitutions.
       // Do we need an occurs check?
-      val newUnifier = Unifier(k -> v)
-      val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newUnifier substitute tpe) }
-      Unifier(improvedSubst + (k -> Unifier(improvedSubst, constraints).substitute(v)), constraints)
+      val newSubst = Map(k -> v)
+      val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
+      Unifier(improvedSubst + (k -> improvedSubst.substitute(v)), constraints)
     }
 
     def equalRegions(r1: Region, r2: Region)(implicit C: Context): Unifier =
@@ -59,44 +101,6 @@ object substitutions {
 
     def skolems(rigids: List[RigidVar]): List[RigidVar] =
       rigids.filterNot { substitutions.isDefinedAt }
-
-    def substitute(t: Type): Type = t match {
-      case t: ValueType      => substitute(t)
-      case b: BlockType      => substitute(b)
-      case b: CapabilityType => b
-    }
-
-    def substitute(t: ValueType): ValueType = t match {
-      case x: TypeVar =>
-        substitutions.getOrElse(x, x)
-      case TypeApp(t, args) =>
-        TypeApp(t, args.map { substitute })
-      case FunType(tpe, reg) =>
-        FunType(substitute(tpe), reg)
-      case other => other
-    }
-
-    def substitute(e: Effectful): Effectful = e match {
-      case Effectful(tpe, effs) => Effectful(substitute(tpe), effs)
-    }
-
-    def substitute(t: InterfaceType): InterfaceType = t match {
-      case b: CapabilityType => b
-      case b: BlockType      => substitute(b)
-    }
-
-    def substitute(t: BlockType): BlockType = t match {
-      case BlockType(tps, ps, ret) =>
-        val substWithout = Unifier(substitutions.filterNot { case (t, _) => ps.contains(t) }, constraints)
-        BlockType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
-    }
-
-    def substitute(t: Sections): Sections = t map {
-      _ map {
-        case v: ValueType     => substitute(v)
-        case b: InterfaceType => substitute(b)
-      }
-    }
   }
   object Unifier {
     def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType])
@@ -114,6 +118,11 @@ object substitutions {
     def equalRegions(r1: Region, r2: Region)(implicit C: Context) = this
   }
 
+  /**
+   * Allows using a unifier for substitution
+   */
+  implicit def toSubstitution(u: Unifier): SubstitutionOps = new SubstitutionOps(u.substitutions)
+
   object Unification {
 
     /**
@@ -130,20 +139,8 @@ object substitutions {
         case (t: ValueType, s: ValueType) =>
           unifyValueTypes(t, s)
 
-        // TODO also consider type parameters here
-        case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
-
-          if (args1.size != args2.size) {
-            return UnificationError(s"Section count does not match $f1 vs. $f2")
-          }
-
-          (args1 zip args2).foldLeft(unifyTypes(ret1.tpe, ret2.tpe)) {
-            case (u, (as1, as2)) =>
-              if (as1.size != as2.size)
-                return UnificationError(s"Argument count does not match $f1 vs. $f2")
-
-              (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u union unifyTypes(a1, a2) }
-          }
+        case (t: BlockType, s: BlockType) =>
+          unifyBlockTypes(t, s)
 
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")
@@ -181,6 +178,29 @@ object substitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
+    def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: Context): UnificationResult =
+      (tpe1, tpe2) match {
+        // TODO also consider type parameters here
+        case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
+
+          if (args1.size != args2.size) {
+            return UnificationError(s"Section count does not match $f1 vs. $f2")
+          }
+
+          (args1 zip args2).foldLeft(unifyEffectful(ret1, ret2)) {
+            case (u, (as1, as2)) =>
+              if (as1.size != as2.size)
+                return UnificationError(s"Argument count does not match $f1 vs. $f2")
+
+              (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u union unifyTypes(a1, a2) }
+          }
+      }
+
+    // We don't unify effects here, instead we simply gather them
+    // Two effects State[?X1] and State[?X2] are assumed to be disjoint until we know that ?X1 and ?X2 are equal.
+    def unifyEffectful(e1: Effectful, e2: Effectful)(implicit C: Context): UnificationResult =
+      unifyTypes(e1.tpe, e2.tpe)
+
     /**
      * Instantiate a typescheme with fresh, rigid type variables
      *
@@ -189,14 +209,13 @@ object substitutions {
     def instantiate(tpe: BlockType)(implicit C: Context): (List[RigidVar], BlockType) = {
       val BlockType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
-      val unifier = Unifier(subst)
       val rigids = subst.values.toList
 
-      val substitutedParams = unifier.substitute(params)
+      val substitutedParams = subst.substitute(params)
 
       // here we also replace all region variables by copies to allow
       // substitution in RegionChecker.
-      val substitutedReturn = unifier.substitute(freshRegions(ret))
+      val substitutedReturn = subst.substitute(freshRegions(ret))
       (rigids, BlockType(Nil, substitutedParams, substitutedReturn))
     }
 
@@ -229,7 +248,13 @@ object substitutions {
       }
 
       def visitEffectful(e: Effectful): Effectful = e match {
-        case Effectful(tpe, effs) => Effectful(visitValueType(tpe), effs)
+        case Effectful(tpe, effs) => Effectful(visitValueType(tpe), Effects(effs.toList.map(visitEffect)))
+      }
+
+      def visitEffect(e: Effect): Effect = e match {
+        // TODO do we need to dealias here?
+        case EffectApp(eff, targs) => EffectApp(eff, targs map visitValueType)
+        case e                     => e
       }
 
       def visitBlockType(t: BlockType): BlockType = t match {

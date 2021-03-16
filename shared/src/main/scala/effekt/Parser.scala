@@ -59,6 +59,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `false` = keyword("false")
   lazy val `val` = keyword("val")
   lazy val `var` = keyword("var")
+  lazy val `for` = keyword("for")
   lazy val `if` = keyword("if")
   lazy val `else` = keyword("else")
   lazy val `while` = keyword("while")
@@ -82,12 +83,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun"
+    "match", "module", "import", "extern", "fun", "for"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
-    "catch", "in", "finally", "switch", "case", "this", "yield"
+    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield"
   )
 
   def keyword(s: String): Parser[String] =
@@ -241,9 +242,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val effectDef: P[Def] =
     ( `effect` ~> effectOp ^^ {
         case op =>
-          EffDef(IdDef(op.id.name) withPositionOf op.id, List(op))
+          EffDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op))
       }
-    | `effect` ~> idDef ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
+    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
     )
 
   lazy val effectOp: P[Operation] =
@@ -437,13 +438,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
   lazy val handler: P[Handler] =
-    ( `with` ~> idRef ~ (`{` ~> some(defClause) <~ `}`) ^^ {
-      case effectId ~ clauses =>
-        Handler(effectId, None, clauses)
+    ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+      case effect ~ clauses =>
+        Handler(effect, None, clauses)
       }
-    | `with` ~> idRef ~ implicitResume ~ blockArg ^^ {
-      case effectId ~ resume ~ BlockArg(params, body) =>
-        Handler(effectId, None, List(OpClause(IdRef(effectId.name), params, body, resume) withPositionOf effectId))
+    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
+      case effect ~ resume ~ BlockArg(params, body) =>
+        val synthesizedId = IdRef(effect.id.name)
+        Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
       }
     )
 
@@ -547,7 +549,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val effectType: P[Effect] =
-    idRef ^^ Effect | failure("Expected a single effect type")
+    (idRef ~ maybeTypeArgs) ^^ Effect | failure("Expected a single effect")
 
 
   // === AST Helpers ===

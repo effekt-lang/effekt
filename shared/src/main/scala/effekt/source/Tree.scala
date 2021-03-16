@@ -185,7 +185,7 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
-case class EffDef(id: IdDef, ops: List[Operation]) extends Def {
+case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.UserEffect
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
@@ -299,7 +299,8 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-case class Handler(id: IdRef, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+  def id = effect.id
   type symbol = symbols.UserEffect
 }
 case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
@@ -342,15 +343,26 @@ case class IgnorePattern() extends MatchPattern
 case class LiteralPattern[T](l: Literal[T]) extends MatchPattern
 
 /**
+ * Something that can be resolved by namer
+ *
+ * It does not need to be a symbol
+ */
+sealed trait Resolvable extends Tree {
+  type resolved
+  def resolve(implicit C: Context): resolved
+}
+
+/**
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
  */
-sealed trait Type extends Tree {
-  type symbol <: symbols.Type
+sealed trait Type extends Tree with Resolvable {
+  type resolved <: symbols.Type
+  def resolve(implicit C: Context) = C.resolvedType(this)
 }
 sealed trait ValueType extends Type {
-  type symbol <: symbols.ValueType
+  type resolved <: symbols.ValueType
 }
 
 /**
@@ -373,14 +385,20 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 
 // for now those are not user definable and thus refer to symbols.Effect
 case class CapabilityType(eff: symbols.Effect) extends Type {
-  type symbol = symbols.CapabilityType
+  type resolved = symbols.CapabilityType
 }
 case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
-  type symbol = symbols.BlockType
+  type resolved = symbols.BlockType
 }
 
-case class Effect(id: IdRef) extends Tree with Reference {
-  type symbol = symbols.UserEffect
+case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
+  // TODO we need to drop Effect <: Symbol and refactor this here
+  // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
+  type resolved = symbols.Effect
+  def resolve(implicit C: Context) = {
+    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
+    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
+  }
 }
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
@@ -497,8 +515,8 @@ object Tree {
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
-      case Handler(id, capability, clauses) =>
-        Handler(id, capability, clauses.map(rewrite))
+      case Handler(effect, capability, clauses) =>
+        Handler(effect, capability, clauses.map(rewrite))
     }
 
     def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {

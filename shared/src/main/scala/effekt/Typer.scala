@@ -11,6 +11,7 @@ import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, Modul
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
+import effekt.symbols.kinds._
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
@@ -139,17 +140,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             funTpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
-      case c @ source.Call(t: source.IdTarget, targs, args) =>
-        checkOverloadedCall(c, t, targs map { resolveValueType }, args, expected)
+      case c @ source.Call(t: source.IdTarget, targs, args) => {
+        checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
+      }
 
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
 
-        val tpe: BlockType = funTpe match {
+        val tpe: BlockType = funTpe.dealias match {
           case f: FunType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
-        val (t / eff) = checkCallTo(c, "function", tpe, targs map { resolveValueType }, args, expected)
+        val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, args, expected)
         t / (eff ++ funEffs)
 
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
@@ -159,13 +161,26 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val (ret / effs) = checkStmt(prog, expected)
 
-        val effects = handlers.map { c => c.definition }
+        var effects: List[symbols.Effect] = Nil
+
         var handlerEffs = Pure
 
-        handlers.foreach { h =>
-          val effect = h.definition
+        handlers foreach Context.withFocus { h =>
+          val effect: Effect = h.effect.resolve
+
+          if (effects contains effect) {
+            Context.error(s"Effect ${effect} is handled twice.")
+          } else {
+            effects = effects :+ effect
+          }
+
+          val effectSymbol: UserEffect = h.definition
+
+          val tparams = effectSymbol.tparams
+          val targs = h.effect.tparams.map(_.resolve)
+
           val covered = h.clauses.map { _.definition }
-          val notCovered = effect.ops.toSet -- covered.toSet
+          val notCovered = effectSymbol.ops.toSet -- covered.toSet
 
           if (notCovered.nonEmpty) {
             val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
@@ -176,24 +191,46 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.error(s"Duplicate definitions of effect operations")
           }
 
-          h.clauses foreach {
+          h.clauses foreach Context.withFocus {
             case d @ source.OpClause(op, params, body, resume) =>
               val effectOp = d.definition
 
-              val BlockType(_, pms, tpe / effs) = Context.blockTypeOf(effectOp)
-              val ps = checkAgainstDeclaration(op.name, pms, params)
+              // (1) Instantiate block type of effect operation
+              val (rigids, BlockType(tparams, pms, tpe / effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
 
+              // (2) unify with given type arguments for effect (i.e., A, B, ...):
+              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+              //     The parameters C, D, ... are existentials
+              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
+              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
+
+              // (3) substitute what we know so far
+              val substPms = Context.unifier substitute pms
+              val substTpe = Context.unifier substitute tpe
+              val substEffs = Context.unifier substitute effectOp.otherEffects
+
+              // (4) check parameters
+              val ps = checkAgainstDeclaration(op.name, substPms, params)
+
+              // (5) synthesize type of continuation
               val resumeType = if (effectOp.isBidirectional) {
                 // resume { e }
-                BlockType(Nil, List(List(BlockType(Nil, List(Nil), tpe / effectOp.otherEffects))), ret / Pure)
+                BlockType(Nil, List(List(BlockType(Nil, List(Nil), substTpe / substEffs))), ret / Pure)
               } else {
                 // resume(v)
-                BlockType(Nil, List(List(tpe)), ret / Pure)
+                BlockType(Nil, List(List(substTpe)), ret / Pure)
               }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
+
+                val typesInEffects = freeTypeVars(heffs)
+                existentials.foreach { t =>
+                  if (typesInEffects.contains(t)) {
+                    Context.error(s"Type variable ${t} escapes its scope as part of the effect types: $heffs")
+                  }
+                }
               }
           }
         }
@@ -357,8 +394,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.abort("User defined effects on extern defs not allowed")
       }
 
-    case d @ source.EffDef(id, ops) =>
-      d.symbol.ops.foreach { op => Context.assignType(op, op.toType) }
+    case d @ source.EffDef(id, tparams, ops) =>
+      d.symbol.ops.foreach { op =>
+        val tpe = op.toType
+        wellformed(tpe)
+        Context.assignType(op, tpe)
+      }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
@@ -366,7 +407,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.assignType(sym, sym.toType)
 
         sym.fields.foreach { field =>
-          Context.assignType(field, field.toType)
+          val tpe = field.toType
+          wellformed(tpe)
+          Context.assignType(field, tpe)
         }
       }
 
@@ -374,10 +417,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       val rec = d.symbol
       Context.assignType(rec, rec.toType)
       rec.fields.foreach { field =>
-        Context.assignType(field, field.toType)
+        val tpe = field.toType
+        wellformed(tpe)
+        Context.assignType(field, tpe)
       }
 
-    case d => ()
+    case d: source.TypeDef   => wellformed(d.symbol.tpe)
+    case d: source.EffectDef => wellformed(d.symbol.effs)
+    case _                   => ()
   }
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
@@ -401,14 +448,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             tpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
-      case d @ source.EffDef(id, ops) =>
+      case d @ source.EffDef(id, tparams, ops) =>
         Context.withEffect(d.symbol)
         TUnit / Pure
 
       case d @ source.ValDef(id, annot, binding) =>
         val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding, None)
+          case Some(t) =>
+            binding checkAgainst t
+          case None => checkStmt(binding, None)
         }
         Context.define(d.symbol, t)
         t / effBinding
@@ -434,10 +482,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-  def resolveValueType(tpe: source.ValueType)(implicit C: Context): ValueType = C.resolvedType(tpe)
-
-  def resolveBlockType(tpe: source.BlockType)(implicit C: Context): BlockType = C.resolvedType(tpe)
-
   /**
    * Invariant: Only call this on declarations that are fully annotated
    */
@@ -448,6 +492,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case ValueParam(_, Some(tpe)) => tpe
     case _ => Context.panic("Cannot extract type")
   }
+
 
   /**
    * Returns the binders that will be introduced to check the corresponding body
@@ -471,7 +516,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           Context.error(s"Wrong number of arguments, given ${ps2.size}, but ${name} expects ${ps1.size}.")
         (ps1 zip ps2).map[(Symbol, Type)] {
           case (decl, p @ source.ValueParam(id, annot)) =>
-            val annotType = annot.map(resolveValueType)
+            val annotType = annot.map(_.resolve)
             annotType.foreach { t =>
               Context.at(p) { Context.unify(decl, t) }
             }
@@ -593,7 +638,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
+    val (rigids, bt @ BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -652,7 +697,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
+      val bt @ BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
+
+      // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
+      Context.annotateBlockArgument(arg, bt)
 
       Context.define {
         checkAgainstDeclaration("block", params, arg.params)
@@ -684,9 +732,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context.annotateTypeArgs(call, inferredTypeArgs)
 
     // annotate the calltarget tree with the resolved blocktype
-    C.annotateTarget(call.target, funTpe)
+    Context.annotateTarget(call.target, Context.unifier.substitute(bt))
 
-    (Context.unifier substitute ret) / effs
+    Context.unifier.substitute(ret / effs)
   }
 
   /**
@@ -715,6 +763,20 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //</editor-fold>
 
+  private def freeTypeVars(o: Any): Set[TypeVar] = o match {
+    case t: symbols.TypeVar => Set(t)
+    case BlockType(tparams, params, ret) =>
+      freeTypeVars(params) ++ freeTypeVars(ret) -- tparams.toSet
+    case e: Effects            => freeTypeVars(e.toList)
+    case _: Symbol | _: String => Set.empty // don't follow symbols
+    case t: Iterable[t] =>
+      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+    case p: Product =>
+      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+    case _ =>
+      Set.empty
+  }
+
   private implicit class ExprOps(expr: Expr) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
       checkExpr(expr, Some(tpe))
@@ -731,15 +793,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
+      wellformed(got)
+      wellformed(effs)
       expected foreach { Context.unify(_, got) }
       C.assignType(t, got / effs)
-      got / effs
-    }
-
-  def check[T <: Tree](t: T)(f: T => Effectful)(implicit C: Context): Effectful =
-    Context.at(t) {
-      val (got / effs) = f(t)
-      Context.assignType(t, got / effs)
       got / effs
     }
 }
@@ -809,13 +866,18 @@ trait TyperOps extends ContextOps { self: Context =>
   // =====================================
   private[typer] def effects: Effects = lexicalEffects
 
-  private[typer] def withEffect(e: Effect): Context = {
+  private[typer] def withEffect(e: UserEffect): Context = {
     lexicalEffects += e
     this
   }
 
   private[typer] def wellscoped(a: Effects): Unit = {
-    val forbidden = a.userDefined -- effects
+    // here we only care for the effect itself, not its type arguments
+    val forbidden = Effects(a.userEffects.collect {
+      case e: UserEffect      => e
+      case EffectApp(e, args) => e
+      case e: EffectAlias     => e
+    }) -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")
     }
@@ -828,7 +890,13 @@ trait TyperOps extends ContextOps { self: Context =>
     this
   }
 
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.Type]): Context = {
+  // this also needs to be backtrackable to interact correctly with overload resolution
+  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Context = {
+    annotations.annotate(Annotations.BlockArgumentType, t, tpe)
+    this
+  }
+
+  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
     annotations.annotate(Annotations.TypeArguments, call, targs)
     this
   }
