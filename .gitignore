@@ -14,3 +14,5 @@ bin/
 notes/
 artwork/
 sbt-microsite-docs
+.vscode/
+.metals/
