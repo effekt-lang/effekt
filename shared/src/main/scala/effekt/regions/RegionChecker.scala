@@ -120,6 +120,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val bodyRegion = check(body)
       bodyRegion -- boundRegions
 
+    // TODO What about capabilities introduced by resume????
     case TryHandle(body, handlers) =>
 
       // regions for all the capabilities
