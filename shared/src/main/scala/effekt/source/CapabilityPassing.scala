@@ -26,7 +26,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val sym = f.symbol
       val effs = sym.effects.userEffects
 
-      C.withCapabilities(effs) { caps =>
+      C.withCapabilities(f, effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
       }
   }
@@ -52,7 +52,10 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
 
       val capabilityArgs = others.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      C.annotate(Annotations.CapabilityArguments, c, capabilityArgs)
+
       val receiver = C.capabilityReferenceFor(self)
+      C.annotate(Annotations.CapabilityReceiver, c, receiver)
 
       val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
       C.annotateCalltarget(target, tpe)
@@ -83,6 +86,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      C.annotate(Annotations.CapabilityArguments, c, capabilityArgs)
 
       Call(fun, targs, transformedArgs ++ capabilityArgs)
 
@@ -96,6 +100,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
       val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      C.annotate(Annotations.CapabilityArguments, c, capabilityArgs)
 
       Call(ExprTarget(transformedExpr), targs, transformedArgs ++ capabilityArgs)
 
@@ -103,16 +108,17 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       val sym = f.symbol
       val effs = sym.effects.userEffects
 
-      C.withCapabilities(effs) { caps =>
+      C.withCapabilities(f, effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
       }
 
-    case TryHandle(prog, handlers) =>
+    case h @ TryHandle(prog, handlers) =>
 
       // here we need to use the effects on the handlers!
       val effects = handlers.map(_.effect.resolve)
 
-      val (caps, body) = C.withCapabilities(effects) { caps =>
+      // TODO annotate each handler with capabilities separately
+      val (caps, body) = C.withCapabilities(h, effects) { caps =>
         (caps, rewrite(prog))
       }
       val hs = (handlers zip caps).map {
@@ -142,7 +148,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
         case (b @ BlockArg(ps, body), List(p: BlockType)) =>
           // here we use the blocktype as inferred by typer (after substitution)
           val effs = C.blockTypeOf(b).ret.effects.userEffects
-          C.withCapabilities(effs) { caps =>
+          C.withCapabilities(b, effs) { caps =>
             BlockArg(ps ++ caps, rewrite(body))
           }
       }
@@ -177,9 +183,9 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
 
   /**
    * runs the given block, binding the provided capabilities, so that
-   * "resolveCapability" will find them.
+   * "capabilityReferenceFor" will find them.
    */
-  private[source] def withCapabilities[R](effs: List[Effect])(block: List[source.CapabilityParam] => R): R = Context in {
+  private[source] def withCapabilities[R](tree: source.Tree, effs: List[Effect])(block: List[source.CapabilityParam] => R): R = Context in {
 
     // create a fresh cabability-symbol for each bound effect
     val caps = effs.map { eff =>
@@ -190,10 +196,16 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
     }
     // additional block parameters for capabilities
     val params = caps.map { sym =>
-      val id = IdDef(sym.name.localName)
+      // TODO this is just an approximate position for now...
+      val pos = tree
+      val id = IdDef(sym.name.localName).inheritPosition(pos)
       assignSymbol(id, sym)
-      source.CapabilityParam(id, source.CapabilityType(sym.effect))
+      val tpe = source.CapabilityType(sym.effect).inheritPosition(pos)
+      source.CapabilityParam(id, tpe).inheritPosition(pos)
     }
+
+    annotate(Annotations.CapabilityBinder, tree, params)
+
     // update state with capabilities
     capabilities = capabilities ++ caps.map { c => (c.effect -> c) }.toMap
 
@@ -201,13 +213,13 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
     block(params)
   }
 
-  private[source] def capabilityReferenceFor(e: Effect): IdRef =
-    capabilities.get(e).map { c =>
+  private[source] def capabilityReferenceFor(eff: Effect): IdRef =
+    capabilities.get(eff).map { c =>
       val id = IdRef(c.name.localName)
       assignSymbol(id, c)
       //Var(id)
       id
     } getOrElse {
-      Context.panic(s"Compiler error: cannot find capability for ${e}")
+      Context.panic(s"Compiler error: cannot find capability for ${eff}")
     }
 }
