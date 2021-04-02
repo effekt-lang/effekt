@@ -340,6 +340,7 @@ trait LSPServer extends Driver with Intelligence {
         text <- positions.textOf(exp)
       } yield TreeAction("Close hole", pos.source.name, hole, text)
 
+      // <{ s1 ; s2; ... }>
       case Hole(stmts) => for {
         text <- positions.textOf(stmts)
       } yield TreeAction("Close hole", pos.source.name, hole, s"locally { ${text} }")

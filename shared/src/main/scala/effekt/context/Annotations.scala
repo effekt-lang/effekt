@@ -74,6 +74,24 @@ object Annotations {
   )
 
   /**
+   * Tree can be either a handler, a function definition, or an anonymous block argument
+   */
+  val CapabilityBinder = Annotation[source.Tree, List[source.CapabilityParam]](
+    "CapabilityBinder",
+    "the inferred capabilities bound by"
+  )
+
+  val CapabilityArguments = Annotation[source.Call, List[source.CapabilityArg]](
+    "CapabilityArguments",
+    "the inferred capabilities passed to"
+  )
+
+  val CapabilityReceiver = Annotation[source.Call, source.IdRef](
+    "CapabilityReceiver",
+    "the capability, which is implicitly called at"
+  )
+
+  /**
    * Type arguments of a _function call_ as inferred by typer
    */
   val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
