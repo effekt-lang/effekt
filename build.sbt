@@ -201,3 +201,6 @@ ${virtuals.mkString("\n\n")}
 
   Seq(sourceFile)
 }
+
+
+libraryDependencies += "net.liftweb" %% "lift-json" % "3.4.3"

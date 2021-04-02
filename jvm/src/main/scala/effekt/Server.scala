@@ -17,6 +17,8 @@ import scala.concurrent.Future
 import effekt.context.Annotations
 import org.eclipse.lsp4j.MessageType
 import scala.reflect.ClassTag
+import netscape.javascript.JSObject
+import com.google.gson.JsonObject
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -137,19 +139,35 @@ trait LSPServer extends Driver with Intelligence {
   }
 
   def getSource(uri: String) = {
+    // println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>")
+    // println("URI: " + uri)
+    // println("Keys: " + sources.keys.mkString(","))
+
+    // sources.keys.foreach((k) => println)
+    // sources.keys.foreach((x) => println("FOOO " + sources.get(x)))
     val src = sources.get(uri);
+    // println("Source: " + src.map(_.name))
+    // println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+    // src.get
+
     src match {
       case None         => new StringSource("")
       case Some(source) => source
     }
   }
 
-  case class TypeAnnotation(line: Int, column: Int, effects: List[Effect])
+  class TypeAnnotation(val line: Int, val column: Int, val effects: Array[Effect]) {
+    override def equals(obj: Any): Boolean = obj match {
+      case a: TypeAnnotation => {
+        a.line == this.line && a.column == this.column && a.effects.sameElements(this.effects)
+      }
+    }
+  }
 
   def getTypeAnnotations(uri: String): CompletableFuture[Array[TypeAnnotation]] = {
-
     var funs = getFunDefs(getSource(uri)).toList
-    var annotations: List[TypeAnnotation] = List();
+    var annotations: scala.collection.immutable.Set[TypeAnnotation] = Set();
+    //var annotations: List[TypeAnnotation] = List();
     funs.foreach((fun) => {
       var pos = context.positions.getStart(fun.decl)
       var ret = fun.ret
@@ -157,18 +175,14 @@ trait LSPServer extends Driver with Intelligence {
         case Some(posval) => ret match {
           case Some(retval) => {
             logMessage("Appending annotation at " + posval.line + ":" + posval.column + " -> " + retval.toString())
-            annotations = (new TypeAnnotation(posval.line, posval.column, retval.effects.toList)) :: annotations
+            annotations = annotations + (new TypeAnnotation(posval.line, posval.column, retval.effects.toList.toArray)) // :: annotations
           }
           case None => logMessage("ret was None")
         }
-        case None => logMessage("pos was None")
+        case None => logMessage("pos was None for " + ret.get.toString())
       }
     })
     return CompletableFuture.completedFuture { annotations.toArray }
-    // start <- context.positions.getStart(fun)
-    // end <- context.positions.getFinish(fun)
-    // ret <- fun.ret
-    // annotation = TypeAnnotation(start, ret)
   }
 
   override def executeCommand(executeCommandParams: ExecuteCommandParams): Any =
@@ -183,6 +197,23 @@ trait LSPServer extends Driver with Intelligence {
         //return CompletableFuture.supplyAsync( () -> "Finished");
         // ( () -> executeCommandParams.getArguments().forEach((x) => println(x.toString())) )
       }
+      case "getHover" => {
+        val args = executeCommandParams.getArguments()
+        var obj = args.get(0)
+        var pos = obj.asInstanceOf[JsonObject]
+        var line = pos.get("line").getAsInt()
+        var char = pos.get("character").getAsInt
+        println("Getting source " + args.get(1).toString())
+        var src = getSource(args.get(1).toString().filter(!"\"".contains(_)))
+
+        //println(positionOfNotification(src, pos))
+        var res = getSymbolHover(new Position(line + 1, char, src))
+        println("Line:", line, "Char:", char)
+        println(res)
+        return CompletableFuture.completedFuture {
+          res
+        }
+      }
       case "testfun" => {
         return CompletableFuture.completedFuture {
           "Hello, you called me?"
@@ -191,11 +222,12 @@ trait LSPServer extends Driver with Intelligence {
       case "getTypeAnnotations" => {
         val args = executeCommandParams.getArguments()
         if (args.size() == 1) {
-          logMessage("Getting type annotations for source file: " + getSource(args.get(0).toString()).name)
+          logMessage("Getting type annotations for source file: " + args.get(0).toString())
+          logMessage("Used sources content: " + getSource(args.get(0).toString()).content)
           val funs = getFunDefs(getSource(args.get(0).toString())).toList
-          for {
-            fun <- funs
-          } yield logMessage("Function: " + fun.name.localName)
+          // for {
+          //   fun <- funs
+          // } yield logMessage("Function: " + fun.name.localName)
           logMessage("Found " + funs.size + " functions")
 
           val annotations = getTypeAnnotations(args.get(0).toString())
@@ -221,6 +253,10 @@ trait LSPServer extends Driver with Intelligence {
   //   val funDefs = getFunDefs(getSource(uri))
   // }
 
+  override def getCommandNames(): Option[Vector[String]] = Some(
+    Vector("println")
+  )
+
   override def getCodeLenses(uri: String): Option[Vector[TreeLens]] = lens(getSymbols(getSource(uri)))(context)
 
   def lens(documentsymbols: Option[Vector[DocumentSymbol]])(implicit C: Context): Option[Vector[TreeLens]] = documentsymbols match {
@@ -237,13 +273,12 @@ trait LSPServer extends Driver with Intelligence {
     case SymbolKind.Method => {
       val args = new ArrayList[Object]();
       args.add(symbol.getName())
-      showMessage(MessageType.Info, symbol.getName())
+      //showMessage(MessageType.Info, symbol.getName())
       args.add(symbol.getRange())
       this.registerCapability("Infer or remove return type and effects", "println", args)
-
       Some(new TreeLens(
         "Fix or unfix function by adding or removing inferred return type and effects.",
-        new Command("Infer / remove ret-type & effects", "println", args),
+        new Command(symbol.getDetail() + " - Infer / remove ret-type & effects", "println", args),
         //      new Command("Fix/unfix return type and effects", "testCommand"),
         symbol.getRange()
       ))
