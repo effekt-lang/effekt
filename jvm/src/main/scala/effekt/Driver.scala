@@ -4,7 +4,7 @@ package effekt
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
 import effekt.source.{ ModuleDecl, Tree }
-import effekt.symbols.Module
+import effekt.symbols.SourceModule
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
 import org.bitbucket.inkytonik.kiama
@@ -82,14 +82,14 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     report(source, C.buffer.get, config)
   }
 
-  def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def eval(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
     }
   }
 
-  def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalJS(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val jsFile = C.codeGenerator.path(mod)
@@ -102,7 +102,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     }
   }
 
-  def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalCS(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
       val csFile = C.codeGenerator.path(mod)

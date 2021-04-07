@@ -3,7 +3,7 @@ package effekt.symbols
 import effekt.source.Id
 import effekt.context.Context
 
-trait Name {
+sealed trait Name {
   /**
    * The local part of the name relative to its potential parent.
    *
@@ -41,9 +41,21 @@ trait Name {
    * @param name the local name of the nested name.
    * @return A [[NestedName]] with this Name as parent.
    */
-  def nested(name: String) = NestedName(this, name)
+  def nested(name: String) = this match {
+    case EmptyName => Name(name)
+    case _         => NestedName(this, name)
+  }
 
   override def toString = localName
+}
+
+case object EmptyName extends Name {
+  def parentOption: Option[Name] = None
+
+  val localName: String = ""
+  def qualifiedName: String = ""
+
+  def rename(f: String => String): Name = this
 }
 
 /**
@@ -109,7 +121,8 @@ object Name {
    * @example `Name("foo.bar.baz") == NestedName(NestedName(ToplevelName("foo"), "bar"), "baz")`
    */
   def apply(name: String): Name = {
-    assert(name.nonEmpty, "Name cannot be empty.")
+    if (name.isEmpty)
+      return EmptyName
 
     val segments = name.split('.')
     val top: Name = ToplevelName(segments.head)

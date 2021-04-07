@@ -1,0 +1,20 @@
+// ModuleDecl
+module example
+import text/string
+
+// ModuleFrag
+module hello {
+    def foo() = {
+        println("Hello Modules")
+    }
+    
+    def bar(x: Int) = {
+        println("Beer".repeat(x))
+        println("Bed".repeat(x))
+    }
+}
+
+def main() = {
+    hello:foo()
+    hello:bar(3)
+}

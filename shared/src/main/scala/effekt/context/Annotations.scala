@@ -100,7 +100,7 @@ object Annotations {
   /**
    * The module a given symbol is defined in
    */
-  val SourceModule = Annotation[symbols.Symbol, symbols.Module](
+  val SourceModule = Annotation[symbols.Symbol, symbols.SourceModule](
     "SourceModule",
     "the source module of symbol"
   )
@@ -369,7 +369,7 @@ trait AnnotationsDB { self: Context =>
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)
 
-  def sourceModuleOf(sym: Symbol): Module =
+  def sourceModuleOf(sym: Symbol): symbols.SourceModule =
     annotation(Annotations.SourceModule, sym)
 
   /**

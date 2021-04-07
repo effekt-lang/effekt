@@ -14,6 +14,7 @@ import effekt.symbols.builtins._
 import effekt.symbols.kinds._
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
+import effekt.source.IdTarget
 
 /**
  * Output: the types we inferred for function like things are written into "types"
@@ -143,6 +144,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case c @ source.Call(t: source.IdTarget, targs, args) => {
         checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
       }
+
+      case c @ source.Call(source.ModTarget(name, id), targs, args) =>
+        // TODO: might fail?
+        checkOverloadedCall(c, IdTarget(id), targs map { _.resolve }, args, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
@@ -429,6 +434,23 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
+      case d @ source.ModuleFrag(id, defs) => {
+        Context in {
+          defs.foreach { d => precheckDef(d) }
+          defs.foreach { d =>
+
+            val (_ / effs) = synthDef(d)
+
+            if (effs.nonEmpty)
+              Context.at(d) {
+                Context.error("Unhandled effects: " + effs)
+              }
+          }
+        }
+
+        TUnit / Pure
+      }
+
       case d @ source.FunDef(id, tparams, params, ret, body) =>
         val sym = d.symbol
         Context.define(sym.params)
@@ -492,7 +514,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case ValueParam(_, Some(tpe)) => tpe
     case _ => Context.panic("Cannot extract type")
   }
-
 
   /**
    * Returns the binders that will be introduced to check the corresponding body

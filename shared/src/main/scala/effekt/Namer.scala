@@ -69,6 +69,20 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       decls foreach { resolve }
       resolveAll(decls)
 
+    case source.ModuleFrag(id, defs) =>
+      // Load empty module
+      // If this step failed, than the id of the module was not processes
+      val mod = C.module.submodule(Name(id.name)).get
+
+      // Create scope to collect everythin inside the module
+      Context.scoped {
+        // Resolve every def
+        defs.foreach(d => { resolve(d) })
+        resolveAll(defs)
+
+        Context.save(mod)
+      }
+
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
       resolve(d)
@@ -301,6 +315,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
+    case source.ModTarget(name, id) => {
+      val mod = C.module.submodule(Name(name)).getOrElse { C.abort(s"Failed to resolve call target ${name}: module not found") }
+      C.scoped {
+        C.load(mod)
+        C.resolveCalltarget(id)
+      }
+    }
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
       Context.resolveCalltarget(id)
@@ -400,6 +421,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tpe = resolve(ret)
         BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
       })
+    }
+
+    case source.ModuleFrag(id, _) => {
+      // Creates an empty module with the given name
+      Context.module.bind(id.name)
     }
 
     case d @ source.ExternInclude(path) =>
@@ -553,6 +579,18 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def define(id: Id, s: TypeSymbol): Unit = {
     assignSymbol(id, s)
     scope.define(id.name, s)
+  }
+
+  // Exports current scope into module
+  private[namer] def save(mod: UserModule): Unit = {
+    // Store results in mod sysmbol
+    mod._trms = scope.terms.toMap
+    mod._typs = scope.types.toMap
+  }
+
+  // Imports module into current scope
+  private[namer] def load(mod: UserModule): Unit = {
+    scope.defineAll(mod.terms, mod.types)
   }
 
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)

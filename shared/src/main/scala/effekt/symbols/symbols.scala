@@ -5,6 +5,7 @@ import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.substitutions._
+import effekt.source.ModuleFrag
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -29,35 +30,77 @@ package object symbols {
     override def synthetic = true
   }
 
-  /**
-   * The result of running the frontend on a module.
-   * Symbols and types are stored globally in CompilerContext.
-   */
-  case class Module(
-    decl: ModuleDecl,
-    source: Source
-  ) extends Symbol {
-    val name = Name.module(decl.path)
+  // extends TermSymbol?
+  sealed trait Module extends Symbol {
+    type TypeMap = Map[String, TypeSymbol]
+    type TermMap = Map[String, Set[TermSymbol]]
+    type SubMods = Map[String, UserModule]
 
-    def path = decl.path
+    def types: TypeMap
+    def terms: TermMap
 
-    private var _terms: Map[String, Set[TermSymbol]] = _
-    def terms = _terms
+    def submodule(name: Name): Option[UserModule]
 
-    private var _types: Map[String, TypeSymbol] = _
-    def types = _types
-
-    private var _imports: List[Module] = _
-    def imports = _imports
-
-    // a topological ordering of all transitive dependencies
-    // this is the order in which the modules need to be compiled / loaded
-    lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
-
-    // toplevel declared effects
+    // declared effects
     def effects: Effects = Effects(types.values.collect {
       case e: Effect => e
     })
+  }
+
+  // A user-defined module.
+  class UserModule(val parent: Module, local: String) extends Module with TermSymbol {
+    override val name = parent match {
+      case SourceModule(_, _) => Name(local)
+      case _                  => parent.name.nested(local)
+    }
+
+    var _typs: TypeMap = Map.empty
+    var _trms: TermMap = Map.empty
+    var _mods: SubMods = Map.empty
+
+    def types: TypeMap = _typs
+    def terms: TermMap = _trms
+
+    def submodule(name: Name): Option[UserModule] = name match {
+      case EmptyName               => Some(this)
+      case ToplevelName(localName) => _mods.get(localName)
+      case NestedName(parent, localName) => submodule(parent) match {
+        case None     => None
+        case Some(pm) => pm._mods.get(localName)
+      }
+    }
+  }
+
+  // Root module
+  case class SourceModule(decl: ModuleDecl, source: Source) extends Module {
+    def path = decl.path
+    val name = Name.module(path)
+
+    var _typs: TypeMap = Map.empty
+    var _trms: TermMap = Map.empty
+
+    var _imps: List[SourceModule] = List.empty
+    var _exps: List[SourceModule] = List.empty
+
+    var _mods: Map[Name, UserModule] = Map.empty
+
+    def types: TypeMap = _typs
+    def terms: TermMap = _trms
+    def imports: List[SourceModule] = _imps
+    def exports: List[SourceModule] = _exps
+
+    def submodule(name: Name): Option[UserModule] = _mods.get(name)
+    def bind(name: String): UserModule = {
+      val m = new UserModule(this, name)
+      _mods = _mods + (m.name -> m)
+      return m
+    }
+
+    // a topological ordering of all transitive dependencies
+    // this is the order in which the modules need to be compiled / loaded
+    //lazy val _deps: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
+    //def dependencies: List[Module] = _deps
+    lazy val dependencies: List[SourceModule] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
     // the transformed ast after frontend
     private var _ast = decl
@@ -77,13 +120,13 @@ package object symbols {
      * again. It is the same, since the source and AST did not change.
      */
     def export(
-      imports: List[Module],
-      terms: Map[String, Set[TermSymbol]],
-      types: Map[String, TypeSymbol]
+      imports: List[SourceModule],
+      terms: TermMap,
+      types: TypeMap
     ): this.type = {
-      _imports = imports
-      _terms = terms
-      _types = types
+      _imps = imports
+      _trms = terms
+      _typs = types
       this
     }
   }

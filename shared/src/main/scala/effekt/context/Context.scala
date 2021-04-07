@@ -7,7 +7,7 @@ import effekt.core.TransformerOps
 import effekt.regions.{ RegionCheckerOps, RegionReporter }
 import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
-import effekt.symbols.Module
+import effekt.symbols.SourceModule
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Positions
 
@@ -51,7 +51,7 @@ abstract class Context(val positions: Positions)
   implicit val context: Context = this
 
   // the currently processed module
-  var module: Module = _
+  var module: SourceModule = _
 
   // the currently processed node
   var focus: Tree = _
@@ -69,7 +69,7 @@ abstract class Context(val positions: Positions)
     _config = cfg
   }
 
-  def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
+  def using[T](module: SourceModule = module, focus: Tree = focus)(block: => T): T = this in {
     this.module = module
     this.focus = focus
     block

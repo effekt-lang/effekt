@@ -36,7 +36,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val nameFirst = """[a-zA-Z$_]""".r
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
-  lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
+
+  lazy val modulePath = "%s([/]%s)*\\b".format(name, name).r
+  lazy val moduleName = "%s([.]%s)*\\b".format(name, name).r
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
@@ -202,12 +204,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val moduleDecl: P[String] =
-    ( `module` ~/> moduleName
+    ( `module` ~/> modulePath
     | defaultModulePath
     )
 
   lazy val importDecl: P[Import] =
-    `import` ~/> moduleName ^^ Import
+    `import` ~/> modulePath ^^ Import
 
 
   /**
@@ -219,7 +221,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDef
+    ( moduleDef
+    | valDef
     | funDef
     | effectDef
     | typeDef
@@ -232,6 +235,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | externInclude
     | failure("Expected a definition")
     )
+
+  lazy val moduleDef: P[Def] =
+    `module` ~/> idDef ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleFrag
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
@@ -420,7 +426,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( idRef ^^ IdTarget
+    ( moduleName ~ (`:` ~/> idRef) ^^ ModTarget
+    | idRef ^^ IdTarget
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )
 

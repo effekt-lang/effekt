@@ -6,16 +6,16 @@ import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 
-class Transformer extends Phase[Module, core.ModuleDecl] {
+class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
   val phaseName = "transformer"
 
-  def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
+  def run(mod: SourceModule)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
     Some(transform(mod))
   }
 
-  def transform(mod: Module)(implicit C: Context): ModuleDecl = {
+  def transform(mod: SourceModule)(implicit C: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.ast
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
@@ -36,6 +36,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+    case source.ModuleFrag(name, defs) =>
+      defs.foldRight(rest) { (d, r) =>
+        transform(d, r)
+      }
+
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val ps = transformParams(params)
@@ -151,6 +156,33 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val e = transform(expr)
       val as = args.flatMap(transform)
       C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
+
+    case c @ source.Call(source.ModTarget(name, id), _, args) =>
+      // assumption: typer removed all ambiguous references, so there is exactly one
+      val sym: Symbol = C.symbolOf(id)
+
+      val as = args.flatMap(transform)
+
+      // the type arguments, inferred by typer
+      val targs = C.typeArguments(c)
+
+      // right now only builtin functions are pure of control effects
+      // later we can have effect inference to learn which ones are pure.
+      sym match {
+        case f: BuiltinFunction if f.pure =>
+          PureApp(BlockVar(f), targs, as)
+        case r: Record =>
+          PureApp(BlockVar(r), targs, as)
+        case f: EffectOp =>
+          C.panic("Should have been translated to a method call!")
+        case f: Field =>
+          val List(arg: Expr) = as
+          Select(arg, f)
+        case f: BlockSymbol =>
+          C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
+        case f: ValueSymbol =>
+          C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(ValueVar(f)), targs, as))
+      }
 
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer

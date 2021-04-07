@@ -153,6 +153,11 @@ case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) exte
 case class Import(path: String) extends Tree
 
 /**
+ * Group of defenitions
+ */
+case class ModuleFrag(id: IdDef, defs: List[Def]) extends Def
+
+/**
  * Parameters and arguments
  */
 sealed trait ParamSection extends Tree
@@ -279,6 +284,11 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   // can refer to either a block OR a term symbol
   type symbol = symbols.TermSymbol
 }
+
+case class ModTarget(name: String, id: IdRef) extends CallTarget with Reference {
+  type symbol = symbols.TermSymbol
+}
+
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.EffectOp
 }
@@ -470,6 +480,9 @@ object Tree {
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
+
+      case ModuleFrag(id, defs) =>
+        ModuleFrag(id, defs.map(rewrite))
 
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))
