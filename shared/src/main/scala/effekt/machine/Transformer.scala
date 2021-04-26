@@ -5,7 +5,7 @@ import scala.collection.mutable
 
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
-import effekt.symbols.{ Symbol, UserEffect, ValueSymbol, BlockSymbol, BlockType, BlockParam, CapabilityParam, Name, Module, builtins, / }
+import effekt.symbols.{ Symbol, UserEffect, ValueSymbol, BlockSymbol, BlockType, BuiltinFunction, BlockParam, CapabilityParam, ResumeParam, Name, Module, builtins, / }
 
 case class FreshValueSymbol(baseName: String, module: Module) extends ValueSymbol {
   val name = Name(baseName, module)
@@ -24,9 +24,8 @@ class Transformer {
 
   def transformDecls(stmt: core.Stmt)(implicit C: TransformerContext): List[Decl] = {
     stmt match {
-      case core.Def(blockName, _, core.Extern(params, body), rest) =>
-        // TODO consider using the annotated block type to get the return type
-        DefPrim(transform(returnTypeOf(blockName)), blockName, params.map(transform), body) :: transformDecls(rest)
+      case core.Def(blockName, blockType: BlockType, core.Extern(params, body), rest) =>
+        DefPrim(transform(blockType.ret.tpe), blockName, params.map(transform), body) :: transformDecls(rest)
       case core.Include(content, rest) =>
         Include(content) :: transformDecls(rest)
       case core.Record(_, _, rest) =>
@@ -74,9 +73,8 @@ class Transformer {
   def transform(stmt: core.Stmt)(implicit C: TransformerContext): Stmt = {
     stmt match {
       case core.Val(name, tpe, bind, rest) =>
-        // TODO use the annotated type insteas of looking it up
         PushFrame(
-          List(transform(C.valueTypeOf(name))),
+          List(transform(tpe)),
           BlockLit(List(transform(core.ValueParam(name, tpe))), transform(rest)),
           List(),
           transform(bind)
@@ -88,6 +86,7 @@ class Transformer {
       case core.App(core.ScopeApp(core.BlockVar(name), scope), List(), args) =>
         // TODO deal with BlockLit
         if (C.blockParamsSet.contains(name)) {
+          // TODO get block type from elsewhere
           PushStack(Var(transform(C.blockTypeOf(name)), name), Ret(transform(scope) :: args.map(transform)))
         } else {
           Jump(BlockVar(name), transform(scope) :: args.map(transform))
@@ -95,7 +94,7 @@ class Transformer {
       case core.App(core.Member(core.ScopeApp(core.BlockVar(name: CapabilityParam), scope), _), null, args) => {
         // TODO fix this null upstream
         // TODO merge this with other application case
-        PushStack(Var(transform(capabilityTypeOf(name)), name), Ret(transform(scope) :: args.map(transform)))
+        PushStack(Var(transform(name.tpe), name), Ret(transform(scope) :: args.map(transform)))
       }
       // TODO add case for resume
       case core.If(cond, thenStmt, elseStmt) => {
@@ -107,7 +106,12 @@ class Transformer {
       }
       case core.Handle(body, handlers) => {
 
-        val answerType = transform(answerTypeOf(handlers));
+        val answerType = handlers match {
+          case handler :: _ => transform(answerTypeOf(handler))
+          case _ =>
+            println(handlers)
+            C.abort("unsupported handlers " + handlers)
+        }
         val paramName = FreshValueSymbol("a", C.module);
         val delimiter = NewStack(
           Stack(List(answerType)),
@@ -138,9 +142,10 @@ class Transformer {
       case core.UnitLit() =>
         UnitLit()
       case core.ValueVar(name: ValueSymbol) =>
+        // TODO get value type from elsewhere
         Var(transform(C.valueTypeOf(name)), name)
-      case core.PureApp(core.BlockVar(blockName: BlockSymbol), List(), args) =>
-        AppPrim(transform(returnTypeOf(blockName)), blockName, args.map(transform))
+      case core.PureApp(core.BlockVar(blockName: BuiltinFunction), List(), args) =>
+        AppPrim(transform(blockName.ret.get.tpe), blockName, args.map(transform))
       case _ =>
         println(expr)
         C.abort("unsupported expression " + expr)
@@ -166,7 +171,7 @@ class Transformer {
       case expr: core.Expr =>
         transform(expr)
       case core.BlockVar(name: CapabilityParam) =>
-        Var(transform(capabilityTypeOf(name)), name)
+        Var(transform(name.tpe), name)
       case core.Lifted(scope, block) =>
         val blockArg = transform(block: core.Argument);
         val paramTypes = blockArg match {
@@ -206,10 +211,11 @@ class Transformer {
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
 
-        val resumeName = resume.id.asInstanceOf[BlockSymbol]
+        val resumeName = resume.id.asInstanceOf[ResumeParam]
 
-        val resultType = transform(returnTypeOf(operationName));
-        val answerType = transform(returnTypeOf(resumeName));
+        val resultType = transform(operationName.annotatedReturn.tpe);
+        // TODO find a better way to get the answer type
+        val answerType = transform(answerTypeOf(handler));
 
         val continuationName = FreshBlockSymbol("k", C.module);
         val resumptionParamName = FreshValueSymbol("r", C.module);
@@ -281,15 +287,10 @@ class Transformer {
 
   def transform(param: core.Param)(implicit C: TransformerContext): Param = {
     param match {
-      case core.ValueParam(name, _) =>
-        // TODO use the annotated type
-        Param(transform(C.valueTypeOf(name)), name)
-      case core.BlockParam(name: BlockParam, _) =>
-        // TODO use the annotated type
-        Param(transform(C.blockTypeOf(name)), name)
-      case core.BlockParam(name: CapabilityParam, _) =>
-        // TODO use the annotated type
-        Param(transform(capabilityTypeOf(name)), name)
+      case core.ValueParam(name, tpe) =>
+        Param(transform(tpe), name)
+      case core.BlockParam(name, tpe) =>
+        Param(transform(tpe), name)
       case _ =>
         println(param)
         C.abort("unsupported parameter " + param)
@@ -319,8 +320,10 @@ class Transformer {
         PrimBoolean()
       case symbols.BlockType(_, sections, ret / _) =>
         // TODO do we only use this function on parameter types?
-        // TODO capability types with multiple operations?
         Stack(evidenceType() :: sections.flatten.map(transform(_)))
+      case symbols.CapabilityType(UserEffect(_, _, List(op))) =>
+        // TODO capability types with multiple operations?
+        Stack(evidenceType() :: symbols.paramsToTypes(op.params).flatten.map(transform(_)))
       case _: symbols.TypeVar =>
         // TODO this is very wrong, but polymorphism isn't supported!
         PrimUnit()
@@ -332,35 +335,17 @@ class Transformer {
 
   def evidenceType(): Type = Evidence()
 
-  def returnTypeOf(blockName: Symbol)(implicit C: TransformerContext): symbols.Type =
-    C.blockTypeOf(blockName) match {
-      case symbols.BlockType(_, _, symbols.Effectful(returnType, _)) => returnType
-    }
-
-  def answerTypeOf(handlers: List[core.Handler])(implicit C: TransformerContext): symbols.Type =
-    handlers match {
-      case core.Handler(_, List((_, core.BlockLit(params, _)))) :: _ =>
+  def answerTypeOf(handler: core.Handler)(implicit C: TransformerContext): symbols.Type =
+    handler match {
+      case core.Handler(_, List((_, core.BlockLit(params, _)))) =>
         // TODO we assume here that resume is the last param
-        returnTypeOf(params.last.id)
+        C.blockTypeOf(params.last.id) match {
+          case symbols.BlockType(_, _, symbols.Effectful(returnType, _)) => returnType
+        }
       case _ =>
-        println(handlers)
-        C.abort("can't find answer type of " + handlers)
+        println(handler)
+        C.abort("can't find answer type of " + handler)
     }
-
-  def capabilityTypeOf(name: CapabilityParam)(implicit C: TransformerContext): symbols.Type = {
-    name.effect match {
-      case e: UserEffect => e.ops match {
-        case List(op) =>
-          C.blockTypeOf(op)
-        case _ =>
-          println(e.ops)
-          C.abort("unsupported operations type " + e.ops)
-      }
-      case _ =>
-        println(name.effect)
-        C.abort("unsupported operations type " + name.effect)
-    }
-  }
 
   /**
    * Extra info in context
