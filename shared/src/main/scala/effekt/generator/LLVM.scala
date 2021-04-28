@@ -63,12 +63,12 @@ class LLVM extends Generator {
     _ = C.config.output().emit(optCommand.!!)
 
     objectFile = objectPath(mod)
-    llcCommand = Process(Seq("llc-11", optFile, "-filetype=obj", "-o", objectFile))
+    llcCommand = Process(Seq("llc-11", "--relocation-model=pic", optFile, "-filetype=obj", "-o", objectFile))
     _ = C.config.output().emit(llcCommand.!!)
 
     mainFile = (C.config.libPath / "main.c").unixPath
     executableFile = path(mod)
-    gccCommand = Process(Seq("gcc", "-no-pie", mainFile, "-o", executableFile, objectFile))
+    gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objectFile))
     _ = C.config.output().emit(gccCommand.!!)
 
   } yield result
