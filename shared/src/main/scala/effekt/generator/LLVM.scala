@@ -114,10 +114,10 @@ object LLVMPrinter extends ParenPrettyPrinter {
       define(globalName(functionName), params.map(toDoc),
         loadEnv("%spp", "@boxessp", env) <@>
           emptyStk <+> "=" <+>
-          "call fastcc %Stk" <+> globalBuiltin("popStack") <>
+          "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
           argumentList(List("%Sp* %spp")) <@>
           "call fastcc void" <+> globalBuiltin("eraseStack") <>
-          argumentList(List("%Stk" <+> emptyStk)) <@>
+          argumentList(List("%Stk*" <+> emptyStk)) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
     case DefFun(returnType, functionName, parameters, body) =>
@@ -156,35 +156,31 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
-      val oldstk = freshLocalName("tmpstk");
-      val tmpstkp = freshLocalName("tmpstkp");
+      val tmpstkp = localName(stackName);
       val spp = freshLocalName("tmpspp");
       val basep = freshLocalName("tmpbasep");
       val limitp = freshLocalName("tmplimitp");
       val boxesspp = freshLocalName("tmpboxesspp");
       val boxesbasep = freshLocalName("tmpboxesbasep");
       val boxeslimitp = freshLocalName("tmpboxeslimitp");
-      oldstk <+> "=" <+> "call fastcc %Stk" <+> globalBuiltin("newStack") <> argumentList(List()) <@>
-        tmpstkp <+> "=" <+> "alloca %Stk" <@>
-        "store %Stk" <+> oldstk <> comma <+> "%Stk*" <+> tmpstkp <@>
+      tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> globalBuiltin("newStack") <> argumentList(List()) <@>
         spp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 0" <@>
         basep <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 1" <@>
         limitp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 2" <@>
         boxesspp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 3" <@>
         boxesbasep <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 4" <@>
         boxeslimitp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 5" <@>
-        storeFrm(spp, basep, limitp, boxesspp, boxesbasep, boxeslimitp, args, globalName(blockName), cntType) <@>
-        localName(stackName) <+> "=" <+> "load %Stk," <+> "%Stk*" <+> tmpstkp
+        storeFrm(spp, basep, limitp, boxesspp, boxesbasep, boxeslimitp, args, globalName(blockName), cntType)
     case PushStack(stack) =>
       "call fastcc void" <+> globalBuiltin("pushStack") <>
         argumentList(List("%Sp* %spp", toDocWithType(stack)))
     case PopStack(stackName) =>
       localName(stackName) <+> "=" <+>
-        "call fastcc %Stk" <+> globalBuiltin("popStack") <>
+        "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
         argumentList(List("%Sp* %spp"))
     case CopyStack(stackName, stack) =>
       localName(stackName) <+> "=" <+>
-        "call fastcc %Stk" <+> globalBuiltin("copyStack") <>
+        "call fastcc %Stk*" <+> globalBuiltin("copyStack") <>
         argumentList(List(toDocWithType(stack)))
     case EraseStack(stack) =>
       "call fastcc void" <+> globalBuiltin("eraseStack") <>
@@ -250,7 +246,13 @@ object LLVMPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(typ: machine.Type): Doc =
-    "%" <> typeName(typ)
+    typ match {
+      case machine.PrimInt()     => "%Int"
+      case machine.PrimBoolean() => "%Boolean"
+      case machine.PrimUnit()    => "%Unit"
+      case machine.Stack(_)      => "%Stk*"
+      case machine.Evidence()    => "%Evi"
+    }
 
   // /**
   //  * Auxiliary macros
@@ -463,15 +465,6 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def globalBuiltin(name: String): Doc =
     "@" <> name
-
-  def typeName(typ: machine.Type): String =
-    typ match {
-      case machine.PrimInt()     => "Int"
-      case machine.PrimBoolean() => "Boolean"
-      case machine.PrimUnit()    => "Unit"
-      case machine.Stack(_)      => "Stk"
-      case machine.Evidence()    => "Evi"
-    }
 
   def isBoxType(typ: machine.Type) = typ match {
     case machine.Stack(_) => true

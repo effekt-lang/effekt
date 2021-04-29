@@ -1,17 +1,15 @@
 ; Basic types
 
 %Sp = type i8*
-%BoxesSp = type i8*
-
 %Base = type %Sp
-%BoxesBase = type %BoxesSp
-
 %Limit = type %Sp
-%BoxesLimit = type %Limit
+%BoxesSp = type i8*
+%BoxesBase = type %BoxesSp
+%BoxesLimit = type %BoxesSp
 
 %Stk = type { %Sp, %Base, %Limit, %BoxesSp, %BoxesBase, %BoxesLimit }
 
-%MStk = type [16 x %Stk]
+%MStk = type [16 x %Stk*]
 
 ; Global locations
 
@@ -37,7 +35,11 @@ declare void @print(i64)
 
 ; Meta-stack management
 
-define fastcc %Stk @newStack() alwaysinline {
+define fastcc %Stk* @newStack() alwaysinline {
+
+    ; TODO find actual size of stack
+    %stkm = call i8* @malloc(i64 48)
+    %stkp = bitcast i8* %stkm to %Stk*
 
     %stk.0 = insertvalue %Stk undef, %Sp null, 0
     %stk.1 = insertvalue %Stk %stk.0, %Base null, 1
@@ -46,16 +48,26 @@ define fastcc %Stk @newStack() alwaysinline {
     %stk.4 = insertvalue %Stk %stk.3, %BoxesBase null, 4
     %stk.5 = insertvalue %Stk %stk.4, %BoxesLimit null, 5
 
-    ret %Stk %stk.5
+    store %Stk %stk.5, %Stk* %stkp
+
+    ret %Stk* %stkp
 }
 
-define fastcc void @pushStack(%Sp* %spp, %Stk %stk) alwaysinline {
-    %newsp = extractvalue %Stk %stk, 0
-    %newbase = extractvalue %Stk %stk, 1
-    %newlimit = extractvalue %Stk %stk, 2
-    %newboxessp = extractvalue %Stk %stk, 3
-    %newboxesbase = extractvalue %Stk %stk, 4
-    %newboxeslimit = extractvalue %Stk %stk, 5
+define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
+
+    %stksp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 0
+    %stkbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 1
+    %stklimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 2
+    %stkboxessp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 3
+    %stkboxesbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 4
+    %stkboxeslimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 5
+
+    %newsp = load %Sp, %Sp* %stksp
+    %newbase = load %Base, %Base* %stkbase
+    %newlimit = load %Limit, %Limit* %stklimit
+    %newboxessp = load %BoxesSp, %BoxesSp* %stkboxessp
+    %newboxesbase = load %BoxesBase, %BoxesBase* %stkboxesbase
+    %newboxeslimit = load %BoxesLimit, %BoxesLimit* %stkboxeslimit
 
     %oldsp = load %Sp, %Sp* %spp
     %oldbase = load %Base, %Base* @base
@@ -64,18 +76,6 @@ define fastcc void @pushStack(%Sp* %spp, %Stk %stk) alwaysinline {
     %oldboxesbase = load %BoxesBase, %BoxesBase* @boxesbase
     %oldboxeslimit = load %BoxesLimit, %BoxesLimit* @boxeslimit
 
-    %msp = load i64, i64* @msp
-
-    %mspsp = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp, i32 0
-    %mspbase = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp, i32 1
-    %msplimit = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp, i32 2
-    %mspboxessp = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp, i32 3
-    %mspboxesbase = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp, i32 4
-    %mspboxeslimit = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp, i32 5
-
-    %newmsp = add i64 %msp, 1
-    store i64 %newmsp, i64* @msp
-
     store %Sp %newsp, %Sp* %spp
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
@@ -83,26 +83,44 @@ define fastcc void @pushStack(%Sp* %spp, %Stk %stk) alwaysinline {
     store %BoxesBase %newboxesbase, %BoxesBase* @boxesbase
     store %BoxesLimit %newboxeslimit, %BoxesLimit* @boxeslimit
 
-    store %Sp %oldsp, %Sp* %mspsp
-    store %Base %oldbase, %Base* %mspbase
-    store %Limit %oldlimit, %Limit* %msplimit
-    store %BoxesSp %oldboxessp, %BoxesSp* %mspboxessp
-    store %BoxesBase %oldboxesbase, %BoxesBase* %mspboxesbase
-    store %BoxesLimit %oldboxeslimit, %BoxesLimit* %mspboxeslimit
+    store %Sp %oldsp, %Sp* %stksp
+    store %Base %oldbase, %Base* %stkbase
+    store %Limit %oldlimit, %Limit* %stklimit
+    store %BoxesSp %oldboxessp, %BoxesSp* %stkboxessp
+    store %BoxesBase %oldboxesbase, %BoxesBase* %stkboxesbase
+    store %BoxesLimit %oldboxeslimit, %BoxesLimit* %stkboxeslimit
+
+    %msp = load i64, i64* @msp
+    %newmsp = add i64 %msp, 1
+    store i64 %newmsp, i64* @msp
+
+    %mspstk = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp
+    store %Stk* %stkp, %Stk** %mspstk
 
     ret void
 }
 
-define fastcc %Stk @popStack(%Sp* %spp) alwaysinline {
+define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     %msp = load i64, i64* @msp
     %newmsp = add i64 %msp, -1
+    store i64 %newmsp, i64* @msp
 
-    %mspsp = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp, i32 0
-    %mspbase = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp, i32 1
-    %msplimit = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp, i32 2
-    %mspboxessp = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp, i32 3
-    %mspboxesbase = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp, i32 4
-    %mspboxeslimit = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp, i32 5
+    %mspstk = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp
+    %stkp = load %Stk*, %Stk** %mspstk
+
+    %stksp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 0
+    %stkbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 1
+    %stklimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 2
+    %stkboxessp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 3
+    %stkboxesbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 4
+    %stkboxeslimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 5
+
+    %newsp = load %Sp, %Sp* %stksp
+    %newbase = load %Base, %Base* %stkbase
+    %newlimit = load %Limit, %Limit* %stklimit
+    %newboxessp = load %BoxesSp, %BoxesSp* %stkboxessp
+    %newboxesbase = load %BoxesBase, %BoxesBase* %stkboxesbase
+    %newboxeslimit = load %BoxesLimit, %BoxesLimit* %stkboxeslimit
 
     %oldsp = load %Sp, %Sp* %spp
     %oldbase = load %Base, %Base* @base
@@ -111,15 +129,6 @@ define fastcc %Stk @popStack(%Sp* %spp) alwaysinline {
     %oldboxesbase = load %BoxesBase, %BoxesBase* @boxesbase
     %oldboxeslimit = load %BoxesLimit, %BoxesLimit* @boxeslimit
 
-    %newsp = load %Sp, %Sp* %mspsp
-    %newbase = load %Base, %Base* %mspbase
-    %newlimit = load %Limit, %Limit* %msplimit
-    %newboxessp = load %BoxesSp, %BoxesSp* %mspboxessp
-    %newboxesbase = load %BoxesBase, %BoxesBase* %mspboxesbase
-    %newboxeslimit = load %BoxesLimit, %BoxesLimit* %mspboxeslimit
-
-    store i64 %newmsp, i64* @msp
-
     store %Sp %newsp, %Sp* %spp
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
@@ -127,18 +136,20 @@ define fastcc %Stk @popStack(%Sp* %spp) alwaysinline {
     store %BoxesBase %newboxesbase, %BoxesBase* @boxesbase
     store %BoxesLimit %newboxeslimit, %BoxesLimit* @boxeslimit
 
-    %result.0 = insertvalue %Stk undef, %Sp %oldsp, 0
-    %result.1 = insertvalue %Stk %result.0, %Base %oldbase, 1
-    %result.2 = insertvalue %Stk %result.1, %Limit %oldlimit, 2
-    %result.3 = insertvalue %Stk %result.2, %BoxesSp %oldboxessp, 3
-    %result.4 = insertvalue %Stk %result.3, %BoxesBase %oldboxesbase, 4
-    %result.5 = insertvalue %Stk %result.4, %BoxesLimit %oldboxeslimit, 5
+    store %Sp %oldsp, %Sp* %stksp
+    store %Base %oldbase, %Base* %stkbase
+    store %Limit %oldlimit, %Limit* %stklimit
+    store %BoxesSp %oldboxessp, %BoxesSp* %stkboxessp
+    store %BoxesBase %oldboxesbase, %BoxesBase* %stkboxesbase
+    store %BoxesLimit %oldboxeslimit, %BoxesLimit* %stkboxeslimit
 
-    ret %Stk %result.5
+    ret %Stk* %stkp
 }
 
-define fastcc %Stk @copyStack(%Stk %stk) alwaysinline {
+define fastcc %Stk* @copyStack(%Stk* %stkp) alwaysinline {
 entry:
+    %stk = load %Stk, %Stk* %stkp
+
     %sp = extractvalue %Stk %stk, 0
     %base = extractvalue %Stk %stk, 1
     %limit = extractvalue %Stk %stk, 2
@@ -172,24 +183,24 @@ entry:
     %newboxeslimit = inttoptr i64 %intnewboxeslimit to %BoxesLimit
 
     ; TODO walk in the other direction
-    %boxessptyped = bitcast %BoxesSp %boxessp to %Stk*
-    %boxesbasetyped = bitcast %BoxesSp %boxesbase to %Stk*
-    %newboxesbasetyped = bitcast %BoxesSp %newboxesbase to %Stk*
+    %boxessptyped = bitcast %BoxesSp %boxessp to %Stk**
+    %boxesbasetyped = bitcast %BoxesSp %boxesbase to %Stk**
+    %newboxesbasetyped = bitcast %BoxesSp %newboxesbase to %Stk**
     br label %comp
 comp:
-    %currentboxessp = phi %Stk* [%boxesbasetyped, %entry], [%nextboxessp, %loop]
-    %currentnewboxessp = phi %Stk* [%newboxesbasetyped, %entry], [%nextnewboxessp, %loop]
-    %atend = icmp eq %Stk* %currentboxessp, %boxessptyped
+    %currentboxessp = phi %Stk** [%boxesbasetyped, %entry], [%nextboxessp, %loop]
+    %currentnewboxessp = phi %Stk** [%newboxesbasetyped, %entry], [%nextnewboxessp, %loop]
+    %atend = icmp eq %Stk** %currentboxessp, %boxessptyped
     br i1 %atend, label %done, label %loop
 loop:
-    %currentstk = load %Stk, %Stk* %currentboxessp
-    %currentnewstk = call fastcc %Stk @copyStack(%Stk %currentstk)
-    store %Stk %currentnewstk, %Stk* %currentnewboxessp
-    %nextboxessp = getelementptr %Stk, %Stk* %currentboxessp, i64 1
-    %nextnewboxessp = getelementptr %Stk, %Stk* %currentnewboxessp, i64 1
+    %currentstk = load %Stk*, %Stk** %currentboxessp
+    %currentnewstk = call fastcc %Stk* @copyStack(%Stk* %currentstk)
+    store %Stk* %currentnewstk, %Stk** %currentnewboxessp
+    %nextboxessp = getelementptr %Stk*, %Stk** %currentboxessp, i64 1
+    %nextnewboxessp = getelementptr %Stk*, %Stk** %currentnewboxessp, i64 1
     br label %comp
 done:
-    %newboxessp = bitcast %Stk* %currentnewboxessp to %BoxesSp
+    %newboxessp = bitcast %Stk** %currentnewboxessp to %BoxesSp
 
     %newstk.0 = insertvalue %Stk undef, %Sp %newsp, 0
     %newstk.1 = insertvalue %Stk %newstk.0, %Base %newbase, 1
@@ -197,29 +208,36 @@ done:
     %newstk.3 = insertvalue %Stk %newstk.2, %BoxesSp %newboxessp, 3
     %newstk.4 = insertvalue %Stk %newstk.3, %BoxesBase %newboxesbase, 4
     %newstk.5 = insertvalue %Stk %newstk.4, %BoxesLimit %newboxeslimit, 5
-    ret %Stk %newstk.5
+
+    %newstkp = call fastcc %Stk* @newStack()
+    store %Stk %newstk.5, %Stk* %newstkp
+    ret %Stk* %newstkp
 }
 
-define fastcc void @eraseStack(%Stk %stk) alwaysinline {
+define fastcc void @eraseStack(%Stk* %stkp) alwaysinline {
 entry:
+    %stk = load %Stk, %Stk* %stkp
+
     %baseuntyped = extractvalue %Stk %stk, 1
     %boxesspuntyped = extractvalue %Stk %stk, 3
     %boxesbaseuntyped = extractvalue %Stk %stk, 4
 
-    %boxessp = bitcast %BoxesSp %boxesspuntyped to %Stk*
-    %boxesbase = bitcast %BoxesBase %boxesbaseuntyped to %Stk*
+    %boxessp = bitcast %BoxesSp %boxesspuntyped to %Stk**
+    %boxesbase = bitcast %BoxesBase %boxesbaseuntyped to %Stk**
 
     br label %comp
 comp:
-    %currentboxessp = phi %Stk* [%boxessp, %entry], [%newboxessp, %loop]
-    %atbase = icmp eq %Stk* %currentboxessp, %boxesbase
+    %currentboxessp = phi %Stk** [%boxessp, %entry], [%newboxessp, %loop]
+    %atbase = icmp eq %Stk** %currentboxessp, %boxesbase
     br i1 %atbase, label %done, label %loop
 loop:
-    %newboxessp = getelementptr %Stk, %Stk* %currentboxessp, i64 -1
-    %nextstk = load %Stk, %Stk* %newboxessp
-    call fastcc void @eraseStack(%Stk %nextstk)
+    %newboxessp = getelementptr %Stk*, %Stk** %currentboxessp, i64 -1
+    %nextstk = load %Stk*, %Stk** %newboxessp
+    call fastcc void @eraseStack(%Stk* %nextstk)
     br label %comp
 done:
+    %stkuntyped = bitcast %Stk* %stkp to i8*
+    call void @free(i8* %stkuntyped)
     call void @free(i8* %baseuntyped)
     call void @free(i8* %boxesbaseuntyped)
     ret void
