@@ -95,13 +95,14 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def toDoc(top: Top)(implicit C: LLVMContext): Doc = top match {
     case DefCnt(functionName, params, entry, body) =>
-      val unboxedParams = params.filterNot(p => isBoxType(p.typ));
-      val boxedParams = params.filter(p => isBoxType(p.typ));
       // This magical 5 ensures that we pass at most 6 64bit parameters
-      val unspilledUnboxedParams = unboxedParams.take(5);
-      val spilledUnboxedParams = unboxedParams.drop(5);
-      define(globalName(functionName), unspilledUnboxedParams.map(toDoc),
-        loadSpilled("%spp", "@boxessp", spilledUnboxedParams, boxedParams) <@>
+      val unspilledParams = params.take(5);
+      val spilledParams = params.drop(5);
+      // TODO spill both kinds of params to non-box stack
+      val spilledUnboxedParams = spilledParams.filterNot(p => isBoxType(p.typ));
+      val spilledBoxedParams = spilledParams.filter(p => isBoxType(p.typ));
+      define(globalName(functionName), unspilledParams.map(toDoc),
+        loadSpilled("%spp", "@boxessp", spilledUnboxedParams, spilledBoxedParams) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
     case DefFrm(functionName, params, env, entry, body) =>
@@ -206,15 +207,16 @@ object LLVMPrinter extends ParenPrettyPrinter {
         jump(cntName, newsp, values.map(toDocWithType(_)))
 
     case Jump(name, args) =>
-      val unboxedArgs = args.filterNot(v => isBoxType(valueType(v)));
-      val boxedArgs = args.filter(v => isBoxType(valueType(v)));
       // This magical 5 ensures that we pass at most 6 64bit parameters
-      val unspilledUnboxedArgs = unboxedArgs.take(5);
-      val spilledUnboxedArgs = unboxedArgs.drop(5);
+      val unspilledArgs = args.take(5);
+      val spilledArgs = args.drop(5);
+      // TODO spill both kinds of params to non-box stack
+      val spilledUnboxedArgs = spilledArgs.filterNot(v => isBoxType(valueType(v)));
+      val spilledBoxedArgs = spilledArgs.filter(v => isBoxType(valueType(v)));
       val sp = freshLocalName("sp");
-      storeSpilled("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", spilledUnboxedArgs, boxedArgs) <@>
+      storeSpilled("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", spilledUnboxedArgs, spilledBoxedArgs) <@>
         sp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
-        jump(globalName(name), sp, unspilledUnboxedArgs.map(toDocWithType))
+        jump(globalName(name), sp, unspilledArgs.map(toDocWithType))
     case JumpLocal(name, args) =>
       "br" <+> "label" <+> localName(name)
     case If(cond, thenBlock, _, elseBlock, _) =>
