@@ -2,21 +2,23 @@ package effekt
 
 import effekt.context.Context
 import effekt.source._
+import effekt.modules.Name
 import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
+import effekt.modules.Mod
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
+class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, Modl.Decl] {
 
   val phaseName = "parser"
 
-  def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
+  def run(source: Source)(implicit C: Context): Option[Modl.Decl] =
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
@@ -37,8 +39,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
 
-  lazy val modulePath = "%s([/]%s)*\\b".format(name, name).r
-  lazy val moduleName = "%s([.]%s)*\\b".format(name, name).r
+  lazy val modPath = "%s([/]%s)*\\b".format(name, name).r
+  lazy val modName = "%s([.]%s)*\\b".format(name, name).r
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
@@ -104,6 +106,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
       if (additionalKeywords.contains(n)) { "_" + n } else { n }
     }
       | failure("Expected an identifier"))
+
+  /** parse a single user-defined word. */
+  lazy val word: P[Name.Word] = ident ^^ Name.Word
+
+  /** parses qualified name */
+  lazy val qual: P[Name] = someSep(word, `.`) ^^ { ws => Name.join(ws) }
 
   lazy val idDef: P[IdDef] = ident ^^ IdDef
   lazy val idRef: P[IdRef] = ident ^^ IdRef
@@ -195,21 +203,21 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // turn scalariform formatting off!
   // format: OFF
 
-  lazy val program: P[ModuleDecl] =
+  lazy val program: P[Modl.Decl] =
     ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
-      case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
+      case name ~ imports ~ defs if name != "effekt" => Modl.Decl(Name.path(name), Modl.Import(Name("effekt")) :: imports, defs)
+      case name ~ imports ~ defs => Modl.Decl(Name.path(name), imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )
 
   lazy val moduleDecl: P[String] =
-    ( `module` ~/> modulePath
+    ( `module` ~/> modPath
     | defaultModulePath
     )
 
-  lazy val importDecl: P[Import] =
-    `import` ~/> modulePath ^^ Import
+  lazy val importDecl: P[Modl.Import] =
+    `import` ~/> modPath ^^ { p => Modl.Import(Name(p)) }
 
 
   /**
@@ -237,7 +245,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val moduleDef: P[Def] =
-    `module` ~/> idDef ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleFrag
+    `module` ~/> qual ~ (`{` ~> many(definition) <~ `}`) ^^ Modl.User
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
@@ -426,7 +434,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( moduleName ~ (`:` ~/> idRef) ^^ ModTarget
+    ( modName ~ (`:` ~/> idRef) ^^ ModTarget
     | idRef ^^ IdTarget
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )
@@ -470,11 +478,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern
     | idDef ^^ AnyPattern
     | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
-        TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
+        TagPattern(new IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
 
-  lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
+  lazy val implicitResume: P[IdDef] = success(new IdDef("resume"))
 
 
   lazy val assignExpr: P[Expr] =
@@ -510,13 +518,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Expr =
-    Call(IdTarget(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
+    Call(IdTarget(new IdRef("Nil")), Nil, List(ValueArgs(Nil)))
 
   private def ConsTree(el: Expr, rest: Expr): Expr =
-    Call(IdTarget(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
+    Call(IdTarget(new IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
 
   private def TupleTree(args: List[Expr]): Expr =
-    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
+    Call(IdTarget(new IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
 
   /**
    * Types and Effects
@@ -564,7 +572,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
      Call(IdTarget(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
 
-  private def opName(op: String): String = op match {
+  private def opName(op: String): String =  op match {
     case "||" => "infixOr"
     case "&&" => "infixAnd"
     case "==" => "infixEq"
@@ -581,7 +589,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    TypeApp(IdRef(s"Tuple${tps.size}"), tps)
+    TypeApp(new IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

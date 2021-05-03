@@ -5,6 +5,9 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
+import effekt.source.BlockStmt
+import effekt.source.Modl
+import effekt.modules.Name
 
 class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
@@ -16,7 +19,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
   }
 
   def transform(mod: SourceModule)(implicit C: Context): ModuleDecl = {
-    val source.ModuleDecl(path, imports, defs) = mod.ast
+    val source.Modl.Decl(path, imports, defs) = mod.ast
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
@@ -29,17 +32,31 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       case (d, r) => transform(d, r)
     }
 
-    ModuleDecl(path, imports.map { _.path }, transformed).inheritPosition(mod.decl)
+    ModuleDecl(path, imports.map { _.path.unix }, transformed).inheritPosition(mod.decl)
   }
 
   /**
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
-    case source.ModuleFrag(name, defs) =>
-      defs.foldRight(rest) { (d, r) =>
+    case m: Modl.Mask => C.abort("TODO: transform mask")
+    case Modl.User(name, defs) =>
+      val mod = C.module.submodule(name).get
+
+      val exports: Stmt = Exports(name, mod.terms.flatMap {
+        case (name, syms) => syms.collect {
+          // TODO export valuebinders properly
+          case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+          case sym: ValBinder => sym
+        }
+      }.toList)
+
+      val b = UserModule(defs.foldRight(exports) { (d, r) =>
         transform(d, r)
-      }
+      })
+
+      val d = Def(mod, null, b, rest)
+      return d
 
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
@@ -160,6 +177,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
     case c @ source.Call(source.ModTarget(name, id), _, args) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       val sym: Symbol = C.symbolOf(id)
+      val mod = C.module.submodule(Name(name)).get
 
       val as = args.flatMap(transform)
 
@@ -168,9 +186,13 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
+
+      val a = App(Member(BlockVar(mod), sym.asInstanceOf[BlockSymbol]), targs, as)
+      return C.bind(C.inferredTypeOf(tree).tpe, a)
+    /*
       sym match {
         case f: BuiltinFunction if f.pure =>
-          PureApp(BlockVar(f), targs, as)
+          App(Member(name, id), targs, as)
         case r: Record =>
           PureApp(BlockVar(r), targs, as)
         case f: EffectOp =>
@@ -182,7 +204,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
           C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
         case f: ValueSymbol =>
           C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(ValueVar(f)), targs, as))
-      }
+      }*/
 
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer

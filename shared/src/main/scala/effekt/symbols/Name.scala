@@ -1,8 +1,9 @@
-package effekt.symbols
+//package effekt.symbols
 
-import effekt.source.Id
-import effekt.context.Context
+//import effekt.source.Id
+//import effekt.context.Context
 
+/*
 sealed trait Name {
   /**
    * The local part of the name relative to its potential parent.
@@ -140,3 +141,4 @@ object Name {
    */
   def module(path: String): Name = Name(path.replace("/", "."))
 }
+*/

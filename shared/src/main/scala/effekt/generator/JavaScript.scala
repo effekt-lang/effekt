@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ SourceModule, Name, Symbol, Wildcard }
+import effekt.symbols.{ SourceModule, Symbol, Wildcard }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -13,7 +13,7 @@ import kiama.util.Source
 import effekt.util.paths._
 
 import scala.language.implicitConversions
-import effekt.symbols.NestedName
+import effekt.modules.Name
 
 class JavaScript extends Generator {
 
@@ -124,7 +124,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
 
 trait JavaScriptBase extends ParenPrettyPrinter {
 
-  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
+  def moduleFile(path: Name): String = path.qual("_") + ".js"
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(commonjs(t))
@@ -135,7 +135,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def amdefine(m: ModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
-    val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
+    val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(Name.path(i)) + "'" }, comma))
     prelude <> line <> "define" <>
       parens(imports <> comma <+> jsFunction("", deps.map { d => jsModuleName(d) }, toDoc(m)))
   }
@@ -143,7 +143,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   def commonjs(m: ModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
-      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
+      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(Name.path(i)) + "'")
     }, semi)
 
     imports <> emptyline <> toDoc(m)
@@ -156,7 +156,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
-  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
+  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.local)
 
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
   def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
@@ -170,7 +170,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case _: symbols.Capability => id.name.toString + "_" + id.id
     case _: symbols.EffectOp   => "op$" + id.name.toString
     case _ => id.name match {
-      case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
+      case name: Name.Link if name.lft != C.module.name => link(name, jsModuleName(name.lft) + "." + name.local) //TODO
       case name => toDoc(name)
     }
   }
@@ -269,6 +269,11 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
 
+    case Def(id, tpe, UserModule(b), rest) =>
+      "var" <+> nameDef(id) <+> "= (function() {" <> emptyline <>
+        "var" <+> jsModuleName(id.name) <+> "=" <+> "{};" <> emptyline <>
+        toDocTopLevel(b) <> emptyline <> "})()" <> emptyline <> toDocTopLevel(rest)
+
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
@@ -282,9 +287,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case other => "return" <+> toDocExpr(other)
   }
 
-  def jsModuleName(path: String): String = jsModuleName(Name.module(path))
+  def jsModuleName(path: String): String = jsModuleName(Name.path(path))
 
-  def jsModuleName(name: Name): String = "$" + name.qualifiedName.replace('.', '_')
+  def jsModuleName(name: Name): String = "$" + name.local
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

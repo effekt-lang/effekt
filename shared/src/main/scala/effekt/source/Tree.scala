@@ -3,6 +3,8 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import effekt.modules.Name
+import effekt.modules.Mod
 
 /**
  * Data type representing source program trees.
@@ -14,7 +16,11 @@ import effekt.symbols.Symbol
  *   |  |- IdDef
  *   |  |- IdRef
  *   |
- *   |- ModuleDecl
+ *   |- Modl
+ *   |  |- Import
+ *   |  |- Decl
+ *   |  |- User
+ *   |  |- Mask
  *   |
  *   |- ParamSection
  *   |  |- ValueParams
@@ -109,6 +115,8 @@ sealed trait Id extends Tree {
   def clone(implicit C: Context): Id
 
 }
+
+/** New Name */
 case class IdDef(name: String) extends Id {
   def clone(implicit C: Context): Id = {
     val copy = IdDef(name)
@@ -116,6 +124,8 @@ case class IdDef(name: String) extends Id {
     copy
   }
 }
+
+/** Use Name */
 case class IdRef(name: String) extends Id {
   def clone(implicit C: Context): Id = {
     val copy = IdRef(name)
@@ -141,6 +151,7 @@ sealed trait Reference extends Named {
   def definition(implicit C: Context): symbol = C.symbolOf(this)
 }
 
+/*
 /**
  * The type of whole compilation units
  *
@@ -149,13 +160,82 @@ sealed trait Reference extends Named {
  * A module declartion, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
-case class Import(path: String) extends Tree
+case class Modl.Decl(path: Name, imports: List[Import], defs: List[Def]) extends Tree {
+  def this(pth: String, imp: List[Import], dfs: List[Def]) = this(Name.path(pth), imp, dfs)
+  def pathStr: String = path.unix
+}
+case class Import(path: Name) extends Tree
 
-/**
- * Group of defenitions
- */
-case class ModuleFrag(id: IdDef, defs: List[Def]) extends Def
+/** Group of definitions. */
+case class ModuleFrag(user: Name, defs: List[Def]) extends Def
+case class ModuleMask(user: Name, face: Name, defs: List[Def]) extends Def
+*/
+
+/** Modulare Element */
+sealed trait Modl extends Tree {
+  type Sym <: Mod.Usr
+
+  def name: Name
+  def body: Modl.Defs
+}
+
+/** Pseudo-Class */
+object Modl {
+  type Defs = List[Def]
+
+  val stdlib = Import(Name("effekt"))
+
+  /** Import declaration */
+  case class Import(path: Name, user: Name = Name.All, face: List[Name] = List(Name.All)) extends Tree {
+    override def toString(): String = {
+      val src = path.unix
+      val usr = user.qual(":")
+      val fce = face
+        .map { f => f.toString() }
+        .reduce { (l, r) => l + ", " + r }
+
+      return s"${src}:${usr}[${fce}]"
+    }
+  }
+
+  /** Module Header */
+  case class Decl(path: Name, imps: List[Import], body: Defs) extends Modl {
+    type Sym = Mod.Src
+
+    def name = path.last
+    def id: IdDef = IdDef(name.full)
+
+    /** empty */
+    def this(path: Name) = this(path, List.empty, List.empty)
+
+    override def toString() = s"src://${path.unix}"
+  }
+
+  /** Module Fragment */
+  case class User(name: Name, body: Defs) extends Modl with Def {
+    type Sym = Mod.Usr
+
+    def id: IdDef = IdDef(name.full)
+
+    /** empty */
+    def this(name: Name) = this(name, List.empty)
+
+    override def toString() = s"usr://${name.full}"
+  }
+
+  /** Module Extension */
+  case class Mask(user: Name, face: Name.Word, body: Defs) extends Modl with Def {
+    type Sym = Mod.Msk
+
+    def name = Name(user, face)
+    def id: IdDef = IdDef(name.full)
+
+    /** empty */
+    def this(face: Name.Word) = this(Name.Blk, face, List.empty)
+
+    override def toString() = s"msk://${user.full}[${face.str}]"
+  }
+}
 
 /**
  * Parameters and arguments
@@ -446,9 +526,9 @@ object Tree {
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: ModuleDecl)(implicit C: Context): ModuleDecl = visit(e) {
-      case ModuleDecl(path, imports, defs) =>
-        ModuleDecl(path, imports, defs.map(rewrite))
+    def rewrite(e: Modl.Decl)(implicit C: Context): Modl.Decl = visit(e) {
+      case Modl.Decl(path, imports, defs) =>
+        Modl.Decl(path, imports, defs.map(rewrite))
     }
 
     def rewrite(e: Expr)(implicit C: Context): Expr = visit(e) {
@@ -481,8 +561,8 @@ object Tree {
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
 
-      case ModuleFrag(id, defs) =>
-        ModuleFrag(id, defs.map(rewrite))
+      case Modl.User(id, defs) =>
+        Modl.User(id, defs.map(rewrite))
 
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))

@@ -7,9 +7,10 @@ package namer
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
 import effekt.regions.Region
-import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, Modl, Named, Tree }
 import effekt.symbols._
 import scopes._
+import effekt.modules.Name
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -26,21 +27,21 @@ import scopes._
  * 2. look at the bodies of effect declarations and type definitions
  * 3. look into the bodies of functions
  */
-class Namer extends Phase[ModuleDecl, ModuleDecl] {
+class Namer extends Phase[Modl.Decl, Modl.Decl] {
 
   val phaseName = "namer"
 
-  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
+  def run(mod: Modl.Decl)(implicit C: Context): Option[Modl.Decl] = {
     Some(resolve(mod))
   }
 
-  def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
+  def resolve(decl: Modl.Decl)(implicit C: Context): Modl.Decl = {
     var scope: Scope = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
-    val imports = decl.imports map {
-      case im @ source.Import(path) => Context.at(im) {
-        val modImport = Context.moduleOf(path)
+    val imports = decl.imps map {
+      case im @ Modl.Import(path, _, _) => Context.at(im) {
+        val modImport = Context.moduleOf(path.unix)
         scope.defineAll(modImport.terms, modImport.types)
         modImport
       }
@@ -65,14 +66,14 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
+    case source.Modl.Decl(path, imports, decls) =>
       decls foreach { resolve }
       resolveAll(decls)
 
-    case source.ModuleFrag(id, defs) =>
+    case source.Modl.User(id, defs) =>
       // Load empty module
       // If this step failed, than the id of the module was not processes
-      val mod = C.module.submodule(Name(id.name)).get
+      val mod = C.module.submodule(id).get
 
       // Create scope to collect everythin inside the module
       Context.scoped {
@@ -333,6 +334,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * not the bodies of functions.
    */
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+    case m: Modl.Mask => C.abort("TODO: resolve mask")
 
     case d @ source.ValDef(id, annot, binding) =>
       ()
@@ -423,9 +425,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       })
     }
 
-    case source.ModuleFrag(id, _) => {
+    case source.Modl.User(id, _) => {
       // Creates an empty module with the given name
-      Context.module.bind(id.name)
+      Context.module.bind(id.local)
     }
 
     case d @ source.ExternInclude(path) =>
@@ -566,7 +568,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def freshTermName(id: Id): Name = {
     val alreadyBound = scope.currentTermsFor(id.name).size
     val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
-    Name(id.name + seed, module)
+    Name(module.name, Name(id.name + seed))
   }
 
   // Name Binding and Resolution
@@ -593,9 +595,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.defineAll(mod.terms, mod.types)
   }
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)
+  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.local, s)
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.localName, s)
+  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.local, s)
 
   private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }

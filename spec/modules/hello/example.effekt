@@ -1,9 +1,14 @@
-// ModuleDecl
+// Modl.Decl
 module example
 import text/string
 
 // ModuleFrag
 module hello {
+    module world {
+        def test() = {
+            println("Hello World")
+        }
+    }
     def foo() = {
         println("Hello Modules")
     }
@@ -12,9 +17,15 @@ module hello {
         println("Beer".repeat(x))
         println("Bed".repeat(x))
     }
+
+    def baz() = {
+        world:test()
+    }
 }
 
 def main() = {
+    // Call ModTarget
     hello:foo()
     hello:bar(3)
+    hello:baz()
 }

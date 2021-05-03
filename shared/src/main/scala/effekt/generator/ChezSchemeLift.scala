@@ -23,7 +23,7 @@ class ChezSchemeLift extends Generator {
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: SourceModule)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+    (C.config.outputPath() / m.path.qual("_")).unixPath + ".ss"
 
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
@@ -75,6 +75,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
     case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
     case Unbox(e)        => toDoc(e)
+    case UserModule(b)   => toDoc(b, false) //TODO Doc
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {

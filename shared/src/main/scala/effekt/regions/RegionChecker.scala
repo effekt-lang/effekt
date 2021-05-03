@@ -6,16 +6,16 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.{ Binder, BlockSymbol, Effectful, Symbol, UserFunction, ValueSymbol }
 import effekt.context.assertions.SymbolAssertions
 
-class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
+class RegionChecker extends Phase[Modl.Decl, Modl.Decl] {
 
   val phaseName = "region-checker"
 
-  def run(input: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
+  def run(input: Modl.Decl)(implicit C: Context): Option[Modl.Decl] = try {
     Context.initRegionstate()
     Context.unifyAndSubstitute()
 
     // this should go into a precheck method
-    input.defs.foreach {
+    input.body.foreach {
       case f: FunDef =>
         Context.annotateRegions(f.symbol, C.staticRegion)
       case f: ExternFun =>

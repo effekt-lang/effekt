@@ -1,0 +1,99 @@
+// Modl.Decl
+module api
+import text/string
+
+
+effekt Logger {
+    def dbug(msg: String)
+    def info(msg: String)
+    def warn(msg: String)
+    def errr(msg: String)
+}
+
+
+mask :Logger {
+  def dbug(msg: String) {
+    println("_bug: " + msg)
+  }
+
+  def info(msg: String) {
+    println("info: " + msg)
+  }
+
+  def warn(msg: String) {
+    println("Warn: " + msg)
+  }
+
+  def errr(msg: String) {
+    println("ERRR: " + msg)
+  }
+}
+
+
+
+// Use ModuleFace:ModuleImpl
+def use(l: Logger) = {
+    l.dbug("Is this thing on?")
+    l.info("Calculating answer...")
+    l.warn("Don't touch this!")
+    l.errr("java.lang.NullPointerException")
+}
+
+
+def main() = {
+    // Provide ModuleImpl
+    use() with Logger {
+        def dbug(msg: String) {
+            println("_bug: " + msg)
+        }
+
+        def info(msg: String) {
+            println("info: " + msg)
+        }
+
+        def warn(msg: String) {
+            println("Warn: " + msg)
+        }
+
+        def errr(msg: String) {
+            println("ERRR: " + msg)
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// Stitches
+module Log {
+    def dbug(msg: String) {
+        println("_bug: " + msg)
+    }
+
+    def info(msg: String) {
+        println("info: " + msg)
+    }
+}
+
+module Ger {
+    def warn(msg: String) {
+        println("Warn: " + msg)
+    }
+
+    def errr(msg: String) {
+        println("ERRR: " + msg)
+    }
+}
+
+var lg: Logger = Log +> Ger

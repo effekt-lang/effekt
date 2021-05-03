@@ -1,13 +1,15 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, ValueSymbol, SourceModule }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
+
+import effekt.modules.Name
 
 class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
@@ -185,18 +187,19 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case e: Expr =>
       runCompiler(source, module.makeEval(e), config)
 
-    case i: Import =>
+    case i: Modl.Import =>
       val extendedImports = module + i
       val output = config.output()
+      val path = i.path.unix
 
       context.setup(config)
-      val src = context.findSource(i.path).getOrElse {
-        output.emitln(s"Cannot find source for import ${i.path}")
+      val src = context.findSource(path).getOrElse {
+        output.emitln(s"Cannot find source for import ${path}")
         return
       }
 
       runParsingFrontend(src, config) { cu =>
-        output.emitln(s"Successfully imported ${i.path}\n")
+        output.emitln(s"Successfully imported ${path}\n")
         output.emitln(s"Imported Types\n==============")
         cu.types.toList.sortBy { case (n, _) => n }.collect {
           case (name, sym) if !sym.synthetic =>
@@ -235,7 +238,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case _ => ()
   }
 
-  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
+  private def runCompiler(source: Source, ast: Modl.Decl, config: EffektConfig): Unit = {
     context.setup(config)
 
     val src = VirtualSource(ast, source)
@@ -248,7 +251,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     report(source, context.buffer.get, config)
   }
 
-  private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runFrontend(source: Source, ast: Modl.Decl, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.frontend(src) map { f } getOrElse {
@@ -256,7 +259,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
   }
 
-  private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runParsingFrontend(source: Source, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     context.frontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
@@ -302,30 +305,32 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   case class ReplModule(
     definitions: List[Def],
-    imports: List[Import]
+    imports: List[Modl.Import]
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
       val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
       copy(definitions = otherDefs :+ d)
     }
-    def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
+    def +(i: Modl.Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
 
-    def contains(im: Import) = imports.exists { other => im.path == other.path }
+    def contains(im: Modl.Import) = imports.exists { other => im.path == other.path }
 
     /**
      * Create a module declaration using the given expression as body of main
      */
-    def make(expr: Expr): ModuleDecl = {
+    def make(expr: Expr): Modl.Decl = {
 
+      val path = Name.path("lib/interactive")
+      val imps = Modl.stdlib :: imports
       val body = Return(expr)
+      val main = FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+        body)
 
-      ModuleDecl("lib/interactive", Import("effekt") :: imports,
-        definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
-          body))
+      Modl.Decl(path, imps, definitions :+ main)
     }
 
-    def makeEval(expr: Expr): ModuleDecl =
+    def makeEval(expr: Expr): Modl.Decl =
       make(Call(IdTarget(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)

@@ -7,7 +7,7 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
 import effekt.regions.Region
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
+import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, Modl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -15,6 +15,7 @@ import effekt.symbols.kinds._
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import effekt.source.IdTarget
+import effekt.modules.Name
 
 /**
  * Output: the types we inferred for function like things are written into "types"
@@ -25,11 +26,11 @@ import effekt.source.IdTarget
  *  Also annotates every lambda with a fresh region variable and collects equality constraints
  *  between regions
  */
-class Typer extends Phase[ModuleDecl, ModuleDecl] {
+class Typer extends Phase[Modl.Decl, Modl.Decl] {
 
   val phaseName = "typer"
 
-  def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
+  def run(module: Modl.Decl)(implicit C: Context): Option[Modl.Decl] = try {
     val mod = Context.module
 
     // Effects that are lexically in scope at the top level
@@ -39,8 +40,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context in {
       // We split the type-checking of definitions into "pre-check" and "check"
       // to allow mutually recursive defs
-      module.defs.foreach { d => precheckDef(d) }
-      module.defs.foreach { d =>
+      module.body.foreach { d => precheckDef(d) }
+      module.body.foreach { d =>
         val (_ / effs) = synthDef(d)
         if (effs.nonEmpty)
           Context.at(d) {
@@ -434,7 +435,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
-      case d @ source.ModuleFrag(id, defs) => {
+      case d @ source.Modl.User(id, defs) => {
         Context in {
           defs.foreach { d => precheckDef(d) }
           defs.foreach { d =>
@@ -584,7 +585,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
             }
           }
-          val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
+          val r = checkCallTo(call, sym.name.local, tpe, targs, args, expected)
           (r, C.backupTyperstate())
         }
       }
@@ -639,7 +640,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // reraise all and abort
         val msgs = failed.flatMap {
           // TODO also print signature!
-          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.qualifiedName}: ${m.label}") }
+          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.full}: ${m.label}") }
         }.toVector
 
         C.reraise(msgs)

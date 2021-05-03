@@ -145,6 +145,7 @@ class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
       case b: ScopeAbs   => sys error "Should not happen"
       // TODO check whether this makes any sense
       case b: Unbox      => Here()
+      case b: UserModule => sys error "TODO evidenceFor"
     }
   }
 }

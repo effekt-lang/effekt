@@ -2,7 +2,8 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
+import effekt.symbols.{ Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
+import effekt.modules.Name
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -14,7 +15,7 @@ sealed trait Tree extends Product {
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
+case class ModuleDecl(path: Name, imports: List[String], defs: Stmt) extends Tree
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -57,9 +58,37 @@ case class Lifted(s: Scope, b: Block) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: EffectOp) extends Block
+case class Member(b: Block, field: BlockSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
+
+/// User-definied module
+case class UserModule(body: Stmt) extends Block
+/*
+
+var hello = (function() {
+  // vvvvvvvv
+  var $hello = {}
+  function foo() {
+  }
+  function bar() {
+  }
+  $hello.exports = {
+    "foo" : foo,
+    "bar" : bar
+  }
+  // ^^^^^^^^^
+  return $hello.exports;
+})()
+
+*/
+/*
+var $name = (function() {
+  $body
+
+  return $name.exports
+})
+*/
 
 /**
  * Statements
@@ -75,7 +104,7 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
-case class Exports(path: String, exports: List[Symbol]) extends Stmt
+case class Exports(path: Name, exports: List[Symbol]) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree
@@ -104,7 +133,7 @@ case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
-case class ScopeId() extends Symbol { val name = Name(s"ev${id}", effekt.symbols.builtins.prelude) }
+case class ScopeId() extends Symbol { val name = Name(effekt.symbols.builtins.prelude.name, Name(s"ev${id}")) }
 
 object Tree {
 

@@ -79,7 +79,7 @@ trait LSPServer extends Driver with Intelligence {
     decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
     kind <- getSymbolKind(sym)
     detail <- getInfoOf(sym)(context)
-  } yield new DocumentSymbol(sym.name.localName, kind, rangeOfNode(decl), rangeOfNode(id), detail.header))
+  } yield new DocumentSymbol(sym.name.local, kind, rangeOfNode(decl), rangeOfNode(id), detail.header))
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {

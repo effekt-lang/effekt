@@ -1,11 +1,11 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ Def, FunDef, Modl, ValDef, VarDef }
 import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.substitutions._
-import effekt.source.ModuleFrag
+import effekt.modules.Name
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -30,7 +30,6 @@ package object symbols {
     override def synthetic = true
   }
 
-  // extends TermSymbol?
   sealed trait Module extends Symbol {
     type TypeMap = Map[String, TypeSymbol]
     type TermMap = Map[String, Set[TermSymbol]]
@@ -48,10 +47,10 @@ package object symbols {
   }
 
   // A user-defined module.
-  class UserModule(val parent: Module, local: String) extends Module with TermSymbol {
+  class UserModule(val parent: Module, local: String) extends Module with BlockSymbol {
     override val name = parent match {
       case SourceModule(_, _) => Name(local)
-      case _                  => parent.name.nested(local)
+      case _                  => parent.name.nest(Name(local))
     }
 
     var _typs: TypeMap = Map.empty
@@ -62,19 +61,19 @@ package object symbols {
     def terms: TermMap = _trms
 
     def submodule(name: Name): Option[UserModule] = name match {
-      case EmptyName               => Some(this)
-      case ToplevelName(localName) => _mods.get(localName)
-      case NestedName(parent, localName) => submodule(parent) match {
-        case None     => None
-        case Some(pm) => pm._mods.get(localName)
+      case Name.Blk     => None
+      case Name.Word(w) => _mods.get(w)
+      case Name.Link(l, r) => submodule(l).flatMap { md =>
+        md.submodule(r)
       }
+      case Name.All => Some(this)
     }
   }
 
   // Root module
-  case class SourceModule(decl: ModuleDecl, source: Source) extends Module {
+  case class SourceModule(decl: Modl.Decl, source: Source) extends Module {
     def path = decl.path
-    val name = Name.module(path)
+    def name = path.last
 
     var _typs: TypeMap = Map.empty
     var _trms: TermMap = Map.empty
@@ -109,7 +108,7 @@ package object symbols {
     /**
      * Should be called once after frontend
      */
-    def setAst(ast: ModuleDecl): this.type = {
+    def setAst(ast: Modl.Decl): this.type = {
       _ast = ast
       this
     }
@@ -138,7 +137,9 @@ package object symbols {
     def effect = tpe.eff
     override def toString = s"@${tpe.eff.name}"
   }
-  case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(module: Module) extends Param with BlockSymbol {
+    val name = module.name.nest(Name("resume"))
+  }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -215,8 +216,8 @@ package object symbols {
   /**
    * Introduced by Transformer
    */
-  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+  case class Wildcard(module: Module) extends ValueSymbol { val name = module.name.nest(Name("_")) }
+  case class Tmp(module: Module) extends ValueSymbol { val name = module.name.nest(Name("tmp" + Symbol.fresh.next())) }
 
   /**
    * A symbol that represents a termlevel capability

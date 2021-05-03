@@ -6,6 +6,7 @@ import effekt.symbols.{ SourceModule, Wildcard }
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
+import effekt.modules.Name
 
 import effekt.util.paths._
 
@@ -66,6 +67,7 @@ trait JavaScriptLiftPrinter extends JavaScriptBase {
     case ScopeAbs(id, b) => jsLambda(List(nameDef(id)), toDoc(b))
     case Lifted(ev, b)   => jsCall("$effekt.liftBlock", List(toDoc(ev), toDoc(b)))
     case Unbox(e)        => toDoc(e)
+    case UserModule(b)   => toDoc(b) //TODO UserMod
   })
 
   // pretty print the statement in a javascript expression context

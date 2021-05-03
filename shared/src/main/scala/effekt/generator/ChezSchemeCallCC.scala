@@ -3,7 +3,8 @@ package effekt.generator
 import effekt.context.Context
 import effekt.core._
 import effekt.symbols.SourceModule
-import effekt.symbols.{ Name, Symbol, Wildcard }
+import effekt.symbols.{ Symbol, Wildcard }
+import effekt.modules.Name
 
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -25,7 +26,7 @@ class ChezSchemeCallCC extends Generator {
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: SourceModule)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+    (C.config.outputPath() / m.path.qual("_")).unixPath + ".ss"
 
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
@@ -78,6 +79,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case ScopeAbs(id, b) => ???
     case Lifted(ev, b)   => ???
     case Unbox(e)        => toDoc(e)
+    case UserModule(b)   => toDoc(b, false) //TODO UserMod toDoc
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {

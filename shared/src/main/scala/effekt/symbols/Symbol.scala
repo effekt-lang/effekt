@@ -2,6 +2,7 @@ package effekt
 package symbols
 
 import org.bitbucket.inkytonik.kiama.util.Counter
+import effekt.modules.Name
 
 /**
  * A symbol uniquely represents a code entity
@@ -20,7 +21,7 @@ trait Symbol {
   /**
    * The name of this symbol
    */
-  val name: Name
+  def name: Name
 
   /**
    * The unique id of this symbol

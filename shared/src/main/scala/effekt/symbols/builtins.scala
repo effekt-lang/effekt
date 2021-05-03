@@ -1,6 +1,7 @@
 package effekt.symbols
 
-import effekt.source.ModuleDecl
+import effekt.modules.Name
+import effekt.source.Modl.Decl
 import org.bitbucket.inkytonik.kiama.util.StringSource
 
 /**
@@ -10,9 +11,9 @@ object builtins {
 
   // a dummy module for built in types. Can be dropped, once they are
   // defined in the prelude
-  lazy val prelude = SourceModule(ModuleDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
+  lazy val prelude = SourceModule(Decl(Name("effekt"), Nil, Nil), StringSource("", "effekt.effekt"))
 
-  private def name(s: String) = Name(s, prelude)
+  private def name(s: String) = Name(prelude.name, Name(s))
 
   val TInt = BuiltinType(name("Int"), Nil)
   val TBoolean = BuiltinType(name("Boolean"), Nil)
