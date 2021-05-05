@@ -7,9 +7,9 @@
 %BoxesBase = type %BoxesSp
 %BoxesLimit = type %BoxesSp
 
-%Stk = type { %Sp, %Base, %Limit, %BoxesSp, %BoxesBase, %BoxesLimit }
+%Stk = type { %Sp, %Base, %Limit, %BoxesSp, %BoxesBase, %BoxesLimit, %Stk* }
 
-%MStk = type [16 x %Stk*]
+%MStk = type %Stk*
 
 ; Global locations
 
@@ -18,10 +18,7 @@
 @boxessp = private global %BoxesSp null
 @boxesbase = private global %BoxesBase null
 @boxeslimit = private global %BoxesLimit null
-
-@metaStack = private global %MStk undef
-
-@msp = private global i64 0
+@rest = private global %MStk undef
 
 ; Foreign imports
 
@@ -38,7 +35,7 @@ declare void @print(i64)
 define fastcc %Stk* @newStack() alwaysinline {
 
     ; TODO find actual size of stack
-    %stkm = call i8* @malloc(i64 48)
+    %stkm = call i8* @malloc(i64 56)
     %stkp = bitcast i8* %stkm to %Stk*
 
     %stk.0 = insertvalue %Stk undef, %Sp null, 0
@@ -47,8 +44,9 @@ define fastcc %Stk* @newStack() alwaysinline {
     %stk.3 = insertvalue %Stk %stk.2, %BoxesSp null, 3
     %stk.4 = insertvalue %Stk %stk.3, %BoxesBase null, 4
     %stk.5 = insertvalue %Stk %stk.4, %BoxesLimit null, 5
+    %stk.6 = insertvalue %Stk %stk.5, %MStk null, 6
 
-    store %Stk %stk.5, %Stk* %stkp
+    store %Stk %stk.6, %Stk* %stkp
 
     ret %Stk* %stkp
 }
@@ -61,6 +59,7 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     %stkboxessp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 3
     %stkboxesbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 4
     %stkboxeslimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 5
+    %stkrest = getelementptr %Stk, %Stk* %stkp, i64 0, i32 6
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
@@ -68,6 +67,8 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     %newboxessp = load %BoxesSp, %BoxesSp* %stkboxessp
     %newboxesbase = load %BoxesBase, %BoxesBase* %stkboxesbase
     %newboxeslimit = load %BoxesLimit, %BoxesLimit* %stkboxeslimit
+    ; %newrest = load %MStk, %MStk* %stkrest
+    ; assert %newrest == null
 
     %oldsp = load %Sp, %Sp* %spp
     %oldbase = load %Base, %Base* @base
@@ -75,6 +76,7 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     %oldboxessp = load %BoxesSp, %BoxesSp* @boxessp
     %oldboxesbase = load %BoxesBase, %BoxesBase* @boxesbase
     %oldboxeslimit = load %BoxesLimit, %BoxesLimit* @boxeslimit
+    %oldrest = load %MStk, %MStk* @rest
 
     store %Sp %newsp, %Sp* %spp
     store %Base %newbase, %Base* @base
@@ -82,6 +84,7 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     store %BoxesSp %newboxessp, %BoxesSp* @boxessp
     store %BoxesBase %newboxesbase, %BoxesBase* @boxesbase
     store %BoxesLimit %newboxeslimit, %BoxesLimit* @boxeslimit
+    store %MStk %stkp, %MStk* @rest
 
     store %Sp %oldsp, %Sp* %stksp
     store %Base %oldbase, %Base* %stkbase
@@ -89,24 +92,14 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     store %BoxesSp %oldboxessp, %BoxesSp* %stkboxessp
     store %BoxesBase %oldboxesbase, %BoxesBase* %stkboxesbase
     store %BoxesLimit %oldboxeslimit, %BoxesLimit* %stkboxeslimit
-
-    %msp = load i64, i64* @msp
-    %newmsp = add i64 %msp, 1
-    store i64 %newmsp, i64* @msp
-
-    %mspstk = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %newmsp
-    store %Stk* %stkp, %Stk** %mspstk
+    store %MStk %oldrest, %MStk* %stkrest
 
     ret void
 }
 
 define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
-    %msp = load i64, i64* @msp
-    %newmsp = add i64 %msp, -1
-    store i64 %newmsp, i64* @msp
 
-    %mspstk = getelementptr %MStk, %MStk* @metaStack, i64 0, i64 %msp
-    %stkp = load %Stk*, %Stk** %mspstk
+    %stkp = load %Stk*, %Stk** @rest
 
     %stksp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 0
     %stkbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 1
@@ -114,6 +107,7 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     %stkboxessp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 3
     %stkboxesbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 4
     %stkboxeslimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 5
+    %stkrest = getelementptr %Stk, %Stk* %stkp, i64 0, i32 6
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
@@ -121,6 +115,7 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     %newboxessp = load %BoxesSp, %BoxesSp* %stkboxessp
     %newboxesbase = load %BoxesBase, %BoxesBase* %stkboxesbase
     %newboxeslimit = load %BoxesLimit, %BoxesLimit* %stkboxeslimit
+    %newrest = load %MStk, %MStk* %stkrest
 
     %oldsp = load %Sp, %Sp* %spp
     %oldbase = load %Base, %Base* @base
@@ -128,6 +123,7 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     %oldboxessp = load %BoxesSp, %BoxesSp* @boxessp
     %oldboxesbase = load %BoxesBase, %BoxesBase* @boxesbase
     %oldboxeslimit = load %BoxesLimit, %BoxesLimit* @boxeslimit
+    ; %oldrest = load %MStk, %MStk* @rest
 
     store %Sp %newsp, %Sp* %spp
     store %Base %newbase, %Base* @base
@@ -135,6 +131,7 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     store %BoxesSp %newboxessp, %BoxesSp* @boxessp
     store %BoxesBase %newboxesbase, %BoxesBase* @boxesbase
     store %BoxesLimit %newboxeslimit, %BoxesLimit* @boxeslimit
+    store %MStk %newrest, %MStk* @rest
 
     store %Sp %oldsp, %Sp* %stksp
     store %Base %oldbase, %Base* %stkbase
@@ -142,6 +139,7 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     store %BoxesSp %oldboxessp, %BoxesSp* %stkboxessp
     store %BoxesBase %oldboxesbase, %BoxesBase* %stkboxesbase
     store %BoxesLimit %oldboxeslimit, %BoxesLimit* %stkboxeslimit
+    store %MStk null, %MStk* %stkrest
 
     ret %Stk* %stkp
 }
@@ -156,6 +154,8 @@ entry:
     %boxessp = extractvalue %Stk %stk, 3
     %boxesbase = extractvalue %Stk %stk, 4
     %boxeslimit = extractvalue %Stk %stk, 5
+    ; %rest = extractvalue %Stk %stk, 6
+    ; assert %rest == null
 
     %intsp = ptrtoint %Sp %sp to i64
     %intbase = ptrtoint %Base %base to i64
@@ -208,9 +208,10 @@ done:
     %newstk.3 = insertvalue %Stk %newstk.2, %BoxesSp %newboxessp, 3
     %newstk.4 = insertvalue %Stk %newstk.3, %BoxesBase %newboxesbase, 4
     %newstk.5 = insertvalue %Stk %newstk.4, %BoxesLimit %newboxeslimit, 5
+    %newstk.6 = insertvalue %Stk %newstk.5, %MStk null, 6
 
     %newstkp = call fastcc %Stk* @newStack()
-    store %Stk %newstk.5, %Stk* %newstkp
+    store %Stk %newstk.6, %Stk* %newstkp
     ret %Stk* %newstkp
 }
 
