@@ -76,6 +76,7 @@ trait Intelligence {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
     case d: EffectOp     => C.definitionTreeOption(d.effect)
+    case a: Anon         => Some(a.decl)
     case u               => C.definitionTreeOption(u)
   }
 
