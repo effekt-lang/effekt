@@ -140,9 +140,17 @@ package object symbols {
     decl: FunDef
   ) extends Fun
 
-  case class Lambda(params: Params) extends Fun {
-    val name = Name("Anonymous function")
+  /**
+   * Anonymous symbols used to represent scopes / regions in the region checker
+   */
+  sealed trait Anon extends TermSymbol {
+    val name = Name("<anon>")
+    def decl: source.Tree
+  }
 
+  case class BlockArg(decl: source.Tree) extends Anon
+
+  case class Lambda(params: Params, decl: source.Tree) extends Fun with Anon {
     // Lambdas currently do not have an annotated return type
     def ret = None
 
