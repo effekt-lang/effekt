@@ -115,9 +115,15 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       }
       reg
 
-    case BlockArg(params, body) =>
+    case b @ BlockArg(params, body) =>
+      // TODO here we just make up a symbol on the spot
+      //   probably we should assign a symbol to block arguments in namer (like for anonymous functions)
+      val selfRegion = Region(symbols.Lambda(Nil))
       val boundRegions: RegionSet = bindRegions(params)
-      val bodyRegion = check(body)
+
+      // This is necessary to fix #50 -- the region inferred for the continuation is not precise enough since
+      // a higher-order function can introduce handlers !
+      val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
       bodyRegion -- boundRegions
 
     // TODO What about capabilities introduced by resume????
@@ -126,7 +132,6 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       // regions for all the capabilities
       val caps = handlers.flatMap { h => h.capability }
       val boundRegions = bindRegions(caps)
-
       val bodyRegion = Context.inRegion(boundRegions) { check(body) }
 
       var reg = bodyRegion -- boundRegions
