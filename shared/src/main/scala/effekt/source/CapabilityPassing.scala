@@ -139,11 +139,11 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       (arg, param) match {
         case (ValueArgs(as), _) =>
           ValueArgs(as.map(rewrite))
-        case (b @ BlockArg(ps, body), List(p: BlockType)) =>
+        case (b @ source.BlockArg(ps, body), List(p: BlockType)) =>
           // here we use the blocktype as inferred by typer (after substitution)
           val effs = C.blockTypeOf(b).ret.effects.userEffects
           C.withCapabilities(effs) { caps =>
-            BlockArg(ps ++ caps, rewrite(body))
+            source.BlockArg(ps ++ caps, rewrite(body))
           }
       }
     }

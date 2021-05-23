@@ -116,12 +116,13 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       reg
 
     case b @ BlockArg(params, body) =>
-      // TODO here we just make up a symbol on the spot
-      //   probably we should assign a symbol to block arguments in namer (like for anonymous functions)
-      val selfRegion = Region(symbols.Lambda(Nil))
+      // Here we just make up a symbol on the spot (symbols.BlockArg)
+      // typically, we use the blockparam to look up types etc., this one
+      // is only used to represent the scope / region
+      val selfRegion = Region(symbols.BlockArg(b))
       val boundRegions: RegionSet = bindRegions(params)
 
-      // This is necessary to fix #50 -- the region inferred for the continuation is not precise enough since
+      // Refining the dynamic region here is necessary to fix #50 -- the region inferred for the continuation is not precise enough since
       // a higher-order function can introduce handlers !
       val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
       bodyRegion -- boundRegions
