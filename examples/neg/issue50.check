@@ -1,0 +1,9 @@
+[info] examples/neg/issue50.effekt:16:11: Not allowed: Anonymous function
+      k = fun (x: Unit) { resume(x) };
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[error] examples/neg/issue50.effekt:16:11: Region mismatch: expected {escape} but got {Anonymous function}
+      k = fun (x: Unit) { resume(x) };
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[info] examples/neg/issue50.effekt:16:27: Function resume is called, which closes over 'Anonymous function'
+      k = fun (x: Unit) { resume(x) };
+                          ^^^^^^
