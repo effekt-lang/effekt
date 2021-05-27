@@ -19,6 +19,11 @@ import org.eclipse.lsp4j.MessageType
 import scala.reflect.ClassTag
 import netscape.javascript.JSObject
 import com.google.gson.JsonObject
+import effekt.context.Annotation
+import com.google.gson.Gson
+import scala.collection.immutable.Vector1
+import effekt.source.Call
+import effekt.source.Operation
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -185,6 +190,8 @@ trait LSPServer extends Driver with Intelligence {
     return CompletableFuture.completedFuture { annotations.toArray }
   }
 
+  case class passedCapability(capabilities: Array[String], line: Int, column: Int)
+
   override def executeCommand(executeCommandParams: ExecuteCommandParams): Any =
     executeCommandParams.getCommand() match {
       case "println" => {
@@ -197,7 +204,109 @@ trait LSPServer extends Driver with Intelligence {
         //return CompletableFuture.supplyAsync( () -> "Finished");
         // ( () -> executeCommandParams.getArguments().forEach((x) => println(x.toString())) )
       }
-      case "getHover" => {
+      case "getPassedCapabilities" => {
+        val args = executeCommandParams.getArguments()
+        var src = getSource(args.get(0).toString().filter(!"\"".contains(_)))
+
+        var calls = Array[Call]()
+        val tree = getTreeFrom(src)(context).get
+        tree.foreach(t => {
+          t match {
+            case c @ Call(target, targs, args) => {
+              print { "\n##\t\t\tCall " + c + " to: " + target.toString + "\n" }
+              val pos = positions.getStart(t).get
+              print { "\t\t\tPosition: " + pos.line + "x" + pos.column }
+              calls = calls :+ c
+            }
+            case _: Tree =>
+          }
+        })
+
+        var caps = Array[passedCapability]()
+        var handled = List[source.CapabilityArg]()
+        calls.foreach((call) => {
+          println("### Call: ", call.toString())
+          var ann = context.annotationOption(Annotations.CapabilityArguments, call)
+          println("\tAnnotations: ", ann.toString())
+          ann match {
+            case None => println("\t##########\nNo annotation for " + call.toString())
+            case Some(annot) => {
+              var capabilities = Array[String]()
+              annot.foreach({
+                arg => capabilities = capabilities :+ arg.id.name
+              })
+              handled = handled ++ ann.get
+              val pos = positions.getStart(call).get
+              if (capabilities.length > 0) {
+                caps = caps :+ passedCapability(capabilities, pos.line, pos.column)
+              }
+            }
+          }
+        })
+        println("##################\nResult")
+        handled.foreach(println)
+        var tpes = Array[String]()
+        handled.foreach((c) => tpes = tpes :+ c.id.name)
+        //context.annotation(Annotations.CapabilityBinder, trees)
+
+        val gson = new Gson
+        return CompletableFuture.completedFuture {
+          gson.toJson(caps)
+        }
+      }
+
+      case "getUnhandledCapabilities" => {
+        val args = executeCommandParams.getArguments()
+        var src = getSource(args.get(0).toString().filter(!"\"".contains(_)))
+
+        var funDefs = Array[FunDef]()
+        val tree = getTreeFrom(src)(context).get
+        tree.foreach(t => {
+          t match {
+            case f @ FunDef(id, tparams, params, ret, body) => {
+              print { "\n##\t\t\tFunctiondefinition " + f + " with return type: " + ret.toString + "\n" }
+              val pos = positions.getStart(t).get
+              print { "\t\t\tPosition: " + pos.line + "x" + pos.column }
+              funDefs = funDefs :+ f
+            }
+            case _: Tree =>
+          }
+        })
+
+        var caps = Array[passedCapability]()
+        var handled = List[source.CapabilityParam]()
+        funDefs.foreach((funDef) => {
+          println("### FunDef: ", funDef.toString())
+          var ann = context.annotationOption(Annotations.CapabilityBinder, funDef)
+          println("\tAnnotations: ", ann.toString())
+          ann match {
+            case None => println("\t##########\nNo annotation for " + funDef.toString())
+            case Some(annot) => {
+              var capabilities = Array[String]()
+              annot.foreach({
+                arg => capabilities = capabilities :+ arg.id.name
+              })
+              handled = handled ++ ann.get
+              val pos = positions.getStart(funDef).get
+              if (capabilities.length > 0) {
+                caps = caps :+ passedCapability(capabilities, pos.line, pos.column)
+              }
+            }
+          }
+        })
+        println("##################\nResult")
+        handled.foreach(println)
+        var tpes = Array[String]()
+        handled.foreach((c) => tpes = tpes :+ c.id.name)
+        //context.annotation(Annotations.CapabilityBinder, trees)
+
+        val gson = new Gson
+        return CompletableFuture.completedFuture {
+          gson.toJson(caps)
+        }
+      }
+
+      case "getCapabilityBinders" => {
         val args = executeCommandParams.getArguments()
         var obj = args.get(0)
         var pos = obj.asInstanceOf[JsonObject]
@@ -207,11 +316,95 @@ trait LSPServer extends Driver with Intelligence {
         var src = getSource(args.get(1).toString().filter(!"\"".contains(_)))
 
         //println(positionOfNotification(src, pos))
-        var res = getSymbolHover(new Position(line + 1, char, src))
+        var res = getSymbolHover(new Position(line + 1, char + 1, src))
         println("Line:", line, "Char:", char)
         println(res)
+
+        var trees = getTreesAt(Position(line + 1, char + 1, src))(context)
+        println("##########\nTrees:")
+        trees.get.foreach((t) => println("### " + t.toString()))
+        var handled = List[source.CapabilityParam]()
+        trees.get.foreach((tree) => {
+          tree match {
+            case FunDef(id, tparams, params, ret, body) => {
+              var ann = context.annotationOption(Annotations.CapabilityBinder, tree)
+              ann match {
+                case None => println("##########\nNo annotation for " + tree.toString())
+                case Some(annot) => {
+                  println("Handled: ")
+                  annot.foreach(println)
+                  handled = handled ++ ann.get
+                }
+              }
+            }
+            case _: Tree => ()
+          }
+        })
+        println("##################\nResult")
+        handled.foreach(println)
+        var tpes = Array[source.CapabilityType]()
+        handled.foreach((c) => tpes :+ c.tpe)
+        //context.annotation(Annotations.CapabilityBinder, trees)
+
+        val gson = new Gson
         return CompletableFuture.completedFuture {
-          res
+          gson.toJson(handled)
+        }
+      }
+      case "getCapabilityArguments" => {
+        val args = executeCommandParams.getArguments()
+        var obj = args.get(0)
+        var pos = obj.asInstanceOf[JsonObject]
+        var line = pos.get("line").getAsInt()
+        var char = pos.get("character").getAsInt
+        println("Getting source " + args.get(1).toString())
+        var src = getSource(args.get(1).toString().filter(!"\"".contains(_)))
+
+        //println(positionOfNotification(src, pos))
+        var res = getSymbolHover(new Position(line + 1, char + 1, src))
+        println("Line:", line, "Char:", char)
+        println(res)
+
+        var calls = Array[Call]()
+        var trees = getTreesAt(Position(line + 1, char + 1, src))(context)
+        trees match {
+          case Some(value) => value.foreach((t) => t match {
+            case c @ Call(target, targs, args) => {
+              println("Found function call", c.toString())
+              calls = calls :+ c
+            }
+            case o @ Operation(id, tparams, params, ret) => {
+              println("Found effect operation", o.toString())
+              //calls = calls :+ c
+            }
+            case _: Tree => None
+          })
+          case None => None
+        }
+
+        var handled = List[source.CapabilityArg]()
+        calls.foreach((call) => {
+          println("### Call: ", call.toString())
+          var ann = context.annotationOption(Annotations.CapabilityArguments, call)
+          println("\tAnnotations: ", ann.toString())
+          ann match {
+            case None => println("\t##########\nNo annotation for " + call.toString())
+            case Some(annot) => {
+              println("\tHandled: ")
+              annot.foreach(println)
+              handled = handled ++ ann.get
+            }
+          }
+        })
+        println("##################\nResult")
+        handled.foreach(println)
+        var tpes = Array[String]()
+        handled.foreach((c) => tpes = tpes :+ c.id.name)
+        //context.annotation(Annotations.CapabilityBinder, trees)
+
+        val gson = new Gson
+        return CompletableFuture.completedFuture {
+          gson.toJson(tpes)
         }
       }
       case "testfun" => {
@@ -233,13 +426,28 @@ trait LSPServer extends Driver with Intelligence {
           val annotations = getTypeAnnotations(args.get(0).toString())
           return annotations
         }
+      }
+      case "getEffectIntroductions" => {
+        val args = executeCommandParams.getArguments()
+        if (args.size() == 1) {
 
+        }
       }
       case _ => {
         logMessage("Unknown command: " + executeCommandParams.getCommand())
         return null
       }
     }
+
+  def getFunCalls(source: Source) = {
+    val syms = context.sourceSymbols
+    syms.collect {
+      case eo: EffectOp => {
+        eo
+      }
+      case ct: CallTarget => ct
+    }
+  }
 
   def getFunDefs(source: Source): Vector[UserFunction] = {
     val syms = context.sourceSymbols
@@ -304,8 +512,61 @@ trait LSPServer extends Driver with Intelligence {
   def action(tree: Tree)(implicit C: Context): Option[TreeAction] = tree match {
     case f: FunDef => inferEffectsAction(f)
     case h: Hole   => closeHoleAction(h)
+    case c: Call   => addEffectHandlerAction(c)
     case _         => None
   }
+
+  def stripCapabilityName(capabilityName: String) = {
+    capabilityName.replaceAll("$$capability", "")
+  }
+
+  def callToString(call: Call) = {
+
+  }
+
+  def addEffectHandlerAction(c: Call)(implicit C: Context): Option[TreeAction] = {
+    logMessage("Adding effect handler Action")
+    var pos = C.positions.getStart(c).getOrElse(return None)
+    var ann = C.annotationOption(Annotations.CapabilityArguments, c)
+    var callString = c.target.toString()
+    var callArgs = c.
+    ann match {
+      case None => None
+      case Some(capabilityArguments) => {
+        var actions = capabilityArguments.map(capability => {
+          var eff = stripCapabilityName(capability.id.name)
+          eff = capability.productPrefix
+          logMessage("Adding handler action for effect " + eff)
+          TreeAction(
+            "Add an effect handler for effect <" + eff + ">",
+            pos.source.name,
+            c,
+            s"""|try {
+                |\t$callString
+                |} with $eff {
+                |\t<>
+                |}""".stripMargin
+          )
+        })
+        Some(actions(0))
+      }
+    }
+  }
+
+  // for {
+  //   pos <- positions.getStart(c)
+  //   ret <- C.annotationOption(Annotations.CapabilityArguments, c)
+  //   eff <- ret
+  // } yield TreeAction(
+  //   "Add an effect handler for effect <"+eff+">",
+  //   pos.source.name,
+  //   c,
+  //   s"""|try {
+  //       |  $c
+  //       |} with $eff {
+  //       |  <>
+  //       |}""".stripMargin
+  // )
 
   /**
    * TODO it would be great, if Kiama would allow setting the position of the code action separately

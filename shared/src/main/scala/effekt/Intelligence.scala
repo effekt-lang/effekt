@@ -37,6 +37,11 @@ trait Intelligence {
     }
   }
 
+  def getTreeFrom(source: kiama.util.Source)(implicit C: Context) = for {
+    decl <- C.getAST(source)
+    tree = new EffektTree(decl)
+  } yield tree.nodes
+
   def getTreesAt(position: Position)(implicit C: Context): Option[Vector[Tree]] = for {
     decl <- C.getAST(position.source)
     tree = new EffektTree(decl)
