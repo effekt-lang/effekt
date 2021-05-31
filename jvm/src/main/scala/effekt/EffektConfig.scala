@@ -78,8 +78,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
         sys.error("Cannot find path to standard library")
     }
 
-    if ((jarPath / ".." / "lib" / "effekt.effekt").exists) {
-      return jarPath / ".." / "lib"
+    val libFolder = if (generator().equals("llvm")) { "llvm" } else { "lib" }
+
+    if ((jarPath / ".." / libFolder / "effekt.effekt").exists) {
+      return jarPath / ".." / libFolder
     }
 
     sys.error("Cannot find path to standard library")
