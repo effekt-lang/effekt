@@ -244,8 +244,7 @@ done:
     ret void
 }
 
-define fastcc %Sp @growStack(%Sp %incedsp, %Sp* %spp, %Base* %basep, %Limit* %limitp) alwaysinline {
-entry:
+define fastcc %Sp @checkOverflow(%Sp %incedsp, %Sp* %spp, %Base* %basep, %Limit* %limitp) alwaysinline {
     %sp = load %Sp, %Sp* %spp
     %limit = load %Limit, %Limit* %limitp
 
@@ -253,8 +252,22 @@ entry:
     %intincedsp = ptrtoint %Sp %incedsp to i64
 
     %overflow = icmp ugt i64 %intincedsp, %intlimit
-    br i1 %overflow, label %grow, label %done
+    br i1 %overflow, label %grow, label %good
+good:
+    store %Sp %incedsp, %Sp* %spp
+    ret %Sp %sp
 grow:
+    %results = call fastcc {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp, %Base* %basep, %Limit* %limitp)
+    %newsp = extractvalue {%Sp, %Sp} %results, 0
+    %newincedsp = extractvalue {%Sp, %Sp} %results, 1
+    store %Sp %newincedsp, %Sp* %spp
+    ret %Sp %newsp
+}
+
+define fastcc {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp, %Base* %basep, %Limit* %limitp) noinline {
+
+    %intincedsp = ptrtoint %Sp %incedsp to i64
+
     %base = load %Base, %Base* %basep
 
     %intsp = ptrtoint %Sp %sp to i64
@@ -278,12 +291,10 @@ grow:
     store %Base %newbase, %Base* %basep
     store %Limit %newlimit, %Limit* %limitp
 
-    br label %done
-done:
-    %incedsp.1 = phi %Sp [%incedsp, %entry], [%newincedsp, %grow]
-    %sp.1 = phi %Sp [%sp, %entry], [%newsp, %grow]
-    store %Sp %incedsp.1, %Sp* %spp
-    ret %Sp %sp.1
+    %results.0 = insertvalue {%Sp, %Sp} undef ,%Sp %newsp, 0
+    %results.1 = insertvalue {%Sp, %Sp} %results.0 ,%Sp %newincedsp, 1
+
+    ret {%Sp,%Sp} %results.1
 }
 
 ; RTS initialization

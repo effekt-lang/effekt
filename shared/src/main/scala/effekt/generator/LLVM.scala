@@ -445,7 +445,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
       incedtypedsp <+> "=" <+> "getelementptr" <+> typ <> comma <+> ptrType <+>
       oldtypedsp <> comma <+> "i64 1" <@>
       incedsp <+> "=" <+> "bitcast" <+> ptrType <+> incedtypedsp <+> "to" <+> "%Sp" <@>
-      newsp <+> "=" <+> "call fastcc %Sp" <+> globalBuiltin("growStack") <>
+      newsp <+> "=" <+> "call fastcc %Sp" <+> globalBuiltin("checkOverflow") <>
       argumentList(List("%Sp" <+> incedsp, "%Sp*" <+> spp, "%Base*" <+> basep, "%Limit*" <+> limitp)) <@>
       newtypedsp <+> "=" <+> "bitcast" <+> "%Sp" <+> newsp <+> "to" <+> ptrType <@>
       "store" <+> typ <+> value <> comma <+> ptrType <+> newtypedsp
