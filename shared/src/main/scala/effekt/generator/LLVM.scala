@@ -57,7 +57,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
           "%spp = alloca %Sp" <@>
             // TODO find return type of main
             "store %Sp null, %Sp* %spp" <@>
-            storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", List(), globalBuiltin("topLevel"), List(machine.PrimInt())) <@>
+            storeFrm("%spp", "@base", "@limit", List(), globalBuiltin("topLevel"), List(machine.PrimInt())) <@>
             "%newsp = load %Sp, %Sp* %spp" <@>
             // TODO deal with top-level evidence
             jump(globalName(mainName), "%newsp", List("%Evi 0"))
@@ -69,22 +69,19 @@ object LLVMPrinter extends ParenPrettyPrinter {
       // This magical 5 ensures that we pass at most 6 64bit parameters
       val unspilledParams = params.take(5);
       val spilledParams = params.drop(5);
-      // TODO spill both kinds of params to non-box stack
-      val spilledUnboxedParams = spilledParams.filterNot(p => isBoxType(p.typ));
-      val spilledBoxedParams = spilledParams.filter(p => isBoxType(p.typ));
       define(globalName(functionName), unspilledParams.map(toDoc),
-        loadSpilled("%spp", "@boxessp", spilledUnboxedParams, spilledBoxedParams) <@>
+        loadSpilled("%spp", spilledParams) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
     case DefFrm(functionName, params, env, entry, body) =>
       define(globalName(functionName), params.map(toDoc),
-        loadEnv("%spp", "@boxessp", env) <@>
+        loadEnv("%spp", env) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
     case DefClo(functionName, params, env, entry, body) =>
       val emptyStk = freshLocalName("emptyStk");
       define(globalName(functionName), params.map(toDoc),
-        loadEnv("%spp", "@boxessp", env) <@>
+        loadEnv("%spp", env) <@>
           emptyStk <+> "=" <+>
           "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
           argumentList(List("%Sp* %spp")) <@>
@@ -138,14 +135,14 @@ object LLVMPrinter extends ParenPrettyPrinter {
       tmpCons <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
         localName(name) <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> tmpCons <> ", i64" <+> variant.toString <> ", 0"
     case PushFrame(cntType, blockName, freeVars) =>
-      storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", freeVars, globalName(blockName), cntType)
+      storeFrm("%spp", "@base", "@limit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
       val tmpstkp = freshLocalName("tempstkp");
       tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> globalBuiltin("newStack") <>
         argumentList(List()) <@>
         "call fastcc void" <+> globalBuiltin("pushStack") <>
         argumentList(List("%Sp* %spp", "%Stk*" <+> tmpstkp)) <@>
-        storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", args, globalName(blockName), cntType) <@>
+        storeFrm("%spp", "@base", "@limit", args, globalName(blockName), cntType) <@>
         localName(stackName) <+> "=" <+>
         "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
         argumentList(List("%Sp* %spp"))
@@ -187,11 +184,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
       // This magical 5 ensures that we pass at most 6 64bit parameters
       val unspilledArgs = args.take(5);
       val spilledArgs = args.drop(5);
-      // TODO spill both kinds of params to non-box stack
-      val spilledUnboxedArgs = spilledArgs.filterNot(v => isBoxType(valueType(v)));
-      val spilledBoxedArgs = spilledArgs.filter(v => isBoxType(valueType(v)));
       val sp = freshLocalName("sp");
-      storeSpilled("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", spilledUnboxedArgs, spilledBoxedArgs) <@>
+      storeSpilled("%spp", "@base", "@limit", spilledArgs) <@>
         sp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
         jump(globalName(name), sp, unspilledArgs.map(toDocWithType))
     case JumpLocal(name, args) =>
@@ -258,101 +252,45 @@ object LLVMPrinter extends ParenPrettyPrinter {
       "ret" <+> "void"
   }
 
-  def loadEnv(spp: Doc, boxesspp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
+  def loadEnv(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
 
-    val unboxedParams =
-      params.filterNot(p => isBoxType(p.typ));
-    val unboxedEnvType =
-      envRecordType(unboxedParams.map(p => toDoc(p.typ)));
-    val unboxedEnvParams =
-      unboxedParams.map(p => localName(p.id));
-    val boxedParams =
-      params.filter(p => isBoxType(p.typ));
-    val boxedEnvType =
-      envRecordType(boxedParams.map(p => toDoc(p.typ)));
-    val boxedEnvParams =
-      boxedParams.map(p => localName(p.id));
-    (unboxedEnvParams, boxedEnvParams) match {
-      case (List(), List()) =>
-        emptyDoc
-      case (_, List()) =>
-        loadParams(spp, unboxedEnvType, unboxedEnvParams)
-      case (List(), _) =>
-        loadParams(boxesspp, boxedEnvType, boxedEnvParams)
-      case (_, _) =>
-        loadParams(spp, unboxedEnvType, unboxedEnvParams) <@>
-          loadParams(boxesspp, boxedEnvType, boxedEnvParams)
+    val envType =
+      envRecordType(params.map(p => toDoc(p.typ)));
+    val envParams =
+      params.map(p => localName(p.id));
+    loadParams(spp, envType, envParams)
+  }
+
+  def storeFrm(spp: Doc, basep: Doc, limitp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
+
+    val envType =
+      envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType));
+    val envValues =
+      values.map(v => toDocWithType(v)) :+ (cntTypeDoc(cntType) <+> cntName);
+    storeValues(spp, basep, limitp, envType, envValues)
+  }
+
+  def loadSpilled(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
+    params match {
+      case Nil => emptyDoc
+      case _ =>
+        val envType =
+          envRecordType(params.map(p => toDoc(p.typ)));
+        val envParams =
+          params.map(p => localName(p.id));
+        loadParams(spp, envType, envParams)
     }
   }
 
-  def storeFrm(spp: Doc, basep: Doc, limitp: Doc, boxesspp: Doc, boxesbasep: Doc, boxeslimitp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
-
-    val unboxedValues =
-      values.filterNot(v => isBoxType(valueType(v)));
-    val unboxedEnvType =
-      envRecordType(unboxedValues.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType));
-    val unboxedEnvValues =
-      unboxedValues.map(v => toDocWithType(v)) :+ (cntTypeDoc(cntType) <+> cntName);
-    val boxedValues =
-      values.filter(v => isBoxType(valueType(v)));
-    val boxedEnvType =
-      envRecordType(boxedValues.map(v => toDoc(valueType(v))));
-    val boxedEnvValues =
-      boxedValues.map(v => toDocWithType(v));
-    (unboxedEnvValues, boxedEnvValues) match {
-      case (List(), List()) =>
-        emptyDoc
-      case (_, List()) =>
-        storeValues(spp, basep, limitp, unboxedEnvType, unboxedEnvValues)
-      case (List(), _) =>
-        storeValues(boxesspp, boxesbasep, boxeslimitp, boxedEnvType, boxedEnvValues)
-      case (_, _) =>
-        storeValues(spp, basep, limitp, unboxedEnvType, unboxedEnvValues) <@>
-          storeValues(boxesspp, boxesbasep, boxeslimitp, boxedEnvType, boxedEnvValues)
-    }
-  }
-
-  def loadSpilled(spp: Doc, boxesspp: Doc, unboxedParams: List[machine.Param], boxedParams: List[machine.Param])(implicit C: LLVMContext): Doc = {
-    val unboxedEnvType =
-      envRecordType(unboxedParams.map(p => toDoc(p.typ)));
-    val unboxedEnvParams =
-      unboxedParams.map(p => localName(p.id));
-    val boxedEnvType =
-      envRecordType(boxedParams.map(p => toDoc(p.typ)));
-    val boxedEnvParams =
-      boxedParams.map(p => localName(p.id));
-    (unboxedEnvParams, boxedEnvParams) match {
-      case (List(), List()) =>
-        emptyDoc
-      case (_, List()) =>
-        loadParams(spp, unboxedEnvType, unboxedEnvParams)
-      case (List(), _) =>
-        loadParams(boxesspp, boxedEnvType, boxedEnvParams)
-      case (_, _) =>
-        loadParams(spp, unboxedEnvType, unboxedEnvParams) <@>
-          loadParams(boxesspp, boxedEnvType, boxedEnvParams)
-    }
-  }
-
-  def storeSpilled(spp: Doc, basep: Doc, limitp: Doc, boxesspp: Doc, boxesbasep: Doc, boxeslimitp: Doc, unboxedValues: List[machine.Value], boxedValues: List[machine.Value])(implicit C: LLVMContext): Doc = {
-    val unboxedEnvType =
-      envRecordType(unboxedValues.map(v => toDoc(valueType(v))));
-    val unboxedEnvValues =
-      unboxedValues.map(v => toDocWithType(v));
-    val boxedEnvType =
-      envRecordType(boxedValues.map(v => toDoc(valueType(v))));
-    val boxedEnvValues =
-      boxedValues.map(v => toDocWithType(v));
-    (unboxedEnvValues, boxedEnvValues) match {
-      case (List(), List()) =>
-        emptyDoc
-      case (_, List()) =>
-        storeValues(spp, basep, limitp, unboxedEnvType, unboxedEnvValues)
-      case (List(), _) =>
-        storeValues(boxesspp, boxesbasep, boxeslimitp, boxedEnvType, boxedEnvValues)
-      case (_, _) =>
-        storeValues(spp, basep, limitp, unboxedEnvType, unboxedEnvValues) <@>
-          storeValues(boxesspp, boxesbasep, boxeslimitp, boxedEnvType, boxedEnvValues)
+  def storeSpilled(spp: Doc, basep: Doc, limitp: Doc, values: List[machine.Value])(implicit C: LLVMContext): Doc = {
+    values match {
+      case Nil => emptyDoc
+      case _ =>
+        val envType =
+          envRecordType(values.map(v => toDoc(valueType(v))));
+        val envValues =
+          values.map(v => toDocWithType(v));
+        storeValues(spp, basep, limitp, envType, envValues)
     }
   }
 
@@ -417,6 +355,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
   }
 
   def store(spp: Doc, basep: Doc, limitp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
+    // TODO remove parameters spp basep and limitp
 
     val ptrType = typ <> "*";
     val oldsp = freshLocalName("oldsp");
@@ -431,7 +370,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
       oldtypedsp <> comma <+> "i64 1" <@>
       incedsp <+> "=" <+> "bitcast" <+> ptrType <+> incedtypedsp <+> "to" <+> "%Sp" <@>
       newsp <+> "=" <+> "call fastcc %Sp" <+> globalBuiltin("checkOverflow") <>
-      argumentList(List("%Sp" <+> incedsp, "%Sp*" <+> spp, "%Base*" <+> basep, "%Limit*" <+> limitp)) <@>
+      argumentList(List("%Sp" <+> incedsp, "%Sp*" <+> spp)) <@>
       newtypedsp <+> "=" <+> "bitcast" <+> "%Sp" <+> newsp <+> "to" <+> ptrType <@>
       "store" <+> typ <+> value <> comma <+> ptrType <+> newtypedsp
     // TODO do the store to spp here and not in growStack
