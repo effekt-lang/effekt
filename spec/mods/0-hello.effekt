@@ -1,0 +1,11 @@
+module examples/mods // source module
+
+module hello { // user module
+    def world() = {
+        println("Hello World!")
+    }
+}
+
+def main() = {
+    hello:world() // module access
+}

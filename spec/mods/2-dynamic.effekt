@@ -1,0 +1,29 @@
+module example/mods/dynamic
+
+// Block Signature
+//type Worker = { def foo(): Int }
+// Effect Declaration
+// => Hilfsmethode für beide
+interface Worker {
+    def foo(): Int 
+}
+
+
+// user
+def work(m: Worker) { n: Int }  = {
+    m:foo()
+}
+
+
+def main() = {
+    work() {
+        def foo(): Int = 42
+    }
+}
+
+//js
+//work({
+//    foo: function() {
+//        42
+//    }
+//})

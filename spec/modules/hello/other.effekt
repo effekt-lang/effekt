@@ -1,8 +1,0 @@
-// Modl.Decl
-module other
-import example
-
-def main() = {
-    hello:foo()
-    hello:bar(3)
-}
