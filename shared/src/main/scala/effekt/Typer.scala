@@ -7,7 +7,7 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
 import effekt.regions.Region
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, Modl, Stmt, TagPattern, Tree }
+import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -26,11 +26,11 @@ import effekt.modules.Name
  *  Also annotates every lambda with a fresh region variable and collects equality constraints
  *  between regions
  */
-class Typer extends Phase[Modl.Decl, Modl.Decl] {
+class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   val phaseName = "typer"
 
-  def run(module: Modl.Decl)(implicit C: Context): Option[Modl.Decl] = try {
+  def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
     val mod = Context.module
 
     // Effects that are lexically in scope at the top level
@@ -40,8 +40,8 @@ class Typer extends Phase[Modl.Decl, Modl.Decl] {
     Context in {
       // We split the type-checking of definitions into "pre-check" and "check"
       // to allow mutually recursive defs
-      module.body.foreach { d => precheckDef(d) }
-      module.body.foreach { d =>
+      module.defs.foreach { d => precheckDef(d) }
+      module.defs.foreach { d =>
         val (_ / effs) = synthDef(d)
         if (effs.nonEmpty)
           Context.at(d) {
@@ -435,7 +435,7 @@ class Typer extends Phase[Modl.Decl, Modl.Decl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
-      case d @ source.Modl.User(id, defs) => {
+      case d @ source.ModuleFrag(id, defs) => {
         Context in {
           defs.foreach { d => precheckDef(d) }
           defs.foreach { d =>

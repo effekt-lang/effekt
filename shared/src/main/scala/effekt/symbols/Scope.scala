@@ -35,17 +35,17 @@ object scopes {
       terms.getOrElse(key, Set.empty)
 
     // TODO add appropriate checks
-    def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
+    def define(key: String, sym: TermSymbol): Unit = {
       val bindings = terms.getOrElse(key, Set())
       terms.update(key, bindings + sym)
     }
 
-    def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
+    def define(key: String, sym: TypeSymbol): Unit =
       types.update(key, sym)
 
     def enter: Scope = BlockScope(this)
 
-    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol]) = {
       tms.foreach { case (n, syms) => syms.foreach { sym => define(n, sym) } }
       tps.foreach { case (n, sym) => define(n, sym) }
     }

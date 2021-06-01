@@ -166,9 +166,10 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
+    case _: symbols.Effect       => toDoc(id.name)
+    case _: symbols.Capability   => id.name.toString + "_" + id.id
+    case _: symbols.EffectOp     => "op$" + id.name.toString
+    case mod: symbols.UserModule => mod.name.full
     case _ => id.name match {
       case name: Name.Link if name.lft != C.module.name => link(name, jsModuleName(name.lft) + "." + name.local) //TODO
       case name => toDoc(name)
@@ -270,9 +271,12 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
 
     case Def(id, tpe, UserModule(b), rest) =>
-      "var" <+> nameDef(id) <+> "= (function() {" <> emptyline <>
-        "var" <+> jsModuleName(id.name) <+> "=" <+> "{};" <> emptyline <>
-        toDocTopLevel(b) <> emptyline <> "})()" <> emptyline <> toDocTopLevel(rest)
+      "var" <+> nameDef(id) <+> "=" <+> jsCall(parens(jsAnonFunc(
+        List.empty, /* (function() {" <> emptyline <> */
+        "var module = {}" <> emptyline <> // only necessary because we use same code to generate exports
+          "var" <+> jsModuleName(id.name) <+> "=" <+> "{};" <> emptyline <>
+          toDocTopLevel(b)
+      ))) <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -296,6 +300,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def jsFunction(name: Doc, params: List[Doc], body: Doc): Doc =
     "function" <+> name <> parens(hsep(params, comma)) <+> jsBlock(body)
+
+  def jsAnonFunc(params: List[Doc], body: Doc): Doc =
+    "function" <+> parens(hsep(params, comma)) <+> jsBlock(body)
 
   def jsObject(fields: (Doc, Doc)*): Doc =
     jsObject(fields.toList)

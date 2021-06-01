@@ -4,7 +4,6 @@ package source
 import effekt.context.Context
 import effekt.symbols.Symbol
 import effekt.modules.Name
-import effekt.modules.Mod
 
 /**
  * Data type representing source program trees.
@@ -151,90 +150,16 @@ sealed trait Reference extends Named {
   def definition(implicit C: Context): symbol = C.symbolOf(this)
 }
 
-/*
-/**
- * The type of whole compilation units
- *
- * Only a subset of definitions (FunDef and EffDef) is allowed on the toplevel
- *
- * A module declartion, the path should be an Effekt include path, not a system dependent file path
- *
- */
-case class Modl.Decl(path: Name, imports: List[Import], defs: List[Def]) extends Tree {
-  def this(pth: String, imp: List[Import], dfs: List[Def]) = this(Name.path(pth), imp, dfs)
-  def pathStr: String = path.unix
-}
+/** Import declaration */
 case class Import(path: Name) extends Tree
 
-/** Group of definitions. */
-case class ModuleFrag(user: Name, defs: List[Def]) extends Def
-case class ModuleMask(user: Name, face: Name, defs: List[Def]) extends Def
-*/
+/** Module Header */
+case class ModuleDecl(path: Name, imports: List[Import], defs: List[Def]) extends Tree
 
-/** Modulare Element */
-sealed trait Modl extends Tree {
-  type Sym <: Mod.Usr
-
-  def name: Name
-  def body: Modl.Defs
-}
-
-/** Pseudo-Class */
-object Modl {
-  type Defs = List[Def]
-
-  val stdlib = Import(Name("effekt"))
-
-  /** Import declaration */
-  case class Import(path: Name, user: Name = Name.All, face: List[Name] = List(Name.All)) extends Tree {
-    override def toString(): String = {
-      val src = path.unix
-      val usr = user.qual(":")
-      val fce = face
-        .map { f => f.toString() }
-        .reduce { (l, r) => l + ", " + r }
-
-      return s"${src}:${usr}[${fce}]"
-    }
-  }
-
-  /** Module Header */
-  case class Decl(path: Name, imps: List[Import], body: Defs) extends Modl {
-    type Sym = Mod.Src
-
-    def name = path.last
-    def id: IdDef = IdDef(name.full)
-
-    /** empty */
-    def this(path: Name) = this(path, List.empty, List.empty)
-
-    override def toString() = s"src://${path.unix}"
-  }
-
-  /** Module Fragment */
-  case class User(name: Name, body: Defs) extends Modl with Def {
-    type Sym = Mod.Usr
-
-    def id: IdDef = IdDef(name.full)
-
-    /** empty */
-    def this(name: Name) = this(name, List.empty)
-
-    override def toString() = s"usr://${name.full}"
-  }
-
-  /** Module Extension */
-  case class Mask(user: Name, face: Name.Word, body: Defs) extends Modl with Def {
-    type Sym = Mod.Msk
-
-    def name = Name(user, face)
-    def id: IdDef = IdDef(name.full)
-
-    /** empty */
-    def this(face: Name.Word) = this(Name.Blk, face, List.empty)
-
-    override def toString() = s"msk://${user.full}[${face.str}]"
-  }
+/** Module Fragment */
+case class ModuleFrag(user: Name, defs: List[Def]) extends Def {
+  type symbol = symbols.UserModule
+  def id: IdDef = IdDef(user.local)
 }
 
 /**
@@ -292,6 +217,11 @@ case class RecordDef(id: IdDef, tparams: List[Id], fields: ValueParams) extends 
 case class TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType) extends Def {
   type symbol = symbols.TypeAlias
 }
+
+/** e.g. `type Worker = { def foo(): Int }` */
+/*case class InterfaceDef(id: IdDef, tpe: BlockType) extends Def {
+  type symbol = symbols.BlockAlias
+}*/
 
 /**
  * Effect aliases like `effect Set = { Get, Put }`
@@ -365,7 +295,7 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.TermSymbol
 }
 
-case class ModTarget(name: String, id: IdRef) extends CallTarget with Reference {
+case class ModTarget(mod: Name, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.TermSymbol
 }
 
@@ -481,6 +411,8 @@ case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type resolved = symbols.BlockType
 }
 
+// case class ModuleType() => Bei UserEffect nachschauen
+
 case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
   // TODO we need to drop Effect <: Symbol and refactor this here
   // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
@@ -526,9 +458,9 @@ object Tree {
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: Modl.Decl)(implicit C: Context): Modl.Decl = visit(e) {
-      case Modl.Decl(path, imports, defs) =>
-        Modl.Decl(path, imports, defs.map(rewrite))
+    def rewrite(e: ModuleDecl)(implicit C: Context): ModuleDecl = visit(e) {
+      case ModuleDecl(path, imports, defs) =>
+        ModuleDecl(path, imports, defs.map(rewrite))
     }
 
     def rewrite(e: Expr)(implicit C: Context): Expr = visit(e) {
@@ -561,8 +493,8 @@ object Tree {
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
 
-      case Modl.User(id, defs) =>
-        Modl.User(id, defs.map(rewrite))
+      case ModuleFrag(name, defs) =>
+        ModuleFrag(name, defs.map(rewrite))
 
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))

@@ -3,7 +3,7 @@ package effekt
 // Adapted from
 //   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
-import effekt.source.{ Modl, Tree }
+import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.SourceModule
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
@@ -22,7 +22,7 @@ import scala.sys.process.Process
 /**
  * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
  */
-trait Driver extends CompilerWithConfig[Tree, Modl.Decl, EffektConfig] { outer =>
+trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -121,7 +121,7 @@ trait Driver extends CompilerWithConfig[Tree, Modl.Decl, EffektConfig] { outer =
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
    * Not used anymore
    */
-  override def process(source: Source, ast: Modl.Decl, config: EffektConfig): Unit = ???
+  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
 
   /**
    * Modified copy of kiama.ServerWithConfig.launch()
@@ -192,7 +192,7 @@ trait Driver extends CompilerWithConfig[Tree, Modl.Decl, EffektConfig] { outer =
   /**
    * Originally called by kiama, not used anymore.
    */
-  override def parse(source: Source): ParseResult[Modl.Decl] = ???
+  override def parse(source: Source): ParseResult[ModuleDecl] = ???
 
-  def format(m: Modl.Decl): Document = ???
+  def format(m: ModuleDecl): Document = ???
 }

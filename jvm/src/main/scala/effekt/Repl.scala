@@ -123,7 +123,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         case Success(e: Expr, _) =>
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
-            val mainSym = mod.terms("main").head
+            val mainSym = mod.main().get
             val mainTpe = context.blockTypeOf(mainSym)
             output.emitln(mainTpe.ret)
           }
@@ -187,7 +187,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case e: Expr =>
       runCompiler(source, module.makeEval(e), config)
 
-    case i: Modl.Import =>
+    case i: Import =>
       val extendedImports = module + i
       val output = config.output()
       val path = i.path.unix
@@ -201,12 +201,12 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       runParsingFrontend(src, config) { cu =>
         output.emitln(s"Successfully imported ${path}\n")
         output.emitln(s"Imported Types\n==============")
-        cu.types.toList.sortBy { case (n, _) => n }.collect {
+        cu._typs.toList.sortBy { case (n, _) => n.str }.collect {
           case (name, sym) if !sym.synthetic =>
             outputCode(DeclPrinter(sym), config)
         }
         output.emitln(s"\nImported Functions\n==================")
-        cu.terms.toList.sortBy { case (n, _) => n }.foreach {
+        cu._trms.toList.sortBy { case (n, _) => n.str }.foreach {
           case (name, syms) =>
             syms.collect {
               case sym if !sym.synthetic =>
@@ -238,7 +238,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     case _ => ()
   }
 
-  private def runCompiler(source: Source, ast: Modl.Decl, config: EffektConfig): Unit = {
+  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
     context.setup(config)
 
     val src = VirtualSource(ast, source)
@@ -251,7 +251,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     report(source, context.buffer.get, config)
   }
 
-  private def runFrontend(source: Source, ast: Modl.Decl, config: EffektConfig)(f: SourceModule => Unit): Unit = {
+  private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.frontend(src) map { f } getOrElse {
@@ -305,32 +305,32 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
    */
   case class ReplModule(
     definitions: List[Def],
-    imports: List[Modl.Import]
+    imports: List[Import]
   ) {
     def +(d: Def) = {
       // drop all equally named definitions for now.
       val otherDefs = definitions.filterNot { other => other.id.name == d.id.name }
       copy(definitions = otherDefs :+ d)
     }
-    def +(i: Modl.Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
+    def +(i: Import) = copy(imports = imports.filterNot { _.path == i.path } :+ i)
 
-    def contains(im: Modl.Import) = imports.exists { other => im.path == other.path }
+    def contains(im: Import) = imports.exists { other => im.path == other.path }
 
     /**
      * Create a module declaration using the given expression as body of main
      */
-    def make(expr: Expr): Modl.Decl = {
+    def make(expr: Expr): ModuleDecl = {
 
       val path = Name.path("lib/interactive")
-      val imps = Modl.stdlib :: imports
+      val imps = Import(Name("effekt")) :: imports
       val body = Return(expr)
       val main = FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
         body)
 
-      Modl.Decl(path, imps, definitions :+ main)
+      ModuleDecl(path, imps, definitions :+ main)
     }
 
-    def makeEval(expr: Expr): Modl.Decl =
+    def makeEval(expr: Expr): ModuleDecl =
       make(Call(IdTarget(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)

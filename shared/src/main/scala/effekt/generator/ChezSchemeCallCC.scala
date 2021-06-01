@@ -55,7 +55,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
   def compilationUnit(mod: SourceModule, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
-      val main = mod.terms("main").toList.head
+      val main = mod.main().get
 
       prelude <>
         "(let () " <+> emptyline <>

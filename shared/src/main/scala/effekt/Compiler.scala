@@ -4,14 +4,13 @@ import effekt.context.Context
 import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.regions.RegionChecker
-import effekt.source.{ CapabilityPassing, Modl }
+import effekt.source.{ CapabilityPassing, ModuleDecl, Import }
 import effekt.symbols.SourceModule
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
-import effekt.core.ModuleDecl
 
 /**
  * "Pure" compiler without reading or writing to files
@@ -51,7 +50,7 @@ trait Compiler {
   /**
    * (2) Frontend
    */
-  val frontendPhases: List[Phase[Modl.Decl, Modl.Decl]] = List(
+  val frontendPhases: List[Phase[ModuleDecl, ModuleDecl]] = List(
     // performs name analysis and associates Id-trees with symbols
     new Namer,
     // type checks and annotates trees with inferred types and effects
@@ -66,7 +65,7 @@ trait Compiler {
    * (3) Backend
    */
   object transformer extends Transformer
-  val backendPhases: List[Phase[ModuleDecl, ModuleDecl]] = List(
+  val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List(
     // optional phase, only run for `Config.requiresLift`
     new LiftInference
   )
@@ -85,8 +84,8 @@ trait Compiler {
   // Tasks
   // =====
 
-  object getAST extends SourceTask[Modl.Decl]("ast") {
-    def run(source: Source)(implicit C: Context): Option[Modl.Decl] = source match {
+  object getAST extends SourceTask[ModuleDecl]("ast") {
+    def run(source: Source)(implicit C: Context): Option[ModuleDecl] = source match {
       case VirtualSource(decl, _) => Some(decl)
       case _ => parser(source)
     }
@@ -95,15 +94,15 @@ trait Compiler {
   object frontend extends SourceTask[SourceModule]("frontend") {
     def run(source: Source)(implicit C: Context): Option[SourceModule] = for {
       ast <- getAST(source)
-      mod = SourceModule(ast, source)
+      mod = new SourceModule(ast, source)
       transformedAst <- C.using(module = mod, focus = ast) {
         Phase.run(ast, frontendPhases)
       }
     } yield mod.setAst(transformedAst)
   }
 
-  object backend extends SourceTask[ModuleDecl]("backend") {
-    def run(source: Source)(implicit C: Context): Option[ModuleDecl] = for {
+  object backend extends SourceTask[core.ModuleDecl]("backend") {
+    def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
       mod <- frontend(source)
       core <- C.using(module = mod) { transformer(mod) }
       transformed <- C.using(module = mod) {

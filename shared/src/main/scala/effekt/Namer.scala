@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
 import effekt.regions.Region
-import effekt.source.{ Def, Id, IdDef, IdRef, Modl, Named, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Import, Named, Tree }
 import effekt.symbols._
 import scopes._
 import effekt.modules.Name
@@ -27,25 +27,50 @@ import effekt.modules.Name
  * 2. look at the bodies of effect declarations and type definitions
  * 3. look into the bodies of functions
  */
-class Namer extends Phase[Modl.Decl, Modl.Decl] {
+class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   val phaseName = "namer"
 
-  def run(mod: Modl.Decl)(implicit C: Context): Option[Modl.Decl] = {
+  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
     Some(resolve(mod))
   }
 
-  def resolve(decl: Modl.Decl)(implicit C: Context): Modl.Decl = {
+  def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
+    // resolve imports
+    C.module.imports = decl.imports.map { ip => C.moduleOf(ip.path.unix) }
+
+    // Open scope
+    val scp = C.module.load(toplevel(builtins.rootTypes)).enter
+
+    // Prepare naming
+    C.initNamerstate(scp)
+
+    // Resolve source module
+    resolveGeneric(decl)
+
+    // Update current module
+    C.module.save(scp)
+
+    // Pass decl
+    decl
+
+    /*
     var scope: Scope = toplevel(builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
-    val imports = decl.imps map {
-      case im @ Modl.Import(path, _, _) => Context.at(im) {
+    val imports = decl.imports map {
+      case im @ Import(path) => Context.at(im) {
         val modImport = Context.moduleOf(path.unix)
         scope.defineAll(modImport.terms, modImport.types)
         modImport
       }
     }
+
+    // decl.imps.map { im =>
+    //   val mod = Context.moduleOf(im.path.unix)
+    //   Context.module.adopt(mod)
+    //   mod
+    // }
 
     // create new scope for the current module
     scope = scope.enter
@@ -55,7 +80,8 @@ class Namer extends Phase[Modl.Decl, Modl.Decl] {
     resolveGeneric(decl)
 
     Context.module.export(imports, scope.terms.toMap, scope.types.toMap)
-    decl
+    // Context.module.save(scope)
+    decl*/
   }
 
   /**
@@ -66,22 +92,15 @@ class Namer extends Phase[Modl.Decl, Modl.Decl] {
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.Modl.Decl(path, imports, decls) =>
+    case source.ModuleDecl(path, imports, decls) =>
       decls foreach { resolve }
       resolveAll(decls)
 
-    case source.Modl.User(id, defs) =>
-      // Load empty module
-      // If this step failed, than the id of the module was not processes
-      val mod = C.module.submodule(id).get
-
-      // Create scope to collect everythin inside the module
-      Context.scoped {
-        // Resolve every def
-        defs.foreach(d => { resolve(d) })
+    case source.ModuleFrag(name, defs) =>
+      // Write to user module
+      C.defMod(name) {
+        defs.foreach { d => resolve(d) }
         resolveAll(defs)
-
-        Context.save(mod)
       }
 
     case source.DefStmt(d, rest) =>
@@ -317,11 +336,20 @@ class Namer extends Phase[Modl.Decl, Modl.Decl] {
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
     case source.ModTarget(name, id) => {
-      val mod = C.module.submodule(Name(name)).getOrElse { C.abort(s"Failed to resolve call target ${name}: module not found") }
-      C.scoped {
-        C.load(mod)
+      C.refMod(name) {
         C.resolveCalltarget(id)
       }
+      /*
+      val mod = C.module.mod(name).getOrElse { C.abort(s"Failed to resolve call target ${name}: module not found") }
+      C.scoped {
+        if (!name.dropLast().isEmpty) {
+          println(s"Load Parent: ${name.dropLast()}")
+          val p = C.module.submodule(name.dropLast()).get
+          C.load(p)
+        }
+        C.load(mod)
+        C.resolveCalltarget(id)
+      }*/
     }
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
@@ -334,7 +362,8 @@ class Namer extends Phase[Modl.Decl, Modl.Decl] {
    * not the bodies of functions.
    */
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
-    case m: Modl.Mask => C.abort("TODO: resolve mask")
+    case source.ModuleFrag(name, defs) =>
+      ()
 
     case d @ source.ValDef(id, annot, binding) =>
       ()
@@ -423,11 +452,6 @@ class Namer extends Phase[Modl.Decl, Modl.Decl] {
         val tpe = resolve(ret)
         BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
       })
-    }
-
-    case source.Modl.User(id, _) => {
-      // Creates an empty module with the given name
-      Context.module.bind(id.local)
     }
 
     case d @ source.ExternInclude(path) =>
@@ -549,6 +573,8 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private var scope: Scope = scopes.EmptyScope()
 
+  private var prefix: Name = Name.Blk
+
   private[namer] def initNamerstate(s: Scope): Unit = scope = s
 
   /**
@@ -559,6 +585,14 @@ trait NamerOps extends ContextOps { Context: Context =>
     val result = super.in(block)
     scope = before
     result
+  }
+
+  /** enters subname space */
+  def sub[T](name: Name = Name.Blk)(block: => T): T = {
+    val pf = prefix
+    prefix = Name(prefix, name)
+    val rs = scoped(block)
+    prefix = pf; rs
   }
 
   // TODO we only want to add a seed to a name under the following conditions:
@@ -583,6 +617,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.define(id.name, s)
   }
 
+  /*
   // Exports current scope into module
   private[namer] def save(mod: UserModule): Unit = {
     // Store results in mod sysmbol
@@ -593,7 +628,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   // Imports module into current scope
   private[namer] def load(mod: UserModule): Unit = {
     scope.defineAll(mod.terms, mod.types)
-  }
+  }*/
 
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.local, s)
 
@@ -652,4 +687,19 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope = scope.enter
     block
   }
+
+  private[namer] def refMod[R](name: Name)(block: => R) = Context.sub(name) {
+    println(s"Ref $name")
+    val mod = Context.module.mod(prefix).getOrElse { Context.abort(s"Failed to resolve reference to module $prefix") }
+    scope = mod.load(scope)
+    block
+  }
+
+  private[namer] def defMod(name: Name)(block: => Unit): Unit = Context.sub(name) {
+    println(s"Def $prefix")
+    val mod = Context.module.bind(prefix)
+    block
+    mod.save(scope)
+  }
+
 }

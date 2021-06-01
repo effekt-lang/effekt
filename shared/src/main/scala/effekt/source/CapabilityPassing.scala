@@ -13,11 +13,11 @@ import effekt.substitutions._
  * That is, block parameters are introduced to bind capabilities and arguments are introduced at
  * the call sites. Resume is currently _not_ introduced as a block parameter.
  */
-class CapabilityPassing extends Phase[Modl.Decl, Modl.Decl] with Rewrite {
+class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
 
   val phaseName = "capability-passing"
 
-  def run(mod: Modl.Decl)(implicit C: Context): Option[Modl.Decl] = Context in {
+  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = Context in {
     Some(rewrite(mod))
   }
 

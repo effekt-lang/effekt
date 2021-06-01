@@ -16,9 +16,6 @@ sealed trait Name {
   /** check if name is `_`. */
   def isEmpty: Boolean = this == Name.Blk
 
-  /** check if name is `*`. */
-  def isEvery: Boolean = this == Name.All
-
   /* Properties *
    * ---------- */
 
@@ -36,6 +33,9 @@ sealed trait Name {
 
   /** (short) local name. */
   def local: String = last.toString()
+
+  /** number of name components*/
+  def count: Int
 
   /* Functions *
    * --------- */
@@ -88,8 +88,6 @@ object Name {
   def apply(str: String): Name = {
     if (str.isEmpty()) {
       return Blk
-    } else if (str == All.toString()) {
-      return All
     } else {
       return Word(str)
     }
@@ -97,9 +95,9 @@ object Name {
 
   /** link */
   def apply(ln: Name, rn: Name): Name = {
-    if (ln == Blk || rn == All) {
+    if (ln == Blk) {
       return rn
-    } else if (ln == All || rn == Blk) {
+    } else if (rn == Blk) {
       return ln
     } else {
       return Link(ln, rn)
@@ -134,17 +132,20 @@ object Name {
 
   /** Empty */
   object Blk extends Name {
+    def count: Int = 0
     override def toString() = "_"
   }
 
   /** Single Word */
   case class Word(str: String) extends Name {
+    def count: Int = 1
     override def toString() = str
     override def rename(f: String => String): Name = Word(f(str))
   }
 
   /** Nested Name */
   case class Link(lft: Name, rgt: Name) extends Name {
+    def count: Int = lft.count + rgt.count
     override def frst: Name = lft.frst
     override def last: Name = rgt.last
 
@@ -165,8 +166,10 @@ object Name {
     override def rename(f: String => String): Name = Link(lft.rename(f), rgt.rename(f))
   }
 
+  /*
   /** Everyone */
   object All extends Name {
+    def count: Int = Int.MaxValue
     override def toString() = "*"
-  }
+  }*/
 }

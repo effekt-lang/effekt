@@ -175,7 +175,7 @@ object Annotations {
   /**
    * The unifier as computed by typer when type checking the module
    */
-  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
+  val Unifier = Annotation[symbols.ModuleSymbol, substitutions.Unifier](
     "Unifier",
     "the unifier for module"
   )
@@ -243,7 +243,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, ModuleSymbol }
 
   // Types
   // -----

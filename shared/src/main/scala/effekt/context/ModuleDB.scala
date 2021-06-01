@@ -3,6 +3,7 @@ package context
 
 import effekt.symbols.SourceModule
 import org.bitbucket.inkytonik.kiama.util.Source
+import effekt.modules.Name
 
 /**
  * The ModuleDB depends on three things:
@@ -54,7 +55,7 @@ trait ModuleDB { self: Context =>
    * Util to check whether main exists on the given module
    */
   def checkMain(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
-    val mains = mod.terms.getOrElse("main", Set())
+    val mains = mod.trm(Name.main) //terms.getOrElse("main", Set())
 
     if (mains.isEmpty) {
       C.abort("No main function defined")

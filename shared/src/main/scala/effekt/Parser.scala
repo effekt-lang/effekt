@@ -7,18 +7,18 @@ import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseR
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
-import effekt.modules.Mod
+import effekt.modules.Name
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, Modl.Decl] {
+class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
 
   val phaseName = "parser"
 
-  def run(source: Source)(implicit C: Context): Option[Modl.Decl] =
+  def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)
@@ -38,9 +38,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val nameFirst = """[a-zA-Z$_]""".r
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
-
-  lazy val modPath = "%s([/]%s)*\\b".format(name, name).r
-  lazy val modName = "%s([.]%s)*\\b".format(name, name).r
 
   lazy val `=` = literal("=")
   lazy val `:` = literal(":")
@@ -111,7 +108,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val word: P[Name.Word] = ident ^^ Name.Word
 
   /** parses qualified name */
-  lazy val qual: P[Name] = someSep(word, `.`) ^^ { ws => Name.join(ws) }
+  lazy val modName: P[Name] = someSep(word, `.`) ^^ { ws => Name.join(ws) }
+
+  /** parses module call */
+  lazy val modCall: P[Name] = someSep(word, `:`) ^^ { ws => Name.join(ws) }
+
+  /** parses module path */
+  lazy val modPath: P[Name] = someSep(word, `/`) ^^ { ws => Name.join(ws) }
 
   lazy val idDef: P[IdDef] = ident ^^ IdDef
   lazy val idRef: P[IdRef] = ident ^^ IdRef
@@ -169,14 +172,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     }
   }
 
-  object defaultModulePath extends Parser[String] {
+  object defaultModulePath extends Parser[Name] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
-    def apply(in: Input): ParseResult[String] = {
+    def apply(in: Input): ParseResult[Name] = {
       val filename = in.source.name
       val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
-      Success(base, in)
+      Success(Name(base), in)
     }
   }
 
@@ -203,21 +206,21 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // turn scalariform formatting off!
   // format: OFF
 
-  lazy val program: P[Modl.Decl] =
+  lazy val program: P[ModuleDecl] =
     ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => Modl.Decl(Name.path(name), Modl.Import(Name("effekt")) :: imports, defs)
-      case name ~ imports ~ defs => Modl.Decl(Name.path(name), imports, defs)
+      case name ~ imports ~ defs if name.full != "effekt" => ModuleDecl(name, Import(Name("effekt")) :: imports, defs)
+      case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )
 
-  lazy val moduleDecl: P[String] =
+  lazy val moduleDecl: P[Name] =
     ( `module` ~/> modPath
     | defaultModulePath
     )
 
-  lazy val importDecl: P[Modl.Import] =
-    `import` ~/> modPath ^^ { p => Modl.Import(Name(p)) }
+  lazy val importDecl: P[Import] =
+    `import` ~/> modPath ^^ Import
 
 
   /**
@@ -245,7 +248,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val moduleDef: P[Def] =
-    `module` ~/> qual ~ (`{` ~> many(definition) <~ `}`) ^^ Modl.User
+    `module` ~/> modName ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleFrag
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
@@ -328,7 +331,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         List(ValueParams(List(ValueParam(IdDef(name), None)))),
         Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
+    | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) } // Zeile ersetzen user module
     )
 
   lazy val lambdaArgs: P[ValueParams] =
@@ -389,7 +392,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
      }
 
   lazy val typeDef: P[TypeDef] =
-    `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef
+    `type` ~> idDef ~ maybeTypeParams ~ (`=` ~> valueType) ^^ TypeDef
 
   lazy val effectAliasDef: P[EffectDef] =
     `effect` ~> idDef ~ (`=` ~/> effects) ^^ EffectDef
@@ -433,9 +436,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
-  lazy val callTarget: P[CallTarget] =
-    ( modName ~ (`:` ~/> idRef) ^^ ModTarget
-    | idRef ^^ IdTarget
+  lazy val callTarget: P[CallTarget] = 
+    //( //idRef ^^ IdTarget
+    ( modCall ^^ { call => 
+      if (call.cmps().length > 1) {
+        ModTarget(call.dropLast(), call.last.toRef())
+      }
+      else {
+        IdTarget(call.toRef())
+      }
+    }
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )
 
@@ -548,7 +558,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val blockType: P[BlockType] =
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType
     | valueType ~ (`=>` ~/> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
-    | effectful ^^ { e => BlockType(Nil, e) }
+    | effectful ^^ { e => BlockType(Nil, e) } // src knoten einfügen? / Zeile ersetzen interface type
     )
 
   lazy val effectful: P[Effectful] =
