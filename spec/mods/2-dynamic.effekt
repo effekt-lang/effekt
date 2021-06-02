@@ -1,9 +1,6 @@
 module example/mods/dynamic
 
-// Block Signature
-//type Worker = { def foo(): Int }
-// Effect Declaration
-// => Hilfsmethode für beide
+// IfcDef
 interface Worker {
     def foo(): Int 
 }
@@ -16,9 +13,10 @@ def work(m: Worker) { n: Int }  = {
 
 
 def main() = {
-    work() {
-        def foo(): Int = 42
-    }
+    //work() {
+    //    def foo(): Int = 42
+    //}
+    println("Some")
 }
 
 //js

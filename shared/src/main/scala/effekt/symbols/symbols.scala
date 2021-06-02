@@ -179,6 +179,7 @@ package object symbols {
   case class ResumeParam(mod: ModuleSymbol) extends Param with BlockSymbol {
     val name = mod.name.nest(Name("resume"))
   }
+  case class ModuleParam(name: Name, tpe: ModuleType) extends Param
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -189,6 +190,7 @@ package object symbols {
   def paramsToTypes(ps: Params): Sections =
     ps map {
       _ map {
+        case ModuleParam(name, tpe)  => sys error "TODO: Module param type"
         case BlockParam(_, tpe)      => tpe
         case CapabilityParam(_, tpe) => tpe
         case v: ValueParam           => v.tpe.get
@@ -333,7 +335,9 @@ package object symbols {
 
   // => Spiegeln nach source
   sealed trait InterfaceType extends Type
-  // case ModuleType() //
+  /** Module interface */
+  case class ModuleType(name: Name, var ops: List[Method] = Nil) extends InterfaceType with TypeSymbol with MethodOwner
+
   case class CapabilityType(eff: Effect) extends InterfaceType // Effect => UserEffect
 
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends InterfaceType {
@@ -416,13 +420,15 @@ package object symbols {
     override def dealias: List[Effect] = effs.dealias
   }
 
-  // Copy UserEffect + EffectOp => ModuleType: Interface + Method (ohne typparams)
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
+  sealed trait MethodOwner
 
-  // Refactorn => Method
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[Method] = Nil) extends Effect with TypeSymbol with MethodOwner
+
+  case class Method(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, owner: MethodOwner) extends Fun {
     def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
     def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
+
+    def effect: UserEffect = owner.asInstanceOf[UserEffect] // TODO: this is unsafe
 
     // The effects as seen by the capability passing transformation
     def otherEffects: Effects = annotatedReturn.effects

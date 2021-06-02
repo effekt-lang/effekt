@@ -34,8 +34,8 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
   override def expr(implicit C: Context) = {
 
     // an effect call -- translate to method call
-    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
-      val op = fun.definition.asEffectOp
+    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[Method] =>
+      val op = fun.definition.asMethod
 
       val tpe @ BlockType(tparams, params, ret / _) = C.blockTypeOf(op)
 

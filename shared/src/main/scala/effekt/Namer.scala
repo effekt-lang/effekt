@@ -96,6 +96,25 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       decls foreach { resolve }
       resolveAll(decls)
 
+    case source.IfcDef(id, ops) =>
+      val mt = Context.resolveType(id).asInstanceOf[ModuleType]
+      mt.ops = ops.map {
+        case source.Operation(id, tparams, params, ret) =>
+          val name = Context.freshTermName(id)
+          Context scoped {
+
+            val tps = tparams map resolve
+
+            // The type parameters of an effect op are:
+            //   1) all type parameters on the effect, followed by
+            //   2) the annotated type parameters on the concrete operation
+            val op = Method(Name(id), tps, params map resolve, resolve(ret), mt)
+            Context.define(id, op)
+            op
+          }
+      }
+      mt.ops.foreach { op => Context.bind(op) }
+
     case source.ModuleFrag(name, defs) =>
       // Write to user module
       C.defMod(name) {
@@ -151,7 +170,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
-            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            val op = Method(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
             Context.define(id, op)
             op
           }
@@ -339,17 +358,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       C.refMod(name) {
         C.resolveCalltarget(id)
       }
-      /*
-      val mod = C.module.mod(name).getOrElse { C.abort(s"Failed to resolve call target ${name}: module not found") }
-      C.scoped {
-        if (!name.dropLast().isEmpty) {
-          println(s"Load Parent: ${name.dropLast()}")
-          val p = C.module.submodule(name.dropLast()).get
-          C.load(p)
-        }
-        C.load(mod)
-        C.resolveCalltarget(id)
-      }*/
     }
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
@@ -362,6 +370,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * not the bodies of functions.
    */
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+    case source.IfcDef(id, ops) => {
+      // we do not resolve the effect operations here to allow them to refer to types that are defined
+      // later in the file
+      Context.define(id, ModuleType(Name(id), List.empty))
+    }
     case source.ModuleFrag(name, defs) =>
       ()
 
@@ -689,14 +702,12 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   private[namer] def refMod[R](name: Name)(block: => R) = Context.sub(name) {
-    println(s"Ref $name")
     val mod = Context.module.mod(prefix).getOrElse { Context.abort(s"Failed to resolve reference to module $prefix") }
-    scope = mod.load(scope)
+    scope = mod.load()
     block
   }
 
   private[namer] def defMod(name: Name)(block: => Unit): Unit = Context.sub(name) {
-    println(s"Def $prefix")
     val mod = Context.module.bind(prefix)
     block
     mod.save(scope)

@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
+import effekt.symbols.{ Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, Method, Type, ValueType, BlockType, InterfaceType }
 import effekt.modules.Name
 
 sealed trait Tree extends Product {
@@ -117,10 +117,10 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
+case class State(id: UserEffect, tpe: ValueType, get: Method, put: Method, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
+case class Handler(id: UserEffect, clauses: List[(Method, BlockLit)]) extends Tree
 
 /**
  * Explicit Lifts

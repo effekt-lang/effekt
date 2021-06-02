@@ -23,7 +23,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
     val exports: Stmt = Exports(path, mod._trms.flatMap {
       case (_, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+        case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
       }
     }.toList ++ mod._mods.values.toList)
@@ -39,18 +39,17 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+    case source.IfcDef(id, ops) => C.abort("TODO transform interface")
     case source.ModuleFrag(name, defs) =>
       val p = prefix
       prefix = Name(prefix, name)
 
-      println(s"Transform ${prefix}")
       val mod = C.module.mod(prefix).get
-      println(s"Terms ${mod._trms.keySet}")
 
       val exports: Stmt = Exports(name, mod._trms.flatMap {
         case (name, syms) => syms.collect {
           // TODO export valuebinders properly
-          case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+          case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
           case sym: ValBinder => sym
         }
       }.toList ++ mod._mods.values.toList)
@@ -191,31 +190,14 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
-      println(s"ModTarget ${mod.name}")
       val a = App(Member(BlockVar(mod), sym.asInstanceOf[BlockSymbol]), targs, as)
       return C.bind(C.inferredTypeOf(tree).tpe, a)
-    /*
-      sym match {
-        case f: BuiltinFunction if f.pure =>
-          App(Member(name, id), targs, as)
-        case r: Record =>
-          PureApp(BlockVar(r), targs, as)
-        case f: EffectOp =>
-          C.panic("Should have been translated to a method call!")
-        case f: Field =>
-          val List(arg: Expr) = as
-          Select(arg, f)
-        case f: BlockSymbol =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
-        case f: ValueSymbol =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(ValueVar(f)), targs, as))
-      }*/
 
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
 
-      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
+      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asMethod), null, args.flatMap(transform))
       C.bind(C.inferredTypeOf(tree).tpe, app)
 
     case c @ source.Call(fun: source.IdTarget, _, args) =>
@@ -234,7 +216,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
           PureApp(BlockVar(f), targs, as)
         case r: Record =>
           PureApp(BlockVar(r), targs, as)
-        case f: EffectOp =>
+        case f: Method =>
           C.panic("Should have been translated to a method call!")
         case f: Field =>
           val List(arg: Expr) = as
@@ -337,13 +319,13 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: EffectOp, put: EffectOp)
+  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: Method, put: Method)
 
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
+    val get = Method(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
+    val put = Method(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
 
     val param = CapabilityParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)

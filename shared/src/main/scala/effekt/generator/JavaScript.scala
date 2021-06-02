@@ -161,14 +161,14 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
   def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
     case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
+    case _: symbols.Method     => "op$" + id.name.toString
     case _                     => toDoc(id.name)
   }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
     case _: symbols.Effect       => toDoc(id.name)
     case _: symbols.Capability   => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp     => "op$" + id.name.toString
+    case _: symbols.Method       => "op$" + id.name.toString
     case mod: symbols.UserModule => mod.name.full
     case _ => id.name match {
       case name: Name.Link if name.lft != C.module.name => link(name, jsModuleName(name.lft) + "." + name.local) //TODO
