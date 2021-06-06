@@ -1,129 +1,176 @@
 package effekt.symbols
 
-import effekt.source.Id
 import effekt.context.Context
-
-trait Name {
-  /**
-   * The local part of the name relative to its potential parent.
-   *
-   * @example The local part of the name `"foo.baz.bar"` is `"bar"`.
-   */
-  val localName: String
-
-  /**
-   * Computes the qualified version of this name.
-   * @return a String containing the local part of this name prefixed by their parent name. Components are separated by the point character (`.`).
-   *
-   * @note this should only be used for reporting errors, not for code generation.
-   */
-  def qualifiedName: String
-
-  /**
-   * @return The parent of this name or [[None]] if this name represents a top-level name.
-   */
-  def parentOption: Option[Name]
-
-  /**
-   * @return The qualified name of the parent or `None` if this name doesn't have a parent.
-   */
-  def qualifiedParentOption: Option[String] = parentOption.map((parent) => parent.qualifiedName)
-
-  /**
-   * Creates a new name with the same parent as this name and the changed local name.
-   * @param f rename function.
-   * @return A Name with local name equal to `f(this.localName)`.
-   */
-  def rename(f: String => String): Name
-
-  /**
-   * Creates a new [[NestedName]] with this name as the parent.
-   * @param name the local name of the nested name.
-   * @return A [[NestedName]] with this Name as parent.
-   */
-  def nested(name: String) = NestedName(this, name)
-
-  override def toString = localName
-}
+import effekt.source.Id
+import effekt.source.IdDef
+import effekt.source.IdRef
 
 /**
- * A Name without a parent, e.g. the name of a global symbol.
- * @param localName the local name which is also the qualified name.
- * The local name should not contain point characters (`'.'`). This could lead to unexpected behavior.
- *
- * @note Don't use the constructor of this type directly. Instead use [[Name(qualifiedName)]] to safely convert strings to names.
+ * Regulare Name
+ *  note: [[toString()]] returns qualified user name.
  */
-case class ToplevelName(localName: String) extends Name {
-  def parentOption: Option[Name] = None
+sealed trait Name {
+  /* Predicates *
+   * ---------- */
 
-  def qualifiedName: String = localName
+  /** check if name is `_`. */
+  def isEmpty: Boolean = this == Name.Blk
 
-  def rename(f: String => String): Name = ToplevelName(f(localName))
+  /* Properties *
+   * ---------- */
+
+  /** left-most name component. */
+  def frst: Name = this
+
+  /** right-most name component. */
+  def last: Name = this
+
+  /** convert to qualified path [[String]]. */
+  def unix: String = qual(Name.pthSep)
+
+  /** convert to qualified user [[String]]. */
+  def full: String = qual(Name.usrSep)
+
+  /** (short) local name. */
+  def local: String = last.toString()
+
+  /** number of name components*/
+  def count: Int
+
+  /* Functions *
+   * --------- */
+
+  /** flattend name components. */
+  def cmps(): List[String] = List(this.toString())
+
+  /** append name. */
+  def nest(nm: Name): Name = Name(this, nm)
+
+  /** compute qualified [[String]] using separator. */
+  def qual(sep: String): String = this.toString()
+
+  /** removes left-most name component. */
+  def dropFirst(): Name = Name.Blk
+
+  /** removes right-most name component. */
+  def dropLast(): Name = Name.Blk
+
+  /* Higher-Order *
+   * ------------ */
+
+  /** map name components. */
+  def rename(f: String => String): Name = this
+
+  /* Utility *
+   * ------- */
+
+  /** converts name to [[IdDef]] */
+  def toDef() = IdDef(this.toString())
+
+  /** converts name to [[IdRef]] */
+  def toRef() = IdRef(this.toString())
 }
 
-/**
- * A Name which is a child of a other name, e.g. the name of a nested module.
- *
- * @param parent The parent of this name.
- * @param localName The local name relative to the parent.
- * The local name should not contain point characters (`'.'`). This could lead to unexpected behavior.
- *
- * @note Creation of [[NestedName]] via the [[Name.nested()]] method is prefered.
- */
-case class NestedName(parent: Name, localName: String) extends Name {
-  def parentOption: Some[Name] = Some(parent)
-
-  def qualifiedName: String = s"${parent.qualifiedName}.$localName"
-
-  def rename(f: String => String): Name = NestedName(parent, f(localName))
-}
-
-// Pseudo-constructors to safely convert ids and strings into names.
+/** Pseudo-Class */
 object Name {
-  /**
-   * Creates a name for the ID inside the module of the current context.
-   *
-   * @param id The id to be converted into a name.
-   * @param C The implicit context used to find the current module.
-   * @return A qualified name inside the module.
-   */
-  def apply(id: Id)(implicit C: Context): Name = Name.apply(id.name, C.module)
+  val main = Word("main")
+  val effekt = Word("effekt")
 
-  /**
-   * Creates a qualified name for a symbol inside the given module.
-   *
-   * @param name the local name of the symbol.
-   * @param module the module containing the symbol.
-   * @return A name with the module path as a parent.
-   *
-   * @example The name `"baz"` inside the module with the path `"foo/bar"` is parsed as qualified name `"foo.bar.baz"`
-   */
-  def apply(name: String, module: Module): Name = module.name.nested(name)
+  /** user name separator */
+  val usrSep = "."
 
-  /**
-   * Parses a [[Name]] from a String which might be a qualified name.
-   * @param name A non-empty String which might be a qualified or local name.
-   * @return A Name where [[Name.qualifiedName]] is equal to the input name.
-   *
-   * @example `Name("foo") == ToplevelName("foo")`
-   * @example `Name("foo.bar.baz") == NestedName(NestedName(ToplevelName("foo"), "bar"), "baz")`
-   */
-  def apply(name: String): Name = {
-    assert(name.nonEmpty, "Name cannot be empty.")
+  /** path name separator*/
+  val pthSep = "/"
 
-    val segments = name.split('.')
-    val top: Name = ToplevelName(segments.head)
-    segments.drop(1).foldLeft(top)((parent, segment) => parent.nested(segment))
+  /** empty */
+  def apply(): Name = Name.Blk
+
+  /** word */
+  def apply(str: String): Name = {
+    if (str.isEmpty()) {
+      return Blk
+    } else {
+      return Word(str)
+    }
   }
 
-  /**
-   * Convert a module path into a valid name.
-   *
-   * @param path the module path where each segment is separated by a slash character (`'/'`).
-   * @return a qualified name with the same name components as the input path.
-   *
-   * @example `module("foo/bar/baz") == Name("foo.bar.baz")`
-   * @note this method might be removed in the future because module paths don't exists in the new module-system.
-   */
-  def module(path: String): Name = Name(path.replace("/", "."))
+  /** link */
+  def apply(ln: Name, rn: Name): Name = {
+    if (ln == Blk) {
+      return rn
+    } else if (rn == Blk) {
+      return ln
+    } else {
+      return Link(ln, rn)
+    }
+  }
+
+  /** components */
+  def apply(as: List[String]): Name = as.foldLeft(Name()) { (nme, str) =>
+    Name(nme, Name(str))
+  }
+
+  /** components */
+  def join(as: List[Word]): Name = as.foldLeft(Name()) { (l, r) =>
+    Name(l, r)
+  }
+
+  /** components */
+  def apply(as: Array[String]): Name = as.foldLeft(Name()) { (nme, str) =>
+    Name(nme, Name(str))
+  }
+
+  def apply(id: Id): Name = Name(id.name) //C.module.name.nest(Name(id.name))
+
+  /** parse [[Name]] from qualified [[String]].*/
+  def qual(qal: String, sep: String) = Name(qal.split(sep))
+
+  /** parse [[Name]] from path [[String]].*/
+  def path(str: String) = Name.qual(str, Name.pthSep)
+
+  /** parse [[Name]] from user [[String]].*/
+  def user(str: String) = Name.qual(str, Name.usrSep)
+
+  /** Empty */
+  object Blk extends Name {
+    def count: Int = 0
+    override def toString() = "_"
+  }
+
+  /** Single Word */
+  case class Word(str: String) extends Name {
+    def count: Int = 1
+    override def toString() = str
+    override def rename(f: String => String): Name = Word(f(str))
+  }
+
+  /** Nested Name */
+  case class Link(lft: Name, rgt: Name) extends Name {
+    def count: Int = lft.count + rgt.count
+    override def frst: Name = lft.frst
+    override def last: Name = rgt.last
+
+    override def dropFirst(): Name = lft match {
+      case l: Link => l.dropFirst()
+      case _       => rgt
+    }
+
+    override def dropLast(): Name = rgt match {
+      case r: Link => r.dropLast()
+      case _       => lft
+    }
+
+    override def cmps(): List[String] = lft.cmps() ++ rgt.cmps()
+    override def qual(sep: String): String = lft.qual(sep) + sep + rgt.qual(sep)
+
+    override def toString() = lft.toString() + Name.usrSep + rgt.toString()
+    override def rename(f: String => String): Name = Link(lft.rename(f), rgt.rename(f))
+  }
+
+  /*
+  /** Everyone */
+  object All extends Name {
+    def count: Int = Int.MaxValue
+    override def toString() = "*"
+  }*/
 }

@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.symbols.Name
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
@@ -37,9 +38,9 @@ package object symbols {
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
-    val name = Name.module(decl.path)
+    val name = path
 
-    def path = decl.path
+    def path: Name = decl.path
 
     private var _terms: Map[String, Set[TermSymbol]] = _
     def terms = _terms
@@ -95,7 +96,7 @@ package object symbols {
     def effect = tpe.eff
     override def toString = s"@${tpe.eff.name}"
   }
-  case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(mod: Module) extends Param with BlockSymbol { val name = mod.name.nest(Name("resume")) }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -180,8 +181,8 @@ package object symbols {
   /**
    * Introduced by Transformer
    */
-  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+  case class Wildcard(module: Module) extends ValueSymbol { val name = module.name.nest(Name("_")) }
+  case class Tmp(module: Module) extends ValueSymbol { val name = module.name.nest(Name("tmp" + Symbol.fresh.next())) }
 
   /**
    * A symbol that represents a termlevel capability

@@ -13,7 +13,6 @@ import kiama.util.Source
 import effekt.util.paths._
 
 import scala.language.implicitConversions
-import effekt.symbols.NestedName
 
 class JavaScript extends Generator {
 
@@ -124,7 +123,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
 
 trait JavaScriptBase extends ParenPrettyPrinter {
 
-  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
+  def moduleFile(path: Name): String = path.qual("_") + ".js"
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(commonjs(t))
@@ -156,21 +155,22 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
-  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
+  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.local)
 
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
-  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _                     => toDoc(id.name)
+  def nameDef(sym: Symbol)(implicit C: Context): Doc = sym match {
+    case _: symbols.Capability => sym.name.local + "_" + sym.id
+    case _: symbols.EffectOp   => "op$" + sym.name.local
+    case _                     => toDoc(sym.name)
   }
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _ => id.name match {
-      case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
+  def nameRef(sym: Symbol)(implicit C: Context): Doc = sym match {
+    case _: symbols.Effect     => toDoc(sym.name)
+    case _: symbols.Capability => sym.name.local + "_" + sym.id
+    case _: symbols.EffectOp   => "op$" + sym.name.local
+    case _ => sym.name match {
+      case name: Name.Link if name.lft != C.module.name =>
+        link(name, jsModuleName(name.lft) + "." + name.local)
       case name => toDoc(name)
     }
   }
@@ -282,9 +282,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case other => "return" <+> toDocExpr(other)
   }
 
-  def jsModuleName(path: String): String = jsModuleName(Name.module(path))
+  def jsModuleName(path: String): String = jsModuleName(Name.path(path))
 
-  def jsModuleName(name: Name): String = "$" + name.qualifiedName.replace('.', '_')
+  def jsModuleName(name: Name): String = "$" + name.qual("_")
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

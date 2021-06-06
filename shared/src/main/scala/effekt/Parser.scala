@@ -6,6 +6,7 @@ import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseR
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
+import effekt.symbols.Name
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
@@ -108,6 +109,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val path = someSep(ident, `/`)
 
+  lazy val modName: P[Name] = someSep(name, `.`) ^^ { ws => Name(ws) }
+  lazy val modPath: P[Name] = someSep(name, `/`) ^^ { ws => Name(ws) }
+  lazy val modCall: P[Name] = someSep(name, `:`) ^^ { ws => Name(ws) }
+
   def oneof(strings: String*): Parser[String] =
     strings.map(literal).reduce(_ | _)
 
@@ -159,14 +164,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     }
   }
 
-  object defaultModulePath extends Parser[String] {
+  object defaultModulePath extends Parser[Name] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
-    def apply(in: Input): ParseResult[String] = {
+    def apply(in: Input): ParseResult[Name] = {
       val filename = in.source.name
       val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
-      Success(base, in)
+      Success(Name(base), in)
     }
   }
 
@@ -195,19 +200,19 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val program: P[ModuleDecl] =
     ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
+      case name ~ imports ~ defs if name != Name.effekt => ModuleDecl(name, Import(Name.effekt) :: imports, defs)
       case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )
 
-  lazy val moduleDecl: P[String] =
-    ( `module` ~/> moduleName
+  lazy val moduleDecl: P[Name] =
+    ( `module` ~/> modPath
     | defaultModulePath
     )
 
   lazy val importDecl: P[Import] =
-    `import` ~/> moduleName ^^ Import
+    `import` ~/> modPath ^^ Import
 
 
   /**

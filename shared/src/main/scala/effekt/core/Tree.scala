@@ -14,7 +14,7 @@ sealed trait Tree extends Product {
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
+case class ModuleDecl(path: Name, imports: List[Name], defs: Stmt) extends Tree
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -75,7 +75,7 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
-case class Exports(path: String, exports: List[Symbol]) extends Stmt
+case class Exports(path: Name, exports: List[Symbol]) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree
@@ -104,7 +104,7 @@ case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
-case class ScopeId() extends Symbol { val name = Name(s"ev${id}", effekt.symbols.builtins.prelude) }
+case class ScopeId() extends Symbol { val name = effekt.symbols.builtins.prelude.name.nest(Name(s"ev${id}")) }
 
 object Tree {
 

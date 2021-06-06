@@ -284,11 +284,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = Context.focusing(params) {
     case ps: source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
-      val sym = BlockParam(Name(id), resolve(tpe))
+      val sym = BlockParam(C.name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
     case source.CapabilityParam(id, tpe) =>
-      val sym = CapabilityParam(Name(id), resolve(tpe))
+      val sym = CapabilityParam(C.name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
   }
@@ -339,7 +339,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = tparams map resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
-        UserEffect(Name(id), tps)
+        UserEffect(C.name(id), tps)
       }
       Context.define(id, effectSym)
 
@@ -347,13 +347,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        TypeAlias(Name(id), tps, resolve(tpe))
+        TypeAlias(C.name(id), tps, resolve(tpe))
       }
       Context.define(id, alias)
 
     case source.EffectDef(id, effs) =>
       val alias = Context scoped {
-        EffectAlias(Name(id), Nil, resolve(effs))
+        EffectAlias(C.name(id), Nil, resolve(effs))
       }
       Context.define(id, alias)
 
@@ -362,7 +362,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
         // later in the file
-        DataType(Name(id), tps)
+        DataType(C.name(id), tps)
       }
       Context.define(id, typ)
 
@@ -371,7 +371,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
         // later in the file
-        Record(Name(id), tps, null)
+        Record(C.name(id), tps, null)
       }
       sym.tpe = if (sym.tparams.isEmpty) sym else TypeApp(sym, sym.tparams)
 
@@ -383,13 +383,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        BuiltinType(Name(id), tps)
+        BuiltinType(C.name(id), tps)
       })
 
     case source.ExternEffect(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        BuiltinEffect(Name(id), tps)
+        BuiltinEffect(C.name(id), tps)
       })
 
     case source.ExternFun(pure, id, tparams, params, ret, body) => {
@@ -418,7 +418,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.IgnorePattern()     => Nil
     case source.LiteralPattern(lit) => Nil
     case source.AnyPattern(id) =>
-      val p = ValueParam(Name(id), None)
+      val p = ValueParam(C.name(id), None)
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns) =>
@@ -505,7 +505,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(implicit C: Context): TypeVar = {
-    val sym = TypeVar(Name(id))
+    val sym = TypeVar(C.name(id))
     Context.define(id, sym)
     sym
   }
@@ -540,7 +540,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def freshTermName(id: Id): Name = {
     val alreadyBound = scope.currentTermsFor(id.name).size
     val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
-    Name(id.name + seed, module)
+    module.name.nest(Name(id.name + seed))
   }
 
   // Name Binding and Resolution
@@ -555,9 +555,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.define(id.name, s)
   }
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)
+  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.local, s)
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.localName, s)
+  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.local, s)
 
   private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
@@ -612,4 +612,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope = scope.enter
     block
   }
+
+  private[namer] def name(id: Id): Name = module.name.nest(Name(id))
 }

@@ -2,6 +2,7 @@ package effekt
 package context
 
 import effekt.symbols.Module
+import effekt.symbols.Name
 import org.bitbucket.inkytonik.kiama.util.Source
 
 /**
@@ -31,8 +32,8 @@ trait ModuleDB { self: Context =>
    *
    * Used by Namer and Evaluator to resolve imports
    */
-  def moduleOf(path: String): Module =
-    moduleOf(findSource(path).getOrElse { abort(s"Cannot find source for $path") })
+  def moduleOf(path: Name): Module =
+    moduleOf(findSource(path.unix).getOrElse { abort(s"Cannot find source for ${path.unix}") })
 
   /**
    * Tries to find a module for the given source, will run compiler on demand

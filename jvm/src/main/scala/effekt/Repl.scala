@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, Name }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
@@ -190,7 +190,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       val output = config.output()
 
       context.setup(config)
-      val src = context.findSource(i.path).getOrElse {
+      val src = context.findSource(i.path.unix).getOrElse {
         output.emitln(s"Cannot find source for import ${i.path}")
         return
       }
@@ -320,7 +320,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
       val body = Return(expr)
 
-      ModuleDecl("lib/interactive", Import("effekt") :: imports,
+      ModuleDecl(Name.path("lib/interactive"), Import(Name.effekt) :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
           body))
     }

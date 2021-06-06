@@ -3,6 +3,7 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import effekt.symbols.Name
 
 /**
  * Data type representing source program trees.
@@ -149,8 +150,8 @@ sealed trait Reference extends Named {
  * A module declartion, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
-case class Import(path: String) extends Tree
+case class ModuleDecl(path: Name, imports: List[Import], defs: List[Def]) extends Tree
+case class Import(path: Name) extends Tree
 
 /**
  * Parameters and arguments
