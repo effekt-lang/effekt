@@ -94,7 +94,7 @@ trait Compiler {
   object frontend extends SourceTask[SourceModule]("frontend") {
     def run(source: Source)(implicit C: Context): Option[SourceModule] = for {
       ast <- getAST(source)
-      mod = SourceModule(ast, source)
+      mod = new SourceModule(ast, source)
       transformedAst <- C.using(module = mod, focus = ast) {
         Phase.run(ast, frontendPhases)
       }

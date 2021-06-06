@@ -1,11 +1,13 @@
 package effekt
 
-import effekt.symbols.Name
+import effekt.symbols.scopes._
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.substitutions._
+import effekt.symbols.Name
+import effekt.symbols.Name.Word
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -30,35 +32,120 @@ package object symbols {
     override def synthetic = true
   }
 
+  /** Module Base Class */
+  sealed abstract class ModuleSymbol extends BlockSymbol {
+    type TypeMap = Map[Name.Word, TypeSymbol]
+    type TermMap = Map[Name.Word, Set[TermSymbol]]
+    type SubMods = Map[Name.Word, UserModule]
+
+    var types: TypeMap = Map.empty
+    var terms: TermMap = Map.empty
+    var mods: SubMods = Map.empty
+
+    /** declared effects */
+    def effects: Effects = Effects(types.values.collect {
+      case e: Effect => e
+    })
+
+    /** lookup submodule. */
+    def mod(name: Name): Option[UserModule] = name match {
+      case Name.Blk          => None
+      case w: Name.Word      => mods.get(w)
+      case Name.Link(ln, rn) => mod(ln).flatMap { m => m.mod(rn) }
+    }
+
+    /** lookup type. */
+    def typ(name: Name): Option[TypeSymbol] = name match {
+      case Name.Blk          => None
+      case w: Name.Word      => types.get(w)
+      case Name.Link(ln, rn) => mod(ln).flatMap { m => m.typ(rn) }
+    }
+
+    /** lookup terms. */
+    def trm(name: Name): Set[TermSymbol] = name match {
+      case Name.Blk          => Set.empty
+      case w: Name.Word      => terms.get(w).getOrElse { Set.empty }
+      case Name.Link(ln, rn) => mod(ln).map { m => m.trm(rn) }.getOrElse { Set.empty }
+    }
+
+    /** export definitions from scope. */
+    def save(scp: Scope): Unit = {
+      types ++= scp.types.map { kv => (Name.Word(kv._1), kv._2) }
+      terms ++= scp.terms.map { kv => (Name.Word(kv._1), kv._2) }
+    }
+
+    /** import definitions into scope. */
+    def load(scp: Scope = EmptyScope()): Scope = {
+      val s = BlockScope(scp)
+      val typ = types.map { kv => (kv._1.str, kv._2) }
+      val trm = terms.map { kv => (kv._1.str, kv._2) }
+      s.defineAll(trm, typ)
+      return s
+    }
+
+    /** Find or create submodule with given name relative to this. */
+    def bind(name: Name): UserModule = mod(name).getOrElse {
+      name match {
+        case w: Name.Word => {
+          val m = new UserModule(this, w)
+          mods = mods.updated(w, m)
+          return m
+        }
+        case Name.Link(lft, rgt) => bind(lft).bind(rgt)
+        case _                   => throw new IllegalArgumentException()
+      }
+    }
+  }
+
+  /** User-defined module. */
+  class UserModule(val parent: ModuleSymbol, val short: Name.Word) extends ModuleSymbol {
+    def name = parent match {
+      case mod: UserModule => Name(mod.name, short)
+      case _: SourceModule => short
+    }
+
+    def root: SourceModule = parent match {
+      case mod: UserModule   => mod.root
+      case src: SourceModule => src
+    }
+
+    override def load(scp: Scope = EmptyScope()) = super.load(parent.load(scp))
+  }
+
   /**
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
    */
-  case class SourceModule(
-    decl: ModuleDecl,
-    source: Source
-  ) extends Symbol {
-    val name = path
+  class SourceModule(val decl: ModuleDecl, val source: Source) extends ModuleSymbol {
+    def name = path
+    def path = decl.path
 
-    def path: Name = decl.path
-
-    private var _terms: Map[String, Set[TermSymbol]] = _
-    def terms = _terms
-
-    private var _types: Map[String, TypeSymbol] = _
-    def types = _types
-
-    private var _imports: List[SourceModule] = _
-    def imports = _imports
+    var imports: List[SourceModule] = List.empty
 
     // a topological ordering of all transitive dependencies
     // this is the order in which the modules need to be compiled / loaded
     lazy val dependencies: List[SourceModule] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
-    // toplevel declared effects
-    def effects: Effects = Effects(types.values.collect {
-      case e: Effect => e
-    })
+    /** lookup main function. */
+    def main(): Option[TermSymbol] = terms.getOrElse(Name.main, Set.empty).headOption
+
+    override def load(scp: Scope): Scope = {
+      // Loads imports first so they can be shadowed
+      super.load(imports.foldLeft(scp) { (s, i) => i.load(s) })
+    }
+
+    override def mod(name: Name): Option[UserModule] = super.mod(name).orElse { lookup { sm => sm.mod(name) } }
+    override def typ(name: Name): Option[TypeSymbol] = super.typ(name).orElse { lookup { sm => sm.typ(name) } }
+    override def trm(name: Name): Set[TermSymbol] = dependencies.reverseIterator.foldLeft(super.trm(name)) { (ts, sm) =>
+      ts ++ sm.trm(name)
+    }
+
+    /** helper function to delegate to imports. */
+    private def lookup[T](f: SourceModule => Option[T]): Option[T] = dependencies.reverseIterator.collectFirst { sm =>
+      f(sm) match {
+        case Some(t) => t
+      }
+    }
 
     // the transformed ast after frontend
     private var _ast = decl
@@ -79,12 +166,12 @@ package object symbols {
      */
     def export(
       imports: List[SourceModule],
-      terms: Map[String, Set[TermSymbol]],
-      types: Map[String, TypeSymbol]
+      terms: TermMap,
+      types: TypeMap
     ): this.type = {
-      _imports = imports
-      _terms = terms
-      _types = types
+      this.imports = imports
+      this.terms = terms
+      this.types = types
       this
     }
   }

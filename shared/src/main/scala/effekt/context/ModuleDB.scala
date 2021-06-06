@@ -55,7 +55,7 @@ trait ModuleDB { self: Context =>
    * Util to check whether main exists on the given module
    */
   def checkMain(mod: SourceModule)(implicit C: Context): Unit = C.at(mod.decl) {
-    val mains = mod.terms.getOrElse("main", Set())
+    val mains = mod.terms.getOrElse(Name.main, Set.empty)
 
     if (mains.isEmpty) {
       C.abort("No main function defined")

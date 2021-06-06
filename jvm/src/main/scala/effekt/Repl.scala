@@ -2,6 +2,7 @@ package effekt
 
 import effekt.source._
 import effekt.symbols.{ BlockSymbol, DeclPrinter, SourceModule, ValueSymbol, Name }
+import effekt.symbols.Name.Word
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
@@ -121,7 +122,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         case Success(e: Expr, _) =>
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
-            val mainSym = mod.terms("main").head
+            val mainSym = mod.main().get
             val mainTpe = context.blockTypeOf(mainSym)
             output.emitln(mainTpe.ret)
           }
@@ -198,12 +199,12 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       runParsingFrontend(src, config) { cu =>
         output.emitln(s"Successfully imported ${i.path}\n")
         output.emitln(s"Imported Types\n==============")
-        cu.types.toList.sortBy { case (n, _) => n }.collect {
+        cu.types.toList.sortBy { case (n, _) => n.toString }.collect {
           case (name, sym) if !sym.synthetic =>
             outputCode(DeclPrinter(sym), config)
         }
         output.emitln(s"\nImported Functions\n==================")
-        cu.terms.toList.sortBy { case (n, _) => n }.foreach {
+        cu.terms.toList.sortBy { case (n, _) => n.toString }.foreach {
           case (name, syms) =>
             syms.collect {
               case sym if !sym.synthetic =>

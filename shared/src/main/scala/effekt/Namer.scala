@@ -35,25 +35,22 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
-    var scope: Scope = toplevel(builtins.rootTypes)
+    // resolve imports
+    C.module.imports = decl.imports.map { ip => C.moduleOf(ip.path) }
 
-    // process all imports, updating the terms and types in scope
-    val imports = decl.imports map {
-      case im @ source.Import(path) => Context.at(im) {
-        val modImport = Context.moduleOf(path)
-        scope.defineAll(modImport.terms, modImport.types)
-        modImport
-      }
-    }
+    // Open scope
+    val scp = C.module.load(toplevel(builtins.rootTypes)).enter
 
-    // create new scope for the current module
-    scope = scope.enter
+    // Prepare naming
+    C.initNamerstate(scp)
 
-    Context.initNamerstate(scope)
-
+    // Resolve source module
     resolveGeneric(decl)
 
-    Context.module.export(imports, scope.terms.toMap, scope.types.toMap)
+    // Export symbols to module
+    C.module.save(scp)
+
+    // Pass decl
     decl
   }
 
