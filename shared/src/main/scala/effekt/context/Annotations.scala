@@ -3,6 +3,7 @@ package context
 
 import effekt.util.messages.ErrorReporter
 import org.bitbucket.inkytonik.kiama.util.Memoiser
+import effekt.symbols.SourceModule
 
 case class Annotation[K, V](name: String, description: String) {
   type Value = V
@@ -100,7 +101,7 @@ object Annotations {
   /**
    * The module a given symbol is defined in
    */
-  val SourceModule = Annotation[symbols.Symbol, symbols.Module](
+  val SourceModule = Annotation[symbols.Symbol, symbols.SourceModule](
     "SourceModule",
     "the source module of symbol"
   )
@@ -175,7 +176,7 @@ object Annotations {
   /**
    * The unifier as computed by typer when type checking the module
    */
-  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
+  val Unifier = Annotation[symbols.SourceModule, substitutions.Unifier](
     "Unifier",
     "the unifier for module"
   )
@@ -243,7 +244,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful }
 
   // Types
   // -----
@@ -369,7 +370,7 @@ trait AnnotationsDB { self: Context =>
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)
 
-  def sourceModuleOf(sym: Symbol): Module =
+  def sourceModuleOf(sym: Symbol): SourceModule =
     annotation(Annotations.SourceModule, sym)
 
   /**

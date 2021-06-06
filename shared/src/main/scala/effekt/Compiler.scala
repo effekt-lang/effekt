@@ -5,7 +5,7 @@ import effekt.core.{ LiftInference, Transformer }
 import effekt.namer.Namer
 import effekt.regions.RegionChecker
 import effekt.source.{ CapabilityPassing, ModuleDecl }
-import effekt.symbols.Module
+import effekt.symbols.SourceModule
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
 import org.bitbucket.inkytonik.kiama
@@ -91,10 +91,10 @@ trait Compiler {
     }
   }
 
-  object frontend extends SourceTask[Module]("frontend") {
-    def run(source: Source)(implicit C: Context): Option[Module] = for {
+  object frontend extends SourceTask[SourceModule]("frontend") {
+    def run(source: Source)(implicit C: Context): Option[SourceModule] = for {
       ast <- getAST(source)
-      mod = Module(ast, source)
+      mod = SourceModule(ast, source)
       transformedAst <- C.using(module = mod, focus = ast) {
         Phase.run(ast, frontendPhases)
       }

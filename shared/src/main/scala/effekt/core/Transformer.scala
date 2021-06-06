@@ -6,16 +6,16 @@ import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 
-class Transformer extends Phase[Module, core.ModuleDecl] {
+class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
   val phaseName = "transformer"
 
-  def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
+  def run(mod: SourceModule)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
     Some(transform(mod))
   }
 
-  def transform(mod: Module)(implicit C: Context): ModuleDecl = {
+  def transform(mod: SourceModule)(implicit C: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.ast
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {

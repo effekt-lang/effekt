@@ -34,7 +34,7 @@ package object symbols {
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
    */
-  case class Module(
+  case class SourceModule(
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
@@ -48,12 +48,12 @@ package object symbols {
     private var _types: Map[String, TypeSymbol] = _
     def types = _types
 
-    private var _imports: List[Module] = _
+    private var _imports: List[SourceModule] = _
     def imports = _imports
 
     // a topological ordering of all transitive dependencies
     // this is the order in which the modules need to be compiled / loaded
-    lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
+    lazy val dependencies: List[SourceModule] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
     // toplevel declared effects
     def effects: Effects = Effects(types.values.collect {
@@ -78,7 +78,7 @@ package object symbols {
      * again. It is the same, since the source and AST did not change.
      */
     def export(
-      imports: List[Module],
+      imports: List[SourceModule],
       terms: Map[String, Set[TermSymbol]],
       types: Map[String, TypeSymbol]
     ): this.type = {
@@ -96,7 +96,7 @@ package object symbols {
     def effect = tpe.eff
     override def toString = s"@${tpe.eff.name}"
   }
-  case class ResumeParam(mod: Module) extends Param with BlockSymbol { val name = mod.name.nest(Name("resume")) }
+  case class ResumeParam(module: SourceModule) extends Param with BlockSymbol { val name = module.name.nest(Name("resume")) }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -181,8 +181,8 @@ package object symbols {
   /**
    * Introduced by Transformer
    */
-  case class Wildcard(module: Module) extends ValueSymbol { val name = module.name.nest(Name("_")) }
-  case class Tmp(module: Module) extends ValueSymbol { val name = module.name.nest(Name("tmp" + Symbol.fresh.next())) }
+  case class Wildcard(module: SourceModule) extends ValueSymbol { val name = module.name.nest(Name("_")) }
+  case class Tmp(module: SourceModule) extends ValueSymbol { val name = module.name.nest(Name("tmp" + Symbol.fresh.next())) }
 
   /**
    * A symbol that represents a termlevel capability

@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core._
-import effekt.symbols.{ Module, Wildcard }
+import effekt.symbols.{ SourceModule, Wildcard }
 import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -18,7 +18,7 @@ class JavaScriptLift extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: SourceModule)(implicit C: Context): String =
     (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
 
   /**
@@ -34,7 +34,7 @@ class JavaScriptLift extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: SourceModule)(implicit C: Context): Option[Document] = for {
     core <- C.backend(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }

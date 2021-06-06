@@ -10,7 +10,7 @@ object builtins {
 
   // a dummy module for built in types. Can be dropped, once they are
   // defined in the prelude
-  lazy val prelude = Module(ModuleDecl(Name.effekt, Nil, Nil), StringSource("", "effekt.effekt"))
+  lazy val prelude = SourceModule(ModuleDecl(Name.effekt, Nil, Nil), StringSource("", "effekt.effekt"))
 
   private def name(s: String) = prelude.name.nest(Name(s))
 
