@@ -293,6 +293,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val params: P[ParamSection] =
     ( valueParams
     | `{` ~/> blockParam <~ `}`
+    //| `with` ~ `{` ~> moduleParam <~ `}` TODO
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
 
@@ -322,7 +323,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
   lazy val args: P[ArgSection] =
     ( valueArgs
-    | blockArg
+    | blockArg 
+    //| moduleArg copy paste form handler
     | failure("Expected at an argument list")
     )
 
@@ -563,7 +565,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val blockType: P[BlockType] =
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType
     | valueType ~ (`=>` ~/> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
-    | effectful ^^ { e => BlockType(Nil, e) } // src knoten einfügen? / Zeile ersetzen interface type
+    | effectful ^^ { e => BlockType(Nil, e) } 
     )
 
   lazy val effectful: P[Effectful] =

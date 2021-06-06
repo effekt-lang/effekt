@@ -7,16 +7,18 @@ interface Worker {
 
 
 // user
-def work(m: Worker) { n: Int }  = {
+def work() { n: Int } with { m: Worker } = { // falls with trouble macht anderes keyword
     m:foo()
 }
 
 
+def work2() with { m: Worker }
+
 def main() = {
-    //work() {
-    //    def foo(): Int = 42
-    //}
-    println("Some")
+    work() { 42 } with {
+        def foo(): Int = 42
+    }
+    
 }
 
 //js

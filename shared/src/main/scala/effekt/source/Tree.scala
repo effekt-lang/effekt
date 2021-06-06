@@ -224,7 +224,7 @@ case class EffectDef(id: IdDef, effs: Effects) extends Def {
   type symbol = symbols.EffectAlias
 }
 
-/** Interface Definition */
+/** Interface Definition  Rename */
 case class IfcDef(id: IdDef, ops: List[Operation]) extends Def {
   type symbol = symbols.ModuleType
 }
@@ -410,7 +410,8 @@ case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
   type resolved = symbols.BlockType
 }
 
-// case class ModuleType() => Bei UserEffect nachschauen
+// TODO
+// case class ModuleType() extends Type
 
 case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
   // TODO we need to drop Effect <: Symbol and refactor this here
