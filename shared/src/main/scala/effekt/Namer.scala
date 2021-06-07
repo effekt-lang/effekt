@@ -62,9 +62,16 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { resolve }
-      resolveAll(decls)
+    case source.ModuleDecl(path, imports, defs) =>
+      defs foreach { resolve }
+      resolveAll(defs)
+
+    case source.ModuleDef(name, defs) =>
+      // Write to user module
+      C.defMod(name) {
+        defs.foreach { d => resolve(d) }
+        resolveAll(defs)
+      }
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
@@ -309,6 +316,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * not the bodies of functions.
    */
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+    case d @ source.ModuleDef(name, defs) =>
+      () // Resolution happens in resolveGeneric
 
     case d @ source.ValDef(id, annot, binding) =>
       ()
@@ -518,6 +527,9 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private var scope: Scope = scopes.EmptyScope()
 
+  /** Namespace of current user module. */
+  private var base: Name = Name.Blk
+
   private[namer] def initNamerstate(s: Scope): Unit = scope = s
 
   /**
@@ -528,6 +540,15 @@ trait NamerOps extends ContextOps { Context: Context =>
     val result = super.in(block)
     scope = before
     result
+  }
+
+  /** enters subnamespace */
+  def sub[T](name: Name = Name.Blk)(block: => T): T = {
+    val b = base
+    base = Name(base, name)
+    val rs = scoped(block)
+    base = b
+    rs
   }
 
   // TODO we only want to add a seed to a name under the following conditions:
@@ -607,6 +628,20 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def scoped[R](block: => R): R = Context in {
     scope = scope.enter
+    block
+  }
+
+  /** defines new module symbol with contents of scope. */
+  private[namer] def defMod(name: Name)(block: => Unit): Unit = Context.sub(name) {
+    val mod = Context.module.bind(base)
+    block
+    mod.save(scope)
+  }
+
+  /** recreates module scope. */
+  private[namer] def refMod[R](name: Name)(block: => R) = Context.sub(name) {
+    val mod = Context.module.mod(base).getOrElse { Context.abort(s"Failed to resolve reference to module $base") }
+    scope = mod.load()
     block
   }
 

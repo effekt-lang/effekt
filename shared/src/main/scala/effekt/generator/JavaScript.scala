@@ -263,6 +263,14 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Val(id, tpe, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
+    case Def(id, tpe, UserModule(b), rest) =>
+      "var" <+> nameDef(id) <+> "=" <+> jsCall(parens(jsAnonFunc(
+        List.empty, /* (function() {" <> emptyline <> */
+        "var module = {}" <> emptyline <> // only necessary because we use same code to generate exports
+          "var" <+> jsModuleName(id.name) <+> "=" <+> "{};" <> emptyline <>
+          toDocTopLevel(b)
+      ))) <> emptyline <> toDocTopLevel(rest)
+
     case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
@@ -285,6 +293,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   def jsModuleName(path: String): String = jsModuleName(Name.path(path))
 
   def jsModuleName(name: Name): String = "$" + name.qual("_")
+
+  def jsAnonFunc(params: List[Doc], body: Doc): Doc =
+    "function" <+> parens(hsep(params, comma)) <+> jsBlock(body)
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

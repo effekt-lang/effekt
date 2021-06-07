@@ -224,7 +224,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDef
+    ( moduleDef
+    | valDef
     | funDef
     | effectDef
     | typeDef
@@ -237,6 +238,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | externInclude
     | failure("Expected a definition")
     )
+
+  lazy val moduleDef: P[Def] =
+    `module` ~/> modName ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleDef
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef

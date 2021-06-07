@@ -31,6 +31,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
     case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
     case Unbox(e)         => toDoc(e)
+    case UserModule(body) => toDoc(body)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString

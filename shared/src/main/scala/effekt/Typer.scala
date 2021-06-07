@@ -429,6 +429,22 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
+      case d @ source.ModuleDef(name, defs) => {
+        Context in {
+          defs.foreach { d => precheckDef(d) }
+          defs.foreach { d =>
+
+            val (_ / effs) = synthDef(d)
+
+            if (effs.nonEmpty)
+              Context.at(d) {
+                Context.error("Unhandled effects: " + effs)
+              }
+          }
+        }
+
+        TUnit / Pure
+      }
       case d @ source.FunDef(id, tparams, params, ret, body) =>
         val sym = d.symbol
         Context.define(sym.params)

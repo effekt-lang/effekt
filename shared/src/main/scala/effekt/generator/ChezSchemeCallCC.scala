@@ -78,6 +78,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case ScopeAbs(id, b) => ???
     case Lifted(ev, b)   => ???
     case Unbox(e)        => toDoc(e)
+    case UserModule(b)   => toDoc(b, false)
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {

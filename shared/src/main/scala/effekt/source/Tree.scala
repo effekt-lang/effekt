@@ -216,6 +216,12 @@ case class EffectDef(id: IdDef, effs: Effects) extends Def {
   type symbol = symbols.EffectAlias
 }
 
+/** User Module Definition like `module foo { def bar(): Int = 42 }` */
+case class ModuleDef(user: Name, defs: List[Def]) extends Def {
+  type symbol = symbols.UserModule
+  def id: IdDef = IdDef(user.local)
+}
+
 // only valid on the toplevel!
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinType
@@ -471,6 +477,9 @@ object Tree {
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
+
+      case ModuleDef(name, defs) =>
+        ModuleDef(name, defs.map(rewrite))
 
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))

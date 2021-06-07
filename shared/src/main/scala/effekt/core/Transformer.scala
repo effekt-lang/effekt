@@ -9,6 +9,8 @@ import effekt.context.assertions.SymbolAssertions
 class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
   val phaseName = "transformer"
+  /** current namespace (used for transforming ModuleDefs) */
+  var base: Name = Name.Blk
 
   def run(mod: SourceModule)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
@@ -36,6 +38,28 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+    case source.ModuleDef(name, defs) =>
+      val b = base
+      base = Name(base, name)
+
+      // Lookup module symbol
+      val mod = C.module.mod(base).get
+
+      val exports: Stmt = Exports(name, mod.terms.flatMap {
+        case (name, syms) => syms.collect {
+          // TODO export valuebinders properly
+          case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+          case sym: ValBinder => sym
+        }
+      }.toList ++ mod.mods.values.toList)
+
+      val coreMod = UserModule(defs.foldRight(exports) { (d, r) =>
+        transform(d, r)
+      })
+
+      val d = Def(mod, null, coreMod, rest)
+      base = b
+      return d
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val ps = transformParams(params)

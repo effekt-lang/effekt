@@ -16,6 +16,9 @@ sealed trait Tree extends Product {
  */
 case class ModuleDecl(path: Name, imports: List[Name], defs: Stmt) extends Tree
 
+/// User-definied module
+case class UserModule(body: Stmt) extends Block
+
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
  */
