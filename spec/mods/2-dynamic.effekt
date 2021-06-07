@@ -1,0 +1,22 @@
+module example/mods/dynamic
+
+// Interface
+interface Worker {
+    def foo(): Int 
+}
+
+module Bar implements Worker {
+    def foo() = 42
+}
+
+// ModuleParam
+def work() with { mod: Worker } = {
+    println(mod:foo())
+}
+
+
+def main() = {
+    // ModuleArg
+    work() with Bar
+}
+

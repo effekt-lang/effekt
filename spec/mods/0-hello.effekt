@@ -1,0 +1,14 @@
+// ModuleDecl
+module examples/mods
+
+// ModuleDef
+module hello { // user module
+    def world() = {
+        println("Hello World!")
+    }
+}
+
+def main() = {
+    // ModuleTarget
+    hello:world()
+}

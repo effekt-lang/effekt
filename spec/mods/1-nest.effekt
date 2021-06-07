@@ -1,0 +1,17 @@
+module example/mods/nest
+
+module hello {
+    def greet(name: String) = {
+        println("Hello " ++ name)
+    }
+
+    module world {
+        def speak() = {
+            greet("World")
+        }
+    }
+}
+
+def main() = {
+    hello:world:speak()
+}
