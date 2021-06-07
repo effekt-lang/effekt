@@ -165,6 +165,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def nameRef(sym: Symbol)(implicit C: Context): Doc = sym match {
+    case m: symbols.UserModule => m.name.full
     case _: symbols.Effect     => toDoc(sym.name)
     case _: symbols.Capability => sym.name.local + "_" + sym.id
     case _: symbols.EffectOp   => "op$" + sym.name.local
@@ -267,7 +268,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       "var" <+> nameDef(id) <+> "=" <+> jsCall(parens(jsAnonFunc(
         List.empty, /* (function() {" <> emptyline <> */
         "var module = {}" <> emptyline <> // only necessary because we use same code to generate exports
-          "var" <+> jsModuleName(id.name) <+> "=" <+> "{};" <> emptyline <>
+          "var" <+> "$" + id.name.local <+> "=" <+> "{};" <> emptyline <>
           toDocTopLevel(b)
       ))) <> emptyline <> toDocTopLevel(rest)
 
