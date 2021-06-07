@@ -144,6 +144,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
       }
 
+      case c @ source.Call(source.ModTarget(name, id), targs, args) =>
+        checkOverloadedCall(c, source.IdTarget(id), targs map { _.resolve }, args, expected)
+
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
 

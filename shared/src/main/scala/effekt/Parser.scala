@@ -429,7 +429,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( idRef ^^ IdTarget
+    ( modCall ^^ { call => 
+      if (call.cmps().length > 1) {
+        ModTarget(call.dropLast(), call.last.toRef())
+      }
+      else {
+        IdTarget(call.toRef())
+      }
+    }
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )
 

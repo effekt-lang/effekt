@@ -290,6 +290,10 @@ case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Refe
   type symbol = symbols.EffectOp
 }
 case class ExprTarget(receiver: Expr) extends CallTarget
+/** Call to module member like `hello:foo()` */
+case class ModTarget(mod: Name, id: IdRef) extends CallTarget with Reference {
+  type symbol = symbols.TermSymbol
+}
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr

@@ -176,6 +176,21 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       val as = args.flatMap(transform)
       C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
 
+    case c @ source.Call(source.ModTarget(name, id), _, args) =>
+      // assumption: typer removed all ambiguous references, so there is exactly one
+      val sym: Symbol = C.symbolOf(id)
+      val mod = C.module.mod(name).get
+
+      val as = args.flatMap(transform)
+
+      // the type arguments, inferred by typer
+      val targs = C.typeArguments(c)
+
+      // right now only builtin functions are pure of control effects
+      // later we can have effect inference to learn which ones are pure.
+      val a = App(Member(BlockVar(mod), sym.asInstanceOf[BlockSymbol]), targs, as)
+      return C.bind(C.inferredTypeOf(tree).tpe, a)
+
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)

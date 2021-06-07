@@ -305,6 +305,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
+    case source.ModTarget(name, id) => {
+      C.refMod(name) {
+        C.resolveCalltarget(id)
+      }
+    }
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
       Context.resolveCalltarget(id)
