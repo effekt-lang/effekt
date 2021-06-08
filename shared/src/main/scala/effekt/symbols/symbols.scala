@@ -345,6 +345,9 @@ package object symbols {
   }
 
   sealed trait InterfaceType extends Type
+
+  case class ModuleType(name: Name, var ops: List[Method] = Nil) extends InterfaceType with TypeSymbol with MethodOwner
+
   case class CapabilityType(eff: Effect) extends InterfaceType
 
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends InterfaceType {
@@ -427,10 +430,17 @@ package object symbols {
     override def dealias: List[Effect] = effs.dealias
   }
 
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
+  /** Either a UserEffect or ModuleType. */
+  sealed trait MethodOwner
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[Method] = Nil) extends Effect with TypeSymbol with MethodOwner
+  case class Method(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, owner: MethodOwner) extends Fun {
     def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
     def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
+
+    def effect: UserEffect = owner match {
+      case e: UserEffect => e
+      case t: ModuleType => sys error s"Method $name is owned by $t (not a UserEffect)."
+    }
 
     // The effects as seen by the capability passing transformation
     def otherEffects: Effects = annotatedReturn.effects

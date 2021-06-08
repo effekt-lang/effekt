@@ -9,6 +9,7 @@ package object kinds {
     case t: ValueType      => wellformed(t)
     case t: BlockType      => wellformed(t)
     case t: CapabilityType => wellformed(t.eff)
+    case t: ModuleType     => C.abort("TODO: wellformed ModuleType")
   }
 
   def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { eff => wellformed(eff) }

@@ -26,8 +26,8 @@ object assertions {
       case t: UserEffect => t
       case _ => reporter.abort("Expected a user defined effect")
     }
-    def asEffectOp: EffectOp = s match {
-      case t: EffectOp => t
+    def asMethod: Method = s match {
+      case t: Method => t
       case _ => reporter.abort("Expected an effect operation, but got " + s)
     }
     def asUserFunction: UserFunction = s match {

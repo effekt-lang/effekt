@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ BlockType, CapabilityType, Effect, Effects, EffectApp, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ ModuleType, BlockType, CapabilityType, Effect, Effects, EffectApp, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -36,6 +36,7 @@ object substitutions {
     def substitute(t: InterfaceType): InterfaceType = t match {
       case b: CapabilityType => b
       case b: BlockType      => substitute(b)
+      case b: ModuleType     => sys.error("TODO: substitue mod type")
     }
 
     def substitute(t: BlockType): BlockType = t match {
@@ -267,6 +268,7 @@ object substitutions {
           case v: ValueType      => visitValueType(v)
           case b: BlockType      => visitBlockType(b)
           case b: CapabilityType => b
+          case b: ModuleType     => sys error "TODO: visit mod type"
         }
       }
       generic(t)

@@ -190,7 +190,7 @@ case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends De
   type symbol = symbols.UserEffect
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Method
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
@@ -220,6 +220,11 @@ case class EffectDef(id: IdDef, effs: Effects) extends Def {
 case class ModuleDef(user: Name, defs: List[Def]) extends Def {
   type symbol = symbols.UserModule
   def id: IdDef = IdDef(user.local)
+}
+
+/** Interface Definition like `interface foo { def bar(): Int }` */
+case class InterfaceDef(id: IdDef, ops: List[Operation]) extends Def {
+  type symbol = symbols.ModuleType
 }
 
 // only valid on the toplevel!
@@ -287,7 +292,7 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.TermSymbol
 }
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Method
 }
 case class ExprTarget(receiver: Expr) extends CallTarget
 /** Call to module member like `hello:foo()` */
@@ -315,7 +320,7 @@ case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, c
   type symbol = symbols.UserEffect
 }
 case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Method
 }
 
 case class Hole(stmts: Stmt) extends Expr

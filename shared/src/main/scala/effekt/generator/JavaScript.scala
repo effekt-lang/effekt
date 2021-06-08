@@ -160,7 +160,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
   def nameDef(sym: Symbol)(implicit C: Context): Doc = sym match {
     case _: symbols.Capability => sym.name.local + "_" + sym.id
-    case _: symbols.EffectOp   => "op$" + sym.name.local
+    case _: symbols.Method     => "op$" + sym.name.local
     case _                     => toDoc(sym.name)
   }
 
@@ -168,7 +168,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case m: symbols.UserModule => m.name.full
     case _: symbols.Effect     => toDoc(sym.name)
     case _: symbols.Capability => sym.name.local + "_" + sym.id
-    case _: symbols.EffectOp   => "op$" + sym.name.local
+    case _: symbols.Method     => "op$" + sym.name.local
     case _ => sym.name match {
       case name: Name.Link if name.lft != C.module.name =>
         link(name, jsModuleName(name.lft) + "." + name.local)

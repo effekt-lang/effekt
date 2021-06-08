@@ -22,7 +22,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+        case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
       }
     }.toList)
@@ -48,7 +48,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       val exports: Stmt = Exports(name, mod.terms.flatMap {
         case (name, syms) => syms.collect {
           // TODO export valuebinders properly
-          case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+          case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
           case sym: ValBinder => sym
         }
       }.toList ++ mod.mods.values.toList)
@@ -60,6 +60,10 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       val d = Def(mod, null, coreMod, rest)
       base = b
       return d
+
+    case source.InterfaceDef(id, ops) =>
+      C.abort("TODO transform interface")
+
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val ps = transformParams(params)
@@ -195,7 +199,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
 
-      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
+      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asMethod), null, args.flatMap(transform))
       C.bind(C.inferredTypeOf(tree).tpe, app)
 
     case c @ source.Call(fun: source.IdTarget, _, args) =>
@@ -214,7 +218,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
           PureApp(BlockVar(f), targs, as)
         case r: Record =>
           PureApp(BlockVar(r), targs, as)
-        case f: EffectOp =>
+        case f: Method =>
           C.panic("Should have been translated to a method call!")
         case f: Field =>
           val List(arg: Expr) = as
@@ -317,13 +321,13 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: EffectOp, put: EffectOp)
+  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: Method, put: Method)
 
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
+    val get = Method(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
+    val put = Method(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
 
     val param = CapabilityParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)

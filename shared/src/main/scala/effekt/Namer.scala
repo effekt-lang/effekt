@@ -73,6 +73,25 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveAll(defs)
       }
 
+    case source.InterfaceDef(id, ops) =>
+      val mt = Context.resolveType(id).asInstanceOf[ModuleType]
+      mt.ops = ops.map {
+        case source.Operation(id, tparams, params, ret) =>
+          val name = Context.freshTermName(id)
+          Context scoped {
+
+            val tps = tparams map resolve
+
+            // The type parameters of an effect op are:
+            //   1) all type parameters on the effect, followed by
+            //   2) the annotated type parameters on the concrete operation
+            val op = Method(Name(id), tps, params map resolve, resolve(ret), mt)
+            Context.define(id, op)
+            op
+          }
+      }
+      mt.ops.foreach { op => Context.bind(op) }
+
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
       resolve(d)
@@ -121,7 +140,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
-            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            val op = Method(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
             Context.define(id, op)
             op
           }
@@ -323,6 +342,12 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.ModuleDef(name, defs) =>
       () // Resolution happens in resolveGeneric
+
+    case source.InterfaceDef(id, ops) => {
+      // we do not resolve the effect operations here to allow them to refer to types that are defined
+      // later in the file
+      Context.define(id, ModuleType(Name(id), List.empty))
+    }
 
     case d @ source.ValDef(id, annot, binding) =>
       ()
