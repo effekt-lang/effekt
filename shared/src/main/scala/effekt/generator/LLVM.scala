@@ -157,21 +157,15 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
-      val tmpstkp = localName(stackName);
-      val spp = freshLocalName("tmpspp");
-      val basep = freshLocalName("tmpbasep");
-      val limitp = freshLocalName("tmplimitp");
-      val boxesspp = freshLocalName("tmpboxesspp");
-      val boxesbasep = freshLocalName("tmpboxesbasep");
-      val boxeslimitp = freshLocalName("tmpboxeslimitp");
-      tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> globalBuiltin("newStack") <> argumentList(List()) <@>
-        spp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 0" <@>
-        basep <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 1" <@>
-        limitp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 2" <@>
-        boxesspp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 3" <@>
-        boxesbasep <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 4" <@>
-        boxeslimitp <+> "=" <+> "getelementptr %Stk, %Stk*" <+> tmpstkp <> comma <+> "i64 0, i32 5" <@>
-        storeFrm(spp, basep, limitp, boxesspp, boxesbasep, boxeslimitp, args, globalName(blockName), cntType)
+      val tmpstkp = freshLocalName("tempstkp");
+      tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> globalBuiltin("newStack") <>
+        argumentList(List()) <@>
+        "call fastcc void" <+> globalBuiltin("pushStack") <>
+        argumentList(List("%Sp* %spp", "%Stk*" <+> tmpstkp)) <@>
+        storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", args, globalName(blockName), cntType) <@>
+        localName(stackName) <+> "=" <+>
+        "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
+        argumentList(List("%Sp* %spp"))
     case PushStack(stack) =>
       "call fastcc void" <+> globalBuiltin("pushStack") <>
         argumentList(List("%Sp* %spp", toDocWithType(stack)))
