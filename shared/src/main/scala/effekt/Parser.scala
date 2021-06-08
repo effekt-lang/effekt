@@ -81,6 +81,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
   lazy val `interface` = keyword("interface")
+  lazy val `implements` = keyword("implements")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
@@ -242,7 +243,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val moduleDef: P[Def] =
-    `module` ~/> modName ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleDef
+    `module` ~/> modName ~ impls ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleDef
+    
+  lazy val impls: P[List[IdRef]] =
+    (`implements` ~> someSep(idRef, `,`)).? ^^ { i => i match {
+      case Some(value) => value
+      case None => List.empty
+    }}
 
   lazy val interfaceDef: P[Def] =
       `interface` ~> idDef ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ InterfaceDef

@@ -66,7 +66,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       defs foreach { resolve }
       resolveAll(defs)
 
-    case source.ModuleDef(name, defs) =>
+    case source.ModuleDef(name, impl, defs) =>
       // Write to user module
       C.defMod(name) {
         defs.foreach { d => resolve(d) }
@@ -340,7 +340,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * not the bodies of functions.
    */
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
-    case d @ source.ModuleDef(name, defs) =>
+    case d @ source.ModuleDef(name, impl, defs) =>
       () // Resolution happens in resolveGeneric
 
     case source.InterfaceDef(id, ops) => {

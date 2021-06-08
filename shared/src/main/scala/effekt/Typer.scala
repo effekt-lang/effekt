@@ -432,7 +432,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
-      case d @ source.ModuleDef(name, defs) => {
+      case d @ source.ModuleDef(name, impl, defs) => {
         Context in {
           defs.foreach { d => precheckDef(d) }
           defs.foreach { d =>

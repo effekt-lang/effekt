@@ -217,7 +217,7 @@ case class EffectDef(id: IdDef, effs: Effects) extends Def {
 }
 
 /** User Module Definition like `module foo { def bar(): Int = 42 }` */
-case class ModuleDef(user: Name, defs: List[Def]) extends Def {
+case class ModuleDef(user: Name, impl: List[IdRef], defs: List[Def]) extends Def {
   type symbol = symbols.UserModule
   def id: IdDef = IdDef(user.local)
 }
@@ -487,8 +487,8 @@ object Tree {
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
 
-      case ModuleDef(name, defs) =>
-        ModuleDef(name, defs.map(rewrite))
+      case ModuleDef(name, impl, defs) =>
+        ModuleDef(name, impl, defs.map(rewrite))
 
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))

@@ -38,7 +38,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
-    case source.ModuleDef(name, defs) =>
+    case source.ModuleDef(name, impl, defs) =>
       val b = base
       base = Name(base, name)
 
