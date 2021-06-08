@@ -111,7 +111,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val modName: P[Name] = someSep(name, `.`) ^^ { ws => Name(ws) }
   lazy val modPath: P[Name] = someSep(name, `/`) ^^ { ws => Name(ws) }
-  lazy val modCall: P[Name] = someSep(name, `:`) ^^ { ws => Name(ws) }
+  lazy val modCall: P[Name] = some(name <~ `:`) ^^ { ws => Name(ws) }
 
   def oneof(strings: String*): Parser[String] =
     strings.map(literal).reduce(_ | _)
@@ -429,14 +429,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( modCall ^^ { call => 
-      if (call.cmps().length > 1) {
-        ModTarget(call.dropLast(), call.last.toRef())
-      }
-      else {
-        IdTarget(call.toRef())
-      }
-    }
+    ( modCall ~ idRef ^^ { case name ~ ref => println(s"Target $name $ref"); ModTarget(name, ref) }
+    | idRef ^^ IdTarget
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )
 
