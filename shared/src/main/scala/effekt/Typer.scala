@@ -404,6 +404,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.assignType(op, tpe)
       }
 
+    case d: source.InterfaceDef => d.symbol.ops.foreach { op =>
+      val tpe = op.toType
+      wellformed(tpe)
+      Context.assignType(op, tpe)
+    }
+
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
@@ -433,6 +439,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
       case d @ source.ModuleDef(name, impl, defs) => {
+        // Check body
         Context in {
           defs.foreach { d => precheckDef(d) }
           defs.foreach { d =>
@@ -445,6 +452,93 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               }
           }
         }
+
+        val mod = Context.module.mod(name).get
+
+        // Check interfaces
+        mod.impls.foreach { ifc =>
+          // For every method declared in the interface...
+          ifc.ops.foreach { op =>
+
+            // (0) Find possible candidates for interface method
+            val cnds = mod.trm(op.name).collect {
+              case f: UserFunction => f
+            }
+
+            if (cnds.size == 0) {
+              C.abort(s"No candidates found for method ${ifc}.${op} in module $mod")
+            }
+
+            // (1) Instantiate block type of interface method
+            val (rigids, expected) = Unification.instantiate(C.blockTypeOf(op))
+
+            // (2) unify with given type arguments for interface (i.e., A, B, ...):
+            //     interface Foo[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+            //     The parameters C, D, ... are existentials
+            //val existentials: List[TypeVar] = rigids.map { r => TypeVar(r.name) }
+            //C.addToUnifier(((rigids: List[TypeVar]) zip existentials).toMap)
+
+            //val substPms = C.unifier.substitute(blockType.params)
+            //val substTpe = C.unifier.substitute(blockType.ret)
+
+            val res = cnds.map { fun => Unification.unifyBlockTypes(expected, C.blockTypeOf(fun)) }
+
+            val pos = res.collect {
+              case u: Unifier => u
+            }
+
+            val neg = res.collect {
+              case e: UnificationError => e
+            }
+
+            if (pos.size == 0) {
+              C.abort(s"No candidate in $mod implements $op:\n" + neg.map { err => err.msg }.mkString("\n"))
+            } else if (pos.size > 1) {
+              C.abort(s"Multiple candidates in $mod implement $op.")
+            }
+          }
+        }
+        /*
+        // (1) Instantiate block type of effect operation
+              val (rigids, BlockType(tparams, pms, tpe / effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
+
+              // (2) unify with given type arguments for effect (i.e., A, B, ...):
+              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+              //     The parameters C, D, ... are existentials
+              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
+              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
+
+              // (3) substitute what we know so far
+              val substPms = Context.unifier substitute pms
+              val substTpe = Context.unifier substitute tpe
+              val substEffs = Context.unifier substitute effectOp.otherEffects
+
+              // (4) check parameters
+              val ps = checkAgainstDeclaration(op.name, substPms, params)
+        // => Infered
+
+        // Check implementation
+        val mod = Context.module.mod(name).get
+
+        mod.impls.foreach { ifc =>
+          println(s"Check interface $ifc")
+          ifc.ops.foreach { op =>
+            println(s"Check method $op")
+            val funs = mod.trm(op.name).collect {
+              case f: UserFunction => f
+            }
+
+            if (!funs.exists { fun =>
+              // TODO
+              fun.tparams == op.tparams &&
+                fun.params == op.params &&
+                fun.inferredReturnType == op.annotatedReturn
+            }) {
+              C.abort(s"Missing implementation of $op in module $mod")
+            }
+          }
+
+        }*/
 
         TUnit / Pure
       }

@@ -127,7 +127,7 @@ object substitutions {
   object Unification {
 
     /**
-     * For error reporting, we assume the second argument (tpe1) is the type expected by the context
+     * For error reporting, we assume the first argument (tpe1) is the type expected by the context
      */
     def unify(tpe1: Type, tpe2: Type)(implicit C: Context): Unifier =
       unifyTypes(tpe1, tpe2).getUnifier

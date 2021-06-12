@@ -68,10 +68,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
     case source.ModuleDef(name, impl, defs) =>
       // Write to user module
-      C.defMod(name) {
+      val mod = C.defMod(name) {
         defs.foreach { d => resolve(d) }
         resolveAll(defs)
       }
+
+      // resolve interfaces
+      mod.impls = impl.map { id => C.resolveType(id).asInterface }
 
     case source.InterfaceDef(id, ops) =>
       val mt = Context.resolveType(id).asInstanceOf[ModuleType]
@@ -541,7 +544,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(implicit C: Context): TypeVar = {
-    val sym = TypeVar(C.name(id))
+    val sym = TypeVar(Name(id))
     Context.define(id, sym)
     sym
   }
@@ -662,10 +665,11 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   /** defines new module symbol with contents of scope. */
-  private[namer] def defMod(name: Name)(block: => Unit): Unit = Context.sub(name) {
+  private[namer] def defMod(name: Name)(block: => Unit): UserModule = Context.sub(name) {
     val mod = Context.module.bind(base)
     block
     mod.save(scope)
+    mod
   }
 
   /** recreates module scope. */
@@ -675,5 +679,5 @@ trait NamerOps extends ContextOps { Context: Context =>
     block
   }
 
-  private[namer] def name(id: Id): Name = module.name.nest(Name(id))
+  private[namer] def name(id: Id): Name = Name(module.name, base).nest(Name(id))
 }

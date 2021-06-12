@@ -62,7 +62,8 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       return d
 
     case source.InterfaceDef(id, ops) =>
-      C.abort("TODO transform interface")
+      //C.abort("TODO transform interface")
+      rest
 
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol

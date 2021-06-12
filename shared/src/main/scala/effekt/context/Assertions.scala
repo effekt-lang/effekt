@@ -13,7 +13,10 @@ object assertions {
    * in one place
    */
   implicit class SymbolAssertions(s: Symbol)(implicit reporter: ErrorReporter) {
-
+    def asInterface: ModuleType = s match {
+      case t: ModuleType => t
+      case _ => reporter.abort("Expected a module interface")
+    }
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
       case _ => reporter.abort("Expected a value parameter")

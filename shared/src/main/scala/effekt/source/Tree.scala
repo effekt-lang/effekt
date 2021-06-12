@@ -499,6 +499,7 @@ object Tree {
       case VarDef(id, annot, binding) =>
         VarDef(id, annot, rewrite(binding))
 
+      case d: InterfaceDef  => d
       case d: EffDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d

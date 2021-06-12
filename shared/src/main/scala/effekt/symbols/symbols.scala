@@ -99,6 +99,8 @@ package object symbols {
 
   /** User-defined module. */
   class UserModule(val parent: ModuleSymbol, val short: Name.Word) extends ModuleSymbol {
+    var impls: List[ModuleType] = List.empty
+
     def name = parent match {
       case mod: UserModule => Name(mod.name, short)
       case _: SourceModule => short
@@ -211,9 +213,12 @@ package object symbols {
     def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
 
     def effects(implicit C: Context): Effects =
+      inferredReturnType.effects
+
+    def inferredReturnType(implicit C: Context): Effectful =
       ret.orElse { C.blockTypeOption(this).map { _.ret } }.getOrElse {
         C.abort(s"Result type of recursive function ${name} needs to be annotated")
-      }.effects
+      }
   }
 
   object Fun {
@@ -331,7 +336,7 @@ package object symbols {
    * Should neither occur in source programs, nor in infered types
    */
   case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
-    // override def toString = "?" + underlying.name + id
+    override def toString = "?" + underlying.name + id
   }
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
@@ -434,7 +439,10 @@ package object symbols {
   sealed trait MethodOwner
   case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[Method] = Nil) extends Effect with TypeSymbol with MethodOwner
   case class Method(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, owner: MethodOwner) extends Fun {
-    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
+    def ret: Option[Effectful] = owner match {
+      case _: ModuleType => Some(Effectful(annotatedReturn.tpe, otherEffects))
+      case _: UserEffect => Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
+    }
     def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
 
     def effect: UserEffect = owner match {

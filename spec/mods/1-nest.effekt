@@ -1,4 +1,4 @@
-module example/mods/nest
+module examples/mods/nest
 
 module hello {
     def greet(name: String) = {
