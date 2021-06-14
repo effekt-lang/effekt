@@ -95,6 +95,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = Context.symbolOf(f)
+
       Context scoped {
         sym.tparams.foreach { p =>
           Context.bind(p)
@@ -167,7 +168,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    case source.TryHandle(body, handlers) =>
+    case source.TryHandle(body, reg, handlers) =>
+      reg map resolve
       Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
 
@@ -322,10 +324,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case f @ source.FunDef(id, tparams, params, annot, body) =>
       val uniqueId = Context.freshTermName(id)
       // we create a new scope, since resolving type params introduces them in this scope
-      val sym = Context scoped {
+      lazy val sym: UserFunction = Context scoped {
         val tps = tparams map resolve
         val ps = params map resolve
         val ret = Context scoped {
+          // TODO allow mentioning self regions here by binding sym
           Context.bind(ps)
           annot map resolve
         }
@@ -500,6 +503,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def resolve(e: source.Effectful)(implicit C: Context): Effectful =
     Effectful(resolve(e.tpe), resolve(e.eff))
+
+  def resolve(r: source.Region)(implicit C: Context): Region =
+    Region(r.refs.map { a => C.resolveTerm(a) })
 
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)

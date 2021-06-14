@@ -1,7 +1,7 @@
 package effekt
 package regions
 
-import effekt.source._
+import effekt.source.{ Region => _, _ }
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.{ Binder, BlockSymbol, Effectful, Symbol, UserFunction, ValueSymbol }
 import effekt.context.assertions.SymbolAssertions
@@ -43,6 +43,9 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   // at that point.
   def checkTree(implicit C: Context): PartialFunction[Tree, RegionSet] = {
 
+    case DefStmt(d, rest) =>
+      check(d) ++ check(d)
+
     case FunDef(id, tparams, params, ret, body) =>
       val sym = id.symbol
 
@@ -56,17 +59,18 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       // regions of parameters introduced by this function
       val boundRegions: RegionSet = bindRegions(params)
 
+      // TODO WHY ARE THERE MULTIPLE MAIN SYMBOLS???
       val selfRegion = Region(sym)
       val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
       val reg = bodyRegion -- boundRegions -- selfRegion
 
       // check that the self region (used by resume and variables) does not escape the scope
-      val tpe = Context.blockTypeOf(sym)
-      val escapes = Context.freeRegionVariables(tpe.ret) intersect selfRegion
-      if (escapes.nonEmpty) {
-        Context.explain(sym, body)
-        Context.abort(s"A value that is introduced in '${id.name}' leaves its scope.")
-      }
+      //      val tpe = Context.blockTypeOf(sym)
+      //      val escapes = Context.freeRegionVariables(tpe.ret) intersect selfRegion
+      //      if (escapes.nonEmpty) {
+      //        Context.explain(sym, body)
+      //        Context.abort(s"A value that is introduced in '${id.name}' leaves its scope.")
+      //      }
 
       // safe inferred region on the function symbol
       Context.annotateRegions(id.symbol, reg)
@@ -120,7 +124,14 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val bodyRegion = check(body)
       bodyRegion -- boundRegions
 
-    case TryHandle(body, handlers) =>
+    // TODO actually look at the annotated region for the continuation!
+    case TryHandle(body, annotatedReg, handlers) =>
+
+      val resumeReg = annotatedReg.map {
+        case r => Region(r.refs.map { _.symbol })
+      } getOrElse {
+        Context.dynamicRegion
+      }
 
       // regions for all the capabilities
       val caps = handlers.flatMap { h => h.capability }
@@ -145,11 +156,20 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         case Handler(id, cap, clauses) => clauses.foreach {
           case OpClause(id, params, body, resumeId) =>
             val resumeSym = resumeId.symbol
-            val resumeReg = Context.dynamicRegion
             Context.annotateRegions(resumeSym, resumeReg)
             reg ++= check(body)
         }
       }
+
+      // if annotated, check it
+      // TODO we should remember the lexical ordering of names somewhere. This way we can know that a nested scope subsumes the outer scope.
+      annotatedReg.foreach { _ =>
+        val unhandled = reg -- resumeReg
+        if (unhandled.nonEmpty) {
+          Context.abort(s"The region annotated on the effect handler do not match the inferred region: ${reg}.\n In particular, the following capabilities might indirectly leave their defining scope via the continuation: ${unhandled}.")
+        }
+      }
+
       reg
 
     // capability call
@@ -190,6 +210,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
     // TODO check: resumptions can take block arguments (with bidirectional effects), but are not "known functions"
     case c @ Call(id: IdTarget, _, args) if id.definition.isInstanceOf[symbols.Fun] =>
+      println(s"checking call to ${id}")
       var reg = check(id)
       val fun = id.definition.asFun
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
@@ -210,6 +231,13 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         case (param, arg: CapabilityArg) => reg ++= Region(arg.definition)
       }
 
+      // we also substite the current dynamic region for the self region:
+      println(id.definition)
+      println(Context.dynamicRegion)
+      println("type " + tpe)
+      substitute(id.definition, Context.dynamicRegion, tpe)
+      println("type after substitution " + tpe)
+
       // check constraints again after substitution
       unifyAndExplain(c)
 
@@ -217,6 +245,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
     // calls to unknown functions (block arguments, lambdas, etc.)
     case c @ Call(target, _, args) =>
+      println(s"DIFFERENT CALL: ${target}")
       val Effectful(tpe, _) = Context.inferredTypeOf(c)
       args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
 

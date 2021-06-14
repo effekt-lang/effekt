@@ -66,6 +66,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `effect` = keyword("effect")
   lazy val `try` = keyword("try")
   lazy val `with` = keyword("with")
+  lazy val `at` = keyword("at")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
   lazy val `fun` = keyword("fun")
@@ -82,7 +83,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun"
+    "match", "module", "import", "extern", "fun", "at"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -433,8 +434,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val doExpr: P[Expr] =
     `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
 
+  // TODO allow region annotation here
   lazy val handleExpr: P[Expr] =
-    `try` ~/> stmt ~ some(handler) ^^ TryHandle
+    `try` ~/> stmt ~ regionAnnotation.? ~ some(handler) ^^ TryHandle
 
   lazy val handler: P[Handler] =
     ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
@@ -447,6 +449,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
       }
     )
+
+  lazy val regionAnnotation: P[Region] =
+    `at` ~> `{` ~> many(idRef) <~ `}` ^^ Region
 
   lazy val defClause: P[OpClause] =
     (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {

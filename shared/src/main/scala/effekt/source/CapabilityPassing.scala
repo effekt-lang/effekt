@@ -107,7 +107,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
         f.copy(params = params ++ caps, body = rewrite(body))
       }
 
-    case TryHandle(prog, handlers) =>
+    case TryHandle(prog, reg, handlers) =>
 
       // here we need to use the effects on the handlers!
       val effects = handlers.map(_.effect.resolve)
@@ -131,7 +131,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
             Handler(eff, Some(cap), cls)
         }
       }
-      TryHandle(body, hs)
+      TryHandle(body, reg, hs)
   }
 
   def rewrite(arg: ArgSection, param: List[symbols.Type])(implicit C: Context): ArgSection =

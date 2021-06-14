@@ -157,7 +157,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
         Context.panic("Method call syntax not allowed in source programs.")
 
-      case source.TryHandle(prog, handlers) =>
+      case source.TryHandle(prog, reg, handlers) =>
 
         val (ret / effs) = checkStmt(prog, expected)
 
@@ -492,7 +492,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case ValueParam(_, Some(tpe)) => tpe
     case _ => Context.panic("Cannot extract type")
   }
-
 
   /**
    * Returns the binders that will be introduced to check the corresponding body

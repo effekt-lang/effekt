@@ -287,7 +287,7 @@ case class ExprTarget(receiver: Expr) extends CallTarget
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+case class TryHandle(prog: Stmt, region: Option[Region], handlers: List[Handler]) extends Expr
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -409,6 +409,8 @@ object Effects {
   def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
 }
 
+case class Region(refs: List[IdRef]) extends Tree
+
 object Tree {
 
   // Generic traversal of trees, applying the partial function `f` to every contained
@@ -461,8 +463,8 @@ object Tree {
       case Call(fun, targs, args) =>
         Call(fun, targs, args.map(rewrite))
 
-      case TryHandle(prog, handlers) =>
-        TryHandle(rewrite(prog), handlers.map(rewrite))
+      case TryHandle(prog, reg, handlers) =>
+        TryHandle(rewrite(prog), reg, handlers.map(rewrite))
 
       case Hole(stmts) =>
         Hole(rewrite(stmts))

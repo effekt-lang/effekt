@@ -186,7 +186,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(ValueVar(f)), targs, as))
       }
 
-    case source.TryHandle(prog, handlers) =>
+    case source.TryHandle(prog, reg, handlers) =>
 
       val effects = handlers.map(_.definition)
       val caps = handlers.map { h =>
