@@ -146,7 +146,6 @@ object LLVMPrinter extends ParenPrettyPrinter {
       localName(name) <+> "=" <+>
         "call fastcc" <+> toDoc(returnType) <+> globalName(blockName) <> argumentList(args.map(toDocWithType))
     }
-
     case Phi(machine.Param(typ, name), args) => {
       localName(name) <+> "=" <+> "phi" <+> toDoc(typ) <+>
         hsep(args.toList.map {
@@ -154,6 +153,11 @@ object LLVMPrinter extends ParenPrettyPrinter {
             brackets(toDoc(value) <> comma <+> localName(label))
         }, comma)
     }
+    case InsertValues(name, typ, args) =>
+      insertValues(localName(name), toDoc(typ), args.map(toDocWithType))
+    case ExtractValue(name, target, field) =>
+      localName(name) <+> "=" <+>
+        "extractvalue" <+> toDocWithType(target) <> comma <+> field.toString
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
@@ -249,11 +253,12 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def toDoc(typ: machine.Type): Doc =
     typ match {
-      case machine.PrimInt()     => "%Int"
-      case machine.PrimBoolean() => "%Boolean"
-      case machine.PrimUnit()    => "%Unit"
-      case machine.Stack(_)      => "%Stk*"
-      case machine.Evidence()    => "%Evi"
+      case machine.PrimInt()          => "%Int"
+      case machine.PrimBoolean()      => "%Boolean"
+      case machine.PrimUnit()         => "%Unit"
+      case machine.Record(fieldTypes) => braces(hsep(fieldTypes.map(t => toDoc(t)), comma))
+      case machine.Stack(_)           => "%Stk*"
+      case machine.Evidence()         => "%Evi"
     }
 
   // /**

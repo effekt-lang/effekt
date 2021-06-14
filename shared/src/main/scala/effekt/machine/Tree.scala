@@ -58,6 +58,8 @@ case class NewStack(typ: Type, block: Block, args: List[Value]) extends Expr
 case class EviPlus(l: Arg, r: Arg) extends Expr { def typ = Evidence() }
 case class EviDecr(l: Arg) extends Expr { def typ = Evidence() }
 case class EviIsZero(l: Arg) extends Expr { def typ = PrimBoolean() }
+case class Select(typ: Type, target: Arg, field: Int) extends Expr
+case class Construct(typ: Type, args: List[Arg]) extends Expr
 
 /**
  * Values
@@ -95,6 +97,7 @@ sealed trait Type extends Tree
 case class PrimUnit() extends Type
 case class PrimInt() extends Type
 case class PrimBoolean() extends Type
+case class Record(fieldTypes: List[Type]) extends Type
 case class Stack(cntType: List[Type]) extends Type
 case class Evidence() extends Type
 
