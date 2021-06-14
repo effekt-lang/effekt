@@ -146,6 +146,12 @@ class Transformer {
         Var(transform(C.valueTypeOf(name)), name)
       case core.PureApp(core.BlockVar(blockName: BuiltinFunction), List(), args) =>
         AppPrim(transform(blockName.ret.get.tpe), blockName, args.map(transform))
+      case core.PureApp(core.BlockVar(constructorName: symbols.Record), List(), args) =>
+        Construct(transform(constructorName), args.map(transform))
+      case core.Select(target, field) =>
+        val fld = field.asInstanceOf[symbols.Field]
+        val idx = fld.rec.fields.indexOf(fld)
+        Select(transform(fld.tpe), transform(target), idx)
       case _ =>
         println(expr)
         C.abort("unsupported expression " + expr)
@@ -318,6 +324,9 @@ class Transformer {
         PrimInt()
       case symbols.BuiltinType(builtins.TBoolean.name, List()) =>
         PrimBoolean()
+      case symbols.Record(_, _, _, fields) =>
+        val fieldTypes = fields.map(_.tpe)
+        Record(fieldTypes.map(transform(_)))
       case symbols.BlockType(_, sections, ret / _) =>
         // TODO do we only use this function on parameter types?
         Stack(evidenceType() :: sections.flatten.map(transform(_)))

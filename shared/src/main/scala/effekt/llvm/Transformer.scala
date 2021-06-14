@@ -108,6 +108,14 @@ object LLVMTransformer {
     }
 
   def transform(body: machine.Stmt, localBlocks: Set[BlockSymbol])(implicit C: LLVMTransformerContext): (List[Instruction], Terminator) = body match {
+    case machine.Let(id: ValueSymbol, machine.Construct(typ, args), rest) => {
+      val (instructions, terminator) = transform(rest, localBlocks)
+      (InsertValues(id, typ.asInstanceOf[machine.Record], args.map(transform)) :: instructions, terminator)
+    }
+    case machine.Let(id: ValueSymbol, machine.Select(_, target, field), rest) => {
+      val (instructions, terminator) = transform(rest, localBlocks)
+      (ExtractValue(id, transform(target), field) :: instructions, terminator)
+    }
     case machine.Let(id: ValueSymbol, machine.AppPrim(typ, func, args), rest) => {
       val (instructions, terminator) = transform(rest, localBlocks);
       (Call(id, typ, func, args.map(transform)) :: instructions, terminator)

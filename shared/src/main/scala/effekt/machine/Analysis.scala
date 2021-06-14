@@ -43,6 +43,8 @@ object Analysis {
   def freeVars(expr: Expr): Set[Var] = expr match {
     case AppPrim(_, _, args)      => args.flatMap(freeVars).toSet
     case NewStack(_, block, args) => args.flatMap(freeVars).toSet ++ freeVars(block)
+    case Construct(_, args)       => args.flatMap(freeVars).toSet
+    case Select(_, target, _)     => freeVars(target)
     case EviPlus(l, r)            => freeVars(l) ++ freeVars(r)
     case EviDecr(l)               => freeVars(l)
     case EviIsZero(l)             => freeVars(l)
@@ -107,6 +109,10 @@ object Analysis {
       AppPrim(typ, blockName, args.map(substitute(mapping, _)))
     case NewStack(typ, block, args) =>
       NewStack(typ, substitute(mapping, block), args.map(substitute(mapping, _)))
+    case Construct(typ, args) =>
+      Construct(typ, args.map(substitute(mapping, _)))
+    case Select(typ, target, field) =>
+      Select(typ, substitute(mapping, target), field)
     case EviPlus(l, r) =>
       EviPlus(substitute(mapping, l), substitute(mapping, r))
     case EviDecr(l) =>
@@ -411,6 +417,10 @@ object Analysis {
     case NewStack(typ, block, args) =>
       // TODO add to blockParamsSet?
       anormalForm(block).map(b => NewStack(typ, b, args))
+    case Construct(typ, args) =>
+      sequence(args.map(anormalForm)).map(vs => Construct(typ, vs))
+    case Select(typ, target, field) =>
+      anormalForm(target).map(t => Select(typ, t, field))
     case EviPlus(l, r) =>
       anormalForm(l).flatMap(x => anormalForm(r).map(y => EviPlus(x, y)))
     case EviDecr(l) =>
@@ -446,6 +456,16 @@ object Analysis {
       control.use(delimiter) { resume =>
         val k = FreshBlockSymbol("k", C.module)
         resume.apply(Var(expr.typ, k)).map(rest => Let(k, expr, rest))
+      }
+    case _: Construct =>
+      control.use(delimiter) { resume =>
+        val x = FreshValueSymbol("x", C.module)
+        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+      }
+    case _: Select =>
+      control.use(delimiter) { resume =>
+        val x = FreshValueSymbol("x", C.module)
+        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
       }
     // TODO deduplicate the following three
     case _: EviPlus =>

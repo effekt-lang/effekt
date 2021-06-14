@@ -27,6 +27,8 @@ case class BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminat
 sealed trait Instruction extends Tree
 case class Call(id: ValueSymbol, typ: machine.Type, func: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class Phi(param: machine.Param, args: List[(BlockSymbol, machine.Value)]) extends Instruction
+case class InsertValues(id: ValueSymbol, typ: machine.Record, args: List[machine.Value]) extends Instruction
+case class ExtractValue(id: ValueSymbol, target: machine.Value, field: Int) extends Instruction
 case class PushFrame(cntType: List[machine.Type], id: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class NewStack(cntType: List[machine.Type], id: BlockSymbol, blockName: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class PushStack(stack: machine.Value) extends Instruction
