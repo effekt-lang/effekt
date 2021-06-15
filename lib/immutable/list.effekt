@@ -2,6 +2,8 @@ module immutable/list
 
 import immutable/option
 
+record EmptyList()
+
 type List[A] {
   Nil();
   Cons(head: A, tail: List[A])
@@ -70,13 +72,13 @@ def isEmpty[A](l: List[A]): Boolean = l match {
 }
 
 // raises a runtime exception that can't be caught
-def head[A](l: List[A]): A = l match {
-  case Nil() => error("Trying to get the head of an empty list")
+def head[A](l: List[A]): A / Exception[EmptyList] = l match {
+  case Nil() => raise(EmptyList(), "Trying to get the head of an empty list")
   case Cons(a, rest) => a
 }
 
-def tail[A](l: List[A]): List[A] = l match {
-  case Nil() => error("Trying to get the head of an empty list")
+def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
+  case Nil() => raise(EmptyList(), "Trying to get the head of an empty list")
   case Cons(a, rest) => rest
 }
 

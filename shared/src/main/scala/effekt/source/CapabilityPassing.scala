@@ -208,6 +208,6 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
       //Var(id)
       id
     } getOrElse {
-      Context.panic(s"Compiler error: cannot find capability for ${e}")
+      Context.panic(s"Compiler error: cannot find capability for ${e}, got capabilities for ${capabilities}")
     }
 }
