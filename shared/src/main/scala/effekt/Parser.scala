@@ -67,6 +67,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `try` = keyword("try")
   lazy val `with` = keyword("with")
   lazy val `at` = keyword("at")
+  lazy val `box` = keyword("box")
+  lazy val `unbox` = keyword("unbox")
   lazy val `case` = keyword("case")
   lazy val `do` = keyword("do")
   lazy val `fun` = keyword("fun")
@@ -83,7 +85,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "at"
+    "match", "module", "import", "extern", "fun", "at", "box", "unbox"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -223,7 +225,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | funDef
     | effectDef
     | typeDef
-    | effectAliasDef
     | dataDef
     | recordDef
     | externType
@@ -234,7 +235,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
+    `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> valueType).? ~ ( `=` ~/> stmt) ^^ FunDef
 
   lazy val maybePure: P[Boolean] =
     `pure`.? ^^ { _.isDefined }
@@ -248,16 +249,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val effectOp: P[Operation] =
-    idDef ~ maybeTypeParams ~ some(valueParams) ~/ (`:` ~/> effectful) ^^ Operation
+    idDef ~ maybeTypeParams ~ some(valueParams) ~/ (`:` ~/> valueType) ^^ Operation
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType
 
+  // TODO change this to capability
   lazy val externEffect: P[Def] =
-    `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect
+    `extern` ~> `effect` ~/> idDef ^^ ExternEffect
 
   lazy val externFun: P[Def] =
-    `extern` ~> (maybePure <~ `def`) ~/ idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
+    `extern` ~> (maybePure <~ `def`) ~/ idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> valueType) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
       case pure ~ id ~ tparams ~ params ~ tpe ~ body => ExternFun(pure, id, tparams, params, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
 
@@ -300,22 +302,25 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
   lazy val args: P[ArgSection] =
     ( valueArgs
-    | blockArg
+    | block ^^ BlockArg
     | failure("Expected at an argument list")
     )
 
-  lazy val blockArg: P[BlockArg] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockArg(List(ps), body) }
+  lazy val blockLit: P[BlockLit] = {
+    // TODO also allow block params to block args
+    // TODO add BlockLit and syntax
+    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLit(List(ps), body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
-      BlockArg(
+      BlockLit(
         List(ValueParams(List(ValueParam(IdDef(name), None)))),
         Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
+    | `{` ~> stmts <~ `}` ^^ { s => BlockLit(List(ValueParams(Nil)), s) }
     )
+  }
 
   lazy val lambdaArgs: P[ValueParams] =
     valueParamsOpt | (idDef ^^ { id => ValueParams(List(ValueParam(id, None))) })
@@ -339,26 +344,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Statements
    */
   lazy val stmts: P[Stmt] =
-    ( withStmt
-    | (expr <~ `;`) ~ stmts ^^ ExprStmt
+    ( (expr <~ `;`) ~ stmts ^^ ExprStmt
     | (definition <~ `;`) ~ stmts ^^ DefStmt
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt
     | (expr <~ `;`) ^^ Return
     | matchDef
-    )
-
-  lazy val withStmt: P[Stmt] =
-    ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
-          (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
-        case params ~ id ~ tps ~ args ~ body =>
-          val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, args :+ BlockArg(List(params), body)) withPositionOf params)
-       }
-    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;` ~> stmts) ^^ {
-        case id ~ tps ~ args ~ body =>
-          val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
-       }
     )
 
   lazy val valDef: P[ValDef] =
@@ -376,9 +366,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val typeDef: P[TypeDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef
-
-  lazy val effectAliasDef: P[EffectDef] =
-    `effect` ~> idDef ~ (`=` ~/> effects) ^^ EffectDef
 
   lazy val dataDef: P[DataDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef
@@ -403,9 +390,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val accessExpr: P[Expr] =
     callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
-        case (firstArg, id ~ targs ~ otherArgs) =>
-          val tgt = IdTarget(id) withPositionOf id
-          Call(tgt, targs, ValueArgs(List(firstArg)).withPositionOf(firstArg) :: otherArgs)
+        case (firstArg, id ~ targs ~ otherArgs) => Select(firstArg, id, targs, otherArgs).withPositionOf(firstArg)
       }
     }
 
@@ -413,45 +398,41 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( ifExpr
     | whileExpr
     | funCall
-    | doExpr
     | handleExpr
-    | lambdaExpr
+    //| lambdaExpr
     | primExpr
     )
 
-  lazy val callTarget: P[CallTarget] =
-    ( idRef ^^ IdTarget
-    | `(` ~> expr <~ `)` ^^ ExprTarget
+  lazy val block: P[Block] =
+    ( idRef ^^ BlockVar
+    | `unbox` ~> expr ^^ Unbox
+    | `(` ~> block <~ `)`
     )
 
   lazy val funCall: P[Expr] =
-    callTarget ~ maybeTypeArgs ~ some(args) ^^ Call
+    block ~ maybeTypeArgs ~ some(args) ^^ Call
 
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
-  // TODO deprecate doExpr
-  lazy val doExpr: P[Expr] =
-    `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
-
   // TODO allow region annotation here
   lazy val handleExpr: P[Expr] =
-    `try` ~/> stmt ~ regionAnnotation.? ~ some(handler) ^^ TryHandle
+    `try` ~/> `{` ~/> idDef ~ (`=>` ~> stmt <~ `}`) ~ regionAnnotation.? ~ handler ^^ TryHandle
 
   lazy val handler: P[Handler] =
     ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
       case effect ~ clauses =>
-        Handler(effect, None, clauses)
+        Handler(effect, clauses)
       }
-    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
-      case effect ~ resume ~ BlockArg(params, body) =>
+    | `with` ~> effectType ~ implicitResume ~ blockLit ^^ {
+      case effect ~ resume ~ BlockLit(params, body) =>
         val synthesizedId = IdRef(effect.id.name)
-        Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
+        Handler(effect, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
       }
     )
 
   lazy val regionAnnotation: P[Region] =
-    `at` ~> `{` ~> many(idRef) <~ `}` ^^ Region
+    `at` ~> region
 
   lazy val defClause: P[OpClause] =
     (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {
@@ -497,8 +478,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
 
-  lazy val lambdaExpr: P[Lambda] =
-    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Lambda(IdDef("<lambda>"), List(ps), body) }
+//  lazy val lambdaExpr: P[Lambda] =
+//    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Lambda(IdDef("<lambda>"), List(ps), body) }
 
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
@@ -507,20 +488,21 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Expr =
-    Call(IdTarget(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
+    Call(BlockVar(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
 
   private def ConsTree(el: Expr, rest: Expr): Expr =
-    Call(IdTarget(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
+    Call(BlockVar(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
 
   private def TupleTree(args: List[Expr]): Expr =
-    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
+    Call(BlockVar(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
 
   /**
    * Types and Effects
    */
 
   lazy val valueType: P[ValueType] =
-    ( funType
+    ( blockType ~ regionAnnotation ^^ BoxedType
+    //| blockType ^^ { tpe => BoxedType(tpe, Region()) }
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | idRef ~ typeArgs ^^ TypeApp
@@ -528,27 +510,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | failure("Expected a type")
     )
 
-  // for now function types need to be parenthesized
-  lazy val funType: P[FunType] =
-    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ {
-      case params ~ ret => FunType(BlockType(params, ret))
-    }
-
+  // TODO generalize to also take block params (and potentially type params)
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType
-    | valueType ~ (`=>` ~/> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
-    | effectful ^^ { e => BlockType(Nil, e) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ FunctionType
+    | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => FunctionType(List(t), e) }
+    | effectType
     )
 
-  lazy val effectful: P[Effectful] =
-    valueType ~ (`/` ~/> effects).? ^^ {
-      case t ~ Some(es) => Effectful(t, es)
-      case t ~ None => Effectful(t, Effects.Pure)
-    }
-
-  lazy val effects: P[Effects] =
-    ( effectType ^^ { e => Effects(e) }
-    | `{` ~/> manySep(effectType, `,`) <~  `}` ^^ Effects.apply
+  lazy val region: P[Region] =
+    ( idRef ^^ { e => Region(e) }
+    | `{` ~/> manySep(idRef, `,`) <~  `}` ^^ Region.apply
     | failure("Expected an effect set")
     )
 
@@ -559,7 +530,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // === AST Helpers ===
 
   private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
-     Call(IdTarget(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
+     Call(BlockVar(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
 
   private def opName(op: String): String = op match {
     case "||" => "infixOr"

@@ -65,9 +65,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.TypeDef(id, tparams, tpe) =>
       rest
 
-    case source.EffectDef(id, effs) =>
-      rest
-
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       val sym = f.symbol
       Def(f.symbol, C.blockTypeOf(sym), Extern(transformParams(params), body), rest)

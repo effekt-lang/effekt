@@ -126,7 +126,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       effectSym.ops.foreach { op => Context.bind(op) }
 
     case source.TypeDef(id, tparams, tpe) => ()
-    case source.EffectDef(id, effs)       => ()
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
@@ -354,12 +353,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
       Context.define(id, alias)
 
-    case source.EffectDef(id, effs) =>
-      val alias = Context scoped {
-        EffectAlias(Name(id), Nil, resolve(effs))
-      }
-      Context.define(id, alias)
-
     case source.DataDef(id, tparams, ctors) =>
       val typ = Context scoped {
         val tps = tparams map resolve
@@ -444,16 +437,21 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
-        val (terms, effects) = resolveTermsOrTypes(effs)
-        val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
-        FunType(btpe, Region(terms))
+      case source.BoxedType(btpe, reg) =>
+        ???
+
+      //      tpe @ source.BlockType(params, source.Effectful(ret, source.Region(effs)))) =>
+      //        val (terms, effects) = resolveTermsOrTypes(effs)
+      //        val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
+      //        FunType(btpe, Region(terms))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type
     kinds.wellformed(res)
     res
   }
+
+  def resolve(tpe: source.BlockType)(implicit C: Context): FunctionType = ???
 
   // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
   def resolveTermsOrTypes(effs: List[source.Effect])(implicit C: Context): (List[TermSymbol], List[Effect]) = {
@@ -477,7 +475,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.Effect(e, args) => Right(EffectApp(Context.resolveType(e).asEffect, args.map(resolve)))
   }
 
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
+  def resolve(tpe: source.BlockType)(implicit C: Context): FunctionType = {
     val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
     C.annotateResolvedType(tpe)(res)
     res
@@ -498,8 +496,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(tpe: source.Effects)(implicit C: Context): Effects =
-    Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
+  def resolve(tpe: source.Region)(implicit C: Context): Effects =
+    Effects(tpe.caps.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(implicit C: Context): Effectful =
     Effectful(resolve(e.tpe), resolve(e.eff))

@@ -34,7 +34,6 @@ import effekt.symbols.Symbol
  *   |  |- DataDef
  *   |  |- RecordDef
  *   |  |- TypeDef
- *   |  |- EffectDef
  *   |  |- ExternType
  *   |  |- ExternEffect
  *   |  |- ExternFun
@@ -158,17 +157,11 @@ case class Import(path: String) extends Tree
 sealed trait ParamSection extends Tree
 case class ValueParams(params: List[ValueParam]) extends ParamSection
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
-
-// TODO fuse into one kind of parameter
 case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
-case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection with Definition { type symbol = symbols.CapabilityParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
-case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
-case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
-  type symbol = symbols.CapabilityParam
-}
+case class BlockArg(blk: Block) extends ArgSection
 
 /**
  * Global and local definitions
@@ -176,7 +169,7 @@ case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
 sealed trait Def extends Definition {
   def id: IdDef
 }
-case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
+case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[ValueType], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
 case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
@@ -188,7 +181,7 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.UserEffect
 }
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
+case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
   type symbol = symbols.EffectOp
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
@@ -208,21 +201,20 @@ case class TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType) extends Def {
   type symbol = symbols.TypeAlias
 }
 
-/**
- * Effect aliases like `effect Set = { Get, Put }`
- */
-case class EffectDef(id: IdDef, effs: Effects) extends Def {
-  type symbol = symbols.EffectAlias
-}
-
 // only valid on the toplevel!
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinType
 }
-case class ExternEffect(id: IdDef, tparams: List[Id]) extends Def {
+// TODO also add extern capabililty
+case class ExternEffect(id: IdDef) extends Def {
   type symbol = symbols.BuiltinEffect
 }
-case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def {
+
+case class ExternCapability(id: IdDef) extends Def {
+
+}
+
+case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: ValueType, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {
@@ -236,6 +228,19 @@ case class DefStmt(d: Def, rest: Stmt) extends Stmt
 case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
 case class Return(d: Expr) extends Stmt
 case class BlockStmt(stmts: Stmt) extends Stmt
+
+sealed trait Block extends Tree
+
+case class Unbox(expr: Expr) extends Block
+
+case class BlockVar(id: IdRef) extends Block with Reference {
+  type symbol = symbols.BlockSymbol
+}
+
+case class BlockLit(params: List[ParamSection], body: Stmt) extends Block with Definition {
+  lazy val id = IdDef("<lambda>")
+  type symbol = symbols.BlockSymbol
+}
 
 /**
  * In our source language, almost everything is an expression.
@@ -263,12 +268,9 @@ case class StringLit(value: String) extends Literal[String]
 /**
  * Represents a first-class function
  *
- * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
- * its parameter symbols.
+ * TODO add box (but this would require adding the syntactic category of blocks to source)
  */
-case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Expr with Definition {
-  type symbol = symbols.Lambda
-}
+case class Box(block: Block) extends Expr
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
@@ -279,7 +281,7 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   // can refer to either a block OR a term symbol
   type symbol = symbols.TermSymbol
 }
-case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
+case class MemberTarget(receiver: Block, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.EffectOp
 }
 case class ExprTarget(receiver: Expr) extends CallTarget
@@ -287,7 +289,7 @@ case class ExprTarget(receiver: Expr) extends CallTarget
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-case class TryHandle(prog: Stmt, region: Option[Region], handlers: List[Handler]) extends Expr
+case class TryHandle(id: IdDef, prog: Stmt, region: Option[Region], handlers: Handler) extends Expr
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -299,7 +301,7 @@ case class TryHandle(prog: Stmt, region: Option[Region], handlers: List[Handler]
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+case class Handler(effect: Effect, clauses: List[OpClause]) extends Reference {
   def id = effect.id
   type symbol = symbols.UserEffect
 }
@@ -373,7 +375,7 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 /**
  * Types of first-class functions
  */
-case class FunType(tpe: BlockType) extends ValueType
+case class BoxedType(tpe: BlockType, reg: Region) extends ValueType
 
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
@@ -383,15 +385,15 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
   type symbol = symbols.DataType
 }
 
-// for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.Effect) extends Type {
-  type resolved = symbols.CapabilityType
-}
-case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
-  type resolved = symbols.BlockType
+sealed trait BlockType extends Type {
+  type resolved <: symbols.FunctionType
 }
 
-case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
+case class FunctionType(params: List[ValueType], ret: ValueType) extends BlockType {
+  type resolved = symbols.FunctionType
+}
+
+case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends BlockType with Resolvable {
   // TODO we need to drop Effect <: Symbol and refactor this here
   // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
   type resolved = symbols.Effect
@@ -400,16 +402,13 @@ case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with R
     if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
   }
 }
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
-case class Effects(effs: List[Effect]) extends Tree
-object Effects {
-  val Pure: Effects = Effects()
-  def apply(effs: Effect*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
+case class Region(caps: List[IdRef]) extends Tree
+object Region {
+  val Pure: Region = Region()
+  def apply(caps: IdRef*): Region = Region(caps.toSet)
+  def apply(caps: Set[IdRef]): Region = Region(caps.toList)
 }
-
-case class Region(refs: List[IdRef]) extends Tree
 
 object Tree {
 
@@ -463,8 +462,8 @@ object Tree {
       case Call(fun, targs, args) =>
         Call(fun, targs, args.map(rewrite))
 
-      case TryHandle(prog, reg, handlers) =>
-        TryHandle(rewrite(prog), reg, handlers.map(rewrite))
+      case TryHandle(id, prog, reg, handler) =>
+        TryHandle(id, rewrite(prog), reg, rewrite(handler))
 
       case Hole(stmts) =>
         Hole(rewrite(stmts))
@@ -486,7 +485,6 @@ object Tree {
       case d: DataDef       => d
       case d: RecordDef     => d
       case d: TypeDef       => d
-      case d: EffectDef     => d
 
       case d: ExternType    => d
       case d: ExternEffect  => d
@@ -510,15 +508,16 @@ object Tree {
         BlockStmt(rewrite(b))
     }
 
+    def rewrite(b: Block)(implicit C: Context): Block = ???
+
     def rewrite(t: ArgSection)(implicit C: Context): ArgSection = visit(t) {
-      case ValueArgs(as)      => ValueArgs(as.map(rewrite))
-      case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
-      case CapabilityArg(id)  => t
+      case ValueArgs(as) => ValueArgs(as.map(rewrite))
+      case BlockArg(b)   => BlockArg(rewrite(b))
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
-      case Handler(effect, capability, clauses) =>
-        Handler(effect, capability, clauses.map(rewrite))
+      case Handler(effect, clauses) =>
+        Handler(effect, clauses.map(rewrite))
     }
 
     def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {

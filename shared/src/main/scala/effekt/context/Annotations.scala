@@ -92,7 +92,7 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.InterfaceType](
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
     "BlockType",
     "the type of block symbol"
   )
@@ -151,7 +151,7 @@ object Annotations {
   /**
    * The blocktype of a calltarget as annotated by typer
    */
-  val TargetType = Annotation[source.CallTarget, symbols.BlockType](
+  val TargetType = Annotation[source.CallTarget, symbols.FunctionType](
     "TargetType",
     "the blocktype for calltarget"
   )
@@ -159,7 +159,7 @@ object Annotations {
   /**
    * The block type of a block argument as annotated by typer
    */
-  val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
+  val BlockArgumentType = Annotation[source.BlockArg, symbols.FunctionType](
     "BlockArgumentType",
     "the inferred type for block argument"
   )
@@ -243,7 +243,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, FunctionType, BlockType, ValueSymbol, BlockSymbol, Effectful, Module }
 
   // Types
   // -----
@@ -266,7 +266,7 @@ trait AnnotationsDB { self: Context =>
     annotationOption(Annotations.InferredRegion, t)
 
   // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
+  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
     case _              => panic(s"Trying to store a block type for non block '${s}'")
   }
@@ -288,14 +288,14 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
-  def blockTypeOf(s: Symbol): BlockType =
+  def blockTypeOf(s: Symbol): FunctionType =
     blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
 
-  def blockTypeOption(s: Symbol): Option[BlockType] =
+  def blockTypeOption(s: Symbol): Option[FunctionType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: BlockType => Some(b)
-        case _            => None
+        case b: FunctionType => Some(b)
+        case _               => None
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
         v.dealias match {
@@ -305,14 +305,14 @@ trait AnnotationsDB { self: Context =>
       }
     }
 
-  def interfaceTypeOf(s: Symbol): InterfaceType =
+  def interfaceTypeOf(s: Symbol): BlockType =
     interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
 
-  def interfaceTypeOption(s: Symbol): Option[InterfaceType] =
+  def interfaceTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: InterfaceType => Some(b)
-        case _                => None
+        case b: BlockType => Some(b)
+        case _            => None
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")
     }
@@ -328,16 +328,16 @@ trait AnnotationsDB { self: Context =>
   // Calltargets
   // -----------
 
-  def annotateCalltarget(t: source.CallTarget, tpe: BlockType): Unit =
+  def annotateCalltarget(t: source.CallTarget, tpe: FunctionType): Unit =
     annotate(Annotations.TargetType, t, tpe)
 
-  def blockTypeOf(t: source.CallTarget): BlockType =
+  def blockTypeOf(t: source.CallTarget): FunctionType =
     annotation(Annotations.TargetType, t)
 
-  def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Unit =
+  def annotateBlockArgument(t: source.BlockArg, tpe: FunctionType): Unit =
     annotate(Annotations.BlockArgumentType, t, tpe)
 
-  def blockTypeOf(t: source.BlockArg): BlockType =
+  def blockTypeOf(t: source.BlockArg): FunctionType =
     annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
