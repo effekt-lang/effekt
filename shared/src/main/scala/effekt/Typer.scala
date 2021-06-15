@@ -468,9 +468,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             if (cnds.size == 0) {
               C.abort(s"No candidates found for method ${ifc}.${op} in module $mod")
             }
-
+            // Expected type
+            val expected = C.blockTypeOf(op)
             // (1) Instantiate block type of interface method
-            val (rigids, expected) = Unification.instantiate(C.blockTypeOf(op))
+            //val (rigids, expected) = Unification.instantiate(C.blockTypeOf(op))
 
             // (2) unify with given type arguments for interface (i.e., A, B, ...):
             //     interface Foo[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
@@ -494,7 +495,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             if (pos.size == 0) {
               C.abort(s"No candidate in $mod implements $op:\n" + neg.map { err => err.msg }.mkString("\n"))
             } else if (pos.size > 1) {
-              C.abort(s"Multiple candidates in $mod implement $op.")
+              C.abort(s"Multiple candidates in $mod implement $op")
             }
           }
         }

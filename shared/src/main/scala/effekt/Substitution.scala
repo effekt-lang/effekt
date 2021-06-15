@@ -181,18 +181,18 @@ object substitutions {
 
     def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: Context): UnificationResult =
       (tpe1, tpe2) match {
-        // TODO also consider type parameters here
-        case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
-
+        case (f1, f2 @ BlockType(tparams2, args2, ret2)) =>
+          if (f1.tparams.size != tparams2.size) {
+            return UnificationError(s"Different number of type parameters: $f1 vs. $f2")
+          }
+          val (rigids, BlockType(tparams1, args1, ret1)) = Unification.instantiate(f1)
           if (args1.size != args2.size) {
             return UnificationError(s"Section count does not match $f1 vs. $f2")
           }
-
           (args1 zip args2).foldLeft(unifyEffectful(ret1, ret2)) {
             case (u, (as1, as2)) =>
               if (as1.size != as2.size)
                 return UnificationError(s"Argument count does not match $f1 vs. $f2")
-
               (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u union unifyTypes(a1, a2) }
           }
       }
