@@ -24,6 +24,8 @@ object scopes {
      */
     def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol
 
+    def lookupFirstTermOption(key: String): Option[TermSymbol]
+
     def lookupType(key: String)(implicit C: Context): TypeSymbol
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
@@ -69,6 +71,8 @@ object scopes {
     def lookupFirst(key: String)(implicit C: Context): Symbol =
       C.abort(s"Could not resolve ${key}")
 
+    def lookupFirstTermOption(key: String): Option[TermSymbol] = None
+
     // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
     // the ambiguity. If it is nested, the first one that type checks should be chosen.
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
@@ -87,6 +91,11 @@ object scopes {
         else
           bindings.head
       }.getOrElse { parent.lookupFirstTerm(key) }
+
+    def lookupFirstTermOption(key: String): Option[TermSymbol] =
+      terms.get(key)
+        .flatMap { res => res.headOption }
+        .orElse { parent.lookupFirstTermOption(key) }
 
     def lookupFirst(key: String)(implicit C: Context): Symbol =
       (terms.get(key).map(_.toList), types.get(key)) match {

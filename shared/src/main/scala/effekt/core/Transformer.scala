@@ -181,10 +181,13 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       val as = args.flatMap(transform)
       C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
 
-    case c @ source.Call(source.ModTarget(name, id), _, args) =>
+    case c @ source.Call(mt @ source.ModTarget(name, id), _, args) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       val sym: Symbol = C.symbolOf(id)
-      val mod = C.module.mod(name).get
+
+      val mod = C.symbolOption(mt.modRef)
+        .collect { case m: ModuleSymbol => m }
+        .getOrElse { C.abort(s"Failed to transform call: Module $name not found") }
 
       val as = args.flatMap(transform)
 
@@ -271,6 +274,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
   def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =
     ps.flatMap {
+      case m @ source.ModuleParam(id, _)     => List(BlockParam(m.symbol))
       case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
       case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
       case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }

@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ SourceModule, Name, Symbol, Wildcard }
+import effekt.symbols.{ SourceModule, Name, Symbol, Wildcard, UserFunction }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -113,12 +113,20 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall(
         "module.exports = Object.assign",
         jsModuleName(path),
-        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
+        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) } ++
+          exportMethods(exports.collect { case f: UserFunction => f }))
       )
 
     case other =>
       sys error s"Cannot print ${other} in expression position"
   }
+
+  def exportMethods(exp: List[UserFunction])(implicit C: Context): List[(Doc, Doc)] =
+    exp.map { f => (C.implements(f), f) }.collect {
+      case (Some(m), f) => {
+        nameRef(m) -> toDoc(f.name)
+      }
+    }
 }
 
 trait JavaScriptBase extends ParenPrettyPrinter {

@@ -32,8 +32,13 @@ package object symbols {
     override def synthetic = true
   }
 
+  sealed trait ModuleSymbol extends BlockSymbol {
+    /** import definitions into scope. */
+    def load(scp: Scope = EmptyScope()): Scope
+  }
+
   /** Module Base Class */
-  sealed abstract class ModuleSymbol extends BlockSymbol {
+  sealed abstract class Module extends ModuleSymbol {
     type TypeMap = Map[Name.Word, TypeSymbol]
     type TermMap = Map[Name.Word, Set[TermSymbol]]
     type SubMods = Map[Name.Word, UserModule]
@@ -75,7 +80,7 @@ package object symbols {
     }
 
     /** import definitions into scope. */
-    def load(scp: Scope = EmptyScope()): Scope = {
+    override def load(scp: Scope = EmptyScope()): Scope = {
       val s = BlockScope(scp)
       val typ = types.map { kv => (kv._1.str, kv._2) }
       val trm = terms.map { kv => (kv._1.str, kv._2) }
@@ -98,7 +103,7 @@ package object symbols {
   }
 
   /** User-defined module. */
-  class UserModule(val parent: ModuleSymbol, val short: Name.Word) extends ModuleSymbol {
+  class UserModule(val parent: Module, val short: Name.Word) extends Module {
     var impls: List[ModuleType] = List.empty
 
     def name = parent match {
@@ -118,7 +123,7 @@ package object symbols {
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
    */
-  class SourceModule(val decl: ModuleDecl, val source: Source) extends ModuleSymbol {
+  class SourceModule(val decl: ModuleDecl, val source: Source) extends Module {
     def name = path
     def path = decl.path
 
@@ -186,6 +191,16 @@ package object symbols {
     override def toString = s"@${tpe.eff.name}"
   }
   case class ResumeParam(module: SourceModule) extends Param with BlockSymbol { val name = module.name.nest(Name("resume")) }
+  case class ModuleParam(name: Name, tpe: ModuleType) extends Param with ModuleSymbol {
+    def load(scp: Scope): Scope = {
+      // Load ops from interface
+      val s = BlockScope(scp)
+      tpe.ops.foreach { op =>
+        s.define(op.name.local, op)
+      }
+      return s
+    }
+  }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -196,6 +211,7 @@ package object symbols {
   def paramsToTypes(ps: Params): Sections =
     ps map {
       _ map {
+        case ModuleParam(_, tpe)     => tpe
         case BlockParam(_, tpe)      => tpe
         case CapabilityParam(_, tpe) => tpe
         case v: ValueParam           => v.tpe.get

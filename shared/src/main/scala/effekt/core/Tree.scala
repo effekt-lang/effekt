@@ -17,6 +17,8 @@ sealed trait Tree extends Product {
 case class ModuleDecl(path: Name, imports: List[Name], defs: Stmt) extends Tree
 
 /// User-definied module
+// TODO: implementierungen merken
+// TODO?: body => List[Stmt]
 case class UserModule(body: Stmt) extends Block
 
 /**

@@ -4,6 +4,7 @@ package source
 import effekt.context.Context
 import effekt.symbols.Symbol
 import effekt.symbols.Name
+import effekt.symbols.ModuleType
 
 /**
  * Data type representing source program trees.
@@ -164,6 +165,11 @@ case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { ty
 case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
 case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection with Definition { type symbol = symbols.CapabilityParam }
 
+/** Module Parameter like `foo() with { mod: Worker }` */
+case class ModuleParam(id: IdDef, tpe: IdRef) extends ParamSection with Definition {
+  type symbol = symbols.ModuleParam
+}
+
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
@@ -297,6 +303,7 @@ case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Refe
 case class ExprTarget(receiver: Expr) extends CallTarget
 /** Call to module member like `hello:foo()` */
 case class ModTarget(mod: Name, id: IdRef) extends CallTarget with Reference {
+  val modRef = IdRef(mod.toString())
   type symbol = symbols.TermSymbol
 }
 

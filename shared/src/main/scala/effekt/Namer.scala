@@ -10,6 +10,8 @@ import effekt.regions.Region
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
+import effekt.context.Annotation
+import effekt.context.Annotations
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -317,6 +319,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val sym = CapabilityParam(C.name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
+    case source.ModuleParam(id, tpe) =>
+      val ifc = Context.resolveType(tpe).asInterface
+      val sym = ModuleParam(C.name(id), ifc)
+      C.assignSymbol(id, sym)
+      List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
@@ -327,9 +334,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
-    case source.ModTarget(name, id) => {
-      C.refMod(name) {
-        C.resolveCalltarget(id)
+    case call: source.ModTarget => {
+      C.refMod(call) {
+        C.resolveCalltarget(call.id)
       }
     }
     case source.MemberTarget(recv, id) =>
@@ -659,6 +666,23 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
+  private[namer] def resolveMod(call: source.ModTarget): ModuleSymbol = {
+    // Check vor mod param
+    val prm = scope.lookupFirstTermOption(call.mod.local).collectFirst {
+      case p: ModuleParam => p
+    }
+
+    // Fallback to user module
+    val mod = prm.getOrElse {
+      Context.module.mod(call.mod).getOrElse {
+        Context.abort(s"Failed to resolve reference to module $base")
+      }
+    }
+
+    assignSymbol(call.modRef, mod)
+    return mod
+  }
+
   private[namer] def scoped[R](block: => R): R = Context in {
     scope = scope.enter
     block
@@ -673,8 +697,8 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   /** recreates module scope. */
-  private[namer] def refMod[R](name: Name)(block: => R) = Context.sub(name) {
-    val mod = Context.module.mod(base).getOrElse { Context.abort(s"Failed to resolve reference to module $base") }
+  private[namer] def refMod[R](call: source.ModTarget)(block: => R) = Context.scoped {
+    val mod = resolveMod(call)
     scope = mod.load()
     block
   }

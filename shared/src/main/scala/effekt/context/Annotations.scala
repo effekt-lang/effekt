@@ -106,6 +106,11 @@ object Annotations {
     "the source module of symbol"
   )
 
+  val Implements = Annotation[symbols.UserFunction, symbols.Method](
+    "Implements",
+    "the implementation of a interface method"
+  )
+
   /**
    * The definition tree of a symbol in source
    *
@@ -244,7 +249,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful }
+  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, UserFunction, Method }
 
   // Types
   // -----
@@ -425,4 +430,12 @@ trait AnnotationsDB { self: Context =>
 
   def regionOf(sym: Symbol): regions.Region =
     annotation(Annotations.Regions, sym)
+
+  /** marks function as implementation of method. */
+  def implements(f: UserFunction, m: Method): Unit =
+    annotate(Annotations.Implements, f, m)
+
+  /** search for method which is implemented by the given function. */
+  def implements(f: UserFunction): Option[Method] =
+    annotationOption(Annotations.Implements, f)
 }

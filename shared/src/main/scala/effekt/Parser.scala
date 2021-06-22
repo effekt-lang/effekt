@@ -292,8 +292,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val params: P[ParamSection] =
     ( valueParams
     | `{` ~/> blockParam <~ `}`
+    | `with` ~/> `{` ~> moduleParam <~ `}`
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
+
+  lazy val moduleParam: P[ModuleParam] =
+    idDef ~ (`:` ~> idRef) ^^ ModuleParam
 
   lazy val valueParams: P[ValueParams] =
     `(` ~/> manySep(valueParam, `,`) <~ `)` ^^ ValueParams
@@ -441,7 +445,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( modCall ~ idRef ^^ { case name ~ ref => println(s"Target $name $ref"); ModTarget(name, ref) }
+    ( modCall ~ idRef ^^ { case name ~ ref => ModTarget(name, ref) }
     | idRef ^^ IdTarget
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )

@@ -15,9 +15,9 @@ module Bar implements Worker {
 }
 
 // ModuleParam
-//def work() with { mod: Worker } = {
-//   println(mod:foo())
-//}
+def work() with { mod: Worker } = {
+   println(mod:foo())
+}
 
 
 def main() = {

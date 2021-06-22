@@ -246,6 +246,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
     var regs: RegionSet = Region.empty
     params.foreach {
+      case m: ModuleParam =>
+        val sym = m.symbol
+        val reg = Region(sym)
+        Context.annotateRegions(sym, reg)
+        regs ++= reg
       case b: BlockParam =>
         val sym = b.symbol
         val reg = Region(sym)
