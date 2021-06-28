@@ -36,7 +36,7 @@ object substitutions {
     def substitute(t: InterfaceType): InterfaceType = t match {
       case b: CapabilityType => b
       case b: BlockType      => substitute(b)
-      case b: ModuleType     => sys.error("TODO: substitue mod type")
+      case b: ModuleType     => b
     }
 
     def substitute(t: BlockType): BlockType = t match {

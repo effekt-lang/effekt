@@ -215,6 +215,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
         // we are using the capability, so we should only run in their region
         case (param, arg: CapabilityArg) => reg ++= Region(arg.definition)
+        case (param, arg: ModuleArg)     => // TODO: need some checks?
       }
 
       // check constraints again after substitution

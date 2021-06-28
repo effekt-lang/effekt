@@ -142,7 +142,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
 
       case c @ source.Call(t: source.IdTarget, targs, args) => {
+        // Fallunterscheidung: ist t effectOp,
+        // val (funTpe / funEffs) = ...
         checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
+        // Wenn effectOp, dann Effect hinzufügen
+        // (funTpe / funEffs ++ effect) (owner of method)
+        // problem: Module mit tparams => ersetzung der tparams nicht mehr bekannt
+        // => verschieben nach checkCall
       }
 
       case c @ source.Call(source.ModTarget(name, id), targs, args) =>
@@ -705,6 +711,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case (List(bt: BlockType), arg: source.BlockArg) =>
         checkBlockArgument(bt, arg)
+
+      case (List(mt: ModuleType), source.ModuleArg(name)) =>
+        val mod = C.module.mod(name).getOrElse { C.abort(s"Failed to check argument: module $name not found.") }
+
+        if (!mod.impls.contains(mt)) {
+          C.abort(s"Failed to check argument: module $name does not implement $mt.")
+        }
 
       case (_, _) =>
         Context.error("Wrong type of argument section")

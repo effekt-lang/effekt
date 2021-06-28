@@ -176,6 +176,10 @@ case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
 case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
   type symbol = symbols.CapabilityParam
 }
+case class ModuleArg(name: Name) extends ArgSection with Reference {
+  val id = name.toRef()
+  type symbol = symbols.UserModule
+}
 
 /**
  * Global and local definitions
@@ -539,6 +543,7 @@ object Tree {
       case ValueArgs(as)      => ValueArgs(as.map(rewrite))
       case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
       case CapabilityArg(id)  => t
+      case ModuleArg(name)    => t
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {

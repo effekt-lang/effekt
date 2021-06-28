@@ -5,6 +5,7 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
+import effekt.source.ModuleArg
 
 class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
@@ -270,6 +271,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
     case source.ValueArgs(args)        => args.map(transform)
     case source.BlockArg(params, body) => List(BlockLit(transformParams(params), transform(body)))
     case c @ source.CapabilityArg(id)  => List(BlockVar(c.definition))
+    case ModuleArg(name)               => List(BlockVar(C.module.mod(name).get))
   }
 
   def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =

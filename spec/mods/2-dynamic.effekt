@@ -20,9 +20,18 @@ def work() with { mod: Worker } = {
 }
 
 
+
 def main() = {
+    
+    
     // ModuleArg
-    // work() with Bar
-    42
+    work() with Bar
+    // work({
+    //    foo: Bar.foo12354
+    //})
+    // oder instanz weitergeben
+    // oder eindeutige namen
+    // oder neue annotation: Impplementation annotiert def
+    
 }
 

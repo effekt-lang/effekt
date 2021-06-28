@@ -326,8 +326,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val args: P[ArgSection] =
     ( valueArgs
     | blockArg
+    | moduleArg
     | failure("Expected at an argument list")
     )
+
+  lazy val moduleArg: P[ModuleArg] =
+    `with` ~> modName ^^ ModuleArg
 
   lazy val blockArg: P[BlockArg] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockArg(List(ps), body) }
