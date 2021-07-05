@@ -33,6 +33,8 @@ object Analysis {
       args.flatMap(freeVars).toSet
     case If(cond, thenBlock, thenArgs, elseBlock, elseArgs) =>
       freeVars(cond) ++ thenArgs.flatMap(freeVars) ++ elseArgs.flatMap(freeVars)
+    case Switch(arg, clauses) =>
+      freeVars(arg) ++ clauses.flatMap(clause => clause._2.flatMap(freeVars))
   }
 
   def freeVars(arg: Arg): Set[Var] = arg match {
@@ -48,6 +50,7 @@ object Analysis {
     case EviPlus(l, r)            => freeVars(l) ++ freeVars(r)
     case EviDecr(l)               => freeVars(l)
     case EviIsZero(l)             => freeVars(l)
+    case Inject(_, arg, _)        => freeVars(arg)
   }
 
   def freeVars(value: Value): Set[Var] = value match {
@@ -90,6 +93,14 @@ object Analysis {
         substitute(mapping, thenBlock), thenArgs.map(substitute(mapping, _)),
         substitute(mapping, elseBlock), elseArgs.map(substitute(mapping, _))
       )
+    case Switch(arg, clauses) =>
+      Switch(substitute(mapping, arg), clauses.map {
+        case (block, args) =>
+          (
+            substitute(mapping, block),
+            args.map(substitute(mapping, _))
+          )
+      })
   }
 
   def substitute(mapping: Map[Symbol, Value], block: Block): Block = block match {
@@ -119,6 +130,8 @@ object Analysis {
       EviDecr(substitute(mapping, l))
     case EviIsZero(l) =>
       EviIsZero(substitute(mapping, l))
+    case Inject(typ, arg, variant) =>
+      Inject(typ, substitute(mapping, arg), variant)
   }
 
   def substitute(mapping: Map[Symbol, Value], value: Value): Value = value match {
@@ -165,6 +178,9 @@ object Analysis {
     case If(cond, thenBlock, thenArgs, elseBlock, elseArgs) =>
       // TODO parameterlift blocks
       If(cond, thenBlock, thenArgs, elseBlock, elseArgs)
+    case Switch(arg, clauses) =>
+      // TODO parameterlift blocks
+      Switch(arg, clauses)
   }
 
   // TODO this only works correctly on ANF as we don't go into expressions
@@ -230,6 +246,21 @@ object Analysis {
           newThenBlock, thenArgs ++ newThenArgs,
           newElseBlock, elseArgs ++ newElseArgs
         )
+      case Switch(arg, clauses) =>
+        val newClauses = clauses.map {
+          case (block, blockArgs) =>
+            val newArgs = block match {
+              case BlockVar(blockName) if (blockName == name) => args
+              case BlockVar(_) => List()
+              case BlockLit(_, _) => List()
+            }
+            val newBlock = block match {
+              case BlockVar(id)           => BlockVar(id)
+              case BlockLit(params, body) => BlockLit(params, addArguments(name, args, body))
+            }
+            (newBlock, blockArgs ++ newArgs)
+        }
+        Switch(arg, newClauses)
     }
 
   def blockFloat(stmt: Stmt): (Map[BlockSymbol, BlockLit], Stmt) = stmt match {
@@ -261,7 +292,11 @@ object Analysis {
     case Jump(blockName, args) =>
       (Map(), Jump(blockName, args))
     case If(cond, thenBlockName, thenArgs, elseBlockName, elseArgs) =>
+      //ToDo: call recursive in blocks
       (Map(), If(cond, thenBlockName, thenArgs, elseBlockName, elseArgs))
+    case Switch(arg, clauses) =>
+      //ToDo: call recursive in blocks
+      (Map(), Switch(arg, clauses))
   }
 
   // TODO this only works correctly on ANF and KNF
@@ -294,6 +329,14 @@ object Analysis {
       case If(_, _, _, _, _) =>
         // TODO this only works correctly on KNF
         Map()
+      case Switch(_, clauses) =>
+        clauses.flatMap {
+          case (block, args) =>
+            block match {
+              case BlockVar(name) => Map(name -> args)
+              case BlockLit(_, _) => Map()
+            }
+        }.toMap
     }
 
   def reachableBasicBlocks(entryBlockName: BlockSymbol, basicBlocks: Map[BlockSymbol, BlockLit]): Map[BlockSymbol, BlockLit] = {
@@ -343,6 +386,8 @@ object Analysis {
         Map()
       case If(_, _, _, _, _) =>
         Map()
+      case Switch(_, _) =>
+        Map()
     }
 
   // TODO this only works on KNF
@@ -369,6 +414,8 @@ object Analysis {
       case Jump(_, _) =>
         Map()
       case If(_, _, _, _, _) =>
+        Map()
+      case Switch(_, _) =>
         Map()
     }
 
@@ -409,6 +456,14 @@ object Analysis {
           anormalForm(cond).map(v =>
             If(v, tb, thenArgs, eb, elseArgs))))
     }
+    case Switch(arg, clauses) => Run {
+      sequence(clauses.map {
+        case (block, args) =>
+          anormalForm(block).map(b => (b, args))
+      }).flatMap(cs =>
+        anormalForm(arg).map(a =>
+          Switch(a, cs)))
+    }
   }
 
   def anormalForm(expr: Expr)(implicit C: Context): Control[Expr] = expr match {
@@ -427,6 +482,8 @@ object Analysis {
       anormalForm(l).map(x => EviDecr(x))
     case EviIsZero(l) =>
       anormalForm(l).map(x => EviIsZero(x))
+    case Inject(typ, arg, variant) =>
+      anormalForm(arg).map(a => Inject(typ, a, variant))
   }
 
   def anormalForm(arg: Arg)(implicit C: Context): Control[Value] = arg match {
@@ -482,6 +539,11 @@ object Analysis {
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
         resume.apply(Var(PrimBoolean(), x)).map(rest => Let(x, expr, rest))
+      }
+    case _: Inject =>
+      control.use(delimiter) { resume =>
+        val x = FreshValueSymbol("x", C.module)
+        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
       }
 
   }
@@ -577,6 +639,9 @@ object Analysis {
       Def(thenBlockName, linearize(BlockLit(freshThenParams, Jump(thenBlock, freshThenArgs))),
         Def(elseBlockName, linearize(BlockLit(freshElseParams, Jump(elseBlock, freshElseArgs))),
           If(cond, BlockVar(thenBlockName), args, BlockVar(elseBlockName), args)))
+    case Switch(arg, clauses) =>
+      //ToDo:
+      Switch(arg, clauses)
   }
 
   def perhapsCopy(vars: Set[Var], arg: Arg)(implicit C: Context): Control[Value] = arg match {

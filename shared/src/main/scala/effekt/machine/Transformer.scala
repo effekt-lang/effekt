@@ -2,10 +2,10 @@ package effekt
 package machine
 
 import scala.collection.mutable
-
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
-import effekt.symbols.{ Symbol, UserEffect, ValueSymbol, BlockSymbol, BlockType, BuiltinFunction, BlockParam, CapabilityParam, ResumeParam, Name, Module, builtins, / }
+import effekt.core.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern }
+import effekt.symbols.{ /, BlockParam, BlockSymbol, BlockType, BuiltinFunction, CapabilityParam, Module, Name, ResumeParam, Symbol, UserEffect, ValueSymbol, builtins }
 
 case class FreshValueSymbol(baseName: String, module: Module) extends ValueSymbol {
   val name = Name(baseName, module)
@@ -31,6 +31,8 @@ class Transformer {
       case core.Record(_, _, rest) =>
         // TODO these are for records and capabilities
         // TODO We only support singleton capabilities
+        transformDecls(rest)
+      case core.Data(_, _, rest) =>
         transformDecls(rest)
       case core.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
@@ -64,6 +66,8 @@ class Transformer {
       case core.Exports(path, symbols) =>
         // TODO jump to main symbol
         Ret(List())
+      case core.Data(_, _, rest) =>
+        transformToplevel(rest)
       case _ =>
         println(stmt)
         C.abort("unsupported top-level statement " + stmt)
@@ -103,6 +107,17 @@ class Transformer {
           BlockLit(List(), transform(thenStmt)), List(),
           BlockLit(List(), transform(elseStmt)), List()
         )
+      }
+      case core.Match(scrutinee, clauses) => {
+        // ToDo: take tag into account
+        Switch(transform(scrutinee), clauses.map {
+          case (pattern, block) => pattern match {
+            case core.TagPattern(tag, List()) => block match {
+              case core.BlockLit(List(), body) => (BlockLit(List(), transform(body)), List())
+            }
+            case _ => C.abort("unsupported pattern " + pattern)
+          }
+        })
       }
       case core.Handle(body, handlers) => {
 
@@ -335,6 +350,8 @@ class Transformer {
           val fieldTypes = fields.map(_.tpe)
           Record(fieldTypes.map(transform(_)))
         }
+      case symbols.DataType(_, _, variants) =>
+        Variant(variants.map(transform))
       case symbols.BlockType(_, sections, ret / _) =>
         // TODO do we only use this function on parameter types?
         Stack(evidenceType() :: sections.flatten.map(transform(_)))

@@ -158,6 +158,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case ExtractValue(name, target, field) =>
       localName(name) <+> "=" <+>
         "extractvalue" <+> toDocWithType(target) <> comma <+> field.toString
+    case Inject(name, typ, variant) =>
+      localName(name) <+> "=" <+> "add i64 0, " <> variant.toString
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
@@ -220,6 +222,11 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case If(cond, thenBlock, _, elseBlock, _) =>
       "br" <+> toDocWithType(cond) <> comma <+>
         "label" <+> localName(thenBlock) <+> comma <+> "label" <+> localName(elseBlock)
+    case Switch(arg, labels) =>
+      //ToDo: default label!
+      "switch" <+> toDocWithType(arg) <> comma <+> "label" <+> localName(labels.head) <+> brackets(hsep(labels.zipWithIndex.map {
+        case (l, i) => "i64" <+> i.toString <> comma <+> "label" <+> localName(l)
+      }, " "))
   }
 
   def toDocWithType(value: machine.Value)(implicit C: LLVMContext): Doc =
@@ -247,12 +254,13 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def toDoc(typ: machine.Type): Doc =
     typ match {
-      case machine.PrimInt()          => "%Int"
-      case machine.PrimBoolean()      => "%Boolean"
-      case machine.PrimUnit()         => "%Unit"
-      case machine.Record(fieldTypes) => braces(hsep(fieldTypes.map(t => toDoc(t)), comma))
-      case machine.Stack(_)           => "%Stk*"
-      case machine.Evidence()         => "%Evi"
+      case machine.PrimInt()             => "%Int"
+      case machine.PrimBoolean()         => "%Boolean"
+      case machine.PrimUnit()            => "%Unit"
+      case machine.Record(fieldTypes)    => braces(hsep(fieldTypes.map(t => toDoc(t)), comma))
+      case machine.Stack(_)              => "%Stk*"
+      case machine.Evidence()            => "%Evi"
+      case machine.Variant(variantTypes) => "i64"
     }
 
   // /**

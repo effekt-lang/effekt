@@ -41,6 +41,7 @@ case class EraseStack(stack: Arg, rest: Stmt) extends Stmt
 case class Ret(values: List[Arg]) extends Stmt
 case class Jump(block: Block, args: List[Arg]) extends Stmt
 case class If(cond: Arg, thenBlock: Block, thenArgs: List[Value], elseBlock: Block, elseArgs: List[Value]) extends Stmt
+case class Switch(arg: Arg, clauses: List[(Block, List[Value])]) extends Stmt
 
 /**
  * Arguments
@@ -60,6 +61,7 @@ case class EviDecr(l: Arg) extends Expr { def typ = Evidence() }
 case class EviIsZero(l: Arg) extends Expr { def typ = PrimBoolean() }
 case class Select(typ: Type, target: Arg, field: Int) extends Expr
 case class Construct(typ: Type, args: List[Arg]) extends Expr
+case class Inject(typ: Type, arg: Arg, variant: Int) extends Expr
 
 /**
  * Values
@@ -98,6 +100,7 @@ case class PrimUnit() extends Type
 case class PrimInt() extends Type
 case class PrimBoolean() extends Type
 case class Record(fieldTypes: List[Type]) extends Type
+case class Variant(variantTypes: List[Type]) extends Type
 case class Stack(cntType: List[Type]) extends Type
 case class Evidence() extends Type
 

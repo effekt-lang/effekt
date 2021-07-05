@@ -116,6 +116,10 @@ object LLVMTransformer {
       val (instructions, terminator) = transform(rest, localBlocks)
       (ExtractValue(id, transform(target), field) :: instructions, terminator)
     }
+    case machine.Let(id: ValueSymbol, machine.Inject(typ, _, variant), rest) => {
+      val (instructions, terminator) = transform(rest, localBlocks)
+      (Inject(id, typ.asInstanceOf[machine.Variant], variant) :: instructions, terminator)
+    }
     case machine.Let(id: ValueSymbol, machine.AppPrim(typ, func, args), rest) => {
       val (instructions, terminator) = transform(rest, localBlocks);
       (Call(id, typ, func, args.map(transform)) :: instructions, terminator)
@@ -176,6 +180,9 @@ object LLVMTransformer {
     }
     case machine.If(cond, thenBlock, thenArgs, elseBlock, elseArgs) => {
       (List(), If(transform(cond), transform(thenBlock), thenArgs, transform(elseBlock), elseArgs))
+    }
+    case machine.Switch(arg, clauses) => {
+      (List(), Switch(transform(arg), clauses.map { case (block, _) => transform(block) }))
     }
   }
 
