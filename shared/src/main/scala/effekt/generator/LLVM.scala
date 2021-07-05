@@ -11,6 +11,7 @@ import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 import org.bitbucket.inkytonik.kiama.util.Counter
 import effekt.context.assertions._
+import effekt.machine.{ Evidence, PrimBoolean, PrimInt, PrimUnit, Stack, Variant }
 import effekt.util.GenericPrinter
 
 import scala.language.implicitConversions
@@ -158,6 +159,14 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case ExtractValue(name, target, field) =>
       localName(name) <+> "=" <+>
         "extractvalue" <+> toDocWithType(target) <> comma <+> field.toString
+    case Inject(name, typ, arg, variant) =>
+      val tmpCons = freshLocalName("tmpcons")
+      val argDocWithType = valueType(arg) match {
+        case PrimUnit() => toDocWithType(new machine.UnitLit)
+        case _          => toDocWithType(arg)
+      }
+      tmpCons <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
+        localName(name) <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> tmpCons <> ", i64" <+> variant.toString <> ", 0"
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", "@base", "@limit", "@boxessp", "@boxesbase", "@boxeslimit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
@@ -220,6 +229,12 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case If(cond, thenBlock, _, elseBlock, _) =>
       "br" <+> toDocWithType(cond) <> comma <+>
         "label" <+> localName(thenBlock) <+> comma <+> "label" <+> localName(elseBlock)
+    case Switch(arg, default, labels) =>
+      "switch" <+> "i64" <+> toDoc(arg) <> comma <+> "label" <+> localName(default) <+> brackets(hsep(labels.map {
+        case (i, l) => "i64" <+> i.toString <> comma <+> "label" <+> localName(l)
+      }, " "))
+    case Panic() =>
+      "call void @exit(i64 1)" <@> "unreachable"
   }
 
   def toDocWithType(value: machine.Value)(implicit C: LLVMContext): Doc =
@@ -247,12 +262,13 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def toDoc(typ: machine.Type): Doc =
     typ match {
-      case machine.PrimInt()          => "%Int"
-      case machine.PrimBoolean()      => "%Boolean"
-      case machine.PrimUnit()         => "%Unit"
-      case machine.Record(fieldTypes) => braces(hsep(fieldTypes.map(t => toDoc(t)), comma))
-      case machine.Stack(_)           => "%Stk*"
-      case machine.Evidence()         => "%Evi"
+      case machine.PrimInt()             => "%Int"
+      case machine.PrimBoolean()         => "%Boolean"
+      case machine.PrimUnit()            => "%Unit"
+      case machine.Record(fieldTypes)    => braces(hsep(fieldTypes.map(t => toDoc(t)), comma))
+      case machine.Stack(_)              => "%Stk*"
+      case machine.Evidence()            => "%Evi"
+      case machine.Variant(variantTypes) => braces("i64," <+> hsep(variantTypes.map(t => toDoc(t)), comma))
     }
 
   // /**

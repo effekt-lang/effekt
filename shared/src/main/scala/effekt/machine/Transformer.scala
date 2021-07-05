@@ -2,10 +2,10 @@ package effekt
 package machine
 
 import scala.collection.mutable
-
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
-import effekt.symbols.{ Symbol, UserEffect, ValueSymbol, BlockSymbol, BlockType, BuiltinFunction, BlockParam, CapabilityParam, ResumeParam, Name, Module, builtins, / }
+import effekt.core.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
+import effekt.symbols.{ /, BlockParam, BlockSymbol, BlockType, BuiltinFunction, CapabilityParam, Module, Name, ResumeParam, Symbol, UserEffect, ValueSymbol, builtins }
 
 case class FreshValueSymbol(baseName: String, module: Module) extends ValueSymbol {
   val name = Name(baseName, module)
@@ -31,6 +31,8 @@ class Transformer {
       case core.Record(_, _, rest) =>
         // TODO these are for records and capabilities
         // TODO We only support singleton capabilities
+        transformDecls(rest)
+      case core.Data(_, _, rest) =>
         transformDecls(rest)
       case core.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
@@ -64,6 +66,8 @@ class Transformer {
       case core.Exports(path, symbols) =>
         // TODO jump to main symbol
         Ret(List())
+      case core.Data(_, _, rest) =>
+        transformToplevel(rest)
       case _ =>
         println(stmt)
         C.abort("unsupported top-level statement " + stmt)
@@ -103,6 +107,26 @@ class Transformer {
           BlockLit(List(), transform(thenStmt)), List(),
           BlockLit(List(), transform(elseStmt)), List()
         )
+      }
+      case core.Match(scrutinee, clauses) => {
+        clauses match {
+          case (core.TagPattern(tag, _), core.BlockLit(params, body)) :: cs =>
+            val idx = C.blockTypeOf(tag).ret.tpe match {
+              case dataType: symbols.DataType => dataType.variants.indexOf(tag)
+              case _ => C.abort("unsupported type " + C.blockTypeOf(tag).ret.tpe)
+            }
+            val fieldsName = FreshValueSymbol("fields", C.module)
+            val fieldTypes = Record(params.map(p => transform(p.asInstanceOf[ValueParam].tpe)))
+            val thenBody = params.zipWithIndex.foldRight(transform(body)) {
+              case ((ValueParam(id, tpe), index), rest) => Let(id, Select(transform(tpe), Var(fieldTypes, fieldsName), index), rest)
+            }
+            // ToDo: do not transform scrutinee twice!
+            val thenBlock = BlockLit(List(), Let(fieldsName, Reject(fieldTypes, transform(scrutinee), idx), thenBody))
+            val elseBlock = BlockLit(List(), transform(core.Match(scrutinee, cs)))
+            Match(transform(scrutinee), idx, thenBlock, List(), elseBlock, List())
+          case Nil => Panic()
+          case _   => C.abort("unsupported Match statement" + clauses)
+        }
       }
       case core.Handle(body, handlers) => {
 
@@ -147,10 +171,16 @@ class Transformer {
       case core.PureApp(core.BlockVar(blockName: BuiltinFunction), List(), args) =>
         AppPrim(transform(blockName.ret.get.tpe), blockName, args.map(transform))
       case core.PureApp(core.BlockVar(constructorName: symbols.Record), List(), args) =>
-        if (args.isEmpty) {
-          UnitLit()
-        } else {
-          Construct(transform(constructorName), args.map(transform))
+        constructorName.tpe match {
+          case dataType: symbols.DataType =>
+            Inject(transform(dataType), Construct(transform(constructorName), args.map(transform)), dataType.variants.indexOf(constructorName))
+          case _: symbols.Record =>
+            if (args.isEmpty) {
+              UnitLit()
+            } else {
+              Construct(transform(constructorName), args.map(transform))
+            }
+          case _ => C.abort("unsupported type " + constructorName.tpe)
         }
       case core.Select(target, field) =>
         val fld = field.asInstanceOf[symbols.Field]
@@ -335,6 +365,8 @@ class Transformer {
           val fieldTypes = fields.map(_.tpe)
           Record(fieldTypes.map(transform(_)))
         }
+      case symbols.DataType(_, _, variants) =>
+        Variant(variants.map(transform))
       case symbols.BlockType(_, sections, ret / _) =>
         // TODO do we only use this function on parameter types?
         Stack(evidenceType() :: sections.flatten.map(transform(_)))

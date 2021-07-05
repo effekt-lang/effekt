@@ -29,6 +29,7 @@ declare void @memcpy(i8*, i8*, i64)
 declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare void @print(i64)
+declare void @exit(i64)
 
 ; Meta-stack management
 

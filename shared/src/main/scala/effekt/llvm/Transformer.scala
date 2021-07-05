@@ -2,11 +2,11 @@ package effekt
 package llvm
 
 import scala.collection.mutable
-
 import effekt.machine.Analysis._
 import effekt.context.Context
 import effekt.context.assertions.SymbolAssertions
-import effekt.symbols.{ Symbol, UserEffect, ValueSymbol, BlockSymbol, Name, Module, builtins, / }
+import effekt.machine.FreshValueSymbol
+import effekt.symbols.{ /, BlockSymbol, Module, Name, Symbol, UserEffect, ValueSymbol, builtins }
 import effekt.util.{ Task, control }
 import effekt.util.control._
 
@@ -110,11 +110,24 @@ object LLVMTransformer {
   def transform(body: machine.Stmt, localBlocks: Set[BlockSymbol])(implicit C: LLVMTransformerContext): (List[Instruction], Terminator) = body match {
     case machine.Let(id: ValueSymbol, machine.Construct(typ, args), rest) => {
       val (instructions, terminator) = transform(rest, localBlocks)
-      (InsertValues(id, typ.asInstanceOf[machine.Record], args.map(transform)) :: instructions, terminator)
+      // ToDo: refactor this
+      if (args.isEmpty) {
+        (InsertValues(id, machine.Record(List()), args.map(transform)) :: instructions, terminator)
+      } else {
+        (InsertValues(id, typ.asInstanceOf[machine.Record], args.map(transform)) :: instructions, terminator)
+      }
     }
     case machine.Let(id: ValueSymbol, machine.Select(_, target, field), rest) => {
       val (instructions, terminator) = transform(rest, localBlocks)
       (ExtractValue(id, transform(target), field) :: instructions, terminator)
+    }
+    case machine.Let(id: ValueSymbol, machine.Inject(typ, arg, variant), rest) => {
+      val (instructions, terminator) = transform(rest, localBlocks)
+      (Inject(id, typ.asInstanceOf[machine.Variant], transform(arg), variant) :: instructions, terminator)
+    }
+    case machine.Let(id: ValueSymbol, machine.Reject(typ, arg, variant), rest) => {
+      val (instructions, terminator) = transform(rest, localBlocks)
+      (ExtractValue(id, transform(arg), variant + 1) :: instructions, terminator)
     }
     case machine.Let(id: ValueSymbol, machine.AppPrim(typ, func, args), rest) => {
       val (instructions, terminator) = transform(rest, localBlocks);
@@ -176,6 +189,14 @@ object LLVMTransformer {
     }
     case machine.If(cond, thenBlock, thenArgs, elseBlock, elseArgs) => {
       (List(), If(transform(cond), transform(thenBlock), thenArgs, transform(elseBlock), elseArgs))
+    }
+    case machine.Match(scrutinee, variant, thenBlock, _, elseBlock, _) => { // ToDo: extract first field from scrutinee
+      val tagName = FreshValueSymbol("tag", C.module)
+      val instructions = List(ExtractValue(tagName, transform(scrutinee), 0))
+      (instructions, Switch(machine.Var(machine.PrimInt(), tagName), transform(elseBlock), List((variant, transform(thenBlock)))))
+    }
+    case machine.Panic() => {
+      (List(), Panic())
     }
   }
 

@@ -29,6 +29,7 @@ case class Call(id: ValueSymbol, typ: machine.Type, func: BlockSymbol, args: Lis
 case class Phi(param: machine.Param, args: List[(BlockSymbol, machine.Value)]) extends Instruction
 case class InsertValues(id: ValueSymbol, typ: machine.Record, args: List[machine.Value]) extends Instruction
 case class ExtractValue(id: ValueSymbol, target: machine.Value, field: Int) extends Instruction
+case class Inject(id: ValueSymbol, typ: machine.Variant, arg: machine.Value, variant: Int) extends Instruction
 case class PushFrame(cntType: List[machine.Type], id: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class NewStack(cntType: List[machine.Type], id: BlockSymbol, blockName: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class PushStack(stack: machine.Value) extends Instruction
@@ -44,4 +45,6 @@ case class Ret(values: List[machine.Value]) extends Terminator
 case class Jump(id: BlockSymbol, args: List[machine.Value]) extends Terminator
 case class JumpLocal(id: BlockSymbol, args: List[machine.Value]) extends Terminator
 case class If(cond: machine.Value, thenBlock: BlockSymbol, thenArgs: List[machine.Value], elseBlock: BlockSymbol, elseArgs: List[machine.Value]) extends Terminator
+case class Switch(arg: machine.Value, default: BlockSymbol, labels: List[(Int, BlockSymbol)]) extends Terminator
+case class Panic() extends Terminator
 

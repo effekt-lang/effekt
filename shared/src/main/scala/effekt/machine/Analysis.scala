@@ -32,7 +32,11 @@ object Analysis {
     case Jump(_, args) =>
       args.flatMap(freeVars).toSet
     case If(cond, thenBlock, thenArgs, elseBlock, elseArgs) =>
-      freeVars(cond) ++ thenArgs.flatMap(freeVars) ++ elseArgs.flatMap(freeVars)
+      freeVars(cond) ++ freeVars(thenBlock) ++ thenArgs.flatMap(freeVars) ++ freeVars(elseBlock) ++ elseArgs.flatMap(freeVars)
+    case Match(scrutinee, _, thenBlock, thenArgs, elseBlock, elseArgs) =>
+      freeVars(scrutinee) ++ freeVars(thenBlock) ++ thenArgs.flatMap(freeVars) ++ freeVars(elseBlock) ++ elseArgs.flatMap(freeVars)
+    case Panic() =>
+      Set()
   }
 
   def freeVars(arg: Arg): Set[Var] = arg match {
@@ -48,6 +52,8 @@ object Analysis {
     case EviPlus(l, r)            => freeVars(l) ++ freeVars(r)
     case EviDecr(l)               => freeVars(l)
     case EviIsZero(l)             => freeVars(l)
+    case Inject(_, arg, _)        => freeVars(arg)
+    case Reject(_, arg, _)        => freeVars(arg)
   }
 
   def freeVars(value: Value): Set[Var] = value match {
@@ -90,6 +96,10 @@ object Analysis {
         substitute(mapping, thenBlock), thenArgs.map(substitute(mapping, _)),
         substitute(mapping, elseBlock), elseArgs.map(substitute(mapping, _))
       )
+    case Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs) =>
+      Match(substitute(mapping, scrutinee), variant, substitute(mapping, thenBlock), thenArgs.map(substitute(mapping, _)), substitute(mapping, elseBlock), elseArgs.map(substitute(mapping, _)))
+    case Panic() =>
+      Panic()
   }
 
   def substitute(mapping: Map[Symbol, Value], block: Block): Block = block match {
@@ -119,6 +129,10 @@ object Analysis {
       EviDecr(substitute(mapping, l))
     case EviIsZero(l) =>
       EviIsZero(substitute(mapping, l))
+    case Inject(typ, arg, variant) =>
+      Inject(typ, substitute(mapping, arg), variant)
+    case Reject(typ, arg, variant) =>
+      Reject(typ, substitute(mapping, arg), variant)
   }
 
   def substitute(mapping: Map[Symbol, Value], value: Value): Value = value match {
@@ -165,6 +179,11 @@ object Analysis {
     case If(cond, thenBlock, thenArgs, elseBlock, elseArgs) =>
       // TODO parameterlift blocks
       If(cond, thenBlock, thenArgs, elseBlock, elseArgs)
+    case Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs) =>
+      // TODO parameterlift blocks
+      Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs)
+    case Panic() =>
+      Panic()
   }
 
   // TODO this only works correctly on ANF as we don't go into expressions
@@ -230,6 +249,28 @@ object Analysis {
           newThenBlock, thenArgs ++ newThenArgs,
           newElseBlock, elseArgs ++ newElseArgs
         )
+      case Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs) =>
+        val newThenArgs = thenBlock match {
+          case BlockVar(blockName) if blockName == name => args
+          case BlockVar(_) => List()
+          case BlockLit(_, _) => List()
+        }
+        val newElseArgs = elseBlock match {
+          case BlockVar(blockName) if blockName == name => args
+          case BlockVar(_) => List()
+          case BlockLit(_, _) => List()
+        }
+        val newThenBlock = thenBlock match {
+          case BlockVar(id)           => BlockVar(id)
+          case BlockLit(params, body) => BlockLit(params, addArguments(name, args, body))
+        }
+        val newElseBlock = elseBlock match {
+          case BlockVar(id)           => BlockVar(id)
+          case BlockLit(params, body) => BlockLit(params, addArguments(name, args, body))
+        }
+        Match(scrutinee, variant, newThenBlock, thenArgs ++ newThenArgs, newElseBlock, elseArgs ++ newElseArgs)
+      case Panic() =>
+        Panic()
     }
 
   def blockFloat(stmt: Stmt): (Map[BlockSymbol, BlockLit], Stmt) = stmt match {
@@ -261,7 +302,13 @@ object Analysis {
     case Jump(blockName, args) =>
       (Map(), Jump(blockName, args))
     case If(cond, thenBlockName, thenArgs, elseBlockName, elseArgs) =>
+      //ToDo: call recursive in blocks
       (Map(), If(cond, thenBlockName, thenArgs, elseBlockName, elseArgs))
+    case Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs) =>
+      //ToDo: call recursive in blocks
+      (Map(), Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs))
+    case Panic() =>
+      (Map(), Panic())
   }
 
   // TODO this only works correctly on ANF and KNF
@@ -293,6 +340,13 @@ object Analysis {
         Map(thenName -> thenArgs) ++ Map(elseName -> elseArgs)
       case If(_, _, _, _, _) =>
         // TODO this only works correctly on KNF
+        Map()
+      case Match(_, _, BlockVar(thenName), thenArgs, BlockVar(elseName), elseArgs) =>
+        Map(thenName -> thenArgs, elseName -> elseArgs)
+      case Match(_, _, _, _, _, _) =>
+        // TODO this only works correctly on KNF
+        Map()
+      case Panic() =>
         Map()
     }
 
@@ -343,6 +397,10 @@ object Analysis {
         Map()
       case If(_, _, _, _, _) =>
         Map()
+      case Match(_, _, _, _, _, _) =>
+        Map()
+      case Panic() =>
+        Map()
     }
 
   // TODO this only works on KNF
@@ -369,6 +427,10 @@ object Analysis {
       case Jump(_, _) =>
         Map()
       case If(_, _, _, _, _) =>
+        Map()
+      case Match(_, _, _, _, _, _) =>
+        Map()
+      case Panic() =>
         Map()
     }
 
@@ -409,6 +471,14 @@ object Analysis {
           anormalForm(cond).map(v =>
             If(v, tb, thenArgs, eb, elseArgs))))
     }
+    case Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs) => Run {
+      anormalForm(thenBlock).flatMap(tb =>
+        anormalForm(elseBlock).flatMap(eb =>
+          anormalForm(scrutinee).map(s =>
+            Match(s, variant, tb, thenArgs, eb, elseArgs))))
+    }
+    case Panic() =>
+      Panic()
   }
 
   def anormalForm(expr: Expr)(implicit C: Context): Control[Expr] = expr match {
@@ -427,6 +497,10 @@ object Analysis {
       anormalForm(l).map(x => EviDecr(x))
     case EviIsZero(l) =>
       anormalForm(l).map(x => EviIsZero(x))
+    case Inject(typ, arg, variant) =>
+      anormalForm(arg).map(a => Inject(typ, a, variant))
+    case Reject(typ, arg, variant) =>
+      anormalForm(arg).map(a => Reject(typ, a, variant))
   }
 
   def anormalForm(arg: Arg)(implicit C: Context): Control[Value] = arg match {
@@ -483,7 +557,16 @@ object Analysis {
         val x = FreshValueSymbol("x", C.module)
         resume.apply(Var(PrimBoolean(), x)).map(rest => Let(x, expr, rest))
       }
-
+    case _: Inject =>
+      control.use(delimiter) { resume =>
+        val x = FreshValueSymbol("x", C.module)
+        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+      }
+    case _: Reject =>
+      control.use(delimiter) { resume =>
+        val x = FreshValueSymbol("x", C.module)
+        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+      }
   }
 
   def bindingBlock(block: BlockLit)(implicit C: Context): Control[BlockSymbol] =
@@ -577,6 +660,11 @@ object Analysis {
       Def(thenBlockName, linearize(BlockLit(freshThenParams, Jump(thenBlock, freshThenArgs))),
         Def(elseBlockName, linearize(BlockLit(freshElseParams, Jump(elseBlock, freshElseArgs))),
           If(cond, BlockVar(thenBlockName), args, BlockVar(elseBlockName), args)))
+    case Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs) =>
+      //ToDo:
+      Match(scrutinee, variant, thenBlock, thenArgs, elseBlock, elseArgs)
+    case Panic() =>
+      Panic()
   }
 
   def perhapsCopy(vars: Set[Var], arg: Arg)(implicit C: Context): Control[Value] = arg match {
