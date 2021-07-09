@@ -111,7 +111,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val path = someSep(ident, `/`)
 
-  lazy val modName: P[Name] = someSep(name, `.`) ^^ { ws => Name(ws) }
+  lazy val modName: P[Name] = someSep(name, `:`) ^^ { ws => Name(ws) }
   lazy val modPath: P[Name] = someSep(name, `/`) ^^ { ws => Name(ws) }
   lazy val modCall = some(idRef <~ `:`)
 

@@ -15,5 +15,5 @@ def work(): Unit / { Get } = {
 def main() {
     try {
         work()
-    } with Foo
+    } with Get by Foo
 }

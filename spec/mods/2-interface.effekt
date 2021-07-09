@@ -14,26 +14,16 @@ module Bar implements Worker {
     def select[A](list: List[A]): A = list.head
 }
 
-
 // ModuleParam
-def work() with { mod: Worker }: Unit = {
+def work() with { mod: Worker } = {
    println(mod:foo())
-   work() with mod
+   //work() with mod
 }
 
 
 
 def main() = {
-    
-    
     // ModuleArg
     work() with Bar
-    // work({
-    //    foo: Bar.foo12354
-    //})
-    // oder instanz weitergeben
-    // oder eindeutige namen
-    // oder neue annotation: Impplementation annotiert def
-    
 }
 

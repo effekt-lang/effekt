@@ -312,16 +312,16 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = Context.focusing(params) {
     case ps: source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
-      val sym = BlockParam(C.name(id), resolve(tpe))
+      val sym = BlockParam(Name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
     case source.CapabilityParam(id, tpe) =>
-      val sym = CapabilityParam(C.name(id), resolve(tpe))
+      val sym = CapabilityParam(Name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
     case source.ModuleParam(id, tpe) =>
       val ifc = Context.resolveType(tpe).asInterface
-      val sym = ModuleParam(C.name(id), ifc)
+      val sym = ModuleParam(Name(id), ifc)
       C.assignSymbol(id, sym)
       List(sym)
   }

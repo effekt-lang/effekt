@@ -15,6 +15,7 @@ import effekt.symbols.kinds._
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import effekt.context.AnnotationsDB
+import effekt.source.IdDef
 
 /**
  * Output: the types we inferred for function like things are written into "types"
@@ -713,6 +714,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         checkBlockArgument(bt, arg)
 
       case (List(mt: ModuleType), source.ModuleArg(name)) =>
+
         // TODO: check for parameter
         val mod = C.module.mod(name).getOrElse { C.abort(s"Failed to check argument: module $name not found.") }
 
