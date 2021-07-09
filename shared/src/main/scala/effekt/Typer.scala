@@ -30,7 +30,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   val phaseName = "typer"
 
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
-    val mod = Context.module
+    val mod = Context.sourceModule
 
     // Effects that are lexically in scope at the top level
     val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
@@ -445,7 +445,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
-      case d @ source.ModuleDef(name, impl, defs) => {
+      case d @ source.ModuleDef(id, impl, defs) => {
         // Check body
         Context in {
           defs.foreach { d => precheckDef(d) }
@@ -460,7 +460,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           }
         }
 
-        val mod = Context.module.mod(name).getOrElse { C.abort(s"Failed to type-check mod $name") }
+        val mod = C.symbolOf(id).asUserModule
         C.checkInterfaces(mod)
 
         TUnit / Pure
@@ -713,6 +713,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         checkBlockArgument(bt, arg)
 
       case (List(mt: ModuleType), source.ModuleArg(name)) =>
+        // TODO: check for parameter
         val mod = C.module.mod(name).getOrElse { C.abort(s"Failed to check argument: module $name not found.") }
 
         if (!mod.impls.contains(mt)) {
@@ -901,7 +902,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     annotations.commit()
-    annotate(Annotations.Unifier, module, currentUnifier)
+    annotate(Annotations.Unifier, sourceModule, currentUnifier)
   }
 
   // Effects that are in the lexical scope

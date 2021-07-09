@@ -173,15 +173,42 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def nameRef(sym: Symbol)(implicit C: Context): Doc = sym match {
-    case m: symbols.UserModule => m.name.full
+    case m: symbols.UserModule => m.user.full
     case _: symbols.Effect     => toDoc(sym.name)
     case _: symbols.Capability => sym.name.local + "_" + sym.id
     case _: symbols.Method     => "op$" + sym.name.local
+    case _: symbols.Tmp        => toDoc(sym.name)
+    case _ =>
+
+      // Find origin module
+      // TODO? sourceSymbolOf builtins does not return the effekt module
+      val origin = C.sourceModuleOf(sym) //if (sym.builtin) effekt.symbols.builtins.prelude else C.sourceModuleOf(sym)
+      //println(s"Process $sym ${sym.getClass()} from $origin (${C.sourceModule})")
+      // Check if name is qualified
+      if (sym.name.toString().startsWith(origin.name.toString())) {
+        // Drop name of source
+        val relName = sym.name.dropFirst(origin.name.count)
+
+        // Check if symbol is imported
+        if (origin.name != C.sourceModule.name) {
+          // access module object
+          link(sym.name, jsModuleName(origin.name) + "." + relName)
+        } else {
+          // Only use relative name
+          //println(s"Local element $sym")
+          toDoc(relName)
+        }
+      } else {
+        toDoc(sym.name)
+      }
+
+    /*
     case _ => sym.name match {
       case name: Name.Link if name.lft != C.module.name =>
+        //println(s"nameRef: ${sym.getClass()} as $name")
         link(name, jsModuleName(name.lft) + "." + name.local)
       case name => toDoc(name)
-    }
+    }*/
   }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {

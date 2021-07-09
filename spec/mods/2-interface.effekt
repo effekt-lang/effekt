@@ -14,9 +14,11 @@ module Bar implements Worker {
     def select[A](list: List[A]): A = list.head
 }
 
+
 // ModuleParam
-def work() with { mod: Worker } = {
+def work() with { mod: Worker }: Unit = {
    println(mod:foo())
+   work() with mod
 }
 
 

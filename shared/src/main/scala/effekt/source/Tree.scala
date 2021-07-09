@@ -227,9 +227,8 @@ case class EffectDef(id: IdDef, effs: Effects) extends Def {
 }
 
 /** User Module Definition like `module foo { def bar(): Int = 42 }` */
-case class ModuleDef(user: Name, impl: List[IdRef], defs: List[Def]) extends Def {
+case class ModuleDef(id: IdDef, impl: List[IdRef], defs: List[Def]) extends Def {
   type symbol = symbols.UserModule
-  def id: IdDef = IdDef(user.local)
 }
 
 /** Interface Definition like `interface foo { def bar(): Int }` */
@@ -306,8 +305,7 @@ case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Refe
 }
 case class ExprTarget(receiver: Expr) extends CallTarget
 /** Call to module member like `hello:foo()` */
-case class ModTarget(mod: Name, id: IdRef) extends CallTarget with Reference {
-  val modRef = IdRef(mod.toString())
+case class ModTarget(path: List[IdRef], id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.TermSymbol
 }
 

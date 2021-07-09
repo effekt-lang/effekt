@@ -38,7 +38,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
     // resolve imports
-    C.module.imports = decl.imports.map { ip => C.moduleOf(ip.path) }
+    C.sourceModule.imports = decl.imports.map { ip => C.moduleOf(ip.path) }
 
     // Open scope
     val scp = C.module.load(toplevel(builtins.rootTypes)).enter
@@ -50,7 +50,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     resolveGeneric(decl)
 
     // Export symbols to module
-    C.module.save(scp)
+    C.sourceModule.save(scp)
 
     // Pass decl
     decl
@@ -68,9 +68,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       defs foreach { resolve }
       resolveAll(defs)
 
-    case source.ModuleDef(name, impl, defs) =>
+    case source.ModuleDef(id, impl, defs) =>
       // Write to user module
-      val mod = C.defMod(name) {
+      val mod = C.defMod(id) {
         defs.foreach { d => resolve(d) }
         resolveAll(defs)
       }
@@ -225,7 +225,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
           val ps = params.map(resolve)
           Context scoped {
             Context.bind(ps)
-            Context.define(resumeId, ResumeParam(C.module))
+            Context.define(resumeId, ResumeParam(C.sourceModule))
             resolveGeneric(body)
           }
       }
@@ -335,7 +335,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
     case call: source.ModTarget => {
-      C.refMod(call) {
+      C.refMod(call.path) {
         C.resolveCalltarget(call.id)
       }
     }
@@ -567,9 +567,6 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private var scope: Scope = scopes.EmptyScope()
 
-  /** Namespace of current user module. */
-  private var base: Name = Name.Blk
-
   private[namer] def initNamerstate(s: Scope): Unit = scope = s
 
   /**
@@ -580,15 +577,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     val result = super.in(block)
     scope = before
     result
-  }
-
-  /** enters subnamespace */
-  def sub[T](name: Name = Name.Blk)(block: => T): T = {
-    val b = base
-    base = Name(base, name)
-    val rs = scoped(block)
-    base = b
-    rs
   }
 
   // TODO we only want to add a seed to a name under the following conditions:
@@ -666,21 +654,16 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
-  private[namer] def resolveMod(call: source.ModTarget): ModuleSymbol = {
+  private[namer] def resolveMod(id: IdRef): ModuleSymbol = {
     // Check vor mod param
-    val prm = scope.lookupFirstTermOption(call.mod.local).collectFirst {
+    val sym: ModuleSymbol = scope.lookupFirstTerm(id.name) match {
       case p: ModuleParam => p
+      case m: Module      => m
+      case _              => Context.abort(s"Failed to resolve reference to module $id")
     }
 
-    // Fallback to user module
-    val mod = prm.getOrElse {
-      Context.module.mod(call.mod).getOrElse {
-        Context.abort(s"Failed to resolve reference to module $base")
-      }
-    }
-
-    assignSymbol(call.modRef, mod)
-    return mod
+    assignSymbol(id, sym)
+    return sym
   }
 
   private[namer] def scoped[R](block: => R): R = Context in {
@@ -689,19 +672,43 @@ trait NamerOps extends ContextOps { Context: Context =>
   }
 
   /** defines new module symbol with contents of scope. */
-  private[namer] def defMod(name: Name)(block: => Unit): UserModule = Context.sub(name) {
-    val mod = Context.module.bind(base)
-    block
-    mod.save(scope)
+  private[namer] def defMod(id: IdDef)(block: => Unit): UserModule = {
+    // Create empty module
+    val mod = new UserModule(Context.module, Name.Word(id.name)) //Context.module.bind(Name(id))
+
+    // Set current module
+    Context.using(mod) {
+
+      // Open new scope
+      Context.scoped {
+        block
+
+        // Export symbols
+        mod.save(scope)
+      }
+    }
+
+    // Assign module
+    define(id, mod)
     mod
   }
 
   /** recreates module scope. */
-  private[namer] def refMod[R](call: source.ModTarget)(block: => R) = Context.scoped {
-    val mod = resolveMod(call)
-    scope = mod.load()
+  private[namer] def refMod[R](path: List[IdRef])(block: => R) = Context.scoped {
+    // Resolve path and assign ids
+    scope = path.foldLeft(scope) { (scp, id) =>
+      scope = scp
+      val modScope = resolveMod(id).load()
+      modScope
+    }
+
+    // load scope of last module
+    //scope = mod.load()
+
+    // run block
     block
   }
 
-  private[namer] def name(id: Id): Name = Name(module.name, base).nest(Name(id))
+  /** Creates a qualified name. */
+  private[namer] def name(id: Id): Name = module.name.nest(Name(id))
 }

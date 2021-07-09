@@ -363,10 +363,10 @@ trait AnnotationsDB { self: Context =>
     case id: source.IdDef =>
       annotate(Annotations.DefinitionTree, sym, id)
       annotate(Annotations.Symbol, id, sym)
-      annotate(Annotations.SourceModule, sym, module)
+      annotate(Annotations.SourceModule, sym, sourceModule)
     case _ =>
       annotate(Annotations.Symbol, id, sym)
-      annotate(Annotations.SourceModule, sym, module)
+    //annotate(Annotations.SourceModule, sym, sourceModule)
   }
 
   def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {

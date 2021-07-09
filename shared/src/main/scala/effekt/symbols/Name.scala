@@ -34,7 +34,7 @@ sealed trait Name {
   /** (short) local name. */
   def local: String = last.toString()
 
-  /** number of name components*/
+  /** number of name segments. */
   def count: Int
 
   /* Functions *
@@ -51,6 +51,15 @@ sealed trait Name {
 
   /** removes left-most name component. */
   def dropFirst(): Name = Name.Blk
+
+  /** removes the first n name components. */
+  def dropFirst(n: Int): Name = {
+    if (n < 1) {
+      this
+    } else {
+      dropFirst().dropFirst(n - 1)
+    }
+  }
 
   /** removes right-most name component. */
   def dropLast(): Name = Name.Blk
@@ -138,6 +147,7 @@ object Name {
   }
 
   /** Single Word */
+  /** use IdRef */
   case class Word(str: String) extends Name {
     def count: Int = 1
     override def toString() = str
@@ -151,12 +161,12 @@ object Name {
     override def last: Name = rgt.last
 
     override def dropFirst(): Name = lft match {
-      case l: Link => l.dropFirst()
+      case l: Link => Name(l.dropFirst(), rgt)
       case _       => rgt
     }
 
     override def dropLast(): Name = rgt match {
-      case r: Link => r.dropLast()
+      case r: Link => Name(lft, r.dropLast())
       case _       => lft
     }
 

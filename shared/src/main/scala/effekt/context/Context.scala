@@ -9,7 +9,8 @@ import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Positions
-import effekt.symbols.SourceModule
+import effekt.symbols.{ Module, SourceModule, UserModule }
+import effekt.symbols.Name
 
 /**
  * Phases like Typer can add operations to the context by extending this trait
@@ -51,7 +52,13 @@ abstract class Context(val positions: Positions)
   implicit val context: Context = this
 
   // the currently processed module
-  var module: SourceModule = _
+  var module: Module = _
+
+  // the currently processed source module
+  def sourceModule: SourceModule = module match {
+    case m: UserModule   => m.root
+    case m: SourceModule => m
+  }
 
   // the currently processed node
   var focus: Tree = _
@@ -69,10 +76,16 @@ abstract class Context(val positions: Positions)
     _config = cfg
   }
 
-  def using[T](module: SourceModule = module, focus: Tree = focus)(block: => T): T = this in {
+  def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
     this.module = module
     this.focus = focus
     block
+  }
+
+  /** opens submodule with given name relative to current module. */
+  def open[T](subn: Name)(block: => T): T = {
+    val mod = this.module.mod(subn).getOrElse { abort(s"Failed to open submodule $subn: Not found.") }
+    using(mod)(block)
   }
 
   /**

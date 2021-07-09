@@ -17,6 +17,11 @@ object assertions {
       case t: ModuleType => t
       case _ => reporter.abort("Expected a module interface")
     }
+    def asUserModule: UserModule = s match {
+      case m: UserModule => m
+      case _ => reporter.abort("Expected a user module")
+    }
+
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
       case _ => reporter.abort("Expected a value parameter")

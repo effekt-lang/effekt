@@ -1,0 +1,19 @@
+module examples/mods/effects
+
+effect Get(): Int
+
+module Foo {
+  def bar(): Int = 42
+
+  with Get { () => resume(bar()) }
+}
+
+def work(): Unit / { Get } = {
+    println(do Get())
+}
+
+def main() {
+    try {
+        work()
+    } with Foo
+}

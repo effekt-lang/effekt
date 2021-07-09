@@ -314,12 +314,12 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
 
   private[regions] def initRegionstate(): Unit = {
     staticRegion = Region.empty
-    constraints = annotation(Annotations.Unifier, module).constraints.toList
+    constraints = annotation(Annotations.Unifier, sourceModule).constraints.toList
   }
 
   private[regions] def commitConstraints(): Unit = {
-    val unifier = annotation(Annotations.Unifier, module)
-    annotate(Annotations.Unifier, module, unifier.copy(constraints = constraints.toSet))
+    val unifier = annotation(Annotations.Unifier, sourceModule)
+    annotate(Annotations.Unifier, sourceModule, unifier.copy(constraints = constraints.toSet))
   }
 
   private[regions] def inRegion[T](r: RegionSet)(block: => T): T = {

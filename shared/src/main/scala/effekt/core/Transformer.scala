@@ -10,8 +10,6 @@ import effekt.source.ModuleArg
 class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
   val phaseName = "transformer"
-  /** current namespace (used for transforming ModuleDefs) */
-  var base: Name = Name.Blk
 
   def run(mod: SourceModule)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
@@ -25,6 +23,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
         // TODO export valuebinders properly
         case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
+        case sym: Module => sym
       }
     }.toList)
 
@@ -39,28 +38,25 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
-    case source.ModuleDef(name, impl, defs) =>
-      val b = base
-      base = Name(base, name)
+    case source.ModuleDef(id, impl, defs) =>
 
       // Lookup module symbol
-      val mod = C.module.mod(base).get
+      val mod = C.symbolOf(id).asUserModule
 
-      val exports: Stmt = Exports(name, mod.terms.flatMap {
+      val exports: Stmt = Exports(mod.short, mod.terms.flatMap {
         case (name, syms) => syms.collect {
           // TODO export valuebinders properly
           case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
           case sym: ValBinder => sym
+          case sym: Module => sym
         }
-      }.toList ++ mod.mods.values.toList)
+      }.toList)
 
       val coreMod = UserModule(defs.foldRight(exports) { (d, r) =>
         transform(d, r)
       })
 
-      val d = Def(mod, null, coreMod, rest)
-      base = b
-      return d
+      return Def(mod, null, coreMod, rest)
 
     case source.InterfaceDef(id, ops) =>
       //C.abort("TODO transform interface")
@@ -182,13 +178,14 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
       val as = args.flatMap(transform)
       C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
 
-    case c @ source.Call(mt @ source.ModTarget(name, id), _, args) =>
+    case c @ source.Call(mt @ source.ModTarget(path, id), _, args) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       val sym: Symbol = C.symbolOf(id)
 
-      val mod = C.symbolOption(mt.modRef)
-        .collect { case m: ModuleSymbol => m }
-        .getOrElse { C.abort(s"Failed to transform call: Module $name not found") }
+      val mod = C.symbolOf(path.last) match {
+        case m: ModuleSymbol => m
+        case _               => C.abort(s"Failed to transform call: Module $path not found")
+      }
 
       val as = args.flatMap(transform)
 
@@ -295,7 +292,7 @@ class Transformer extends Phase[SourceModule, core.ModuleDecl] {
     exprs.map(transform)
 
   def freshWildcardFor(e: source.Tree)(implicit C: Context): Wildcard = {
-    val x = Wildcard(C.module)
+    val x = Wildcard(C.sourceModule)
     C.inferredTypeOption(e) match {
       case Some(t / _) => C.assignType(x, t)
       case _           => C.abort("Internal Error: Missing type of source expression.")
@@ -385,7 +382,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(tpe: symbols.ValueType, s: Stmt): Expr = {
 
     // create a fresh symbol and assign the type
-    val x = Tmp(module)
+    val x = Tmp(sourceModule)
     assignType(x, tpe)
 
     val binding = (x, tpe, s)

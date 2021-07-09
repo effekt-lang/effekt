@@ -41,11 +41,9 @@ package object symbols {
   sealed abstract class Module extends ModuleSymbol {
     type TypeMap = Map[Name.Word, TypeSymbol]
     type TermMap = Map[Name.Word, Set[TermSymbol]]
-    type SubMods = Map[Name.Word, UserModule]
 
     var types: TypeMap = Map.empty
     var terms: TermMap = Map.empty
-    var mods: SubMods = Map.empty
 
     /** declared effects */
     def effects: Effects = Effects(types.values.collect {
@@ -55,7 +53,7 @@ package object symbols {
     /** lookup submodule. */
     def mod(name: Name): Option[UserModule] = name match {
       case Name.Blk          => None
-      case w: Name.Word      => mods.get(w)
+      case w: Name.Word      => trm(w).collect { case mod: UserModule => mod }.headOption
       case Name.Link(ln, rn) => mod(ln).flatMap { m => m.mod(rn) }
     }
 
@@ -69,7 +67,7 @@ package object symbols {
     /** lookup terms. */
     def trm(name: Name): Set[TermSymbol] = name match {
       case Name.Blk          => Set.empty
-      case w: Name.Word      => terms.get(w).getOrElse { Set.empty }
+      case w: Name.Word      => terms.getOrElse(w, Set.empty)
       case Name.Link(ln, rn) => mod(ln).map { m => m.trm(rn) }.getOrElse { Set.empty }
     }
 
@@ -89,6 +87,7 @@ package object symbols {
     }
 
     /** Find or create submodule with given name relative to this. */
+    /*
     def bind(name: Name): UserModule = mod(name).getOrElse {
       name match {
         case w: Name.Word => {
@@ -99,15 +98,17 @@ package object symbols {
         case Name.Link(lft, rgt) => bind(lft).bind(rgt)
         case _                   => throw new IllegalArgumentException()
       }
-    }
+    }*/
   }
 
   /** User-defined module. */
   class UserModule(val parent: Module, val short: Name.Word) extends Module {
     var impls: List[ModuleType] = List.empty
+    def name = Name(parent.name, short)
 
-    def name = parent match {
-      case mod: UserModule => Name(mod.name, short)
+    /** user name relative to its source module */
+    def user: Name = parent match {
+      case mod: UserModule => Name(mod.user, short)
       case _: SourceModule => short
     }
 
