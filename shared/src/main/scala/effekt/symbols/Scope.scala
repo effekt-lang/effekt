@@ -35,22 +35,22 @@ object scopes {
       terms.getOrElse(key, Set.empty)
 
     // TODO add appropriate checks
-    def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
+    def define(key: String, sym: TermSymbol): Unit = {
       val bindings = terms.getOrElse(key, Set())
       terms.update(key, bindings + sym)
     }
 
-    def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
+    def define(key: String, sym: TypeSymbol): Unit =
       types.update(key, sym)
 
     def enter: Scope = BlockScope(this)
 
-    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol]) = {
       tms.foreach { case (n, syms) => syms.foreach { sym => define(n, sym) } }
       tps.foreach { case (n, sym) => define(n, sym) }
     }
 
-    def enterWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+    def enterWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol]) = {
       val scope = BlockScope(this)
       scope.defineAll(tms, tps)
       scope
@@ -93,7 +93,7 @@ object scopes {
         case (Some(List(t)), None) => t
         case (None, Some(t)) => t
         // give precendence to the type level effect, if an equally named effect op is in scope
-        case (Some(List(t1: EffectOp)), Some(t2: UserEffect)) => t2
+        case (Some(List(t1: Method)), Some(t2: UserEffect)) => t2
         case (Some(t1), Some(t2)) =>
           C.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
         case (None, None) => parent.lookupFirst(key)

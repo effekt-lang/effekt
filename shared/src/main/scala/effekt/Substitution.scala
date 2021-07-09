@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ BlockType, CapabilityType, Effect, Effects, EffectApp, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ ModuleType, BlockType, CapabilityType, Effect, Effects, EffectApp, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -36,6 +36,7 @@ object substitutions {
     def substitute(t: InterfaceType): InterfaceType = t match {
       case b: CapabilityType => b
       case b: BlockType      => substitute(b)
+      case b: ModuleType     => b
     }
 
     def substitute(t: BlockType): BlockType = t match {
@@ -126,7 +127,7 @@ object substitutions {
   object Unification {
 
     /**
-     * For error reporting, we assume the second argument (tpe1) is the type expected by the context
+     * For error reporting, we assume the first argument (tpe1) is the type expected by the context
      */
     def unify(tpe1: Type, tpe2: Type)(implicit C: Context): Unifier =
       unifyTypes(tpe1, tpe2).getUnifier
@@ -180,18 +181,18 @@ object substitutions {
 
     def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: Context): UnificationResult =
       (tpe1, tpe2) match {
-        // TODO also consider type parameters here
-        case (f1 @ BlockType(_, args1, ret1), f2 @ BlockType(_, args2, ret2)) =>
-
+        case (f1, f2 @ BlockType(tparams2, args2, ret2)) =>
+          if (f1.tparams.size != tparams2.size) {
+            return UnificationError(s"Different number of type parameters: $f1 vs. $f2")
+          }
+          val (rigids, BlockType(tparams1, args1, ret1)) = Unification.instantiate(f1)
           if (args1.size != args2.size) {
             return UnificationError(s"Section count does not match $f1 vs. $f2")
           }
-
           (args1 zip args2).foldLeft(unifyEffectful(ret1, ret2)) {
             case (u, (as1, as2)) =>
               if (as1.size != as2.size)
                 return UnificationError(s"Argument count does not match $f1 vs. $f2")
-
               (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u union unifyTypes(a1, a2) }
           }
       }
@@ -267,6 +268,7 @@ object substitutions {
           case v: ValueType      => visitValueType(v)
           case b: BlockType      => visitBlockType(b)
           case b: CapabilityType => b
+          case b: ModuleType     => sys error "TODO: visit mod type"
         }
       }
       generic(t)

@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol, Wildcard }
+import effekt.symbols.{ SourceModule, Name, Symbol, Wildcard, UserFunction }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -13,7 +13,6 @@ import kiama.util.Source
 import effekt.util.paths._
 
 import scala.language.implicitConversions
-import effekt.symbols.NestedName
 
 class JavaScript extends Generator {
 
@@ -22,7 +21,7 @@ class JavaScript extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: SourceModule)(implicit C: Context): String =
     (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
 
   /**
@@ -38,7 +37,7 @@ class JavaScript extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: SourceModule)(implicit C: Context): Option[Document] = for {
     core <- C.backend(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }
@@ -114,17 +113,25 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall(
         "module.exports = Object.assign",
         jsModuleName(path),
-        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
+        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) } ++
+          exportMethods(exports.collect { case f: UserFunction => f }))
       )
 
     case other =>
       sys error s"Cannot print ${other} in expression position"
   }
+
+  def exportMethods(exp: List[UserFunction])(implicit C: Context): List[(Doc, Doc)] =
+    exp.map { f => (C.implements(f), f) }.collect {
+      case (Some(m), f) => {
+        nameRef(m) -> toDoc(f.name)
+      }
+    }
 }
 
 trait JavaScriptBase extends ParenPrettyPrinter {
 
-  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
+  def moduleFile(path: Name): String = path.qual("_") + ".js"
 
   def format(t: ModuleDecl)(implicit C: Context): Document =
     pretty(commonjs(t))
@@ -156,23 +163,43 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
-  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
+  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.local)
 
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
-  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _                     => toDoc(id.name)
+  def nameDef(sym: Symbol)(implicit C: Context): Doc = sym match {
+    case _: symbols.Capability => sym.name.local + "_" + sym.id
+    case _: symbols.Method     => "op$" + sym.name.local
+    case _                     => toDoc(sym.name)
   }
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _ => id.name match {
-      case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
-      case name => toDoc(name)
-    }
+  def nameRef(sym: Symbol)(implicit C: Context): Doc = sym match {
+    case m: symbols.UserModule => m.user.full
+    case _: symbols.Effect     => toDoc(sym.name)
+    case _: symbols.Capability => sym.name.local + "_" + sym.id
+    case _: symbols.Method     => "op$" + sym.name.local
+    case _: symbols.Tmp        => toDoc(sym.name)
+    case _ =>
+
+      // Find origin module
+      // TODO? sourceSymbolOf builtins does not return the effekt module
+      val origin = C.sourceModuleOf(sym) //if (sym.builtin) effekt.symbols.builtins.prelude else C.sourceModuleOf(sym)
+
+      // Check if name is qualified
+      if (sym.name.toString().startsWith(origin.name.toString())) {
+        // Drop name of source
+        val relName = sym.name.dropFirst(origin.name.count)
+
+        // Check if symbol is imported
+        if (origin.name != C.sourceModule.name) {
+          // access module object
+          link(sym.name, jsModuleName(origin.name) + "." + relName)
+        } else {
+          // Only use relative name
+          toDoc(relName)
+        }
+      } else {
+        toDoc(sym.name)
+      }
   }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
@@ -263,6 +290,14 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Val(id, tpe, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
+    case Def(id, tpe, UserModule(b), rest) =>
+      "var" <+> nameDef(id) <+> "=" <+> jsCall(parens(jsAnonFunc(
+        List.empty, /* (function() {" <> emptyline <> */
+        "var module = {}" <> emptyline <> // only necessary because we use same code to generate exports
+          "var" <+> "$" + id.name.local <+> "=" <+> "{};" <> emptyline <>
+          toDocTopLevel(b)
+      ))) <> emptyline <> toDocTopLevel(rest)
+
     case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
@@ -282,9 +317,12 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case other => "return" <+> toDocExpr(other)
   }
 
-  def jsModuleName(path: String): String = jsModuleName(Name.module(path))
+  def jsModuleName(path: String): String = jsModuleName(Name.path(path))
 
-  def jsModuleName(name: Name): String = "$" + name.qualifiedName.replace('.', '_')
+  def jsModuleName(name: Name): String = "$" + name.qual("_")
+
+  def jsAnonFunc(params: List[Doc], body: Doc): Doc =
+    "function" <+> parens(hsep(params, comma)) <+> jsBlock(body)
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

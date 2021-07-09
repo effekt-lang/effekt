@@ -3,6 +3,8 @@ package source
 
 import effekt.context.Context
 import effekt.symbols.Symbol
+import effekt.symbols.Name
+import effekt.symbols.ModuleType
 
 /**
  * Data type representing source program trees.
@@ -149,8 +151,8 @@ sealed trait Reference extends Named {
  * A module declartion, the path should be an Effekt include path, not a system dependent file path
  *
  */
-case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
-case class Import(path: String) extends Tree
+case class ModuleDecl(path: Name, imports: List[Import], defs: List[Def]) extends Tree
+case class Import(path: Name) extends Tree
 
 /**
  * Parameters and arguments
@@ -163,11 +165,20 @@ case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { ty
 case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
 case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection with Definition { type symbol = symbols.CapabilityParam }
 
+/** Module Parameter like `foo() with { mod: Worker }` */
+case class ModuleParam(id: IdDef, tpe: IdRef) extends ParamSection with Definition {
+  type symbol = symbols.ModuleParam
+}
+
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
 case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
   type symbol = symbols.CapabilityParam
+}
+case class ModuleArg(name: Name) extends ArgSection with Reference {
+  val id = name.toRef()
+  type symbol = symbols.UserModule
 }
 
 /**
@@ -189,7 +200,7 @@ case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends De
   type symbol = symbols.UserEffect
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Method
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
@@ -213,6 +224,16 @@ case class TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType) extends Def {
  */
 case class EffectDef(id: IdDef, effs: Effects) extends Def {
   type symbol = symbols.EffectAlias
+}
+
+/** User Module Definition like `module foo { def bar(): Int = 42 }` */
+case class ModuleDef(id: IdDef, impl: List[IdRef], defs: List[Def]) extends Def {
+  type symbol = symbols.UserModule
+}
+
+/** Interface Definition like `interface foo { def bar(): Int }` */
+case class InterfaceDef(id: IdDef, ops: List[Operation]) extends Def {
+  type symbol = symbols.ModuleType
 }
 
 // only valid on the toplevel!
@@ -280,9 +301,13 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.TermSymbol
 }
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Method
 }
 case class ExprTarget(receiver: Expr) extends CallTarget
+/** Call to module member like `hello:foo()` */
+case class ModTarget(path: List[IdRef], id: IdRef) extends CallTarget with Reference {
+  type symbol = symbols.TermSymbol
+}
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
@@ -304,7 +329,7 @@ case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, c
   type symbol = symbols.UserEffect
 }
 case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Method
 }
 
 case class Hole(stmts: Stmt) extends Expr
@@ -471,6 +496,9 @@ object Tree {
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
 
+      case ModuleDef(name, impl, defs) =>
+        ModuleDef(name, impl, defs.map(rewrite))
+
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))
 
@@ -480,6 +508,7 @@ object Tree {
       case VarDef(id, annot, binding) =>
         VarDef(id, annot, rewrite(binding))
 
+      case d: InterfaceDef  => d
       case d: EffDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d
@@ -512,6 +541,7 @@ object Tree {
       case ValueArgs(as)      => ValueArgs(as.map(rewrite))
       case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
       case CapabilityArg(id)  => t
+      case ModuleArg(name)    => t
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {

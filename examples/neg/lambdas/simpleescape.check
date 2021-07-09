@@ -1,10 +1,10 @@
-[error] examples/neg/lambdas/simpleescape.effekt:6:3: The value returned from this handler has type () ⟹ Unit / { @Raise }. 
-As part of this type, the following capabilities leave their defining scope {@Raise}.
+[error] examples/neg/lambdas/simpleescape.effekt:6:3: The value returned from this handler has type () ⟹ effekt.Unit / { @simpleescape.Raise }. 
+As part of this type, the following capabilities leave their defining scope {@simpleescape.Raise}.
   try {
   ^
-[info] examples/neg/lambdas/simpleescape.effekt:6:7: The return type mentions capability @Raise
+[info] examples/neg/lambdas/simpleescape.effekt:6:7: The return type mentions capability @simpleescape.Raise
   try {
       ^
-[info] examples/neg/lambdas/simpleescape.effekt:13:5: A value is returned that mentions '@Raise' in its inferred type
+[info] examples/neg/lambdas/simpleescape.effekt:13:5: A value is returned that mentions '@simpleescape.Raise' in its inferred type
     f
     ^

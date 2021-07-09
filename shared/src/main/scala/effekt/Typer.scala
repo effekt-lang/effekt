@@ -14,6 +14,8 @@ import effekt.symbols.builtins._
 import effekt.symbols.kinds._
 import effekt.util.messages.FatalPhaseError
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
+import effekt.context.AnnotationsDB
+import effekt.source.IdDef
 
 /**
  * Output: the types we inferred for function like things are written into "types"
@@ -29,7 +31,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   val phaseName = "typer"
 
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
-    val mod = Context.module
+    val mod = Context.sourceModule
 
     // Effects that are lexically in scope at the top level
     val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
@@ -141,8 +143,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
 
       case c @ source.Call(t: source.IdTarget, targs, args) => {
+        // Fallunterscheidung: ist t effectOp,
+        // val (funTpe / funEffs) = ...
         checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
+        // Wenn effectOp, dann Effect hinzufügen
+        // (funTpe / funEffs ++ effect) (owner of method)
+        // problem: Module mit tparams => ersetzung der tparams nicht mehr bekannt
+        // => verschieben nach checkCall
       }
+
+      case c @ source.Call(source.ModTarget(name, id), targs, args) =>
+        checkOverloadedCall(c, source.IdTarget(id), targs map { _.resolve }, args, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
@@ -401,6 +412,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.assignType(op, tpe)
       }
 
+    case d: source.InterfaceDef => d.symbol.ops.foreach { op =>
+      val tpe = op.toType
+      wellformed(tpe)
+      Context.assignType(op, tpe)
+    }
+
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
@@ -429,6 +446,26 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
     d match {
+      case d @ source.ModuleDef(id, impl, defs) => {
+        // Check body
+        Context in {
+          defs.foreach { d => precheckDef(d) }
+          defs.foreach { d =>
+
+            val (_ / effs) = synthDef(d)
+
+            if (effs.nonEmpty)
+              Context.at(d) {
+                Context.error("Unhandled effects: " + effs)
+              }
+          }
+        }
+
+        val mod = C.symbolOf(id).asUserModule
+        C.checkInterfaces(mod)
+
+        TUnit / Pure
+      }
       case d @ source.FunDef(id, tparams, params, ret, body) =>
         val sym = d.symbol
         Context.define(sym.params)
@@ -562,7 +599,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
             }
           }
-          val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
+          val r = checkCallTo(call, sym.name.local, tpe, targs, args, expected)
           (r, C.backupTyperstate())
         }
       }
@@ -617,7 +654,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // reraise all and abort
         val msgs = failed.flatMap {
           // TODO also print signature!
-          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.qualifiedName}: ${m.label}") }
+          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name}: ${m.label}") }
         }.toVector
 
         C.reraise(msgs)
@@ -675,6 +712,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case (List(bt: BlockType), arg: source.BlockArg) =>
         checkBlockArgument(bt, arg)
+
+      case (List(mt: ModuleType), source.ModuleArg(name)) =>
+
+        // TODO: check for parameter
+        val mod = C.module.mod(name).getOrElse { C.abort(s"Failed to check argument: module $name not found.") }
+
+        if (!mod.impls.contains(mt)) {
+          C.abort(s"Failed to check argument: module $name does not implement $mt.")
+        }
 
       case (_, _) =>
         Context.error("Wrong type of argument section")
@@ -858,7 +904,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     annotations.commit()
-    annotate(Annotations.Unifier, module, currentUnifier)
+    annotate(Annotations.Unifier, sourceModule, currentUnifier)
   }
 
   // Effects that are in the lexical scope
@@ -920,6 +966,7 @@ trait TyperOps extends ContextOps { self: Context =>
     ps.flatten.foreach {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
       case s @ BlockParam(name, tpe) => define(s, tpe)
+      case s @ ModuleParam(name, tpe) => define(s, tpe)
       case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
@@ -944,4 +991,51 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def checkFullyDefined(rigids: List[RigidVar]): Unit =
     currentUnifier.checkFullyDefined(rigids).getUnifier
+
+  private[typer] def checkInterfaces(mod: UserModule): Unit =
+    // Check interfaces
+    mod.impls.foreach { ifc =>
+      // For every method declared in the interface...
+      ifc.ops.foreach { op =>
+
+        // (0) Find possible candidates for interface method
+        val cnds = mod.trm(op.name).collect {
+          case f: UserFunction => f
+        }
+
+        if (cnds.size == 0) {
+          abort(s"No candidates found for method ${ifc}.${op} in module $mod")
+        }
+        // Expected type
+        val expected = blockTypeOf(op)
+        // (1) Instantiate block type of interface method
+        //val (rigids, expected) = Unification.instantiate(C.blockTypeOf(op))
+
+        // (2) unify with given type arguments for interface (i.e., A, B, ...):
+        //     interface Foo[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+        //     The parameters C, D, ... are existentials
+        //val existentials: List[TypeVar] = rigids.map { r => TypeVar(r.name) }
+        //C.addToUnifier(((rigids: List[TypeVar]) zip existentials).toMap)
+
+        //val substPms = C.unifier.substitute(blockType.params)
+        //val substTpe = C.unifier.substitute(blockType.ret)
+        val res = cnds.map { fun => (fun, Unification.unifyBlockTypes(expected, blockTypeOf(fun))) }
+
+        val pos = res.collect {
+          case (f, u: Unifier) => (f, u)
+        }
+
+        val neg = res.collect {
+          case (_, e: UnificationError) => e
+        }
+
+        if (pos.size == 0) {
+          abort(s"No candidate in $mod implements $op:\n" + neg.map { err => err.msg }.mkString("\n"))
+        } else if (pos.size > 1) {
+          abort(s"Multiple candidates in $mod implement $op")
+        }
+
+        implements(pos.head._1, op)
+      }
+    }
 }

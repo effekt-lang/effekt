@@ -6,6 +6,7 @@ import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseR
 import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
+import effekt.symbols.Name
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
@@ -79,6 +80,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `include` = keyword("include")
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
+  lazy val `interface` = keyword("interface")
+  lazy val `implements` = keyword("implements")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
@@ -107,6 +110,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val idRef: P[IdRef] = ident ^^ IdRef
 
   lazy val path = someSep(ident, `/`)
+
+  lazy val modName: P[Name] = someSep(name, `:`) ^^ { ws => Name(ws) }
+  lazy val modPath: P[Name] = someSep(name, `/`) ^^ { ws => Name(ws) }
+  lazy val modCall = some(idRef <~ `:`)
 
   def oneof(strings: String*): Parser[String] =
     strings.map(literal).reduce(_ | _)
@@ -159,14 +166,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     }
   }
 
-  object defaultModulePath extends Parser[String] {
+  object defaultModulePath extends Parser[Name] {
     // we are purposefully not using File here since the parser needs to work both
     // on the JVM and in JavaScript
-    def apply(in: Input): ParseResult[String] = {
+    def apply(in: Input): ParseResult[Name] = {
       val filename = in.source.name
       val baseWithExt = filename.split("[\\\\/]").last
       val base = baseWithExt.split('.').head
-      Success(base, in)
+      Success(Name(base), in)
     }
   }
 
@@ -195,19 +202,19 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val program: P[ModuleDecl] =
     ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
+      case name ~ imports ~ defs if name != Name.effekt => ModuleDecl(name, Import(Name.effekt) :: imports, defs)
       case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
     }
     | failure("Required at least one top-level function or effect definition")
     )
 
-  lazy val moduleDecl: P[String] =
-    ( `module` ~/> moduleName
+  lazy val moduleDecl: P[Name] =
+    ( `module` ~/> modPath
     | defaultModulePath
     )
 
   lazy val importDecl: P[Import] =
-    `import` ~/> moduleName ^^ Import
+    `import` ~/> modPath ^^ Import
 
 
   /**
@@ -219,7 +226,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDef
+    ( moduleDef
+    | interfaceDef
+    | valDef
     | funDef
     | effectDef
     | typeDef
@@ -232,6 +241,18 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | externInclude
     | failure("Expected a definition")
     )
+
+  lazy val moduleDef: P[Def] =
+    `module` ~/> idDef ~ impls ~ (`{` ~> many(definition) <~ `}`) ^^ ModuleDef
+    
+  lazy val impls: P[List[IdRef]] =
+    (`implements` ~> someSep(idRef, `,`)).? ^^ { i => i match {
+      case Some(value) => value
+      case None => List.empty
+    }}
+
+  lazy val interfaceDef: P[Def] =
+      `interface` ~> idDef ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ InterfaceDef
 
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
@@ -271,8 +292,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val params: P[ParamSection] =
     ( valueParams
     | `{` ~/> blockParam <~ `}`
+    | `with` ~/> `{` ~> moduleParam <~ `}`
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
     )
+
+  lazy val moduleParam: P[ModuleParam] =
+    idDef ~ (`:` ~> idRef) ^^ ModuleParam
 
   lazy val valueParams: P[ValueParams] =
     `(` ~/> manySep(valueParam, `,`) <~ `)` ^^ ValueParams
@@ -301,8 +326,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val args: P[ArgSection] =
     ( valueArgs
     | blockArg
+    | moduleArg
     | failure("Expected at an argument list")
     )
+
+  lazy val moduleArg: P[ModuleArg] =
+    `with` ~> modName ^^ ModuleArg
 
   lazy val blockArg: P[BlockArg] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockArg(List(ps), body) }
@@ -420,7 +449,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( idRef ^^ IdTarget
+    ( modCall ~ idRef ^^ { case name ~ ref => ModTarget(name, ref) }
+    | idRef ^^ IdTarget
     | `(` ~> expr <~ `)` ^^ ExprTarget
     )
 

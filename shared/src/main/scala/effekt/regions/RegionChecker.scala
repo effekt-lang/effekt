@@ -215,6 +215,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
         // we are using the capability, so we should only run in their region
         case (param, arg: CapabilityArg) => reg ++= Region(arg.definition)
+        case (param, arg: ModuleArg)     => // TODO: need some checks?
       }
 
       // check constraints again after substitution
@@ -246,6 +247,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
     var regs: RegionSet = Region.empty
     params.foreach {
+      case m: ModuleParam =>
+        val sym = m.symbol
+        val reg = Region(sym)
+        Context.annotateRegions(sym, reg)
+        regs ++= reg
       case b: BlockParam =>
         val sym = b.symbol
         val reg = Region(sym)
@@ -308,12 +314,12 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
 
   private[regions] def initRegionstate(): Unit = {
     staticRegion = Region.empty
-    constraints = annotation(Annotations.Unifier, module).constraints.toList
+    constraints = annotation(Annotations.Unifier, sourceModule).constraints.toList
   }
 
   private[regions] def commitConstraints(): Unit = {
-    val unifier = annotation(Annotations.Unifier, module)
-    annotate(Annotations.Unifier, module, unifier.copy(constraints = constraints.toSet))
+    val unifier = annotation(Annotations.Unifier, sourceModule)
+    annotate(Annotations.Unifier, sourceModule, unifier.copy(constraints = constraints.toSet))
   }
 
   private[regions] def inRegion[T](r: RegionSet)(block: => T): T = {

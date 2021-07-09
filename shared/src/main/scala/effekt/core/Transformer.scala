@@ -5,23 +5,25 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
+import effekt.source.ModuleArg
 
-class Transformer extends Phase[Module, core.ModuleDecl] {
+class Transformer extends Phase[SourceModule, core.ModuleDecl] {
 
   val phaseName = "transformer"
 
-  def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
+  def run(mod: SourceModule)(implicit C: Context): Option[ModuleDecl] = Context in {
     C.initTransformerState()
     Some(transform(mod))
   }
 
-  def transform(mod: Module)(implicit C: Context): ModuleDecl = {
+  def transform(mod: SourceModule)(implicit C: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = mod.ast
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+        case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
+        case sym: Module => sym
       }
     }.toList)
 
@@ -36,6 +38,30 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+    case source.ModuleDef(id, impl, defs) =>
+
+      // Lookup module symbol
+      val mod = C.symbolOf(id).asUserModule
+
+      val exports: Stmt = Exports(mod.short, mod.terms.flatMap {
+        case (name, syms) => syms.collect {
+          // TODO export valuebinders properly
+          case sym: Fun if !sym.isInstanceOf[Method] && !sym.isInstanceOf[Field] => sym
+          case sym: ValBinder => sym
+          case sym: Module => sym
+        }
+      }.toList)
+
+      val coreMod = UserModule(defs.foldRight(exports) { (d, r) =>
+        transform(d, r)
+      })
+
+      return Def(mod, null, coreMod, rest)
+
+    case source.InterfaceDef(id, ops) =>
+      //C.abort("TODO transform interface")
+      rest
+
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val ps = transformParams(params)
@@ -152,11 +178,30 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val as = args.flatMap(transform)
       C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
 
+    case c @ source.Call(mt @ source.ModTarget(path, id), _, args) =>
+      // assumption: typer removed all ambiguous references, so there is exactly one
+      val sym: Symbol = C.symbolOf(id)
+
+      val mod = C.symbolOf(path.last) match {
+        case m: ModuleSymbol => m
+        case _               => C.abort(s"Failed to transform call: Module $path not found")
+      }
+
+      val as = args.flatMap(transform)
+
+      // the type arguments, inferred by typer
+      val targs = C.typeArguments(c)
+
+      // right now only builtin functions are pure of control effects
+      // later we can have effect inference to learn which ones are pure.
+      val a = App(Member(BlockVar(mod), sym.asInstanceOf[BlockSymbol]), targs, as)
+      return C.bind(C.inferredTypeOf(tree).tpe, a)
+
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
 
-      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
+      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asMethod), null, args.flatMap(transform))
       C.bind(C.inferredTypeOf(tree).tpe, app)
 
     case c @ source.Call(fun: source.IdTarget, _, args) =>
@@ -175,7 +220,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           PureApp(BlockVar(f), targs, as)
         case r: Record =>
           PureApp(BlockVar(r), targs, as)
-        case f: EffectOp =>
+        case f: Method =>
           C.panic("Should have been translated to a method call!")
         case f: Field =>
           val List(arg: Expr) = as
@@ -223,10 +268,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.ValueArgs(args)        => args.map(transform)
     case source.BlockArg(params, body) => List(BlockLit(transformParams(params), transform(body)))
     case c @ source.CapabilityArg(id)  => List(BlockVar(c.definition))
+    case ModuleArg(name)               => List(BlockVar(C.module.mod(name).get))
   }
 
   def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =
     ps.flatMap {
+      case m @ source.ModuleParam(id, _)     => List(BlockParam(m.symbol))
       case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
       case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
       case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
@@ -245,7 +292,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     exprs.map(transform)
 
   def freshWildcardFor(e: source.Tree)(implicit C: Context): Wildcard = {
-    val x = Wildcard(C.module)
+    val x = Wildcard(C.sourceModule)
     C.inferredTypeOption(e) match {
       case Some(t / _) => C.assignType(x, t)
       case _           => C.abort("Internal Error: Missing type of source expression.")
@@ -278,13 +325,13 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: EffectOp, put: EffectOp)
+  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: Method, put: Method)
 
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
+    val get = Method(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
+    val put = Method(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
 
     val param = CapabilityParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)
@@ -335,7 +382,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(tpe: symbols.ValueType, s: Stmt): Expr = {
 
     // create a fresh symbol and assign the type
-    val x = Tmp(module)
+    val x = Tmp(sourceModule)
     assignType(x, tpe)
 
     val binding = (x, tpe, s)

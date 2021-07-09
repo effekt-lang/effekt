@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core._
-import effekt.symbols.Module
+import effekt.symbols.SourceModule
 import effekt.symbols.{ Name, Symbol, Wildcard }
 
 import org.bitbucket.inkytonik.kiama
@@ -24,8 +24,8 @@ class ChezSchemeCallCC extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+  def path(m: SourceModule)(implicit C: Context): String =
+    (C.config.outputPath() / m.path.qual("_")).unixPath + ".ss"
 
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
@@ -43,7 +43,7 @@ class ChezSchemeCallCC extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: SourceModule)(implicit C: Context): Option[Document] = for {
     core <- C.backend(mod.source)
     doc = ChezSchemeCallCCPrinter.format(core)
   } yield doc
@@ -51,10 +51,10 @@ class ChezSchemeCallCC extends Generator {
 
 object ChezSchemeCallCCPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: SourceModule, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
-      val main = mod.terms("main").toList.head
+      val main = mod.main().get
 
       prelude <>
         "(let () " <+> emptyline <>
@@ -78,6 +78,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case ScopeAbs(id, b) => ???
     case Lifted(ev, b)   => ???
     case Unbox(e)        => toDoc(e)
+    case UserModule(b)   => toDoc(b, false)
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
@@ -118,14 +119,14 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
-  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
+  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.local)
 
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
-  def nameDef(id: Symbol)(implicit C: Context): Doc =
-    id.name.toString + "_" + id.id
+  def nameDef(sym: Symbol)(implicit C: Context): Doc =
+    sym.name.local + "_" + sym.id
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc =
-    id.name.toString + "_" + id.id
+  def nameRef(sym: Symbol)(implicit C: Context): Doc =
+    sym.name.local + "_" + sym.id
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "#f"
@@ -164,7 +165,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
     // we can't use the unique id here, since we do not know it in the extern string.
     case Def(id, tpe, Extern(ps, body), rest) =>
-      defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest, toplevel)
+      defineFunction(nameDef(id), ps.map { p => p.id.name.local }, body) <> emptyline <> toDoc(rest, toplevel)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -251,7 +252,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     val constructor = if (did.isInstanceOf[effekt.symbols.Effect]) "make-" <> nameDef(did) else nameDef(did)
 
     val definition =
-      parens("define-record-type" <+> parens(did.name.toString <+> constructor <+> pred) <>
+      parens("define-record-type" <+> parens(did.name.local <+> constructor <+> pred) <>
         nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
           parens("nongenerative" <+> nameDef(did))))
 

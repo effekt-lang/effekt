@@ -34,8 +34,8 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
   override def expr(implicit C: Context) = {
 
     // an effect call -- translate to method call
-    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
-      val op = fun.definition.asEffectOp
+    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[Method] =>
+      val op = fun.definition.asMethod
 
       val tpe @ BlockType(tparams, params, ret / _) = C.blockTypeOf(op)
 
@@ -145,6 +145,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
           C.withCapabilities(effs) { caps =>
             source.BlockArg(ps ++ caps, rewrite(body))
           }
+        case (ma: ModuleArg, _) => ma
       }
     }
 
@@ -190,7 +191,7 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
     }
     // additional block parameters for capabilities
     val params = caps.map { sym =>
-      val id = IdDef(sym.name.localName)
+      val id = IdDef(sym.name.local)
       assignSymbol(id, sym)
       source.CapabilityParam(id, source.CapabilityType(sym.effect))
     }
@@ -203,7 +204,7 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
 
   private[source] def capabilityReferenceFor(e: Effect): IdRef =
     capabilities.get(e).map { c =>
-      val id = IdRef(c.name.localName)
+      val id = IdRef(c.name.local)
       assignSymbol(id, c)
       //Var(id)
       id

@@ -14,3 +14,8 @@ bin/
 notes/
 artwork/
 sbt-microsite-docs
+.vscode/
+.metals/
+project/
+.bloop/
+*.tgz

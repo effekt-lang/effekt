@@ -13,7 +13,7 @@ trait IOModuleDB extends ModuleDB { self: Context =>
    * used by Namer to resolve FFI includes
    */
   override def contentsOf(path: String): Option[String] = {
-    val includeFile = file(module.source.name).parent / path
+    val includeFile = file(sourceModule.source.name).parent / path
     if (!includeFile.exists) {
       None
     } else {

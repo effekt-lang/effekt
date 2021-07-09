@@ -16,7 +16,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
-    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
+    "module" <+> m.path.unix <> emptyline <> vsep(m.imports.map { im => "import" <+> im.unix }, line) <>
       emptyline <> toDocStmt(m.defs)
   }
 
@@ -31,6 +31,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
     case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
     case Unbox(e)         => toDoc(e)
+    case UserModule(body) => toDoc(body)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString

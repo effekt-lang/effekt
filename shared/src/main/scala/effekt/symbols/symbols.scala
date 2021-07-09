@@ -1,10 +1,13 @@
 package effekt
 
+import effekt.symbols.scopes._
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.substitutions._
+import effekt.symbols.Name
+import effekt.symbols.Name.Word
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -29,35 +32,114 @@ package object symbols {
     override def synthetic = true
   }
 
+  sealed trait ModuleSymbol extends BlockSymbol {
+    /** import definitions into scope. */
+    def load(scp: Scope = EmptyScope()): Scope
+  }
+
+  /** Module Base Class */
+  sealed abstract class Module extends ModuleSymbol {
+    type TypeMap = Map[Name.Word, TypeSymbol]
+    type TermMap = Map[Name.Word, Set[TermSymbol]]
+
+    var types: TypeMap = Map.empty
+    var terms: TermMap = Map.empty
+
+    /** declared effects */
+    def effects: Effects = Effects(types.values.collect {
+      case e: Effect => e
+    })
+
+    /** lookup submodule. */
+    def mod(name: Name): Option[UserModule] = name match {
+      case Name.Blk          => None
+      case w: Name.Word      => trm(w).collect { case mod: UserModule => mod }.headOption
+      case Name.Link(ln, rn) => mod(ln).flatMap { m => m.mod(rn) }
+    }
+
+    /** lookup type. */
+    def typ(name: Name): Option[TypeSymbol] = name match {
+      case Name.Blk          => None
+      case w: Name.Word      => types.get(w)
+      case Name.Link(ln, rn) => mod(ln).flatMap { m => m.typ(rn) }
+    }
+
+    /** lookup terms. */
+    def trm(name: Name): Set[TermSymbol] = name match {
+      case Name.Blk          => Set.empty
+      case w: Name.Word      => terms.getOrElse(w, Set.empty)
+      case Name.Link(ln, rn) => mod(ln).map { m => m.trm(rn) }.getOrElse { Set.empty }
+    }
+
+    /** export definitions from scope. */
+    def save(scp: Scope): Unit = {
+      types ++= scp.types.map { kv => (Name.Word(kv._1), kv._2) }
+      terms ++= scp.terms.map { kv => (Name.Word(kv._1), kv._2) }
+    }
+
+    /** import definitions into scope. */
+    override def load(scp: Scope = EmptyScope()): Scope = {
+      val s = BlockScope(scp)
+      val typ = types.map { kv => (kv._1.str, kv._2) }
+      val trm = terms.map { kv => (kv._1.str, kv._2) }
+      s.defineAll(trm, typ)
+      return s
+    }
+  }
+
+  /** User-defined module. */
+  class UserModule(val parent: Module, val short: Name.Word) extends Module {
+    var impls: List[ModuleType] = List.empty
+    def name = Name(parent.name, short)
+
+    /** user name relative to its source module */
+    def user: Name = parent match {
+      case mod: UserModule => Name(mod.user, short)
+      case _: SourceModule => short
+    }
+
+    def root: SourceModule = parent match {
+      case mod: UserModule   => mod.root
+      case src: SourceModule => src
+    }
+
+    override def load(scp: Scope = EmptyScope()) = super.load(parent.load(scp))
+  }
+
   /**
    * The result of running the frontend on a module.
    * Symbols and types are stored globally in CompilerContext.
    */
-  case class Module(
-    decl: ModuleDecl,
-    source: Source
-  ) extends Symbol {
-    val name = Name.module(decl.path)
-
+  class SourceModule(val decl: ModuleDecl, val source: Source) extends Module {
+    def name = path
     def path = decl.path
 
-    private var _terms: Map[String, Set[TermSymbol]] = _
-    def terms = _terms
-
-    private var _types: Map[String, TypeSymbol] = _
-    def types = _types
-
-    private var _imports: List[Module] = _
-    def imports = _imports
+    var imports: List[SourceModule] = List.empty
 
     // a topological ordering of all transitive dependencies
     // this is the order in which the modules need to be compiled / loaded
-    lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
+    lazy val dependencies: List[SourceModule] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
-    // toplevel declared effects
-    def effects: Effects = Effects(types.values.collect {
-      case e: Effect => e
-    })
+    /** lookup main function. */
+    def main(): Option[TermSymbol] = terms.getOrElse(Name.main, Set.empty).headOption
+
+    override def load(scp: Scope): Scope = {
+      // Loads imports first so they can be shadowed
+      super.load(imports.foldLeft(scp) { (s, i) => i.load(s) })
+    }
+
+    override def mod(name: Name): Option[UserModule] = super.mod(name).orElse { lookup { sm => sm.mod(name) } }
+    override def typ(name: Name): Option[TypeSymbol] = super.typ(name).orElse { lookup { sm => sm.typ(name) } }
+    override def trm(name: Name): Set[TermSymbol] = dependencies.reverseIterator.foldLeft(super.trm(name)) { (ts, sm) =>
+      ts ++ sm.trm(name)
+    }
+
+    /** helper function to delegate to imports. */
+    private def lookup[T](f: SourceModule => Option[T]): Option[T] = dependencies.reverseIterator.collectFirst { sm =>
+      f(sm) match {
+        case Some(t) => t
+      }
+    }
 
     // the transformed ast after frontend
     private var _ast = decl
@@ -77,13 +159,13 @@ package object symbols {
      * again. It is the same, since the source and AST did not change.
      */
     def export(
-      imports: List[Module],
-      terms: Map[String, Set[TermSymbol]],
-      types: Map[String, TypeSymbol]
+      imports: List[SourceModule],
+      terms: TermMap,
+      types: TypeMap
     ): this.type = {
-      _imports = imports
-      _terms = terms
-      _types = types
+      this.imports = imports
+      this.terms = terms
+      this.types = types
       this
     }
   }
@@ -95,7 +177,17 @@ package object symbols {
     def effect = tpe.eff
     override def toString = s"@${tpe.eff.name}"
   }
-  case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(module: SourceModule) extends Param with BlockSymbol { val name = module.name.nest(Name("resume")) }
+  case class ModuleParam(name: Name, tpe: ModuleType) extends Param with ModuleSymbol {
+    def load(scp: Scope): Scope = {
+      // Load ops from interface
+      val s = BlockScope(scp)
+      tpe.ops.foreach { op =>
+        s.define(op.name.local, op)
+      }
+      return s
+    }
+  }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -106,6 +198,7 @@ package object symbols {
   def paramsToTypes(ps: Params): Sections =
     ps map {
       _ map {
+        case ModuleParam(_, tpe)     => tpe
         case BlockParam(_, tpe)      => tpe
         case CapabilityParam(_, tpe) => tpe
         case v: ValueParam           => v.tpe.get
@@ -123,9 +216,12 @@ package object symbols {
     def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
 
     def effects(implicit C: Context): Effects =
+      inferredReturnType.effects
+
+    def inferredReturnType(implicit C: Context): Effectful =
       ret.orElse { C.blockTypeOption(this).map { _.ret } }.getOrElse {
         C.abort(s"Result type of recursive function ${name} needs to be annotated")
-      }.effects
+      }
   }
 
   object Fun {
@@ -180,8 +276,8 @@ package object symbols {
   /**
    * Introduced by Transformer
    */
-  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+  case class Wildcard(module: SourceModule) extends ValueSymbol { val name = module.name.nest(Name("_")) }
+  case class Tmp(module: SourceModule) extends ValueSymbol { val name = module.name.nest(Name("tmp" + Symbol.fresh.next())) }
 
   /**
    * A symbol that represents a termlevel capability
@@ -243,7 +339,7 @@ package object symbols {
    * Should neither occur in source programs, nor in infered types
    */
   case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
-    // override def toString = "?" + underlying.name + id
+    override def toString = "?" + underlying.name + id
   }
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
@@ -257,6 +353,9 @@ package object symbols {
   }
 
   sealed trait InterfaceType extends Type
+
+  case class ModuleType(name: Name, var ops: List[Method] = Nil) extends InterfaceType with TypeSymbol with MethodOwner
+
   case class CapabilityType(eff: Effect) extends InterfaceType
 
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends InterfaceType {
@@ -339,10 +438,20 @@ package object symbols {
     override def dealias: List[Effect] = effs.dealias
   }
 
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
-    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
+  /** Either a UserEffect or ModuleType. */
+  sealed trait MethodOwner
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[Method] = Nil) extends Effect with TypeSymbol with MethodOwner
+  case class Method(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, owner: MethodOwner) extends Fun {
+    def ret: Option[Effectful] = owner match {
+      case _: ModuleType => Some(Effectful(annotatedReturn.tpe, otherEffects))
+      case _: UserEffect => Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
+    }
     def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
+
+    def effect: UserEffect = owner match {
+      case e: UserEffect => e
+      case t: ModuleType => sys error s"Method $name is owned by $t (not a UserEffect)."
+    }
 
     // The effects as seen by the capability passing transformation
     def otherEffects: Effects = annotatedReturn.effects

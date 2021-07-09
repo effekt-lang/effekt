@@ -20,7 +20,7 @@ trait Symbol {
   /**
    * The name of this symbol
    */
-  val name: Name
+  def name: Name
 
   /**
    * The unique id of this symbol

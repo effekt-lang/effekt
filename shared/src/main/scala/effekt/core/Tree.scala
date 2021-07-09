@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, Method, Type, ValueType, BlockType, InterfaceType }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -14,7 +14,12 @@ sealed trait Tree extends Product {
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
+case class ModuleDecl(path: Name, imports: List[Name], defs: Stmt) extends Tree
+
+/// User-definied module
+// TODO: implementierungen merken
+// TODO?: body => List[Stmt]
+case class UserModule(body: Stmt) extends Block
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -57,7 +62,7 @@ case class Lifted(s: Scope, b: Block) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: EffectOp) extends Block
+case class Member(b: Block, field: BlockSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 
@@ -75,7 +80,7 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
-case class Exports(path: String, exports: List[Symbol]) extends Stmt
+case class Exports(path: Name, exports: List[Symbol]) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree
@@ -88,10 +93,10 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
+case class State(id: UserEffect, tpe: ValueType, get: Method, put: Method, init: Stmt, body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
+case class Handler(id: UserEffect, clauses: List[(Method, BlockLit)]) extends Tree
 
 /**
  * Explicit Lifts
@@ -104,7 +109,7 @@ case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
-case class ScopeId() extends Symbol { val name = Name(s"ev${id}", effekt.symbols.builtins.prelude) }
+case class ScopeId() extends Symbol { val name = effekt.symbols.builtins.prelude.name.nest(Name(s"ev${id}")) }
 
 object Tree {
 

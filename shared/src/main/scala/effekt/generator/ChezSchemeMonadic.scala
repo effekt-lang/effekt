@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core._
-import effekt.symbols.Module
+import effekt.symbols.SourceModule
 import effekt.symbols.Wildcard
 
 import org.bitbucket.inkytonik.kiama
@@ -22,8 +22,8 @@ class ChezSchemeMonadic extends Generator {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+  def path(m: SourceModule)(implicit C: Context): String =
+    (C.config.outputPath() / m.path.qual("_")).unixPath + ".ss"
 
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
@@ -41,7 +41,7 @@ class ChezSchemeMonadic extends Generator {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
+  def compile(mod: SourceModule)(implicit C: Context): Option[Document] = for {
     core <- C.backend(mod.source)
     doc = ChezSchemeMonadicPrinter.format(core)
   } yield doc
@@ -49,10 +49,10 @@ class ChezSchemeMonadic extends Generator {
 
 object ChezSchemeMonadicPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: SourceModule, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
     pretty {
 
-      val main = mod.terms("main").toList.head
+      val main = mod.main().get
 
       prelude <>
         "(let () " <+> emptyline <>

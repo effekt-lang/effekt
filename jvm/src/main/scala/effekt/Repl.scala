@@ -1,7 +1,8 @@
 package effekt
 
 import effekt.source._
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, SourceModule, ValueSymbol, Name }
+import effekt.symbols.Name.Word
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import org.bitbucket.inkytonik.kiama
@@ -121,7 +122,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
         case Success(e: Expr, _) =>
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
-            val mainSym = mod.terms("main").head
+            val mainSym = mod.main().get
             val mainTpe = context.blockTypeOf(mainSym)
             output.emitln(mainTpe.ret)
           }
@@ -190,7 +191,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       val output = config.output()
 
       context.setup(config)
-      val src = context.findSource(i.path).getOrElse {
+      val src = context.findSource(i.path.unix).getOrElse {
         output.emitln(s"Cannot find source for import ${i.path}")
         return
       }
@@ -198,12 +199,12 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       runParsingFrontend(src, config) { cu =>
         output.emitln(s"Successfully imported ${i.path}\n")
         output.emitln(s"Imported Types\n==============")
-        cu.types.toList.sortBy { case (n, _) => n }.collect {
+        cu.types.toList.sortBy { case (n, _) => n.toString }.collect {
           case (name, sym) if !sym.synthetic =>
             outputCode(DeclPrinter(sym), config)
         }
         output.emitln(s"\nImported Functions\n==================")
-        cu.terms.toList.sortBy { case (n, _) => n }.foreach {
+        cu.terms.toList.sortBy { case (n, _) => n.toString }.foreach {
           case (name, syms) =>
             syms.collect {
               case sym if !sym.synthetic =>
@@ -248,7 +249,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     report(source, context.buffer.get, config)
   }
 
-  private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.frontend(src) map { f } getOrElse {
@@ -256,7 +257,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
   }
 
-  private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
+  private def runParsingFrontend(source: Source, config: EffektConfig)(f: SourceModule => Unit): Unit = {
     context.setup(config)
     context.frontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
@@ -320,7 +321,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
 
       val body = Return(expr)
 
-      ModuleDecl("lib/interactive", Import("effekt") :: imports,
+      ModuleDecl(Name.path("lib/interactive"), Import(Name.effekt) :: imports,
         definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
           body))
     }

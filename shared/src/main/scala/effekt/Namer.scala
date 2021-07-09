@@ -10,6 +10,8 @@ import effekt.regions.Region
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
+import effekt.context.Annotation
+import effekt.context.Annotations
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -35,25 +37,22 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
-    var scope: Scope = toplevel(builtins.rootTypes)
+    // resolve imports
+    C.sourceModule.imports = decl.imports.map { ip => C.moduleOf(ip.path) }
 
-    // process all imports, updating the terms and types in scope
-    val imports = decl.imports map {
-      case im @ source.Import(path) => Context.at(im) {
-        val modImport = Context.moduleOf(path)
-        scope.defineAll(modImport.terms, modImport.types)
-        modImport
-      }
-    }
+    // Open scope
+    val scp = C.module.load(toplevel(builtins.rootTypes)).enter
 
-    // create new scope for the current module
-    scope = scope.enter
+    // Prepare naming
+    C.initNamerstate(scp)
 
-    Context.initNamerstate(scope)
-
+    // Resolve source module
     resolveGeneric(decl)
 
-    Context.module.export(imports, scope.terms.toMap, scope.types.toMap)
+    // Export symbols to module
+    C.sourceModule.save(scp)
+
+    // Pass decl
     decl
   }
 
@@ -65,9 +64,38 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   def resolveGeneric(tree: Tree)(implicit C: Context): Unit = Context.focusing(tree) {
 
     // (1) === Binding Occurrences ===
-    case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { resolve }
-      resolveAll(decls)
+    case source.ModuleDecl(path, imports, defs) =>
+      defs foreach { resolve }
+      resolveAll(defs)
+
+    case source.ModuleDef(id, impl, defs) =>
+      // Write to user module
+      val mod = C.defMod(id) {
+        defs.foreach { d => resolve(d) }
+        resolveAll(defs)
+      }
+
+      // resolve interfaces
+      mod.impls = impl.map { id => C.resolveType(id).asInterface }
+
+    case source.InterfaceDef(id, ops) =>
+      val mt = Context.resolveType(id).asInstanceOf[ModuleType]
+      mt.ops = ops.map {
+        case source.Operation(id, tparams, params, ret) =>
+          val name = Context.freshTermName(id)
+          Context scoped {
+
+            val tps = tparams map resolve
+
+            // The type parameters of an effect op are:
+            //   1) all type parameters on the effect, followed by
+            //   2) the annotated type parameters on the concrete operation
+            val op = Method(Name(id), tps, params map resolve, resolve(ret), mt)
+            Context.define(id, op)
+            op
+          }
+      }
+      mt.ops.foreach { op => Context.bind(op) }
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
@@ -117,7 +145,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
-            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            val op = Method(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
             Context.define(id, op)
             op
           }
@@ -197,7 +225,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
           val ps = params.map(resolve)
           Context scoped {
             Context.bind(ps)
-            Context.define(resumeId, ResumeParam(C.module))
+            Context.define(resumeId, ResumeParam(C.sourceModule))
             resolveGeneric(body)
           }
       }
@@ -291,6 +319,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val sym = CapabilityParam(Name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
+    case source.ModuleParam(id, tpe) =>
+      val ifc = Context.resolveType(tpe).asInterface
+      val sym = ModuleParam(Name(id), ifc)
+      C.assignSymbol(id, sym)
+      List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
@@ -301,6 +334,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
+    case call: source.ModTarget => {
+      C.refMod(call.path) {
+        C.resolveCalltarget(call.id)
+      }
+    }
     case source.MemberTarget(recv, id) =>
       Context.resolveTerm(recv)
       Context.resolveCalltarget(id)
@@ -312,6 +350,14 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    * not the bodies of functions.
    */
   def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+    case d @ source.ModuleDef(name, impl, defs) =>
+      () // Resolution happens in resolveGeneric
+
+    case source.InterfaceDef(id, ops) => {
+      // we do not resolve the effect operations here to allow them to refer to types that are defined
+      // later in the file
+      Context.define(id, ModuleType(Name(id), List.empty))
+    }
 
     case d @ source.ValDef(id, annot, binding) =>
       ()
@@ -339,7 +385,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = tparams map resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
-        UserEffect(Name(id), tps)
+        UserEffect(C.name(id), tps)
       }
       Context.define(id, effectSym)
 
@@ -347,13 +393,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        TypeAlias(Name(id), tps, resolve(tpe))
+        TypeAlias(C.name(id), tps, resolve(tpe))
       }
       Context.define(id, alias)
 
     case source.EffectDef(id, effs) =>
       val alias = Context scoped {
-        EffectAlias(Name(id), Nil, resolve(effs))
+        EffectAlias(C.name(id), Nil, resolve(effs))
       }
       Context.define(id, alias)
 
@@ -362,7 +408,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = tparams map resolve
         // we do not resolve the constructors here to allow them to refer to types that are defined
         // later in the file
-        DataType(Name(id), tps)
+        DataType(C.name(id), tps)
       }
       Context.define(id, typ)
 
@@ -371,7 +417,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = Context scoped { tparams map resolve }
         // we do not resolve the fields here to allow them to refer to types that are defined
         // later in the file
-        Record(Name(id), tps, null)
+        Record(C.name(id), tps, null)
       }
       sym.tpe = if (sym.tparams.isEmpty) sym else TypeApp(sym, sym.tparams)
 
@@ -383,13 +429,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        BuiltinType(Name(id), tps)
+        BuiltinType(C.name(id), tps)
       })
 
     case source.ExternEffect(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        BuiltinEffect(Name(id), tps)
+        BuiltinEffect(C.name(id), tps)
       })
 
     case source.ExternFun(pure, id, tparams, params, ret, body) => {
@@ -418,7 +464,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.IgnorePattern()     => Nil
     case source.LiteralPattern(lit) => Nil
     case source.AnyPattern(id) =>
-      val p = ValueParam(Name(id), None)
+      val p = ValueParam(C.name(id), None)
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns) =>
@@ -540,7 +586,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def freshTermName(id: Id): Name = {
     val alreadyBound = scope.currentTermsFor(id.name).size
     val seed = if (alreadyBound > 0) "$" + alreadyBound else ""
-    Name(id.name + seed, module)
+    module.name.nest(Name(id.name + seed))
   }
 
   // Name Binding and Resolution
@@ -555,9 +601,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.define(id.name, s)
   }
 
-  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.localName, s)
+  private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.local, s)
 
-  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.localName, s)
+  private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.local, s)
 
   private[namer] def bind(params: List[List[Param]]): Context = {
     params.flatten.foreach { p => bind(p) }
@@ -608,8 +654,61 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
+  private[namer] def resolveMod(id: IdRef): ModuleSymbol = {
+    // Check vor mod param
+    val sym: ModuleSymbol = scope.lookupFirstTerm(id.name) match {
+      case p: ModuleParam => p
+      case m: Module      => m
+      case _              => Context.abort(s"Failed to resolve reference to module $id")
+    }
+
+    assignSymbol(id, sym)
+    return sym
+  }
+
   private[namer] def scoped[R](block: => R): R = Context in {
     scope = scope.enter
     block
   }
+
+  /** defines new module symbol with contents of scope. */
+  private[namer] def defMod(id: IdDef)(block: => Unit): UserModule = {
+    // Create empty module
+    val mod = new UserModule(Context.module, Name.Word(id.name)) //Context.module.bind(Name(id))
+
+    // Set current module
+    Context.using(mod) {
+
+      // Open new scope
+      Context.scoped {
+        block
+
+        // Export symbols
+        mod.save(scope)
+      }
+    }
+
+    // Assign module
+    define(id, mod)
+    mod
+  }
+
+  /** recreates module scope. */
+  private[namer] def refMod[R](path: List[IdRef])(block: => R) = Context.scoped {
+    // Resolve path and assign ids
+    scope = path.foldLeft(scope) { (scp, id) =>
+      scope = scp
+      val modScope = resolveMod(id).load()
+      modScope
+    }
+
+    // load scope of last module
+    //scope = mod.load()
+
+    // run block
+    block
+  }
+
+  /** Creates a qualified name. */
+  private[namer] def name(id: Id): Name = module.name.nest(Name(id))
 }
