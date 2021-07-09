@@ -85,20 +85,6 @@ package object symbols {
       s.defineAll(trm, typ)
       return s
     }
-
-    /** Find or create submodule with given name relative to this. */
-    /*
-    def bind(name: Name): UserModule = mod(name).getOrElse {
-      name match {
-        case w: Name.Word => {
-          val m = new UserModule(this, w)
-          mods = mods.updated(w, m)
-          return m
-        }
-        case Name.Link(lft, rgt) => bind(lft).bind(rgt)
-        case _                   => throw new IllegalArgumentException()
-      }
-    }*/
   }
 
   /** User-defined module. */

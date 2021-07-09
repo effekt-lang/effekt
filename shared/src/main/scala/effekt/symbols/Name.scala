@@ -147,7 +147,6 @@ object Name {
   }
 
   /** Single Word */
-  /** use IdRef */
   case class Word(str: String) extends Name {
     def count: Int = 1
     override def toString() = str
