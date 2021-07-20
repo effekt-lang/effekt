@@ -482,7 +482,7 @@ trait LSPServer extends Driver with Intelligence {
   }
 
   def positionToLSPPosition(position: Position): LSPPosition = {
-    return new LSPPosition(position.line, position.column)
+    return new LSPPosition(position.line - 1, position.column - 1)
   }
 
   /**
@@ -494,9 +494,24 @@ trait LSPServer extends Driver with Intelligence {
    */
   case class CapabilityInfo(capabilityKind: String, capabilityName: String, sourceRange: LSPRange, scopeRange: LSPRange)
 
-  def getCapabilityBinderInfos(source: Source): Array[CapabilityInfo] = {
-    val trees = getTreeFrom(source)(context).get
-    val capabilityBinders = getCapabilityBinders(trees).toArray
+  /**
+   * Extract all Trees from sourceTrees that could possibly have a CapabilityBinder annotation
+   * @param sourceTrees
+   * @return
+   */
+  def getPossibleCapabilityBinders(sourceTrees: Vector[Tree]): Vector[Tree] = {
+    sourceTrees.collect {
+      case f: FunDef     => f
+      case th: TryHandle => th
+      case ba: BlockArg  => ba
+    }
+  }
+
+  /**
+   * extract all the CapabilityBinders from the given source, pack them in CapabilityInfos and return an array of all CapabilityInfos
+   */
+  def getCapabilityBinderInfos(trees: Vector[Tree]): Array[CapabilityInfo] = {
+    val capabilityBinders = getPossibleCapabilityBinders(trees).toArray
 
     val capabilityBinderInfos = for {
       cb: Tree <- capabilityBinders
@@ -510,19 +525,11 @@ trait LSPServer extends Driver with Intelligence {
         val argdef = context.definitionTreeOption(argsym).get
         val argStart = positionToLSPPosition(positions.getStart(argdef).get)
         val argEnd = positionToLSPPosition(positions.getFinish(argdef).get)
-        CapabilityInfo("CapabilityBinder", arg.id.name, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
+        CapabilityInfo("CapabilityBinder", arg.tpe.eff.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
       })
     }
 
     return capabilityBinderInfos.flatten
-  }
-
-  def getCapabilityBinders(sourceTrees: Vector[Tree]): Vector[Tree] = {
-    sourceTrees.collect {
-      case f: FunDef     => f
-      case th: TryHandle => th
-      case ba: BlockArg  => ba
-    }
   }
 
   def getFunctionCalls(sourceTrees: Vector[Tree]): Vector[Call] = {
@@ -532,11 +539,33 @@ trait LSPServer extends Driver with Intelligence {
   }
 
   /**
+   * extract all the CapabilityReceivers from the given source, pack them in CapabilityInfos and return an array of all CapabilityInfos
+   */
+  def getCapabilityReceiverInfos(trees: Vector[Tree]): Array[CapabilityInfo] = {
+    val capabilityReceivers = getFunctionCalls(trees).toArray
+
+    val capabilityReceiverInfos = for {
+      cr <- capabilityReceivers
+      z <- context.annotationOption(Annotations.CapabilityReceiver, cr)
+    } yield {
+      val callStart = positionToLSPPosition(positions.getStart(cr).get)
+      val callEnd = positionToLSPPosition(positions.getFinish(cr).get)
+
+      val argsym = z.symbol(context)
+      val argdef = context.definitionTreeOption(argsym).get
+      val argStart = positionToLSPPosition(positions.getStart(argdef).get)
+      val argEnd = positionToLSPPosition(positions.getFinish(argdef).get)
+
+      CapabilityInfo("CapabilityReceiver", argsym.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
+    }
+
+    return capabilityReceiverInfos
+  }
+
+  /**
    * extract all the CapabilityArguments from the given source, pack them in CapabilityInfos and return an array of all CapabilityInfos
    */
-  def getCapabilityArgumentInfos(source: Source): Array[CapabilityInfo] = {
-
-    val trees = getTreeFrom(source)(context).get
+  def getCapabilityArgumentInfos(trees: Vector[Tree]): Array[CapabilityInfo] = {
     val funCalls = getFunctionCalls(trees).toArray
 
     val capabilityArgumentInfos = for {
@@ -547,11 +576,11 @@ trait LSPServer extends Driver with Intelligence {
       val callEnd = positionToLSPPosition(positions.getFinish(fc).get)
 
       ann.toArray.map(arg => {
-        val argsym = context.symbolOf(arg.id)
+        val argsym = arg.id.symbol(context)
         val argdef = context.definitionTreeOption(argsym).get
         val argStart = positionToLSPPosition(positions.getStart(argdef).get)
         val argEnd = positionToLSPPosition(positions.getFinish(argdef).get)
-        CapabilityInfo("CapabilityArgument", arg.id.name, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
+        CapabilityInfo("CapabilityArgument", argsym.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
       })
     }
 
@@ -572,39 +601,19 @@ trait LSPServer extends Driver with Intelligence {
    * - the range of the scope of the capability
    *
    * TODO:
-   * - switch argument from ExecuteCommandParams to Source
-   * - change return type
-   * - what is the scopeRange if capabilityKind is a CapabilityBinder? We could still return the scopeRange
-   *  of that tree and decide in the client whether or not to visualize the obvious.
+   * - Nothing
    */
-  def getCapabilitiesInfo(source: Source): Any = {
-    logMessage("This is a simple test!")
-    logMessage("##########\ngetCapabilitiesInfo:\n")
-    // var src = getSource(args.get(0).toString().filter(!"\"".contains(_)))
-    logMessage(source.toString())
-
-    /**
-     * Get CapabilityBinder Info
-     */
-    val binderInfos = getCapabilityBinderInfos(source)
-    binderInfos.foreach(ci => logMessage("binderInfo: " + ci.toString() + "\n"))
-    /**
-     * Get CapabilityArgument Info
-     */
-    val argumentInfos = getCapabilityArgumentInfos(source)
-    argumentInfos.foreach(ci => logMessage("argumentInfo: " + ci.toString() + "\n"))
-
-    val retval = binderInfos ++ argumentInfos
-
-    val gson = new Gson
-    return CompletableFuture.completedFuture {
-      gson.toJson(retval)
-    }
-
+  def getCapabilitiesInfo(source: Source): Array[CapabilityInfo] = {
+    val trees = getTreeFrom(source)(context).get
+    val binderInfos = getCapabilityBinderInfos(trees)
+    val argumentInfos = getCapabilityArgumentInfos(trees)
+    val receiverInfos = getCapabilityReceiverInfos(trees)
+    return binderInfos ++ argumentInfos ++ receiverInfos
   }
 
   override def executeCommand(executeCommandParams: ExecuteCommandParams): Any =
     executeCommandParams.getCommand() match {
+
       case "println" => {
         CompletableFuture.completedFuture {
           executeCommandParams.getArguments.forEach((x) => println(x.toString()))
@@ -614,7 +623,11 @@ trait LSPServer extends Driver with Intelligence {
       case "getCapabilitiesInfo" => {
         val args = executeCommandParams.getArguments()
         var src = getSource(args.get(0).toString().filter(!"\"".contains(_)))
-        return getCapabilitiesInfo(src)
+        val capabilitiesInfo = getCapabilitiesInfo(src)
+        val gson = new Gson
+        return CompletableFuture.completedFuture {
+          gson.toJson(capabilitiesInfo)
+        }
       }
 
       case "getPassedCapabilities" => {
