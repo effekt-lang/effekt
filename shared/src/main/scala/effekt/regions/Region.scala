@@ -59,6 +59,8 @@ object Region {
  */
 class RegionVar(val id: Int, val source: Tree) extends Region {
 
+  // sys.error(s"Created fresh variable ${id}")
+
   private var _region: Option[Region] = None
 
   // do not treat region variables that point to other variables as instantiated

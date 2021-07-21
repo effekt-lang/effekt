@@ -77,6 +77,22 @@ def forwards(in: Double) { prog: Num => Num / AD }: Double =
       exp(x.value),
       fresh(x.d.get * exp(x.value))))
   }
+
+def forwards2 { prog: Num => Num / AD }: (Double) => Double / {prog} =
+  fun (in: Double) {
+    try { prog(Num(in, fresh(1.0))).d.get } with AD {
+      def num(v)    = resume(Num(v, fresh(0.0)))
+      def add(x, y) = resume(Num(
+        x.value + y.value,
+        fresh(x.d.get + y.d.get)))
+      def mul(x, y) = resume(Num(
+        x.value * y.value,
+        fresh(x.d.get * y.value + y.d.get * x.value)))
+      def exp(x) = resume(Num(
+        exp(x.value),
+        fresh(x.d.get * exp(x.value))))
+    }
+  }
 ```
 Except for the wrapping and unwrapping of the references, the definition
 of `add`, `mul` and `exp` are exactly the ones we would expect from a text book.
