@@ -1,0 +1,35 @@
+effect Raise(): Unit
+
+// Annotating the return type here prevents substitution to work
+// at the call site because it leads to a unification error.
+//
+// The problem is that, even if we create fresh unification variables,
+// we will pre-instantiate them with {selftest}.
+// Then the assignment at `val f` introduces the unification constraint:
+// {main} =!= {selftest}, which is not true BEFORE substitution, but true
+// AFTER substitution (in the region checker).
+//
+// So eventually, the attempt to unify at the beginning of the region checker
+// will cause a problem.
+def selftest() // : () => Int / { selftest }
+  = {
+  var x = 42
+  fun() { x }
+}
+
+
+def main() = {
+
+  val f: () => Int / {main} = selftest();
+
+  var pureCont : () => Int / { main } = fun() { 0 };
+
+  try { 42 } at { main } with Raise { def Raise() =
+   pureCont = fun() { resume(()) };
+   resume(())
+  };
+  pureCont = fun() { 0 };
+  pureCont = f;
+  ()
+
+}

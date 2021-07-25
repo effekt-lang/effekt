@@ -1,0 +1,34 @@
+module examples/pos/lambdas/namedcaps
+
+effect Yield {
+  def yield(): Unit
+}
+
+def repeater { f: Unit }: (Int) => Unit / {f} = {
+  def rec(n: Int): Unit = if (n == 0) { f() } else rec(n - 1)
+  fun(n: Int) { rec(n) }
+}
+
+// (1) Type checking (Introducing constraints and unification variables)
+// (2) Region checking (poten. unifying...)
+def main() =
+  try {
+    // this causes a unifaction of 
+    //   g: (Int) => Unit / {y}
+    // and the return type of repeater
+    //   (Int) => Unit / {f} 
+    // BEFORE we actually substitute f, giving us {y} != {f}
+    //
+    // {y} =:= {f}
+    // ?R := {f}
+    // {y} =:= ?R
+
+    // {y} =:= {?f}
+    val g: (Int) => Unit / {y}  = repeater { yield(); println("hello") }; // (Int) => Unit / ?R
+
+    g(1)
+  } with y: Yield {
+    def yield() = { println("yielded"); resume(()) }
+  }
+
+  

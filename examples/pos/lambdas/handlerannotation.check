@@ -1,0 +1,3 @@
+[warning] examples/pos/lambdas/handlerannotation.effekt:27:3: Handling effects that are not used: Raise
+  try { 42 } at { main } with Raise { def Raise() =
+  ^
