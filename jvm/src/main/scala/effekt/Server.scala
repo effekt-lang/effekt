@@ -517,6 +517,16 @@ trait LSPServer extends Driver with Intelligence {
       cb: Tree <- capabilityBinders
       ann <- context.annotationOption(Annotations.CapabilityBinder, cb)
     } yield {
+
+      // logMessage("CapabilityBinder found: " + cb.toString())
+      // val binder = cb match {
+      //   case f: FunDef    => Some(f.id)
+      //   case t: TryHandle => Some(t)
+      //   case ba: BlockArg => Some(ba)
+      //   case _            => None
+      // }
+
+      // logMessage("Binder is: " + binder.get)
       val callStart = positionToLSPPosition(positions.getStart(cb).get)
       val callEnd = positionToLSPPosition(positions.getFinish(cb).get)
 
@@ -556,7 +566,7 @@ trait LSPServer extends Driver with Intelligence {
       val argStart = positionToLSPPosition(positions.getStart(argdef).get)
       val argEnd = positionToLSPPosition(positions.getFinish(argdef).get)
 
-      CapabilityInfo("CapabilityReceiver", argsym.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
+      CapabilityInfo("CapabilityReceiver", argsym.asInstanceOf[CapabilityParam].tpe.eff.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
     }
 
     return capabilityReceiverInfos
@@ -572,15 +582,14 @@ trait LSPServer extends Driver with Intelligence {
       fc: Call <- funCalls: Array[Call]
       ann: List[CapabilityArg] <- context.annotationOption(Annotations.CapabilityArguments, fc): Option[List[CapabilityArg]]
     } yield {
-      val callStart = positionToLSPPosition(positions.getStart(fc).get)
-      val callEnd = positionToLSPPosition(positions.getFinish(fc).get)
-
       ann.toArray.map(arg => {
+        val callStart = positionToLSPPosition(positions.getStart(fc).getOrElse({ println("No position for " + fc.toString()); new Position(1, 1, StringSource("")); }))
+        val callEnd = positionToLSPPosition(positions.getFinish(fc).get)
         val argsym = arg.id.symbol(context)
         val argdef = context.definitionTreeOption(argsym).get
         val argStart = positionToLSPPosition(positions.getStart(argdef).get)
         val argEnd = positionToLSPPosition(positions.getFinish(argdef).get)
-        CapabilityInfo("CapabilityArgument", argsym.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
+        CapabilityInfo("CapabilityArgument", argsym.asInstanceOf[CapabilityParam].tpe.eff.name.localName, new LSPRange(callStart, callEnd), new LSPRange(argStart, argEnd))
       })
     }
 
@@ -701,12 +710,13 @@ trait LSPServer extends Driver with Intelligence {
       //showMessage(MessageType.Info, symbol.getName())
       args.add(symbol.getRange())
       this.registerCapability("Infer or remove return type and effects", "println", args)
-      Some(new TreeLens(
-        "Fix or unfix function by adding or removing inferred return type and effects.",
-        new Command(symbol.getDetail() + " - Infer / remove ret-type & effects", "println", args),
-        //      new Command("Fix/unfix return type and effects", "testCommand"),
-        symbol.getRange()
-      ))
+      // Some(new TreeLens(
+      //   "Fix or unfix function by adding or removing inferred return type and effects.",
+      //   new Command(symbol.getDetail() + " - Infer / remove ret-type & effects", "println", args),
+      //   //      new Command("Fix/unfix return type and effects", "testCommand"),
+      //   symbol.getRange()
+      // ))
+      None
     }
     case _ => None
   }
