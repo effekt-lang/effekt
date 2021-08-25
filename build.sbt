@@ -60,8 +60,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
   .jvmSettings(
     libraryDependencies ++= Seq(
       "org.rogach" %% "scallop" % "3.4.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.4.0-SNAPSHOT",
-      "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.4.0-SNAPSHOT",
+      "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.6.0-SNAPSHOT",
+      "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.6.0-SNAPSHOT",
       "org.scala-sbt" %% "io" % "1.3.1" % "test",
       "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
     ),
