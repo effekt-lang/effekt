@@ -6,42 +6,12 @@ import effekt.source.{ FunDef, Hole, Tree }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind, ExecuteCommandParams }
-import org.eclipse.lsp4j.CodeLens
-import org.eclipse.lsp4j.Command
-import scala.collection.immutable.Vector0
 import org.bitbucket.inkytonik.kiama.util.StringSource
-import effekt.source.NoSource
 import java.util.ArrayList
 import java.util.concurrent.CompletableFuture
-import scala.concurrent.Future
 import effekt.context.Annotations
-import org.eclipse.lsp4j.MessageType
-import com.google.gson.JsonObject
 import effekt.context.Annotation
 import com.google.gson.Gson
-import scala.collection.immutable.Vector1
-import effekt.source.{
-  Call,
-  Operation,
-  ArgSection,
-  ValueArgs,
-  IntLit,
-  Expr,
-  BooleanLit,
-  StringLit,
-  DoubleLit,
-  UnitLit,
-  Var,
-  ExprTarget,
-  IdTarget,
-  MemberTarget,
-  IdRef,
-  BlockArg,
-  TryHandle,
-  Handler,
-  CapabilityArg
-}
-import effekt.context.assertions.SymbolAssertions
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -222,9 +192,9 @@ trait LSPServer extends Driver with Intelligence {
    */
   def getPossibleCapabilityBinders(sourceTrees: Vector[Tree]): Vector[Tree] = {
     sourceTrees.collect {
-      case f: FunDef     => f
-      case th: TryHandle => th
-      case ba: BlockArg  => ba
+      case f: source.FunDef     => f
+      case th: source.TryHandle => th
+      case ba: source.BlockArg  => ba
     }
   }
 
@@ -253,9 +223,9 @@ trait LSPServer extends Driver with Intelligence {
     return capabilityBinderInfos.flatten
   }
 
-  def getFunctionCalls(sourceTrees: Vector[Tree]): Vector[Call] = {
+  def getFunctionCalls(sourceTrees: Vector[Tree]): Vector[source.Call] = {
     sourceTrees.collect {
-      case c: Call => c
+      case c: source.Call => c
     }
   }
 
@@ -290,8 +260,8 @@ trait LSPServer extends Driver with Intelligence {
     val funCalls = getFunctionCalls(trees).toArray
 
     val capabilityArgumentInfos = for {
-      fc: Call <- funCalls: Array[Call]
-      ann: List[CapabilityArg] <- context.annotationOption(Annotations.CapabilityArguments, fc): Option[List[CapabilityArg]]
+      fc: source.Call <- funCalls: Array[source.Call]
+      ann: List[source.CapabilityArg] <- context.annotationOption(Annotations.CapabilityArguments, fc): Option[List[source.CapabilityArg]]
     } yield {
       ann.toArray.map(arg => {
         val callStart = positionToLSPPosition(positions.getStart(fc).getOrElse({ println("No position for " + fc.toString()); new Position(1, 1, StringSource("")); }))
@@ -391,7 +361,6 @@ trait LSPServer extends Driver with Intelligence {
     case SymbolKind.Method => {
       val args = new ArrayList[Object]();
       args.add(symbol.getName())
-      //showMessage(MessageType.Info, symbol.getName())
       args.add(symbol.getRange())
       this.registerCapability("Infer or remove return type and effects", "println", args)
       // Some(new TreeLens(
@@ -413,40 +382,40 @@ trait LSPServer extends Driver with Intelligence {
     } yield action)
 
   def action(tree: Tree)(implicit C: Context): Option[Vector[TreeAction]] = tree match {
-    case f: FunDef => inferEffectsAction(f) match {
+    case f: source.FunDef => inferEffectsAction(f) match {
       case Some(ta) => Some(Vector(ta))
       case None     => None
     }
-    case h: Hole => closeHoleAction(h) match {
+    case h: source.Hole => closeHoleAction(h) match {
       case Some(ta) => Some(Vector(ta))
       case None     => None
     }
-    case c: Call => addEffectHandlerActions(c)
-    case _       => None
+    case c: source.Call => addEffectHandlerActions(c)
+    case _              => None
   }
 
-  def expressionsToString(args: List[Expr])(implicit C: Context): String = {
+  def expressionsToString(args: List[source.Expr])(implicit C: Context): String = {
     var res = args.map(arg => arg match {
-      case IntLit(value)     => value.toString()
-      case BooleanLit(value) => value.toString()
-      case StringLit(value)  => "\"" + value.toString() + "\""
-      case DoubleLit(value)  => value.toString()
-      case UnitLit()         => "()"
-      case Var(id)           => id.name
-      case c: Call           => callToString(c)(C)
-      case z @ _             => z.toString()
+      case source.IntLit(value)     => value.toString()
+      case source.BooleanLit(value) => value.toString()
+      case source.StringLit(value)  => "\"" + value.toString() + "\""
+      case source.DoubleLit(value)  => value.toString()
+      case source.UnitLit()         => "()"
+      case source.Var(id)           => id.name
+      case c: source.Call           => callToString(c)(C)
+      case z @ _                    => z.toString()
     })
     res.mkString(", ")
   }
 
-  def callToString(call: Call)(implicit C: Context) = {
+  def callToString(call: source.Call)(implicit C: Context) = {
     var callString = ""
     call.target match {
-      case e @ ExprTarget(receiver) => logMessage("Unhandled: " + e.toString())
-      case i @ IdTarget(id) => {
+      case e @ source.ExprTarget(receiver) => logMessage("Unhandled: " + e.toString())
+      case i @ source.IdTarget(id) => {
         callString += id.name
       }
-      case m @ MemberTarget(receiver, id) => logMessage("Unhandled: " + m.toString())
+      case m @ source.MemberTarget(receiver, id) => logMessage("Unhandled: " + m.toString())
     }
 
     callString += "("
@@ -454,8 +423,8 @@ trait LSPServer extends Driver with Intelligence {
     val args = call.args.map(arg => {
       logMessage("arg: " + arg.toString())
       arg match {
-        case ValueArgs(args) => expressionsToString(args)(C)
-        case _               =>
+        case source.ValueArgs(args) => expressionsToString(args)(C)
+        case _ =>
       }
     })
     callString += args.mkString(", ")
@@ -468,7 +437,7 @@ trait LSPServer extends Driver with Intelligence {
    * Create a vector of TreeActions for a call that introduces an effect.
    * A resulting code action would be the introduction of an effect handler.
    */
-  def addEffectHandlerActions(c: Call)(implicit C: Context): Option[Vector[TreeAction]] = {
+  def addEffectHandlerActions(c: source.Call)(implicit C: Context): Option[Vector[TreeAction]] = {
     logMessage("Adding effect handler Action")
 
     var pos = C.positions.getStart(c).getOrElse(return None)
@@ -480,7 +449,7 @@ trait LSPServer extends Driver with Intelligence {
 
     rec match {
       case None => ()
-      case Some(capabilityID) => {
+      case Some(capabilityID: source.IdRef) => {
 
         var startPos = positions.getStart(c).get
         var endPos = positions.getFinish(c).get
@@ -507,7 +476,7 @@ trait LSPServer extends Driver with Intelligence {
 
     ann match {
       case None => None
-      case Some(capabilityArguments) => {
+      case Some(capabilityArguments: List[source.CapabilityArg]) => {
         logMessage("Capability arguments: " + ann.toString())
         actions = actions ++ capabilityArguments.map(capability => {
           var startPos = positions.getStart(c).get
@@ -577,12 +546,12 @@ trait LSPServer extends Driver with Intelligence {
     (contentTpe / _) <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
-      case Hole(source.Return(exp)) => for {
+      case source.Hole(source.Return(exp)) => for {
         text <- positions.textOf(exp)
       } yield TreeAction("Close hole", pos.source.name, hole, text)
 
       // <{ s1 ; s2; ... }>
-      case Hole(stmts) => for {
+      case source.Hole(stmts) => for {
         text <- positions.textOf(stmts)
       } yield TreeAction("Close hole", pos.source.name, hole, s"locally { ${text} }")
     }
