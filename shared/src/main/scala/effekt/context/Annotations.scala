@@ -69,7 +69,7 @@ object Annotations {
    * Can also be used by LSP server to display type information for type-checked trees
    */
   // TODO rename to Type
-  val TypeAndEffect = Annotation[source.Tree, symbols.ValueType](
+  val InferredType = Annotation[source.Tree, symbols.ValueType](
     "Type",
     "the inferred type of"
   )
@@ -237,7 +237,7 @@ trait AnnotationsDB { self: Context =>
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[ValueType] =
-    annotationOption(Annotations.TypeAndEffect, t)
+    annotationOption(Annotations.InferredType, t)
 
   def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
