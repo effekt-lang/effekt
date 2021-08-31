@@ -74,11 +74,7 @@ trait Compiler {
    * (4) Code Generation
    */
   def codeGenerator(implicit C: Context) = C.config.generator() match {
-    case "js"           => new effekt.generator.JavaScript
-    case "js-lift"      => new effekt.generator.JavaScriptLift
-    case "chez-callcc"  => new effekt.generator.ChezSchemeCallCC
-    case "chez-monadic" => new effekt.generator.ChezSchemeMonadic
-    case "chez-lift"    => new effekt.generator.ChezSchemeLift
+    case "js" => new effekt.generator.JavaScript
   }
 
   // Tasks
