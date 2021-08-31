@@ -1,3 +1,0 @@
-[error] examples/neg/lambdas/inference.effekt:13:12: Expected Boolean, but got Unit
-  hof2(fun(f: (Int) => Unit) { "" })
-           ^^^^^^^^^^^^^^^^
