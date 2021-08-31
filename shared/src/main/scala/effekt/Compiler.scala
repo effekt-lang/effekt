@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{ LiftInference, Transformer }
+import effekt.core.{ Transformer }
 import effekt.namer.Namer
 import effekt.regions.RegionChecker
 import effekt.source.{ CapabilityPassing, ModuleDecl }
@@ -65,10 +65,7 @@ trait Compiler {
    * (3) Backend
    */
   object transformer extends Transformer
-  val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List(
-    // optional phase, only run for `Config.requiresLift`
-    new LiftInference
-  )
+  val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List()
 
   /**
    * (4) Code Generation
