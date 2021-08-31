@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.util.messages.ErrorReporter
-import kiama.util.Memoiser
+import kiama.util.{ Memoiser, Source }
 
 case class Annotation[K, V](name: String, description: String) {
   type Value = V
@@ -63,14 +63,32 @@ object Annotations {
   }
 
   /**
-   * The type and effect as inferred by typer at a given position in the tree
+   * The type as inferred by typer at a given position in the tree
    *
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val InferredType = Annotation[source.Tree, symbols.Effectful](
-    "InferredType",
-    "the inferred type and effect of"
+  val InferredValueType = Annotation[source.Tree, symbols.ValueType](
+    "ValueType",
+    "the inferred value type of"
+  )
+
+  val InferredBlockType = Annotation[source.Tree, symbols.BlockType](
+    "BlockType",
+    "the inferred block type of"
+  )
+
+  val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
+    "CaptureSet",
+    "the inferred capture of"
+  )
+
+  /**
+   * Used by LSP to list all captures
+   */
+  val CaptureForFile = Annotation[symbols.Module, List[(source.Tree, symbols.CaptureSet)]](
+    "CaptureSet",
+    "all inferred captures for file"
   )
 
   /**
@@ -92,9 +110,19 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.InterfaceType](
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
     "BlockType",
     "the type of block symbol"
+  )
+
+  /**
+   * Block symbols are annotated with their capture set
+   *
+   * Block symbols without annotation are assumed to be tracked
+   */
+  val CaptureSet = Annotation[symbols.BlockSymbol, symbols.CaptureSet](
+    "CaptureSet",
+    "the capture set of block symbol"
   )
 
   /**
@@ -148,46 +176,10 @@ object Annotations {
     "the resolved type for"
   )
 
-  /**
-   * The blocktype of a calltarget as annotated by typer
-   */
-  val TargetType = Annotation[source.CallTarget, symbols.BlockType](
-    "TargetType",
-    "the blocktype for calltarget"
+  val Capture = Annotation[source.CaptureSet, symbols.CaptureSet](
+    "Capture",
+    "the resolved capture set for"
   )
-
-  /**
-   * The block type of a block argument as annotated by typer
-   */
-  val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
-    "BlockArgumentType",
-    "the inferred type for block argument"
-  )
-
-  /*
-   * The region a given symbol can be used in
-   */
-  val Regions = Annotation[symbols.Symbol, regions.Region](
-    "Regions",
-    "the regions associated with symbol"
-  )
-
-  /**
-   * The unifier as computed by typer when type checking the module
-   */
-  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
-    "Unifier",
-    "the unifier for module"
-  )
-
-  /**
-   * Similar to TypeAndEffect: the region of a program inferred by RegionChecker
-   */
-  val InferredRegion = Annotation[source.Tree, regions.RegionSet](
-    "InferredRegion",
-    "the inferred region for source tree"
-  )
-
 }
 
 /**
@@ -243,7 +235,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, FunctionType, BlockType, ValueSymbol, BlockSymbol, Module, CaptureSet }
 
   // Types
   // -----
@@ -251,22 +243,24 @@ trait AnnotationsDB { self: Context =>
   def typeArguments(c: source.Call): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
-  def inferredTypeOption(t: source.Tree): Option[Effectful] =
-    annotationOption(Annotations.InferredType, t)
+  def inferredTypeOption(t: source.Tree): Option[ValueType] =
+    annotationOption(Annotations.InferredValueType, t)
 
-  def inferredTypeOf(t: source.Tree): Effectful =
+  def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
-  def inferredRegion(t: source.Tree): regions.RegionSet =
-    annotation(Annotations.InferredRegion, t)
+  def inferredCaptureOption(t: source.Tree): Option[CaptureSet] =
+    annotationOption(Annotations.InferredCapture, t)
 
-  def inferredRegionOption(t: source.Tree): Option[regions.RegionSet] =
-    annotationOption(Annotations.InferredRegion, t)
+  def inferredCaptureOf(t: source.Tree): CaptureSet =
+    inferredCaptureOption(t).getOrElse {
+      panic(s"Internal Error: Missing capture of source expression: '${t}'")
+    }
 
   // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
+  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
     case _              => panic(s"Trying to store a block type for non block '${s}'")
   }
@@ -276,17 +270,44 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
 
+  def assignCaptureSet(s: Symbol, capt: CaptureSet): Unit = s match {
+    case b: BlockSymbol => annotate(Annotations.CaptureSet, b, capt)
+    case _              => panic(s"Trying to store a capture set for non block '${s}'")
+  }
+
+  def captureOf(s: Symbol): CaptureSet = captureOption(s) getOrElse panic(s"Cannot find capture set for '${s}'")
+
+  def captureOption(s: Symbol): Option[CaptureSet] = s match {
+    case b: BlockSymbol => annotationOption(Annotations.CaptureSet, b)
+    case _              => panic(s"Trying to lookup a capture set for non block '${s}'")
+  }
+
   def annotateResolvedType(tree: source.Type)(tpe: tree.resolved): Unit =
     annotate(Annotations.Type, tree, tpe)
 
   def resolvedType(tree: source.Type): tree.resolved =
     annotation(Annotations.Type, tree).asInstanceOf[tree.resolved]
 
+  def annotateResolvedCapture(tree: source.CaptureSet)(capt: tree.resolved): Unit =
+    annotate(Annotations.Capture, tree, capt)
+
+  def resolvedCapture(tree: source.CaptureSet): tree.resolved =
+    annotation(Annotations.Capture, tree)
+
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
     case s: BlockSymbol => interfaceTypeOf(s)
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
+
+  def functionTypeOf(s: Symbol): FunctionType =
+    functionTypeOption(s) getOrElse { panic(s"Cannot find function type for '${s}'") }
+
+  def functionTypeOption(s: Symbol): Option[FunctionType] =
+    blockTypeOption(s) flatMap {
+      case f: FunctionType => Some(f)
+      case _               => None
+    }
 
   def blockTypeOf(s: Symbol): BlockType =
     blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
@@ -297,22 +318,20 @@ trait AnnotationsDB { self: Context =>
         case b: BlockType => Some(b)
         case _            => None
       }
-      case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
-        v.dealias match {
-          case symbols.FunType(tpe, _) => Some(tpe)
-          case _ => None
-        }
+      case v: ValueSymbol => valueTypeOption(v).flatMap {
+        case symbols.BoxedType(tpe: BlockType, capt) => Some(tpe)
+        case _ => None
       }
     }
 
-  def interfaceTypeOf(s: Symbol): InterfaceType =
+  def interfaceTypeOf(s: Symbol): BlockType =
     interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
 
-  def interfaceTypeOption(s: Symbol): Option[InterfaceType] =
+  def interfaceTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: InterfaceType => Some(b)
-        case _                => None
+        case b: BlockType => Some(b)
+        case _            => None
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")
     }
@@ -324,22 +343,6 @@ trait AnnotationsDB { self: Context =>
     case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
-
-  // Calltargets
-  // -----------
-
-  // annotated by capability passing
-  def annotateCalltarget(t: source.CallTarget, tpe: BlockType): Unit =
-    annotate(Annotations.TargetType, t, tpe)
-
-  def blockTypeOf(t: source.CallTarget): BlockType =
-    annotation(Annotations.TargetType, t)
-
-  def blockTypeOption(t: source.CallTarget): Option[BlockType] =
-    annotationOption(Annotations.TargetType, t)
-
-  def blockTypeOf(t: source.BlockArg): BlockType =
-    annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
   // -------
@@ -409,6 +412,10 @@ trait AnnotationsDB { self: Context =>
       case s: Symbol if hasAnnotation(Annotations.SourceModule, s) => s
     }
 
+  // TODO running frontend is NOT the job of Annotations and should be moved to intelligence
+  def allCaptures(s: Source) =
+    tryModuleOf(s).flatMap { mod => annotationOption(Annotations.CaptureForFile, mod) }.getOrElse(Nil)
+
   /**
    * List all references for a symbol
    *
@@ -419,9 +426,4 @@ trait AnnotationsDB { self: Context =>
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
 
-  def annotateRegions(sym: Symbol, r: regions.Region): Unit =
-    annotate(Annotations.Regions, sym, r)
-
-  def regionOf(sym: Symbol): regions.Region =
-    annotation(Annotations.Regions, sym)
 }

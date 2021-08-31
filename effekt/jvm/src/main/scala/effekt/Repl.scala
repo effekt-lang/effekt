@@ -4,7 +4,6 @@ import effekt.source._
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
-
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, REPL, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
@@ -118,11 +117,11 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
      */
     def typecheck(source: Source, config: EffektConfig): Unit =
       parse(source) match {
-        case Success(e: Expr, _) =>
+        case Success(e: Term, _) =>
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
             val mainSym = mod.terms("main").head
-            val mainTpe = context.blockTypeOf(mainSym)
+            val mainTpe = context.functionTypeOf(mainSym)
             output.emitln(mainTpe.ret)
           }
 
@@ -182,7 +181,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
    * imports, if they typecheck.
    */
   def process(source: Source, tree: Tree, config: EffektConfig): Unit = tree match {
-    case e: Expr =>
+    case e: Term =>
       runCompiler(source, module.makeEval(e), config)
 
     case i: Import =>
@@ -316,17 +315,17 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     /**
      * Create a module declaration using the given expression as body of main
      */
-    def make(expr: Expr): ModuleDecl = {
+    def make(expr: Term): ModuleDecl = {
 
       val body = Return(expr)
 
-      ModuleDecl("interactive", Import("effekt") :: imports,
-        definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+      ModuleDecl("lib/interactive", Import("effekt") :: imports,
+        definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,
           body))
     }
 
-    def makeEval(expr: Expr): ModuleDecl =
-      make(Call(IdTarget(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
+    def makeEval(expr: Term): ModuleDecl =
+      make(Call(Var(IdRef("println")), Nil, List(expr), Nil))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

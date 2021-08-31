@@ -2,7 +2,6 @@ package effekt
 package util
 
 import effekt.source.ModuleDecl
-
 import kiama.util.Source
 
 /**

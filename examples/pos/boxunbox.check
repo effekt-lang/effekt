@@ -1,0 +1,3 @@
+[error] examples/pos/boxunbox.effekt:6:3: ';' expected but 'b' found
+  b
+  ^

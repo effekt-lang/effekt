@@ -1,3 +1,0 @@
-[error] examples/neg/variables.effekt:5:3: Expected a mutable variable
-  x = 9
-  ^

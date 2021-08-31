@@ -3,7 +3,6 @@ package generator
 
 import effekt.context.Context
 import effekt.symbols.Module
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 

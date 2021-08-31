@@ -2,12 +2,12 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.{ ModuleDecl, Tree }
-
-import kiama.util.Position
+import kiama.util.{ Position, Source }
 
 trait Intelligence {
 
   import effekt.symbols._
+  import symbols.builtins.TState
 
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
@@ -64,25 +64,21 @@ trait Intelligence {
   def getSymbolAt(position: Position)(implicit C: Context): Option[(Tree, Symbol)] = for {
     id <- getIdTreeAt(position)
     sym <- C.symbolOption(id)
-  } yield (id, resolveCallTarget(sym))
+  } yield (id, sym)
 
   def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
     (_, sym) <- getSymbolAt(position)
-    decl <- getDefinitionOf(resolveCallTarget(sym))
+    decl <- getDefinitionOf(sym)
   } yield decl
 
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
-    case u: Binder       => Some(u.decl)
-    case d: EffectOp     => C.definitionTreeOption(d.effect)
+    case u: ValBinder    => Some(u.decl)
+    case u: VarBinder    => Some(u.decl)
+    case CaptureOf(p)    => getDefinitionOf(p)
+    // case d: EffectOp     => C.definitionTreeOption(d.effect)
     case a: Anon         => Some(a.decl)
     case u               => C.definitionTreeOption(u)
-  }
-
-  // For now, only show the first call target
-  def resolveCallTarget(sym: Symbol): Symbol = sym match {
-    case t: CallTarget => t.symbols.flatten.head
-    case s             => s
   }
 
   def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
@@ -93,49 +89,35 @@ trait Intelligence {
               | | `${outerTpe}` | `${innerTpe}` |
               |""".stripMargin
 
-  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
+  // For now we only show captures of function definitions and calls to box
+  def getInferredCaptures(src: Source)(implicit C: Context): List[(Position, CaptureSet)] =
+    C.allCaptures(src).filter {
+      case (t, c) =>
+        val p = C.positions.getStart(t)
+        p.isDefined
+    }.collect {
+      case (t: source.FunDef, c) => for {
+        pos <- C.positions.getStart(t)
+      } yield (pos, c)
+      case (t: source.BlockDef, c) => for {
+        pos <- C.positions.getStart(t)
+      } yield (pos, c)
+      case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
+        pos <- C.positions.getStart(block)
+        capt <- C.inferredCaptureOption(block)
+      } yield (pos, capt)
+    }.flatten
+
+  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(sym) {
+
+    case o: Operation =>
+      SymbolInfo(o, "Operation", Some(DeclPrinter(o)), None)
 
     case b: BuiltinFunction =>
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 
     case f: UserFunction if C.blockTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
-
-    case f: BuiltinEffect =>
-      val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
-                   |but cannot be handled with `try { ... } with ${f.name} { ... }`. The return type
-                   |of the main function can still have unhandled builtin effects.
-                   |""".stripMargin
-
-      SymbolInfo(f, "Builtin Effect", None, Some(ex))
-
-    case f: EffectOp =>
-      val ex =
-        s"""|Effect operations, like `${f.name}` allow to express non-local control flow.
-            |
-            |Other than blocks, the implementation of an effect operation is provided by
-            |the closest
-            |```effekt
-            |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
-            |```
-            |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
-            |
-            |However, note that opposed to languages like Java, effect operations
-            |cannot be _captured_ in Effekt. That is, if the type of a function or block
-            |```effekt
-            |def f(): Int / {}
-            |```
-            |does not mention the effect `${f.effect.name}`, then this effect will not be
-            |handled by the handler. This is important when considering higher-order functions.
-            |""".stripMargin
-
-      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
-
-    case f: EffectAlias =>
-      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None)
-
-    case t: TypeAlias =>
-      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
     case c: Record =>
       val ex = s"""|Instances of data types like `${c.tpe}` can only store
@@ -161,39 +143,47 @@ trait Intelligence {
       SymbolInfo(c, "Block parameter", signature, Some(ex))
 
     case c: ResumeParam =>
-      val tpe = C.blockTypeOption(c)
+      val tpe = C.functionTypeOption(c)
       val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
-      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse { " " }
+      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret}`)" }.getOrElse { " " }
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound
-            |when handling effect operations.
-            |
-            |The following three types have to be the same$hint:
-            |- the return type of the operation clause
-            |- the type of the handled expression enclosed by `try { EXPR } with EFFECT { ... }`, and
-            |- the return type of the resumption.
-            |""".stripMargin
+              |when handling effect operations.
+              |
+              |The following three types have to be the same$hint:
+              |- the return type of the operation clause
+              |- the type of the handled expression enclosed by `try { EXPR } with EFFECT { ... }`, and
+              |- the return type of the resumption.
+              |""".stripMargin
 
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
     case c: ValueParam =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value parameter", signature, None)
+      SymbolInfo(c, "Value parameter", Some(s"${c.name}: ${C.valueTypeOption(c).getOrElse(c.tpe)}"), None)
+
+    case c: MatchParam if C.valueTypeOption(c).isDefined =>
+      SymbolInfo(c, "Value parameter bound by a match", Some(s"${c.name}: ${C.valueTypeOption(c).get}"), None)
 
     case c: ValBinder =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value binder", signature, None)
 
+    case c: DefBinder =>
+      val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Block binder", signature, None)
+
     case c: VarBinder =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      val signature = C.blockTypeOption(c).map {
+        case BlockTypeApp(TState, List(tpe)) => tpe
+      }.orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
 
       val ex =
         s"""|Like in other languages, mutable variable binders like `${c.name}`
             |can be modified (e.g., `${c.name} = VALUE`) by code that has `${c.name}`
             |in its lexical scope.
             |
-            |However, as opposed to other languages, variable binders in Effekt
+            |However, as opposed to other languages, variable binders
             |are stack allocated and show the right backtracking behavior in
             |combination with effect handlers.
          """.stripMargin

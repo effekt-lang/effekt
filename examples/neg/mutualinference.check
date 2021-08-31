@@ -1,0 +1,3 @@
+[error] examples/neg/mutualinference.effekt:14:24: Function type (){f: () => Unit} => (() => Unit at {?odd, f, c}) needs to be fully known -- maybe annotate the return type?
+    box { () => (unbox even { () => g() })() }
+                       ^^^^^^^^^^^^^^^^^^

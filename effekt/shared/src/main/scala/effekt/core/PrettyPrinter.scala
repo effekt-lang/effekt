@@ -22,15 +22,13 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v) => v.name.toString
-    case BlockLit(ps, body) =>
-      parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
-    case Member(b, id) =>
-      toDoc(b) <> "." <> id.name.toString
-    case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
-    case Lifted(ev, b)    => "lift" <> parens(toDoc(ev) <> comma <+> toDoc(b))
-    case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
-    case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
-    case Unbox(e)         => toDoc(e)
+    case BlockLit(vps, bps, body) =>
+      parens(hsep(vps map toDoc, comma)) <+> braces(hsep(bps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
+    case Select(b, sel) =>
+      toDoc(b) <> "." <> sel
+    case Extern(_, ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
+    case Unbox(e)            => "unbox" <+> toDoc(e)
+    case New(_, members)     => ???
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
@@ -38,28 +36,15 @@ class PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()     => "()"
-    case StringLit(s)  => "\"" + s + "\""
+    case UnitLit() => "()"
+    case StringLit(s) => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => id.name.toString
+    case ValueVar(id) => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr  => toDoc(e)
-      case b: Block => toDoc(b)
-    }, comma))
+    case PureApp(b, targs, vargs, bargs) => toDoc(b) <> parens(hsep(vargs map toDoc, comma)) <> braces(hsep(bargs map toDoc, space))
 
-    case Select(b, field) =>
-      toDoc(b) <> "." <> toDoc(field.name)
-
-    case Closure(b) => toDoc(b)
+    case Box(b) => "box" <+> toDoc(b)
   }
-
-  def argToDoc(e: Argument): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
-  }
-
-  def toDoc(s: Scope): Doc = ???
 
   def toDoc(s: Stmt): Doc =
     if (requiresBlock(s))
@@ -74,8 +59,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
       toDoc(binding) <> ";" <> line <> toDoc(body)
     case Val(id, tpe, binding, body) =>
       "val" <+> toDoc(id.name) <+> ":" <+> tpe.toString <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
-    case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case App(b, targs, vargs, bargs) =>
+      toDoc(b) <> parens(hsep(vargs map toDoc, comma)) <> braces(hsep(bargs map toDoc, comma))
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> toDocExpr(thn) <+> "else" <+> toDocExpr(els)
     case While(cond, body) =>
@@ -85,14 +70,14 @@ class PrettyPrinter extends ParenPrettyPrinter {
     // don't print exports for now
     case Exports(path, exports) =>
       emptyDoc
-    case Handle(body, hs) =>
-      // TODO pretty print correctly
-      val handlers = hs map { handler =>
-        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
-      }
-      val cs = parens("[" <> hsep(handlers, comma) <> "]")
-      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
-    case State(id, tpe, get, put, init, body) =>
+    //    case Handle(body, hs) =>
+    //      // TODO pretty print correctly
+    //      val handlers = hs map { handler =>
+    //        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+    //      }
+    //      val cs = parens("[" <> hsep(handlers, comma) <> "]")
+    //      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
+    case State(init, reg, body) =>
       "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
 
     case Match(sc, clauses) =>
@@ -112,8 +97,9 @@ class PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt): Doc = s match {
-    case Def(id, tpe, Extern(ps, body), rest) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+>
+    case Def(id, tpe, Extern(pure, ps, body), rest) =>
+      val pureString = if (pure) "pure " else ""
+      s"extern ${pureString}def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+>
         braces(nest(body) <> line) <> emptyline <> toDocStmt(rest)
 
     case Def(id, tpe, b, rest) =>
@@ -123,9 +109,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
       val cs = ctors.map { id => toDoc(id.name) }
       "type" <+> toDoc(did.name) <> parens(hsep(cs, ",")) <> emptyline <> toDocStmt(rest)
 
-    case Record(did, fields, rest) =>
-      val fs = fields.map { f => toDoc(f.name) }
-      "record" <+> toDoc(did.name) <> parens(hsep(fs, ",")) <> emptyline <> toDocStmt(rest)
+    // TODO generate code
+    case Interface(id, ops, rest) => toDocStmt(rest)
 
     // for now, don't print includes
     case Include(contents, rest) =>

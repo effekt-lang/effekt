@@ -5,25 +5,40 @@ package typer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.context.assertions.SymbolAssertions
-import effekt.regions.Region
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
+import effekt.context.assertions._
+import effekt.source.{ AnyPattern, Def, MutualStmt, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree }
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.symbols.kinds._
-import effekt.util.messages.FatalPhaseError
-import kiama.util.Messaging.Messages
 
 /**
- * Output: the types we inferred for function like things are written into "types"
- *   - Blocks
- *   - Functions
- *   - Resumptions
+ * Typechecking
+ * ============
  *
- *  Also annotates every lambda with a fresh region variable and collects equality constraints
- *  between regions
+ * Preconditions:
+ * --------------
+ * Typer assumes that all dependencies already have been type checked.
+ * In particular, it assumes that all definitions / symbols (functions, parameters etc.)
+ * have been annotated with a type: this models a (global) typing context.
+ *
+ * Postconditions:
+ * ---------------
+ * All trees will be annotated with intermediate types (and effects). This is useful for
+ * IDE support.
+ * Also, after type checking, all definitions of the file will be annotated with their type.
  */
+case class TyperResult[+T](tpe: T, capt: CaptureSet)
+object / {
+  def unapply[T](t: TyperResult[T]): Option[(T, CaptureSet)] = Some((t.tpe, t.capt))
+}
+object TyperResult {
+  implicit class TypeOps[T](tpe: T) {
+    def /(capt: CaptureSet): TyperResult[T] = TyperResult(tpe, capt)
+  }
+}
+import TyperResult._
+
 class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   val phaseName = "typer"
@@ -31,20 +46,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
     val mod = Context.module
 
-    // Effects that are lexically in scope at the top level
-    val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
-    Context.initTyperstate(toplevelEffects)
+    Context.initTyperstate()
 
     Context in {
-      // We split the type-checking of definitions into "pre-check" and "check"
-      // to allow mutually recursive defs
-      module.defs.foreach { d => precheckDef(d) }
-      module.defs.foreach { d =>
-        val (_ / effs) = synthDef(d)
-        if (effs.nonEmpty)
-          Context.at(d) {
-            Context.error("Unhandled effects: " + effs)
-          }
+      Context.withUnificationScope {
+        // We split the type-checking of definitions into "pre-check" and "check"
+        // to allow mutually recursive defs
+        checkStmt(source.MutualStmt(module.defs, source.Return(source.UnitLit())))
       }
     }
 
@@ -60,10 +68,69 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   }
 
+  // checks an expression in second-class position
+  //<editor-fold desc="blocks">
+
+  def insertBoxing(expr: Term)(implicit C: Context): TyperResult[ValueType] = expr match {
+    case source.Var(id) => checkExpr(source.Box(None, source.InterfaceArg(id).inheritPosition(id)).inheritPosition(expr))
+    case _              => Context.abort("Currently automatic boxing is only supported for variables, please bind the block first.")
+  }
+
+  def insertUnboxing(expr: Term)(implicit C: Context): TyperResult[BlockType] =
+    checkExprAsBlock(source.Unbox(expr).inheritPosition(expr))
+
+  /**
+   * We defer checking whether something is first-class or second-class to Typer now.
+   */
+  def checkExprAsBlock(expr: Term)(implicit C: Context): TyperResult[BlockType] =
+    checkBlock(expr) {
+      case source.Unbox(expr) =>
+        val vtpe / capt1 = checkExpr(expr)
+        // TODO here we also need unification variables for block types!
+        // C.unify(tpe, BoxedType())
+        vtpe match {
+          case BoxedType(btpe, capt2) => btpe / (capt1 ++ capt2)
+          case _ => Context.abort(s"Unbox requires a boxed type, but got $vtpe")
+        }
+
+      case source.Var(id) => id.symbol match {
+        case b: BlockSymbol =>
+          val (tpe, capt) = Context.lookup(b)
+          tpe / capt
+        case e: ValueSymbol => insertUnboxing(expr)
+      }
+
+      case s @ source.Select(expr, selector) =>
+        checkExprAsBlock(expr) match {
+          case ((i @ InterfaceType(interface, targs)) / capt) =>
+            // (1) find the operation
+            // try to find an operation with name "selector"
+            val op = interface.ops.collect {
+              case op if op.name.name == selector.name => op
+            } match {
+              case Nil      => Context.at(s) { Context.abort(s"Cannot select ${selector.name} in type ${i}") }
+              case List(op) => op
+              case _        => Context.at(s) { Context.abort(s"Multiple operations match ${selector.name} in type ${i}") }
+            }
+            // assign the resolved operation to the identifier
+            Context.assignSymbol(selector, op)
+
+            // (2) substitute type arguments
+            val tsubst = (interface.tparams zip targs).toMap
+            tsubst.substitute(op.toType) / capt
+
+          case _ => Context.abort(s"Selection requires an interface type.")
+        }
+
+      case _ => Context.abort(s"Expected something of a block type.")
+    }
+
+  //</editor-fold>
+
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): Effectful =
-    checkAgainst(expr, expected) {
+  def checkExpr(expr: Term)(implicit C: Context): TyperResult[ValueType] =
+    check(expr) {
       case source.IntLit(n)     => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
       case source.UnitLit()     => TUnit / Pure
@@ -71,206 +138,269 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case source.StringLit(s)  => TString / Pure
 
       case source.If(cond, thn, els) =>
-        val (cndTpe / cndEffs) = cond checkAgainst TBoolean
-        val (thnTpe / thnEffs) = checkStmt(thn, expected)
-        val (elsTpe / elsEffs) = els checkAgainst thnTpe
+        val cndTpe / cndCapt = cond checkAgainst TBoolean
+        val thnTpe / thnCapt = checkStmt(thn)
+        val elsTpe / elsCapt = checkStmt(els)
 
-        thnTpe / (cndEffs ++ thnEffs ++ elsEffs)
+        Context.unify(thnTpe, elsTpe)
+
+        thnTpe / (cndCapt ++ thnCapt ++ elsCapt)
 
       case source.While(cond, block) =>
-        val (_ / condEffs) = cond checkAgainst TBoolean
-        val (_ / blockEffs) = block checkAgainst TUnit
-        TUnit / (condEffs ++ blockEffs)
+        val _ / cndCapt = cond checkAgainst TBoolean
+        val _ / blkCapt = block checkAgainst TUnit
+        TUnit / (cndCapt ++ blkCapt)
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
-        case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
-        case e: ValueSymbol => Context.valueTypeOf(e) / Pure
+        case b: VarBinder => Context.lookup(b) match {
+          case (BlockTypeApp(TState, List(tpe)), capt) => tpe / capt
+          case _ => Context.panic(s"Builtin state cannot be typed.")
+        }
+        case b: BlockSymbol => insertBoxing(expr)
+        case x: ValueSymbol => Context.lookup(x) / Pure
       }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
-        TUnit / eff
+        val stTpe / stCapt = Context.lookup(sym) match {
+          case (BlockTypeApp(TState, List(tpe)), capt) => tpe / capt
+          case _ => Context.panic(s"Builtin state cannot be typed.")
+        }
+        val _ / exprCapt = expr checkAgainst stTpe
 
-      // TODO share code with FunDef
-      case l @ source.Lambda(id, params, body) =>
-        val sym = l.symbol
-        // currently expects params to be fully annotated
-        Context.define(sym.params)
+        TUnit / (stCapt ++ exprCapt)
 
-        expected match {
-          case Some(exp @ FunType(BlockType(_, ps, ret / effs), reg)) =>
-            checkAgainstDeclaration("lambda", ps, params)
-            val (retGot / effsGot) = body checkAgainst ret
-            Context.unify(ret, retGot)
+      case source.Box(annotatedCapt, block) =>
+        // by introducing a unification scope here, we know that `capt` cannot contain fresh unification variables.
+        val inferredTpe / inferredCapt = Context.at(block) { Context withUnificationScope { checkBlockArgument(block) } }
 
-            val diff = effsGot -- effs
+        // box { ... }  ~>  box ?C { ... }
+        val capt = annotatedCapt.map { c =>
+          val expected = c.resolve
+          C.sub(inferredCapt, expected)
+          expected
+        }.getOrElse(inferredCapt)
 
-            val reg = Region.fresh(l)
-            val got = FunType(BlockType(Nil, ps, retGot / effs), reg)
+        // If there is no annotated capture set, we simply use the inferred one. This might lead to type errors
+        // up higher.
+        BoxedType(inferredTpe, capt) / Pure
 
-            Context.unify(exp, got)
+      case source.Unbox(_) => insertBoxing(expr)
 
-            Context.assignType(sym, sym.toType(ret / effs))
-            Context.assignType(l, ret / effs)
-            Context.annotateRegions(sym, reg)
-
-            got / diff
-
-          case _ =>
-            val (ret / effs) = checkStmt(body, None)
-            Context.wellscoped(effs)
-            val ps = extractAllTypes(sym.params)
-            val tpe = BlockType(Nil, ps, ret / effs)
-
-            // we make up a fresh region variable that will be checked later by the region checker
-            val reg = Region.fresh(l)
-            val funTpe = FunType(tpe, reg)
-
-            Context.assignType(sym, sym.toType(ret / effs))
-            Context.assignType(l, ret / effs)
-            Context.annotateRegions(sym, reg)
-
-            expected.foreach { exp =>
-              Context.unify(exp, funTpe)
-            }
-
-            funTpe / Pure // all effects are handled by the function itself (since they are inferred)
+      case c @ source.Call(e, targsTree, vargs, bargs) =>
+        val funTpe / funCapt = checkExprAsBlock(e) match {
+          case TyperResult(b: FunctionType, capt) => b / capt
+          case _ => Context.abort("Callee is required to have function type")
         }
 
-      case c @ source.Call(t: source.IdTarget, targs, args) => {
-        checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
-      }
+        val targs = targsTree map { _.resolve }
 
-      case c @ source.Call(source.ExprTarget(e), targs, args) =>
-        val (funTpe / funEffs) = checkExpr(e, None)
+        // (1) Instantiate blocktype
+        // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+        // TODO: do something about capture params
+        val (trigids, crigids, bt @ FunctionType(_, _, vparams, bparams, ret)) = Context.instantiate(funTpe)
 
-        val tpe: BlockType = funTpe.dealias match {
-          case f: FunType => f.tpe
-          case _          => Context.abort(s"Expected function type, but got ${funTpe}")
+        // (2) Wellformedness -- check arity
+        if (targs.nonEmpty && targs.size != trigids.size)
+          Context.abort(s"Wrong number of type arguments ${targs.size}")
+
+        if (vparams.size != vargs.size)
+          Context.error(s"Wrong number of value arguments, given ${vargs.size}, but function expects ${vparams.size}.")
+
+        if (bparams.size != bargs.size)
+          Context.error(s"Wrong number of block arguments, given ${bargs.size}, but function expects ${bparams.size}.")
+
+        // (3) Unify with provided type arguments, if any.
+        if (targs.nonEmpty) {
+          (trigids zip targs) map { case (r, a) => Context.unify(r, a) }
         }
-        val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, args, expected)
-        t / (eff ++ funEffs)
 
-      case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
-        Context.panic("Method call syntax not allowed in source programs.")
+        var argCapt = Pure
+        (vparams zip vargs) foreach {
+          case (paramType, arg) =>
+            val _ / capt = arg checkAgainst paramType
+            argCapt ++= capt
+        }
+        (bparams zip bargs zip crigids) foreach {
+          case ((paramType, arg), cvar) =>
+            val got / capt = checkBlockArgument(arg)
+            C.unify(paramType, got)
+
+            // here we use unify, not sub since this really models substitution
+            C.unify(capt, cvar)
+            argCapt ++= capt
+        }
+
+        ret / (funCapt ++ argCapt)
+
+      // TODO implement properly
+      case d @ source.Region(id, body) =>
+        val param = d.symbol
+        val capt = CaptureSet(CaptureOf(param))
+
+        Context.bind(param)
+        Context.withRegion(capt) {
+          // unification scope is important here to be able to check escaping
+          val tpe / bodyCapt = Context.withUnificationScope { checkStmt(body) }
+          checkNonEscape(capt, d, tpe)
+          tpe / (bodyCapt -- capt)
+        }
 
       case source.TryHandle(prog, handlers) =>
 
-        val (ret / effs) = checkStmt(prog, expected)
+        val capabilityParams = handlers.map { h => h.capability.symbol }
 
-        var effects: List[symbols.Effect] = Nil
+        // the current region is delimited by this handler
+        val lexical = CaptureSet(capabilityParams map CaptureOf)
 
-        var handlerEffs = Pure
-
-        handlers foreach Context.withFocus { h =>
-          val effect: Effect = h.effect.resolve
-
-          if (effects contains effect) {
-            Context.error(s"Effect ${effect} is handled twice.")
-          } else {
-            effects = effects :+ effect
-          }
-
-          val effectSymbol: UserEffect = h.definition
-
-          val tparams = effectSymbol.tparams
-          val targs = h.effect.tparams.map(_.resolve)
-
-          val covered = h.clauses.map { _.definition }
-          val notCovered = effectSymbol.ops.toSet -- covered.toSet
-
-          if (notCovered.nonEmpty) {
-            val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-            Context.error(s"Missing definitions for effect operations: ${explanation}")
-          }
-
-          if (covered.size > covered.distinct.size) {
-            Context.error(s"Duplicate definitions of effect operations")
-          }
-
-          h.clauses foreach Context.withFocus {
-            case d @ source.OpClause(op, params, body, resume) =>
-              val effectOp = d.definition
-
-              // (1) Instantiate block type of effect operation
-              val (rigids, BlockType(tparams, pms, tpe / effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
-
-              // (2) unify with given type arguments for effect (i.e., A, B, ...):
-              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-              //     The parameters C, D, ... are existentials
-              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
-              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
-
-              // (3) substitute what we know so far
-              val substPms = Context.unifier substitute pms
-              val substTpe = Context.unifier substitute tpe
-              val substEffs = Context.unifier substitute effectOp.otherEffects
-
-              // (4) check parameters
-              val ps = checkAgainstDeclaration(op.name, substPms, params)
-
-              // (5) synthesize type of continuation
-              val resumeType = if (effectOp.isBidirectional) {
-                // resume { e }
-                BlockType(Nil, List(List(BlockType(Nil, List(Nil), substTpe / substEffs))), ret / Pure)
-              } else {
-                // resume(v)
-                BlockType(Nil, List(List(substTpe)), ret / Pure)
-              }
-
-              Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
-                val (_ / heffs) = body checkAgainst ret
-                handlerEffs = handlerEffs ++ heffs
-
-                val typesInEffects = freeTypeVars(heffs)
-                existentials.foreach { t =>
-                  if (typesInEffects.contains(t)) {
-                    Context.error(s"Type variable ${t} escapes its scope as part of the effect types: $heffs")
-                  }
-                }
-              }
+        // (1) create new unification scope and check handled program (`prog`) with capabilities in scope
+        val ret / bodyCapt = Context.at(prog) {
+          Context.withUnificationScope {
+            // bind capability types in type environment
+            capabilityParams foreach Context.bind
+            Context.withRegion(lexical) { checkStmt(prog) }
           }
         }
 
-        val unusedEffects = Effects(effects) -- effs
+        val boundCaptures: Set[Capture] = capabilityParams.map(CaptureOf).toSet
 
-        if (unusedEffects.nonEmpty)
-          Context.warning("Handling effects that are not used: " + unusedEffects)
+        // subtract capability from inferred capture Cp. Outer unification variables cannot possibly contain the fresh capability.
+        val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(boundCaptures)
 
-        ret / ((effs -- Effects(effects)) ++ handlerEffs)
+        // check that none of the bound capabilities escapes through the return type
+        checkNonEscape(CaptureSet(boundCaptures), prog, ret)
 
-      case source.MatchExpr(sc, clauses) =>
+        // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
+        Context.withUnificationScope {
+
+          var handlerCapt = Pure
+
+          // the capture variable for the continuation ?Ck
+          val resumeCapture = C.freshCaptVar(CaptureParam(LocalName("$resume")))
+
+          // Check all handler bodies and collect all inferred capture sets Ch
+          handlers foreach Context.withFocus { h =>
+            // try { ... } with s: >>>State[Int]<<< { ... }
+            val annotatedType @ InterfaceType(interface, targs) = h.capability.symbol.tpe.asInterfaceType
+
+            val tparams = interface.tparams
+            val tsubst = (tparams zip targs).toMap
+
+            // (3) check all operations are covered
+            val covered = h.clauses.map { _.definition }
+            val notCovered = interface.ops.toSet -- covered.toSet
+
+            if (notCovered.nonEmpty) {
+              val explanation = notCovered.map { op => s"${op.name} of interface ${op.interface.name}" }.mkString(", ")
+              Context.error(s"Missing definitions for operations: ${explanation}")
+            }
+
+            if (covered.size > covered.distinct.size)
+              Context.error(s"Duplicate definitions of operations")
+
+            // (4) actually check each clause
+            h.clauses foreach Context.withFocus {
+              // TODO what is with type parameters of operation clauses?
+              case d @ source.OpClause(op, tparams, vparams, body, resume) =>
+
+                val declaration = d.definition
+
+                // (4a) the effect operation might refer to type parameters of the interface
+                //   i.e. interface Foo[A] { def bar[B](a: A): B }
+                //
+                // at the handle site, we might have
+                //   try { ... } with f: Foo[Int] { def bar[C](a: Int): C }
+                //
+                // So as a first step, we need to obtain the function type of the declaration bar:
+                //   bar: [B](a: A) -> B
+                // and substitute { A -> Int}
+                //   barSubstituted: [B](a: Int) -> B
+                // TODO: do something about capture set
+                val FunctionType(tparams1, cparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
+
+                // (4b) check the body of the clause
+                val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
+                val vparamSyms = vparams.map { p => p.symbol }
+
+                vparamSyms foreach Context.bind
+
+                // TODO add constraints on resume capture
+                val resumeType = FunctionType(Nil, Nil, List(ret1), Nil, ret)
+                val resumeSym = Context.symbolOf(resume).asBlockSymbol
+
+                Context.bind(resumeSym, resumeType, CaptureSet(resumeCapture))
+
+                // TODO does this need to be a fresh unification scope?
+                val opRet / opCapt = Context in { body checkAgainst ret }
+                handlerCapt ++= opCapt
+
+                // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
+                /** TODO: do something about capture set parameters */
+                val inferredTpe = FunctionType(tparamSyms, Nil, vparamSyms.map { Context.lookup }, Nil, opRet)
+                val expectedTpe = FunctionType(tparams1, cparams1, vparams1, bparams1, ret)
+
+                Context.unify(inferredTpe, expectedTpe)
+            }
+          }
+
+          // Ck = (Cp - cap) union (UNION Ch)
+          val residualCapt = bodyCaptWithoutCapabilities ++ handlerCapt
+          C.unify(CaptureSet(resumeCapture), residualCapt)
+
+          ret / residualCapt
+        }
+
+      case source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
-        val (tpe / effs) = checkExpr(sc, None)
+        val scTpe / scCapt = Context.withUnificationScope { checkExpr(sc) }
+
+        var capt = scCapt
 
         // (2) check exhaustivity
-        checkExhaustivity(tpe, clauses.map { _.pattern })
+        checkExhaustivity(scTpe, clauses.map { _.pattern })
 
         // (3) infer types for all clauses
-        val (fstTpe, _) :: tpes = clauses.map {
+        // TODO here we would need multi arity constraints!
+        val (firstTpe / firstCapt, firstTree) :: clauseTpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
-            Context.define(checkPattern(tpe, p)) in {
-              (checkStmt(body, expected), body)
+            val res = Context.withUnificationScope {
+              Context in {
+                Context.bind(checkPattern(scTpe, p))
+                checkStmt(body)
+              }
             }
+            (res, body)
         }
+
+        capt ++= firstCapt
 
         // (4) unify clauses and collect effects
-        val (tpeCases / effsCases) = tpes.foldLeft(fstTpe) {
-          case (expected / effs, (clauseTpe / clauseEffs, tree)) =>
-            Context.at(tree) { Context.unify(expected, clauseTpe) }
-            expected / (effs ++ clauseEffs)
+        clauseTpes foreach {
+          case (clauseTpe / clauseCapt, tree) =>
+            capt ++= clauseCapt
+            Context.at(tree) { Context.unify(firstTpe, clauseTpe) }
         }
-        tpeCases / (effsCases ++ effs)
+
+        firstTpe / capt
+
+      case source.Select(_, _) =>
+        insertBoxing(expr)
 
       case source.Hole(stmt) =>
-        val tpe / effs = checkStmt(stmt, None)
-        expected.getOrElse(THole) / Pure
+        checkStmt(stmt)
+        THole / Pure
     }
+
+  def checkNonEscape(bound: CaptureSet, prog: Tree, ret: Type)(implicit C: Context): Unit = {
+    val escape = freeCapture(ret) intersect bound.captures
+    if (escape.nonEmpty) {
+      C.at(prog) { C.error(s"The type ${ret} is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}") }
+    }
+  }
 
   //</editor-fold>
 
@@ -326,26 +456,27 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, BlockType(_, pms, ret / _)) = Unification.instantiate(sym.toType)
+      // constructors can't take block parameters, so we can ignore them safely
+      val (trigids, crigids, FunctionType(_, _, vpms, _, ret)) = Context.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.unify(ret, sc)
+      //
+      //      // (6) check for existential type variables
+      //      // at the moment we do not allow existential type parameters on constructors.
+      //      val skolems = Context.skolems(rigids)
+      //      if (skolems.nonEmpty) {
+      //        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
+      //      }
 
-      // (6) check for existential type variables
-      // at the moment we do not allow existential type parameters on constructors.
-      val skolems = Context.skolems(rigids)
-      if (skolems.nonEmpty) {
-        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
-      }
-
-      // (7) refine parameter types of constructor
-      // i.e. `(Int, List[Int])`
-      val constructorParams = Context.unifier substitute pms
+      //        // (7) refine parameter types of constructor
+      //        // i.e. `(Int, List[Int])`
+      //        val constructorParams = vpms map { p => Context.unifier substitute p }
 
       // (8) check nested patterns
       var bindings = Map.empty[Symbol, ValueType]
 
-      (List(patterns) zip constructorParams) foreach {
+      (patterns, vpms) match {
         case (pats, pars) =>
           if (pats.size != pars.size)
             Context.error(s"Wrong number of pattern arguments, given ${pats.size}, expected ${pars.size}.")
@@ -364,589 +495,497 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): Effectful =
-    checkAgainst(stmt, expected) {
-      case source.DefStmt(b, rest) =>
-        val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
-        val (r / effStmt) = checkStmt(rest, expected)
-        r / (effBinding ++ effStmt)
+  def checkStmt(stmt: Stmt)(implicit C: Context): TyperResult[ValueType] = check(stmt) {
+    case source.MutualStmt(defs, rest) => Context.withUnificationScope {
+      defs foreach precheckDef
 
-      // <expr> ; <stmt>
-      case source.ExprStmt(e, rest) =>
-        val (_ / eff1) = checkExpr(e, None)
-        val (r / eff2) = checkStmt(rest, expected)
-        r / (eff1 ++ eff2)
+      var capt = Pure
+      defs foreach { d => capt ++= checkDef(d) }
 
-      case source.Return(e)        => checkExpr(e, expected)
-
-      case source.BlockStmt(stmts) => checkStmt(stmts, expected)
+      val restTpe / restCapt = checkStmt(rest)
+      restTpe / (restCapt ++ capt)
     }
+
+    case d @ source.ValDef(id, annot, binding, rest) =>
+      val tpeBind / captBind = d.symbol.tpe match {
+        case Some(t) =>
+          binding checkAgainst t
+        case None => checkStmt(binding)
+      }
+      Context.bind(d.symbol, tpeBind)
+
+      val tpeRest / captRest = checkStmt(rest)
+
+      tpeRest / (captBind ++ captRest)
+
+    case d @ source.VarDef(id, annot, reg, binding, rest) =>
+      val sym = d.symbol
+
+      // we use the current region as an approximation for the state
+      val captState = reg map Context.symbolOf map {
+        case b: BlockSymbol =>
+          Context.lookup(b) match {
+            case (TRegion, capt) => capt
+            case _               => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+          }
+        case _ => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+      } getOrElse C.region
+
+      val tpeBind / captBind = sym.tpe match {
+        case Some(t) => binding checkAgainst t
+        case None    => checkStmt(binding)
+      }
+      val stTpe = BlockTypeApp(TState, List(tpeBind))
+
+      Context.bind(sym, stTpe, captState)
+
+      val tpeRest / captRest = checkStmt(rest)
+
+      tpeRest / (captState ++ captBind ++ captRest)
+
+    case source.ExprStmt(e, rest) =>
+      val _ / captExpr = checkExpr(e)
+      val tpe / captRest = checkStmt(rest)
+      tpe / (captExpr ++ captRest)
+
+    case source.Return(e)        => checkExpr(e)
+
+    case source.BlockStmt(stmts) => checkStmt(stmts)
+  }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
+  //
+  // we also need to create fresh capture variables to collect constraints
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tparams, params, ret, body) =>
-      d.symbol.ret.foreach { annot => Context.assignType(d.symbol, d.symbol.toType) }
+    case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
+      val funSym = d.symbol
+      val funCapt = CaptureSet(C.freshCaptVar(CaptureOf(funSym)))
+      Context.bind(funSym, funCapt)
+      funSym.ret.foreach { annot => Context.bind(d.symbol, d.symbol.toType) }
+
+    case d @ source.BlockDef(id, tpe, body) =>
+      val blockSym = d.symbol
+      val blockCapt = CaptureSet(C.freshCaptVar(CaptureOf(blockSym)))
+      Context.bind(blockSym, blockCapt)
+      blockSym.tpe.foreach { annot => Context.bind(d.symbol, annot) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      Context.assignType(d.symbol, d.symbol.toType)
-      if (d.symbol.effects.userDefined.nonEmpty) {
-        Context.abort("User defined effects on extern defs not allowed")
-      }
+      Context.bind(d.symbol, d.symbol.toType, Pure)
 
-    case d @ source.EffDef(id, tparams, ops) =>
+    case d @ source.InterfaceDef(id, tparams, ops) =>
       d.symbol.ops.foreach { op =>
         val tpe = op.toType
         wellformed(tpe)
-        Context.assignType(op, tpe)
+        Context.bind(op, tpe, Pure)
       }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        Context.assignType(sym, sym.toType)
+        Context.bind(sym, sym.toType, Pure)
 
         sym.fields.foreach { field =>
           val tpe = field.toType
           wellformed(tpe)
-          Context.assignType(field, tpe)
+          Context.bind(field, tpe, Pure)
         }
       }
 
-    case d @ source.RecordDef(id, tparams, fields) =>
-      val rec = d.symbol
-      Context.assignType(rec, rec.toType)
-      rec.fields.foreach { field =>
-        val tpe = field.toType
-        wellformed(tpe)
-        Context.assignType(field, tpe)
-      }
-
-    case d: source.TypeDef   => wellformed(d.symbol.tpe)
-    case d: source.EffectDef => wellformed(d.symbol.effs)
-    case _                   => ()
+    case d: source.ExternInclude => ()
+    case d: source.ExternType    => ()
   }
 
-  def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
-    d match {
-      case d @ source.FunDef(id, tparams, params, ret, body) =>
+  def checkDef(d: Def)(implicit C: Context): CaptureSet =
+    Context.focusing(d) {
+      case d @ source.BlockDef(id, tpe, body) =>
         val sym = d.symbol
-        Context.define(sym.params)
-        sym.ret match {
-          case Some(tpe / funEffs) =>
-            val (_ / effs) = body checkAgainst tpe
-            Context.wellscoped(effs)
-            Context.assignType(d, tpe / effs)
-
-            tpe / (effs -- funEffs) // the declared effects are considered as bound
-          case None =>
-            val (tpe / effs) = checkStmt(body, None)
-            Context.wellscoped(effs) // check they are in scope
-            Context.assignType(sym, sym.toType(tpe / effs))
-            Context.assignType(d, tpe / effs)
-
-            tpe / Pure // all effects are handled by the function itself (since they are inferred)
+        val precheckedCapt = C.lookupCapture(sym)
+        val lexical = CaptureOf(sym)
+        val tpe / capt = Context.at(body) {
+          Context.withRegion(CaptureSet(lexical)) {
+            Context.withUnificationScope {
+              sym.tpe match {
+                case Some(tpe) => body checkAgainst tpe
+                case None      => checkBlockArgument(body)
+              }
+            }
+          }
         }
 
-      case d @ source.EffDef(id, tparams, ops) =>
-        Context.withEffect(d.symbol)
-        TUnit / Pure
+        checkNonEscape(CaptureSet(lexical), d, tpe)
+        Context.bind(sym, tpe, capt)
+        Context.annotateInferredType(d, tpe)
+        Context.annotateInferredCapt(d, capt)
 
-      case d @ source.ValDef(id, annot, binding) =>
-        val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) =>
-            binding checkAgainst t
-          case None => checkStmt(binding, None)
+        // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
+        C.unify(capt, precheckedCapt)
+        // this is important for use vs. mention -- we annotate the block with the capture set and only require it, when it is USED
+        Pure
+
+      case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
+        val sym = d.symbol
+        sym.vparams foreach Context.bind
+        sym.bparams foreach Context.bind
+
+        val precheckedCapt = C.lookupCapture(sym)
+
+        val lexical = CaptureOf(sym)
+
+        val tpe / capt = Context.at(body) {
+          Context.withRegion(CaptureSet(lexical)) {
+            Context.withUnificationScope {
+              sym.ret match {
+                case Some(tpe) => body checkAgainst tpe
+                case None      => checkStmt(body)
+              }
+            }
+          }
         }
-        Context.define(d.symbol, t)
-        t / effBinding
 
-      case d @ source.VarDef(id, annot, binding) =>
-        val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding, None)
-        }
-        Context.define(d.symbol, t)
-        t / effBinding
+        checkNonEscape(CaptureSet(lexical), d, tpe)
 
-      case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-        Context.define(d.symbol.params)
-        TUnit / Pure
+        // TODO check whether the subtraction here works in presence of unification variables
+        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf)) -- CaptureSet(lexical)
 
-      // all other defintions have already been prechecked
-      case d => TUnit / Pure
+        Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
+        Context.annotateInferredType(d, tpe)
+        Context.annotateInferredCapt(d, captWithoutBoundParams)
+
+        // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
+        C.unify(captWithoutBoundParams, precheckedCapt)
+        // this is important for use vs. mention -- we annotate the block with the capture set and only require it, when it is USED
+        Pure
+
+      case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
+        d.symbol.vparams map { p => Context.bind(p) }
+        Pure
+
+      // All other defs have already been prechecked
+      case d: source.InterfaceDef  => Pure
+      case d: source.DataDef       => Pure
+      case d: source.ExternInclude => Pure
+      case d: source.ExternType    => Pure
     }
-  }
 
   //</editor-fold>
 
   //<editor-fold desc="arguments and parameters">
 
-  /**
-   * Invariant: Only call this on declarations that are fully annotated
-   */
-  def extractAllTypes(params: Params)(implicit C: Context): Sections = params map extractTypes
-
-  def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
-    case BlockParam(_, tpe) => tpe
-    case ValueParam(_, Some(tpe)) => tpe
-    case _ => Context.panic("Cannot extract type")
-  }
-
-  /**
-   * Returns the binders that will be introduced to check the corresponding body
-   */
-  def checkAgainstDeclaration(
-    name: String,
-    atCallee: List[List[Type]],
-    // we ask for the source Params here, since it might not be annotated
-    atCaller: List[source.ParamSection]
-  )(implicit C: Context): Map[Symbol, Type] = {
-
-    if (atCallee.size != atCaller.size)
-      Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
-
-    (atCallee zip atCaller).flatMap[(Symbol, Type)] {
-      case (List(b1: BlockType), b2: source.BlockParam) =>
-        Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
-
-      case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
-        if (ps1.size != ps2.size)
-          Context.error(s"Wrong number of arguments, given ${ps2.size}, but ${name} expects ${ps1.size}.")
-        (ps1 zip ps2).map[(Symbol, Type)] {
-          case (decl, p @ source.ValueParam(id, annot)) =>
-            val annotType = annot.map(_.resolve)
-            annotType.foreach { t =>
-              Context.at(p) { Context.unify(decl, t) }
-            }
-            (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
-        }.toMap
-    }.toMap
-  }
-
-  /**
-   * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
-   *
-   * This is necessary for overload resolution by trying all alternatives.
-   *   - if there is multiple without errors: Report ambiguity
-   *   - if there is no without errors: report all possible solutions with corresponding errors
-   */
-  def checkOverloadedCall(
-    call: source.Call,
-    target: source.IdTarget,
-    targs: List[ValueType],
-    args: List[source.ArgSection],
-    expected: Option[Type]
-  )(implicit C: Context): Effectful = {
-
-    val scopes = target.definition match {
-      // an overloaded call target
-      case CallTarget(name, syms) => syms
-      // already resolved by a previous attempt to typecheck
-      case sym                    => List(Set(sym))
-    }
-
-    // TODO improve: stop typechecking if one scope was successful
-
-    val stateBefore = C.backupTyperstate()
-
-    // TODO try to avoid duplicate error messages
-    val results = scopes map { scope =>
-      scope.toList.map { sym =>
-        sym -> Try {
-          C.restoreTyperstate(stateBefore)
-          val tpe = Context.blockTypeOption(sym).getOrElse {
-            if (sym.isInstanceOf[ValueSymbol]) {
-              Context.abort(s"Expected a function type.")
-            } else {
-              Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
-            }
-          }
-          val r = checkCallTo(call, sym.name.name, tpe, targs, args, expected)
-          (r, C.backupTyperstate())
-        }
-      }
-    }
-
-    val successes = results.map { scope => scope.collect { case (sym, Right(r)) => sym -> r } }
-    val errors = results.flatMap { scope => scope.collect { case (sym, Left(r)) => sym -> r } }
-
-    successes foreach {
-      // continue in outer scope
-      case Nil => ()
-
-      // Exactly one successful result in the current scope
-      case List((sym, (tpe, st))) =>
-        // use the typer state after this checking pass
-        C.restoreTyperstate(st)
-        // reassign symbol of fun to resolved calltarget symbol
-        C.assignSymbol(target.id, sym)
-
-        return tpe
-
-      // Ambiguous reference
-      case results =>
-        val sucMsgs = results.map {
-          case (sym, tpe) =>
-            s"- ${sym.name} of type ${Context.blockTypeOf(sym)}"
-        }.mkString("\n")
-
-        val explanation =
-          s"""| Ambiguous reference to ${target.id}. The following blocks would typecheck:
-              |
-              |${sucMsgs}
-              |""".stripMargin
-
-        C.abort(explanation)
-    }
-
-    errors match {
-      case Nil =>
-        C.abort("Cannot typecheck call, no function found")
-
-      // exactly one error
-      case List((sym, errs)) =>
-        val msg = errs.head
-        val msgs = errs.tail
-        C.buffer.append(msgs)
-        // reraise and abort
-        // TODO clean this up
-        C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
-
-      case failed =>
-        // reraise all and abort
-        val msgs = failed.flatMap {
-          // TODO also print signature!
-          case (block, msgs) =>
-            val fullname = block.name match {
-              case q: QualifiedName => q.qualifiedName
-              case n                => n.name
-            }
-            msgs.map { m => m.copy(label = s"Possible overload ${fullname}: ${m.label}") }
-        }.toVector
-
-        C.reraise(msgs)
-
-        C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
-    }
-  }
-
-  def checkCallTo(
-    call: source.Call,
-    name: String,
-    funTpe: BlockType,
-    targs: List[ValueType],
-    args: List[source.ArgSection],
-    expected: Option[Type]
-  )(implicit C: Context): Effectful = {
-
-    // (1) Instantiate blocktype
-    // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, bt @ BlockType(_, params, ret / retEffs)) = Unification.instantiate(funTpe)
-
-    if (targs.nonEmpty && targs.size != rigids.size)
-      Context.abort(s"Wrong number of type arguments ${targs.size}")
-
-    // (2) Compute substitutions from provided type arguments (if any)
-    if (targs.nonEmpty) {
-      Context.addToUnifier(((rigids: List[TypeVar]) zip targs).toMap)
-    }
-
-    // (3) refine substitutions by matching return type against expected type
-    expected.foreach { expectedReturn =>
-      val refinedReturn = Context.unifier substitute ret
-      Context.unify(expectedReturn, refinedReturn)
-    }
-
-    var effs = retEffs
-
-    if (params.size != args.size)
-      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${name} expects ${params.size}.")
-
-    def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
-      case (ps: List[Type], source.ValueArgs(as)) =>
-        if (ps.size != as.size)
-          Context.error(s"Wrong number of arguments. Argument section of ${name} requires ${ps.size}, but ${as.size} given.")
-
-        // check that types are actually value types
-        val vps = ps map {
-          case tpe: ValueType => tpe
-          case _ =>
-            Context.error("Wrong argument type, expected a value argument")
-            return
-        }
-
-        (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
-
-      case (List(bt: BlockType), arg: source.BlockArg) =>
-        checkBlockArgument(bt, arg)
-
-      case (_, _) =>
-        Context.error("Wrong type of argument section")
-    }
-
-    def checkValueArgument(tpe: ValueType, arg: source.Expr): Unit = Context.at(arg) {
-      val tpe1 = Context.unifier substitute tpe // apply what we already know.
-      val (tpe2 / exprEffs) = arg checkAgainst tpe1
-
-      // Update substitution with new information
-      Context.unify(tpe1, tpe2)
-
-      effs = effs ++ exprEffs
-    }
-
-    // Example.
-    //   BlockParam: def foo { f: Int => String / Print }
-    //   BlockArg: foo { n => println("hello" + n) }
-    //     or
-    //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val bt @ BlockType(Nil, params, tpe1 / handled) = Context.unifier substitute tpe
-
-      // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
-      Context.annotateBlockArgument(arg, bt)
-
-      Context.define {
-        checkAgainstDeclaration("block", params, arg.params)
+  def checkBlockArgument(arg: source.BlockArg)(implicit C: Context): TyperResult[BlockType] = checkBlock(arg) {
+    case arg: source.FunctionArg  => checkFunctionArgument(arg)
+    case arg: source.InterfaceArg => checkExprAsBlock(source.Var(arg.id).inheritPosition(arg))
+    case source.UnboxArg(expr) =>
+      val tpe / outerCapt = checkExpr(expr)
+      // TODO this is a conservative approximation:
+      //    the capture of the expr should be part of the capture of the call, but not the block argument!
+      tpe match {
+        case BoxedType(btpe, capt) => btpe / (capt ++ outerCapt)
+        case _                     => C.abort(s"Unboxing requires a boxed type, but got $tpe")
       }
 
-      val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
+    // TODO share with effect handlers, this is mostly copy and pasted
+    case n @ source.NewArg(tpe, members) =>
 
-      Context.unify(tpe1, tpe2)
-      effs = (effs ++ (stmtEffs -- handled))
-    }
+      // The self region is created by Namer and stored in the DB
+      val lexical = C.annotation(Annotations.InferredCapture, n)
 
-    (params zip args) foreach { case (ps, as) => checkArgumentSection(ps, as) }
+      var capt = Pure
 
-    //    println(
-    //      s"""|Results of checking application of ${sym.name}
-    //                  |    to args ${args}
-    //                  |Substitution before checking arguments: $substBefore
-    //                  |Substitution after checking arguments: $subst
-    //                  |Rigids: $rigids
-    //                  |Return type before substitution: $ret
-    //                  |Return type after substitution: ${subst substitute ret}
-    //                  |""".stripMargin
-    //    )
+      // new >>>State[Int]<<< { ... }
+      val annotatedType @ InterfaceType(interface, targs) = tpe.resolve.asInterfaceType
 
-    Context.checkFullyDefined(rigids)
+      val tparams = interface.tparams
+      val tsubst = (tparams zip targs).toMap
 
-    // annotate call node with inferred type arguments
-    val inferredTypeArgs = rigids.map(Context.unifier.substitute)
-    Context.annotateTypeArgs(call, inferredTypeArgs)
+      // (3) check all operations are covered
+      val covered = members.map { _.definition }
+      val notCovered = interface.ops.toSet -- covered.toSet
 
-    // annotate the calltarget tree with the resolved blocktype
-    Context.annotateTarget(call.target, Context.unifier.substitute(bt))
+      if (notCovered.nonEmpty) {
+        val explanation = notCovered.map { op => s"${op.name} of interface ${op.interface.name}" }.mkString(", ")
+        Context.error(s"Missing definitions for operations: ${explanation}")
+      }
 
-    Context.unifier.substitute(ret / effs)
+      if (covered.size > covered.distinct.size)
+        Context.error(s"Duplicate definitions of operations")
+
+      // (4) actually check each clause
+      members foreach Context.withFocus {
+        // TODO what is with type parameters of operation clauses?
+        case d @ source.OpClause(op, tparams, vparams, body, _) =>
+
+          val declaration = d.definition
+
+          val FunctionType(tparams1, cparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
+
+          // (4b) check the body of the clause
+          val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
+          val vparamSyms = vparams.map { p => p.symbol }
+
+          vparamSyms foreach Context.bind
+
+          // TODO does this need to be a fresh unification scope?
+          val opRet / opCapt = Context in { body checkAgainst ret1 }
+          capt ++= opCapt
+
+          // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
+          /** TODO: do something about capture set parameters */
+          val inferredTpe = FunctionType(tparamSyms, Nil, vparamSyms.map { Context.lookup }, Nil, opRet)
+          val expectedTpe = FunctionType(tparams1, cparams1, vparams1, bparams1, ret1)
+
+          Context.unify(inferredTpe, expectedTpe)
+      }
+
+      annotatedType / capt
   }
 
-  /**
-   * Returns Left(Messages) if there are any errors
-   *
-   * In the case of nested calls, currently only the errors of the innermost failing call
-   * are reported
-   */
-  private def Try[T](block: => T)(implicit C: Context): Either[Messages, T] = {
-    import kiama.util.Severities.Error
+  // Example.
+  //   BlockParam: def foo { f: Int => String / Print }
+  //   BlockArg: foo { n => println("hello" + n) }
+  //     or
+  //   BlockArg: foo { (n: Int) => println("hello" + n) }
+  def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context): TyperResult[FunctionType] = arg match {
+    case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
+      val tparamSymbols = tparams.map { p => p.symbol.asTypeVar }
+      tparamSymbols.foreach { p => Context.bind(p, p) }
+      vparams.foreach { p => Context.bind(p.symbol) }
+      bparams.foreach { p => Context.bind(p.symbol) }
+      val capts = bparams.map { p => CaptureOf(p.symbol) }
 
-    val (msgs, optRes) = Context withMessages {
-      try { Some(block) } catch {
-        case FatalPhaseError(msg) =>
-          C.error(msg)
-          None
-      }
-    }
+      // The self region is created by Namer and stored in the DB
+      val lexical = C.annotation(Annotations.InferredCapture, decl)
 
-    if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
-      Left(msgs)
-    } else {
-      Right(optRes.get)
-    }
+      // TODO should we open a new unification scope here?
+      val ret / capt = Context.withRegion(lexical) { checkStmt(body) }
+
+      checkNonEscape(lexical, arg, ret)
+
+      val capture = capt -- CaptureSet(capts) -- lexical
+
+      FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capture
   }
 
   //</editor-fold>
 
-  private def freeTypeVars(o: Any): Set[TypeVar] = o match {
-    case t: symbols.TypeVar => Set(t)
-    case BlockType(tparams, params, ret) =>
-      freeTypeVars(params) ++ freeTypeVars(ret) -- tparams.toSet
-    case e: Effects            => freeTypeVars(e.toList)
-    case _: Symbol | _: String => Set.empty // don't follow symbols
-    case t: Iterable[t] =>
-      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
-    case p: Product =>
-      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
-    case _ =>
-      Set.empty
+  private implicit class ExprOps(expr: Term) {
+    def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(expr) {
+      val got / capt = checkExpr(expr)
+      C.unify(tpe, got)
+      tpe / capt
+    }
+    def checkAgainst(tpe: BlockType)(implicit C: Context): TyperResult[BlockType] = Context.at(expr) {
+      val got / capt = checkExprAsBlock(expr)
+      C.unify(tpe, got)
+      tpe / capt
+    }
   }
 
-  private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
-      checkExpr(expr, Some(tpe))
+  private implicit class BlockArgOps(expr: source.BlockArg) {
+    def checkAgainst(tpe: BlockType)(implicit C: Context): TyperResult[BlockType] = Context.at(expr) {
+      val got / capt = checkBlockArgument(expr)
+      C.unify(tpe, got)
+      tpe / capt
+    }
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
-      checkStmt(stmt, Some(tpe))
+    def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(stmt) {
+      val got / capt = checkStmt(stmt)
+      C.unify(tpe, got)
+      tpe / capt
+    }
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
+  def check[T <: Tree](t: T)(f: T => TyperResult[ValueType])(implicit C: Context): TyperResult[ValueType] =
     Context.at(t) {
-      val (got / effs) = f(t)
+      val got / capt = f(t)
       wellformed(got)
-      wellformed(effs)
-      expected foreach { Context.unify(_, got) }
-      C.assignType(t, got / effs)
-      got / effs
+      C.annotateInferredType(t, got)
+      C.annotateInferredCapt(t, capt)
+      got / capt
+    }
+
+  def checkBlock[T <: Tree](t: T)(f: T => TyperResult[BlockType])(implicit C: Context): TyperResult[BlockType] =
+    Context.at(t) {
+      val got / capt = f(t)
+      wellformed(got)
+      C.annotateInferredType(t, got)
+      C.annotateInferredCapt(t, capt)
+      got / capt
     }
 }
-
-/**
- * Instances of this class represent an immutable backup of the typer state
- */
-private[typer] case class TyperState(effects: Effects, annotations: Annotations, unifier: Unifier)
 
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
-   * the effects, whose declarations are _lexically_ in scope
+   * The current unification Scope
    */
-  private var lexicalEffects: Effects = Pure
+  private var scope: UnificationScope = new UnificationScope
 
   /**
-   * Annotations added by typer
+   * The substitutions learnt so far
+   */
+  private var substitutions: Substitutions = Substitutions.empty
+
+  /**
+   * We need to substitute after solving and update the DB again, later.
+   */
+  private var inferredValueTypes: List[(Tree, ValueType)] = Nil
+  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
+  private var inferredCaptures: List[(Tree, CaptureSet)] = Nil
+
+  /**
+   * The current lexical region used for mutable variables.
    *
-   * The annotations are immutable and can be backtracked.
+   * None on the toplevel
    */
-  private var annotations: Annotations = Annotations.empty
+  private var lexicalRegion: Option[CaptureSet] = None
 
-  /**
-   * Computed _unifier for type variables in this module
-   */
-  private var currentUnifier: Unifier = Unifier.empty
+  private[typer] def initTyperstate(): Unit = {
+    // Clear annotations, we are about to recompute those
+    annotate(Annotations.CaptureForFile, module, Nil)
 
-  /**
-   * Override the dynamically scoped `in` to also reset typer state
-   */
-  override def in[T](block: => T): T = {
-    val effectsBefore = lexicalEffects
-    val result = super.in(block)
-
-    // TyperState has two kinds of components:
-    // - reader-like (like lexicalEffects that are in scope)
-    // - state-like (like annotations and unification constraints)
-    //
-    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
-    // not the "state" components. For those, we manually perform backup and restore in typer.
-    lexicalEffects = effectsBefore
-    result
-  }
-
-  private[typer] def initTyperstate(effects: Effects): Unit = {
-    lexicalEffects = effects
-    annotations = Annotations.empty
-    currentUnifier = Unifier.empty
-  }
-
-  private[typer] def backupTyperstate(): TyperState =
-    TyperState(lexicalEffects, annotations.copy, currentUnifier)
-
-  private[typer] def restoreTyperstate(st: TyperState): Unit = {
-    lexicalEffects = st.effects
-    annotations = st.annotations.copy
-    currentUnifier = st.unifier
+    scope = new UnificationScope
+    inferredValueTypes = List.empty
+    inferredBlockTypes = List.empty
+    inferredCaptures = List.empty
+    valueTypingContext = Map.empty
+    blockTypingContext = Map.empty
+    substitutions = Substitutions.empty
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    annotations.commit()
-    annotate(Annotations.Unifier, module, currentUnifier)
-  }
+    // now also store the typing context in the global database:
+    valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    captureContext foreach { case (s, c) => assignCaptureSet(s, c) }
 
-  // Effects that are in the lexical scope
-  // =====================================
-  private[typer] def effects: Effects = lexicalEffects
+    // Update and write out all inferred types and captures for LSP support
+    // This info is currently also used by Transformer!
+    inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, subst.substitute(tpe)) }
+    inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
 
-  private[typer] def withEffect(e: UserEffect): Context = {
-    lexicalEffects += e
-    this
-  }
+    val substitutedCaptures = inferredCaptures map { case (t, capt) => (t, subst.substitute(capt)) }
+    // TODO maybe this is not necessary anymore
+    substitutedCaptures foreach { case (t, capt) => annotate(Annotations.InferredCapture, t, capt) }
 
-  private[typer] def wellscoped(a: Effects): Unit = {
-    // here we only care for the effect itself, not its type arguments
-    val forbidden = Effects(a.userEffects.collect {
-      case e: UserEffect      => e
-      case EffectApp(e, args) => e
-      case e: EffectAlias     => e
-    }) -- effects
-    if (forbidden.nonEmpty) {
-      error(s"Effects ${forbidden} leave their defining scope.")
-    }
-  }
-
-  // Inferred types
-  // ==============
-  private[typer] def assignType(t: Tree, e: Effectful): Context = {
-    annotations.annotate(Annotations.InferredType, t, e)
-    this
-  }
-
-  // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Context = {
-    annotations.annotate(Annotations.BlockArgumentType, t, tpe)
-    this
-  }
-
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
-    annotations.annotate(Annotations.TypeArguments, call, targs)
-    this
-  }
-
-  private[typer] def define(s: Symbol, t: ValueType): Context = {
-    assignType(s, t); this
-  }
-
-  private[typer] def define(s: Symbol, t: InterfaceType): Context = {
-    assignType(s, t); this
-  }
-
-  private[typer] def define(bs: Map[Symbol, Type]): Context = {
-    bs foreach {
-      case (v: ValueSymbol, t: ValueType) => define(v, t)
-      case (v: BlockSymbol, t: BlockType) => define(v, t)
-      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
-    }; this
-  }
-
-  private[typer] def define(ps: List[List[Param]]): Context = {
-    ps.flatten.foreach {
-      case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
-      case s @ BlockParam(name, tpe) => define(s, tpe)
-      case s => panic(s"Internal Error: Cannot add $s to context.")
-    }
-    this
-  }
-
-  private[typer] def annotateTarget(t: source.CallTarget, tpe: BlockType): Unit = {
-    annotations.annotate(Annotations.TargetType, t, tpe)
+    annotate(Annotations.CaptureForFile, module, substitutedCaptures)
   }
 
   // Unification
   // ===========
-  private[typer] def unifier: Unifier = currentUnifier
 
-  private[typer] def addToUnifier(map: Map[TypeVar, ValueType]): Unit =
-    currentUnifier = currentUnifier.addAll(map)
+  // opens a fresh unification scope
+  private[typer] def withUnificationScope[T <: Type](block: => TyperResult[T]): TyperResult[T] = {
+    val outerScope = scope
+    scope = new UnificationScope
+    val tpe / capt = block
+    // leaving scope: solve here and check all are local unification variables are defined...
+    val (subst, cs, ccs) = scope.solve
 
-  private[typer] def unify(tpe1: Type, tpe2: Type): Unit =
-    currentUnifier = (currentUnifier union Unification.unify(tpe1, tpe2)).getUnifier
+    // TODO applying the substitution to the environment is not enough! We also need to substitute into types and captures
+    // that are locally in scope in Typer...
 
-  private[typer] def skolems(rigids: List[RigidVar]): List[RigidVar] =
-    currentUnifier.skolems(rigids)
+    // The unification variables now go out of scope:
+    // use the new substitution to update the defined symbols (typing context) and inferred types (annotated trees).
+    valueTypingContext = valueTypingContext.view.mapValues { t => subst.substitute(t) }.toMap
+    blockTypingContext = blockTypingContext.view.mapValues { t => subst.substitute(t) }.toMap
+    captureContext = captureContext.view.mapValues { c => subst.substitute(c) }.toMap
+    substitutions = substitutions.updateWith(subst)
 
-  private[typer] def checkFullyDefined(rigids: List[RigidVar]): Unit =
-    currentUnifier.checkFullyDefined(rigids).getUnifier
+    outerScope.addAllType(cs)
+    outerScope.addAllCapt(ccs)
+    scope = outerScope
+
+    tpe match {
+      case t: ValueType => subst.substitute(t).asInstanceOf[T] / subst.substitute(capt)
+      case t: BlockType => subst.substitute(t).asInstanceOf[T] / subst.substitute(capt)
+    }
+  }
+
+  def unify(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
+  def unify(t1: BlockType, t2: BlockType) = scope.requireEqual(t1, t2)
+  def unify(c1: CaptureSet, c2: CaptureSet) = scope.requireEqual(c1, c2)
+
+  def sub(c1: CaptureSet, c2: CaptureSet) = scope.requireSub(c1, c2)
+
+  def subst: Substitutions = substitutions
+
+  // these are different methods because those are constraints that we like to introduce
+  // might help refactoring later
+  def unify(c1: CaptureSet, c2: Capture): Unit = unify(c1, CaptureSet(Set(c2)))
+  def sub(c1: CaptureSet, c2: Capture): Unit = sub(c1, CaptureSet(Set(c2)))
+
+  def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
+
+  // TODO this is only for synthesized capture sets (i.e. when box isn't annotated)
+  def freshCaptVar() = scope.freshCaptVar(CaptureParam(NoName))
+  def freshCaptVar(underlying: Capture) = scope.freshCaptVar(underlying)
+
+  // Inferred types
+  // ==============
+
+  private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
+  private[typer] def annotateInferredType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
+  private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
+
+  // The "Typing Context"
+  // ====================
+  // since symbols are unique, we can use mutable state instead of reader
+  private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
+  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+  private var captureContext: Map[Symbol, CaptureSet] = Map.empty
+
+  // first tries to find the type in the local typing context
+  // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
+  private[typer] def lookup(s: ValueSymbol) =
+    valueTypingContext.getOrElse(s, valueTypeOf(s))
+
+  private[typer] def lookup(s: BlockSymbol) = (lookupType(s), lookupCapture(s))
+
+  private[typer] def lookupType(s: BlockSymbol) =
+    blockTypingContext.get(s).orElse(blockTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
+
+  private[typer] def lookupCapture(s: BlockSymbol) =
+    captureContext.getOrElse(s, captureOf(s))
+
+  private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
+
+  private[typer] def bind(s: Symbol, tpe: BlockType, capt: CaptureSet): Unit = { bind(s, tpe); bind(s, capt) }
+
+  private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
+
+  private[typer] def bind(s: Symbol, capt: CaptureSet): Unit = captureContext += (s -> capt)
+
+  private[typer] def bind(bs: Map[Symbol, ValueType]): Unit =
+    bs foreach {
+      case (v: ValueSymbol, t: ValueType) => bind(v, t)
+      //        case (v: BlockSymbol, t: FunctionType) => bind(v, t)
+      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
+    }
+
+  private[typer] def bind(p: ValueParam): Unit = p match {
+    case s @ ValueParam(name, tpe) => bind(s, tpe)
+    case s => panic(s"Internal Error: Cannot add $s to typing context.")
+  }
+
+  private[typer] def bind(p: BlockParam): Unit = p match {
+    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(CaptureOf(s)))
+    case s => panic(s"Internal Error: Cannot add $s to typing context.")
+  }
+
+  // Lexical Regions
+  // ===============
+  def region: CaptureSet = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
+  def withRegion[T](c: CaptureSet)(prog: => T): T = {
+    val before = lexicalRegion
+    lexicalRegion = Some(c)
+    val res = prog
+    lexicalRegion = before
+    res
+  }
 }

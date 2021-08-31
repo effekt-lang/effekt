@@ -1,0 +1,97 @@
+// Examples illustrating use vs. mention, adapted from Colin Gordon's "Designing with Static Capabilities and Effects"
+// ---
+// we do not have subtyping between Read and Write
+interface Write[T] {
+  def write(value: T): Unit
+  def read(): T
+}
+interface Read[T] { def read(): T }
+
+// Section 2.1 shows with a simple example how mention is to coarse grained
+// we can encode the effect-system variant that allows paralellization
+def section2_1[T] { x : Read[T] } { y: Write[T] }  {
+
+  val parallelizeMe: () => Unit at {} = box { () =>
+
+    // here we mention `y`, but do not really "use" it.
+    def z1(v: T) { y.write(v) }
+
+    // same here.
+    val z2 = box { () => y.write(<>) };
+
+    def ignore { f: Write[T] }: Unit { () }
+    // here we are closer to mention, than to use
+    // ignore { y };
+
+    // in the monomorphic case, we can be more precise
+    def ignore2(f: Write[T] at {y}): Unit { () }
+    ignore2(y);
+
+    // and here
+    def z3 = y;
+
+    ()
+  };
+  ()
+}
+
+interface UI { def use(): Unit }
+interface IO { def println(msg: String): Unit }
+
+// Section 2.3 argues that capabilities are sometimes too coarse grained.
+// The following example is difficult to express with capabilities and the authors also
+// fell back to effect systems in their own related work.
+def section2_3 { ui : UI } { io: IO } {
+
+  // this is to show that we distinguish between tracked and transparent bindings
+  def aliased = ui;
+
+  def setLabel(text: String): Unit { ui.use() }
+
+  def forkThread(run: () => Unit at {io}): Unit { return () }
+  def forkUIThread(run: () => Unit at {ui}): Unit { return () }
+
+  forkThread({() =>
+    val res = 42;
+
+    io.println(show(res));
+
+
+    forkUIThread({() =>
+      // direct
+      ui.use();
+      // indirect via closure
+      setLabel("The result is " ++ show(res))
+    })
+  });
+  ()
+}
+
+
+// Section 3 argues that effect systems are more complicated.
+// In particular, a system that would track the use of `x` would need
+// some means to discover that `x` simply aliases `ui`.
+def section3_1 { ui : UI } {
+
+  // e1 is a complicated expression that returns a block
+  val e1  = box { () => ui.use(); () };
+
+  // we indirectly alias `ui` as `x`
+  def x = unbox e1;
+
+  // however, by requiring capture to be reflected in the type, when treated as first-class value
+  // the aliasing is trivially resolved.
+  def test1 = { () => x() };
+
+  // of course we can also alias directly
+  // for simplicity the right hand side of `def` has to be a block (not a complex expression)
+  // it should be easy to automatically perform the ANF transformation from above
+  def y = ui;
+
+  return ()
+}
+
+
+def main() {
+    ()
+}

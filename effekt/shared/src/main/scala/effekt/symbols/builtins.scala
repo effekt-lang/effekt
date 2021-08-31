@@ -22,11 +22,24 @@ object builtins {
 
   val THole = BuiltinType(name("Unknown"), Nil)
 
+  // Builtin Local State
+  val TState = {
+    val S = TypeVar(LocalName("S"))
+    val interface = Interface(LocalName("$State"), List(S), Nil)
+    val get = Operation(LocalName("get"), Nil, Nil, S, interface)
+    val put = Operation(LocalName("put"), Nil, List(ValueParam(LocalName("s"), S)), TUnit, interface)
+    interface.ops = List(get, put)
+    interface
+  }
+
+  val TRegion = Interface(LocalName("Region"), Nil, Nil)
+
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
     "Boolean" -> TBoolean,
     "Unit" -> TUnit,
     "String" -> TString,
-    "Double" -> TDouble
+    "Double" -> TDouble,
+    "Region" -> TRegion
   )
 }

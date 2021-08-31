@@ -1,6 +1,0 @@
-[error] examples/neg/inference.effekt:25:17: Expected Int, but got String
-  case Nil() => ""
-                ^^
-[error] examples/neg/inference.effekt:25:17: Expected Int, but got String
-  case Nil() => ""
-                ^

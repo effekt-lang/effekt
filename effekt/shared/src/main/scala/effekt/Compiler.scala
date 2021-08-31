@@ -1,14 +1,12 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{ LiftInference, Transformer }
+import effekt.core.{ Transformer }
 import effekt.namer.Namer
-import effekt.regions.RegionChecker
-import effekt.source.{ CapabilityPassing, ModuleDecl }
+import effekt.source.{ ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -54,31 +52,20 @@ trait Compiler {
     // performs name analysis and associates Id-trees with symbols
     new Namer,
     // type checks and annotates trees with inferred types and effects
-    new Typer,
-    // uses annotated effects to translate to explicit capability passing
-    new CapabilityPassing,
-    // infers regions and prevents escaping of first-class functions
-    new RegionChecker
+    new Typer
   )
 
   /**
    * (3) Backend
    */
   object transformer extends Transformer
-  val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List(
-    // optional phase, only run for `Config.requiresLift`
-    new LiftInference
-  )
+  val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List()
 
   /**
    * (4) Code Generation
    */
   def codeGenerator(implicit C: Context) = C.config.generator() match {
-    case "js"           => new effekt.generator.JavaScript
-    case "js-lift"      => new effekt.generator.JavaScriptLift
-    case "chez-callcc"  => new effekt.generator.ChezSchemeCallCC
-    case "chez-monadic" => new effekt.generator.ChezSchemeMonadic
-    case "chez-lift"    => new effekt.generator.ChezSchemeLift
+    case "js" => new effekt.generator.JavaScript
   }
 
   // Tasks

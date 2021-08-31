@@ -1,0 +1,56 @@
+import immutable/list
+
+// we first draft a naive implementation of a queue
+def emptyQueue[T]() { Nil[T]() }
+def enqueue[T](q: List[T], el: T): List[T] { Cons(el, q) }
+def nonEmpty[T](q: List[T]) { size(q) > 0 }
+def dequeue[T](q: List[T]) { reverse(q) match {
+  case Nil() => panic[(List[T], T)]("Empty queue")
+  case Cons(hd, tl) => (reverse(tl), hd)
+}}
+
+// now we define the interface of our scheduler
+interface Proc { def fork(): Boolean }
+
+// and implement the scheduler itself
+def schedule { p: { Proc } => Unit }: Unit {
+  // "processes" spawned by fork are stored in this local mutable cell
+  var q: List[() => Unit at {p, schedule}] = emptyQueue();
+
+  // we run the program with our own scheduler
+  try { p {proc} } with proc: Proc {
+    // forking enqueues the continuation twice
+    def fork() { q = enqueue(q, box { () => resume(true) });
+                 q = enqueue(q, box { () => resume(false) }) }
+  };
+
+  // finally, while there are continuations, we dequeue and force them
+  while (nonEmpty(q)) {
+    dequeue(q) match {
+      case (rest, k) =>
+        // this "type-ascription" is necessary due to our preliminary
+        // implementation of local type inference for matches
+        val k2: () => Unit at {p, schedule} = k;
+        q = rest;
+
+        // force the continuation
+        (unbox k2)()
+    }
+  }
+}
+
+interface Exc { def abort(): Unit }
+def main() {
+  try {
+    schedule { {p:Proc} =>
+      if (p.fork()) {
+        println("(1)");
+        if (p.fork()) {
+          println("(2)"); exc.abort()
+        } else {
+          println("(3)")
+        }
+      } else { println("(4)") }
+    }
+  } with exc: Exc { def abort() { println("aborted") }}
+}

@@ -1,7 +1,5 @@
 module effekt
 
-extern effect Console
-
 // Runtime
 extern include "effekt_runtime.js"
 
@@ -11,11 +9,11 @@ extern include "effekt_builtins.js"
 // Pattern Matching
 extern include "effekt_matching.js"
 
-def locally[R] { f: R }: R = f()
+def locally[R] { f: () => R }: R { f() }
 
 // Side effecting ops
 // ==================
-extern def println[R](value: R): Unit / Console =
+extern def println[R](value: R): Unit =
   "println$impl(value)"
 
 extern pure def inspect[R](value: R): Unit =
@@ -52,17 +50,17 @@ extern pure def infixSub(x: Int, y: Int): Int =
 extern pure def mod(x: Int, y: Int): Int =
   "(x % y)"
 
-extern pure def infixAdd(x: Double, y: Double): Double =
-  "(x + y)"
+// extern pure def infixAdd(x: Double, y: Double): Double =
+//   "(x + y)"
 
-extern pure def infixMul(x: Double, y: Double): Double =
-  "(x * y)"
+// extern pure def infixMul(x: Double, y: Double): Double =
+//   "(x * y)"
 
-extern pure def infixSub(x: Double, y: Double): Double =
-  "(x - y)"
+// extern pure def infixSub(x: Double, y: Double): Double =
+//   "(x - y)"
 
-extern pure def infixDiv(x: Double, y: Double): Double =
-  "(x / y)"
+// extern pure def infixDiv(x: Double, y: Double): Double =
+//   "(x / y)"
 
 
 extern pure def cos(x: Double): Double =
@@ -95,8 +93,6 @@ extern pure def exp(x: Double): Double =
 // since we do not have "extern val", yet
 extern pure def _pi(): Double =
   "Math.PI"
-
-val PI: Double = _pi()
 
 extern pure def toInt(d: Double): Int =
   "Math.round(d)"
@@ -131,17 +127,17 @@ extern pure def infixGt(x: Int, y: Int): Boolean =
 extern pure def infixGte(x: Int, y: Int): Boolean =
   "x >= y"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
-  "x < y"
+// extern pure def infixLt(x: Double, y: Double): Boolean =
+//   "x < y"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
-  "x <= y"
+// extern pure def infixLte(x: Double, y: Double): Boolean =
+//   "x <= y"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
-  "x > y"
+// extern pure def infixGt(x: Double, y: Double): Boolean =
+//   "x > y"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
-  "x >= y"
+// extern pure def infixGte(x: Double, y: Double): Boolean =
+//   "x >= y"
 
 extern pure def infixLt(x: String, y: String): Boolean =
   "x < y"
@@ -181,11 +177,11 @@ extern pure def isNull[A](value: A): Boolean =
 
 // Pairs
 // =====
-record Tuple2[A, B](first: A, second: B)
-record Tuple3[A, B, C](first: A, second: B, third: C)
-record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
-record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
-record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+type Tuple2[A, B] { Tuple2(first: A, second: B) }
+type Tuple3[A, B, C]{ Tuple3(first: A, second: B, third: C) }
+type Tuple4[A, B, C, D]{ Tuple4(first: A, second: B, third: C, fourth: D) }
+type Tuple5[A, B, C, D, E]{ Tuple4(first: A, second: B, third: C, fourth: D, fifth: E) }
+type Tuple6[A, B, C, D, E, F]{ Tuple4(first: A, second: B, third: C, fourth: D, fifth: E, sixth: F) }
 
 
 // Exceptions
@@ -194,39 +190,35 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 extern pure def panic[R](msg: String): R =
   "(function() { throw msg })()"
 
-effect Exception[E] {
+interface Exception[E] {
   def raise[A](exception: E, msg: String): A
 }
-record RuntimeError()
+type RuntimeError { RuntimeError() }
 
-def raise[A](msg: String): A / Exception[RuntimeError] = raise(RuntimeError(), msg)
-
+def raise[A](msg: String) { e: Exception[RuntimeError] }: A {
+  e.raise(RuntimeError(), msg)
+}
 // converts exceptions of (static) type E to an uncatchable panic that aborts the program
-def panicOn[E] { prog: Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception, msg) = panic(msg) }
-
-// reports exceptions of (static) type E to the console
-def report[E] { prog: Unit / Exception[E] }: Unit / Console =
-  try { prog() } with Exception[E] { def raise(exception, msg) = println(msg) }
-
-// ignores exceptions of (static) type E
-// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
-def ignoring[E] { prog: Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception, msg) = () }
-
-// Control Flow
-// ============
-def each(start: Int, end: Int) { action: (Int) => Unit } = {
-  var i = start;
-  while (i < end) {
-      action(i)
-      i = i + 1
+def panicOn[E] { prog: {Exception[E]} => Unit }: Unit {
+  try { prog { exc } } with exc : Exception[E] {
+    def raise[A](exception: E, msg: String) { panic(msg) }
   }
 }
 
-def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
+// reports exceptions of (static) type E to the console
+def report[E] { prog: {Exception[E]} => Unit }: Unit {
+  try { prog { exc } } with exc : Exception[E] {
+    def raise[A](exception: E, msg: String) { println(msg) }
+  }
+}
 
-
+// ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+def ignoring[E] { prog: {Exception[E]} => Unit }: Unit {
+  try { prog { exc } } with exc : Exception[E] {
+    def raise[A](exception: E, msg: String) { () }
+  }
+}
 
 // Benchmarking
 // ============
@@ -236,25 +228,5 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 extern def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
 
-extern pure def setTimeout(callback: () => Unit, timeout: Int): Unit =
+extern pure def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
   "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
-
-// runs the block and returns the time in nanoseconds
-def timed { block: Unit }: Int = {
-  val before = currentTimeNanos()
-  block()
-  val after = currentTimeNanos()
-  after - before
-}
-
-def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
-  def run(n: Int, report: Boolean): Unit = {
-    if (n <= 0) { () } else {
-      val time = timed { block() };
-      if (report) { println(time) } else { () };
-      run(n - 1, report)
-    }
-  }
-  run(warmup, false)
-  run(iterations, true)
-}

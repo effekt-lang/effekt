@@ -5,7 +5,6 @@ import effekt.context.assertions._
 import effekt.core._
 import effekt.symbols.{ Module, Name, NoName, LocalName, QualifiedName, Symbol, Wildcard }
 import effekt.symbols
-
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -52,16 +51,14 @@ class JavaScript extends Generator {
 trait JavaScriptPrinter extends JavaScriptBase {
 
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v) =>
-      nameRef(v)
-    case BlockLit(ps, body) =>
-      jsLambda(ps map toDoc, toDoc(body))
-    case Member(b, id) =>
-      toDoc(b) <> "." <> nameRef(id)
-    case Extern(ps, body) =>
-      jsLambda(ps map toDoc, body)
-    case Unbox(e) => toDoc(e)
-    case _        => sys error "Unsupported block in plain JS pretty printer"
+    case BlockVar(v)              => nameRef(v)
+    case BlockLit(vps, bps, body) => jsLambda((vps map toDoc) ++ (bps map toDoc), toDoc(body))
+    case Extern(pure, ps, body)   => jsLambda(ps map toDoc, body)
+    case Unbox(e)                 => toDoc(e)
+    case Select(b, sel)           => toDoc(b) <> "." <> jsEscape(sel)
+    case New(tpe, members) => jsObject(members.map {
+      case (id, b) => nameDef(id) -> toDoc(b)
+    })
   })
 
   // pretty print the statement in a javascript expression context
@@ -73,8 +70,8 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Val(id, tpe, binding, body) =>
       toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
 
-    case App(b, targs, args) =>
-      jsCall(toDoc(b), args map argToDoc)
+    case App(b, targs, vargs, bargs) =>
+      jsCall(toDoc(b), (vargs map toDoc) ++ (bargs map toDoc))
 
     case If(cond, thn, els) =>
       parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
@@ -89,13 +86,19 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(id, tpe, get, put, init, body) =>
+    case State(init, None, body) =>
       toDocDelayed(init) <> ".state" <> parens(toDoc(body))
+
+    case State(init, Some(reg), body) =>
+      toDocDelayed(init) <> ".stateIn" <> parens(nameRef(reg)) <> parens(toDoc(body))
 
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
       val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
+
+    case Region(body) =>
+      "$effekt.region" <> parens(nest(line <> toDoc(body)))
 
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {
@@ -157,41 +160,20 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
-  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _                     => jsEscape(id.name.toString)
-  }
+  def nameDef(id: Symbol)(implicit C: Context): Doc = jsEscape(id.name.toString)
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _: symbols.Field      => jsEscape(id.name.name)
-    case _                     => jsEscape(jsNameRef(id.name))
-  }
+  def nameRef(id: Symbol)(implicit C: Context): Doc = jsEscape(jsNameRef(id.name))
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
-    case UnitLit()     => "$effekt.unit"
-    case StringLit(s)  => jsString(s)
+    case UnitLit() => "$effekt.unit"
+    case StringLit(s) => jsString(s)
     case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => nameRef(id)
+    case ValueVar(id) => nameRef(id)
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr  => toDoc(e)
-      case b: Block => toDoc(b)
-    }, comma))
+    case PureApp(b, targs, vargs, bargs) => toDoc(b) <> parens(hsep((vargs map toDoc) ++ (bargs map toDoc), comma))
 
-    case Select(b, field) =>
-      toDoc(b) <> "." <> nameRef(field)
-
-    case Closure(e) => toDoc(e)
+    case Box(e) => parens(toDoc(e))
   })
-
-  def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
-  }
 
   def toDoc(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
@@ -220,18 +202,27 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
-    case Def(id, tpe, Extern(ps, body), rest) =>
+    // we treat functions specially for recursion
+    // TODO fix this in namer and typer to rule out recursion for block defs!
+    case Def(id, tpe, BlockLit(vps, bps, body), rest) =>
+      jsFunction(nameDef(id), (vps map toDoc) ++ (bps map toDoc), toDocStmt(body)) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, tpe, Extern(false, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, tpe, Extern(true, ps, body), rest) =>
+      jsFunction(nameDef(id), ps map toDoc, "return" <+> jsCall("$effekt.pure", body)) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, tpe, b, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(b) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
 
-    case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> ";" <> emptyline <> toDocStmt(rest)
+    // TODO generate code
+    case Interface(id, ops, rest) => toDocStmt(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
@@ -243,12 +234,12 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     generateConstructor(ctor, ctor.fields)
 
   def generateConstructor(ctor: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
-    jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
+    jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsCall("$effekt.pure", jsObject(List(
       text("__tag") -> jsString(nameDef(ctor)),
       text("__data") -> jsArray(fields map { f => nameDef(f) }),
     ) ++ fields.map { f =>
         (nameDef(f), nameDef(f))
-      }))
+      })))
   }
 
   /**
@@ -259,18 +250,20 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Val(id, tpe, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
+    case Def(id, tpe, BlockLit(vps, bps, body), rest) =>
+      jsFunction(nameDef(id), (vps map toDoc) ++ (bps map toDoc), toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
-    case Def(id, tpe, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(false, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
+
+    case Def(id, tpe, Extern(true, ps, body), rest) =>
+      jsFunction(nameDef(id), ps map toDoc, "return" <+> jsCall("$effekt.pure", body)) <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
 
-    case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> ";" <> emptyline <> toDocTopLevel(rest)
+    case Interface(id, ops, rest) => toDocStmt(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
@@ -281,13 +274,11 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this")
   def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
-  def jsNameRef(name: Name)(implicit C: Context): String = name match {
-    case LocalName(name) => name
-    case QualifiedName(Nil, name) => name
-    // TODO this is rather fragile...
-    case QualifiedName(path, name) if C.module.path == path.mkString("/") => name
-    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + jsEscape(name)
-    case NoName => sys error "Trying to generate code for an anonymous entity"
+  def jsNameRef(name: Name): String = name match {
+    case LocalName(name)           => name
+    case QualifiedName(Nil, name)  => name
+    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + name
+    case NoName                    => sys error "Trying to generate code for an anonymous entity"
   }
 
   def jsModuleName(path: String): String = "$" + path.replace('/', '_')
@@ -317,8 +308,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
-    case Record(did, fields, rest) => true
     case Def(id, tpe, d, rest) => true
+    case Interface(id, ops, rest) => true
     case _ => false
   }
 }

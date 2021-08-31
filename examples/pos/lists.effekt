@@ -1,29 +1,9 @@
-module examples/pos/lists
+import immutable/list
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
+def main() {
+  val l = map([1, 2, 3]) { (a: Int) => a + 1 };
 
-
-def map[A, B](l: List[A]) { f: A => B } : List[B] =
-  l match {
-    case Nil() => Nil()
-    case Cons(a, rest) => Cons(f(a), map(rest) { a => f(a) })
-  }
-
-def foreach[A](l: List[A]) { f: A => Unit } : Unit =
-  l match {
-    case Nil() => ()
-    case Cons(a, rest) =>
-      f(a);
-      foreach(rest) { a => f(a) }
-  }
-
-def main() = {
-  val l = [1, 2, 3].map { a => a + 1 };
-
- l.foreach { a =>
+ foreach(l) { (a: Int) =>
     println(a)
   }
 }

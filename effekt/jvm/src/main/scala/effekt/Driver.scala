@@ -7,11 +7,9 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
-
 import effekt.util.messages.FatalPhaseError
 
 import scala.sys.process.Process
@@ -118,7 +116,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
    * Not used anymore
    */
-  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
+  override final def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
 
   /**
    * Originally called by kiama, not used anymore.

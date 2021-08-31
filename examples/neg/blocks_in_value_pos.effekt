@@ -1,9 +1,0 @@
-module blocks_in_value_pos
-
-effect MyPrint(n: Int): Unit
-
-def main { prog: Unit / MyPrint } =
-  try { prog(); prog() } with MyPrint { (n: Int) =>
-    resume(prog);
-    println(n)
-  }

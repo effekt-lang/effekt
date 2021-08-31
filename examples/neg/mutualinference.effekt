@@ -1,0 +1,18 @@
+interface Console { def log(): Unit }
+interface Time { def now(): Unit }
+
+def mymodule { c: Console } { t : Time } {
+
+  def even { f : () => Unit } {
+    c.log();
+    box { () => (unbox odd { () => f() })() }
+  }
+
+  def odd { g : () => Unit } : () => Unit at {c, g} {
+    // ((){f: () => Unit} => (() => Unit at {?odd, f, c}))[f !-> ?C] fails
+    // because we cannot know whether f in ?odd
+    box { () => (unbox even { () => g() })() }
+  }
+
+  return ()
+}
