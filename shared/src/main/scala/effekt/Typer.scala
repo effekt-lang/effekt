@@ -6,7 +6,6 @@ package typer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
-import effekt.regions.Region
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
@@ -20,9 +19,6 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  *   - Blocks
  *   - Functions
  *   - Resumptions
- *
- *  Also annotates every lambda with a fresh region variable and collects equality constraints
- *  between regions
  */
 class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
@@ -101,21 +97,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.define(sym.params)
 
         expected match {
-          case Some(exp @ FunType(BlockType(_, ps, ret / effs), reg)) =>
+          case Some(exp @ FunType(BlockType(_, ps, ret / effs))) =>
             checkAgainstDeclaration("lambda", ps, params)
             val (retGot / effsGot) = body checkAgainst ret
             Context.unify(ret, retGot)
 
             val diff = effsGot -- effs
 
-            val reg = Region.fresh(l)
-            val got = FunType(BlockType(Nil, ps, retGot / effs), reg)
+            val got = FunType(BlockType(Nil, ps, retGot / effs))
 
             Context.unify(exp, got)
 
             Context.assignType(sym, sym.toType(ret / effs))
             Context.assignType(l, ret / effs)
-            Context.annotateRegions(sym, reg)
 
             got / diff
 
@@ -125,13 +119,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             val ps = extractAllTypes(sym.params)
             val tpe = BlockType(Nil, ps, ret / effs)
 
-            // we make up a fresh region variable that will be checked later by the region checker
-            val reg = Region.fresh(l)
-            val funTpe = FunType(tpe, reg)
+            val funTpe = FunType(tpe)
 
             Context.assignType(sym, sym.toType(ret / effs))
             Context.assignType(l, ret / effs)
-            Context.annotateRegions(sym, reg)
 
             expected.foreach { exp =>
               Context.unify(exp, funTpe)

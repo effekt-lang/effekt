@@ -164,28 +164,12 @@ object Annotations {
     "the inferred type for block argument"
   )
 
-  /*
-   * The region a given symbol can be used in
-   */
-  val Regions = Annotation[symbols.Symbol, regions.Region](
-    "Regions",
-    "the regions associated with symbol"
-  )
-
   /**
    * The unifier as computed by typer when type checking the module
    */
   val Unifier = Annotation[symbols.Module, substitutions.Unifier](
     "Unifier",
     "the unifier for module"
-  )
-
-  /**
-   * Similar to TypeAndEffect: the region of a program inferred by RegionChecker
-   */
-  val InferredRegion = Annotation[source.Tree, regions.RegionSet](
-    "InferredRegion",
-    "the inferred region for source tree"
   )
 
 }
@@ -259,12 +243,6 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
-  def inferredRegion(t: source.Tree): regions.RegionSet =
-    annotation(Annotations.InferredRegion, t)
-
-  def inferredRegionOption(t: source.Tree): Option[regions.RegionSet] =
-    annotationOption(Annotations.InferredRegion, t)
-
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
@@ -299,8 +277,8 @@ trait AnnotationsDB { self: Context =>
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
         v.dealias match {
-          case symbols.FunType(tpe, _) => Some(tpe)
-          case _ => None
+          case symbols.FunType(tpe) => Some(tpe)
+          case _                    => None
         }
       }
     }
@@ -419,9 +397,4 @@ trait AnnotationsDB { self: Context =>
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
 
-  def annotateRegions(sym: Symbol, r: regions.Region): Unit =
-    annotate(Annotations.Regions, sym, r)
-
-  def regionOf(sym: Symbol): regions.Region =
-    annotation(Annotations.Regions, sym)
 }

@@ -2,7 +2,6 @@ package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
-import effekt.regions.{ Region, RegionSet, RegionVar }
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.substitutions._
 
@@ -208,29 +207,7 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class FunType(tpe: BlockType, region: Region) extends ValueType {
-    override def toString: String = {
-
-      val BlockType(_, params, Effectful(ret, effs)) = tpe
-      // copy and paste from BlockType.toString
-      val ps = params.map {
-        case List(b: BlockType)             => s"{${b.toString}}"
-        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
-      }.mkString("")
-
-      val effects = effs.toList
-      val regs = region match {
-        case RegionSet(r) => r.regions.toList
-        // to not confuse users, we render uninstantiated region variables as ?
-        case e            => List("?")
-      }
-      val both: List[String] = (effects ++ regs).map { _.toString }
-
-      val tpeString = if (both.isEmpty) ret.toString else s"$ret / { ${both.mkString(", ")} }"
-
-      s"$ps ⟹ $tpeString"
-    }
-  }
+  case class FunType(tpe: BlockType /*, region: Region */ ) extends ValueType
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
   object TypeVar {

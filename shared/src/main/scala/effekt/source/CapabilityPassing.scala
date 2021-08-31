@@ -89,7 +89,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, args) =>
       val transformedExpr = rewrite(expr)
-      val (FunType(BlockType(tparams, params, ret / effs), _) / _) = C.inferredTypeOf(expr)
+      val (FunType(BlockType(tparams, params, ret / effs)) / _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.userDefined.toList.map(subst.substitute)

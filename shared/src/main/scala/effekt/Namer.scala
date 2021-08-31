@@ -6,7 +6,6 @@ package namer
  */
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions.SymbolAssertions
-import effekt.regions.Region
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
@@ -444,7 +443,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
         val (terms, effects) = resolveTermsOrTypes(effs)
         val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
-        FunType(btpe, Region(terms))
+        FunType(btpe)
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type

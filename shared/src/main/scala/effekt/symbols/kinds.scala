@@ -48,7 +48,7 @@ package object kinds {
   }
 
   private def wellformedType(tpe: ValueType)(implicit C: Context): Kind = tpe match {
-    case FunType(tpe, region) =>
+    case FunType(tpe) =>
       wellformed(tpe); Kind.Type
     case _: TypeVar => Kind.Type
     case TypeApp(tpe, args) =>

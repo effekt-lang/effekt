@@ -3,7 +3,6 @@ package effekt
 import effekt.context.Context
 import effekt.core.{ Transformer }
 import effekt.namer.Namer
-import effekt.regions.RegionChecker
 import effekt.source.{ CapabilityPassing, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.Typer
@@ -56,9 +55,7 @@ trait Compiler {
     // type checks and annotates trees with inferred types and effects
     new Typer,
     // uses annotated effects to translate to explicit capability passing
-    new CapabilityPassing,
-    // infers regions and prevents escaping of first-class functions
-    new RegionChecker
+    new CapabilityPassing
   )
 
   /**
