@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, UserEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Type, ValueType, BlockType, InterfaceType }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -50,14 +50,9 @@ case class BlockParam(id: BlockSymbol, tpe: InterfaceType) extends Param
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: BlockSymbol) extends Block
 
-// introduced by lift inference only
-case class ScopeAbs(scope: Symbol, body: Block) extends Block
-case class ScopeApp(b: Block, evidence: Scope) extends Block
-case class Lifted(s: Scope, b: Block) extends Block
-
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: EffectOp) extends Block
+// case class Member(b: Block, field: EffectOp) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 
@@ -88,23 +83,11 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
-case class Handle(body: Block, handler: List[Handler]) extends Stmt
-// TODO change to Map
-case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
+// case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
 
-/**
- * Explicit Lifts
- * ---
- * introduced by lift inference only
- * TODO maybe add a separate core language with explicit lifts
- */
-sealed trait Scope extends Tree
-case class Here() extends Scope
-case class Nested(list: List[Scope]) extends Scope
-case class ScopeVar(id: Symbol) extends Scope
-
-case class ScopeId() extends Symbol { val name = Name(s"ev${id}", effekt.symbols.builtins.prelude) }
+//case class Handle(body: Block, handler: List[Handler]) extends Stmt
+//// TODO change to Map
+//case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
 
 object Tree {
 
@@ -127,7 +110,7 @@ object Tree {
     def param: PartialFunction[Param, Param] = t => t
     def block: PartialFunction[Block, Block] = t => t
     def pattern: PartialFunction[Pattern, Pattern] = t => t
-    def handler: PartialFunction[Handler, Handler] = t => t
+    // def handler: PartialFunction[Handler, Handler] = t => t
 
     // Entrypoints to use the traversal on, defined in terms of the above hooks
     def rewrite(e: Expr): Expr = e match {
@@ -159,10 +142,10 @@ object Tree {
         Ret(rewrite(e))
       case Include(contents, rest) =>
         Include(contents, rewrite(rest))
-      case State(id, tpe, get, put, init, body) =>
-        State(id, tpe, get, put, rewrite(init), rewrite(body))
-      case Handle(body, handler) =>
-        Handle(rewrite(body), handler map rewrite)
+      // case State(id, tpe, get, put, init, body) =>
+      //   State(id, tpe, get, put, rewrite(init), rewrite(body))
+      //      case Handle(body, handler) =>
+      //        Handle(rewrite(body), handler map rewrite)
       case Match(scrutinee, clauses) =>
         Match(rewrite(scrutinee), clauses map {
           case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
@@ -176,16 +159,10 @@ object Tree {
     }
     def rewrite(e: Block): Block = e match {
       case e if block.isDefinedAt(e) => block(e)
-      case ScopeAbs(scope, body) =>
-        ScopeAbs(scope, rewrite(body))
-      case ScopeApp(b, evidence) =>
-        ScopeApp(rewrite(b), evidence)
-      case Lifted(s, b) =>
-        Lifted(s, rewrite(b))
       case BlockLit(params, body) =>
         BlockLit(params map rewrite, rewrite(body))
-      case Member(b, field) =>
-        Member(rewrite(b), field)
+      //      case Member(b, field) =>
+      //        Member(rewrite(b), field)
       case Extern(params, body) =>
         Extern(params map rewrite, body)
       case b: BlockVar => b
@@ -198,12 +175,12 @@ object Tree {
         LiteralPattern(rewrite(l).asInstanceOf[Literal[_]])
       case p => p
     }
-    def rewrite(e: Handler): Handler = e match {
-      case e if handler.isDefinedAt(e) => handler(e)
-      case Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) => Handler(id, clauses map {
-        case (s, b) => (s, rewrite(b).asInstanceOf[BlockLit])
-      })
-    }
+    //    def rewrite(e: Handler): Handler = e match {
+    //      case e if handler.isDefinedAt(e) => handler(e)
+    //      case Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) => Handler(id, clauses map {
+    //        case (s, b) => (s, rewrite(b).asInstanceOf[BlockLit])
+    //      })
+    //    }
 
     def rewrite(e: Argument): Argument = e match {
       case e: Expr  => rewrite(e)
@@ -221,7 +198,7 @@ object Tree {
     def param: PartialFunction[Param, T]
     def block: PartialFunction[Block, T]
     def pattern: PartialFunction[Pattern, T]
-    def handler: PartialFunction[Handler, T]
+    // def handler: PartialFunction[Handler, T]
 
     def run(e: Expr): T = e match {
       case e if expr.isDefinedAt(e) => expr(e)
@@ -243,10 +220,10 @@ object Tree {
       case e if pattern.isDefinedAt(e) => pattern(e)
       case e => runGeneric(e)
     }
-    def run(e: Handler): T = e match {
-      case e if handler.isDefinedAt(e) => handler(e)
-      case e => runGeneric(e)
-    }
+    //    def run(e: Handler): T = e match {
+    //      case e if handler.isDefinedAt(e) => handler(e)
+    //      case e => runGeneric(e)
+    //    }
 
     def run(e: Tree): T = e match {
       case e: Expr    => run(e)
@@ -254,7 +231,7 @@ object Tree {
       case p: Param   => run(p)
       case b: Block   => run(b)
       case b: Pattern => run(b)
-      case b: Handler => run(b)
+      // case b: Handler => run(b)
       case other      => runGeneric(other) // TODO explicitly expand
     }
 
@@ -276,6 +253,6 @@ object Tree {
     def param: PartialFunction[Param, Unit] = x => ()
     def block: PartialFunction[Block, Unit] = x => ()
     def pattern: PartialFunction[Pattern, Unit] = x => ()
-    def handler: PartialFunction[Handler, Unit] = x => ()
+    // def handler: PartialFunction[Handler, Unit] = x => ()
   }
 }

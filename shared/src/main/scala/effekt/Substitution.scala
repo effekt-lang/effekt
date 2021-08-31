@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ BlockType, CapabilityType, Effect, Effects, EffectApp, Effectful, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ BlockType, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -24,20 +24,16 @@ object substitutions {
       case other => other
     }
 
-    def substitute(e: Effectful): Effectful = e match {
-      case Effectful(tpe, effs) => Effectful(substitute(tpe), substitute(effs))
-    }
+    // def substitute(e: Effects): Effects = Effects(e.toList.map(substitute))
 
-    def substitute(e: Effects): Effects = Effects(e.toList.map(substitute))
-
-    def substitute(e: Effect): Effect = e match {
-      case EffectApp(e, tpes) => EffectApp(substitute(e), tpes.map(substitute))
-      case e                  => e
-    }
+    //    def substitute(e: Effect): Effect = e match {
+    //      case EffectApp(e, tpes) => EffectApp(substitute(e), tpes.map(substitute))
+    //      case e                  => e
+    //    }
 
     def substitute(t: InterfaceType): InterfaceType = t match {
-      case b: CapabilityType => b
-      case b: BlockType      => substitute(b)
+      // case b: CapabilityType => b
+      case b: BlockType => substitute(b)
     }
 
     def substitute(t: BlockType): BlockType = t match {
@@ -184,7 +180,7 @@ object substitutions {
             return UnificationError(s"Section count does not match $f1 vs. $f2")
           }
 
-          (args1 zip args2).foldLeft(unifyEffectful(ret1, ret2)) {
+          (args1 zip args2).foldLeft(unifyValueTypes(ret1, ret2)) {
             case (u, (as1, as2)) =>
               if (as1.size != as2.size)
                 return UnificationError(s"Argument count does not match $f1 vs. $f2")
@@ -195,8 +191,8 @@ object substitutions {
 
     // We don't unify effects here, instead we simply gather them
     // Two effects State[?X1] and State[?X2] are assumed to be disjoint until we know that ?X1 and ?X2 are equal.
-    def unifyEffectful(e1: Effectful, e2: Effectful)(implicit C: Context): UnificationResult =
-      unifyTypes(e1.tpe, e2.tpe)
+    //    def unifyEffectful(e1: Effectful, e2: Effectful)(implicit C: Context): UnificationResult =
+    //      unifyTypes(e1.tpe, e2.tpe)
 
     /**
      * Instantiate a typescheme with fresh, rigid type variables

@@ -3,7 +3,7 @@ package effekt
 import effekt.context.Context
 import effekt.core.{ Transformer }
 import effekt.namer.Namer
-import effekt.source.{ CapabilityPassing, ModuleDecl }
+import effekt.source.{ ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
@@ -53,9 +53,7 @@ trait Compiler {
     // performs name analysis and associates Id-trees with symbols
     new Namer,
     // type checks and annotates trees with inferred types and effects
-    new Typer,
-    // uses annotated effects to translate to explicit capability passing
-    new CapabilityPassing
+    new Typer
   )
 
   /**

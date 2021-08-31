@@ -75,7 +75,7 @@ trait Intelligence {
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
-    case d: EffectOp     => C.definitionTreeOption(d.effect)
+    // case d: EffectOp     => C.definitionTreeOption(d.effect)
     case a: Anon         => Some(a.decl)
     case u               => C.definitionTreeOption(u)
   }
@@ -101,36 +101,36 @@ trait Intelligence {
 
     case f: UserFunction if C.blockTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
-
-    case f: BuiltinEffect =>
-      val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
-                   |but cannot be handled with `try { ... } with ${f.name} { ... }`. The return type
-                   |of the main function can still have unhandled builtin effects.
-                   |""".stripMargin
-
-      SymbolInfo(f, "Builtin Effect", None, Some(ex))
-
-    case f: EffectOp =>
-      val ex =
-        s"""|Effect operations, like `${f.name}` allow to express non-local control flow.
-            |
-            |Other than blocks, the implementation of an effect operation is provided by
-            |the closest
-            |```effekt
-            |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
-            |```
-            |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
-            |
-            |However, note that opposed to languages like Java, effect operations
-            |cannot be _captured_ in Effekt. That is, if the type of a function or block
-            |```effekt
-            |def f(): Int / {}
-            |```
-            |does not mention the effect `${f.effect.name}`, then this effect will not be
-            |handled by the handler. This is important when considering higher-order functions.
-            |""".stripMargin
-
-      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
+    //
+    //    case f: BuiltinEffect =>
+    //      val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
+    //                   |but cannot be handled with `try { ... } with ${f.name} { ... }`. The return type
+    //                   |of the main function can still have unhandled builtin effects.
+    //                   |""".stripMargin
+    //
+    //      SymbolInfo(f, "Builtin Effect", None, Some(ex))
+    //
+    //    case f: EffectOp =>
+    //      val ex =
+    //        s"""|Effect operations, like `${f.name}` allow to express non-local control flow.
+    //            |
+    //            |Other than blocks, the implementation of an effect operation is provided by
+    //            |the closest
+    //            |```effekt
+    //            |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
+    //            |```
+    //            |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
+    //            |
+    //            |However, note that opposed to languages like Java, effect operations
+    //            |cannot be _captured_ in Effekt. That is, if the type of a function or block
+    //            |```effekt
+    //            |def f(): Int / {}
+    //            |```
+    //            |does not mention the effect `${f.effect.name}`, then this effect will not be
+    //            |handled by the handler. This is important when considering higher-order functions.
+    //            |""".stripMargin
+    //
+    //      SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
 
     case c: Record =>
       val ex = s"""|Instances of data types like `${c.tpe}` can only store
@@ -155,22 +155,22 @@ trait Intelligence {
 
       SymbolInfo(c, "Block parameter", signature, Some(ex))
 
-    case c: ResumeParam =>
-      val tpe = C.blockTypeOption(c)
-      val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
-      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse { " " }
-
-      val ex =
-        s"""|Resumptions are block parameters, implicitly bound
-            |when handling effect operations.
-            |
-            |The following three types have to be the same$hint:
-            |- the return type of the operation clause
-            |- the type of the handled expression enclosed by `try { EXPR } with EFFECT { ... }`, and
-            |- the return type of the resumption.
-            |""".stripMargin
-
-      SymbolInfo(c, "Resumption", signature, Some(ex))
+    //    case c: ResumeParam =>
+    //      val tpe = C.blockTypeOption(c)
+    //      val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
+    //      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse { " " }
+    //
+    //      val ex =
+    //        s"""|Resumptions are block parameters, implicitly bound
+    //            |when handling effect operations.
+    //            |
+    //            |The following three types have to be the same$hint:
+    //            |- the return type of the operation clause
+    //            |- the type of the handled expression enclosed by `try { EXPR } with EFFECT { ... }`, and
+    //            |- the return type of the resumption.
+    //            |""".stripMargin
+    //
+    //      SymbolInfo(c, "Resumption", signature, Some(ex))
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }

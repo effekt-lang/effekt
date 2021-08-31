@@ -22,14 +22,14 @@ object assertions {
       case t: BlockParam => t
       case _ => reporter.abort("Expected a block parameter")
     }
-    def asUserEffect: UserEffect = s match {
-      case t: UserEffect => t
-      case _ => reporter.abort("Expected a user defined effect")
-    }
-    def asEffectOp: EffectOp = s match {
-      case t: EffectOp => t
-      case _ => reporter.abort("Expected an effect operation, but got " + s)
-    }
+    //    def asUserEffect: UserEffect = s match {
+    //      case t: UserEffect => t
+    //      case _ => reporter.abort("Expected a user defined effect")
+    //    }
+    //    def asEffectOp: EffectOp = s match {
+    //      case t: EffectOp => t
+    //      case _ => reporter.abort("Expected an effect operation, but got " + s)
+    //    }
     def asUserFunction: UserFunction = s match {
       case t: UserFunction => t
       case _ => reporter.abort("Expected a user defined function")
@@ -70,10 +70,10 @@ object assertions {
       case t: Type => t
       case _ => reporter.abort("Expected a type")
     }
-    def asEffect: Effect = s match {
-      case t: Effect => t
-      case _ => reporter.abort("Expected an effect")
-    }
+    //    def asEffect: Effect = s match {
+    //      case t: Effect => t
+    //      case _ => reporter.abort("Expected an effect")
+    //    }
     def asFun: Fun = s match {
       case t: Fun => t
       case _ => reporter.abort("Expected a function")

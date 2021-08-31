@@ -102,26 +102,26 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(body)
       }
 
-    case source.EffDef(id, tparams, ops) =>
-      val effectSym = Context.resolveType(id).asUserEffect
-      effectSym.ops = ops.map {
-        case source.Operation(id, tparams, params, ret) =>
-          val name = Context.freshTermName(id)
-          Context scoped {
-            // the parameters of the effect are in scope
-            effectSym.tparams.foreach { p => Context.bind(p) }
-
-            val tps = tparams map resolve
-
-            // The type parameters of an effect op are:
-            //   1) all type parameters on the effect, followed by
-            //   2) the annotated type parameters on the concrete operation
-            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
-            Context.define(id, op)
-            op
-          }
-      }
-      effectSym.ops.foreach { op => Context.bind(op) }
+    //    case source.EffDef(id, tparams, ops) =>
+    //      val effectSym = Context.resolveType(id).asUserEffect
+    //      effectSym.ops = ops.map {
+    //        case source.Operation(id, tparams, params, ret) =>
+    //          val name = Context.freshTermName(id)
+    //          Context scoped {
+    //            // the parameters of the effect are in scope
+    //            effectSym.tparams.foreach { p => Context.bind(p) }
+    //
+    //            val tps = tparams map resolve
+    //
+    //            // The type parameters of an effect op are:
+    //            //   1) all type parameters on the effect, followed by
+    //            //   2) the annotated type parameters on the concrete operation
+    //            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+    //            Context.define(id, op)
+    //            op
+    //          }
+    //      }
+    //      effectSym.ops.foreach { op => Context.bind(op) }
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
@@ -147,7 +147,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       record.fields = resolveFields(fields, record)
 
     case source.ExternType(id, tparams) => ()
-    case source.ExternEffect(id, tparams) => ()
+    // case source.ExternEffect(id, tparams) => ()
     case source.ExternFun(pure, id, tparams, params, ret, body) => ()
     case source.ExternInclude(path) => ()
 
@@ -163,38 +163,38 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    case source.TryHandle(body, handlers) =>
-      Context scoped { resolveGeneric(body) }
-      resolveAll(handlers)
-
-    case source.Handler(effect, _, clauses) =>
-
-      def extractUserEffect(e: Effect): UserEffect = e match {
-        case EffectApp(e, args) => extractUserEffect(e)
-        case e: UserEffect      => e
-        case b: BuiltinEffect =>
-          Context.abort(s"Cannot handle built in effects like ${b}")
-      }
-
-      val eff: UserEffect = Context.at(effect) { extractUserEffect(resolve(effect)) }
-
-      clauses.foreach {
-        case source.OpClause(op, params, body, resumeId) =>
-
-          // try to find the operation in the handled effect:
-          eff.ops.find { o => o.name.toString == op.name } map { opSym =>
-            Context.assignSymbol(op, opSym)
-          } getOrElse {
-            Context.abort(s"Effect operation ${op.name} is not part of effect ${eff}.")
-          }
-
-          val ps = params.map(resolve)
-          Context scoped {
-            Context.bind(ps)
-            Context.define(resumeId, ResumeParam(C.module))
-            resolveGeneric(body)
-          }
-      }
+    //    case source.TryHandle(body, handlers) =>
+    //      Context scoped { resolveGeneric(body) }
+    //      resolveAll(handlers)
+    //
+    //    case source.Handler(effect, _, clauses) =>
+    //
+    //      def extractUserEffect(e: Effect): UserEffect = e match {
+    //        case EffectApp(e, args) => extractUserEffect(e)
+    //        case e: UserEffect      => e
+    //        case b: BuiltinEffect =>
+    //          Context.abort(s"Cannot handle built in effects like ${b}")
+    //      }
+    //
+    //      val eff: UserEffect = Context.at(effect) { extractUserEffect(resolve(effect)) }
+    //
+    //      clauses.foreach {
+    //        case source.OpClause(op, params, body, resumeId) =>
+    //
+    //          // try to find the operation in the handled effect:
+    //          eff.ops.find { o => o.name.toString == op.name } map { opSym =>
+    //            Context.assignSymbol(op, opSym)
+    //          } getOrElse {
+    //            Context.abort(s"Effect operation ${op.name} is not part of effect ${eff}.")
+    //          }
+    //
+    //          val ps = params.map(resolve)
+    //          Context scoped {
+    //            Context.bind(ps)
+    //            Context.define(resumeId, ResumeParam(C.module))
+    //            resolveGeneric(body)
+    //          }
+    //      }
 
     case source.MatchClause(pattern, body) =>
       val ps = resolve(pattern)
@@ -281,10 +281,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val sym = BlockParam(Name(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
-    case source.CapabilityParam(id, tpe) =>
-      val sym = CapabilityParam(Name(id), resolve(tpe))
-      Context.assignSymbol(id, sym)
-      List(sym)
+    //    case source.CapabilityParam(id, tpe) =>
+    //      val sym = CapabilityParam(Name(id), resolve(tpe))
+    //      Context.assignSymbol(id, sym)
+    //      List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
@@ -294,10 +294,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     }
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
-    case source.IdTarget(id) => Context.resolveCalltarget(id)
-    case source.MemberTarget(recv, id) =>
-      Context.resolveTerm(recv)
-      Context.resolveCalltarget(id)
+    case source.IdTarget(id)     => Context.resolveCalltarget(id)
+    //    case source.MemberTarget(recv, id) =>
+    //      Context.resolveTerm(recv)
+    //      Context.resolveCalltarget(id)
     case source.ExprTarget(expr) => resolveGeneric(expr)
   }
 
@@ -327,15 +327,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
       Context.define(id, sym)
 
-    case source.EffDef(id, tparams, ops) =>
-      // we use the localName for effects, since they will be bound as capabilities
-      val effectSym = Context scoped {
-        val tps = tparams map resolve
-        // we do not resolve the effect operations here to allow them to refer to types that are defined
-        // later in the file
-        UserEffect(Name(id), tps)
-      }
-      Context.define(id, effectSym)
+    //    case source.EffDef(id, tparams, ops) =>
+    //      // we use the localName for effects, since they will be bound as capabilities
+    //      val effectSym = Context scoped {
+    //        val tps = tparams map resolve
+    //        // we do not resolve the effect operations here to allow them to refer to types that are defined
+    //        // later in the file
+    //        UserEffect(Name(id), tps)
+    //      }
+    //      Context.define(id, effectSym)
 
     case source.DataDef(id, tparams, ctors) =>
       val typ = Context scoped {
@@ -366,11 +366,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         BuiltinType(Name(id), tps)
       })
 
-    case source.ExternEffect(id, tparams) =>
-      Context.define(id, Context scoped {
-        val tps = tparams map resolve
-        BuiltinEffect(Name(id), tps)
-      })
+    //    case source.ExternEffect(id, tparams) =>
+    //      Context.define(id, Context scoped {
+    //        val tps = tparams map resolve
+    //        BuiltinEffect(Name(id), tps)
+    //      })
 
     case source.ExternFun(pure, id, tparams, params, ret, body) => {
       val name = Context.freshTermName(id)
@@ -421,9 +421,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
-        val (terms, effects) = resolveTermsOrTypes(effs)
-        val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
+      case source.FunType(tpe @ source.BlockType(params, ret)) =>
+        val btpe = BlockType(Nil, List(params.map(resolve)), resolve(ret))
         FunType(btpe)
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
@@ -432,54 +431,29 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
-  def resolveTermsOrTypes(effs: List[source.Effect])(implicit C: Context): (List[TermSymbol], List[Effect]) = {
-    var terms: List[TermSymbol] = Nil
-    var effects: List[Effect] = Nil
-
-    effs.foreach { eff =>
-      resolveTermOrType(eff) match {
-        case Left(term) => terms = terms :+ term
-        case Right(tpe) => effects = effects :+ tpe
-      }
-    }
-    (terms, effects)
-  }
-
-  def resolveTermOrType(eff: source.Effect)(implicit C: Context): Either[TermSymbol, Effect] = eff match {
-    case source.Effect(e, Nil) => Context.resolveAny(e) match {
-      case t: TermSymbol => Left(t)
-      case e: Effect     => Right(e)
-    }
-    case source.Effect(e, args) => Right(EffectApp(Context.resolveType(e).asEffect, args.map(resolve)))
-  }
-
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
     val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
     C.annotateResolvedType(tpe)(res)
     res
   }
 
-  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
-    val res = CapabilityType(tpe.eff)
-    C.annotateResolvedType(tpe)(res)
-    res
-  }
+  //  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
+  //    val res = CapabilityType(tpe.eff)
+  //    C.annotateResolvedType(tpe)(res)
+  //    res
+  //  }
 
-  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
-    val res = eff match {
-      case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
-      case source.Effect(e, args) => EffectApp(Context.resolveType(e).asEffect, args.map(resolve))
-    }
-    kinds.wellformed(res)
-    res
-  }
+  //  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
+  //    val res = eff match {
+  //      case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
+  //      case source.Effect(e, args) => EffectApp(Context.resolveType(e).asEffect, args.map(resolve))
+  //    }
+  //    kinds.wellformed(res)
+  //    res
+  //  }
 
-  def resolve(tpe: source.Effects)(implicit C: Context): Effects =
-    Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
-
-  def resolve(e: source.Effectful)(implicit C: Context): Effectful =
-    Effectful(resolve(e.tpe), resolve(e.eff))
+  //  def resolve(tpe: source.Effects)(implicit C: Context): Effects =
+  //    Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)

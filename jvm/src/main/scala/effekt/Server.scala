@@ -116,38 +116,14 @@ trait LSPServer extends Driver with Intelligence {
     } yield actions)
 
   def action(tree: Tree)(implicit C: Context): Option[TreeAction] = tree match {
-    case f: FunDef => inferEffectsAction(f)
-    case h: Hole   => closeHoleAction(h)
-    case _         => None
+    case h: Hole => closeHoleAction(h)
+    case _       => None
   }
-
-  /**
-   * TODO it would be great, if Kiama would allow setting the position of the code action separately
-   * from the node to replace. Here, we replace the annotated return type, but would need the
-   * action on the function (since the return type might not exist in the original program).
-   *
-   * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
-   * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
-   */
-  def inferEffectsAction(fun: FunDef)(implicit C: Context): Option[TreeAction] = for {
-    pos <- positions.getStart(fun)
-    ret <- fun.ret
-    // the inferred type
-    tpe <- C.inferredTypeOption(fun)
-    // the annotated type
-    ann = fun.symbol.ret
-    if ann.map { a => needsUpdate(a, tpe) }.getOrElse(true)
-  } yield TreeAction(
-    "Update return type with inferred effects",
-    pos.source.name,
-    ret,
-    tpe.toString
-  )
 
   def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
     pos <- positions.getStart(hole)
-    (holeTpe / _) <- C.inferredTypeOption(hole)
-    (contentTpe / _) <- C.inferredTypeOption(hole.stmts)
+    holeTpe <- C.inferredTypeOption(hole)
+    contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {
@@ -161,10 +137,10 @@ trait LSPServer extends Driver with Intelligence {
     }
   } yield res
 
-  def needsUpdate(annotated: Effectful, inferred: Effectful)(implicit C: Context): Boolean = {
-    val (tpe1 / effs1) = annotated
-    val (tpe2 / effs2) = inferred
-    tpe1 != tpe2 || effs1 != effs2
+  def needsUpdate(annotated: ValueType, inferred: ValueType)(implicit C: Context): Boolean = {
+    val tpe1 = annotated
+    val tpe2 = inferred
+    tpe1 != tpe2
   }
 }
 

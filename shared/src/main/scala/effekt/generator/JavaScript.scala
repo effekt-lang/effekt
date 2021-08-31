@@ -57,8 +57,8 @@ trait JavaScriptPrinter extends JavaScriptBase {
       nameRef(v)
     case BlockLit(ps, body) =>
       jsLambda(ps map toDoc, toDoc(body))
-    case Member(b, id) =>
-      toDoc(b) <> "." <> nameDef(id)
+    //    case Member(b, id) =>
+    //      toDoc(b) <> "." <> nameDef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
     case Unbox(e) => toDoc(e)
@@ -90,13 +90,13 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(id, tpe, get, put, init, body) =>
-      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
-
-    case Handle(body, hs) =>
-      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
-      val cs = parens(jsArray(handlers))
-      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
+    //    case State(id, tpe, get, put, init, body) =>
+    //      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
+    //
+    //    case Handle(body, hs) =>
+    //      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
+    //      val cs = parens(jsArray(handlers))
+    //      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
 
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {
@@ -160,15 +160,15 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
   def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _                     => toDoc(id.name)
+    // case _: symbols.Capability => id.name.toString + "_" + id.id
+    // case _: symbols.EffectOp   => "op$" + id.name.toString
+    case _ => toDoc(id.name)
   }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
+    // case _: symbols.Effect     => toDoc(id.name)
+    // case _: symbols.Capability => id.name.toString + "_" + id.id
+    // case _: symbols.EffectOp   => "op$" + id.name.toString
     case _ => id.name match {
       case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
       case name => toDoc(name)

@@ -91,9 +91,9 @@ object scopes {
     def lookupFirst(key: String)(implicit C: Context): Symbol =
       (terms.get(key).map(_.toList), types.get(key)) match {
         case (Some(List(t)), None) => t
-        case (None, Some(t)) => t
+        case (None, Some(t))       => t
         // give precendence to the type level effect, if an equally named effect op is in scope
-        case (Some(List(t1: EffectOp)), Some(t2: UserEffect)) => t2
+        // case (Some(List(t1: EffectOp)), Some(t2: UserEffect)) => t2
         case (Some(t1), Some(t2)) =>
           C.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
         case (None, None) => parent.lookupFirst(key)

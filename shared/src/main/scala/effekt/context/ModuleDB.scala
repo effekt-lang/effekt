@@ -71,10 +71,10 @@ trait ModuleDB { self: Context =>
       C.abort("Main does not take arguments")
     }
 
-    val tpe = C.blockTypeOf(main)
-    val userEffects = tpe.ret.effects.userDefined
-    if (userEffects.nonEmpty) {
-      C.abort(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
-    }
+    //    val tpe = C.blockTypeOf(main)
+    //    val userEffects = tpe.ret.effects.userDefined
+    //    if (userEffects.nonEmpty) {
+    //      C.abort(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
+    //    }
   }
 }

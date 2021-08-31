@@ -63,14 +63,15 @@ object Annotations {
   }
 
   /**
-   * The type and effect as inferred by typer at a given position in the tree
+   * The type as inferred by typer at a given position in the tree
    *
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val TypeAndEffect = Annotation[source.Tree, symbols.Effectful](
-    "TypeAndEffect",
-    "the inferred type and effect of"
+  // TODO rename to Type
+  val TypeAndEffect = Annotation[source.Tree, symbols.ValueType](
+    "Type",
+    "the inferred type of"
   )
 
   /**
@@ -227,7 +228,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Effectful, Module }
+  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Module }
 
   // Types
   // -----
@@ -235,10 +236,10 @@ trait AnnotationsDB { self: Context =>
   def typeArguments(c: source.Call): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
-  def inferredTypeOption(t: source.Tree): Option[Effectful] =
+  def inferredTypeOption(t: source.Tree): Option[ValueType] =
     annotationOption(Annotations.TypeAndEffect, t)
 
-  def inferredTypeOf(t: source.Tree): Effectful =
+  def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }

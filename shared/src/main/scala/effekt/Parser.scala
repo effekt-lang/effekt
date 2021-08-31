@@ -221,41 +221,41 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val definition: P[Def] =
     ( valDef
     | funDef
-    | effectDef
+    // | effectDef
     | dataDef
     | recordDef
     | externType
-    | externEffect
+    // | externEffect
     | externFun
     | externInclude
     | failure("Expected a definition")
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef
+    `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> valueType).? ~ ( `=` ~/> stmt) ^^ FunDef
 
   lazy val maybePure: P[Boolean] =
     `pure`.? ^^ { _.isDefined }
 
-  lazy val effectDef: P[Def] =
-    ( `effect` ~> effectOp ^^ {
-        case op =>
-          EffDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op))
-      }
-    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
-    )
+  //  lazy val effectDef: P[Def] =
+  //    ( `effect` ~> effectOp ^^ {
+  //        case op =>
+  //          EffDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op))
+  //      }
+  //    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
+  //    )
 
-  lazy val effectOp: P[Operation] =
-    idDef ~ maybeTypeParams ~ some(valueParams) ~/ (`:` ~/> effectful) ^^ Operation
+  //  lazy val effectOp: P[Operation] =
+  //    idDef ~ maybeTypeParams ~ some(valueParams) ~/ (`:` ~/> valueType) ^^ Operation
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType
 
-  lazy val externEffect: P[Def] =
-    `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect
+  //  lazy val externEffect: P[Def] =
+  //    `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect
 
   lazy val externFun: P[Def] =
-    `extern` ~> (maybePure <~ `def`) ~/ idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
+    `extern` ~> (maybePure <~ `def`) ~/ idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> valueType) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
       case pure ~ id ~ tparams ~ params ~ tpe ~ body => ExternFun(pure, id, tparams, params, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
 
@@ -405,8 +405,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( ifExpr
     | whileExpr
     | funCall
-    | doExpr
-    | handleExpr
+    // | handleExpr
     | lambdaExpr
     | primExpr
     )
@@ -422,29 +421,25 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
-  // TODO deprecate doExpr
-  lazy val doExpr: P[Expr] =
-    `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call
+  //  lazy val handleExpr: P[Expr] =
+  //    `try` ~/> stmt ~ some(handler) ^^ TryHandle
+  //
+  //  lazy val handler: P[Handler] =
+  //    ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+  //      case effect ~ clauses =>
+  //        Handler(effect, None, clauses)
+  //      }
+  //    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
+  //      case effect ~ resume ~ BlockArg(params, body) =>
+  //        val synthesizedId = IdRef(effect.id.name)
+  //        Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
+  //      }
+  //    )
 
-  lazy val handleExpr: P[Expr] =
-    `try` ~/> stmt ~ some(handler) ^^ TryHandle
-
-  lazy val handler: P[Handler] =
-    ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
-      case effect ~ clauses =>
-        Handler(effect, None, clauses)
-      }
-    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
-      case effect ~ resume ~ BlockArg(params, body) =>
-        val synthesizedId = IdRef(effect.id.name)
-        Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
-      }
-    )
-
-  lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {
-      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
-    }
+  //  lazy val defClause: P[OpClause] =
+  //    (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {
+  //      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
+  //    }
 
   lazy val clause: P[MatchClause] =
     `case` ~/> pattern ~ (`=>` ~/> stmts) ^^ MatchClause
@@ -459,7 +454,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
       }
     )
 
-  lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
+  // lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 
 
   lazy val assignExpr: P[Expr] =
@@ -518,31 +513,15 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // for now function types need to be parenthesized
   lazy val funType: P[FunType] =
-    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ {
+    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ {
       case params ~ ret => FunType(BlockType(params, ret))
     }
 
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType
-    | valueType ~ (`=>` ~/> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
-    | effectful ^^ { e => BlockType(Nil, e) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ BlockType
+    | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => BlockType(List(t), e) }
+    | valueType ^^ { e => BlockType(Nil, e) }
     )
-
-  lazy val effectful: P[Effectful] =
-    valueType ~ (`/` ~/> effects).? ^^ {
-      case t ~ Some(es) => Effectful(t, es)
-      case t ~ None => Effectful(t, Effects.Pure)
-    }
-
-  lazy val effects: P[Effects] =
-    ( effectType ^^ { e => Effects(e) }
-    | `{` ~/> manySep(effectType, `,`) <~  `}` ^^ Effects.apply
-    | failure("Expected an effect set")
-    )
-
-  lazy val effectType: P[Effect] =
-    (idRef ~ maybeTypeArgs) ^^ Effect | failure("Expected a single effect")
-
 
   // === AST Helpers ===
 

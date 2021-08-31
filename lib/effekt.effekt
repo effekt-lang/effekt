@@ -1,7 +1,5 @@
 module effekt
 
-extern effect Console
-
 // Runtime
 extern include "effekt_runtime.js"
 
@@ -15,7 +13,7 @@ def locally[R] { f: R }: R = f()
 
 // Side effecting ops
 // ==================
-extern def println[R](value: R): Unit / Console =
+extern def println[R](value: R): Unit =
   "println$impl(value)"
 
 extern pure def inspect[R](value: R): Unit =
@@ -174,26 +172,6 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 extern pure def panic[R](msg: String): R =
   "(function() { throw msg })()"
 
-effect Exception[E] {
-  def raise[A](exception: E, msg: String): A
-}
-record RuntimeError()
-
-def raise[A](msg: String): A / Exception[RuntimeError] = raise(RuntimeError(), msg)
-
-// converts exceptions of (static) type E to an uncatchable panic that aborts the program
-def panicOn[E] { prog: Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception, msg) = panic(msg) }
-
-// reports exceptions of (static) type E to the console
-def report[E] { prog: Unit / Exception[E] }: Unit / Console =
-  try { prog() } with Exception[E] { def raise(exception, msg) = println(msg) }
-
-// ignores exceptions of (static) type E
-// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
-def ignoring[E] { prog: Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception, msg) = () }
-
 // Benchmarking
 // ============
 
@@ -210,7 +188,7 @@ def timed { block: Unit }: Int = {
   after - before
 }
 
-def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
+def measure(warmup: Int, iterations: Int) { block: Unit }: Unit = {
   def run(n: Int, report: Boolean): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };

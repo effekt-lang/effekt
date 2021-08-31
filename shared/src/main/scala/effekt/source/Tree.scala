@@ -33,10 +33,7 @@ import effekt.symbols.Symbol
  *   |  |- EffDef
  *   |  |- DataDef
  *   |  |- RecordDef
- *   |  |- TypeDef
- *   |  |- EffectDef
  *   |  |- ExternType
- *   |  |- ExternEffect
  *   |  |- ExternFun
  *   |  |- ExternInclude
  *   |
@@ -75,10 +72,6 @@ import effekt.symbols.Symbol
  *   |  |
  *   |  |- CapabilityType
  *   |  |- BlockType
- *   |
- *   |- Effect
- *   |- Effectful
- *   |- Effects
  *
  * We extend product to allow reflective access by Kiama.
  */
@@ -162,14 +155,14 @@ case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { ty
 // TODO fuse into one kind of parameter
 sealed trait TrackedParam extends ParamSection with Definition
 case class BlockParam(id: IdDef, tpe: BlockType) extends TrackedParam { type symbol = symbols.BlockParam }
-case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends TrackedParam { type symbol = symbols.CapabilityParam }
+//case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends TrackedParam { type symbol = symbols.CapabilityParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
-case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
-  type symbol = symbols.CapabilityParam
-}
+//case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
+//  type symbol = symbols.CapabilityParam
+//}
 
 /**
  * Global and local definitions
@@ -177,7 +170,7 @@ case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
 sealed trait Def extends Definition {
   def id: IdDef
 }
-case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
+case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[ValueType], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
 case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
@@ -186,12 +179,12 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
-case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
-  type symbol = symbols.UserEffect
-}
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
-  type symbol = symbols.EffectOp
-}
+//case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
+//  type symbol = symbols.UserEffect
+//}
+//case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
+//  type symbol = symbols.EffectOp
+//}
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }
@@ -206,10 +199,10 @@ case class RecordDef(id: IdDef, tparams: List[Id], fields: ValueParams) extends 
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinType
 }
-case class ExternEffect(id: IdDef, tparams: List[Id]) extends Def {
-  type symbol = symbols.BuiltinEffect
-}
-case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def {
+//case class ExternEffect(id: IdDef, tparams: List[Id]) extends Def {
+//  type symbol = symbols.BuiltinEffect
+//}
+case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: ValueType, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {
@@ -266,15 +259,15 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   // can refer to either a block OR a term symbol
   type symbol = symbols.TermSymbol
 }
-case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
-  type symbol = symbols.EffectOp
-}
+//case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
+//  type symbol = symbols.EffectOp
+//}
 case class ExprTarget(receiver: Expr) extends CallTarget
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+//case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -286,13 +279,13 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
-  def id = effect.id
-  type symbol = symbols.UserEffect
-}
-case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
-  type symbol = symbols.EffectOp
-}
+//case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+//  def id = effect.id
+//  type symbol = symbols.UserEffect
+//}
+//case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
+//  type symbol = symbols.EffectOp
+//}
 
 case class Hole(stmts: Stmt) extends Expr
 
@@ -371,30 +364,30 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 }
 
 // for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.Effect) extends Type {
-  type resolved = symbols.CapabilityType
-}
-case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
+//case class CapabilityType(eff: symbols.Effect) extends Type {
+//  type resolved = symbols.CapabilityType
+//}
+case class BlockType(params: List[ValueType], ret: ValueType) extends Type {
   type resolved = symbols.BlockType
 }
 
-case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
-  // TODO we need to drop Effect <: Symbol and refactor this here
-  // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
-  type resolved = symbols.Effect
-  def resolve(implicit C: Context) = {
-    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
-    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
-  }
-}
-case class Effectful(tpe: ValueType, eff: Effects) extends Tree
-
-case class Effects(effs: List[Effect]) extends Tree
-object Effects {
-  val Pure: Effects = Effects()
-  def apply(effs: Effect*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
-}
+//case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
+//  // TODO we need to drop Effect <: Symbol and refactor this here
+//  // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
+//  type resolved = symbols.Effect
+//  def resolve(implicit C: Context) = {
+//    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
+//    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
+//  }
+//}
+//case class Effectful(tpe: ValueType, eff: Effects) extends Tree
+//
+//case class Effects(effs: List[Effect]) extends Tree
+//object Effects {
+//  val Pure: Effects = Effects()
+//  def apply(effs: Effect*): Effects = Effects(effs.toSet)
+//  def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
+//}
 
 object Tree {
 
@@ -448,8 +441,8 @@ object Tree {
       case Call(fun, targs, args) =>
         Call(fun, targs, args.map(rewrite))
 
-      case TryHandle(prog, handlers) =>
-        TryHandle(rewrite(prog), handlers.map(rewrite))
+      //      case TryHandle(prog, handlers) =>
+      //        TryHandle(rewrite(prog), handlers.map(rewrite))
 
       case Hole(stmts) =>
         Hole(rewrite(stmts))
@@ -467,12 +460,12 @@ object Tree {
       case VarDef(id, annot, binding) =>
         VarDef(id, annot, rewrite(binding))
 
-      case d: EffDef        => d
+      // case d: EffDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d
 
       case d: ExternType    => d
-      case d: ExternEffect  => d
+      //      case d: ExternEffect  => d
       case d: ExternFun     => d
       case d: ExternInclude => d
     }
@@ -496,18 +489,18 @@ object Tree {
     def rewrite(t: ArgSection)(implicit C: Context): ArgSection = visit(t) {
       case ValueArgs(as)      => ValueArgs(as.map(rewrite))
       case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
-      case CapabilityArg(id)  => t
+      //      case CapabilityArg(id)  => t
     }
 
-    def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
-      case Handler(effect, capability, clauses) =>
-        Handler(effect, capability, clauses.map(rewrite))
-    }
-
-    def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {
-      case OpClause(id, params, body, resume) =>
-        OpClause(id, params, rewrite(body), resume)
-    }
+    //    def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
+    //      case Handler(effect, capability, clauses) =>
+    //        Handler(effect, capability, clauses.map(rewrite))
+    //    }
+    //
+    //    def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {
+    //      case OpClause(id, params, body, resume) =>
+    //        OpClause(id, params, rewrite(body), resume)
+    //    }
 
     def rewrite(c: MatchClause)(implicit C: Context): MatchClause = visit(c) {
       case MatchClause(pattern, body) =>

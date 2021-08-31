@@ -24,12 +24,9 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(v) => v.name.toString
     case BlockLit(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
-    case Member(b, id) =>
-      toDoc(b) <> "." <> id.name.toString
+    //    case Member(b, id) =>
+    //      toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
-    case Lifted(ev, b)    => "lift" <> parens(toDoc(ev) <> comma <+> toDoc(b))
-    case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
-    case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
     case Unbox(e)         => toDoc(e)
   }
 
@@ -59,8 +56,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def toDoc(s: Scope): Doc = ???
-
   def toDoc(s: Stmt): Doc =
     if (requiresBlock(s))
       braces(nest(line <> toDocStmt(s)) <> line)
@@ -85,15 +80,15 @@ class PrettyPrinter extends ParenPrettyPrinter {
     // don't print exports for now
     case Exports(path, exports) =>
       emptyDoc
-    case Handle(body, hs) =>
-      // TODO pretty print correctly
-      val handlers = hs map { handler =>
-        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
-      }
-      val cs = parens("[" <> hsep(handlers, comma) <> "]")
-      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
-    case State(id, tpe, get, put, init, body) =>
-      "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
+    //    case Handle(body, hs) =>
+    //      // TODO pretty print correctly
+    //      val handlers = hs map { handler =>
+    //        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+    //      }
+    //      val cs = parens("[" <> hsep(handlers, comma) <> "]")
+    //      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
+    //    case State(id, tpe, get, put, init, body) =>
+    //      "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
 
     case Match(sc, clauses) =>
       val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> "=>" <+> toDoc(b) })) <> line)
