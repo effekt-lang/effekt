@@ -222,8 +222,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( valDef
     | funDef
     | effectDef
-    | typeDef
-    | effectAliasDef
     | dataDef
     | recordDef
     | externType
@@ -373,12 +371,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
        case p ~ sc ~ body =>
         Return(MatchExpr(sc, List(MatchClause(p, body)))) withPositionOf p
      }
-
-  lazy val typeDef: P[TypeDef] =
-    `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef
-
-  lazy val effectAliasDef: P[EffectDef] =
-    `effect` ~> idDef ~ (`=` ~/> effects) ^^ EffectDef
 
   lazy val dataDef: P[DataDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef

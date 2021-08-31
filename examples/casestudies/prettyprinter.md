@@ -73,9 +73,6 @@ The effect `Flow` represents the current layouting direction. Also the indentati
 document depends on the context and is therefore modeled as an effect.
 
 Computing the layout of a document to be pretty printed uses the above three effects:
-```
-effect Layout = { Indent, DefaultIndent, Flow }
-```
 
 ## Output: A Stream of Layout Elements
 Before we look at examples on how to use the `Layout` effect, we introduce yet another effect to
@@ -127,16 +124,16 @@ Indentation can be configured by locally handling `Layout` and thereby changing 
 
 ```
 // Uses `n` as the indentation in the given document
-def in[R](n: Int) { doc: R / Layout }: R / Layout =
+def in[R](n: Int) { doc: R / { Indent, DefaultIndent, Flow } }: R / { Indent, DefaultIndent, Flow } =
   try { doc() }
   with Indent { () => resume(n) }
 
 // Adds `j` to the indentation in the current document
-def nest[R](j: Int) { doc: R / Layout }: R / Layout =
+def nest[R](j: Int) { doc: R / { Indent, DefaultIndent, Flow } }: R / { Indent, DefaultIndent, Flow } =
   (do Indent() + j).in { doc() }
 
 // Uses the default indentation to nest a document
-def nested[R] { doc: R / Layout }: R / Layout =
+def nested[R] { doc: R / { Indent, DefaultIndent, Flow } }: R / { Indent, DefaultIndent, Flow } =
   nest(do DefaultIndent()) { doc() }
 ```
 
@@ -146,14 +143,14 @@ are _all_ layouted horizontally or vertically. Similarly, we can implement handl
 fix the direction:
 
 ```
-def in[R](dir: Direction) { doc: R / Layout }: R / Layout =
+def in[R](dir: Direction) { doc: R / { Indent, DefaultIndent, Flow } }: R / { Indent, DefaultIndent, Flow } =
   try { doc() }
   with Flow { () => resume(dir) }
 
-def horizontal { p: Unit / Layout }: Unit / Layout =
+def horizontal { p: Unit / { Indent, DefaultIndent, Flow } }: Unit / { Indent, DefaultIndent, Flow } =
   Horizontal().in { p() }
 
-def vertical { p: Unit / Layout }: Unit / Layout =
+def vertical { p: Unit / { Indent, DefaultIndent, Flow } }: Unit / { Indent, DefaultIndent, Flow } =
   Vertical().in { p() }
 ```
 
@@ -171,13 +168,10 @@ effect LayoutChoice {
 The `LayoutChoice` effect is very similar to the `Nondet` effect in the [parser case study](parser).
 
 We define the following effect alias for pretty printing documents that depend on layout choices:
-```
-effect Pretty = { Emit, Layout, LayoutChoice }
-```
 
 Using layout choices, we can express the maybe most important pretty printing combinator:
 ```
-def group { p: Unit / Layout } =
+def group { p: Unit / { Indent, DefaultIndent, Flow } } =
   choice().in { p() }
 ```
 The `group` combinator expresses that depending on the result of `choice` we either layout all children
@@ -288,7 +282,7 @@ def writer { p: Unit / Emit } = {
 We can implement a handler for `Layout` by intercepting emit effects and keeping track of the current
 column position.
 ```
-def printer(width: Int, defaultIndent: Int) { prog: Unit / { Emit, Layout } } : Unit / { Emit, LayoutChoice } = {
+def printer(width: Int, defaultIndent: Int) { prog: Unit / { Emit, Indent, DefaultIndent, Flow } } : Unit / { Emit, LayoutChoice } = {
   // the position in the current line
   var pos: Int = 0;
 
@@ -317,7 +311,7 @@ If the current text still fits the line, we simply re-emit it.
 
 Finally, we can compose the different handlers to a single pretty printing handler:
 ```
-def pretty(width: Int) { doc: Unit / Pretty }: String = {
+def pretty(width: Int) { doc: Unit / { Emit, Indent, DefaultIndent, Flow, LayoutChoice } }: String = {
   val result = searchLayout { writer { printer(width, 2) { doc() } } };
   result.getOrElse { "Cannot print document, since it would overflow." }
 }
@@ -332,11 +326,11 @@ which contains the currently printed document is reset to its previous state.
 
 We can of course define some additional combinators to describe documents:
 ```
-def parens { p: Unit }: Unit / Pretty = {
+def parens { p: Unit }: Unit / { Emit, Indent, DefaultIndent, Flow, LayoutChoice } = {
   text("("); p(); text(")")
 }
 
-def braces { p: Unit }: Unit / Pretty = {
+def braces { p: Unit }: Unit / { Emit, Indent, DefaultIndent, Flow, LayoutChoice } = {
   text("{"); p(); text("}")
 }
 ```
@@ -344,7 +338,7 @@ def braces { p: Unit }: Unit / Pretty = {
 and write a pretty printer for the example `Tree` from the [parser case study](parser):
 
 ```
-def toDoc(t: Tree): Unit / Pretty = t match {
+def toDoc(t: Tree): Unit / { Emit, Indent, DefaultIndent, Flow, LayoutChoice } = t match {
   case Lit(value) => text(show(value))
   case Var(name) => text(name)
   case Let(name, binding, body) =>

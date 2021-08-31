@@ -138,7 +138,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
 
-        val tpe: BlockType = funTpe.dealias match {
+        val tpe: BlockType = funTpe match {
           case f: FunType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
@@ -413,9 +413,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.assignType(field, tpe)
       }
 
-    case d: source.TypeDef   => wellformed(d.symbol.tpe)
-    case d: source.EffectDef => wellformed(d.symbol.effs)
-    case _                   => ()
+    case _ => ()
   }
 
   def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
@@ -866,7 +864,6 @@ trait TyperOps extends ContextOps { self: Context =>
     val forbidden = Effects(a.userEffects.collect {
       case e: UserEffect      => e
       case EffectApp(e, args) => e
-      case e: EffectAlias     => e
     }) -- effects
     if (forbidden.nonEmpty) {
       error(s"Effects ${forbidden} leave their defining scope.")

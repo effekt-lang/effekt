@@ -68,12 +68,9 @@ def backtrack[R] { prog: () => R / { Fail, Flip } }: Result[R] / {} =
     }
   }
 
+def manyNumbers() : List[Int] / { Fail, Flip, Next } = many { number() }
 
-effect Parser = { Fail, Flip, Next }
-
-def manyNumbers() : List[Int] / Parser = many { number() }
-
-def parse[R](input: List[String]) { prog: () => R / Parser }: Result[R] / {} =
+def parse[R](input: List[String]) { prog: () => R / { Fail, Flip, Next } }: Result[R] / {} =
   backtrack { feed(input) { prog() } }
 
 

@@ -123,9 +123,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
       effectSym.ops.foreach { op => Context.bind(op) }
 
-    case source.TypeDef(id, tparams, tpe) => ()
-    case source.EffectDef(id, effs)       => ()
-
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
       val typ = d.symbol
@@ -177,8 +174,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         case e: UserEffect      => e
         case b: BuiltinEffect =>
           Context.abort(s"Cannot handle built in effects like ${b}")
-        case b: EffectAlias =>
-          Context.abort(s"Cannot only handle concrete effects, but $b is an effect alias")
       }
 
       val eff: UserEffect = Context.at(effect) { extractUserEffect(resolve(effect)) }
@@ -341,20 +336,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         UserEffect(Name(id), tps)
       }
       Context.define(id, effectSym)
-
-    case source.TypeDef(id, tparams, tpe) =>
-      val tps = Context scoped { tparams map resolve }
-      val alias = Context scoped {
-        tps.foreach { t => Context.bind(t) }
-        TypeAlias(Name(id), tps, resolve(tpe))
-      }
-      Context.define(id, alias)
-
-    case source.EffectDef(id, effs) =>
-      val alias = Context scoped {
-        EffectAlias(Name(id), Nil, resolve(effs))
-      }
-      Context.define(id, alias)
 
     case source.DataDef(id, tparams, ctors) =>
       val typ = Context scoped {

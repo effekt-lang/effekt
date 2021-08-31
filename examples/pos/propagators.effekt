@@ -13,46 +13,45 @@ import mutable/heap
 // we are using unsafe/Cont since operations cannot take blocks
 // Safety is established manually and restricted to the local scope of
 // the handler `propagators`.
-type Cell[T] = Ref[(Option[T], List[Cont[T, Unit]])]
 
 // A net of propagators
 effect Net {
-  def unknown[R](): Cell[R]
-  def make[R](value: R): Cell[R]
+  def unknown[R](): Ref[(Option[R], List[Cont[R, Unit]])]
+  def make[R](value: R): Ref[(Option[R], List[Cont[R, Unit]])]
 
-  def learn[A](cell: Cell[A])(value: A): Unit
+  def learn[A](cell: Ref[(Option[A], List[Cont[A, Unit]])])(value: A): Unit
 
   // this really needs to be Cell[A] and { A => Unit / Net } since
   // the updater needs to be run "in parallel". In particular it should
   // only span this block, not the entire remaining computation.
-  def subscribe[A](cell: Cell[A]): Option[A]
+  def subscribe[A](cell: Ref[(Option[A], List[Cont[A, Unit]])]): Option[A]
 
   // To model a scoped operation, we also include abort, which aborts the current strand of updating
   def abort(): Unit
 }
 
-def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net, Console } =
+def watch[A](cell: Ref[(Option[A], List[Cont[A, Unit]])]) { f: A => Unit }: Unit / { Net, Console } =
   cell.subscribe.foreach { a =>
     println("received a " ++ a.show);
     f(a); abort() } // this abort seems to abort also other subscribers?
 
 // establishes a connection between cellA and cellB
 // will run f once the value of cellA is available to update cellB
-def connect[A, B](cellA: Cell[A])(cellB: Cell[B]) { f: A => B }: Unit / { Net, Console } =
+def connect[A, B](cellA: Ref[(Option[A], List[Cont[A, Unit]])])(cellB: Ref[(Option[B], List[Cont[B, Unit]])]) { f: A => B }: Unit / { Net, Console } =
   cellA.watch { a  => cellB.learn(f(a)) }
 
-def connect[A, B, C](cellA: Cell[A], cellB: Cell[B], cellC: Cell[C]) { f: (A, B) => C }: Unit / { Net, Console } = {
+def connect[A, B, C](cellA: Ref[(Option[A], List[Cont[A, Unit]])], cellB: Ref[(Option[B], List[Cont[B, Unit]])], cellC: Ref[(Option[C], List[Cont[C, Unit]])]) { f: (A, B) => C }: Unit / { Net, Console } = {
   cellA.watch { a => cellB.subscribe.foreach { b => cellC.learn(f(a, b)) } }
   cellB.watch { b => cellA.subscribe.foreach { a => cellC.learn(f(a, b)) } }
 }
 
-def sumOf(res: Cell[Int])(arg1: Cell[Int], arg2: Cell[Int]) = {
+def sumOf(res: Ref[(Option[Int], List[Cont[Int, Unit]])])(arg1: Ref[(Option[Int], List[Cont[Int, Unit]])], arg2: Ref[(Option[Int], List[Cont[Int, Unit]])]) = {
   connect(arg1, arg2, res) { (a, b) => a + b }
   connect(res, arg2, arg1) { (a, b) => a - b }
   connect(res, arg1, arg2) { (a, b) => a - b }
 }
 
-def negated(that: Cell[Int])(inverse: Cell[Int]) = {
+def negated(that: Ref[(Option[Int], List[Cont[Int, Unit]])])(inverse: Ref[(Option[Int], List[Cont[Int, Unit]])]) = {
   that.connect(inverse) { x => (0 - x) }
   inverse.connect(that) { x => (0 - x) }
 }

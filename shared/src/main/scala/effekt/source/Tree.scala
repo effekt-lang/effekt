@@ -201,20 +201,6 @@ case class RecordDef(id: IdDef, tparams: List[Id], fields: ValueParams) extends 
   type symbol = symbols.Record
 }
 
-/**
- * Type aliases like `type Matrix[T] = List[List[T]]`
- */
-case class TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType) extends Def {
-  type symbol = symbols.TypeAlias
-}
-
-/**
- * Effect aliases like `effect Set = { Get, Put }`
- */
-case class EffectDef(id: IdDef, effs: Effects) extends Def {
-  type symbol = symbols.EffectAlias
-}
-
 // only valid on the toplevel!
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinType
@@ -483,8 +469,6 @@ object Tree {
       case d: EffDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d
-      case d: TypeDef       => d
-      case d: EffectDef     => d
 
       case d: ExternType    => d
       case d: ExternEffect  => d

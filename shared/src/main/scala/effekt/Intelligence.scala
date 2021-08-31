@@ -132,12 +132,6 @@ trait Intelligence {
 
       SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
 
-    case f: EffectAlias =>
-      SymbolInfo(f, "Effect alias", Some(DeclPrinter(f)), None)
-
-    case t: TypeAlias =>
-      SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
-
     case c: Record =>
       val ex = s"""|Instances of data types like `${c.tpe}` can only store
                    |_values_, not _blocks_. Hence, constructors like `${c.name}` only have

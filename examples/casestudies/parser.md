@@ -26,8 +26,6 @@ effect Nondet {
   def alt(): Boolean
   def fail[A](msg: String): A
 }
-
-effect Parser = { Nondet, Lexer }
 ```
 
 ## Parser Combinators
@@ -36,7 +34,7 @@ We start by the simplest one, which applies a predicate to the next element in t
 input stream and fails, if it does not match.
 
 ```
-def accept { p: Token => Boolean } : Token / Parser = {
+def accept { p: Token => Boolean } : Token / { Nondet, Lexer } = {
   val got = next();
   if (p(got)) got
   else fail("Unexpected token " ++ show(got))
@@ -54,7 +52,7 @@ def punct(p: String) = {
   if (tok.text == p) ()
   else fail("Expected " ++ p ++ " but got " ++ tok.text)
 }
-def kw(exp: String): Unit / Parser = {
+def kw(exp: String): Unit / { Nondet, Lexer } = {
   val got = ident();
   if (got == exp) ()
   else fail("Expected keyword " ++ exp ++ " but got " ++ got)
@@ -65,13 +63,13 @@ Using the effect for non-deterministic choice `alt`, we can model alternatives, 
 def or[R] { p: R } { q: R } =
   if (alt()) { p() } else { q() }
 
-def opt[R] { p: R }: Option[R] / Parser =
+def opt[R] { p: R }: Option[R] / { Nondet, Lexer } =
   or { Some(p()) } { None() }
 
-def many { p: Unit }: Unit / Parser =
+def many { p: Unit }: Unit / { Nondet, Lexer } =
   or { some { p() } } { () }
 
-def some { p: Unit }: Unit / Parser =
+def some { p: Unit }: Unit / { Nondet, Lexer } =
   { p(); many { p() } }
 ```
 
@@ -90,7 +88,7 @@ type Tree {
 
 Let us start by defining the parser for numeric literals.
 ```
-def parseNum(): Tree / Parser = {
+def parseNum(): Tree / { Nondet, Lexer } = {
   val numText = number()
   val num = toInt(numText).getOrElse {
     fail("Expected number, but cannot convert input to integer: " ++ numText)
@@ -102,7 +100,7 @@ We simply call the parser for `number()` and try to convert the
 resulting string to an intenger.
 
 ```
-def parseVar(): Tree / Parser =
+def parseVar(): Tree / { Nondet, Lexer } =
   Var(ident())
 
 def parseAtom() = or { parseVar() } { parseNum() }
@@ -116,7 +114,7 @@ semantics of effects.
 Similarly, we can write parsers for let bindings, by sequentially composing
 our existing parsers:
 ```
-def parseLet(): Tree / Parser = {
+def parseLet(): Tree / { Nondet, Lexer } = {
   kw("let");
   val name = ident();
   punct("=");
@@ -140,7 +138,7 @@ def parseGroup() = or { parseAtom() } {
   res
 }
 
-def parseApp(): Tree / Parser = {
+def parseApp(): Tree / { Nondet, Lexer } = {
   val funName = ident();
   punct("(");
   val arg = parseExpr();
@@ -148,7 +146,7 @@ def parseApp(): Tree / Parser = {
   App(funName, arg)
 }
 
-def parseExpr(): Tree / Parser =
+def parseExpr(): Tree / { Nondet, Lexer } =
   or { parseLet() } { or { parseApp() } { parseGroup() } }
 ```
 
@@ -165,7 +163,7 @@ The following example implements an example
 ```
 It uses local (mutable) variables to count the number of leafs as semantic action.
 ```
-def parseCalls(): Int / Parser =
+def parseCalls(): Int / { Nondet, Lexer } =
   or { number(); 1 } {
     var count = 1;
     ident();
@@ -201,7 +199,7 @@ type ParseResult[R] {
 The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
-def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
+def parse[R](input: String) { p: R / { Nondet, Lexer } }: ParseResult[R] = try {
   lexer(input) { skipWhitespace { Success(p()) } }
 } with Nondet {
   def alt() = resume(true) match {
@@ -222,7 +220,7 @@ the lexer positions will be restored when calling the continuation a second time
 
 
 ## Running the Examples
-Having implemented a handler for the `Parser` effect, we can run our example "grammars" on some inputs.
+Having implemented a handler for the `{ Nondet, Lexer }` effects, we can run our example "grammars" on some inputs.
 
 ```
 def main() = {

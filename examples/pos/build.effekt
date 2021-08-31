@@ -3,23 +3,18 @@ module examples/pos/build
 import immutable/list
 import immutable/option
 
-type Key = String
-type Val = Int
+effect Need(key: String): Int
+effect NeedInput(key: String): Int
+effect KeyNotFound[A](key: String): A
 
-effect Need(key: Key): Val
-effect NeedInput(key: Key): Val
-effect KeyNotFound[A](key: Key): A
-
-type Store = List[(Key,Val)]
-
-def find(store: Store, key: Key): Val / KeyNotFound = {
+def find(store: List[(String,Int)], key: String): Int / KeyNotFound = {
     store match {
         case Nil() => do KeyNotFound(key)
         case Cons((k, v), xs) => if (k == key) { v } else { find(xs, key) }
     }
 }
 
-def build(target: Key) { tasks: Key => Val / { Need } }: Val / {} =
+def build(target: String) { tasks: String => Int / { Need } }: Int / {} =
     try { tasks(target) }
     with Need { requestedKey =>
         resume(build(requestedKey) { k => tasks(k) })
@@ -27,7 +22,7 @@ def build(target: Key) { tasks: Key => Val / { Need } }: Val / {} =
 
 // effect transformer "memo"
 def memo[R] { prog: R / { Need } } = {
-    var store: Store = Nil();
+    var store: List[(String,Int)] = Nil();
     try {
         prog()
     } with Need { (key) =>
@@ -41,7 +36,7 @@ def memo[R] { prog: R / { Need } } = {
     }
 }
 
-def supplyInput[R](store: Store) { prog: R / { NeedInput } } = {
+def supplyInput[R](store: List[(String,Int)]) { prog: R / { NeedInput } } = {
     try { prog() } with NeedInput { (key) => resume(find(store, key)) }
 }
 
@@ -51,7 +46,7 @@ def supplyInput[R](store: Store) { prog: R / { NeedInput } } = {
 //  |  A | B
 // 1| 10 | A1 + A2
 // 2| 20 | B1 * 2
-def example1(key: Key): Val / { Need, NeedInput, Console } = {
+def example1(key: String): Int / { Need, NeedInput, Console } = {
     println(key);
     key match {
         case "B1" => do Need("A1") + do Need("A2")
@@ -61,7 +56,7 @@ def example1(key: Key): Val / { Need, NeedInput, Console } = {
 }
 
 // Needing the same key twice
-def example2(key: Key) = {
+def example2(key: String) = {
     println(key);
     key match {
         case "B1" => do Need("A1") + do Need("A2")

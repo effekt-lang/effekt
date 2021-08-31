@@ -24,8 +24,7 @@ def semiAfterDef(n: Int) = {
 }
 
 def semiAfterType(n: Int) = {
-  type X = Int;
-  val x: X = 3
+  val x: Int = 3
   x
 }
 

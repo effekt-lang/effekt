@@ -61,10 +61,6 @@ package object kinds {
       }
       args foreach { a => wellformedType(a) }
       res
-
-    case TypeAlias(_, tparams, tpe) =>
-      wellformed(tpe)
-      Kind.TypeFun(tparams map { p => Kind.Type })
     case DataType(_, tparams, _)  => Kind.TypeFun(tparams map { p => Kind.Type })
     case Record(_, tparams, _, _) => Kind.TypeFun(tparams map { p => Kind.Type })
     case BuiltinType(_, tparams)  => Kind.TypeFun(tparams map { p => Kind.Type })
@@ -81,9 +77,6 @@ package object kinds {
       }
       args foreach { a => wellformed(a) }
       res
-    case EffectAlias(_, tparams, effs) =>
-      wellformed(effs)
-      Kind.EffectFun(tparams map { p => Kind.Type })
     case UserEffect(_, tparams, _) =>
       Kind.EffectFun(tparams map { p => Kind.Type })
     case BuiltinEffect(_, tparams) =>

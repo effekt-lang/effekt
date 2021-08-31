@@ -116,12 +116,12 @@ Of course, we can combine the different components into one bing pipeline. We st
 by defining a pretty printer for the language of expressions and statements:
 
 ```
-def toDocExpr(t: Expr): Unit / Pretty = t match {
+def toDocExpr(t: Expr): Unit / { Emit, Indent, DefaultIndent, Flow, LayoutChoice } = t match {
     case CLit(value) => text(value.show)
     case CVar(name)  => text(name)
 }
 
-def toDocStmt(s: Stmt): Unit / Pretty = s match {
+def toDocStmt(s: Stmt): Unit / { Emit, Indent, DefaultIndent, Flow, LayoutChoice } = s match {
     case CLet(name, binding, body) =>
         text("let"); space(); text(name); space(); text("=");
         group {

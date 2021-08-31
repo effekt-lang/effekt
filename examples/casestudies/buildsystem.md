@@ -24,10 +24,7 @@ import immutable/option
 This example revolves around a single effect: `Need`.
 
 ```
-type Key = String
-type Val = Int
-
-effect Need(key: Key): Val
+effect Need(key: String): Int
 ```
 
 The `Need` effect operation requests the value for a specific key. In this example keys are strings and values are integers.
@@ -35,7 +32,7 @@ The `Need` effect operation requests the value for a specific key. In this examp
 A build system defines rules that specify how to build the values for each key. The values for some keys are inputs. For those we have a second effect, `NeedInput`.
 
 ```
-effect NeedInput(key: Key): Val
+effect NeedInput(key: String): Int
 ```
 
 With these two effect operations, we can express the rules for the spreadsheet example from the paper. We define the rules for cells `"B1"` and `"B2"` and treats the other cells as inputs.
@@ -49,7 +46,7 @@ spreadsheet:
 | **2**  | 20 | B1 * 2  |
 
 ```
-def example1(key: Key): Val / { Need, NeedInput, Console } = {
+def example1(key: String): Int / { Need, NeedInput, Console } = {
     println(key);
     key match {
         case "B1" => do Need("A1") + do Need("A2")
@@ -64,7 +61,7 @@ This example explains how to get the value for a given key. It uses the `Need` o
 A build system is a handler for the `Need` effect.
 
 ```
-def build(target: Key) { tasks: Key => Val / { Need } }: Val / {} =
+def build(target: String) { tasks: String => Int / { Need } }: Int / {} =
     try { tasks(target) }
     with Need { requestedKey =>
         resume(build(requestedKey) { k => tasks(k) })
@@ -76,11 +73,9 @@ This handler function recursively calls itself when a key is needed. It duplicat
 Another handler would memoize keys once they are built to avoid duplication.
 
 ```
-effect KeyNotFound[A](key: Key): A
+effect KeyNotFound[A](key: String): A
 
-type Store = List[(Key,Val)]
-
-def find(store: Store, key: Key): Val / KeyNotFound = {
+def find(store: List[(String, Int)], key: String): Int / KeyNotFound = {
     store match {
         case Nil() => do KeyNotFound(key)
         case Cons((k, v), xs) => if (k == key) { v } else { find(xs, key) }
@@ -94,7 +89,7 @@ The `memo` handler function tries to look up the needed key in the store. If the
 
 ```
 def memo[R] { prog: R / { Need } }: R / { Need } = {
-    var store: Store = Nil();
+    var store: List[(String, Int)] = Nil();
     try {
         prog()
     } with Need { (key) =>
@@ -113,7 +108,7 @@ A second example needs the same key twice.
 
 ```
 // Needing the same key twice
-def example2(key: Key) = {
+def example2(key: String) = {
     println(key);
     key match {
         case "B1" => do Need("A1") + do Need("A2")
@@ -128,7 +123,7 @@ When we run this example without memoization we will see `"B1"`, `"A1"`, and `"A
 Finally, to supply the inputs, we have a handler for the `NeedInput` effect.
 
 ```
-def supplyInput[R](store: Store) { prog: R / { NeedInput } }: R / { KeyNotFound } = {
+def supplyInput[R](store: List[(String, Int)]) { prog: R / { NeedInput } }: R / { KeyNotFound } = {
     try { prog() } with NeedInput { (key) => resume(find(store, key)) }
 }
 ```

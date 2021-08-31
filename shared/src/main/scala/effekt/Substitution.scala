@@ -144,7 +144,7 @@ object substitutions {
       }
 
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit C: Context): UnificationResult =
-      (tpe1.dealias, tpe2.dealias) match {
+      (tpe1, tpe2) match {
 
         case (t, s) if t == s =>
           Unifier.empty
