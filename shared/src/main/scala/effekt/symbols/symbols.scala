@@ -89,12 +89,15 @@ package object symbols {
 
   sealed trait Param extends TermSymbol
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
-  case class BlockParam(name: Name, tpe: BlockType) extends Param with BlockSymbol
-  case class CapabilityParam(name: Name, tpe: CapabilityType) extends Param with Capability {
+
+  // TODO everywhere else the two universes are called "value" and "block"
+  sealed trait TrackedParam extends Param
+  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
+  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
     def effect = tpe.eff
     override def toString = s"@${tpe.eff.name}"
   }
-  case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name("resume", module) }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
