@@ -1,3 +1,0 @@
-[error] examples/neg/unbound_type.effekt:9:40: Could not resolve type Position
-effect LexerError[A](msg: String, pos: Position): A
-                                       ^^^^^^^^

@@ -1,3 +1,0 @@
-[error] examples/neg/unhandled_under_handler.effekt:8:1: Unhandled effects: Flip
-def main(): Unit / { Console } = {
-^
