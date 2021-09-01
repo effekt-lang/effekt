@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol, Wildcard }
+import effekt.symbols.{ Module, Name, NoName, LocalName, QualifiedName, Symbol, Wildcard }
 import effekt.symbols
 import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
@@ -13,7 +13,6 @@ import kiama.util.Source
 import effekt.util.paths._
 
 import scala.language.implicitConversions
-import effekt.symbols.NestedName
 
 class JavaScript extends Generator {
 
@@ -165,15 +164,10 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case _ => toDoc(id.name)
   }
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    // case _: symbols.Effect     => toDoc(id.name)
-    // case _: symbols.Capability => id.name.toString + "_" + id.id
-    // case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _ => id.name match {
-      case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
-      case name => toDoc(name)
-    }
-  }
+  def nameRef(id: Symbol)(implicit C: Context): Doc = jsNameRef(id.name)
+  // case _: symbols.Effect     => toDoc(id.name)
+  // case _: symbols.Capability => id.name.toString + "_" + id.id
+  // case _: symbols.EffectOp   => "op$" + id.name.toString
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "$effekt.unit"
@@ -282,9 +276,14 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case other => "return" <+> toDocExpr(other)
   }
 
-  def jsModuleName(path: String): String = jsModuleName(Name.module(path))
+  def jsNameRef(name: Name): String = name match {
+    case LocalName(name)           => name
+    case QualifiedName(Nil, name)  => name
+    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + name
+    case NoName                    => sys error "Trying to generate code for an anonymous entity"
+  }
 
-  def jsModuleName(name: Name): String = "$" + name.qualifiedName.replace('.', '_')
+  def jsModuleName(path: String): String = "$" + path.replace('/', '_')
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

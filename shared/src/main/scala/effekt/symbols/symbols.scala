@@ -36,7 +36,10 @@ package object symbols {
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
-    val name = Name.module(decl.path)
+    val name = {
+      val segments = decl.path.split("/")
+      QualifiedName(segments.tail.toList, segments.head)
+    }
 
     def path = decl.path
 
@@ -83,11 +86,11 @@ package object symbols {
   }
 
   sealed trait Param extends TermSymbol
-  case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
+  case class ValueParam(name: LocalName, tpe: Option[ValueType]) extends Param with ValueSymbol
 
   // TODO everywhere else the two universes are called "value" and "block"
   sealed trait TrackedParam extends Param
-  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
+  case class BlockParam(name: LocalName, tpe: BlockType) extends TrackedParam with BlockSymbol
   //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
   //    def effect = tpe.eff
   //    override def toString = s"@${tpe.eff.name}"
@@ -136,7 +139,7 @@ package object symbols {
    * Anonymous symbols used to represent scopes / regions in the region checker
    */
   sealed trait Anon extends TermSymbol {
-    val name = Name("<anon>")
+    val name = NoName
     def decl: source.Tree
   }
 
@@ -159,8 +162,8 @@ package object symbols {
     def tpe: Option[ValueType]
     def decl: Def
   }
-  case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder
-  case class VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder
+  case class ValBinder(name: LocalName, tpe: Option[ValueType], decl: ValDef) extends Binder
+  case class VarBinder(name: LocalName, tpe: Option[ValueType], decl: VarDef) extends Binder
 
   /**
    * Synthetic symbol representing potentially multiple call targets
@@ -172,8 +175,8 @@ package object symbols {
   /**
    * Introduced by Transformer
    */
-  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+  case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }
+  case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
   /**
    * A symbol that represents a termlevel capability
@@ -199,9 +202,9 @@ package object symbols {
    */
   case class FunType(tpe: BlockType /*, region: Region */ ) extends ValueType
 
-  class TypeVar(val name: Name) extends ValueType with TypeSymbol
+  class TypeVar(val name: LocalName) extends ValueType with TypeSymbol
   object TypeVar {
-    def apply(name: Name): TypeVar = new TypeVar(name)
+    def apply(name: LocalName): TypeVar = new TypeVar(name)
   }
 
   /**
@@ -264,10 +267,11 @@ package object symbols {
    *
    * param: The underlying constructor parameter
    */
-  case class Field(name: Name, param: ValueParam, rec: Record) extends Fun with Synthetic {
+  case class Field(name: LocalName, param: ValueParam, rec: Record) extends Fun with Synthetic {
     val tparams = rec.tparams
     val tpe = param.tpe.get
-    val params = List(List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))
+    val typeName = Name.local(rec.name.name)
+    val params = List(List(ValueParam(typeName, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))
     val ret = Some(tpe)
   }
 

@@ -92,8 +92,6 @@ extern pure def exp(x: Double): Double =
 extern pure def _pi(): Double =
   "Math.PI"
 
-val PI: Double = _pi()
-
 extern pure def toInt(d: Double): Int =
   "Math.round(d)"
 

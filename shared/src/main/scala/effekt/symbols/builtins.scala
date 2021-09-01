@@ -12,7 +12,7 @@ object builtins {
   // defined in the prelude
   lazy val prelude = Module(ModuleDecl("effekt", Nil, Nil), StringSource("", "effekt.effekt"))
 
-  private def name(s: String) = Name(s, prelude)
+  private def name(s: String) = Name.qualified(s, prelude)
 
   val TInt = BuiltinType(name("Int"), Nil)
   val TBoolean = BuiltinType(name("Boolean"), Nil)
