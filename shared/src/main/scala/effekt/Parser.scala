@@ -390,16 +390,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val eqExpr:  P[Expr] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
   lazy val relExpr: P[Expr] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
   lazy val addExpr: P[Expr] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
+  lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ callExpr ^^ binaryOp | callExpr
 
-  lazy val accessExpr: P[Expr] =
-    callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
-      case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
-        case (firstArg, id ~ targs ~ otherArgs) =>
-          val tgt = IdTarget(id) withPositionOf id
-          Call(tgt, targs, ValueArgs(List(firstArg)).withPositionOf(firstArg) :: otherArgs)
-      }
-    }
+  lazy val accessExpr: P[Expr] = callExpr
+  //    callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
+  //      case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
+  //        case (firstArg, id ~ targs ~ otherArgs) =>
+  //          val tgt = IdTarget(id) withPositionOf id
+  //          Call(tgt, targs, ValueArgs(List(firstArg)).withPositionOf(firstArg) :: otherArgs)
+  //      }
+  //    }
 
   lazy val callExpr: P[Expr] =
     ( ifExpr
