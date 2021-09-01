@@ -118,18 +118,6 @@ trait LSPServer extends Driver with Intelligence {
         None
     }
 
-  def getLensSyms(documentsymbols: Option[Vector[DocumentSymbol]]): Option[Vector[DocumentSymbol]] = documentsymbols match {
-    case None => None
-    case Some(vec) => vec match {
-      case head +: tail => Some(
-        for {
-          e <- vec
-          if e.getKind() == SymbolKind.Method
-        } yield e
-      )
-      case _ => None
-    }
-  }
 
   def getSource(uri: String) = {
     val src = sources.get(uri);
@@ -139,39 +127,11 @@ trait LSPServer extends Driver with Intelligence {
     }
   }
 
-  class TypeAnnotation(val line: Int, val column: Int, val effects: Array[Effect]) {
-    override def equals(obj: Any): Boolean = obj match {
-      case a: TypeAnnotation => {
-        a.line == this.line && a.column == this.column && a.effects.sameElements(this.effects)
-      }
-    }
-  }
-
-  def getTypeAnnotations(uri: String): CompletableFuture[Array[TypeAnnotation]] = {
-    var funs = getFunDefs(getSource(uri)).toList
-    var annotations: scala.collection.immutable.Set[TypeAnnotation] = Set();
-    //var annotations: List[TypeAnnotation] = List();
-    funs.foreach((fun) => {
-      var pos = context.positions.getStart(fun.decl)
-      var ret = fun.ret
-      pos match {
-        case Some(posval) => ret match {
-          case Some(retval) => {
-            logMessage("Appending annotation at " + posval.line + ":" + posval.column + " -> " + retval.toString())
-            annotations = annotations + (new TypeAnnotation(posval.line, posval.column, retval.effects.toList.toArray)) // :: annotations
-          }
-          case None => logMessage("ret was None")
-        }
-        case None => logMessage("pos was None for " + ret.get.toString())
-      }
-    })
-    return CompletableFuture.completedFuture { annotations.toArray }
-  }
-
-  case class simplePosition(line: Int, column: Int)
-  case class capability(name: String, scopeStart: simplePosition, scopeEnd: simplePosition)
-  case class passedCapability(capabilities: Array[capability], line: Int, column: Int)
-
+  /**
+   * Turn a kiama Position into an LSP4J Position
+   * @param position: the kiama Position, assumed to be 1-indexed
+   * @return the LSP4J Position (zero-indexed)
+   */
   def positionToLSPPosition(position: Position): LSPPosition = {
     return new LSPPosition(position.line - 1, position.column - 1)
   }
