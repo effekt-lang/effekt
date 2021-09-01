@@ -20,6 +20,13 @@ jobs:
         ref: scala-js
         path: kiama
 
+    - name: Checkout Kiama fork for extended LSP support
+      uses: actions/checkout@v2
+      with:
+        repository: edding4500/kiama-effekt
+        ref: extended-LSP-support
+        path: kiama-effekt
+
     - name: Set up JDK 1.8
       uses: actions/setup-java@v1
       with:
@@ -36,6 +43,10 @@ jobs:
     - name: Install Kiama fork
       run: sbt publishLocal
       working-directory: kiama
+
+    - name: Install Kiama fork for extended LSP support
+      run: sbt publishLocal
+      working-directory: kiama-effekt
 
     - name: Run tests
       run: sbt clean test
