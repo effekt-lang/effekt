@@ -102,7 +102,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }
 
   def transform(tree: source.Expr)(implicit C: Context): Expr = withPosition(tree) {
-    case v: source.Var               => UnitLit() // TODO implement
+    case v: source.Var => v.definition match {
+      case sym: VarBinder => UnitLit() // TODO implement
+      case sym            => ValueVar(sym)
+    }
     //      v.definition match {
     //        case sym: VarBinder =>
     //          val state = C.state(sym)
