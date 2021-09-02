@@ -50,6 +50,27 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   }
 
+  // checks an expression in second-class position
+  //<editor-fold desc="blocks">
+
+  /**
+   * We defer checking whether something is first-class or second-class to Typer now.
+   */
+  def checkExprAsBlock(expr: Expr, expected: Option[InterfaceType])(implicit C: Context): InterfaceType = expr match {
+    case source.Var(id) => id.symbol match {
+      case b: BlockSymbol => Context.blockTypeOf(b)
+      case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
+    }
+
+    case source.Select(expr, selector) =>
+      val btpe = checkExprAsBlock(expr, None)
+      ???
+
+    case _ => Context.abort(s"Expected something of a block type.")
+  }
+
+  //</editor-fold>
+
   //<editor-fold desc="expressions">
 
   def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): ValueType =
@@ -122,18 +143,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             funTpe
         }
 
-      case c @ source.Call(t: source.IdTarget, targs, args) => {
-        checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
-      }
-
-      case c @ source.Call(source.ExprTarget(e), targs, args) =>
-        val funTpe = checkExpr(e, None)
-
-        val tpe: BlockType = funTpe match {
-          case f: FunType => f.tpe
-          case _          => Context.abort(s"Expected function type, but got ${funTpe}")
+      case c @ source.Call(e, targs, args) =>
+        val btpe = checkExprAsBlock(e, None) match {
+          case b: BlockType => b
+          case _            => Context.abort("Callee is required to have function type")
         }
-        checkCallTo(c, "function", tpe, targs map { _.resolve }, args, expected)
+        checkCallTo(c, "???", btpe, targs map { _.resolve }, args, expected)
 
       //      case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
       //        Context.panic("Method call syntax not allowed in source programs.")
@@ -247,6 +262,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             expected
         }
         tpeCases
+
+      case source.Select(expr, selector) =>
+        Context.abort("Block in expression position: automatic boxing currently not supported.")
 
       case source.Hole(stmt) =>
         val tpe = checkStmt(stmt, None)
@@ -499,107 +517,107 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     }.toMap
   }
 
-  /**
-   * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
-   *
-   * This is necessary for overload resolution by trying all alternatives.
-   *   - if there is multiple without errors: Report ambiguity
-   *   - if there is no without errors: report all possible solutions with corresponding errors
-   */
-  def checkOverloadedCall(
-    call: source.Call,
-    target: source.IdTarget,
-    targs: List[ValueType],
-    args: List[source.ArgSection],
-    expected: Option[Type]
-  )(implicit C: Context): ValueType = {
-
-    val scopes = target.definition match {
-      // an overloaded call target
-      case CallTarget(name, syms) => syms
-      // already resolved by a previous attempt to typecheck
-      case sym                    => List(Set(sym))
-    }
-
-    // TODO improve: stop typechecking if one scope was successful
-
-    val stateBefore = C.backupTyperstate()
-
-    // TODO try to avoid duplicate error messages
-    val results = scopes map { scope =>
-      scope.toList.map { sym =>
-        sym -> Try {
-          C.restoreTyperstate(stateBefore)
-          val tpe = Context.blockTypeOption(sym).getOrElse {
-            if (sym.isInstanceOf[ValueSymbol]) {
-              Context.abort(s"Expected a function type.")
-            } else {
-              Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
-            }
-          }
-          val r = checkCallTo(call, sym.name.name, tpe, targs, args, expected)
-          (r, C.backupTyperstate())
-        }
-      }
-    }
-
-    val successes = results.map { scope => scope.collect { case (sym, Right(r)) => sym -> r } }
-    val errors = results.flatMap { scope => scope.collect { case (sym, Left(r)) => sym -> r } }
-
-    successes foreach {
-      // continue in outer scope
-      case Nil => ()
-
-      // Exactly one successful result in the current scope
-      case List((sym, (tpe, st))) =>
-        // use the typer state after this checking pass
-        C.restoreTyperstate(st)
-        // reassign symbol of fun to resolved calltarget symbol
-        C.assignSymbol(target.id, sym)
-
-        return tpe
-
-      // Ambiguous reference
-      case results =>
-        val sucMsgs = results.map {
-          case (sym, tpe) =>
-            s"- ${sym.name} of type ${Context.blockTypeOf(sym)}"
-        }.mkString("\n")
-
-        val explanation =
-          s"""| Ambiguous reference to ${target.id}. The following blocks would typecheck:
-              |
-              |${sucMsgs}
-              |""".stripMargin
-
-        C.abort(explanation)
-    }
-
-    errors match {
-      case Nil =>
-        C.abort("Cannot typecheck call, no function found")
-
-      // exactly one error
-      case List((sym, errs)) =>
-        val msg = errs.head
-        val msgs = errs.tail
-        C.buffer.append(msgs)
-        // reraise and abort
-        // TODO clean this up
-        C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
-
-      case failed =>
-        // reraise all and abort
-        val msgs = failed.flatMap {
-          // TODO also print qualified name and signature!
-          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.name}: ${m.label}") }
-        }.toVector
-
-        C.reraise(msgs)
-
-        C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
-    }
-  }
+  //  /**
+  //   * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
+  //   *
+  //   * This is necessary for overload resolution by trying all alternatives.
+  //   *   - if there is multiple without errors: Report ambiguity
+  //   *   - if there is no without errors: report all possible solutions with corresponding errors
+  //   */
+  //  def checkOverloadedCall(
+  //    call: source.Call,
+  //    target: source.IdTarget,
+  //    targs: List[ValueType],
+  //    args: List[source.ArgSection],
+  //    expected: Option[Type]
+  //  )(implicit C: Context): ValueType = {
+  //
+  //    val scopes = target.definition match {
+  //      // an overloaded call target
+  //      case CallTarget(name, syms) => syms
+  //      // already resolved by a previous attempt to typecheck
+  //      case sym                    => List(Set(sym))
+  //    }
+  //
+  //    // TODO improve: stop typechecking if one scope was successful
+  //
+  //    val stateBefore = C.backupTyperstate()
+  //
+  //    // TODO try to avoid duplicate error messages
+  //    val results = scopes map { scope =>
+  //      scope.toList.map { sym =>
+  //        sym -> Try {
+  //          C.restoreTyperstate(stateBefore)
+  //          val tpe = Context.blockTypeOption(sym).getOrElse {
+  //            if (sym.isInstanceOf[ValueSymbol]) {
+  //              Context.abort(s"Expected a function type.")
+  //            } else {
+  //              Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
+  //            }
+  //          }
+  //          val r = checkCallTo(call, sym.name.name, tpe, targs, args, expected)
+  //          (r, C.backupTyperstate())
+  //        }
+  //      }
+  //    }
+  //
+  //    val successes = results.map { scope => scope.collect { case (sym, Right(r)) => sym -> r } }
+  //    val errors = results.flatMap { scope => scope.collect { case (sym, Left(r)) => sym -> r } }
+  //
+  //    successes foreach {
+  //      // continue in outer scope
+  //      case Nil => ()
+  //
+  //      // Exactly one successful result in the current scope
+  //      case List((sym, (tpe, st))) =>
+  //        // use the typer state after this checking pass
+  //        C.restoreTyperstate(st)
+  //        // reassign symbol of fun to resolved calltarget symbol
+  //        C.assignSymbol(target.id, sym)
+  //
+  //        return tpe
+  //
+  //      // Ambiguous reference
+  //      case results =>
+  //        val sucMsgs = results.map {
+  //          case (sym, tpe) =>
+  //            s"- ${sym.name} of type ${Context.blockTypeOf(sym)}"
+  //        }.mkString("\n")
+  //
+  //        val explanation =
+  //          s"""| Ambiguous reference to ${target.id}. The following blocks would typecheck:
+  //              |
+  //              |${sucMsgs}
+  //              |""".stripMargin
+  //
+  //        C.abort(explanation)
+  //    }
+  //
+  //    errors match {
+  //      case Nil =>
+  //        C.abort("Cannot typecheck call, no function found")
+  //
+  //      // exactly one error
+  //      case List((sym, errs)) =>
+  //        val msg = errs.head
+  //        val msgs = errs.tail
+  //        C.buffer.append(msgs)
+  //        // reraise and abort
+  //        // TODO clean this up
+  //        C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
+  //
+  //      case failed =>
+  //        // reraise all and abort
+  //        val msgs = failed.flatMap {
+  //          // TODO also print qualified name and signature!
+  //          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.name}: ${m.label}") }
+  //        }.toVector
+  //
+  //        C.reraise(msgs)
+  //
+  //        C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
+  //    }
+  //  }
 
   def checkCallTo(
     call: source.Call,
@@ -699,9 +717,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     // annotate call node with inferred type arguments
     val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     Context.annotateTypeArgs(call, inferredTypeArgs)
-
-    // annotate the calltarget tree with the resolved blocktype
-    Context.annotateTarget(call.target, Context.unifier.substitute(bt))
 
     Context.unifier.substitute(ret)
   }
@@ -861,10 +876,6 @@ trait TyperOps extends ContextOps { self: Context =>
       case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
-  }
-
-  private[typer] def annotateTarget(t: source.CallTarget, tpe: BlockType): Unit = {
-    annotations.annotate(Annotations.TargetType, t, tpe)
   }
 
   // Unification

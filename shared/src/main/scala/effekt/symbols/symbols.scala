@@ -143,7 +143,7 @@ package object symbols {
     def decl: source.Tree
   }
 
-  case class BlockArg(decl: source.Tree) extends Anon
+  case class BlockArg(decl: source.Tree) extends BlockSymbol with Anon
 
   case class Lambda(params: Params, decl: source.Tree) extends Fun with Anon {
     // Lambdas currently do not have an annotated return type

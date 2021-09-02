@@ -337,26 +337,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Statements
    */
   lazy val stmts: P[Stmt] =
-    ( withStmt
-    | (expr <~ `;`) ~ stmts ^^ ExprStmt
+    ( (expr <~ `;`) ~ stmts ^^ ExprStmt
     | (definition <~ `;`) ~ stmts ^^ DefStmt
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt
     | (expr <~ `;`) ^^ Return
     | matchDef
-    )
-
-  lazy val withStmt: P[Stmt] =
-    ( `with` ~> (valueParamsOpt | valueParamOpt ^^ { p => ValueParams(List(p)) withPositionOf p }) ~
-          (`=` ~/> idRef) ~ maybeTypeArgs ~ many(args) ~ (`;`  ~> stmts) ^^ {
-        case params ~ id ~ tps ~ args ~ body =>
-          val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, args :+ BlockArg(List(params), body)) withPositionOf params)
-       }
-    | `with` ~> idRef ~ maybeTypeArgs ~ many(args) ~ (`;` ~> stmts) ^^ {
-        case id ~ tps ~ args ~ body =>
-          val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
-       }
     )
 
   lazy val valDef: P[ValDef] =
@@ -410,13 +395,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
-  lazy val callTarget: P[CallTarget] =
-    ( idRef ^^ IdTarget
-    | `(` ~> expr <~ `)` ^^ ExprTarget
-    )
-
   lazy val funCall: P[Expr] =
-    callTarget ~ maybeTypeArgs ~ some(args) ^^ Call
+    funCall ~ maybeTypeArgs ~ some(args) ^^ Call | primExpr
 
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
@@ -490,13 +470,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
   private def NilTree: Expr =
-    Call(IdTarget(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
+    Call(Var(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
 
   private def ConsTree(el: Expr, rest: Expr): Expr =
-    Call(IdTarget(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
+    Call(Var(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
 
   private def TupleTree(args: List[Expr]): Expr =
-    Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
+    Call(Var(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
 
   /**
    * Types and Effects
@@ -526,7 +506,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   // === AST Helpers ===
 
   private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
-     Call(IdTarget(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
+     Call(Var(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
 
   private def opName(op: String): String = op match {
     case "||" => "infixOr"

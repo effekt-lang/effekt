@@ -223,9 +223,9 @@ case class BlockStmt(stmts: Stmt) extends Stmt
  */
 sealed trait Expr extends Tree
 
-// Variable / Value use
+// Variable / Value use (can now also stand for blocks)
 case class Var(id: IdRef) extends Expr with Reference {
-  type symbol = symbols.ValueSymbol with symbols.TermSymbol
+  type symbol = symbols.TermSymbol
 }
 case class Assign(id: IdRef, expr: Expr) extends Expr with Reference {
   type symbol = symbols.VarBinder
@@ -250,19 +250,14 @@ case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Exp
   type symbol = symbols.Lambda
 }
 
+/**
+ * Selecting a capability or a method out of a capability
+ */
+case class Select(receiver: Expr, selector: IdRef) extends Expr
+
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
-case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Expr
-
-sealed trait CallTarget extends Tree
-case class IdTarget(id: IdRef) extends CallTarget with Reference {
-  // can refer to either a block OR a term symbol
-  type symbol = symbols.TermSymbol
-}
-//case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
-//  type symbol = symbols.EffectOp
-//}
-case class ExprTarget(receiver: Expr) extends CallTarget
+case class Call(receiver: Expr, targs: List[ValueType], args: List[ArgSection]) extends Expr
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr

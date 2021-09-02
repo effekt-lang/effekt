@@ -58,7 +58,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsLambda(ps map toDoc, toDoc(body))
     //    case Member(b, id) =>
     //      toDoc(b) <> "." <> nameDef(id)
-    case Extern(ps, body) =>
+    case Extern(pure, ps, body) =>
       jsLambda(ps map toDoc, body)
     case Unbox(e) => toDoc(e)
     case _        => sys error "Unsupported block in plain JS pretty printer"
@@ -221,8 +221,11 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
-    case Def(id, tpe, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(false, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, tpe, Extern(true, ps, body), rest) =>
+      jsFunction(nameDef(id), ps map toDoc, "return" <+> jsCall("$effekt.pure", body)) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -260,8 +263,11 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
-    case Def(id, tpe, Extern(ps, body), rest) =>
+    case Def(id, tpe, Extern(false, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
+
+    case Def(id, tpe, Extern(true, ps, body), rest) =>
+      jsFunction(nameDef(id), ps map toDoc, "return" <+> jsCall("$effekt.pure", body)) <> emptyline <> toDocTopLevel(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }

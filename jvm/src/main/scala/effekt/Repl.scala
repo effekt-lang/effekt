@@ -326,7 +326,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
     }
 
     def makeEval(expr: Expr): ModuleDecl =
-      make(Call(IdTarget(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
+      make(Call(Var(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

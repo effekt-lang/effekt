@@ -150,14 +150,6 @@ object Annotations {
   )
 
   /**
-   * The blocktype of a calltarget as annotated by typer
-   */
-  val TargetType = Annotation[source.CallTarget, symbols.BlockType](
-    "TargetType",
-    "the blocktype for calltarget"
-  )
-
-  /**
    * The block type of a block argument as annotated by typer
    */
   val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
@@ -301,22 +293,6 @@ trait AnnotationsDB { self: Context =>
     case s: ValueSymbol => annotationOption(Annotations.ValueType, s)
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
-
-  // Calltargets
-  // -----------
-
-  // annotated by capability passing
-  def annotateCalltarget(t: source.CallTarget, tpe: BlockType): Unit =
-    annotate(Annotations.TargetType, t, tpe)
-
-  def blockTypeOf(t: source.CallTarget): BlockType =
-    annotation(Annotations.TargetType, t)
-
-  def blockTypeOption(t: source.CallTarget): Option[BlockType] =
-    annotationOption(Annotations.TargetType, t)
-
-  def blockTypeOf(t: source.BlockArg): BlockType =
-    annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
   // -------

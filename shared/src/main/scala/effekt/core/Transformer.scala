@@ -66,7 +66,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, C.blockTypeOf(sym), Extern(transformParams(params), body), rest)
+      Def(f.symbol, C.blockTypeOf(sym), Extern(pure, transformParams(params), body), rest)
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest)
@@ -101,10 +101,24 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.StringLit(value)  => StringLit(value)
   }
 
+  def transformAsBlock(tree: source.Expr)(implicit C: Context): Block = withPosition(tree) {
+    case v: source.Var => v.definition match {
+      case sym: ValueSymbol => C.abort("Value in block position: automatic unboxing currently not supported.")
+      case sym: BlockSymbol => BlockVar(sym)
+    }
+
+    case source.Select(receiver, selector) =>
+      Member(transformAsBlock(receiver), selector.name)
+
+    case _ =>
+      C.abort("Value in block position: automatic unboxing currently not supported.")
+  }
+
   def transform(tree: source.Expr)(implicit C: Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
-      case sym: VarBinder => UnitLit() // TODO implement
-      case sym            => ValueVar(sym)
+      case sym: VarBinder   => UnitLit() // TODO implement
+      case sym: ValueSymbol => ValueVar(sym)
+      case sym: BlockSymbol => C.abort("Block in expression position: automatic boxing currently not supported.")
     }
     //      v.definition match {
     //        case sym: VarBinder =>
@@ -146,10 +160,20 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
       C.bind(C.inferredTypeOf(tree), Match(scrutinee, cs))
 
-    case c @ source.Call(source.ExprTarget(expr), _, args) =>
-      val e = transform(expr)
+    // TODO generate "pure" applications again
+    case c @ source.Call(e, _, args) =>
+      val b = transformAsBlock(e)
       val as = args.flatMap(transform)
-      C.bind(C.inferredTypeOf(tree), App(Unbox(e), Nil, as))
+      C.bind(C.inferredTypeOf(tree), App(b, Nil, as))
+
+    case source.Select(receiver, selector) =>
+      C.abort("Block in expression position: automatic boxing currently not supported.")
+
+    //
+    //    case c @ source.Call(source.ExprTarget(expr), _, args) =>
+    //      val e = transform(expr)
+    //      val as = args.flatMap(transform)
+    //      C.bind(C.inferredTypeOf(tree), App(Unbox(e), Nil, as))
 
     //    case c @ source.Call(source.MemberTarget(block, op), _, args) =>
     //      // the type arguments, inferred by typer
@@ -158,30 +182,30 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     //      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
     //      C.bind(C.inferredTypeOf(tree), app)
 
-    case c @ source.Call(fun: source.IdTarget, _, args) =>
-      // assumption: typer removed all ambiguous references, so there is exactly one
-      val sym: Symbol = fun.definition
-
-      val as = args.flatMap(transform)
-
-      // the type arguments, inferred by typer
-      val targs = C.typeArguments(c)
-
-      // right now only builtin functions are pure of control effects
-      // later we can have effect inference to learn which ones are pure.
-      sym match {
-        case f: BuiltinFunction if f.pure =>
-          PureApp(BlockVar(f), targs, as)
-        case r: Record =>
-          PureApp(BlockVar(r), targs, as)
-        case f: Field =>
-          val List(arg: Expr) = as
-          Select(arg, f)
-        case f: BlockSymbol =>
-          C.bind(C.inferredTypeOf(tree), App(BlockVar(f), targs, as))
-        case f: ValueSymbol =>
-          C.bind(C.inferredTypeOf(tree), App(Unbox(ValueVar(f)), targs, as))
-      }
+    //    case c @ source.Call(fun: source.IdTarget, _, args) =>
+    //      // assumption: typer removed all ambiguous references, so there is exactly one
+    //      val sym: Symbol = fun.definition
+    //
+    //      val as = args.flatMap(transform)
+    //
+    //      // the type arguments, inferred by typer
+    //      val targs = C.typeArguments(c)
+    //
+    //      // right now only builtin functions are pure of control effects
+    //      // later we can have effect inference to learn which ones are pure.
+    //      sym match {
+    //        case f: BuiltinFunction if f.pure =>
+    //          PureApp(BlockVar(f), targs, as)
+    //        case r: Record =>
+    //          PureApp(BlockVar(r), targs, as)
+    //        case f: Field =>
+    //          val List(arg: Expr) = as
+    //          Select(arg, f)
+    //        case f: BlockSymbol =>
+    //          C.bind(C.inferredTypeOf(tree), App(BlockVar(f), targs, as))
+    //        case f: ValueSymbol =>
+    //          C.bind(C.inferredTypeOf(tree), App(Unbox(ValueVar(f)), targs, as))
+    //      }
 
     //    case source.TryHandle(prog, handlers) =>
     //

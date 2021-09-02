@@ -52,8 +52,9 @@ case class BlockVar(id: BlockSymbol) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-// case class Member(b: Block, field: EffectOp) extends Block
-case class Extern(params: List[Param], body: String) extends Block
+// TODO use resolved selector here
+case class Member(b: Block, selector: String) extends Block
+case class Extern(pure: Boolean, params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 
 /**
@@ -163,8 +164,8 @@ object Tree {
         BlockLit(params map rewrite, rewrite(body))
       //      case Member(b, field) =>
       //        Member(rewrite(b), field)
-      case Extern(params, body) =>
-        Extern(params map rewrite, body)
+      case Extern(pure, params, body) =>
+        Extern(pure, params map rewrite, body)
       case b: BlockVar => b
     }
     def rewrite(e: Pattern): Pattern = e match {

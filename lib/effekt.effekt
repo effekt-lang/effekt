@@ -48,17 +48,17 @@ extern pure def infixSub(x: Int, y: Int): Int =
 extern pure def mod(x: Int, y: Int): Int =
   "(x % y)"
 
-extern pure def infixAdd(x: Double, y: Double): Double =
-  "(x + y)"
+// extern pure def infixAdd(x: Double, y: Double): Double =
+//   "(x + y)"
 
-extern pure def infixMul(x: Double, y: Double): Double =
-  "(x * y)"
+// extern pure def infixMul(x: Double, y: Double): Double =
+//   "(x * y)"
 
-extern pure def infixSub(x: Double, y: Double): Double =
-  "(x - y)"
+// extern pure def infixSub(x: Double, y: Double): Double =
+//   "(x - y)"
 
-extern pure def infixDiv(x: Double, y: Double): Double =
-  "(x / y)"
+// extern pure def infixDiv(x: Double, y: Double): Double =
+//   "(x / y)"
 
 
 extern pure def cos(x: Double): Double =
@@ -119,17 +119,17 @@ extern pure def infixGt(x: Int, y: Int): Boolean =
 extern pure def infixGte(x: Int, y: Int): Boolean =
   "x >= y"
 
-extern pure def infixLt(x: Double, y: Double): Boolean =
-  "x < y"
+// extern pure def infixLt(x: Double, y: Double): Boolean =
+//   "x < y"
 
-extern pure def infixLte(x: Double, y: Double): Boolean =
-  "x <= y"
+// extern pure def infixLte(x: Double, y: Double): Boolean =
+//   "x <= y"
 
-extern pure def infixGt(x: Double, y: Double): Boolean =
-  "x > y"
+// extern pure def infixGt(x: Double, y: Double): Boolean =
+//   "x > y"
 
-extern pure def infixGte(x: Double, y: Double): Boolean =
-  "x >= y"
+// extern pure def infixGte(x: Double, y: Double): Boolean =
+//   "x >= y"
 
 // Boolean ops
 // ===========

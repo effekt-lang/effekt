@@ -222,7 +222,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     // (2) === Bound Occurrences ===
 
     case source.Call(target, targs, args) =>
-      resolve(target)
+      resolveAll(target)
       targs foreach resolve
       resolveAll(args)
 
@@ -292,14 +292,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context.assignSymbol(p.id, sym)
       sym
     }
-
-  def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
-    case source.IdTarget(id)     => Context.resolveCalltarget(id)
-    //    case source.MemberTarget(recv, id) =>
-    //      Context.resolveTerm(recv)
-    //      Context.resolveCalltarget(id)
-    case source.ExprTarget(expr) => resolveGeneric(expr)
-  }
 
   /**
    * To allow mutually recursive definitions, here we only resolve the declarations,
@@ -543,20 +535,6 @@ trait NamerOps extends ContextOps { Context: Context =>
     val sym = scope.lookupFirst(id.name)
     assignSymbol(id, sym)
     sym
-  }
-
-  /**
-   * Resolves a potentially overloaded call target
-   */
-  private[namer] def resolveCalltarget(id: Id): Unit = at(id) {
-
-    val syms = scope.lookupOverloaded(id.name)
-
-    if (syms.isEmpty) {
-      abort(s"Cannot resolve function ${id.name}")
-    }
-
-    assignSymbol(id, new CallTarget(Name.local(id), syms))
   }
 
   /**
