@@ -102,26 +102,26 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(body)
       }
 
-    //    case source.EffDef(id, tparams, ops) =>
-    //      val effectSym = Context.resolveType(id).asUserEffect
-    //      effectSym.ops = ops.map {
-    //        case source.Operation(id, tparams, params, ret) =>
-    //          val name = Context.freshTermName(id)
-    //          Context scoped {
-    //            // the parameters of the effect are in scope
-    //            effectSym.tparams.foreach { p => Context.bind(p) }
-    //
-    //            val tps = tparams map resolve
-    //
-    //            // The type parameters of an effect op are:
-    //            //   1) all type parameters on the effect, followed by
-    //            //   2) the annotated type parameters on the concrete operation
-    //            val op = EffectOp(Name(id), effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
-    //            Context.define(id, op)
-    //            op
-    //          }
-    //      }
-    //      effectSym.ops.foreach { op => Context.bind(op) }
+    case source.EffDef(id, tparams, ops) =>
+      val effectSym = Context.resolveType(id).asUserEffect
+      effectSym.ops = ops.map {
+        case source.Operation(id, tparams, params, ret) =>
+          // effect operations are always selected, no functions are generated, so we use a local name here
+          val name = Name.local(id)
+          Context scoped {
+            // the parameters of the effect are in scope
+            effectSym.tparams.foreach { p => Context.bind(p) }
+
+            val tps = tparams map resolve
+
+            // The type parameters of an effect op are:
+            //   1) all type parameters on the effect, followed by
+            //   2) the annotated type parameters on the concrete operation
+            val op = EffectOp(name, effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            Context.define(id, op)
+            op
+          }
+      }
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
@@ -314,15 +314,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
       Context.define(id, sym)
 
-    //    case source.EffDef(id, tparams, ops) =>
-    //      // we use the localName for effects, since they will be bound as capabilities
-    //      val effectSym = Context scoped {
-    //        val tps = tparams map resolve
-    //        // we do not resolve the effect operations here to allow them to refer to types that are defined
-    //        // later in the file
-    //        UserEffect(Name(id), tps)
-    //      }
-    //      Context.define(id, effectSym)
+    case source.EffDef(id, tparams, ops) =>
+      val effectName = Name.qualified(id)
+      val effectSym = Context scoped {
+        val tps = tparams map resolve
+        // we do not resolve the effect operations here to allow them to refer to types that are defined
+        // later in the file
+        UserEffect(effectName, tps)
+      }
+      Context.define(id, effectSym)
 
     case source.DataDef(id, tparams, ctors) =>
       val typ = Context scoped {

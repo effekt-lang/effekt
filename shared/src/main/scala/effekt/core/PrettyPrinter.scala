@@ -116,6 +116,9 @@ class PrettyPrinter extends ParenPrettyPrinter {
       val cs = ctors.map { id => toDoc(id.name) }
       "type" <+> toDoc(did.name) <> parens(hsep(cs, ",")) <> emptyline <> toDocStmt(rest)
 
+    // TODO generate code
+    case Eff(id, ops, rest) => toDocStmt(rest)
+
     // for now, don't print includes
     case Include(contents, rest) =>
       toDocStmt(rest)

@@ -1,0 +1,7 @@
+module examples/pos/effects
+
+effect Test {
+  def get(): Int
+}
+
+def main() = println("hello")

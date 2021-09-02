@@ -228,6 +228,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
 
+    // TODO generate code
+    case Eff(id, ops, rest) => toDocStmt(rest)
+
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
 
@@ -266,6 +269,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
+
+    case Eff(id, ops, rest) => toDocStmt(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
@@ -308,6 +313,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
     case Def(id, tpe, d, rest) => true
+    case Eff(id, ops, rest) => true
     case _ => false
   }
 }

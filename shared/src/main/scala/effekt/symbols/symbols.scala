@@ -278,27 +278,22 @@ package object symbols {
   /** Effects */
 
   // TODO effects are only temporarily symbols to be resolved by namer
-  //  sealed trait Effect {
-  //    def name: Name
-  //    def builtin: Boolean
-  //  }
+  sealed trait Effect {
+    def name: Name
+    def builtin: Boolean
+  }
+  case class EffectApp(effect: UserEffect, args: List[ValueType]) extends Effect {
+    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
+    override def builtin = effect.builtin
+    override val name = effect.name
+
+  }
   //
-  //  case class EffectApp(effect: Effect, args: List[ValueType]) extends Effect {
-  //    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
-  //    override def builtin = effect.builtin
-  //    override val name = effect.name
-  //
-  //  }
-  //
-  //  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  //  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: Effectful, effect: UserEffect) extends Fun {
-  //    def ret: Option[Effectful] = Some(Effectful(annotatedReturn.tpe, otherEffects + appliedEffect))
-  //    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
-  //
-  //    // The effects as seen by the capability passing transformation
-  //    def otherEffects: Effects = annotatedReturn.effects
-  //    def isBidirectional: Boolean = otherEffects.nonEmpty
-  //  }
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends TypeSymbol
+  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: ValueType, effect: UserEffect) extends Fun {
+    def ret: Option[ValueType] = Some(annotatedReturn)
+    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
+  }
 
   /**
    * Builtins

@@ -179,12 +179,12 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
-//case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
-//  type symbol = symbols.UserEffect
-//}
-//case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
-//  type symbol = symbols.EffectOp
-//}
+case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
+  type symbol = symbols.UserEffect
+}
+case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
+  type symbol = symbols.EffectOp
+}
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }
