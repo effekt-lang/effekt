@@ -217,9 +217,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     // (2) === Bound Occurrences ===
 
     case source.Call(target, targs, args) =>
-      resolveAll(target)
+      resolveGeneric(target)
       targs foreach resolve
       resolveAll(args)
+
+    // do not try to attempt resolving the selector!
+    case source.Select(target, selector) =>
+      resolveGeneric(target)
 
     case source.Var(id)        => Context.resolveVar(id)
 
