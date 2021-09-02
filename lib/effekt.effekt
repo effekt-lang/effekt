@@ -9,7 +9,7 @@ extern include "effekt_builtins.js"
 // Pattern Matching
 extern include "effekt_matching.js"
 
-def locally[R] { f: R }: R = f()
+def locally[R] { f: () => R }: R = f()
 
 // Side effecting ops
 // ==================
@@ -171,14 +171,14 @@ extern def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
 
 // runs the block and returns the time in nanoseconds
-def timed { block: Unit }: Int = {
+def timed { block: () => Unit }: Int = {
   val before = currentTimeNanos()
   block()
   val after = currentTimeNanos()
   after - before
 }
 
-def measure(warmup: Int, iterations: Int) { block: Unit }: Unit = {
+def measure(warmup: Int, iterations: Int) { block: () => Unit }: Unit = {
   def run(n: Int, report: Boolean): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };
