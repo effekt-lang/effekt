@@ -141,11 +141,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
           record
       }
 
-    // The record has been resolved as part of the preresolution step
-    case d @ source.RecordDef(id, tparams, fields) =>
-      val record = d.symbol
-      record.fields = resolveFields(fields, record)
-
     case source.ExternType(id, tparams) => ()
     // case source.ExternEffect(id, tparams) => ()
     case source.ExternFun(pure, id, tparams, params, ret, body) => ()
@@ -337,20 +332,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         DataType(C.nameFor(id), tps)
       }
       Context.define(id, typ)
-
-    case source.RecordDef(id, tparams, fields) =>
-      lazy val sym: Record = {
-        val tps = Context scoped { tparams map resolve }
-        // we do not resolve the fields here to allow them to refer to types that are defined
-        // later in the file
-        Record(C.nameFor(id), tps, null)
-      }
-      sym.tpe = if (sym.tparams.isEmpty) sym else TypeApp(sym, sym.tparams)
-
-      // define constructor
-      Context.define(id, sym: TermSymbol)
-      // define record type
-      Context.define(id, sym: TypeSymbol)
 
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {

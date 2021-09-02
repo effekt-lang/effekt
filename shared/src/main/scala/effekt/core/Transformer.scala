@@ -44,10 +44,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case d @ source.DataDef(id, _, ctors) =>
       Data(d.symbol, ctors.map { c => c.symbol }, rest)
 
-    case d @ source.RecordDef(id, _, _) =>
-      val rec = d.symbol
-      core.Record(rec, rec.fields, rest)
-
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest)
 

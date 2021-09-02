@@ -412,15 +412,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
       }
 
-    case d @ source.RecordDef(id, tparams, fields) =>
-      val rec = d.symbol
-      Context.assignType(rec, rec.toType)
-      rec.fields.foreach { field =>
-        val tpe = field.toType
-        wellformed(tpe)
-        Context.assignType(field, tpe)
-      }
-
     case _ => ()
   }
 

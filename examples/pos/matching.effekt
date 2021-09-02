@@ -1,6 +1,8 @@
 module examples/pos/matching
 
-record Pair[A, B](fst: A, snd: B)
+type Pair[A, B] {
+  Pair(fst: A, snd: B)
+}
 
 def main() = {
   Pair(1, 2) match {

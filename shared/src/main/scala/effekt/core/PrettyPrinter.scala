@@ -45,9 +45,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
       case b: Block => toDoc(b)
     }, comma))
 
-    case Select(b, field) =>
-      toDoc(b) <> "." <> toDoc(field.name)
-
     case Closure(b) => toDoc(b)
   }
 
@@ -118,10 +115,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Data(did, ctors, rest) =>
       val cs = ctors.map { id => toDoc(id.name) }
       "type" <+> toDoc(did.name) <> parens(hsep(cs, ",")) <> emptyline <> toDocStmt(rest)
-
-    case Record(did, fields, rest) =>
-      val fs = fields.map { f => toDoc(f.name) }
-      "record" <+> toDoc(did.name) <> parens(hsep(fs, ",")) <> emptyline <> toDocStmt(rest)
 
     // for now, don't print includes
     case Include(contents, rest) =>

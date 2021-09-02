@@ -180,9 +180,6 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       case b: Block => toDoc(b)
     }, comma))
 
-    case Select(b, field) =>
-      toDoc(b) <> "." <> nameDef(field)
-
     case Closure(e) => toDoc(e)
   })
 
@@ -231,9 +228,6 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
 
-    case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> ";" <> emptyline <> toDocStmt(rest)
-
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
 
@@ -272,9 +266,6 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
-
-    case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> ";" <> emptyline <> toDocTopLevel(rest)
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
@@ -316,7 +307,6 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def requiresBlock(s: Stmt): Boolean = s match {
     case Data(did, ctors, rest) => true
-    case Record(did, fields, rest) => true
     case Def(id, tpe, d, rest) => true
     case _ => false
   }

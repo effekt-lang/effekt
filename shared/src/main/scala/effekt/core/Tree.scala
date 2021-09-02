@@ -37,7 +37,6 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol) extends Expr
 case class Closure(b: Block) extends Expr
 
 /**
@@ -64,8 +63,6 @@ sealed trait Stmt extends Tree
 case class Def(id: BlockSymbol, tpe: InterfaceType, block: Block, rest: Stmt) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
-case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
-
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
@@ -118,8 +115,6 @@ object Tree {
       case e if expr.isDefinedAt(e) => expr(e)
       case PureApp(b, targs, args) =>
         PureApp(rewrite(b), targs, args map rewrite)
-      case Select(target, field) =>
-        Select(rewrite(target), field)
       case v: ValueVar   => v
       case l: Literal[_] => l
     }
@@ -131,8 +126,6 @@ object Tree {
         Val(id, tpe, rewrite(binding), rewrite(body))
       case Data(id, ctors, rest) =>
         Data(id, ctors, rewrite(rest))
-      case Record(id, fields, rest) =>
-        Record(id, fields, rewrite(rest))
       case App(b, targs, args) =>
         App(rewrite(b), targs, args map rewrite)
       case If(cond, thn, els) =>

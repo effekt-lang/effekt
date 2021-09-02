@@ -191,9 +191,6 @@ case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) exten
 case class Constructor(id: IdDef, params: ValueParams) extends Definition {
   type symbol = symbols.Record
 }
-case class RecordDef(id: IdDef, tparams: List[Id], fields: ValueParams) extends Def {
-  type symbol = symbols.Record
-}
 
 // only valid on the toplevel!
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
@@ -457,7 +454,6 @@ object Tree {
 
       // case d: EffDef        => d
       case d: DataDef       => d
-      case d: RecordDef     => d
 
       case d: ExternType    => d
       //      case d: ExternEffect  => d
