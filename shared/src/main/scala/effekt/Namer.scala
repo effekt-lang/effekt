@@ -540,10 +540,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Variables have to be resolved uniquely
    */
-  private[namer] def resolveVar(id: Id): TermSymbol = resolveTerm(id) match {
-    case b: BlockParam => abort("Blocks have to be fully applied and can't be used as values.")
-    case other         => other
-  }
+  private[namer] def resolveVar(id: Id): TermSymbol = resolveTerm(id)
 
   private[namer] def resolveType(id: Id): TypeSymbol = at(id) {
     val sym = scope.lookupType(id.name)

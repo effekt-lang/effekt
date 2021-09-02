@@ -244,12 +244,12 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     generateConstructor(ctor, ctor.fields)
 
   def generateConstructor(ctor: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
-    jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
+    jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsCall("$effekt.pure", jsObject(List(
       text("__tag") -> jsString(nameDef(ctor)),
       text("__data") -> jsArray(fields map { f => nameDef(f) }),
     ) ++ fields.map { f =>
         (nameDef(f), nameDef(f))
-      }))
+      })))
   }
 
   /**
