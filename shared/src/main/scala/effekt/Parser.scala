@@ -279,7 +279,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idDef ~ (`:` ~> valueType).? ^^ ValueParam
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~> blockType) ^^ BlockParam
+    idDef ~ (`:` ~> interfaceType) ^^ BlockParam
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -296,17 +296,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | failure("Expected at an argument list")
     )
 
-  lazy val blockArg: P[BlockArg] =
+  lazy val blockArg: P[ArgSection] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockArg(List(ps), body) }
-    | `{` ~> some(clause) <~ `}` ^^ { cs =>
-      // TODO positions should be improved here and fresh names should be generated for the scrutinee
-      // also mark the temp name as synthesized to prevent it from being listed in VSCode
-      val name = "__tmpRes"
-      BlockArg(
-        List(ValueParams(List(ValueParam(IdDef(name), None)))),
-        Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
-    }
-    | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
+    | (`{` ~> idRef <~ `}`) ^^ CapabilityArg
     )
 
   lazy val lambdaArgs: P[ValueParams] =
@@ -487,6 +479,14 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ {
       case params ~ ret => FunType(BlockType(params, ret))
     }
+
+  lazy val interfaceType: P[InterfaceType] =
+    ( blockType
+    | capabilityType
+    )
+
+  lazy val capabilityType: P[CapabilityType] =
+    idRef ^^ CapabilityType
 
   lazy val blockType: P[BlockType] =
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ BlockType

@@ -181,7 +181,7 @@ def timed { block: () => Unit }: Int = {
 def measure(warmup: Int, iterations: Int) { block: () => Unit }: Unit = {
   def run(n: Int, report: Boolean): Unit = {
     if (n <= 0) { () } else {
-      val time = timed { block() };
+      val time = timed { () => block() };
       if (report) { println(time) } else { () };
       run(n - 1, report)
     }

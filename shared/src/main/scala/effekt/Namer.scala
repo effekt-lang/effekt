@@ -404,17 +404,23 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
+  def resolve(tpe: source.InterfaceType)(implicit C: Context): InterfaceType = tpe match {
+    case b: source.BlockType      => resolve(b)
+    case c: source.CapabilityType => resolve(c)
+  }
+
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
     val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
     C.annotateResolvedType(tpe)(res)
     res
   }
 
-  //  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
-  //    val res = CapabilityType(tpe.eff)
-  //    C.annotateResolvedType(tpe)(res)
-  //    res
-  //  }
+  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
+    val eff = Context.resolveType(tpe.effect).asEffect
+    val res = CapabilityType(eff)
+    C.annotateResolvedType(tpe)(res)
+    res
+  }
 
   //  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
   //    val res = eff match {

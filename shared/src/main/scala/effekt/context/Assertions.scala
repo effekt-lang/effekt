@@ -70,10 +70,10 @@ object assertions {
       case t: Type => t
       case _ => reporter.abort("Expected a type")
     }
-    //    def asEffect: Effect = s match {
-    //      case t: Effect => t
-    //      case _ => reporter.abort("Expected an effect")
-    //    }
+    def asEffect: Effect = s match {
+      case t: Effect => t
+      case _ => reporter.abort("Expected an effect")
+    }
     def asFun: Fun = s match {
       case t: Fun => t
       case _ => reporter.abort("Expected a function")

@@ -154,15 +154,14 @@ case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { ty
 
 // TODO fuse into one kind of parameter
 sealed trait TrackedParam extends ParamSection with Definition
-case class BlockParam(id: IdDef, tpe: BlockType) extends TrackedParam { type symbol = symbols.BlockParam }
-//case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends TrackedParam { type symbol = symbols.CapabilityParam }
+case class BlockParam(id: IdDef, tpe: InterfaceType) extends TrackedParam { type symbol = symbols.BlockParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
 case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
-//case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
-//  type symbol = symbols.CapabilityParam
-//}
+case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
+  type symbol = symbols.BlockParam
+}
 
 /**
  * Global and local definitions
@@ -355,11 +354,13 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
   type symbol = symbols.DataType
 }
 
-// for now those are not user definable and thus refer to symbols.Effect
-//case class CapabilityType(eff: symbols.Effect) extends Type {
-//  type resolved = symbols.CapabilityType
-//}
-case class BlockType(params: List[ValueType], ret: ValueType) extends Type {
+sealed trait InterfaceType extends Type
+
+// TODO we simplify it for now and don't allow type constructor application on effects
+case class CapabilityType(effect: IdRef) extends InterfaceType {
+  type resolved = symbols.CapabilityType
+}
+case class BlockType(params: List[ValueType], ret: ValueType) extends InterfaceType {
   type resolved = symbols.BlockType
 }
 
@@ -371,12 +372,4 @@ case class BlockType(params: List[ValueType], ret: ValueType) extends Type {
 //    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
 //    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
 //  }
-//}
-//case class Effectful(tpe: ValueType, eff: Effects) extends Tree
-//
-//case class Effects(effs: List[Effect]) extends Tree
-//object Effects {
-//  val Pure: Effects = Effects()
-//  def apply(effs: Effect*): Effects = Effects(effs.toSet)
-//  def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
 //}

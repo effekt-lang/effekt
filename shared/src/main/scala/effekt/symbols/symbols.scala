@@ -88,9 +88,10 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: LocalName, tpe: Option[ValueType]) extends Param with ValueSymbol
 
-  // TODO everywhere else the two universes are called "value" and "block"
-  sealed trait TrackedParam extends Param
-  case class BlockParam(name: LocalName, tpe: BlockType) extends TrackedParam with BlockSymbol
+  sealed trait InterfaceParam extends Param
+  // TODO maybe revive the CapabilityParam below
+  // ultimately we might want to allow arbitrary expressions with implicit unboxing and so forth.
+  case class BlockParam(name: LocalName, tpe: InterfaceType) extends InterfaceParam with BlockSymbol
   //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
   //    def effect = tpe.eff
   //    override def toString = s"@${tpe.eff.name}"
@@ -221,7 +222,7 @@ package object symbols {
   }
 
   sealed trait InterfaceType extends Type
-  // case class CapabilityType(eff: Effect) extends InterfaceType
+  case class CapabilityType(eff: Effect) extends InterfaceType
 
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: ValueType) extends InterfaceType {
     override def toString: String = {
@@ -282,17 +283,17 @@ package object symbols {
     def name: Name
     def builtin: Boolean
   }
-  case class EffectApp(effect: UserEffect, args: List[ValueType]) extends Effect {
-    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
-    override def builtin = effect.builtin
-    override val name = effect.name
-
-  }
+  //  case class EffectApp(effect: UserEffect, args: List[ValueType]) extends Effect {
+  //    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
+  //    override def builtin = effect.builtin
+  //    override val name = effect.name
   //
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends TypeSymbol
+  //  }
+  //
+  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
   case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: ValueType, effect: UserEffect) extends Fun {
     def ret: Option[ValueType] = Some(annotatedReturn)
-    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
+    //    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
   }
 
   /**

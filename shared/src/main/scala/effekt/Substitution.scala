@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ BlockType, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ BlockType, CapabilityType, FunType, InterfaceType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -32,8 +32,9 @@ object substitutions {
     //    }
 
     def substitute(t: InterfaceType): InterfaceType = t match {
-      // case b: CapabilityType => b
-      case b: BlockType => substitute(b)
+      // TODO for now substitution doesn't do anything on capability types.
+      case b: CapabilityType => b
+      case b: BlockType      => substitute(b)
     }
 
     def substitute(t: BlockType): BlockType = t match {
