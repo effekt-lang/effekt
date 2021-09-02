@@ -52,7 +52,7 @@ case class BlockVar(id: BlockSymbol) extends Block
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 // TODO use resolved selector here
-case class Member(b: Block, selector: String) extends Block
+case class Select(b: Block, selector: String) extends Block
 case class Extern(pure: Boolean, params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 

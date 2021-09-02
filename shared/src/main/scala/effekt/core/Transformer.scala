@@ -104,7 +104,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     }
 
     case source.Select(receiver, selector) =>
-      Member(transformAsBlock(receiver), selector.name)
+      Select(transformAsBlock(receiver), selector.name)
 
     case _ =>
       C.abort("Value in block position: automatic unboxing currently not supported.")

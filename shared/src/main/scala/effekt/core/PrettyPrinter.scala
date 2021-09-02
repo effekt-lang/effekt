@@ -24,7 +24,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(v) => v.name.toString
     case BlockLit(ps, body) =>
       parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
-    case Member(b, sel) =>
+    case Select(b, sel) =>
       toDoc(b) <> "." <> sel
     case Extern(_, ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
     case Unbox(e)            => toDoc(e)
