@@ -133,8 +133,8 @@ object substitutions {
         case (t: ValueType, s: ValueType) =>
           unifyValueTypes(t, s)
 
-        case (t: BlockType, s: BlockType) =>
-          unifyBlockTypes(t, s)
+        case (t: InterfaceType, s: InterfaceType) =>
+          unifyInterfaceTypes(t, s)
 
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")
@@ -171,6 +171,22 @@ object substitutions {
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")
       }
+
+    def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType)(implicit C: Context): UnificationResult = (tpe1, tpe2) match {
+      case (t: BlockType, s: BlockType) =>
+        unifyBlockTypes(t, s)
+
+      case (t: CapabilityType, s: CapabilityType) =>
+        unifyCapabilityTypes(t, s)
+
+      case (t, s) =>
+        UnificationError(s"Expected ${t}, but got ${s}")
+    }
+
+    def unifyCapabilityTypes(tpe1: CapabilityType, tpe2: CapabilityType)(implicit C: Context): UnificationResult =
+      // TODO implement properly
+      if (tpe1.effect == tpe2.effect) Unifier.empty
+      else UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
 
     def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: Context): UnificationResult =
       (tpe1, tpe2) match {

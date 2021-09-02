@@ -1,7 +1,16 @@
 module examples/pos/effects
 
-effect Test {
-  def get(): Int
+effect Test1 {
+  def get1(): Int
 }
+
+effect Test2 {
+  def get2(): Int
+}
+
+def foo { test : Test1 }: Unit =
+  foo { test }
+
+// def bar { test : Test2 } = foo { test }
 
 def main() = println("hello")

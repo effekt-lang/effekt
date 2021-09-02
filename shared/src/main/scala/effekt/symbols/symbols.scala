@@ -222,7 +222,9 @@ package object symbols {
   }
 
   sealed trait InterfaceType extends Type
-  case class CapabilityType(eff: Effect) extends InterfaceType
+  case class CapabilityType(effect: Effect) extends InterfaceType {
+    override def toString = effect.toString
+  }
 
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: ValueType) extends InterfaceType {
     override def toString: String = {

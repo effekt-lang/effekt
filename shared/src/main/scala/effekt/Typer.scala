@@ -658,6 +658,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case (List(bt: BlockType), arg: source.BlockArg) =>
         checkBlockArgument(bt, arg)
 
+      case (List(ct: CapabilityType), arg: source.CapabilityArg) =>
+        checkCapabilityArgument(ct, arg)
+
       case (_, _) =>
         Context.error("Wrong type of argument section")
     }
@@ -678,15 +681,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
       val bt @ BlockType(Nil, params, tpe1) = Context.unifier substitute tpe
 
-      // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
-      Context.annotateBlockArgument(arg, bt)
-
       Context.define {
         checkAgainstDeclaration("block", params, arg.params)
       }
 
       val tpe2 = arg.body checkAgainst tpe1
 
+      Context.unify(tpe1, tpe2)
+    }
+
+    def checkCapabilityArgument(tpe: CapabilityType, arg: source.CapabilityArg) = Context.at(arg) {
+      val tpe1 = Context.unifier substitute tpe
+      val tpe2 = arg.definition.tpe
       Context.unify(tpe1, tpe2)
     }
 
