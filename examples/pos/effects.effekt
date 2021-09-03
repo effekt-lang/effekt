@@ -19,6 +19,14 @@ def foo { test : Test1 }: Unit = {
 
 }
 
+def bar(): Int = {
+  try {
+    test2.get2() + 1
+  } with test2 : Test2 {
+    def get2() = resume(42)
+  }
+}
+
 // def bar { test : Test2 } = foo { test }
 
-def main() = println("hello")
+def main() = println(bar())

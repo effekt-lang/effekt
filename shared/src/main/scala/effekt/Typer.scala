@@ -5,7 +5,7 @@ package typer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
@@ -135,6 +135,53 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val ret = checkStmt(prog, expected)
 
         // TODO implement checking of handlers
+
+        handlers foreach Context.withFocus { h =>
+          val effect: Interface = h.capability.symbol.tpe.asUserEffect
+
+          val tparams = effect.tparams
+          // TODO implement
+          val targs = List() // h.effect.tparams.map(_.resolve)
+
+          val covered = h.clauses.map { _.definition }
+          val notCovered = effect.ops.toSet -- covered.toSet
+
+          if (notCovered.nonEmpty) {
+            val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
+            Context.error(s"Missing definitions for effect operations: ${explanation}")
+          }
+
+          if (covered.size > covered.distinct.size) {
+            Context.error(s"Duplicate definitions of effect operations")
+          }
+          h.clauses foreach Context.withFocus {
+            case d @ source.OpClause(op, params, body, resume) =>
+              val effectOp = d.definition
+
+              // (1) Instantiate block type of effect operation
+              val (rigids, FunctionType(tparams, pms, tpe)) = Unification.instantiate(Context.functionTypeOf(effectOp))
+
+              // (2) unify with given type arguments for effect (i.e., A, B, ...):
+              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+              //     The parameters C, D, ... are existentials
+              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
+              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
+
+              // (3) substitute what we know so far
+              val substPms = Context.unifier substitute pms
+              val substTpe = Context.unifier substitute tpe
+
+              // (4) check parameters
+              val ps = checkAgainstDeclaration(op.name, substPms, params)
+
+              // (5) synthesize type of continuation
+              val resumeType = FunctionType(Nil, List(List(substTpe)), ret)
+
+              Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
+                body checkAgainst ret
+              }
+          }
+        }
 
         ret
       //      case source.TryHandle(prog, handlers) =>

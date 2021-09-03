@@ -96,6 +96,13 @@ object assertions {
     }
   }
 
+  implicit class TypeSymbolAssertions(t: symbols.Type)(implicit reporter: ErrorReporter) {
+    def asUserEffect: Interface = t match {
+      case t: Interface => t
+      case _ => reporter.abort("Expected a user defined effect")
+    }
+  }
+
   implicit class TypeAssertions(t: source.Type)(implicit reporter: ErrorReporter) {
     def asTypeVar: source.TypeVar = t match {
       case t: source.TypeVar => t

@@ -5,7 +5,7 @@ package namer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Context, ContextOps }
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
@@ -234,6 +234,27 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         case source.Handler(cap, clauses) => Context scoped {
           val param = resolve(cap)
           Context.bind(param)
+
+          val eff = param.tpe.asUserEffect
+
+          clauses.foreach {
+            case source.OpClause(op, params, body, resumeId) =>
+
+              // try to find the operation in the handled effect:
+              eff.ops.find { o => o.name.toString == op.name } map { opSym =>
+                Context.assignSymbol(op, opSym)
+              } getOrElse {
+                Context.abort(s"Operation ${op.name} is not part of interface ${eff}.")
+              }
+
+              val ps = params.map(resolve)
+              Context scoped {
+                Context.bind(ps)
+                Context.define(resumeId, ResumeParam(C.module))
+                resolveGeneric(body)
+              }
+          }
+
           param
         }
       }

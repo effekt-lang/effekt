@@ -96,7 +96,7 @@ package object symbols {
   //    def effect = tpe.eff
   //    override def toString = s"@${tpe.eff.name}"
   //  }
-  //  case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = LocalName("resume") }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -110,7 +110,7 @@ package object symbols {
         case BlockParam(_, tpe) => tpe
         // case CapabilityParam(_, tpe) => tpe
         case v: ValueParam      => v.tpe.get
-        // case r: ResumeParam     => sys error "Internal Error: No type annotated on resumption parameter"
+        case r: ResumeParam     => sys error "Internal Error: No type annotated on resumption parameter"
       }
     }
 

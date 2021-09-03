@@ -4,7 +4,7 @@ package core
 import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
 
@@ -167,25 +167,27 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
       val body = BlockLit(caps, transform(prog))
 
+      // to obtain a canonical ordering of operation clauses, we use the definition ordering
+      val hs = handlers.map {
+        case h @ source.Handler(cap, cls) =>
+
+          val effect = cap.symbol.tpe.asUserEffect
+          val clauses = cls.map { cl => (cl.definition, cl) }.toMap
+
+          Handler(effect, effect.ops.map(clauses.apply).map {
+            case op @ source.OpClause(id, params, body, resume) =>
+              val ps = transformParams(params)
+
+              // introduce a block parameter for resume
+              val resumeParam = BlockParam(resume.symbol.asInstanceOf[BlockSymbol])
+
+              val opBlock = BlockLit(ps :+ resumeParam, transform(body))
+              (op.definition, opBlock)
+          })
+      }
+
       // TODO transform handlers
-      C.bind(C.inferredTypeOf(tree), Handle(body, Nil))
-    //
-    //      // to obtain a canonical ordering of operation clauses, we use the definition ordering
-    //      val hs = handlers.map {
-    //        case h @ source.Handler(eff, cap, cls) =>
-    //          val clauses = cls.map { cl => (cl.definition, cl) }.toMap
-    //
-    //          Handler(h.definition, h.definition.ops.map(clauses.apply).map {
-    //            case op @ source.OpClause(id, params, body, resume) =>
-    //              val ps = transformParams(params)
-    //
-    //              // introduce a block parameter for resume
-    //              val resumeParam = BlockParam(resume.symbol.asInstanceOf[BlockSymbol])
-    //
-    //              val opBlock = BlockLit(ps :+ resumeParam, transform(body))
-    //              (op.definition, opBlock)
-    //          })
-    //      }
+      C.bind(C.inferredTypeOf(tree), Handle(body, hs))
 
     case source.Hole(stmts) =>
       C.bind(C.inferredTypeOf(tree), Hole)
@@ -201,7 +203,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =
     ps.flatMap {
       case b @ source.BlockParam(id, _) => List(BlockParam(b.symbol))
-      // case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
       case v @ source.ValueParams(ps)   => ps.map { p => ValueParam(p.symbol) }
     }
 
@@ -244,7 +245,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     core.ValueParam(id, C.valueTypeOf(id))
 
   def BlockParam(id: BlockSymbol)(implicit C: Context): core.BlockParam =
-    core.BlockParam(id, C.interfaceTypeOf(id))
+    core.BlockParam(id, C.blockTypeOf(id))
 
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(implicit C: Context): core.Val =
     core.Val(id, C.valueTypeOf(id), binding, body)
