@@ -132,11 +132,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case l: source.Literal[t]        => transformLit(l)
 
-    case l @ source.Lambda(id, params, body) =>
-      val tpe = C.blockTypeOf(l.symbol)
-      val ps = transformParams(params)
-      Box(BlockLit(ps, transform(body)))
-
     case source.If(cond, thn, els) =>
       val c = transform(cond)
       val exprTpe = C.inferredTypeOf(tree)

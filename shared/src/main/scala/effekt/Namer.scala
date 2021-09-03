@@ -205,15 +205,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(stmt)
       }
 
-    case l @ source.Lambda(id, params, stmt) =>
-      val ps = params.map(resolve)
-      Context scoped {
-        Context.bind(ps)
-        resolveGeneric(stmt)
-      }
-      val sym = Lambda(ps, l)
-      Context.define(id, sym)
-
     // (2) === Bound Occurrences ===
 
     case source.Call(target, targs, args) =>

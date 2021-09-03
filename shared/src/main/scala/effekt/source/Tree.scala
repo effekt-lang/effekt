@@ -235,16 +235,6 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 /**
- * Represents a first-class function
- *
- * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
- * its parameter symbols.
- */
-case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Expr with Definition {
-  type symbol = symbols.Lambda
-}
-
-/**
  * Selecting a capability or a method out of a capability
  */
 case class Select(receiver: Expr, selector: IdRef) extends Expr

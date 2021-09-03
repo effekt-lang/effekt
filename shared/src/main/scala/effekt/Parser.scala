@@ -376,7 +376,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | whileExpr
     | funCall
     // | handleExpr
-    | lambdaExpr
     | primExpr
     )
 
@@ -444,9 +443,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
-
-  lazy val lambdaExpr: P[Lambda] =
-    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Lambda(IdDef("<lambda>"), List(ps), body) }
 
   lazy val listLiteral: P[Expr] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }

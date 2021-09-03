@@ -105,44 +105,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val _ = expr checkAgainst Context.valueTypeOf(sym)
         TUnit
 
-      // TODO share code with FunDef
-      case l @ source.Lambda(id, params, body) =>
-        val sym = l.symbol
-        // currently expects params to be fully annotated
-        Context.define(sym.params)
-
-        expected match {
-          case Some(exp @ BoxedType(FunctionType(_, ps, ret))) =>
-            checkAgainstDeclaration("lambda", ps, params)
-            val retGot = body checkAgainst ret
-            Context.unify(ret, retGot)
-
-            val got = BoxedType(FunctionType(Nil, ps, retGot))
-
-            Context.unify(exp, got)
-
-            Context.assignType(sym, sym.toType(ret))
-            Context.assignType(l, ret)
-
-            got
-
-          case _ =>
-            val ret = checkStmt(body, None)
-            val ps = extractAllTypes(sym.params)
-            val tpe = FunctionType(Nil, ps, ret)
-
-            val funTpe = BoxedType(tpe)
-
-            Context.assignType(sym, sym.toType(ret))
-            Context.assignType(l, ret)
-
-            expected.foreach { exp =>
-              Context.unify(exp, funTpe)
-            }
-
-            funTpe
-        }
-
       case c @ source.Call(e, targs, args) =>
         val btpe = checkExprAsBlock(e, None) match {
           case b: FunctionType => b
