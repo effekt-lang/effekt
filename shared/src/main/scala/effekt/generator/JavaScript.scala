@@ -52,16 +52,11 @@ class JavaScript extends Generator {
 trait JavaScriptPrinter extends JavaScriptBase {
 
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v) =>
-      nameRef(v)
-    case BlockLit(ps, body) =>
-      jsLambda(ps map toDoc, toDoc(body))
-    //    case Member(b, id) =>
-    //      toDoc(b) <> "." <> nameDef(id)
-    case Extern(pure, ps, body) =>
-      jsLambda(ps map toDoc, body)
-    case Unbox(e) => toDoc(e)
-    case _        => sys error "Unsupported block in plain JS pretty printer"
+    case BlockVar(v)            => nameRef(v)
+    case BlockLit(ps, body)     => jsLambda(ps map toDoc, toDoc(body))
+    case Extern(pure, ps, body) => jsLambda(ps map toDoc, body)
+    case Unbox(e)               => toDoc(e)
+    case Select(b, sel)         => toDoc(b) <> "." <> sel
   })
 
   // pretty print the statement in a javascript expression context

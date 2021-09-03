@@ -270,7 +270,7 @@ package object symbols {
   case class FunctionType(tparams: List[TypeVar], params: Sections, ret: ValueType) extends BlockType {
     override def toString: String = {
       val ps = params.map {
-        case List(b: FunctionType)          => s"{${b.toString}}"
+        case List(b: BlockType)             => s"{${b.toString}}"
         case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
       }.mkString("")
 

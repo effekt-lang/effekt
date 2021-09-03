@@ -148,7 +148,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      Context.define(id, BlockParam(Name.local(id), resolve(tpe)))
+      val p = BlockParam(Name.local(id), resolve(tpe))
+      Context.define(id, p)
 
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
@@ -320,10 +321,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val sym = BlockParam(Name.local(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
-    //    case source.CapabilityParam(id, tpe) =>
-    //      val sym = CapabilityParam(Name(id), resolve(tpe))
-    //      Context.assignSymbol(id, sym)
-    //      List(sym)
   }
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>

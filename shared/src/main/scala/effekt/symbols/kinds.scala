@@ -28,7 +28,7 @@ package object kinds {
     case FunctionType(tparams, params: Sections, ret) =>
       params.flatten.foreach { tpe => wellformed(tpe) }
       wellformed(ret)
-    case i: InterfaceType => ???
+    case i: InterfaceType => ()
   }
 
   private sealed trait Kind

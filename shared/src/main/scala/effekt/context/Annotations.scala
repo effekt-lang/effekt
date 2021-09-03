@@ -274,8 +274,8 @@ trait AnnotationsDB { self: Context =>
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: FunctionType => Some(b)
-        case _               => None
+        case b: BlockType => Some(b)
+        case _            => None
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap {
         case symbols.BoxedType(tpe: BlockType) => Some(tpe)

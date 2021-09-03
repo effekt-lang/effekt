@@ -1,7 +1,7 @@
 module examples/pos/effects
 
 effect Test1 {
-  def get1(): Int
+  def get1(b: Boolean): Int
 }
 
 effect Test2 {
@@ -9,7 +9,7 @@ effect Test2 {
 }
 
 def foo { test : Test1 }: Unit = {
-  test.get1();
+  test.get1(true);
   foo { test }
 }
 

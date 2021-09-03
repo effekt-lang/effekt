@@ -56,18 +56,31 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
-  def checkExprAsBlock(expr: Expr, expected: Option[BlockType])(implicit C: Context): BlockType = expr match {
-    case source.Var(id) => id.symbol match {
-      case b: BlockSymbol => Context.blockTypeOf(b)
-      case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
+  def checkExprAsBlock(expr: Expr, expected: Option[BlockType])(implicit C: Context): BlockType =
+    checkAgainstBlock(expr, expected) {
+      case source.Var(id) => id.symbol match {
+        case b: BlockSymbol => Context.blockTypeOf(b)
+        case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
+      }
+
+      case source.Select(expr, selector) =>
+        checkExprAsBlock(expr, None) match {
+          case i: Interface =>
+            // try to find an operation with name "selector"
+            val op = i.ops.collect {
+              case op if op.name.name == selector.name => op
+            } match {
+              case Nil      => Context.abort(s"Cannot select ${selector} in type ${i}")
+              case List(op) => op
+              case _        => Context.abort(s"Multi operations match ${selector} in type ${i}")
+            }
+
+            op.toType
+          case _ => Context.abort(s"Selection requires an interface type.")
+        }
+
+      case _ => Context.abort(s"Expected something of a block type.")
     }
-
-    case source.Select(expr, selector) =>
-      val btpe = checkExprAsBlock(expr, None)
-      ???
-
-    case _ => Context.abort(s"Expected something of a block type.")
-  }
 
   //</editor-fold>
 
@@ -347,7 +360,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
-      d.symbol.ret.foreach { annot => Context.assignType(d.symbol, d.symbol.toType) }
+      d.symbol.ret.foreach { annot =>
+        Context.assignType(d.symbol, d.symbol.toType)
+      }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
@@ -741,6 +756,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       C.assignType(t, got)
       got
     }
+
+  def checkAgainstBlock[T <: Tree](t: T, expected: Option[Type])(f: T => BlockType)(implicit C: Context): BlockType =
+    Context.at(t) {
+      val got = f(t)
+      wellformed(got)
+      expected foreach { Context.unify(_, got) }
+      C.assignType(t, got)
+      got
+    }
 }
 
 /**
@@ -796,10 +820,14 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Inferred types
   // ==============
+
   private[typer] def assignType(t: Tree, e: ValueType): Context = {
     annotations.annotate(Annotations.InferredType, t, e)
     this
   }
+
+  // TODO actually store in DB
+  private[typer] def assignType(t: Tree, e: BlockType): Context = this
 
   // this also needs to be backtrackable to interact correctly with overload resolution
   private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: FunctionType): Context = {
