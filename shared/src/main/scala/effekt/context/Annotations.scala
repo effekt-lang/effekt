@@ -259,17 +259,26 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
-  def blockTypeOf(s: Symbol): FunctionType =
+  def functionTypeOf(s: Symbol): FunctionType =
+    functionTypeOption(s) getOrElse { panic(s"Cannot find function type for '${s}'") }
+
+  def functionTypeOption(s: Symbol): Option[FunctionType] =
+    blockTypeOption(s) flatMap {
+      case f: FunctionType => Some(f)
+      case _               => None
+    }
+
+  def blockTypeOf(s: Symbol): BlockType =
     blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
 
-  def blockTypeOption(s: Symbol): Option[FunctionType] =
+  def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: FunctionType => Some(b)
         case _               => None
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap {
-        case symbols.BoxedType(tpe: FunctionType) => Some(tpe)
+        case symbols.BoxedType(tpe: BlockType) => Some(tpe)
         case _ => None
       }
     }

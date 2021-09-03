@@ -50,7 +50,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"extern type ${name}$tps"
 
     case c: Fun =>
-      format("def", c, context.blockTypeOption(c).map(_.ret))
+      format("def", c, context.functionTypeOption(c).map(_.ret))
   }
   def format(kw: String, f: Fun, ret: ValueType): Doc = format(kw, f, Some(ret))
   def format(kw: String, f: Fun, ret: Option[ValueType]): Doc = {

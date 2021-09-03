@@ -122,7 +122,7 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
             val mainSym = mod.terms("main").head
-            val mainTpe = context.blockTypeOf(mainSym)
+            val mainTpe = context.functionTypeOf(mainSym)
             output.emitln(mainTpe.ret)
           }
 

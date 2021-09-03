@@ -19,11 +19,6 @@ import scopes._
  *   - resolving: that is looking up symbols (might include storing the result into the symbolTable)
  *   - binding: that is adding a binding to the environment (lexical.Scope)
  *
- *
- * TODO we could split resolution in three phases
- * 1. only look at the declaration head of definitions in one scope
- * 2. look at the bodies of effect declarations and type definitions
- * 3. look into the bodies of functions
  */
 class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
@@ -57,6 +52,80 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   /**
+   * To allow mutually recursive definitions, here we only resolve the declarations,
+   * not the bodies of functions.
+   */
+  def preresolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+
+    case d @ source.ValDef(id, annot, binding) =>
+      ()
+
+    case d @ source.VarDef(id, annot, binding) =>
+      ()
+
+    case f @ source.FunDef(id, tparams, params, annot, body) =>
+      val uniqueId = Context.freshNameFor(id)
+      // we create a new scope, since resolving type params introduces them in this scope
+      val sym = Context scoped {
+        val tps = tparams map resolve
+        val ps = params map resolve
+        val ret = Context scoped {
+          Context.bind(ps)
+          annot map resolve
+        }
+        UserFunction(uniqueId, tps, ps, ret, f)
+      }
+      Context.define(id, sym)
+
+    case source.EffDef(id, tparams, ops) =>
+      val effectName = Name.qualified(id)
+      val effectSym = Context scoped {
+        val tps = tparams map resolve
+        // we do not resolve the effect operations here to allow them to refer to types that are defined
+        // later in the file
+        Interface(effectName, tps)
+      }
+      Context.define(id, effectSym)
+
+    case source.DataDef(id, tparams, ctors) =>
+      val typ = Context scoped {
+        val tps = tparams map resolve
+        // we do not resolve the constructors here to allow them to refer to types that are defined
+        // later in the file
+        DataType(C.nameFor(id), tps)
+      }
+      Context.define(id, typ)
+
+    case source.ExternType(id, tparams) =>
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        BuiltinType(C.nameFor(id), tps)
+      })
+
+    //    case source.ExternEffect(id, tparams) =>
+    //      Context.define(id, Context scoped {
+    //        val tps = tparams map resolve
+    //        BuiltinEffect(Name(id), tps)
+    //      })
+
+    case source.ExternFun(pure, id, tparams, params, ret, body) => {
+      val name = Context.freshNameFor(id)
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        val ps: Params = params map resolve
+        val tpe = resolve(ret)
+        BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
+      })
+    }
+
+    case d @ source.ExternInclude(path) =>
+      d.contents = Context.contentsOf(path).getOrElse {
+        C.abort(s"Missing include: ${path}")
+      }
+      ()
+  }
+
+  /**
    * An effectful traversal with two side effects:
    * 1) the passed environment is enriched with definitions
    * 2) names are resolved using the environment and written to the table
@@ -65,12 +134,12 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
     // (1) === Binding Occurrences ===
     case source.ModuleDecl(path, imports, decls) =>
-      decls foreach { resolve }
+      decls foreach { preresolve }
       resolveAll(decls)
 
     case source.DefStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
-      resolve(d)
+      preresolve(d)
       // resolve bodies
       resolveGeneric(d)
       resolveGeneric(rest)
@@ -91,7 +160,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       resolveGeneric(binding)
       Context.define(id, VarBinder(Name.local(id), tpe, d))
 
-    // FunDef and EffDef have already been resolved as part of the module declaration
+    // FunDef, EffDef, and DataDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, params, ret, body) =>
       val sym = Context.symbolOf(f)
       Context scoped {
@@ -227,26 +296,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case other                    => resolveAll(other)
   }
 
-  // TODO move away
-  def resolveFields(params: source.ValueParams, record: Record)(implicit C: Context): List[Field] = Context.focusing(params) {
-    case ps @ source.ValueParams(params) =>
-
-      val paramSyms = Context scoped {
-        // Bind the type parameters
-        record.tparams.foreach { t => Context.bind(t) }
-        resolve(ps)
-      }
-
-      (paramSyms zip params) map {
-        case (paramSym, paramTree) =>
-          val fieldId = paramTree.id.clone
-          val name = Context.freshLocalName(fieldId)
-          val fieldSym = Field(name, paramSym, record)
-          Context.define(fieldId, fieldSym)
-          fieldSym
-      }
-  }
-
   def resolveAll(obj: Any)(implicit C: Context): Unit = obj match {
     case p: Product => p.productIterator.foreach {
       case t: Tree => resolveGeneric(t)
@@ -283,78 +332,23 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       sym
     }
 
-  /**
-   * To allow mutually recursive definitions, here we only resolve the declarations,
-   * not the bodies of functions.
-   */
-  def resolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+  def resolveFields(params: source.ValueParams, record: Record)(implicit C: Context): List[Field] = Context.focusing(params) {
+    case ps @ source.ValueParams(params) =>
 
-    case d @ source.ValDef(id, annot, binding) =>
-      ()
-
-    case d @ source.VarDef(id, annot, binding) =>
-      ()
-
-    case f @ source.FunDef(id, tparams, params, annot, body) =>
-      val uniqueId = Context.freshNameFor(id)
-      // we create a new scope, since resolving type params introduces them in this scope
-      val sym = Context scoped {
-        val tps = tparams map resolve
-        val ps = params map resolve
-        val ret = Context scoped {
-          Context.bind(ps)
-          annot map resolve
-        }
-        UserFunction(uniqueId, tps, ps, ret, f)
+      val paramSyms = Context scoped {
+        // Bind the type parameters
+        record.tparams.foreach { t => Context.bind(t) }
+        resolve(ps)
       }
-      Context.define(id, sym)
 
-    case source.EffDef(id, tparams, ops) =>
-      val effectName = Name.qualified(id)
-      val effectSym = Context scoped {
-        val tps = tparams map resolve
-        // we do not resolve the effect operations here to allow them to refer to types that are defined
-        // later in the file
-        Interface(effectName, tps)
+      (paramSyms zip params) map {
+        case (paramSym, paramTree) =>
+          val fieldId = paramTree.id.clone
+          val name = Context.freshLocalName(fieldId)
+          val fieldSym = Field(name, paramSym, record)
+          Context.define(fieldId, fieldSym)
+          fieldSym
       }
-      Context.define(id, effectSym)
-
-    case source.DataDef(id, tparams, ctors) =>
-      val typ = Context scoped {
-        val tps = tparams map resolve
-        // we do not resolve the constructors here to allow them to refer to types that are defined
-        // later in the file
-        DataType(C.nameFor(id), tps)
-      }
-      Context.define(id, typ)
-
-    case source.ExternType(id, tparams) =>
-      Context.define(id, Context scoped {
-        val tps = tparams map resolve
-        BuiltinType(C.nameFor(id), tps)
-      })
-
-    //    case source.ExternEffect(id, tparams) =>
-    //      Context.define(id, Context scoped {
-    //        val tps = tparams map resolve
-    //        BuiltinEffect(Name(id), tps)
-    //      })
-
-    case source.ExternFun(pure, id, tparams, params, ret, body) => {
-      val name = Context.freshNameFor(id)
-      Context.define(id, Context scoped {
-        val tps = tparams map resolve
-        val ps: Params = params map resolve
-        val tpe = resolve(ret)
-        BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
-      })
-    }
-
-    case d @ source.ExternInclude(path) =>
-      d.contents = Context.contentsOf(path).getOrElse {
-        C.abort(s"Missing include: ${path}")
-      }
-      ()
   }
 
   /**
