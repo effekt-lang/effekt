@@ -160,52 +160,15 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.Select(receiver, selector) =>
       C.abort("Block in expression position: automatic boxing currently not supported.")
 
-    //
-    //    case c @ source.Call(source.ExprTarget(expr), _, args) =>
-    //      val e = transform(expr)
-    //      val as = args.flatMap(transform)
-    //      C.bind(C.inferredTypeOf(tree), App(Unbox(e), Nil, as))
+    case source.TryHandle(prog, handlers) =>
 
-    //    case c @ source.Call(source.MemberTarget(block, op), _, args) =>
-    //      // the type arguments, inferred by typer
-    //      // val targs = C.typeArguments(c)
-    //
-    //      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
-    //      C.bind(C.inferredTypeOf(tree), app)
+      val caps = handlers.map { h =>
+        BlockParam(h.capability.symbol)
+      }
+      val body = BlockLit(caps, transform(prog))
 
-    //    case c @ source.Call(fun: source.IdTarget, _, args) =>
-    //      // assumption: typer removed all ambiguous references, so there is exactly one
-    //      val sym: Symbol = fun.definition
-    //
-    //      val as = args.flatMap(transform)
-    //
-    //      // the type arguments, inferred by typer
-    //      val targs = C.typeArguments(c)
-    //
-    //      // right now only builtin functions are pure of control effects
-    //      // later we can have effect inference to learn which ones are pure.
-    //      sym match {
-    //        case f: BuiltinFunction if f.pure =>
-    //          PureApp(BlockVar(f), targs, as)
-    //        case r: Record =>
-    //          PureApp(BlockVar(r), targs, as)
-    //        case f: Field =>
-    //          val List(arg: Expr) = as
-    //          Select(arg, f)
-    //        case f: BlockSymbol =>
-    //          C.bind(C.inferredTypeOf(tree), App(BlockVar(f), targs, as))
-    //        case f: ValueSymbol =>
-    //          C.bind(C.inferredTypeOf(tree), App(Unbox(ValueVar(f)), targs, as))
-    //      }
-
-    //    case source.TryHandle(prog, handlers) =>
-    //
-    //      val effects = handlers.map(_.definition)
-    //      val caps = handlers.map { h =>
-    //        val cap = h.capability.get.symbol
-    //        core.BlockParam(cap, cap.tpe)
-    //      }
-    //      val body = BlockLit(caps, transform(prog))
+      // TODO transform handlers
+      C.bind(C.inferredTypeOf(tree), Handle(body, Nil))
     //
     //      // to obtain a canonical ordering of operation clauses, we use the definition ordering
     //      val hs = handlers.map {
@@ -223,8 +186,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     //              (op.definition, opBlock)
     //          })
     //      }
-    //
-    //      C.bind(C.inferredTypeOf(tree).tpe, Handle(body, hs))
 
     case source.Hole(stmts) =>
       C.bind(C.inferredTypeOf(tree), Hole)

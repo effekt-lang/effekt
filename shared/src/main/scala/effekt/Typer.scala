@@ -125,9 +125,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
         checkCallTo(c, "???", btpe, targs map { _.resolve }, args, expected)
 
-      //      case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
-      //        Context.panic("Method call syntax not allowed in source programs.")
+      case source.TryHandle(prog, handlers) =>
 
+        // (1) assign types to capabilities
+        val capabilities = handlers.map { h => h.capability.symbol }
+        Context.define(List(capabilities))
+
+        // (2) check body
+        val ret = checkStmt(prog, expected)
+
+        // TODO implement checking of handlers
+
+        ret
       //      case source.TryHandle(prog, handlers) =>
       //
       //        val ret = checkStmt(prog, expected)

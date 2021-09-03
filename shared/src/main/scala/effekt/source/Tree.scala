@@ -246,7 +246,7 @@ case class Call(receiver: Expr, targs: List[ValueType], args: List[ArgSection]) 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-//case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -258,13 +258,10 @@ case class While(cond: Expr, block: Stmt) extends Expr
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-//case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
-//  def id = effect.id
-//  type symbol = symbols.UserEffect
-//}
-//case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
-//  type symbol = symbols.EffectOp
-//}
+case class Handler(capability: BlockParam, clauses: List[OpClause]) extends Tree
+case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
+  type symbol = symbols.Operation
+}
 
 case class Hole(stmts: Stmt) extends Expr
 

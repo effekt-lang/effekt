@@ -376,7 +376,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( ifExpr
     | whileExpr
     | funCall
-    // | handleExpr
+    | handleExpr
     | primExpr
     )
 
@@ -386,25 +386,20 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val matchExpr: P[Expr] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
 
-  //  lazy val handleExpr: P[Expr] =
-  //    `try` ~/> stmt ~ some(handler) ^^ TryHandle
-  //
-  //  lazy val handler: P[Handler] =
-  //    ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
-  //      case effect ~ clauses =>
-  //        Handler(effect, None, clauses)
-  //      }
-  //    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
-  //      case effect ~ resume ~ BlockArg(params, body) =>
-  //        val synthesizedId = IdRef(effect.id.name)
-  //        Handler(effect, None, List(OpClause(synthesizedId, params, body, resume) withPositionOf effect))
-  //      }
-  //    )
+  lazy val handleExpr: P[Expr] =
+    `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
-  //  lazy val defClause: P[OpClause] =
-  //    (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {
-  //      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
-  //    }
+  lazy val handler: P[Handler] =
+    ( `with` ~> blockParam ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+      case cap ~ clauses =>
+        Handler(cap, clauses)
+      }
+    )
+
+  lazy val defClause: P[OpClause] =
+    (`def` ~/> idRef) ~ some(valueParamsOpt) ~ implicitResume ~ (`=` ~/> stmt) ^^ {
+      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
+    }
 
   lazy val clause: P[MatchClause] =
     `case` ~/> pattern ~ (`=>` ~/> stmts) ^^ MatchClause
@@ -419,7 +414,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
       }
     )
 
-  // lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
+  lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 
 
   lazy val assignExpr: P[Expr] =

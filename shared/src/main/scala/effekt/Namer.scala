@@ -228,11 +228,19 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    //    case source.TryHandle(body, handlers) =>
-    //      Context scoped { resolveGeneric(body) }
-    //      resolveAll(handlers)
-    //
-    //    case source.Handler(effect, _, clauses) =>
+    case source.TryHandle(body, handlers) =>
+
+      val caps = handlers map {
+        case source.Handler(cap, clauses) => Context scoped {
+          val param = resolve(cap)
+          Context.bind(param)
+          param
+        }
+      }
+      Context scoped {
+        caps foreach { Context.bind }
+        resolveGeneric(body)
+      }
     //
     //      def extractUserEffect(e: Effect): UserEffect = e match {
     //        case EffectApp(e, args) => extractUserEffect(e)
@@ -317,11 +325,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    */
   def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = Context.focusing(params) {
     case ps: source.ValueParams => resolve(ps)
+    case b: source.BlockParam   => List(resolve(b))
+  }
+  def resolve(p: source.BlockParam)(implicit C: Context): BlockParam = Context.focusing(p) {
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(Name.local(id), resolve(tpe))
       Context.assignSymbol(id, sym)
-      List(sym)
+      sym
   }
+
   def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
     ps.params map { p =>
       val sym = ValueParam(Name.local(p.id), p.tpe.map(resolve))

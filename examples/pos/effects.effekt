@@ -10,7 +10,13 @@ interface Test2 {
 
 def foo { test : Test1 }: Unit = {
   println(test.get1(true) + 1);
+  try {
+    test2.get2() + 1
+  } with test2 : Test2 {
+    def get2() = resume(42)
+  };
   foo { test }
+
 }
 
 // def bar { test : Test2 } = foo { test }

@@ -87,10 +87,10 @@ trait JavaScriptPrinter extends JavaScriptBase {
     //    case State(id, tpe, get, put, init, body) =>
     //      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
     //
-    //    case Handle(body, hs) =>
-    //      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
-    //      val cs = parens(jsArray(handlers))
-    //      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
+    case Handle(body, hs) =>
+      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
+      val cs = parens(jsArray(handlers))
+      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
 
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {

@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Type, ValueType, FunctionType, BlockType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Type, InterfaceType, ValueType, FunctionType, BlockType, Operation }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -84,6 +84,6 @@ case object Hole extends Stmt
 
 // case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
 
-//case class Handle(body: Block, handler: List[Handler]) extends Stmt
+case class Handle(body: Block, handler: List[Handler]) extends Stmt
 //// TODO change to Map
-//case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
+case class Handler(tpe: InterfaceType, clauses: List[(Operation, BlockLit)]) extends Tree
