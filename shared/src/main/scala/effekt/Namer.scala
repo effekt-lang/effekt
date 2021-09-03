@@ -408,8 +408,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
-    case b: source.FunctionType => resolve(b)
-    case c: source.BlockType    => resolve(c)
+    case b: source.FunctionType  => resolve(b)
+    case c: source.InterfaceType => resolve(c)
   }
 
   def resolve(tpe: source.FunctionType)(implicit C: Context): FunctionType = {
@@ -419,12 +419,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(tpe: source.InterfaceType)(implicit C: Context): InterfaceType = {
-    // TODO reimplement
-    ???
-    //    val eff = Context.resolveType(tpe.effect).asInterfaceType
-    //    val res = Interface(eff)
-    //    C.annotateResolvedType(tpe)(res)
-    //    res
+    val res = Context.resolveType(tpe.id).asInterfaceType
+    C.annotateResolvedType(tpe)(res)
+    res
   }
 
   //  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
