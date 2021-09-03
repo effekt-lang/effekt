@@ -117,7 +117,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
-            val op = EffectOp(name, effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            val op = Operation(name, effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
             Context.define(id, op)
             op
           }
@@ -225,15 +225,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.Select(target, selector) =>
       resolveGeneric(target)
 
-    case source.Var(id)        => Context.resolveVar(id)
+    case source.Var(id)           => Context.resolveVar(id)
 
-    case tpe: source.ValueType => resolve(tpe)
-    case tpe: source.BlockType => resolve(tpe)
+    case tpe: source.ValueType    => resolve(tpe)
+    case tpe: source.FunctionType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id: Id                => Context.resolveTerm(id)
+    case id: Id                   => Context.resolveTerm(id)
 
-    case other                 => resolveAll(other)
+    case other                    => resolveAll(other)
   }
 
   // TODO move away
@@ -324,7 +324,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = tparams map resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
-        UserEffect(effectName, tps)
+        Interface(effectName, tps)
       }
       Context.define(id, effectSym)
 
@@ -398,9 +398,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.FunType(tpe @ source.BlockType(params, ret)) =>
-        val btpe = BlockType(Nil, List(params.map(resolve)), resolve(ret))
-        FunType(btpe)
+      case source.BoxedType(tpe) =>
+        BoxedType(resolve(tpe))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type
@@ -408,28 +407,30 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(tpe: source.InterfaceType)(implicit C: Context): InterfaceType = tpe match {
-    case b: source.BlockType      => resolve(b)
-    case c: source.CapabilityType => resolve(c)
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
+    case b: source.FunctionType => resolve(b)
+    case c: source.BlockType    => resolve(c)
   }
 
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
-    val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
+  def resolve(tpe: source.FunctionType)(implicit C: Context): FunctionType = {
+    val res = FunctionType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
     C.annotateResolvedType(tpe)(res)
     res
   }
 
-  def resolve(tpe: source.CapabilityType)(implicit C: Context): CapabilityType = {
-    val eff = Context.resolveType(tpe.effect).asEffect
-    val res = CapabilityType(eff)
-    C.annotateResolvedType(tpe)(res)
-    res
+  def resolve(tpe: source.InterfaceType)(implicit C: Context): InterfaceType = {
+    // TODO reimplement
+    ???
+    //    val eff = Context.resolveType(tpe.effect).asInterfaceType
+    //    val res = Interface(eff)
+    //    C.annotateResolvedType(tpe)(res)
+    //    res
   }
 
   //  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
   //    val res = eff match {
-  //      case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
-  //      case source.Effect(e, args) => EffectApp(Context.resolveType(e).asEffect, args.map(resolve))
+  //      case source.Effect(e, Nil)  => Context.resolveType(e).asInterfaceType
+  //      case source.Effect(e, args) => EffectApp(Context.resolveType(e).asInterfaceType, args.map(resolve))
   //    }
   //    kinds.wellformed(res)
   //    res

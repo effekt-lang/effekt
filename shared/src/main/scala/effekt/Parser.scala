@@ -477,22 +477,22 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   // for now function types need to be parenthesized
-  lazy val funType: P[FunType] =
+  lazy val funType: P[BoxedType] =
     (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ {
-      case params ~ ret => FunType(BlockType(params, ret))
+      case params ~ ret => BoxedType(FunctionType(params, ret))
     }
 
-  lazy val interfaceType: P[InterfaceType] =
+  lazy val interfaceType: P[BlockType] =
     ( blockType
     | capabilityType
     )
 
-  lazy val capabilityType: P[CapabilityType] =
-    idRef ^^ CapabilityType
+  lazy val capabilityType: P[InterfaceType] =
+    idRef ^^ InterfaceType
 
-  lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ BlockType
-    | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => BlockType(List(t), e) }
+  lazy val blockType: P[FunctionType] =
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ FunctionType
+    | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => FunctionType(List(t), e) }
     )
 
   // === AST Helpers ===

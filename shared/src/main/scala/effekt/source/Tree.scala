@@ -152,9 +152,7 @@ sealed trait ParamSection extends Tree
 case class ValueParams(params: List[ValueParam]) extends ParamSection
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
 
-// TODO fuse into one kind of parameter
-sealed trait TrackedParam extends ParamSection with Definition
-case class BlockParam(id: IdDef, tpe: InterfaceType) extends TrackedParam { type symbol = symbols.BlockParam }
+case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection
@@ -179,10 +177,10 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
   type symbol = symbols.VarBinder
 }
 case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
-  type symbol = symbols.UserEffect
+  type symbol = symbols.Interface
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Operation
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
@@ -344,7 +342,7 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 /**
  * Types of first-class functions
  */
-case class FunType(tpe: BlockType) extends ValueType
+case class BoxedType(tpe: BlockType) extends ValueType
 
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
@@ -354,14 +352,14 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
   type symbol = symbols.DataType
 }
 
-sealed trait InterfaceType extends Type
+sealed trait BlockType extends Type
 
 // TODO we simplify it for now and don't allow type constructor application on effects
-case class CapabilityType(effect: IdRef) extends InterfaceType {
-  type resolved = symbols.CapabilityType
+case class InterfaceType(id: IdRef) extends BlockType {
+  type resolved = symbols.InterfaceType
 }
-case class BlockType(params: List[ValueType], ret: ValueType) extends InterfaceType {
-  type resolved = symbols.BlockType
+case class FunctionType(params: List[ValueType], ret: ValueType) extends BlockType {
+  type resolved = symbols.FunctionType
 }
 
 //case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {

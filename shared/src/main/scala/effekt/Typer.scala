@@ -56,7 +56,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
-  def checkExprAsBlock(expr: Expr, expected: Option[InterfaceType])(implicit C: Context): InterfaceType = expr match {
+  def checkExprAsBlock(expr: Expr, expected: Option[BlockType])(implicit C: Context): BlockType = expr match {
     case source.Var(id) => id.symbol match {
       case b: BlockSymbol => Context.blockTypeOf(b)
       case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
@@ -112,12 +112,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.define(sym.params)
 
         expected match {
-          case Some(exp @ FunType(BlockType(_, ps, ret))) =>
+          case Some(exp @ BoxedType(FunctionType(_, ps, ret))) =>
             checkAgainstDeclaration("lambda", ps, params)
             val retGot = body checkAgainst ret
             Context.unify(ret, retGot)
 
-            val got = FunType(BlockType(Nil, ps, retGot))
+            val got = BoxedType(FunctionType(Nil, ps, retGot))
 
             Context.unify(exp, got)
 
@@ -129,9 +129,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case _ =>
             val ret = checkStmt(body, None)
             val ps = extractAllTypes(sym.params)
-            val tpe = BlockType(Nil, ps, ret)
+            val tpe = FunctionType(Nil, ps, ret)
 
-            val funTpe = FunType(tpe)
+            val funTpe = BoxedType(tpe)
 
             Context.assignType(sym, sym.toType(ret))
             Context.assignType(l, ret)
@@ -145,8 +145,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case c @ source.Call(e, targs, args) =>
         val btpe = checkExprAsBlock(e, None) match {
-          case b: BlockType => b
-          case _            => Context.abort("Callee is required to have function type")
+          case b: FunctionType => b
+          case _               => Context.abort("Callee is required to have function type")
         }
         checkCallTo(c, "???", btpe, targs map { _.resolve }, args, expected)
 
@@ -325,7 +325,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, BlockType(_, pms, ret)) = Unification.instantiate(sym.toType)
+      val (rigids, FunctionType(_, pms, ret)) = Unification.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.unify(ret, sc)
@@ -491,7 +491,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
 
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
-      case (List(b1: BlockType), b2: source.BlockParam) =>
+      case (List(b1: FunctionType), b2: source.BlockParam) =>
         Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
@@ -613,7 +613,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def checkCallTo(
     call: source.Call,
     name: String,
-    funTpe: BlockType,
+    funTpe: FunctionType,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
@@ -621,7 +621,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, bt @ BlockType(_, params, ret)) = Unification.instantiate(funTpe)
+    val (rigids, bt @ FunctionType(_, params, ret)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -655,10 +655,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
-      case (List(bt: BlockType), arg: source.BlockArg) =>
+      case (List(bt: FunctionType), arg: source.BlockArg) =>
         checkBlockArgument(bt, arg)
 
-      case (List(ct: CapabilityType), arg: source.CapabilityArg) =>
+      case (List(ct: InterfaceType), arg: source.CapabilityArg) =>
         checkCapabilityArgument(ct, arg)
 
       case (_, _) =>
@@ -678,8 +678,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     //   BlockArg: foo { n => println("hello" + n) }
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val bt @ BlockType(Nil, params, tpe1) = Context.unifier substitute tpe
+    def checkBlockArgument(tpe: FunctionType, arg: source.BlockArg): Unit = Context.at(arg) {
+      val bt @ FunctionType(Nil, params, tpe1) = Context.unifier substitute tpe
 
       Context.define {
         checkAgainstDeclaration("block", params, arg.params)
@@ -690,7 +690,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       Context.unify(tpe1, tpe2)
     }
 
-    def checkCapabilityArgument(tpe: CapabilityType, arg: source.CapabilityArg) = Context.at(arg) {
+    def checkCapabilityArgument(tpe: InterfaceType, arg: source.CapabilityArg) = Context.at(arg) {
       val tpe1 = Context.unifier substitute tpe
       val tpe2 = arg.definition.tpe
       Context.unify(tpe1, tpe2)
@@ -746,7 +746,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
-    case BlockType(tparams, params, ret) =>
+    case FunctionType(tparams, params, ret) =>
       freeTypeVars(params) ++ freeTypeVars(ret) -- tparams.toSet
     // case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
@@ -840,7 +840,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Context = {
+  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: FunctionType): Context = {
     annotations.annotate(Annotations.BlockArgumentType, t, tpe)
     this
   }
@@ -854,14 +854,14 @@ trait TyperOps extends ContextOps { self: Context =>
     assignType(s, t); this
   }
 
-  private[typer] def define(s: Symbol, t: InterfaceType): Context = {
+  private[typer] def define(s: Symbol, t: BlockType): Context = {
     assignType(s, t); this
   }
 
   private[typer] def define(bs: Map[Symbol, Type]): Context = {
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => define(v, t)
-      case (v: BlockSymbol, t: BlockType) => define(v, t)
+      case (v: BlockSymbol, t: FunctionType) => define(v, t)
       case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
     }; this
   }

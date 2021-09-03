@@ -88,10 +88,10 @@ package object symbols {
   sealed trait Param extends TermSymbol
   case class ValueParam(name: LocalName, tpe: Option[ValueType]) extends Param with ValueSymbol
 
-  sealed trait InterfaceParam extends Param
+  //  sealed trait InterfaceParam extends Param
   // TODO maybe revive the CapabilityParam below
   // ultimately we might want to allow arbitrary expressions with implicit unboxing and so forth.
-  case class BlockParam(name: LocalName, tpe: InterfaceType) extends InterfaceParam with BlockSymbol
+  case class BlockParam(name: LocalName, tpe: BlockType) extends Param with BlockSymbol
   //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
   //    def effect = tpe.eff
   //    override def toString = s"@${tpe.eff.name}"
@@ -120,8 +120,8 @@ package object symbols {
     def ret: Option[ValueType]
 
     // invariant: only works if ret is defined!
-    def toType: BlockType = BlockType(tparams, paramsToTypes(params), ret.get)
-    def toType(ret: ValueType): BlockType = BlockType(tparams, paramsToTypes(params), ret)
+    def toType: FunctionType = FunctionType(tparams, paramsToTypes(params), ret.get)
+    def toType(ret: ValueType): FunctionType = FunctionType(tparams, paramsToTypes(params), ret)
   }
 
   object Fun {
@@ -196,12 +196,15 @@ package object symbols {
    */
   type Sections = List[List[Type]]
 
+  /**
+   * Value Types
+   */
   sealed trait ValueType extends Type
 
   /**
    * Types of first-class functions
    */
-  case class FunType(tpe: BlockType /*, region: Region */ ) extends ValueType
+  case class BoxedType(tpe: BlockType /*, region: Region */ ) extends ValueType
 
   class TypeVar(val name: LocalName) extends ValueType with TypeSymbol
   object TypeVar {
@@ -221,25 +224,6 @@ package object symbols {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
   }
 
-  sealed trait InterfaceType extends Type
-  case class CapabilityType(effect: Effect) extends InterfaceType {
-    override def toString = effect.toString
-  }
-
-  case class BlockType(tparams: List[TypeVar], params: Sections, ret: ValueType) extends InterfaceType {
-    override def toString: String = {
-      val ps = params.map {
-        case List(b: BlockType)             => s"{${b.toString}}"
-        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
-      }.mkString("")
-
-      tparams match {
-        case Nil => s"$ps ⟹ $ret"
-        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $ret"
-      }
-    }
-  }
-
   /**
    * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
    */
@@ -250,7 +234,7 @@ package object symbols {
       case t: TypeConstructor => Some(t)
       case TypeApp(tpe, args) => unapply(tpe)
       case t: BuiltinType     => None
-      case t: FunType         => None
+      case t: BoxedType       => None
     }
   }
 
@@ -278,10 +262,26 @@ package object symbols {
     val ret = Some(tpe)
   }
 
-  /** Effects */
+  /**
+   * Block Types
+   */
+  sealed trait BlockType extends Type
 
-  // TODO effects are only temporarily symbols to be resolved by namer
-  sealed trait Effect {
+  case class FunctionType(tparams: List[TypeVar], params: Sections, ret: ValueType) extends BlockType {
+    override def toString: String = {
+      val ps = params.map {
+        case List(b: FunctionType)          => s"{${b.toString}}"
+        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+      }.mkString("")
+
+      tparams match {
+        case Nil => s"$ps ⟹ $ret"
+        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $ret"
+      }
+    }
+  }
+
+  sealed trait InterfaceType extends BlockType {
     def name: Name
     def builtin: Boolean
   }
@@ -292,8 +292,8 @@ package object symbols {
   //
   //  }
   //
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: ValueType, effect: UserEffect) extends Fun {
+  case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType with TypeSymbol
+  case class Operation(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], annotatedReturn: ValueType, effect: Interface) extends Fun {
     def ret: Option[ValueType] = Some(annotatedReturn)
     //    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)
   }

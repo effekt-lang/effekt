@@ -93,7 +93,7 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.InterfaceType](
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
     "BlockType",
     "the type of block symbol"
   )
@@ -152,7 +152,7 @@ object Annotations {
   /**
    * The block type of a block argument as annotated by typer
    */
-  val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
+  val BlockArgumentType = Annotation[source.BlockArg, symbols.FunctionType](
     "BlockArgumentType",
     "the inferred type for block argument"
   )
@@ -220,7 +220,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Module }
+  import symbols.{ Symbol, Type, ValueType, FunctionType, BlockType, ValueSymbol, BlockSymbol, Module }
 
   // Types
   // -----
@@ -237,7 +237,7 @@ trait AnnotationsDB { self: Context =>
     }
 
   // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
+  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
     case _              => panic(s"Trying to store a block type for non block '${s}'")
   }
@@ -259,29 +259,29 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
-  def blockTypeOf(s: Symbol): BlockType =
+  def blockTypeOf(s: Symbol): FunctionType =
     blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
 
-  def blockTypeOption(s: Symbol): Option[BlockType] =
+  def blockTypeOption(s: Symbol): Option[FunctionType] =
+    s match {
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
+        case b: FunctionType => Some(b)
+        case _               => None
+      }
+      case v: ValueSymbol => valueTypeOption(v).flatMap {
+        case symbols.BoxedType(tpe: FunctionType) => Some(tpe)
+        case _ => None
+      }
+    }
+
+  def interfaceTypeOf(s: Symbol): BlockType =
+    interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
+
+  def interfaceTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: BlockType => Some(b)
         case _            => None
-      }
-      case v: ValueSymbol => valueTypeOption(v).flatMap {
-        case symbols.FunType(tpe) => Some(tpe)
-        case _                    => None
-      }
-    }
-
-  def interfaceTypeOf(s: Symbol): InterfaceType =
-    interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
-
-  def interfaceTypeOption(s: Symbol): Option[InterfaceType] =
-    s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: InterfaceType => Some(b)
-        case _                => None
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")
     }

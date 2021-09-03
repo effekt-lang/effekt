@@ -22,12 +22,12 @@ object assertions {
       case t: BlockParam => t
       case _ => reporter.abort("Expected a block parameter")
     }
-    def asUserEffect: UserEffect = s match {
-      case t: UserEffect => t
+    def asUserEffect: Interface = s match {
+      case t: Interface => t
       case _ => reporter.abort("Expected a user defined effect")
     }
-    def asEffectOp: EffectOp = s match {
-      case t: EffectOp => t
+    def asEffectOp: Operation = s match {
+      case t: Operation => t
       case _ => reporter.abort("Expected an effect operation, but got " + s)
     }
     def asUserFunction: UserFunction = s match {
@@ -50,8 +50,8 @@ object assertions {
       case t: ValueType => t
       case _ => reporter.abort("Expected a value type")
     }
-    def asBlockType: BlockType = s match {
-      case t: BlockType => t
+    def asBlockType: FunctionType = s match {
+      case t: FunctionType => t
       case _ => reporter.abort("Expected a block type")
     }
     def asValBinder: ValBinder = s match {
@@ -70,9 +70,9 @@ object assertions {
       case t: Type => t
       case _ => reporter.abort("Expected a type")
     }
-    def asEffect: Effect = s match {
-      case t: Effect => t
-      case _ => reporter.abort("Expected an effect")
+    def asInterfaceType: InterfaceType = s match {
+      case t: InterfaceType => t
+      case _ => reporter.abort("Expected an interface type")
     }
     def asFun: Fun = s match {
       case t: Fun => t
