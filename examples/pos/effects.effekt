@@ -9,7 +9,7 @@ effect Test2 {
 }
 
 def foo { test : Test1 }: Unit = {
-  test.get1(true);
+  println(test.get1(true) + 1);
   foo { test }
 }
 

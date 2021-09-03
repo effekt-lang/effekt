@@ -366,16 +366,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
-    //      if (d.symbol.effects.userDefined.nonEmpty) {
-    //        Context.abort("User defined effects on extern defs not allowed")
-    //      }
 
-    //    case d @ source.EffDef(id, tparams, ops) =>
-    //      d.symbol.ops.foreach { op =>
-    //        val tpe = op.toType
-    //        wellformed(tpe)
-    //        Context.assignType(op, tpe)
-    //      }
+    case d @ source.EffDef(id, tparams, ops) =>
+      d.symbol.ops.foreach { op =>
+        val tpe = op.toType
+        wellformed(tpe)
+        Context.assignType(op, tpe)
+      }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
