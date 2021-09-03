@@ -182,9 +182,6 @@ package object symbols {
   /**
    * A symbol that represents a termlevel capability
    */
-  //  trait Capability extends BlockSymbol {
-  //    def effect: Effect
-  //  }
 
   /**
    * Types

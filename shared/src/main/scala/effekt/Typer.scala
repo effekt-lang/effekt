@@ -367,7 +367,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
 
-    case d @ source.EffDef(id, tparams, ops) =>
+    case d @ source.InterfaceDef(id, tparams, ops) =>
       d.symbol.ops.foreach { op =>
         val tpe = op.toType
         wellformed(tpe)

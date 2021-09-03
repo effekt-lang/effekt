@@ -77,7 +77,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
       Context.define(id, sym)
 
-    case source.EffDef(id, tparams, ops) =>
+    case source.InterfaceDef(id, tparams, ops) =>
       val effectName = Name.qualified(id)
       val effectSym = Context scoped {
         val tps = tparams map resolve
@@ -172,7 +172,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(body)
       }
 
-    case source.EffDef(id, tparams, ops) =>
+    case source.InterfaceDef(id, tparams, ops) =>
       val effectSym = Context.resolveType(id).asUserEffect
       effectSym.ops = ops.map {
         case source.Operation(id, tparams, params, ret) =>

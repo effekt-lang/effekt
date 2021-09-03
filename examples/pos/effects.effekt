@@ -1,10 +1,10 @@
 module examples/pos/effects
 
-effect Test1 {
+interface Test1 {
   def get1(b: Boolean): Int
 }
 
-effect Test2 {
+interface Test2 {
   def get2(): Int
 }
 

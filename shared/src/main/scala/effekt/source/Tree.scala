@@ -176,7 +176,7 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
-case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
+case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.Interface
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
@@ -352,12 +352,3 @@ case class FunctionType(params: List[ValueType], ret: ValueType) extends BlockTy
   type resolved = symbols.FunctionType
 }
 
-//case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
-//  // TODO we need to drop Effect <: Symbol and refactor this here
-//  // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
-//  type resolved = symbols.Effect
-//  def resolve(implicit C: Context) = {
-//    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
-//    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
-//  }
-//}

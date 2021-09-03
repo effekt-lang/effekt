@@ -65,6 +65,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `while` = keyword("while")
   lazy val `type` = keyword("type")
   lazy val `effect` = keyword("effect")
+  lazy val `interface` = keyword("interface")
   lazy val `try` = keyword("try")
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
@@ -83,7 +84,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "for"
+    "match", "module", "import", "extern", "fun", "for", "interface"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -221,7 +222,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val definition: P[Def] =
     ( valDef
     | funDef
-    | effectDef
+    | interfaceDef
     | dataDef
     | externType
     // | externEffect
@@ -236,10 +237,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val maybePure: P[Boolean] =
     `pure`.? ^^ { _.isDefined }
 
-  lazy val effectDef: P[Def] =
-    `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ EffDef
+  lazy val interfaceDef: P[Def] =
+    `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> operation)  <~ `}`) ^^ InterfaceDef
 
-  lazy val effectOp: P[Operation] =
+  lazy val operation: P[Operation] =
     idDef ~ maybeTypeParams ~ some(valueParams) ~/ (`:` ~/> valueType) ^^ Operation
 
   lazy val externType: P[Def] =

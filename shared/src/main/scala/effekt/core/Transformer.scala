@@ -70,7 +70,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     //    case e: source.ExternEffect =>
     //      rest
     //
-    case d @ source.EffDef(id, tparams, ops) =>
+    case d @ source.InterfaceDef(id, tparams, ops) =>
       core.Eff(d.symbol, ops.map { e => e.symbol }, rest)
   }
 
