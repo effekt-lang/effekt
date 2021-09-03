@@ -180,7 +180,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       case b: Block => toDoc(b)
     }, comma))
 
-    case Closure(e) => toDoc(e)
+    case Box(e) => toDoc(e)
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

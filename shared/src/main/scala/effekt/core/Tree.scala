@@ -37,7 +37,7 @@ case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
-case class Closure(b: Block) extends Expr
+case class Box(b: Block) extends Expr
 
 /**
  * Blocks

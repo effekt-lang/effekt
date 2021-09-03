@@ -45,7 +45,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
       case b: Block => toDoc(b)
     }, comma))
 
-    case Closure(b) => toDoc(b)
+    case Box(b) => toDoc(b)
   }
 
   def argToDoc(e: Argument): Doc = e match {
