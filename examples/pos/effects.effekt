@@ -19,11 +19,13 @@ def foo { test : Test1 }: Unit = {
 
 }
 
+def user { t: Test2 } = t.get2() + 1
+
 def bar(): Int = {
   try {
-    test2.get2() + 1
+    user { test2 }
   } with test2 : Test2 {
-    def get2() = resume(42)
+    def get2() = resume(10) * resume(3)
   }
 }
 

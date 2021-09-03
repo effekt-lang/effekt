@@ -186,7 +186,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
           })
       }
 
-      // TODO transform handlers
       C.bind(C.inferredTypeOf(tree), Handle(body, hs))
 
     case source.Hole(stmts) =>
