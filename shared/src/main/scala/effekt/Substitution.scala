@@ -122,12 +122,12 @@ object substitutions {
     /**
      * For error reporting, we assume the second argument (tpe1) is the type expected by the context
      */
-    def unify(tpe1: Type, tpe2: Type)(implicit C: Context): Unifier =
+    def unify(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): Unifier =
       unifyTypes(tpe1, tpe2).getUnifier
 
     // The lhs can contain rigid vars that we can compute a mapping for
     // i.e. unify(List[?A], List[Int]) = Map(?A -> Int)
-    def unifyTypes(tpe1: Type, tpe2: Type)(implicit C: Context): UnificationResult =
+    def unifyTypes(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): UnificationResult =
       (tpe1, tpe2) match {
 
         case (t: ValueType, s: ValueType) =>
@@ -140,7 +140,7 @@ object substitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
-    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit C: Context): UnificationResult =
+    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit C: ErrorReporter): UnificationResult =
       (tpe1, tpe2) match {
 
         case (t, s) if t == s =>
@@ -172,7 +172,7 @@ object substitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
-    def unifyInterfaceTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: Context): UnificationResult = (tpe1, tpe2) match {
+    def unifyInterfaceTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: ErrorReporter): UnificationResult = (tpe1, tpe2) match {
       case (t: FunctionType, s: FunctionType) =>
         unifyBlockTypes(t, s)
 
@@ -183,12 +183,12 @@ object substitutions {
         UnificationError(s"Expected ${t}, but got ${s}")
     }
 
-    def unifyInterfaceType(tpe1: InterfaceType, tpe2: InterfaceType)(implicit C: Context): UnificationResult =
+    def unifyInterfaceType(tpe1: InterfaceType, tpe2: InterfaceType)(implicit C: ErrorReporter): UnificationResult =
       // TODO implement properly
       if (tpe1 == tpe2) Unifier.empty
       else UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
 
-    def unifyBlockTypes(tpe1: FunctionType, tpe2: FunctionType)(implicit C: Context): UnificationResult =
+    def unifyBlockTypes(tpe1: FunctionType, tpe2: FunctionType)(implicit C: ErrorReporter): UnificationResult =
       (tpe1, tpe2) match {
         // TODO also consider type parameters here
         case (f1 @ FunctionType(_, args1, ret1), f2 @ FunctionType(_, args2, ret2)) =>
@@ -216,7 +216,7 @@ object substitutions {
      *
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
      */
-    def instantiate(tpe: FunctionType)(implicit C: Context): (List[RigidVar], FunctionType) = {
+    def instantiate(tpe: FunctionType)(implicit C: ErrorReporter): (List[RigidVar], FunctionType) = {
       val FunctionType(tparams, params, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
       val rigids = subst.values.toList
