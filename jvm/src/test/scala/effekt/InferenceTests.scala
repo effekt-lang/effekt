@@ -34,5 +34,8 @@ class InferenceTests extends AnyFunSpec {
     // TODO test capture avoiding substitution
     val substituted = subst.substitute(FunctionType(Nil, List(List(T1)), T1))
     assert(substituted == FunctionType(Nil, List(List(TInt)), TInt))
+
+    val substituted2 = subst.substitute(FunctionType(List(T1), List(List(T1)), T1))
+    println(substituted2)
   }
 }

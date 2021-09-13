@@ -39,7 +39,8 @@ object substitutions {
 
     def substitute(t: FunctionType): FunctionType = t match {
       case FunctionType(tps, ps, ret) =>
-        val substWithout = substitutions.filterNot { case (t, _) => ps.contains(t) }
+        // do not substitute with types parameters bound by this function!
+        val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
         FunctionType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
     }
 
