@@ -310,8 +310,6 @@ sealed trait Resolvable extends Tree {
 
 /**
  * Types and Effects
- *
- * TODO generalize to blocks that can take blocks
  */
 sealed trait Type extends Tree with Resolvable {
   type resolved <: symbols.Type
@@ -345,6 +343,7 @@ sealed trait BlockType extends Type
 case class InterfaceType(id: IdRef) extends BlockType {
   type resolved = symbols.InterfaceType
 }
+// TODO generalize to blocks that can take blocks
 case class FunctionType(params: List[ValueType], ret: ValueType) extends BlockType {
   type resolved = symbols.FunctionType
 }

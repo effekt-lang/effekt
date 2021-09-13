@@ -167,13 +167,6 @@ package object symbols {
   case class VarBinder(name: LocalName, tpe: Option[ValueType], decl: VarDef) extends Binder
 
   /**
-   * Synthetic symbol representing potentially multiple call targets
-   *
-   * Refined by typer.
-   */
-  case class CallTarget(name: Name, symbols: List[Set[TermSymbol]]) extends Synthetic with BlockSymbol
-
-  /**
    * Introduced by Transformer
    */
   case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }

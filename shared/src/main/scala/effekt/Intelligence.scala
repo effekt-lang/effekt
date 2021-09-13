@@ -65,11 +65,11 @@ trait Intelligence {
   def getSymbolAt(position: Position)(implicit C: Context): Option[(Tree, Symbol)] = for {
     id <- getIdTreeAt(position)
     sym <- C.symbolOption(id)
-  } yield (id, resolveCallTarget(sym))
+  } yield (id, sym)
 
   def getDefinitionAt(position: Position)(implicit C: Context): Option[Tree] = for {
     (_, sym) <- getSymbolAt(position)
-    decl <- getDefinitionOf(resolveCallTarget(sym))
+    decl <- getDefinitionOf(sym)
   } yield decl
 
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
@@ -80,12 +80,6 @@ trait Intelligence {
     case u               => C.definitionTreeOption(u)
   }
 
-  // For now, only show the first call target
-  def resolveCallTarget(sym: Symbol): Symbol = sym match {
-    case t: CallTarget => t.symbols.flatten.head
-    case s             => s
-  }
-
   def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
     outerTpe <- C.inferredTypeOption(hole)
     innerTpe <- C.inferredTypeOption(hole.stmts)
@@ -94,7 +88,7 @@ trait Intelligence {
               | | `${outerTpe}` | `${innerTpe}` |
               |""".stripMargin
 
-  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
+  def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(sym) {
 
     case b: BuiltinFunction =>
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
