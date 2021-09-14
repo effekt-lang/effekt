@@ -98,12 +98,6 @@ package object symbols {
   //  }
   case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = LocalName("resume") }
 
-  /**
-   * Right now, parameters are a union type of a list of value params and one block param.
-   */
-  // TODO Introduce ParamSection also on symbol level and then use Params for types
-  type Params = List[List[Param]]
-
   def paramToType(p: ValueParam) = p.tpe.get
   def paramToType(p: BlockParam) = p.tpe
 
@@ -174,11 +168,6 @@ package object symbols {
    * Types
    */
   sealed trait Type
-
-  /**
-   * like Params but without name binders
-   */
-  type Sections = List[List[Type]]
 
   /**
    * Value Types

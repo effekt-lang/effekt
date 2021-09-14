@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType, CaptVar, CaptureSet }
+import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, RigidVar, Type, TypeApp, TypeVar, ValueType, CaptVar, CaptureSet }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -48,13 +48,6 @@ object substitutions {
         // do not substitute with types parameters bound by this function!
         val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
         FunctionType(tps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
-    }
-
-    def substitute(t: Sections): Sections = t map {
-      _ map {
-        case v: ValueType => substitute(v)
-        case b: BlockType => substitute(b)
-      }
     }
   }
 

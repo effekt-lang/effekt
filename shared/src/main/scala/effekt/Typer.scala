@@ -500,17 +500,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //<editor-fold desc="arguments and parameters">
 
   /**
-   * Invariant: Only call this on declarations that are fully annotated
-   */
-  def extractAllTypes(params: Params)(implicit C: Context): Sections = params map extractTypes
-
-  def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
-    case BlockParam(_, tpe) => tpe
-    case ValueParam(_, Some(tpe)) => tpe
-    case _ => Context.panic("Cannot extract type")
-  }
-
-  /**
    * Returns the binders that will be introduced to check the corresponding body
    */
   def checkAgainstDeclaration(
