@@ -1,11 +1,17 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType, CaptVar, CaptureSet }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
 object substitutions {
+
+  // TODO implement bi-substitution for capture sets and substitution for type vars?
+  case class Substitution(
+    typeSubst: Map[TypeVar, ValueType], // maps a type variable to the inferred value type
+    captSubst: Map[CaptVar, (CaptureSet, CaptureSet)] // maps a capture variable to its lower and upper bounds
+  )
 
   type Substitutions = Map[TypeVar, ValueType]
 
@@ -38,10 +44,10 @@ object substitutions {
     }
 
     def substitute(t: FunctionType): FunctionType = t match {
-      case FunctionType(tps, ps, ret) =>
+      case FunctionType(tps, vps, bps, ret) =>
         // do not substitute with types parameters bound by this function!
         val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
-        FunctionType(tps, substWithout.substitute(ps), substWithout.substitute(ret))
+        FunctionType(tps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
     }
 
     def substitute(t: Sections): Sections = t map {
@@ -173,6 +179,7 @@ object substitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
+    // TODO rename to unifyBlockTypes
     def unifyInterfaceTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: ErrorReporter): UnificationResult = (tpe1, tpe2) match {
       case (t: FunctionType, s: FunctionType) =>
         unifyBlockTypes(t, s)
@@ -192,19 +199,20 @@ object substitutions {
     def unifyBlockTypes(tpe1: FunctionType, tpe2: FunctionType)(implicit C: ErrorReporter): UnificationResult =
       (tpe1, tpe2) match {
         // TODO also consider type parameters here
-        case (f1 @ FunctionType(_, args1, ret1), f2 @ FunctionType(_, args2, ret2)) =>
+        case (f1 @ FunctionType(_, vargs1, bargs1, ret1), f2 @ FunctionType(_, vargs2, bargs2, ret2)) =>
 
-          if (args1.size != args2.size) {
-            return UnificationError(s"Section count does not match $f1 vs. $f2")
-          }
+          if (vargs1.size != vargs2.size)
+            return UnificationError(s"Value argument count does not match $f1 vs. $f2")
 
-          (args1 zip args2).foldLeft(unifyValueTypes(ret1, ret2)) {
-            case (u, (as1, as2)) =>
-              if (as1.size != as2.size)
-                return UnificationError(s"Argument count does not match $f1 vs. $f2")
+          if (bargs1.size != bargs2.size)
+            return UnificationError(s"Block argument count does not match $f1 vs. $f2")
 
-              (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u union unifyTypes(a1, a2) }
-          }
+          var unifier = unifyValueTypes(ret1, ret2)
+
+          (vargs1 zip vargs2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
+          (bargs1 zip bargs2) foreach { case (a1, a2) => unifier = unifier union unifyInterfaceTypes(a1, a2) }
+
+          unifier
       }
 
     // We don't unify effects here, instead we simply gather them
@@ -218,13 +226,14 @@ object substitutions {
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
      */
     def instantiate(tpe: FunctionType)(implicit C: ErrorReporter): (List[RigidVar], FunctionType) = {
-      val FunctionType(tparams, params, ret) = tpe
+      val FunctionType(tparams, vparams, bparams, ret) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
       val rigids = subst.values.toList
 
-      val substitutedParams = subst.substitute(params)
+      val substitutedVparams = vparams map subst.substitute
+      val substitutedBparams = bparams map subst.substitute
       val substitutedReturn = subst.substitute(ret)
-      (rigids, FunctionType(Nil, substitutedParams, substitutedReturn))
+      (rigids, FunctionType(Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
   }
 }

@@ -66,8 +66,8 @@ trait ModuleDB { self: Context =>
 
     val main = mains.head
 
-    val mainParams = C.functionTypeOf(main).params
-    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
+    val mainParams = C.functionTypeOf(main).vparams ++ C.functionTypeOf(main).bparams
+    if (mainParams.nonEmpty) {
       C.abort("Main does not take arguments")
     }
 

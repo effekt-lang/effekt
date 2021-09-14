@@ -148,16 +148,13 @@ case class Import(path: String) extends Tree
 /**
  * Parameters and arguments
  */
-sealed trait ParamSection extends Tree
-case class ValueParams(params: List[ValueParam]) extends ParamSection
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
 
-case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
+case class BlockParam(id: IdDef, tpe: BlockType) extends Definition { type symbol = symbols.BlockParam }
 
-sealed trait ArgSection extends Tree
-case class ValueArgs(args: List[Expr]) extends ArgSection
-case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
-case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
+sealed trait BlockArg extends Tree
+case class FunctionArg(vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
+case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
   type symbol = symbols.BlockParam
 }
 
@@ -167,7 +164,7 @@ case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
 sealed trait Def extends Definition {
   def id: IdDef
 }
-case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[ValueType], body: Stmt) extends Def {
+case class FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[ValueType], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
 case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
@@ -179,13 +176,13 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.Interface
 }
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: ValueType) extends Definition {
+case class Operation(id: IdDef, tparams: List[Id], vparams: List[ValueParam], ret: ValueType) extends Definition {
   type symbol = symbols.Operation
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }
-case class Constructor(id: IdDef, params: ValueParams) extends Definition {
+case class Constructor(id: IdDef, vparams: List[ValueParam]) extends Definition {
   type symbol = symbols.Record
 }
 
@@ -196,7 +193,7 @@ case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
 //case class ExternEffect(id: IdDef, tparams: List[Id]) extends Def {
 //  type symbol = symbols.BuiltinEffect
 //}
-case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: ValueType, body: String) extends Def {
+case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], vparams: List[ValueParam], ret: ValueType, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {
@@ -241,7 +238,7 @@ case class Select(receiver: Expr, selector: IdRef) extends Expr
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
-case class Call(receiver: Expr, targs: List[ValueType], args: List[ArgSection]) extends Expr
+case class Call(receiver: Expr, targs: List[ValueType], vargs: List[Expr], bargs: List[BlockArg]) extends Expr
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
@@ -259,7 +256,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
  * Here eff is the capability parameter, as introduced by the transformation.
  */
 case class Handler(capability: BlockParam, clauses: List[OpClause]) extends Tree
-case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
+case class OpClause(id: IdRef, vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.Operation
 }
 

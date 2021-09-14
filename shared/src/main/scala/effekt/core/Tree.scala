@@ -17,14 +17,9 @@ sealed trait Tree extends Product {
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
 
 /**
- * Fine-grain CBV: Arguments can be either expressions or blocks
- */
-sealed trait Argument extends Tree
-
-/**
  * Expressions
  */
-sealed trait Expr extends Tree with Argument
+sealed trait Expr extends Tree
 case class ValueVar(id: ValueSymbol) extends Expr
 
 sealed trait Literal[T] extends Expr {
@@ -36,7 +31,7 @@ case class BooleanLit(value: Boolean) extends Literal[Boolean]
 case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
-case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
+case class PureApp(b: Block, targs: List[Type], vargs: List[Expr], bargs: List[Block]) extends Expr
 case class Box(b: Block) extends Expr
 
 /**
@@ -46,11 +41,11 @@ sealed trait Param extends Tree { def id: TermSymbol }
 case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
 case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
 
-sealed trait Block extends Tree with Argument
+sealed trait Block extends Tree
 case class BlockVar(id: BlockSymbol) extends Block
 
 // TODO add type params here
-case class BlockLit(params: List[Param], body: Stmt) extends Block
+case class BlockLit(vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Block
 // TODO use resolved selector here
 case class Select(b: Block, selector: String) extends Block
 case class Extern(pure: Boolean, params: List[Param], body: String) extends Block
@@ -64,7 +59,7 @@ case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extend
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Eff(id: Symbol, ops: List[Symbol], rest: Stmt) extends Stmt
-case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
+case class App(b: Block, targs: List[Type], vargs: List[Expr], bargs: List[Block]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt

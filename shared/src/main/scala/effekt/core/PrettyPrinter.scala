@@ -22,8 +22,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v) => v.name.toString
-    case BlockLit(ps, body) =>
-      parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
+    case BlockLit(vps, bps, body) =>
+      parens(hsep(vps map toDoc, comma)) <+> braces(hsep(bps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
     case Select(b, sel) =>
       toDoc(b) <> "." <> sel
     case Extern(_, ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
@@ -35,22 +35,14 @@ class PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()     => "()"
-    case StringLit(s)  => "\"" + s + "\""
+    case UnitLit() => "()"
+    case StringLit(s) => "\"" + s + "\""
     case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => id.name.toString
+    case ValueVar(id) => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr  => toDoc(e)
-      case b: Block => toDoc(b)
-    }, comma))
+    case PureApp(b, targs, vargs, bargs) => toDoc(b) <> parens(hsep(vargs map toDoc, comma)) <> braces(hsep(bargs map toDoc, space))
 
     case Box(b) => toDoc(b)
-  }
-
-  def argToDoc(e: Argument): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
   }
 
   def toDoc(s: Stmt): Doc =
@@ -66,8 +58,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
       toDoc(binding) <> ";" <> line <> toDoc(body)
     case Val(id, tpe, binding, body) =>
       "val" <+> toDoc(id.name) <+> ":" <+> tpe.toString <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
-    case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case App(b, targs, vargs, bargs) =>
+      toDoc(b) <> parens(hsep(vargs map toDoc, comma)) <> braces(hsep(bargs map toDoc, comma))
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> toDocExpr(thn) <+> "else" <+> toDocExpr(els)
     case While(cond, body) =>

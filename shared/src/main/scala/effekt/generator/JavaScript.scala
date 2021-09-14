@@ -52,11 +52,11 @@ class JavaScript extends Generator {
 trait JavaScriptPrinter extends JavaScriptBase {
 
   def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v)            => nameRef(v)
-    case BlockLit(ps, body)     => jsLambda(ps map toDoc, toDoc(body))
-    case Extern(pure, ps, body) => jsLambda(ps map toDoc, body)
-    case Unbox(e)               => toDoc(e)
-    case Select(b, sel)         => toDoc(b) <> "." <> sel
+    case BlockVar(v)              => nameRef(v)
+    case BlockLit(vps, bps, body) => jsLambda((vps map toDoc) ++ (bps map toDoc), toDoc(body))
+    case Extern(pure, ps, body)   => jsLambda(ps map toDoc, body)
+    case Unbox(e)                 => toDoc(e)
+    case Select(b, sel)           => toDoc(b) <> "." <> sel
   })
 
   // pretty print the statement in a javascript expression context
@@ -68,8 +68,8 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Val(id, tpe, binding, body) =>
       toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
 
-    case App(b, targs, args) =>
-      jsCall(toDoc(b), args map argToDoc)
+    case App(b, targs, vargs, bargs) =>
+      jsCall(toDoc(b), (vargs map toDoc) ++ (bargs map toDoc))
 
     case If(cond, thn, els) =>
       parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
@@ -165,23 +165,15 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   // case _: symbols.EffectOp   => "op$" + id.name.toString
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
-    case UnitLit()     => "$effekt.unit"
-    case StringLit(s)  => jsString(s)
+    case UnitLit() => "$effekt.unit"
+    case StringLit(s) => jsString(s)
     case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => nameRef(id)
+    case ValueVar(id) => nameRef(id)
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr  => toDoc(e)
-      case b: Block => toDoc(b)
-    }, comma))
+    case PureApp(b, targs, vargs, bargs) => toDoc(b) <> parens(hsep((vargs map toDoc) ++ (bargs map toDoc), comma))
 
     case Box(e) => toDoc(e)
   })
-
-  def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
-  }
 
   def toDoc(s: Stmt)(implicit C: Context): Doc =
     if (requiresBlock(s))
@@ -210,8 +202,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
+    case Def(id, tpe, BlockLit(vps, bps, body), rest) =>
+      jsFunction(nameDef(id), (vps map toDoc) ++ (bps map toDoc), toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
     case Def(id, tpe, Extern(false, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
@@ -252,8 +244,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Val(id, tpe, binding, body) =>
       "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
 
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
+    case Def(id, tpe, BlockLit(vps, bps, body), rest) =>
+      jsFunction(nameDef(id), (vps map toDoc) ++ (bps map toDoc), toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
 
     case Def(id, tpe, Extern(false, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)

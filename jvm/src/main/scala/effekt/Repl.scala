@@ -321,12 +321,12 @@ class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
       val body = Return(expr)
 
       ModuleDecl("lib/interactive", Import("effekt") :: imports,
-        definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+        definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,
           body))
     }
 
     def makeEval(expr: Expr): ModuleDecl =
-      make(Call(Var(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
+      make(Call(Var(IdRef("println")), Nil, List(expr), Nil))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

@@ -152,7 +152,7 @@ object Annotations {
   /**
    * The block type of a block argument as annotated by typer
    */
-  val BlockArgumentType = Annotation[source.BlockArg, symbols.FunctionType](
+  val BlockArgumentType = Annotation[source.FunctionArg, symbols.FunctionType](
     "BlockArgumentType",
     "the inferred type for block argument"
   )

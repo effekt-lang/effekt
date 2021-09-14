@@ -25,8 +25,9 @@ package object kinds {
   //  }
 
   def wellformed(b: BlockType)(implicit C: Context): Unit = b match {
-    case FunctionType(tparams, params: Sections, ret) =>
-      params.flatten.foreach { tpe => wellformed(tpe) }
+    case FunctionType(tparams, vparams, bparams, ret) =>
+      vparams.foreach { tpe => wellformed(tpe) }
+      bparams.foreach { tpe => wellformed(tpe) }
       wellformed(ret)
     case i: InterfaceType => ()
   }
