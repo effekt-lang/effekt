@@ -134,7 +134,7 @@ object substitutions {
           unifyValueTypes(t, s)
 
         case (t: BlockType, s: BlockType) =>
-          unifyInterfaceTypes(t, s)
+          unifyBlockType(t, s)
 
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")
@@ -172,10 +172,9 @@ object substitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
-    // TODO rename to unifyBlockTypes
-    def unifyInterfaceTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: ErrorReporter): UnificationResult = (tpe1, tpe2) match {
+    def unifyBlockType(tpe1: BlockType, tpe2: BlockType)(implicit C: ErrorReporter): UnificationResult = (tpe1, tpe2) match {
       case (t: FunctionType, s: FunctionType) =>
-        unifyBlockTypes(t, s)
+        unifyFunctionType(t, s)
 
       case (t: InterfaceType, s: InterfaceType) =>
         unifyInterfaceType(t, s)
@@ -189,7 +188,7 @@ object substitutions {
       if (tpe1 == tpe2) Unifier.empty
       else UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
 
-    def unifyBlockTypes(tpe1: FunctionType, tpe2: FunctionType)(implicit C: ErrorReporter): UnificationResult =
+    def unifyFunctionType(tpe1: FunctionType, tpe2: FunctionType)(implicit C: ErrorReporter): UnificationResult =
       (tpe1, tpe2) match {
         // TODO also consider type parameters here
         case (f1 @ FunctionType(_, vargs1, bargs1, ret1), f2 @ FunctionType(_, vargs2, bargs2, ret2)) =>
@@ -203,7 +202,7 @@ object substitutions {
           var unifier = unifyValueTypes(ret1, ret2)
 
           (vargs1 zip vargs2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
-          (bargs1 zip bargs2) foreach { case (a1, a2) => unifier = unifier union unifyInterfaceTypes(a1, a2) }
+          (bargs1 zip bargs2) foreach { case (a1, a2) => unifier = unifier union unifyBlockType(a1, a2) }
 
           unifier
       }
