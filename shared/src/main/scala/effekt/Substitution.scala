@@ -190,8 +190,10 @@ object substitutions {
 
     def unifyFunctionType(tpe1: FunctionType, tpe2: FunctionType)(implicit C: ErrorReporter): UnificationResult =
       (tpe1, tpe2) match {
-        // TODO also consider type parameters here
-        case (f1 @ FunctionType(_, vargs1, bargs1, ret1), f2 @ FunctionType(_, vargs2, bargs2, ret2)) =>
+        case (f1 @ FunctionType(targs1, vargs1, bargs1, ret1), f2 @ FunctionType(targs2, vargs2, bargs2, ret2)) =>
+
+          if (targs1.size != targs2.size)
+            return UnificationError(s"Type argument count does not match $f1 vs. $f2")
 
           if (vargs1.size != vargs2.size)
             return UnificationError(s"Value argument count does not match $f1 vs. $f2")
@@ -199,10 +201,14 @@ object substitutions {
           if (bargs1.size != bargs2.size)
             return UnificationError(s"Block argument count does not match $f1 vs. $f2")
 
-          var unifier = unifyValueTypes(ret1, ret2)
+          val (rigids1, FunctionType(_, substVargs1, substBargs1, substRet1)) = instantiate(f1)
+          val (rigids2, FunctionType(_, substVargs2, substBargs2, substRet2)) = instantiate(f2)
 
-          (vargs1 zip vargs2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
-          (bargs1 zip bargs2) foreach { case (a1, a2) => unifier = unifier union unifyBlockType(a1, a2) }
+          var unifier = unifyValueTypes(substRet1, substRet2)
+
+          (rigids1 zip rigids2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
+          (substVargs1 zip substVargs2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
+          (substBargs1 zip substBargs2) foreach { case (a1, a2) => unifier = unifier union unifyBlockType(a1, a2) }
 
           unifier
       }

@@ -28,6 +28,8 @@ class InferenceTests extends AnyFunSpec {
     println(Unification.unify(TInt, TInt))
 
     val T1 = RigidVar(TypeVar(Name.local("T1")))
+    val T2 = RigidVar(TypeVar(Name.local("T2")))
+
     println(Unification.unify(TInt, T1))
     val Unifier(subst, constraints) = Unification.unify(T1, TInt)
 
@@ -37,5 +39,18 @@ class InferenceTests extends AnyFunSpec {
 
     val substituted2 = subst.substitute(FunctionType(List(T1), List(T1), Nil, T1))
     println(substituted2)
+
+    println(Unification.unify(
+      FunctionType(List(T1), List(T1), Nil, T1),
+      FunctionType(List(T2), List(T2), Nil, T2)
+    ))
+    println(Unification.unify(
+      FunctionType(List(T1), List(T1), Nil, BoxedType(FunctionType(List(T2), List(T2), Nil, T2))),
+      FunctionType(List(T2), List(T2), Nil, BoxedType(FunctionType(List(T1), List(T1), Nil, T1)))
+    ))
+    println(Unification.unify(
+      FunctionType(List(T1), List(T1), Nil, BoxedType(FunctionType(List(T1), List(T1), Nil, T1))),
+      FunctionType(List(T2), List(T2), Nil, BoxedType(FunctionType(List(T2), List(T2), Nil, T2)))
+    ))
   }
 }

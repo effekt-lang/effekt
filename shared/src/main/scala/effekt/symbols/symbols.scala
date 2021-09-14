@@ -190,7 +190,7 @@ package object symbols {
    * Should neither occur in source programs, nor in infered types
    */
   case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
-    // override def toString = "?" + underlying.name + id
+    override def toString = "?" + underlying.name + id
   }
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
