@@ -57,7 +57,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
    * We defer checking whether something is first-class or second-class to Typer now.
    */
   def checkExprAsBlock(expr: Expr, expected: Option[BlockType])(implicit C: Context): BlockType =
-    checkAgainstBlock(expr, expected) {
+    checkBlock(expr) {
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.blockTypeOf(b)
         case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
@@ -87,7 +87,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //<editor-fold desc="expressions">
 
   def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): ValueType =
-    checkAgainst(expr, expected) {
+    check(expr) {
       case source.IntLit(n)     => TInt
       case source.BooleanLit(n) => TBoolean
       case source.UnitLit()     => TUnit
@@ -313,7 +313,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //<editor-fold desc="statements and definitions">
 
   def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): ValueType =
-    checkAgainst(stmt, expected) {
+    check(stmt) {
       case source.DefStmt(b, rest) =>
         val t = Context in { precheckDef(b); synthDef(b) }
         val r = checkStmt(rest, expected)
@@ -588,32 +588,35 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType =
-      checkExpr(expr, Some(tpe))
+    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = {
+      // TODO: here we should generate constraints
+      C.unify(tpe, checkExpr(expr, None))
+      tpe
+    }
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType =
-      checkStmt(stmt, Some(tpe))
+    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = {
+      C.unify(tpe, checkStmt(stmt, None))
+      tpe
+    }
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => ValueType)(implicit C: Context): ValueType =
+  def check[T <: Tree](t: T)(f: T => ValueType)(implicit C: Context): ValueType =
     Context.at(t) {
       val got = f(t)
       wellformed(got)
-      expected foreach { Context.unify(_, got) }
       C.assignType(t, got)
       got
     }
 
-  def checkAgainstBlock[T <: Tree](t: T, expected: Option[Type])(f: T => BlockType)(implicit C: Context): BlockType =
+  def checkBlock[T <: Tree](t: T)(f: T => BlockType)(implicit C: Context): BlockType =
     Context.at(t) {
       val got = f(t)
       wellformed(got)
-      expected foreach { Context.unify(_, got) }
       C.assignType(t, got)
       got
     }
