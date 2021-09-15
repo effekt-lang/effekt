@@ -86,7 +86,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): ValueType =
+  def checkExpr(expr: Expr)(implicit C: Context): ValueType =
     check(expr) {
       case source.IntLit(n)     => TInt
       case source.BooleanLit(n) => TBoolean
@@ -96,7 +96,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.If(cond, thn, els) =>
         val cndTpe = cond checkAgainst TBoolean
-        val thnTpe = checkStmt(thn, expected)
+        val thnTpe = checkStmt(thn)
         val elsTpe = els checkAgainst thnTpe
 
         thnTpe
@@ -123,7 +123,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case b: FunctionType => b
           case _               => Context.abort("Callee is required to have function type")
         }
-        checkCallTo(c, "???", btpe, targs map { _.resolve }, vargs, bargs, expected)
+        checkCallTo(c, "???", btpe, targs map { _.resolve }, vargs, bargs)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -132,7 +132,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         capabilities foreach Context.define
 
         // (2) check body
-        val ret = checkStmt(prog, expected)
+        val ret = checkStmt(prog)
 
         // TODO implement checking of handlers
 
@@ -190,7 +190,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
-        val tpe = checkExpr(sc, None)
+        val tpe = checkExpr(sc)
 
         // (2) check exhaustivity
         checkExhaustivity(tpe, clauses.map { _.pattern })
@@ -199,7 +199,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val (fstTpe, _) :: tpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
             Context.define(checkPattern(tpe, p)) in {
-              (checkStmt(body, expected), body)
+              (checkStmt(body), body)
             }
         }
 
@@ -215,8 +215,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         Context.abort("Block in expression position: automatic boxing currently not supported.")
 
       case source.Hole(stmt) =>
-        val tpe = checkStmt(stmt, None)
-        expected.getOrElse(THole)
+        checkStmt(stmt)
+        THole
     }
 
   //</editor-fold>
@@ -312,22 +312,22 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): ValueType =
+  def checkStmt(stmt: Stmt)(implicit C: Context): ValueType =
     check(stmt) {
       case source.DefStmt(b, rest) =>
         val t = Context in { precheckDef(b); synthDef(b) }
-        val r = checkStmt(rest, expected)
+        val r = checkStmt(rest)
         r
 
       // <expr> ; <stmt>
       case source.ExprStmt(e, rest) =>
-        val _ = checkExpr(e, None)
-        val r = checkStmt(rest, expected)
+        val _ = checkExpr(e)
+        val r = checkStmt(rest)
         r
 
-      case source.Return(e)        => checkExpr(e, expected)
+      case source.Return(e)        => checkExpr(e)
 
-      case source.BlockStmt(stmts) => checkStmt(stmts, expected)
+      case source.BlockStmt(stmts) => checkStmt(stmts)
     }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
@@ -375,7 +375,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.assignType(d, tpe)
             tpe
           case None =>
-            val tpe = checkStmt(body, None)
+            val tpe = checkStmt(body)
             Context.assignType(sym, sym.toType(tpe))
             Context.assignType(d, tpe)
             tpe
@@ -389,7 +389,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val t = d.symbol.tpe match {
           case Some(t) =>
             binding checkAgainst t
-          case None => checkStmt(binding, None)
+          case None => checkStmt(binding)
         }
         Context.define(d.symbol, t)
         t
@@ -397,7 +397,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case d @ source.VarDef(id, annot, binding) =>
         val t = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding, None)
+          case None    => checkStmt(binding)
         }
         Context.define(d.symbol, t)
         t
@@ -456,8 +456,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     funTpe: FunctionType,
     targs: List[ValueType],
     vargs: List[source.Expr],
-    bargs: List[source.BlockArg],
-    expected: Option[Type]
+    bargs: List[source.BlockArg]
   )(implicit C: Context): ValueType = {
 
     // (1) Instantiate blocktype
@@ -473,10 +472,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     }
 
     // (3) refine substitutions by matching return type against expected type
-    expected.foreach { expectedReturn =>
-      val refinedReturn = Context.unifier substitute ret
-      Context.unify(expectedReturn, refinedReturn)
-    }
+    //    expected.foreach { expectedReturn =>
+    //      val refinedReturn = Context.unifier substitute ret
+    //      Context.unify(expectedReturn, refinedReturn)
+    //    }
 
     if (vparams.size != vargs.size)
       Context.error(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${vparams.size}.")
@@ -590,14 +589,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   private implicit class ExprOps(expr: Expr) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = {
       // TODO: here we should generate constraints
-      C.unify(tpe, checkExpr(expr, None))
+      C.unify(tpe, checkExpr(expr))
       tpe
     }
   }
 
   private implicit class StmtOps(stmt: Stmt) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = {
-      C.unify(tpe, checkStmt(stmt, None))
+      C.unify(tpe, checkStmt(stmt))
       tpe
     }
   }
