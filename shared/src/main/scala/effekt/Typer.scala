@@ -33,9 +33,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       // We split the type-checking of definitions into "pre-check" and "check"
       // to allow mutually recursive defs
       module.defs.foreach { d => precheckDef(d) }
-      module.defs.foreach { d =>
-        val _ = synthDef(d)
-      }
+      module.defs.foreach { d => checkDef(d) }
     }
 
     if (C.buffer.hasErrors) {
@@ -56,7 +54,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
-  def checkExprAsBlock(expr: Expr, expected: Option[BlockType])(implicit C: Context): BlockType =
+  def checkExprAsBlock(expr: Expr)(implicit C: Context): BlockType =
     checkBlock(expr) {
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.blockTypeOf(b)
@@ -64,7 +62,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       }
 
       case source.Select(expr, selector) =>
-        checkExprAsBlock(expr, None) match {
+        checkExprAsBlock(expr) match {
           case i: Interface =>
             // try to find an operation with name "selector"
             val op = i.ops.collect {
@@ -119,7 +117,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         TUnit
 
       case c @ source.Call(e, targs, vargs, bargs) =>
-        val btpe = checkExprAsBlock(e, None) match {
+        val btpe = checkExprAsBlock(e) match {
           case b: FunctionType => b
           case _               => Context.abort("Callee is required to have function type")
         }
@@ -133,8 +131,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         // (2) check body
         val ret = checkStmt(prog)
-
-        // TODO implement checking of handlers
 
         handlers foreach Context.withFocus { h =>
           val effect: Interface = h.capability.symbol.tpe.asUserEffect
@@ -315,7 +311,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def checkStmt(stmt: Stmt)(implicit C: Context): ValueType =
     check(stmt) {
       case source.DefStmt(b, rest) =>
-        val t = Context in { precheckDef(b); synthDef(b) }
+        val t = Context in { precheckDef(b); checkDef(b) }
         val r = checkStmt(rest)
         r
 
@@ -332,6 +328,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
+  //
+  // we also need to create fresh capture variables to collect constraints
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       d.symbol.ret.foreach { annot =>
@@ -363,7 +361,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case _ => ()
   }
 
-  def synthDef(d: Def)(implicit C: Context): ValueType = Context.at(d) {
+  def checkDef(d: Def)(implicit C: Context): Unit = Context.at(d) {
     d match {
       case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
         val sym = d.symbol
@@ -392,7 +390,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case None => checkStmt(binding)
         }
         Context.define(d.symbol, t)
-        t
 
       case d @ source.VarDef(id, annot, binding) =>
         val t = d.symbol.tpe match {
@@ -404,10 +401,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
         d.symbol.vparams map { p => Context.define(p) }
-        TUnit
 
       // all other defintions have already been prechecked
-      case d => TUnit
+      case d => ()
     }
   }
 
@@ -731,9 +727,9 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def unify(tpe1: Type, tpe2: Type): Unit =
     currentUnifier = (currentUnifier union Unification.unify(tpe1, tpe2)).getUnifier
 
-  private[typer] def skolems(rigids: List[RigidVar]): List[RigidVar] =
+  private[typer] def skolems(rigids: List[UnificationVar]): List[UnificationVar] =
     currentUnifier.skolems(rigids)
 
-  private[typer] def checkFullyDefined(rigids: List[RigidVar]): Unit =
+  private[typer] def checkFullyDefined(rigids: List[UnificationVar]): Unit =
     currentUnifier.checkFullyDefined(rigids).getUnifier
 }

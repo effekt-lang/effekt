@@ -24,8 +24,8 @@ class InferenceTests extends AnyFunSpec {
     implicit val C = reporter
     println(Unification.unify(TInt, TInt))
 
-    val T1 = RigidVar(TypeVar(Name.local("T1")))
-    val T2 = RigidVar(TypeVar(Name.local("T2")))
+    val T1 = UnificationVar(TypeVar(Name.local("T1")))
+    val T2 = UnificationVar(TypeVar(Name.local("T2")))
 
     println(Unification.unify(TInt, T1))
     val Unifier(subst, constraints) = Unification.unify(T1, TInt)

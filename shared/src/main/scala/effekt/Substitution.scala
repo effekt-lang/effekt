@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, RigidVar, Type, TypeApp, TypeVar, ValueType, CaptVar, CaptureSet }
+import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, UnificationVar, Type, TypeApp, TypeVar, ValueType, CaptureVar, CaptureSet }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -54,7 +54,7 @@ object substitutions {
   sealed trait UnificationResult {
     def add(k: TypeVar, v: ValueType): UnificationResult
     def union(other: UnificationResult): UnificationResult
-    def checkFullyDefined(rigids: List[RigidVar]): UnificationResult
+    def checkFullyDefined(rigids: List[UnificationVar]): UnificationResult
     def getUnifier(implicit error: ErrorReporter): Unifier
   }
 
@@ -86,7 +86,7 @@ object substitutions {
       case err: UnificationError => err
     }
 
-    def checkFullyDefined(rigids: List[RigidVar]): UnificationResult = {
+    def checkFullyDefined(rigids: List[UnificationVar]): UnificationResult = {
       rigids.foreach { tpe =>
         if (!substitutions.isDefinedAt(tpe))
           return UnificationError(s"Couldn't infer type for ${tpe.underlying}")
@@ -94,7 +94,7 @@ object substitutions {
       this
     }
 
-    def skolems(rigids: List[RigidVar]): List[RigidVar] =
+    def skolems(rigids: List[UnificationVar]): List[UnificationVar] =
       rigids.filterNot { substitutions.isDefinedAt }
   }
   object Unifier {
@@ -109,7 +109,7 @@ object substitutions {
     }
     def add(k: TypeVar, v: ValueType) = this
     def union(other: UnificationResult) = this
-    def checkFullyDefined(rigids: List[RigidVar]) = this
+    def checkFullyDefined(rigids: List[UnificationVar]) = this
   }
 
   /**
@@ -146,12 +146,12 @@ object substitutions {
         case (t, s) if t == s =>
           Unifier.empty
 
-        case (s: RigidVar, t: ValueType) =>
+        case (s: UnificationVar, t: ValueType) =>
           Unifier(s -> t)
 
         // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
         // type `?R` (since `==: [R] (R, R) => Boolean`)
-        case (s: ValueType, t: RigidVar) =>
+        case (s: ValueType, t: UnificationVar) =>
           Unifier(t -> s)
 
         case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
@@ -223,9 +223,9 @@ object substitutions {
      *
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
      */
-    def instantiate(tpe: FunctionType)(implicit C: ErrorReporter): (List[RigidVar], FunctionType) = {
+    def instantiate(tpe: FunctionType)(implicit C: ErrorReporter): (List[UnificationVar], FunctionType) = {
       val FunctionType(tparams, vparams, bparams, ret) = tpe
-      val subst = tparams.map { p => p -> RigidVar(p) }.toMap
+      val subst = tparams.map { p => p -> UnificationVar(p) }.toMap
       val rigids = subst.values.toList
 
       val substitutedVparams = vparams map subst.substitute

@@ -189,7 +189,7 @@ package object symbols {
    *
    * Should neither occur in source programs, nor in infered types
    */
-  case class RigidVar(underlying: TypeVar) extends TypeVar(underlying.name) {
+  case class UnificationVar(underlying: TypeVar) extends TypeVar(underlying.name) {
     override def toString = "?" + underlying.name + id
   }
 
