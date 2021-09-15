@@ -109,7 +109,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
       "type" <+> toDoc(did.name) <> parens(hsep(cs, ",")) <> emptyline <> toDocStmt(rest)
 
     // TODO generate code
-    case Eff(id, ops, rest) => toDocStmt(rest)
+    case Interface(id, ops, rest) => toDocStmt(rest)
 
     // for now, don't print includes
     case Include(contents, rest) =>

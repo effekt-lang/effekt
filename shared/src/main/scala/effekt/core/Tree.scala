@@ -58,7 +58,7 @@ sealed trait Stmt extends Tree
 case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
-case class Eff(id: Symbol, ops: List[Symbol], rest: Stmt) extends Stmt
+case class Interface(id: Symbol, ops: List[Symbol], rest: Stmt) extends Stmt
 case class App(b: Block, targs: List[Type], vargs: List[Expr], bargs: List[Block]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt

@@ -139,7 +139,7 @@ sealed trait Reference extends Named {
  *
  * Only a subset of definitions (FunDef and EffDef) is allowed on the toplevel
  *
- * A module declartion, the path should be an Effekt include path, not a system dependent file path
+ * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
 case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
@@ -154,6 +154,8 @@ case class BlockParam(id: IdDef, tpe: BlockType) extends Definition { type symbo
 
 sealed trait BlockArg extends Tree
 case class FunctionArg(vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
+
+// TODO we might want to add anonymous instances here
 case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
   type symbol = symbols.BlockParam
 }
@@ -341,7 +343,7 @@ case class InterfaceType(id: IdRef) extends BlockType {
   type resolved = symbols.InterfaceType
 }
 // TODO generalize to blocks that can take blocks
-case class FunctionType(params: List[ValueType], ret: ValueType) extends BlockType {
+case class FunctionType(vparams: List[ValueType], ret: ValueType) extends BlockType {
   type resolved = symbols.FunctionType
 }
 

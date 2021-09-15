@@ -72,7 +72,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     //      rest
     //
     case d @ source.InterfaceDef(id, tparams, ops) =>
-      core.Eff(d.symbol, ops.map { e => e.symbol }, rest)
+      core.Interface(d.symbol, ops.map { e => e.symbol }, rest)
   }
 
   def transform(tree: source.Stmt)(implicit C: Context): Stmt = withPosition(tree) {

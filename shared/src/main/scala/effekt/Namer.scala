@@ -428,7 +428,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(tpe: source.FunctionType)(implicit C: Context): FunctionType = {
-    val res = FunctionType(Nil, tpe.params.map(resolve), Nil, resolve(tpe.ret))
+    val res = FunctionType(Nil, tpe.vparams.map(resolve), Nil, resolve(tpe.ret))
     C.annotateResolvedType(tpe)(res)
     res
   }

@@ -1,9 +1,6 @@
 package effekt
 
-import java.io.File
-
 import effekt.source.Tree
-import effekt.util.messages
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 
 import org.scalatest.funspec.AnyFunSpec
