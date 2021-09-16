@@ -31,17 +31,19 @@ object substitutions {
 
     var constraints: List[TypeConstraint] = Nil
 
-    def checkEqual(t1: ValueType, t2: ValueType): Unit = constraints = Eq(t1, t2) :: constraints
+    def requireEqual(t1: ValueType, t2: ValueType): Unit = constraints = Eq(t1, t2) :: constraints
 
-    def checkEqual(t1: BlockType, t2: BlockType) = constraints = EqBlock(t1, t2) :: constraints
+    def requireEqual(t1: BlockType, t2: BlockType) = constraints = EqBlock(t1, t2) :: constraints
+
+    def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
-    def solve(constraints: List[TypeConstraint])(implicit C: ErrorReporter): (Substitutions, List[Eq]) = {
+    def solve(implicit C: ErrorReporter): (Substitutions, List[TypeConstraint]) = {
       var cs = constraints
       var cache: List[TypeConstraint] = Nil
       var typeSubst: Substitutions = Map.empty
 
-      var residual: List[Eq] = Nil
+      var residual: List[TypeConstraint] = Nil
 
       object comparer extends TypeComparer {
         def scope = self
@@ -59,7 +61,6 @@ object substitutions {
       }
 
       def push(c: Eq): Unit = cs = c :: cs
-
       def pop() = { val el = cs.head; cs = cs.tail; el }
 
       while (cs.nonEmpty) pop() match {
@@ -76,7 +77,9 @@ object substitutions {
 
       if (undefined.size > 0) { C.abort(s"Cannot infer type for ${undefined.mkString(" and ")}") }
 
-      (typeSubst, residual)
+      val substitutedResiduals = residual map { typeSubst.substitute }
+
+      (typeSubst, substitutedResiduals)
     }
 
     override def toString = s"Scope$id"
@@ -110,6 +113,11 @@ object substitutions {
         // do not substitute with types parameters bound by this function!
         val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
         FunctionType(tps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
+    }
+
+    def substitute(c: TypeConstraint): TypeConstraint = c match {
+      case Eq(t1, t2)      => Eq(substitute(t1), substitute(t2))
+      case EqBlock(t1, t2) => EqBlock(substitute(t1), substitute(t2))
     }
   }
 

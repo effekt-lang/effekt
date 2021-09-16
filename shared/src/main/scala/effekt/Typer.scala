@@ -575,30 +575,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     ret // Context.unifier.substitute(ret)
   }
 
-  /**
-   * Returns Left(Messages) if there are any errors
-   *
-   * In the case of nested calls, currently only the errors of the innermost failing call
-   * are reported
-   */
-  private def Try[T](block: => T)(implicit C: Context): Either[Messages, T] = {
-    import org.bitbucket.inkytonik.kiama.util.Severities.Error
-
-    val (msgs, optRes) = Context withMessages {
-      try { Some(block) } catch {
-        case FatalPhaseError(msg) =>
-          C.error(msg)
-          None
-      }
-    }
-
-    if (msgs.exists { m => m.severity == Error } || optRes.isEmpty) {
-      Left(msgs)
-    } else {
-      Right(optRes.get)
-    }
-  }
-
   //</editor-fold>
 
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
@@ -688,17 +664,21 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[R](block: => R): R = {
-    val oldScope = scope
+    val outerScope = scope
     scope = new UnificationScope
     val res = block
-    // TODO solve here, and check all are local unification variables are defined...
-    scope = oldScope
+    // leaving scope: solve here and check all are local unification variables are defined...
+    val (subst, cs) = scope.solve
+    // The unification variables now go out of scope:
+    // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
+    outerScope.addAll(cs)
+    scope = outerScope
     res
   }
 
-  def unify(t1: ValueType, t2: ValueType): Unit = scope.checkEqual(t1, t2)
+  def unify(t1: ValueType, t2: ValueType): Unit = scope.requireEqual(t1, t2)
 
-  def unify(t1: BlockType, t2: BlockType) = scope.checkEqual(t1, t2)
+  def unify(t1: BlockType, t2: BlockType) = scope.requireEqual(t1, t2)
 
   // Inferred types
   // ==============
