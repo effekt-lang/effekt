@@ -65,17 +65,16 @@ package object kinds {
     case Interface(_, tparams, ops) =>
       Kind.BlockTypeFun(tparams map { p => Kind.VType })
 
-    case BlockTypeApp(c, targs) => ???
-      //      val Kind.Fun(params, res) = wellformedEffect(eff) match {
-  //        case t: Kind.Fun => t
-  //        case _           => C.abort(s"Expected an effect that takes type parameters, but got: ${eff}")
-  //      }
-  //      if (args.size != params.size) {
-  //        C.abort(s"Wrong number of type arguments. Effect ${eff} expects ${params.size} parameters, but got ${args.size} arguments.")
-  //      }
-  //      args foreach { a => wellformed(a) }
-  //      res
-  //    case Us
+    case BlockTypeApp(c, targs) =>
+      val Kind.Fun(params, res) = wellformedType(c) match {
+        case t: Kind.Fun => t
+        case _           => C.abort(s"Expected an effect that takes type parameters, but got: ${c}")
+      }
+      if (targs.size != params.size) {
+        C.abort(s"Wrong number of type arguments. Effect ${c} expects ${params.size} parameters, but got ${targs.size} arguments.")
+      }
+      targs foreach { a => wellformed(a) }
+      res
   }
 
   private implicit class ValueTypeWellformedOps[T <: ValueType](tpe: T) {
@@ -84,16 +83,4 @@ package object kinds {
       tpe
     }
   }
-  //  private implicit class EffectWellformedOps[T <: Effect](eff: T) {
-  //    def wellformed(implicit C: Context): T = {
-  //      kinds.wellformed(eff)
-  //      eff
-  //    }
-  //  }
-  //  private implicit class EffectsWellformedOps(effs: Effects) {
-  //    def wellformed(implicit C: Context): Effects = {
-  //      kinds.wellformed(effs)
-  //      effs
-  //    }
-  //  }
 }
