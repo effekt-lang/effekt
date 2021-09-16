@@ -130,12 +130,37 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val _ = expr checkAgainst Context.lookup(sym)
         TUnit
 
-      case c @ source.Call(e, targs, vargs, bargs) =>
-        val btpe = checkExprAsBlock(e) match {
+      case c @ source.Call(e, targsTree, vargs, bargs) =>
+        val funTpe = checkExprAsBlock(e) match {
           case b: FunctionType => b
           case _               => Context.abort("Callee is required to have function type")
         }
-        checkCallTo(c, btpe, targs map { _.resolve }, vargs, bargs)
+
+        val targs = targsTree map { _.resolve }
+
+        // (1) Instantiate blocktype
+        // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+        val (rigids, bt @ FunctionType(_, vparams, bparams, ret)) = Context.instantiate(funTpe)
+
+        // (2) Wellformedness -- check arity
+        if (targs.nonEmpty && targs.size != rigids.size)
+          Context.abort(s"Wrong number of type arguments ${targs.size}")
+
+        if (vparams.size != vargs.size)
+          Context.error(s"Wrong number of value arguments, given ${vargs.size}, but function expects ${vparams.size}.")
+
+        if (bparams.size != bargs.size)
+          Context.error(s"Wrong number of block arguments, given ${vargs.size}, but function expects ${vparams.size}.")
+
+        // (3) Unify with provided type arguments, if any.
+        if (targs.nonEmpty) {
+          (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
+        }
+
+        (vparams zip vargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
+        (bparams zip bargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
+
+        ret
 
       case source.TryHandle(prog, handlers) =>
 
@@ -501,39 +526,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       // TODO should we open a new unifcation scope here?
       val ret = checkStmt(body)
       FunctionType(Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret)
-  }
-
-  def checkCallTo(
-    call: source.Call,
-    funTpe: FunctionType,
-    targs: List[ValueType],
-    vargs: List[source.Expr],
-    bargs: List[source.BlockArg]
-  )(implicit C: Context): ValueType = {
-
-    // (1) Instantiate blocktype
-    // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, bt @ FunctionType(_, vparams, bparams, ret)) = Context.instantiate(funTpe)
-
-    // (2) Wellformedness -- check arity
-    if (targs.nonEmpty && targs.size != rigids.size)
-      Context.abort(s"Wrong number of type arguments ${targs.size}")
-
-    if (vparams.size != vargs.size)
-      Context.error(s"Wrong number of value arguments, given ${vargs.size}, but function expects ${vparams.size}.")
-
-    if (bparams.size != bargs.size)
-      Context.error(s"Wrong number of block arguments, given ${vargs.size}, but function expects ${vparams.size}.")
-
-    // (3) Unify with provided type arguments, if any.
-    if (targs.nonEmpty) {
-      (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
-    }
-
-    (vparams zip vargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
-    (bparams zip bargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
-
-    ret
   }
 
   //</editor-fold>
