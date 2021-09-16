@@ -482,6 +482,27 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     tpeMapVals
   }
 
+  def checkBlockArgument(arg: source.BlockArg)(implicit C: Context) = arg match {
+    case arg: source.FunctionArg  => checkFunctionArgument(arg)
+    case arg: source.InterfaceArg => checkCapabilityArgument(arg)
+  }
+
+  def checkCapabilityArgument(arg: source.InterfaceArg)(implicit C: Context) = arg.definition.tpe
+
+  // Example.
+  //   BlockParam: def foo { f: Int => String / Print }
+  //   BlockArg: foo { n => println("hello" + n) }
+  //     or
+  //   BlockArg: foo { (n: Int) => println("hello" + n) }
+  def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context) = arg match {
+    case source.FunctionArg(vparams, bparams, body) =>
+      vparams.foreach { p => Context.define(p.symbol) }
+      bparams.foreach { p => Context.define(p.symbol) }
+      // TODO should we open a new unifcation scope here?
+      val ret = checkStmt(body)
+      FunctionType(Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret)
+  }
+
   def checkCallTo(
     call: source.Call,
     funTpe: FunctionType,
@@ -509,59 +530,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
     }
 
-    def checkValueArgument(tpe1: ValueType, arg: source.Expr) = arg checkAgainst tpe1
-
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = (tpe, arg) match {
-      case (bt: FunctionType, arg: source.FunctionArg) =>
-        checkFunctionArgument(bt, arg)
-
-      case (ct: InterfaceType, arg: source.InterfaceArg) =>
-        checkCapabilityArgument(ct, arg)
-
-      case (_, _) => Context.error("Wrong block argument type")
-    }
-
-    // Example.
-    //   BlockParam: def foo { f: Int => String / Print }
-    //   BlockArg: foo { n => println("hello" + n) }
-    //     or
-    //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkFunctionArgument(tpe: FunctionType, arg: source.FunctionArg): Unit = Context.at(arg) {
-
-      // TODO implement
-      //      val bt @ FunctionType(Nil, vparams, bparams, tpe1) = Context.unifier substitute tpe
-      //
-      //      Context.define {
-      //        checkAgainstDeclaration("block", vparams, bparams, arg.vparams, arg.bparams)
-      //      }
-      val tpe1: ValueType = ???
-
-      val tpe2 = arg.body checkAgainst tpe1
-      Context.unify(tpe1, tpe2)
-    }
-
-    def checkCapabilityArgument(tpe1: InterfaceType, arg: source.InterfaceArg) = Context.at(arg) {
-      val tpe2 = arg.definition.tpe
-      Context.unify(tpe1, tpe2)
-    }
-
-    (vparams zip vargs) foreach { case (p, a) => checkValueArgument(p, a) }
-    (bparams zip bargs) foreach { case (p, a) => checkBlockArgument(p, a) }
-
-    //    println(
-    //      s"""|Results of checking application of ${sym.name}
-    //                  |    to args ${args}
-    //                  |Substitution before checking arguments: $substBefore
-    //                  |Substitution after checking arguments: $subst
-    //                  |Rigids: $rigids
-    //                  |Return type before substitution: $ret
-    //                  |Return type after substitution: ${subst substitute ret}
-    //                  |""".stripMargin
-    //    )
-
-    // TODO annotate call node with inferred type arguments
-    //    val inferredTypeArgs = rigids.map(Context.unifier.substitute)
-    //    Context.annotateTypeArgs(call, inferredTypeArgs)
+    (vparams zip vargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
+    (bparams zip bargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
 
     ret
   }
@@ -584,7 +554,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   private implicit class ExprOps(expr: Expr) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(expr) {
-      // TODO: here we should generate constraints
       C.unify(tpe, checkExpr(expr))
       tpe
     }
@@ -593,6 +562,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   private implicit class StmtOps(stmt: Stmt) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(stmt) {
       C.unify(tpe, checkStmt(stmt))
+      tpe
+    }
+  }
+
+  private implicit class BlockArgOps(block: source.BlockArg) {
+    def checkAgainst(tpe: BlockType)(implicit C: Context): BlockType = Context.at(block) {
+      C.unify(tpe, checkBlockArgument(block))
       tpe
     }
   }
