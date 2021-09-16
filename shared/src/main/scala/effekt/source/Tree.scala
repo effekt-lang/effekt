@@ -148,7 +148,7 @@ case class Import(path: String) extends Tree
 /**
  * Parameters and arguments
  */
-case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
+case class ValueParam(id: IdDef, tpe: ValueType) extends Definition { type symbol = symbols.ValueParam }
 
 case class BlockParam(id: IdDef, tpe: BlockType) extends Definition { type symbol = symbols.BlockParam }
 

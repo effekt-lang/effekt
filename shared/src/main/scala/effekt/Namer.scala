@@ -147,7 +147,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       resolveGeneric(rest)
 
     case source.ValueParam(id, tpe) =>
-      Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
+      Context.define(id, ValueParam(Name.local(id), resolve(tpe)))
 
     case source.BlockParam(id, tpe) =>
       val p = BlockParam(Name.local(id), resolve(tpe))
@@ -358,7 +358,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(p: source.ValueParam)(implicit C: Context): ValueParam = {
-    val sym = ValueParam(Name.local(p.id), p.tpe.map(resolve))
+    val sym = ValueParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym
   }
@@ -390,7 +390,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.IgnorePattern()     => Nil
     case source.LiteralPattern(lit) => Nil
     case source.AnyPattern(id) =>
-      val p = ValueParam(Name.local(id), None)
+      val p = ValueParam(Name.local(id), ???) // TODO deal with non-type annotated patterns
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns) =>

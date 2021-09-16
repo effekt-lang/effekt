@@ -1,16 +1,13 @@
 package effekt
 
 import effekt.source.Tree
-import effekt.util.messages.{ ErrorReporter, MessageBuffer }
-
+import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
 import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
-
-import effekt.symbols.builtins.{ TInt, TBoolean, TString, TUnit }
+import effekt.symbols.builtins.{ TBoolean, TInt, TString, TUnit }
 import symbols._
-
-import effekt.symbols.{ Name, LocalName, QualifiedName }
+import effekt.symbols.{ LocalName, Name, QualifiedName }
 import effekt.substitutions._
 
 class InferenceTests extends AnyFunSpec {

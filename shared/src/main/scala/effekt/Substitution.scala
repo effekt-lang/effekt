@@ -7,11 +7,80 @@ import effekt.util.messages.ErrorReporter
 
 object substitutions {
 
-  // TODO implement bi-substitution for capture sets and substitution for type vars?
-  case class Substitution(
-    typeSubst: Map[TypeVar, ValueType], // maps a type variable to the inferred value type
-    captSubst: Map[CaptVar, (CaptureSet, CaptureSet)] // maps a capture variable to its lower and upper bounds
-  )
+  sealed trait TypeConstraint
+
+  // TODO add some metadata to this constraint: aka. provenance of the types, source position of the constraint, expected / got?
+  case class Eq(tpe1: ValueType, tpe2: ValueType) extends TypeConstraint
+  case class EqBlock(tpe1: BlockType, tpe2: BlockType) extends TypeConstraint
+
+  private var scopeId: Int = 0
+  /**
+   * A substitution scope -- every fresh unification variable is associated with a scope.
+   */
+  class UnificationScope { self =>
+
+    val id = { scopeId += 1; scopeId }
+
+    def fresh(underlying: TypeVar): UnificationVar = {
+      val x = UnificationVar(underlying, this)
+      skolems = x :: skolems
+      x
+    }
+
+    var skolems: List[UnificationVar] = Nil
+
+    var constraints: List[TypeConstraint] = Nil
+
+    def checkEqual(t1: ValueType, t2: ValueType): Unit = constraints = Eq(t1, t2) :: constraints
+
+    def checkEqual(t1: BlockType, t2: BlockType) = constraints = EqBlock(t1, t2) :: constraints
+
+    // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
+    def solve(constraints: List[TypeConstraint])(implicit C: ErrorReporter): (Substitutions, List[Eq]) = {
+      var cs = constraints
+      var cache: List[TypeConstraint] = Nil
+      var typeSubst: Substitutions = Map.empty
+
+      var residual: List[Eq] = Nil
+
+      object comparer extends TypeComparer {
+        def scope = self
+        def defer(t1: ValueType, t2: ValueType): Unit = residual = Eq(t1, t2) :: residual
+        def abort(msg: String) = C.abort(msg)
+        def learn(x: UnificationVar, tpe: ValueType) = {
+          typeSubst.get(x).foreach { v2 => push(Eq(v2, tpe)) }
+
+          // Use new substitution binding to refine right-hand-sides of existing substitutions.
+          // Do we need an occurs check?
+          val newSubst: Substitutions = Map(x -> tpe)
+          val improvedSubst: Substitutions = typeSubst.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
+          typeSubst = improvedSubst + (x -> improvedSubst.substitute(tpe))
+        }
+      }
+
+      def push(c: Eq): Unit = cs = c :: cs
+
+      def pop() = { val el = cs.head; cs = cs.tail; el }
+
+      while (cs.nonEmpty) pop() match {
+        case c @ Eq(x, y) if !cache.contains(c) =>
+          cache = c :: cache
+          comparer.unifyValueTypes(x, y)
+        case c @ EqBlock(x, y) if !cache.contains(c) =>
+          cache = c :: cache
+          comparer.unifyBlockTypes(x, y)
+        case _ => ()
+      }
+
+      val undefined = skolems filterNot { x => typeSubst.isDefinedAt(x) }
+
+      if (undefined.size > 0) { C.abort(s"Cannot infer type for ${undefined.mkString(" and ")}") }
+
+      (typeSubst, residual)
+    }
+
+    override def toString = s"Scope$id"
+  }
 
   type Substitutions = Map[TypeVar, ValueType]
 
@@ -30,13 +99,6 @@ object substitutions {
       case other => other
     }
 
-    // def substitute(e: Effects): Effects = Effects(e.toList.map(substitute))
-
-    //    def substitute(e: Effect): Effect = e match {
-    //      case EffectApp(e, tpes) => EffectApp(substitute(e), tpes.map(substitute))
-    //      case e                  => e
-    //    }
-
     def substitute(t: BlockType): BlockType = t match {
       // TODO for now substitution doesn't do anything on capability types.
       case b: InterfaceType => b
@@ -51,181 +113,73 @@ object substitutions {
     }
   }
 
-  sealed trait UnificationResult {
-    def add(k: TypeVar, v: ValueType): UnificationResult
-    def union(other: UnificationResult): UnificationResult
-    def checkFullyDefined(rigids: List[UnificationVar]): UnificationResult
-    def getUnifier(implicit error: ErrorReporter): Unifier
-  }
+  trait TypeComparer {
 
-  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq] = Set.empty) extends UnificationResult {
+    // "unification effects"
+    def learn(x: UnificationVar, tpe: ValueType): Unit
+    def abort(msg: String): Nothing
+    def scope: UnificationScope
+    def defer(t1: ValueType, t2: ValueType): Unit
 
-    def getUnifier(implicit error: ErrorReporter): Unifier = this
+    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
+      case (t, s) if t == s => ()
+      case (s: UnificationVar, t: ValueType) if s.scope == scope => learn(s, t)
 
-    def addAll(unifier: Map[TypeVar, ValueType]): Unifier =
-      Unifier(substitutions ++ unifier, constraints)
+      // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
+      // type `?R` (since `==: [R] (R, R) => Boolean`)
+      case (s: ValueType, t: UnificationVar) if t.scope == scope => learn(t, s)
 
-    def add(k: TypeVar, v: ValueType): UnificationResult = {
-      substitutions.get(k).foreach { v2 =>
-        if (v != v2) {
-          return UnificationError(s"${k} cannot be instantiated with ${v} and with ${v2} at the same time.")
-        }
-      }
+      // we defer unification of variables introduced in other scopes
+      case (s: UnificationVar, t: ValueType) => defer(s, t)
+      case (s: ValueType, t: UnificationVar) => defer(s, t)
 
-      // Use new substitution binding to refine right-hand-sides of existing substitutions.
-      // Do we need an occurs check?
-      val newSubst = Map(k -> v)
-      val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
-      Unifier(improvedSubst + (k -> improvedSubst.substitute(v)), constraints)
+      case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
+        if (args1.size != args2.size)
+          abort(s"Argument count does not match $t1 vs. $t2")
+
+        (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
+
+      case (THole, _) | (_, THole) => ()
+      case (BoxedType(tpe1), BoxedType(tpe2)) => unifyBlockTypes(tpe1, tpe2)
+
+      case (t, s) => abort(s"Expected ${t}, but got ${s}")
     }
 
-    def union(other: UnificationResult): UnificationResult = other match {
-      case Unifier(subst, constr) =>
-        val bothConstraints: UnificationResult = Unifier(subst, constr ++ constraints)
-        substitutions.foldLeft(bothConstraints) { case (u, (k, v)) => u.add(k, v) }
-      case err: UnificationError => err
+    def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType): Unit = (tpe1, tpe2) match {
+      case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s)
+      case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s)
+      case (t, s) => abort(s"Expected ${t}, but got ${s}")
     }
 
-    def checkFullyDefined(rigids: List[UnificationVar]): UnificationResult = {
-      rigids.foreach { tpe =>
-        if (!substitutions.isDefinedAt(tpe))
-          return UnificationError(s"Couldn't infer type for ${tpe.underlying}")
-      }
-      this
-    }
-
-    def skolems(rigids: List[UnificationVar]): List[UnificationVar] =
-      rigids.filterNot { substitutions.isDefinedAt }
-  }
-  object Unifier {
-    def empty: Unifier = Unifier(Map.empty[TypeVar, ValueType])
-    def apply(unify: (TypeVar, ValueType)): Unifier = Unifier(Map(unify))
-  }
-  case class UnificationError(msg: String) extends UnificationResult {
-    // TODO currently we only return an empty unifier for backwards compatibility
-    def getUnifier(implicit error: ErrorReporter): Unifier = {
-      error.error(msg)
-      Unifier.empty
-    }
-    def add(k: TypeVar, v: ValueType) = this
-    def union(other: UnificationResult) = this
-    def checkFullyDefined(rigids: List[UnificationVar]) = this
-  }
-
-  /**
-   * Allows using a unifier for substitution
-   */
-  implicit def toSubstitution(u: Unifier): SubstitutionOps = new SubstitutionOps(u.substitutions)
-
-  object Unification {
-
-    /**
-     * For error reporting, we assume the second argument (tpe1) is the type expected by the context
-     */
-    def unify(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): Unifier =
-      unifyTypes(tpe1, tpe2).getUnifier
-
-    // The lhs can contain rigid vars that we can compute a mapping for
-    // i.e. unify(List[?A], List[Int]) = Map(?A -> Int)
-    def unifyTypes(tpe1: Type, tpe2: Type)(implicit C: ErrorReporter): UnificationResult =
-      (tpe1, tpe2) match {
-
-        case (t: ValueType, s: ValueType) =>
-          unifyValueTypes(t, s)
-
-        case (t: BlockType, s: BlockType) =>
-          unifyBlockType(t, s)
-
-        case (t, s) =>
-          UnificationError(s"Expected ${t}, but got ${s}")
-      }
-
-    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(implicit C: ErrorReporter): UnificationResult =
-      (tpe1, tpe2) match {
-
-        case (t, s) if t == s =>
-          Unifier.empty
-
-        case (s: UnificationVar, t: ValueType) =>
-          Unifier(s -> t)
-
-        // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
-        // type `?R` (since `==: [R] (R, R) => Boolean`)
-        case (s: ValueType, t: UnificationVar) =>
-          Unifier(t -> s)
-
-        case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
-          if (args1.size != args2.size)
-            return UnificationError(s"Argument count does not match $t1 vs. $t2")
-
-          (args1 zip args2).foldLeft(Unifier.empty: UnificationResult) {
-            case (u, (a1, a2)) => u union unifyValueTypes(a1, a2)
-          }
-
-        case (THole, _) | (_, THole) =>
-          Unifier.empty
-
-        case (BoxedType(tpe1), BoxedType(tpe2)) =>
-          unifyTypes(tpe1, tpe2)
-
-        case (t, s) =>
-          UnificationError(s"Expected ${t}, but got ${s}")
-      }
-
-    def unifyBlockType(tpe1: BlockType, tpe2: BlockType)(implicit C: ErrorReporter): UnificationResult = (tpe1, tpe2) match {
-      case (t: FunctionType, s: FunctionType) =>
-        unifyFunctionType(t, s)
-
-      case (t: InterfaceType, s: InterfaceType) =>
-        unifyInterfaceType(t, s)
-
-      case (t, s) =>
-        UnificationError(s"Expected ${t}, but got ${s}")
-    }
-
-    def unifyInterfaceType(tpe1: InterfaceType, tpe2: InterfaceType)(implicit C: ErrorReporter): UnificationResult =
+    def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType): Unit =
       // TODO implement properly
-      if (tpe1 == tpe2) Unifier.empty
-      else UnificationError(s"Expected ${tpe1}, but got ${tpe2}")
+      if (tpe1 != tpe2) abort(s"Expected ${tpe1}, but got ${tpe2}")
 
-    def unifyFunctionType(tpe1: FunctionType, tpe2: FunctionType)(implicit C: ErrorReporter): UnificationResult =
-      (tpe1, tpe2) match {
-        case (f1 @ FunctionType(targs1, vargs1, bargs1, ret1), f2 @ FunctionType(targs2, vargs2, bargs2, ret2)) =>
+    def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType): Unit = (tpe1, tpe2) match {
+      case (f1 @ FunctionType(targs1, vargs1, bargs1, ret1), f2 @ FunctionType(targs2, vargs2, bargs2, ret2)) =>
 
-          if (targs1.size != targs2.size)
-            return UnificationError(s"Type argument count does not match $f1 vs. $f2")
+        if (targs1.size != targs2.size)
+          abort(s"Type argument count does not match $f1 vs. $f2")
 
-          if (vargs1.size != vargs2.size)
-            return UnificationError(s"Value argument count does not match $f1 vs. $f2")
+        if (vargs1.size != vargs2.size)
+          abort(s"Value argument count does not match $f1 vs. $f2")
 
-          if (bargs1.size != bargs2.size)
-            return UnificationError(s"Block argument count does not match $f1 vs. $f2")
+        if (bargs1.size != bargs2.size)
+          abort(s"Block argument count does not match $f1 vs. $f2")
 
-          val (rigids1, FunctionType(_, substVargs1, substBargs1, substRet1)) = instantiate(f1)
-          val (rigids2, FunctionType(_, substVargs2, substBargs2, substRet2)) = instantiate(f2)
+        val (rigids1, FunctionType(_, substVargs1, substBargs1, substRet1)) = instantiate(f1)
+        val (rigids2, FunctionType(_, substVargs2, substBargs2, substRet2)) = instantiate(f2)
 
-          var unifier = unifyValueTypes(substRet1, substRet2)
+        unifyValueTypes(substRet1, substRet2)
 
-          (rigids1 zip rigids2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
-          (substVargs1 zip substVargs2) foreach { case (a1, a2) => unifier = unifier union unifyValueTypes(a1, a2) }
-          (substBargs1 zip substBargs2) foreach { case (a1, a2) => unifier = unifier union unifyBlockType(a1, a2) }
+        (rigids1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
+        (substVargs1 zip substVargs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
+        (substBargs1 zip substBargs2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2) }
+    }
 
-          unifier
-      }
-
-    // We don't unify effects here, instead we simply gather them
-    // Two effects State[?X1] and State[?X2] are assumed to be disjoint until we know that ?X1 and ?X2 are equal.
-    //    def unifyEffectful(e1: Effectful, e2: Effectful)(implicit C: Context): UnificationResult =
-    //      unifyTypes(e1.tpe, e2.tpe)
-
-    /**
-     * Instantiate a typescheme with fresh, rigid type variables
-     *
-     * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-     */
-    def instantiate(tpe: FunctionType)(implicit C: ErrorReporter): (List[UnificationVar], FunctionType) = {
+    def instantiate(tpe: FunctionType): (List[UnificationVar], FunctionType) = {
       val FunctionType(tparams, vparams, bparams, ret) = tpe
-      val subst = tparams.map { p => p -> UnificationVar(p) }.toMap
+      val subst = tparams.map { p => p -> scope.fresh(p) }.toMap
       val rigids = subst.values.toList
 
       val substitutedVparams = vparams map subst.substitute
@@ -234,4 +188,5 @@ object substitutions {
       (rigids, FunctionType(Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
   }
+
 }

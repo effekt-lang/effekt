@@ -167,8 +167,7 @@ trait Intelligence {
     //      SymbolInfo(c, "Resumption", signature, Some(ex))
 
     case c: ValueParam =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
-      SymbolInfo(c, "Value parameter", signature, None)
+      SymbolInfo(c, "Value parameter", Some(s"${c.name}: ${c.tpe}"), None)
 
     case c: ValBinder =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }

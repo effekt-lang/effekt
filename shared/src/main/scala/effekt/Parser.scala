@@ -269,14 +269,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val blockParam: P[BlockParam] = `{` ~/> blockParamSig <~ `}`
 
-  lazy val valueParamsOpt: P[List[ValueParam]] =
-    `(` ~/> manySep(valueParamOpt, `,`) <~ `)`
-
   lazy val valueParam: P[ValueParam] =
-    idDef ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, Some(tpe)) }
-
-  lazy val valueParamOpt: P[ValueParam] =
-    idDef ~ (`:` ~> valueType).? ^^ ValueParam
+    idDef ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, tpe) }
 
   lazy val blockParamSig: P[BlockParam] =
     idDef ~ (`:` ~> interfaceType) ^^ BlockParam
@@ -296,7 +290,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None)) })
+    valueParams //| (idDef ^^ { id => List(ValueParam(id, None)) })
 
   lazy val valueArgs: P[List[Expr]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | failure("Expected a value argument list")
@@ -395,7 +389,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ valueParamsOpt ~ implicitResume ~ (`=` ~/> stmt) ^^ {
+    (`def` ~/> idRef) ~ valueParams ~ implicitResume ~ (`=` ~/> stmt) ^^ {
       case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
     }
 

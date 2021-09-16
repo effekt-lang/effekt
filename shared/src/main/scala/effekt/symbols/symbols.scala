@@ -86,7 +86,7 @@ package object symbols {
   }
 
   sealed trait Param extends TermSymbol
-  case class ValueParam(name: LocalName, tpe: Option[ValueType]) extends Param with ValueSymbol
+  case class ValueParam(name: LocalName, tpe: ValueType) extends Param with ValueSymbol
 
   //  sealed trait InterfaceParam extends Param
   // TODO maybe revive the CapabilityParam below
@@ -98,7 +98,7 @@ package object symbols {
   //  }
   case class ResumeParam(module: Module) extends Param with BlockSymbol { val name = LocalName("resume") }
 
-  def paramToType(p: ValueParam) = p.tpe.get
+  def paramToType(p: ValueParam) = p.tpe
   def paramToType(p: BlockParam) = p.tpe
 
   trait Fun extends BlockSymbol {
@@ -189,8 +189,8 @@ package object symbols {
    *
    * Should neither occur in source programs, nor in infered types
    */
-  case class UnificationVar(underlying: TypeVar) extends TypeVar(underlying.name) {
-    override def toString = "?" + underlying.name + id
+  case class UnificationVar(underlying: TypeVar, scope: UnificationScope) extends TypeVar(underlying.name) {
+    override def toString = s"?${scope.id}.${underlying.name}$id"
   }
 
   case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
@@ -230,9 +230,9 @@ package object symbols {
    */
   case class Field(name: LocalName, param: ValueParam, rec: Record) extends Fun with Synthetic {
     val tparams = rec.tparams
-    val tpe = param.tpe.get
+    val tpe = param.tpe
     val typeName = Name.local(rec.name.name)
-    val vparams = List(ValueParam(typeName, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams))))
+    val vparams = List(ValueParam(typeName, if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))
     val bparams = Nil
     val ret = Some(tpe)
   }
@@ -287,4 +287,38 @@ package object symbols {
   // case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends Effect with TypeSymbol with Builtin
 
   def isBuiltin(e: Symbol): Boolean = e.builtin
+
+  /**
+   * Capture Sets
+   */
+
+  case class CaptureSet(captures: Set[Capture]) {
+    override def toString = s"{${captures.mkString(", ")}}"
+  }
+
+  sealed class Capture(val name: Name) extends TypeSymbol
+  case class CaptureOf(sym: TermSymbol) extends Capture(sym.name)
+  case class CaptureVar(underlying: Capture) extends Capture(underlying.name) {
+    override def toString = "?" + underlying.name + id
+  }
+
+  //  trait CaptureSet
+  //
+  //  // we need at least two kinds of capture variables:
+  //  // 1) one that point to block parameters
+  //  // 2) one that is a unification variable
+  //  // typically, the second also has a pointer to the first
+  //
+  //  // TODO those should be symbols...
+  //  trait CaptVar extends CaptureSet
+  //
+  //  case class CaptParam(param: BlockParam) extends CaptVar
+  //  case class CaptRigid(underlying: CaptVar) extends CaptVar
+  //
+  //  case class Union(c1: CaptureSet, c2: CaptureSet) extends CaptureSet
+
+  // TODO:
+  //   represent function types as something like:
+  //    FunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[(BlockType, CaptVar)] ret: ValueType)
+
 }

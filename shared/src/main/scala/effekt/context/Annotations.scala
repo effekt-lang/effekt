@@ -156,15 +156,6 @@ object Annotations {
     "BlockArgumentType",
     "the inferred type for block argument"
   )
-
-  /**
-   * The unifier as computed by typer when type checking the module
-   */
-  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
-    "Unifier",
-    "the unifier for module"
-  )
-
 }
 
 /**
