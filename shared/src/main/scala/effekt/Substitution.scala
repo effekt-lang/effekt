@@ -27,9 +27,15 @@ object substitutions {
       x
     }
 
-    var skolems: List[UnificationVar] = Nil
+    /**
+     * These are the unification variables introduced in the current scope
+     */
+    private var skolems: List[UnificationVar] = Nil
 
-    var constraints: List[TypeConstraint] = Nil
+    /**
+     * These are the constraints introduced in the current scope
+     */
+    private var constraints: List[TypeConstraint] = Nil
 
     def requireEqual(t1: ValueType, t2: ValueType): Unit = constraints = Eq(t1, t2) :: constraints
 
