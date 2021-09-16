@@ -108,8 +108,9 @@ package object symbols {
     def ret: Option[ValueType]
 
     // invariant: only works if ret is defined!
-    def toType: FunctionType = FunctionType(tparams, vparams map paramToType, bparams map paramToType, ret.get)
+    def toType: FunctionType = annotatedType.get
     def toType(ret: ValueType): FunctionType = FunctionType(tparams, vparams map paramToType, bparams map paramToType, ret)
+    def annotatedType: Option[FunctionType] = ret map { toType }
   }
 
   case class UserFunction(

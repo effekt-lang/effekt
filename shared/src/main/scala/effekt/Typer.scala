@@ -67,7 +67,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def checkExprAsBlock(expr: Expr)(implicit C: Context): BlockType =
     checkBlock(expr) {
       case source.Var(id) => id.symbol match {
-        case b: BlockSymbol => Context.blockTypeOf(b)
+        case b: BlockSymbol => Context.lookup(b)
         case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
       }
 
@@ -82,7 +82,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               case List(op) => op
               case _        => Context.abort(s"Multi operations match ${selector} in type ${i}")
             }
-
+            // TODO: for polymorphic interfaces, here we need to substitute the type arguments of the interface
             op.toType
           case _ => Context.abort(s"Selection requires an interface type.")
         }
@@ -105,25 +105,27 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case source.If(cond, thn, els) =>
         val cndTpe = cond checkAgainst TBoolean
         val thnTpe = checkStmt(thn)
-        val elsTpe = els checkAgainst thnTpe
+        val elsTpe = checkStmt(els)
+
+        Context.unify(thnTpe, elsTpe)
 
         thnTpe
 
       case source.While(cond, block) =>
-        val _ = cond checkAgainst TBoolean
-        val _ = block checkAgainst TUnit
+        cond checkAgainst TBoolean
+        block checkAgainst TUnit
         TUnit
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
-        case e: ValueSymbol => Context.valueTypeOf(e)
+        case x: ValueSymbol => Context.lookup(x)
       }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val _ = expr checkAgainst Context.valueTypeOf(sym)
+        val _ = expr checkAgainst Context.lookup(sym)
         TUnit
 
       case c @ source.Call(e, targs, vargs, bargs) =>
@@ -131,7 +133,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case b: FunctionType => b
           case _               => Context.abort("Callee is required to have function type")
         }
-        checkCallTo(c, "???", btpe, targs map { _.resolve }, vargs, bargs)
+        checkCallTo(c, btpe, targs map { _.resolve }, vargs, bargs)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -364,28 +366,28 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       d.symbol.ret.foreach { annot =>
-        Context.assignType(d.symbol, d.symbol.toType)
+        Context.define(d.symbol, d.symbol.toType)
       }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      Context.assignType(d.symbol, d.symbol.toType)
+      Context.define(d.symbol, d.symbol.toType)
 
     case d @ source.InterfaceDef(id, tparams, ops) =>
       d.symbol.ops.foreach { op =>
         val tpe = op.toType
         wellformed(tpe)
-        Context.assignType(op, tpe)
+        Context.define(op, tpe)
       }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        Context.assignType(sym, sym.toType)
+        Context.define(sym, sym.toType)
 
         sym.fields.foreach { field =>
           val tpe = field.toType
           wellformed(tpe)
-          Context.assignType(field, tpe)
+          Context.define(field, tpe)
         }
       }
 
@@ -406,7 +408,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             tpe
           case None =>
             val tpe = checkStmt(body)
-            Context.assignType(sym, sym.toType(tpe))
+            Context.define(sym, sym.toType(tpe))
             Context.assignType(d, tpe)
             tpe
         }
@@ -479,7 +481,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def checkCallTo(
     call: source.Call,
-    name: String,
     funTpe: FunctionType,
     targs: List[ValueType],
     vargs: List[source.Expr],
@@ -506,10 +507,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     //    }
 
     if (vparams.size != vargs.size)
-      Context.error(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${vparams.size}.")
+      Context.error(s"Wrong number of value arguments, given ${vargs.size}, but function expects ${vparams.size}.")
 
     if (bparams.size != bargs.size)
-      Context.error(s"Wrong number of block arguments, given ${vargs.size}, but ${name} expects ${vparams.size}.")
+      Context.error(s"Wrong number of block arguments, given ${vargs.size}, but function expects ${vparams.size}.")
 
     def checkValueArgument(tpe1: ValueType, arg: source.Expr): Unit = Context.at(arg) {
       val tpe2 = arg checkAgainst tpe1
@@ -657,6 +658,10 @@ trait TyperOps extends ContextOps { self: Context =>
     // TODO substitute and commit
     annotations.commit()
     //    annotate(Annotations.Unifier, module, currentUnifier)
+
+    // now also store the typing context in the global database:
+    valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
   }
 
   // Unification
@@ -704,14 +709,19 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // The "Typing Context"
   // ====================
-  // since symbols are unique, we can use mutable state (DB) instead of reader
-  // TODO This writes to the GLOBAL DB!!!
+  // since symbols are unique, we can use mutable state instead of reader
+  private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
+  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+
+  private[typer] def lookup(s: ValueSymbol) = valueTypingContext.getOrElse(s, abort(s"Cannot find type for ${s}."))
+  private[typer] def lookup(s: BlockSymbol) = blockTypingContext.getOrElse(s, abort(s"Cannot find type for ${s}."))
+
   private[typer] def define(s: Symbol, t: ValueType): Context = {
-    assignType(s, t); this
+    valueTypingContext += (s -> t); this
   }
 
   private[typer] def define(s: Symbol, t: BlockType): Context = {
-    assignType(s, t); this
+    blockTypingContext += (s -> t); this
   }
 
   private[typer] def define(bs: Map[Symbol, Type]): Context = {
