@@ -202,7 +202,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       typ.variants = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshNameFor(id)
-          val ctorRet = if (typ.tparams.isEmpty) typ else TypeApp(typ, typ.tparams)
+          val ctorRet = if (typ.tparams.isEmpty) typ else ValueTypeApp(typ, typ.tparams)
           val record = Record(name, typ.tparams, ctorRet)
           // define constructor
           Context.define(id, record: TermSymbol)
@@ -408,7 +408,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     val res = tpe match {
       case source.TypeApp(id, args) =>
         val data = Context.resolveType(id).asValueType
-        TypeApp(data, args.map(resolve))
+        ValueTypeApp(data, args.map(resolve))
       case source.TypeVar(id) =>
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>

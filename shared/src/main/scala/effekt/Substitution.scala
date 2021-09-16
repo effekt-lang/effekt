@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, UnificationVar, Type, TypeApp, TypeVar, ValueType, CaptureVar, CaptureSet }
+import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, UnificationVar, Type, ValueTypeApp, TypeVar, ValueType, CaptureVar, CaptureSet }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -112,8 +112,8 @@ object substitutions {
     def substitute(t: ValueType): ValueType = t match {
       case x: TypeVar =>
         substitutions.getOrElse(x, x)
-      case TypeApp(t, args) =>
-        TypeApp(t, args.map { substitute })
+      case ValueTypeApp(t, args) =>
+        ValueTypeApp(t, args.map { substitute })
       case BoxedType(tpe) =>
         BoxedType(substitute(tpe))
       case other => other
@@ -158,7 +158,7 @@ object substitutions {
       case (s: UnificationVar, t: ValueType) => defer(s, t)
       case (s: ValueType, t: UnificationVar) => defer(s, t)
 
-      case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
+      case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) if t1 == t2 =>
         if (args1.size != args2.size)
           abort(s"Argument count does not match $t1 vs. $t2")
 

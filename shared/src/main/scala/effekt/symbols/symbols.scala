@@ -194,7 +194,7 @@ package object symbols {
     override def toString = s"?${scope.id}.${underlying.name}$id"
   }
 
-  case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
+  case class ValueTypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
   }
 
@@ -204,11 +204,11 @@ package object symbols {
   sealed trait TypeConstructor extends TypeSymbol with ValueType
   object TypeConstructor {
     def unapply(t: ValueType): Option[TypeConstructor] = t match {
-      case t: TypeVar         => None
-      case t: TypeConstructor => Some(t)
-      case TypeApp(tpe, args) => unapply(tpe)
-      case t: BuiltinType     => None
-      case t: BoxedType       => None
+      case t: TypeVar              => None
+      case t: TypeConstructor      => Some(t)
+      case ValueTypeApp(tpe, args) => unapply(tpe)
+      case t: BuiltinType          => None
+      case t: BoxedType            => None
     }
   }
 
@@ -233,7 +233,7 @@ package object symbols {
     val tparams = rec.tparams
     val tpe = param.tpe
     val typeName = Name.local(rec.name.name)
-    val vparams = List(ValueParam(typeName, if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))
+    val vparams = List(ValueParam(typeName, if (rec.tparams.isEmpty) rec else ValueTypeApp(rec, rec.tparams)))
     val bparams = Nil
     val ret = Some(tpe)
   }
@@ -260,13 +260,12 @@ package object symbols {
     def name: Name
     def builtin: Boolean
   }
-  //  case class EffectApp(effect: UserEffect, args: List[ValueType]) extends Effect {
-  //    override def toString = s"${effect}[${args.map { _.toString }.mkString(", ")}]"
-  //    override def builtin = effect.builtin
-  //    override val name = effect.name
-  //
-  //  }
-  //
+  case class BlockTypeApp(constructor: InterfaceType, args: List[ValueType]) extends InterfaceType {
+    override def toString = s"${constructor}[${args.map { _.toString }.mkString(", ")}]"
+    override def builtin = constructor.builtin
+    override val name = constructor.name
+  }
+
   case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType with TypeSymbol
   case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], annotatedReturn: ValueType, effect: Interface) extends Fun {
     def ret: Option[ValueType] = Some(annotatedReturn)

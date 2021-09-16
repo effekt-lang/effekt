@@ -172,14 +172,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val ret = checkStmt(prog)
 
         handlers foreach Context.withFocus { h =>
-          val effect: Interface = h.capability.symbol.tpe.asInterface
-
-          val tparams = effect.tparams
+          // try { ... } with s: >>>State[Int]<<< { ... }
+          val annotatedType: Interface = h.capability.symbol.tpe.asInterface
+          // Int in the above example
+          val tparams = annotatedType.tparams
           // TODO implement
-          val targs = List() // h.effect.tparams.map(_.resolve)
+          val targs = Nil // annotatedType.tparams.map(_.resolve)
 
           val covered = h.clauses.map { _.definition }
-          val notCovered = effect.ops.toSet -- covered.toSet
+          val notCovered = annotatedType.ops.toSet -- covered.toSet
 
           if (notCovered.nonEmpty) {
             val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
