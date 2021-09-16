@@ -173,7 +173,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val hs = handlers.map {
         case h @ source.Handler(cap, cls) =>
 
-          val effect = cap.symbol.tpe.asUserEffect
+          val effect = cap.symbol.tpe.asInterface
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(effect, effect.ops.map(clauses.apply).map {

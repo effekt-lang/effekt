@@ -164,7 +164,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.TryHandle(prog, handlers) =>
 
-        // (1) assign types to capabilities
+        // (1) bind capability types in type environment
         val capabilities = handlers.map { h => h.capability.symbol }
         capabilities foreach Context.define
 
@@ -172,7 +172,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val ret = checkStmt(prog)
 
         handlers foreach Context.withFocus { h =>
-          val effect: Interface = h.capability.symbol.tpe.asUserEffect
+          val effect: Interface = h.capability.symbol.tpe.asInterface
 
           val tparams = effect.tparams
           // TODO implement

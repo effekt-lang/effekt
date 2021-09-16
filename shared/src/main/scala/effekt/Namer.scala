@@ -238,7 +238,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
           val param = resolve(cap)
           Context.bind(param)
 
-          val eff = param.tpe.asUserEffect
+          val eff = param.tpe.asInterface
 
           clauses.foreach {
             case source.OpClause(op, params, body, resumeId) =>

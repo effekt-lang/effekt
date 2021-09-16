@@ -93,7 +93,7 @@ object assertions {
   }
 
   implicit class TypeSymbolAssertions(t: symbols.Type)(implicit reporter: ErrorReporter) {
-    def asUserEffect: Interface = t match {
+    def asInterface: Interface = t match {
       case t: Interface => t
       case _ => reporter.abort("Expected a user defined effect")
     }
