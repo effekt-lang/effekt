@@ -40,10 +40,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context.initTyperstate()
 
     Context in {
-      // We split the type-checking of definitions into "pre-check" and "check"
-      // to allow mutually recursive defs
-      module.defs.foreach { d => precheckDef(d) }
-      module.defs.foreach { d => checkDef(d) }
+      Context.withUnificationScope {
+        // We split the type-checking of definitions into "pre-check" and "check"
+        // to allow mutually recursive defs
+        module.defs.foreach { d => precheckDef(d) }
+        module.defs.foreach { d => checkDef(d) }
+      }
     }
 
     if (C.buffer.hasErrors) {
@@ -396,7 +398,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def checkDef(d: Def)(implicit C: Context): Unit = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
+      case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) => Context.withUnificationScope {
         val sym = d.symbol
         sym.vparams foreach Context.define
         sym.bparams foreach Context.define
@@ -412,6 +414,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.assignType(d, tpe)
             tpe
         }
+      }
 
       //      case d @ source.EffDef(id, tparams, ops) =>
       //        Context.withEffect(d.symbol)
@@ -489,22 +492,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    // TODO implement
-    val (rigids: List[TypeVar], bt @ FunctionType(_, vparams, bparams, ret)) = (Nil, funTpe) //Unification.instantiate(funTpe)
+    val (rigids, bt @ FunctionType(_, vparams, bparams, ret)) = Context.instantiate(funTpe)
 
+    // (2) Wellformedness -- check arity
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
-
-    // (2) Compute substitutions from provided type arguments (if any)
-    if (targs.nonEmpty) {
-      (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
-    }
-
-    // (3) refine substitutions by matching return type against expected type
-    //    expected.foreach { expectedReturn =>
-    //      val refinedReturn = Context.unifier substitute ret
-    //      Context.unify(expectedReturn, refinedReturn)
-    //    }
 
     if (vparams.size != vargs.size)
       Context.error(s"Wrong number of value arguments, given ${vargs.size}, but function expects ${vparams.size}.")
@@ -512,10 +504,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     if (bparams.size != bargs.size)
       Context.error(s"Wrong number of block arguments, given ${vargs.size}, but function expects ${vparams.size}.")
 
-    def checkValueArgument(tpe1: ValueType, arg: source.Expr): Unit = Context.at(arg) {
-      val tpe2 = arg checkAgainst tpe1
-      Context.unify(tpe1, tpe2)
+    // (3) Unify with provided type arguments, if any.
+    if (targs.nonEmpty) {
+      (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
     }
+
+    def checkValueArgument(tpe1: ValueType, arg: source.Expr) = arg checkAgainst tpe1
 
     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = (tpe, arg) match {
       case (bt: FunctionType, arg: source.FunctionArg) =>
@@ -565,15 +559,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     //                  |""".stripMargin
     //    )
 
-    // TODO this should be automatically checked, by leaving the fresh unification scope
-    // Context.checkFullyDefined(rigids)
-
     // TODO annotate call node with inferred type arguments
     //    val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     //    Context.annotateTypeArgs(call, inferredTypeArgs)
 
-    // TODO substitute
-    ret // Context.unifier.substitute(ret)
+    ret
   }
 
   //</editor-fold>
@@ -593,7 +583,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = {
+    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(expr) {
       // TODO: here we should generate constraints
       C.unify(tpe, checkExpr(expr))
       tpe
@@ -601,7 +591,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = {
+    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(stmt) {
       C.unify(tpe, checkStmt(stmt))
       tpe
     }
@@ -650,8 +640,10 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def initTyperstate(): Unit = {
     scope = new UnificationScope
     annotations = Annotations.empty
-    inferredValueTypes = Nil
-    inferredBlockTypes = Nil
+    inferredValueTypes = List.empty
+    inferredBlockTypes = List.empty
+    valueTypingContext = Map.empty
+    blockTypingContext = Map.empty
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
@@ -659,9 +651,15 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.commit()
     //    annotate(Annotations.Unifier, module, currentUnifier)
 
+    println(">>>>>>>>>>>>>>>>>\nDone Typechecking!\n>>>>>>>>>>>>>>>>>\n")
+
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
-    blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    blockTypingContext foreach {
+      case (s, tpe) =>
+        assignType(s, tpe)
+        println(s"${s.name} : $tpe")
+    }
   }
 
   // Unification
@@ -671,19 +669,26 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def withUnificationScope[R](block: => R): R = {
     val outerScope = scope
     scope = new UnificationScope
+    println(s"entering scope ${scope.id}")
     val res = block
     // leaving scope: solve here and check all are local unification variables are defined...
     val (subst, cs) = scope.solve
     // The unification variables now go out of scope:
     // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
+    valueTypingContext = valueTypingContext.view.mapValues { subst.substitute }.toMap
+    blockTypingContext = blockTypingContext.view.mapValues { subst.substitute }.toMap
     outerScope.addAll(cs)
+
+    println(s"leaving scope ${scope.id}")
+    println(s"found substitutions: ${subst}")
+    println(s"unsolved constraints: ${cs}")
     scope = outerScope
     res
   }
 
-  def unify(t1: ValueType, t2: ValueType): Unit = scope.requireEqual(t1, t2)
-
+  def unify(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
   def unify(t1: BlockType, t2: BlockType) = scope.requireEqual(t1, t2)
+  def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
 
   // Inferred types
   // ==============
@@ -713,8 +718,13 @@ trait TyperOps extends ContextOps { self: Context =>
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
   private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
 
-  private[typer] def lookup(s: ValueSymbol) = valueTypingContext.getOrElse(s, abort(s"Cannot find type for ${s}."))
-  private[typer] def lookup(s: BlockSymbol) = blockTypingContext.getOrElse(s, abort(s"Cannot find type for ${s}."))
+  // first tries to find the type in the local typing context
+  // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
+  private[typer] def lookup(s: ValueSymbol) =
+    valueTypingContext.getOrElse(s, valueTypeOf(s))
+
+  private[typer] def lookup(s: BlockSymbol) =
+    blockTypingContext.getOrElse(s, blockTypeOf(s))
 
   private[typer] def define(s: Symbol, t: ValueType): Context = {
     valueTypingContext += (s -> t); this

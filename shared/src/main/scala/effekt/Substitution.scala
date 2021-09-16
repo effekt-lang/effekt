@@ -43,6 +43,17 @@ object substitutions {
 
     def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
 
+    def instantiate(tpe: FunctionType): (List[UnificationVar], FunctionType) = {
+      val FunctionType(tparams, vparams, bparams, ret) = tpe
+      val subst = tparams.map { p => p -> fresh(p) }.toMap
+      val rigids = subst.values.toList
+
+      val substitutedVparams = vparams map subst.substitute
+      val substitutedBparams = bparams map subst.substitute
+      val substitutedReturn = subst.substitute(ret)
+      (rigids, FunctionType(Nil, substitutedVparams, substitutedBparams, substitutedReturn))
+    }
+
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
     def solve(implicit C: ErrorReporter): (Substitutions, List[TypeConstraint]) = {
       var cs = constraints
@@ -181,25 +192,14 @@ object substitutions {
         if (bargs1.size != bargs2.size)
           abort(s"Block argument count does not match $f1 vs. $f2")
 
-        val (rigids1, FunctionType(_, substVargs1, substBargs1, substRet1)) = instantiate(f1)
-        val (rigids2, FunctionType(_, substVargs2, substBargs2, substRet2)) = instantiate(f2)
+        val (rigids1, FunctionType(_, substVargs1, substBargs1, substRet1)) = scope.instantiate(f1)
+        val (rigids2, FunctionType(_, substVargs2, substBargs2, substRet2)) = scope.instantiate(f2)
 
         unifyValueTypes(substRet1, substRet2)
 
         (rigids1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
         (substVargs1 zip substVargs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
         (substBargs1 zip substBargs2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2) }
-    }
-
-    def instantiate(tpe: FunctionType): (List[UnificationVar], FunctionType) = {
-      val FunctionType(tparams, vparams, bparams, ret) = tpe
-      val subst = tparams.map { p => p -> scope.fresh(p) }.toMap
-      val rigids = subst.values.toList
-
-      val substitutedVparams = vparams map subst.substitute
-      val substitutedBparams = bparams map subst.substitute
-      val substitutedReturn = subst.substitute(ret)
-      (rigids, FunctionType(Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
   }
 
