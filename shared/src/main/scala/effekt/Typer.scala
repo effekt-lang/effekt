@@ -478,40 +478,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-  /**
-   * Returns the binders that will be introduced to check the corresponding body
-   */
-  def checkAgainstDeclaration(
-    name: String,
-    atCalleeValues: List[ValueType],
-    atCalleeBlocks: List[BlockType],
-    // we ask for the source Params here, since it might not be annotated
-    atCallerValues: List[source.ValueParam],
-    atCallerBlocks: List[source.BlockParam]
-  )(implicit C: Context): Map[Symbol, Type] = {
-
-    if (atCalleeValues.size != atCallerValues.size)
-      Context.error(s"Wrong number of value arguments, given ${atCallerValues.size}, but ${name} expects ${atCalleeValues.size}.")
-
-    if (atCalleeBlocks.size != atCallerBlocks.size)
-      Context.error(s"Wrong number of block arguments, given ${atCallerBlocks.size}, but ${name} expects ${atCalleeBlocks.size}.")
-
-    val tpeMapVals = (atCalleeValues zip atCallerValues).map[(Symbol, Type)] {
-      case (decl, p @ source.ValueParam(id, annot)) =>
-        val annotType = annot.resolve
-        Context.at(p) { Context.unify(decl, annotType) }
-
-        (p.symbol, annotType) // use the annotation, if present.
-    }.toMap
-
-    // TODO implement for SystemC
-    val tpeMapBlocks = (atCalleeBlocks zip atCallerBlocks).map[(Symbol, Type)] {
-      case (b1, b2) =>
-        Context.at(b2) { Context.panic("Internal Compiler Error: HOF not yet supported") }
-    }
-    tpeMapVals
-  }
-
   def checkBlockArgument(arg: source.BlockArg)(implicit C: Context) = arg match {
     case arg: source.FunctionArg  => checkFunctionArgument(arg)
     case arg: source.InterfaceArg => checkCapabilityArgument(arg)
