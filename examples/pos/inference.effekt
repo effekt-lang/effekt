@@ -1,0 +1,57 @@
+type List[A] {
+  Cons(head: A, tail: List[A]);
+  Nil()
+}
+
+interface State[A] {
+  def put(a: A): Unit
+  def foo[C](a: C): A
+}
+
+def handling() = try {
+  s.put(s.foo(true))
+} with s: State[Int] {
+  def put(a: Int) = resume(())
+  def foo[B](b: B) = { println[B](b); resume(42) }
+}
+
+
+def id[A](a: A) = a
+
+def ex() = {
+  val a = panic("a")
+  // if (true) { 42 } else { true };
+  a + 1
+}
+
+def bar() = id(id(id(false)))
+
+def baz { f: Int => Int }: Int = f(id(42))
+
+def main() = println(baz { (n: Int) => n + 1 })
+
+// values: global type inference
+// defs: local type inference
+def test() = {
+  // removing the type annotation here results in a type error
+  def nested(): Int = panic("test");
+  val a = panic("a");
+  val b = nested();
+  a + b
+}
+
+def oneOf[A](fst: A, snd: A): A = fst
+
+
+def residual() = {
+  // this introduces a unification variable in the outer scope
+  val el = panic("a")
+  def nested() = { // new scope
+    val l1 = Cons(1, Nil())
+    val l2 = Cons(el, Nil())
+    // this introduces a constraint on the outer unification variable
+    oneOf(l1, l2)
+  }
+  val l: List[Int] = nested();
+  ()
+}
