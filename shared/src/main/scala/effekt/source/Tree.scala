@@ -258,7 +258,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
  * Here eff is the capability parameter, as introduced by the transformation.
  */
 case class Handler(capability: BlockParam, clauses: List[OpClause]) extends Tree
-case class OpClause(id: IdRef, vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
+case class OpClause(id: IdRef, tparams: List[Id], vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.Operation
 }
 
@@ -332,7 +332,7 @@ case class BoxedType(tpe: BlockType) extends ValueType
 case class TypeVar(id: IdRef) extends ValueType with Reference {
   type symbol = symbols.Symbol with symbols.ValueType
 }
-case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Reference {
+case class ValueTypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Reference {
   type symbol = symbols.DataType
 }
 
@@ -342,6 +342,11 @@ sealed trait BlockType extends Type
 case class InterfaceType(id: IdRef) extends BlockType {
   type resolved = symbols.InterfaceType
 }
+
+case class BlockTypeApp(id: IdRef, params: List[ValueType]) extends BlockType with Reference {
+  type symbol = symbols.Symbol with symbols.InterfaceType
+}
+
 // TODO generalize to blocks that can take blocks
 case class FunctionType(vparams: List[ValueType], ret: ValueType) extends BlockType {
   type resolved = symbols.FunctionType

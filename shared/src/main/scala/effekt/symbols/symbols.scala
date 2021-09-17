@@ -259,14 +259,18 @@ package object symbols {
   sealed trait InterfaceType extends BlockType {
     def name: Name
     def builtin: Boolean
+    def interface: Interface
   }
-  case class BlockTypeApp(constructor: InterfaceType, args: List[ValueType]) extends InterfaceType {
+  case class BlockTypeApp(constructor: Interface, args: List[ValueType]) extends InterfaceType {
     override def toString = s"${constructor}[${args.map { _.toString }.mkString(", ")}]"
     override def builtin = constructor.builtin
     override val name = constructor.name
+    override def interface = constructor
   }
 
-  case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType with TypeSymbol
+  case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType with TypeSymbol {
+    def interface = this
+  }
   case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], annotatedReturn: ValueType, effect: Interface) extends Fun {
     def ret: Option[ValueType] = Some(annotatedReturn)
     def bparams = Nil

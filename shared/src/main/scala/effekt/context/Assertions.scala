@@ -13,7 +13,10 @@ object assertions {
    * in one place
    */
   implicit class SymbolAssertions(s: Symbol)(implicit reporter: ErrorReporter) {
-
+    def asTypeVar: TypeVar = s match {
+      case t: TypeVar => t
+      case _ => reporter.abort("Expected a type variable")
+    }
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
       case _ => reporter.abort("Expected a value parameter")
@@ -74,10 +77,6 @@ object assertions {
       case t: Type => t
       case _ => reporter.abort("Expected a type")
     }
-    def asInterfaceType: InterfaceType = s match {
-      case t: InterfaceType => t
-      case _ => reporter.abort("Expected an interface type")
-    }
     def asFun: Fun = s match {
       case t: Fun => t
       case _ => reporter.abort("Expected a function")
@@ -90,12 +89,24 @@ object assertions {
       case t: BlockSymbol => t
       case _ => reporter.panic("Expected a term symbol")
     }
+    def asInterface: Interface = s match {
+      case t: Interface => t
+      case _ => reporter.abort("Expected an interface type")
+    }
+    def asInterfaceType: InterfaceType = s match {
+      case t: InterfaceType => t
+      case _ => reporter.abort("Expected an interface type")
+    }
   }
 
   implicit class TypeSymbolAssertions(t: symbols.Type)(implicit reporter: ErrorReporter) {
     def asInterface: Interface = t match {
       case t: Interface => t
-      case _ => reporter.abort("Expected a user defined effect")
+      case _ => reporter.abort("Expected an interface type")
+    }
+    def asInterfaceType: InterfaceType = t match {
+      case t: InterfaceType => t
+      case _ => reporter.abort("Expected an interface type")
     }
   }
 

@@ -178,19 +178,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.InterfaceDef(id, tparams, ops) =>
       val effectSym = Context.resolveType(id).asUserEffect
       effectSym.ops = ops.map {
-        case source.Operation(id, tparams, params, ret) =>
+        case source.Operation(id, tparams, vparams, ret) =>
           // effect operations are always selected, no functions are generated, so we use a local name here
           val name = Name.local(id)
           Context scoped {
             // the parameters of the effect are in scope
             effectSym.tparams.foreach { p => Context.bind(p) }
-
             val tps = tparams map resolve
-
-            // The type parameters of an effect op are:
-            //   1) all type parameters on the effect, followed by
-            //   2) the annotated type parameters on the concrete operation
-            val op = Operation(name, effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            val vps = vparams map resolve
+            val op = Operation(name, tps, vps, resolve(ret), effectSym)
             Context.define(id, op)
             op
           }
@@ -238,10 +234,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
           val param = resolve(cap)
           Context.bind(param)
 
-          val eff = param.tpe.asInterface
+          val eff = param.tpe.asInterfaceType.interface
 
           clauses.foreach {
-            case source.OpClause(op, params, body, resumeId) =>
+            case source.OpClause(op, tparams, vparams, body, resumeId) =>
 
               // try to find the operation in the handled effect:
               eff.ops.find { o => o.name.toString == op.name } map { opSym =>
@@ -250,9 +246,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
                 Context.abort(s"Operation ${op.name} is not part of interface ${eff}.")
               }
 
-              val ps = params.map(resolve)
+              val tps = tparams map resolve
+              val vps = vparams map resolve
               Context scoped {
-                Context.bindValue(ps)
+                Context.bindValue(vps)
                 Context.define(resumeId, ResumeParam(C.module))
                 resolveGeneric(body)
               }
@@ -406,7 +403,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    */
   def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = Context.at(tpe) {
     val res = tpe match {
-      case source.TypeApp(id, args) =>
+      case source.ValueTypeApp(id, args) =>
         val data = Context.resolveType(id).asValueType
         ValueTypeApp(data, args.map(resolve))
       case source.TypeVar(id) =>
@@ -422,9 +419,18 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
-    case b: source.FunctionType  => resolve(b)
-    case c: source.InterfaceType => resolve(c)
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
+    val res = tpe match {
+      case b: source.FunctionType  => resolve(b)
+      case c: source.InterfaceType => resolve(c)
+      case source.BlockTypeApp(id, args) =>
+        val interface = Context.resolveType(id).asInterface
+        BlockTypeApp(interface, args.map(resolve))
+    }
+    C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
+    // check that we resolved to a well-kinded type
+    kinds.wellformed(res)
+    res
   }
 
   def resolve(tpe: source.FunctionType)(implicit C: Context): FunctionType = {

@@ -75,17 +75,25 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Select(expr, selector) =>
         checkExprAsBlock(expr) match {
-          case i: Interface =>
+          case i: InterfaceType =>
+            // TODO refactor, this is the second time we write this
+            val (interface, targs) = i match {
+              case i: Interface          => (i, Nil)
+              case BlockTypeApp(i, args) => (i, args)
+            }
+
+            val tsubst = (interface.tparams zip targs).toMap
+
             // try to find an operation with name "selector"
-            val op = i.ops.collect {
+            val op = interface.ops.collect {
               case op if op.name.name == selector.name => op
             } match {
               case Nil      => Context.abort(s"Cannot select ${selector} in type ${i}")
               case List(op) => op
               case _        => Context.abort(s"Multi operations match ${selector} in type ${i}")
             }
-            // TODO: for polymorphic interfaces, here we need to substitute the type arguments of the interface
-            op.toType
+            tsubst.substitute(op.toType)
+
           case _ => Context.abort(s"Selection requires an interface type.")
         }
 
@@ -173,28 +181,36 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         handlers foreach Context.withFocus { h =>
           // try { ... } with s: >>>State[Int]<<< { ... }
-          val annotatedType: Interface = h.capability.symbol.tpe.asInterface
-          // Int in the above example
-          val tparams = annotatedType.tparams
-          // TODO implement
-          val targs = Nil // annotatedType.tparams.map(_.resolve)
+          val annotatedType = h.capability.symbol.tpe.asInterfaceType
 
+          val (interface, targs) = annotatedType match {
+            case i: Interface          => (i, Nil)
+            case BlockTypeApp(i, args) => (i, args)
+          }
+
+          val tparams = interface.tparams
+          val tsubst = (tparams zip targs).toMap
+
+          // (3) check all operations are covered
           val covered = h.clauses.map { _.definition }
-          val notCovered = annotatedType.ops.toSet -- covered.toSet
+          val notCovered = interface.ops.toSet -- covered.toSet
 
           if (notCovered.nonEmpty) {
-            val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-            Context.error(s"Missing definitions for effect operations: ${explanation}")
+            val explanation = notCovered.map { op => s"${op.name} of interface ${op.effect.name}" }.mkString(", ")
+            Context.error(s"Missing definitions for operations: ${explanation}")
           }
 
           if (covered.size > covered.distinct.size) {
-            Context.error(s"Duplicate definitions of effect operations")
+            Context.error(s"Duplicate definitions of operations")
           }
+          // (4) actually check each clause
           h.clauses foreach Context.withFocus {
-            case d @ source.OpClause(op, vparams, body, resume) =>
-              val effectOp = d.definition
+            // TODO what is with type parameters of operation clauses?
+            case d @ source.OpClause(op, tparams, vparams, body, resume) =>
 
-              // the effect operation might refer to type parameters of the interface
+              val declaration = d.definition
+
+              // (4a) the effect operation might refer to type parameters of the interface
               //   i.e. interface Foo[A] { def bar[B](a: A): B }
               //
               // at the handle site, we might have
@@ -204,37 +220,26 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               //   bar: [B](a: A) -> B
               // and substitute { A -> Int}
               //   barSubstituted: [B](a: Int) -> B
+              val declTpe = tsubst.substitute(declaration.toType)
+
+              // (4b) check the body of the clause
+              val resumeType = FunctionType(Nil, List(declTpe.ret), Nil, ret)
+
+              val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
+              val vparamSyms = vparams.map { p => p.symbol }
+
+              vparamSyms foreach Context.define
+              Context.define(Context.symbolOf(resume), resumeType)
+
+              // TODO does this need to be a fresh unification scope?
+              val opRet = Context in { body checkAgainst ret }
+
               //
               // After substituting, we now unify
               //   [B](a: Int) -> B     with     [C](a: Int) -> ?T
+              val inferredTpe = FunctionType(tparamSyms, vparamSyms.map { Context.lookup }, Nil, opRet)
 
-              // TODO
-              // ===========================
-              //
-              //              // (1) Instantiate block type of effect operation
-              //              val (rigids, FunctionType(tparams, vpms, bpms, tpe)) = Unification.instantiate(Context.functionTypeOf(effectOp))
-              //
-              //              // (2) unify with given type arguments for effect (i.e., A, B, ...):
-              //              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-              //              //     The parameters C, D, ... are existentials
-              //              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
-              //              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
-              //
-              //              // (3) substitute what we know so far
-              //              val substVpms = vpms map Context.unifier.substitute
-              //              val substBpms = bpms map Context.unifier.substitute
-              //              val substTpe = Context.unifier substitute tpe
-              //
-              //              // (4) check parameters
-              //              val ps = checkAgainstDeclaration(op.name, substVpms, substBpms, vparams, Nil)
-              //
-              //              // (5) synthesize type of continuation
-              //              val resumeType = FunctionType(Nil, List(substTpe), Nil, ret)
-              //
-              //              Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
-              //                body checkAgainst ret
-              //              }
-              ???
+              Context.unify(inferredTpe, declTpe)
           }
         }
 

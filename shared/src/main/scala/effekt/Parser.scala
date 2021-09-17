@@ -389,8 +389,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ valueParams ~ implicitResume ~ (`=` ~/> stmt) ^^ {
-      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
+    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParams ~ implicitResume ~ (`=` ~/> stmt) ^^ {
+      case id ~ tparams ~ vparams ~ resume ~ body => OpClause(id, tparams, vparams, body, resume)
     }
 
   lazy val clause: P[MatchClause] =
@@ -455,7 +455,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( funType
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
-    | idRef ~ typeArgs ^^ TypeApp
+    | idRef ~ typeArgs ^^ ValueTypeApp
     | idRef ^^ TypeVar
     | failure("Expected a type")
     )
@@ -467,7 +467,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     }
 
   lazy val interfaceType: P[BlockType] =
-    ( blockType
+    ( idRef ~ typeArgs ^^ BlockTypeApp
+    | blockType
     | capabilityType
     )
 
@@ -501,7 +502,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    TypeApp(IdRef(s"Tuple${tps.size}"), tps)
+    ValueTypeApp(IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

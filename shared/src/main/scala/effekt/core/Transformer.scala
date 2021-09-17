@@ -173,11 +173,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val hs = handlers.map {
         case h @ source.Handler(cap, cls) =>
 
-          val effect = cap.symbol.tpe.asInterface
+          val effect = cap.symbol.tpe.asInterfaceType.interface
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(effect, effect.ops.map(clauses.apply).map {
-            case op @ source.OpClause(id, vparams, body, resume) =>
+            case op @ source.OpClause(id, tparams, vparams, body, resume) =>
               val vps = vparams map transform
 
               // introduce a block parameter for resume

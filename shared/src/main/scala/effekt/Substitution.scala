@@ -197,9 +197,9 @@ object substitutions {
 
         unifyValueTypes(substRet1, substRet2)
 
-        (rigids1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
-        (substVargs1 zip substVargs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
-        (substBargs1 zip substBargs2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2) }
+        (rigids1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
+        (substVargs1 zip substVargs2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
+        (substBargs1 zip substBargs2) foreach { case (t1, t2) => unifyBlockTypes(t2, t1) }
     }
   }
 
