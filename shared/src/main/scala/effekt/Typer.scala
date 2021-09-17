@@ -446,10 +446,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
       }
 
-      //      case d @ source.EffDef(id, tparams, ops) =>
-      //        Context.withEffect(d.symbol)
-      //        TUnit / Pure
-
       case d @ source.ValDef(id, annot, binding) =>
         val t = d.symbol.tpe match {
           case Some(t) =>
