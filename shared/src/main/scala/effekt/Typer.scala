@@ -200,9 +200,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             Context.error(s"Missing definitions for operations: ${explanation}")
           }
 
-          if (covered.size > covered.distinct.size) {
+          if (covered.size > covered.distinct.size)
             Context.error(s"Duplicate definitions of operations")
-          }
+
           // (4) actually check each clause
           h.clauses foreach Context.withFocus {
             // TODO what is with type parameters of operation clauses?

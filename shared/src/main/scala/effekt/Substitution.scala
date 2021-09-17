@@ -72,6 +72,10 @@ object substitutions {
           // Use new substitution binding to refine right-hand-sides of existing substitutions.
           // Do we need an occurs check?
           val newSubst: Substitutions = Map(x -> tpe)
+
+          // update remaining constraints
+          cs = cs map { newSubst.substitute }
+
           val improvedSubst: Substitutions = typeSubst.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
           typeSubst = improvedSubst + (x -> improvedSubst.substitute(tpe))
         }
