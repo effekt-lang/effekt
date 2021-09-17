@@ -181,25 +181,24 @@ object substitutions {
       if (tpe1 != tpe2) abort(s"Expected ${tpe1}, but got ${tpe2}")
 
     def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType): Unit = (tpe1, tpe2) match {
-      case (f1 @ FunctionType(targs1, vargs1, bargs1, ret1), f2 @ FunctionType(targs2, vargs2, bargs2, ret2)) =>
+      case (f1 @ FunctionType(tparams1, vparams1, bparams1, ret1), f2 @ FunctionType(tparams2, vparams2, bparams2, ret2)) =>
 
-        if (targs1.size != targs2.size)
-          abort(s"Type argument count does not match $f1 vs. $f2")
+        if (tparams1.size != tparams2.size)
+          abort(s"Type parameter count does not match $f1 vs. $f2")
 
-        if (vargs1.size != vargs2.size)
-          abort(s"Value argument count does not match $f1 vs. $f2")
+        if (vparams1.size != vparams2.size)
+          abort(s"Value parameter count does not match $f1 vs. $f2")
 
-        if (bargs1.size != bargs2.size)
-          abort(s"Block argument count does not match $f1 vs. $f2")
+        if (bparams1.size != bparams2.size)
+          abort(s"Block parameter count does not match $f1 vs. $f2")
 
-        val (rigids1, FunctionType(_, substVargs1, substBargs1, substRet1)) = scope.instantiate(f1)
-        val (rigids2, FunctionType(_, substVargs2, substBargs2, substRet2)) = scope.instantiate(f2)
+        val (rigids2, FunctionType(_, substVparams2, substBparams2, substRet2)) = scope.instantiate(f2)
 
-        unifyValueTypes(substRet1, substRet2)
+        unifyValueTypes(ret1, substRet2)
 
-        (rigids1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
-        (substVargs1 zip substVargs2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
-        (substBargs1 zip substBargs2) foreach { case (t1, t2) => unifyBlockTypes(t2, t1) }
+        (tparams1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
+        (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
+        (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t2, t1) }
     }
   }
 

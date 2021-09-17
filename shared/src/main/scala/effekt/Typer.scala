@@ -220,10 +220,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               //   bar: [B](a: A) -> B
               // and substitute { A -> Int}
               //   barSubstituted: [B](a: Int) -> B
-              val declTpe = tsubst.substitute(declaration.toType)
+              val FunctionType(tparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
 
               // (4b) check the body of the clause
-              val resumeType = FunctionType(Nil, List(declTpe.ret), Nil, ret)
+              val resumeType = FunctionType(Nil, List(ret1), Nil, ret)
 
               val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
               val vparamSyms = vparams.map { p => p.symbol }
@@ -234,12 +234,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               // TODO does this need to be a fresh unification scope?
               val opRet = Context in { body checkAgainst ret }
 
-              //
-              // After substituting, we now unify
-              //   [B](a: Int) -> B     with     [C](a: Int) -> ?T
+              // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
               val inferredTpe = FunctionType(tparamSyms, vparamSyms.map { Context.lookup }, Nil, opRet)
+              val expectedTpe = FunctionType(tparams1, vparams1, bparams1, ret)
 
-              Context.unify(inferredTpe, declTpe)
+              Context.unify(inferredTpe, expectedTpe)
           }
         }
 
