@@ -1,7 +1,8 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols.{ FunctionType, InterfaceType, BoxedType, BlockType, UnificationVar, Type, ValueTypeApp, TypeVar, ValueType, CaptureVar, CaptureSet }
+import effekt.source.Tree
+import effekt.symbols.{ BlockType, BoxedType, CaptureSet, CaptureVar, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -10,8 +11,8 @@ object substitutions {
   sealed trait TypeConstraint
 
   // TODO add some metadata to this constraint: aka. provenance of the types, source position of the constraint, expected / got?
-  case class Eq(tpe1: ValueType, tpe2: ValueType) extends TypeConstraint
-  case class EqBlock(tpe1: BlockType, tpe2: BlockType) extends TypeConstraint
+  case class Eq(tpe1: ValueType, tpe2: ValueType, position: Tree) extends TypeConstraint
+  case class EqBlock(tpe1: BlockType, tpe2: BlockType, position: Tree) extends TypeConstraint
 
   private var scopeId: Int = 0
   /**
@@ -37,9 +38,9 @@ object substitutions {
      */
     private var constraints: List[TypeConstraint] = Nil
 
-    def requireEqual(t1: ValueType, t2: ValueType): Unit = constraints = Eq(t1, t2) :: constraints
+    def requireEqual(t1: ValueType, t2: ValueType)(implicit C: Context) = constraints = Eq(t1, t2, C.focus) :: constraints
 
-    def requireEqual(t1: BlockType, t2: BlockType) = constraints = EqBlock(t1, t2) :: constraints
+    def requireEqual(t1: BlockType, t2: BlockType)(implicit C: Context) = constraints = EqBlock(t1, t2, C.focus) :: constraints
 
     def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
 
@@ -55,7 +56,7 @@ object substitutions {
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
-    def solve(implicit C: ErrorReporter): (Substitutions, List[TypeConstraint]) = {
+    def solve(implicit C: Context): (Substitutions, List[TypeConstraint]) = {
       var cs = constraints
       var cache: List[TypeConstraint] = Nil
       var typeSubst: Substitutions = Map.empty
@@ -64,10 +65,10 @@ object substitutions {
 
       object comparer extends TypeComparer {
         def scope = self
-        def defer(t1: ValueType, t2: ValueType): Unit = residual = Eq(t1, t2) :: residual
+        def defer(t1: ValueType, t2: ValueType): Unit = residual = Eq(t1, t2, C.focus) :: residual
         def abort(msg: String) = C.abort(msg)
         def learn(x: UnificationVar, tpe: ValueType) = {
-          typeSubst.get(x).foreach { v2 => push(Eq(v2, tpe)) }
+          typeSubst.get(x).foreach { v2 => push(Eq(v2, tpe, C.focus)) }
 
           // Use new substitution binding to refine right-hand-sides of existing substitutions.
           // Do we need an occurs check?
@@ -85,12 +86,14 @@ object substitutions {
       def pop() = { val el = cs.head; cs = cs.tail; el }
 
       while (cs.nonEmpty) pop() match {
-        case c @ Eq(x, y) if !cache.contains(c) =>
+        case c @ Eq(x, y, pos) if !cache.contains(c) => C.at(pos) {
           cache = c :: cache
           comparer.unifyValueTypes(x, y)
-        case c @ EqBlock(x, y) if !cache.contains(c) =>
+        }
+        case c @ EqBlock(x, y, pos) if !cache.contains(c) => C.at(pos) {
           cache = c :: cache
           comparer.unifyBlockTypes(x, y)
+        }
         case _ => ()
       }
 
@@ -137,8 +140,8 @@ object substitutions {
     }
 
     def substitute(c: TypeConstraint): TypeConstraint = c match {
-      case Eq(t1, t2)      => Eq(substitute(t1), substitute(t2))
-      case EqBlock(t1, t2) => EqBlock(substitute(t1), substitute(t2))
+      case Eq(t1, t2, pos)      => Eq(substitute(t1), substitute(t2), pos)
+      case EqBlock(t1, t2, pos) => EqBlock(substitute(t1), substitute(t2), pos)
     }
   }
 
