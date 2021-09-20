@@ -75,23 +75,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Select(expr, selector) =>
         checkExprAsBlock(expr) match {
-          case i: InterfaceType =>
-            // TODO refactor, this is the second time we write this
-            val (interface, targs) = i match {
-              case i: Interface          => (i, Nil)
-              case BlockTypeApp(i, args) => (i, args)
-            }
-
-            val tsubst = (interface.tparams zip targs).toMap
-
+          case i @ InterfaceType(interface, targs) =>
+            // (2) find the operation
             // try to find an operation with name "selector"
             val op = interface.ops.collect {
               case op if op.name.name == selector.name => op
             } match {
               case Nil      => Context.abort(s"Cannot select ${selector} in type ${i}")
               case List(op) => op
-              case _        => Context.abort(s"Multi operations match ${selector} in type ${i}")
+              case _        => Context.abort(s"Multiple operations match ${selector} in type ${i}")
             }
+
+            // (3) substitute type arguments
+            val tsubst = (interface.tparams zip targs).toMap
             tsubst.substitute(op.toType)
 
           case _ => Context.abort(s"Selection requires an interface type.")
@@ -181,12 +177,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         handlers foreach Context.withFocus { h =>
           // try { ... } with s: >>>State[Int]<<< { ... }
-          val annotatedType = h.capability.symbol.tpe.asInterfaceType
-
-          val (interface, targs) = annotatedType match {
-            case i: Interface          => (i, Nil)
-            case BlockTypeApp(i, args) => (i, args)
-          }
+          val annotatedType @ InterfaceType(interface, targs) = h.capability.symbol.tpe.asInterfaceType
 
           val tparams = interface.tparams
           val tsubst = (tparams zip targs).toMap

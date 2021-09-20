@@ -261,6 +261,13 @@ package object symbols {
     def builtin: Boolean
     def interface: Interface
   }
+  object InterfaceType {
+    def unapply(i: InterfaceType): Option[(Interface, List[ValueType])] = i match {
+      case i: Interface          => Some((i, Nil))
+      case BlockTypeApp(i, args) => Some((i, args))
+      case _                     => None
+    }
+  }
   case class BlockTypeApp(constructor: Interface, args: List[ValueType]) extends InterfaceType {
     override def toString = s"${constructor}[${args.map { _.toString }.mkString(", ")}]"
     override def builtin = constructor.builtin
