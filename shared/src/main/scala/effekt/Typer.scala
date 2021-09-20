@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
+import effekt.source.{ AnyPattern, Def, Term, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -66,7 +66,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
-  def checkExprAsBlock(expr: Expr)(implicit C: Context): BlockType =
+  def checkExprAsBlock(expr: Term)(implicit C: Context): BlockType =
     checkBlock(expr) {
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.lookup(b)
@@ -76,7 +76,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case source.Select(expr, selector) =>
         checkExprAsBlock(expr) match {
           case i @ InterfaceType(interface, targs) =>
-            // (2) find the operation
+            // (1) find the operation
             // try to find an operation with name "selector"
             val op = interface.ops.collect {
               case op if op.name.name == selector.name => op
@@ -86,7 +86,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               case _        => Context.abort(s"Multiple operations match ${selector} in type ${i}")
             }
 
-            // (3) substitute type arguments
+            // (2) substitute type arguments
             val tsubst = (interface.tparams zip targs).toMap
             tsubst.substitute(op.toType)
 
@@ -100,7 +100,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr)(implicit C: Context): ValueType =
+  def checkExpr(expr: Term)(implicit C: Context): ValueType =
     check(expr) {
       case source.IntLit(n)     => TInt
       case source.BooleanLit(n) => TBoolean
@@ -235,7 +235,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         ret
 
-      case source.MatchExpr(sc, clauses) =>
+      case source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
@@ -502,7 +502,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       Set.empty
   }
 
-  private implicit class ExprOps(expr: Expr) {
+  private implicit class ExprOps(expr: Term) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(expr) {
       C.unify(tpe, checkExpr(expr))
       tpe

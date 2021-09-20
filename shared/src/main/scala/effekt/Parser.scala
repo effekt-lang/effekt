@@ -292,10 +292,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val lambdaArgs: P[List[ValueParam]] =
     valueParams //| (idDef ^^ { id => List(ValueParam(id, None)) })
 
-  lazy val valueArgs: P[List[Expr]] =
+  lazy val valueArgs: P[List[Term]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | failure("Expected a value argument list")
 
-  lazy val maybeValueArgs: P[List[Expr]] =
+  lazy val maybeValueArgs: P[List[Term]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | success(Nil)
 
   lazy val typeArgs: P[List[ValueType]] =
@@ -331,7 +331,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
        case p ~ sc ~ body =>
-        Return(MatchExpr(sc, List(MatchClause(p, body)))) withPositionOf p
+        Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
   lazy val dataDef: P[DataDef] =
@@ -343,17 +343,17 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   /**
    * Expressions
    */
-  lazy val expr:    P[Expr] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
-  lazy val orExpr:  P[Expr] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
-  lazy val andExpr: P[Expr] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
-  lazy val eqExpr:  P[Expr] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
-  lazy val relExpr: P[Expr] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
-  lazy val addExpr: P[Expr] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ callExpr ^^ binaryOp | accessExpr
+  lazy val expr:    P[Term] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
+  lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
+  lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
+  lazy val eqExpr:  P[Term] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
+  lazy val relExpr: P[Term] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
+  lazy val addExpr: P[Term] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
+  lazy val mulExpr: P[Term] = mulExpr ~ oneof("*", "/") ~/ callExpr ^^ binaryOp | accessExpr
 
   lazy val arguments = valueArgs ~ many(blockArg) | maybeValueArgs ~ some(blockArg)
 
-  lazy val accessExpr: P[Expr] =
+  lazy val accessExpr: P[Term] =
     ( callExpr ~ some(`.` ~> idRef) ~ maybeTypeArgs ~ arguments ^^ {
         case firstTarget ~ accesses ~ targs ~ (vargs ~ bargs) =>
           val selection = accesses.foldLeft(firstTarget) {
@@ -364,7 +364,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | callExpr
     )
 
-  lazy val callExpr: P[Expr] =
+  lazy val callExpr: P[Term] =
     ( ifExpr
     | whileExpr
     | funCall
@@ -372,13 +372,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
-  lazy val funCall: P[Expr] =
+  lazy val funCall: P[Term] =
     funCall ~ maybeTypeArgs ~ arguments ^^ { case fun ~ targs ~ (vargs ~ bargs) => Call(fun, targs, vargs, bargs) } | primExpr
 
-  lazy val matchExpr: P[Expr] =
-    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr
+  lazy val matchExpr: P[Term] =
+    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ Match
 
-  lazy val handleExpr: P[Expr] =
+  lazy val handleExpr: P[Term] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
   lazy val handler: P[Handler] =
@@ -409,22 +409,22 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 
 
-  lazy val assignExpr: P[Expr] =
+  lazy val assignExpr: P[Term] =
     idRef ~ (`=` ~> expr) ^^ Assign
 
-  lazy val ifExpr: P[Expr] =
+  lazy val ifExpr: P[Term] =
     `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt) ^^ If
 
-  lazy val whileExpr: P[Expr] =
+  lazy val whileExpr: P[Term] =
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
-  lazy val primExpr: P[Expr] =
+  lazy val primExpr: P[Term] =
     variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
 
-  lazy val variable: P[Expr] =
+  lazy val variable: P[Term] =
     idRef ^^ Var
 
-  lazy val hole: P[Expr] =
+  lazy val hole: P[Term] =
     ( `<>` ^^^ Hole(Return(UnitLit()))
     | `<{` ~> stmts <~ `}>` ^^ Hole
     )
@@ -432,19 +432,19 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
 
-  lazy val listLiteral: P[Expr] =
+  lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
 
-  lazy val tupleLiteral: P[Expr] =
+  lazy val tupleLiteral: P[Term] =
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
-  private def NilTree: Expr =
+  private def NilTree: Term =
     Call(Var(IdRef("Nil")), Nil, Nil, Nil)
 
-  private def ConsTree(el: Expr, rest: Expr): Expr =
+  private def ConsTree(el: Term, rest: Term): Term =
     Call(Var(IdRef("Cons")), Nil, List(el, rest), Nil)
 
-  private def TupleTree(args: List[Expr]): Expr =
+  private def TupleTree(args: List[Term]): Term =
     Call(Var(IdRef(s"Tuple${args.size}")), Nil, args, Nil)
 
   /**
@@ -482,7 +482,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // === AST Helpers ===
 
-  private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
+  private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
      Call(Var(IdRef(opName(op))), Nil, List(lhs, rhs), Nil)
 
   private def opName(op: String): String = op match {

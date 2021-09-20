@@ -98,7 +98,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.StringLit(value)  => StringLit(value)
   }
 
-  def transformAsBlock(tree: source.Expr)(implicit C: Context): Block = withPosition(tree) {
+  def transformAsBlock(tree: source.Term)(implicit C: Context): Block = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: ValueSymbol => C.abort("Value in block position: automatic unboxing currently not supported.")
       case sym: BlockSymbol => BlockVar(sym)
@@ -111,7 +111,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       C.abort("Value in block position: automatic unboxing currently not supported.")
   }
 
-  def transform(tree: source.Expr)(implicit C: Context): Expr = withPosition(tree) {
+  def transform(tree: source.Term)(implicit C: Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: VarBinder   => UnitLit() // TODO implement
       case sym: ValueSymbol => ValueVar(sym)
@@ -142,7 +142,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val exprTpe = C.inferredTypeOf(tree)
       C.bind(exprTpe, While(insertBindings { Ret(transform(cond)) }, transform(body)))
 
-    case source.MatchExpr(sc, clauses) =>
+    case source.Match(sc, clauses) =>
       val scrutinee = transform(sc)
 
       val cs: List[(Pattern, BlockLit)] = clauses.map {
@@ -212,7 +212,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       (core.TagPattern(p.definition, patterns), params.flatten)
   }
 
-  def transform(exprs: List[source.Expr])(implicit C: Context): List[Expr] =
+  def transform(exprs: List[source.Term])(implicit C: Context): List[Expr] =
     exprs.map(transform)
 
   def freshWildcardFor(e: source.Tree)(implicit C: Context): Wildcard = {

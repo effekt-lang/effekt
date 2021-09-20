@@ -206,25 +206,25 @@ case class ExternInclude(path: String) extends Def {
 
 sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
-case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
-case class Return(d: Expr) extends Stmt
+case class ExprStmt(d: Term, rest: Stmt) extends Stmt
+case class Return(d: Term) extends Stmt
 case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
  * Effectful calls, if, while, ...
  */
-sealed trait Expr extends Tree
+sealed trait Term extends Tree
 
 // Variable / Value use (can now also stand for blocks)
-case class Var(id: IdRef) extends Expr with Reference {
+case class Var(id: IdRef) extends Term with Reference {
   type symbol = symbols.TermSymbol
 }
-case class Assign(id: IdRef, expr: Expr) extends Expr with Reference {
+case class Assign(id: IdRef, expr: Term) extends Term with Reference {
   type symbol = symbols.VarBinder
 }
 
-sealed trait Literal[T] extends Expr {
+sealed trait Literal[T] extends Term {
   def value: T
 }
 case class UnitLit() extends Literal[Unit] { def value = () }
@@ -236,16 +236,16 @@ case class StringLit(value: String) extends Literal[String]
 /**
  * Selecting a capability or a method out of a capability
  */
-case class Select(receiver: Expr, selector: IdRef) extends Expr
+case class Select(receiver: Term, selector: IdRef) extends Term
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
-case class Call(receiver: Expr, targs: List[ValueType], vargs: List[Expr], bargs: List[BlockArg]) extends Expr
+case class Call(receiver: Term, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
 
-case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
-case class While(cond: Expr, block: Stmt) extends Expr
+case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
+case class While(cond: Term, block: Stmt) extends Term
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -262,9 +262,9 @@ case class OpClause(id: IdRef, tparams: List[Id], vparams: List[ValueParam], bod
   type symbol = symbols.Operation
 }
 
-case class Hole(stmts: Stmt) extends Expr
+case class Hole(stmts: Stmt) extends Term
 
-case class MatchExpr(scrutinee: Expr, clauses: List[MatchClause]) extends Expr
+case class Match(scrutinee: Term, clauses: List[MatchClause]) extends Term
 case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
 sealed trait MatchPattern extends Tree
