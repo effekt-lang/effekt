@@ -1,8 +1,8 @@
 package effekt
 
 import effekt.context.Context
-import effekt.source.Tree
-import effekt.symbols.{ BlockType, BoxedType, CaptureSet, CaptureVar, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp }
+import effekt.source.{ Tree }
+import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureVar, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -59,26 +59,48 @@ object substitutions {
     def solve(implicit C: Context): (Substitutions, List[TypeConstraint]) = {
       var cs = constraints
       var cache: List[TypeConstraint] = Nil
-      var typeSubst: Substitutions = Map.empty
 
       var residual: List[TypeConstraint] = Nil
+
+      // This implements a simple union-find -- not very efficient
+      object equivalences {
+        import scala.collection.mutable
+
+        val classes: mutable.Map[UnificationVar, mutable.Set[ValueType]] = mutable.Map.empty
+        def find(t: UnificationVar): mutable.Set[ValueType] = classes.getOrElseUpdate(t, mutable.Set(t))
+        def union(t1: UnificationVar, t2: UnificationVar): Unit = {
+          val s1 = find(t1)
+          val s2 = find(t2)
+
+          // they are already the same equivalence class, nothing to do
+          if (s1 eq s2) return ;
+
+          val (smaller, larger) = if (s1.size < s2.size) (s1, s2) else (s2, s1)
+          larger.addAll(smaller)
+          smaller.foreach {
+            case t: UnificationVar if t.scope == self => classes.update(t, larger)
+            // what to do with "concrete" types?
+            case _ => ()
+          }
+        }
+        def add(x: UnificationVar, t: ValueType): Unit = t match {
+          case y: UnificationVar if y.scope == self => union(x, y)
+          case _ => find(x).add(t)
+        }
+        def solutions(x: UnificationVar): List[ValueType] = find(x).filter {
+          case y: UnificationVar => y.scope != self
+          case tpe               => true
+        }.toList
+      }
 
       object comparer extends TypeComparer {
         def scope = self
         def defer(t1: ValueType, t2: ValueType): Unit = residual = Eq(t1, t2, C.focus) :: residual
         def abort(msg: String) = C.abort(msg)
         def learn(x: UnificationVar, tpe: ValueType) = {
-          typeSubst.get(x).foreach { v2 => push(Eq(v2, tpe, C.focus)) }
-
-          // Use new substitution binding to refine right-hand-sides of existing substitutions.
-          // Do we need an occurs check?
-          val newSubst: Substitutions = Map(x -> tpe)
-
-          // update remaining constraints
-          cs = cs map { newSubst.substitute }
-
-          val improvedSubst: Substitutions = typeSubst.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
-          typeSubst = improvedSubst + (x -> improvedSubst.substitute(tpe))
+          // all existing solutions have to be compatible with the new one
+          equivalences.solutions(x).foreach { s => push(Eq(tpe, s, C.focus)) }
+          equivalences.add(x, tpe)
         }
       }
 
@@ -97,9 +119,44 @@ object substitutions {
         case _ => ()
       }
 
-      val undefined = skolems filterNot { x => typeSubst.isDefinedAt(x) }
+      // check whether all unification variables have a concrete solution
+      val undefined = skolems filter { x => equivalences.solutions(x).isEmpty }
 
       if (undefined.size > 0) { C.abort(s"Cannot infer type for ${undefined.mkString(" and ")}") }
+
+      def computeTypeSubstitution: Substitutions = {
+
+        var subst: Substitutions = Map.empty
+
+        def computeSubstitutionFor(x: UnificationVar): ValueType = subst.getOrElse(x, {
+          val candidates = equivalences.solutions(x).map(substitutedValueType)
+          // TODO check and error if multiple candidates
+          subst += (x -> candidates.head)
+          candidates.head
+        })
+
+        def substitutedValueType(tpe: ValueType): ValueType = tpe match {
+          case t: UnificationVar if t.scope == self => computeSubstitutionFor(t)
+          case ValueTypeApp(c, args) => ValueTypeApp(c, args map substitutedValueType)
+          case THole => THole
+          case BoxedType(btpe) => BoxedType(substitutedBlockType(btpe))
+          case _ => tpe
+        }
+        def substitutedBlockType(tpe: BlockType): BlockType = tpe match {
+          case FunctionType(tparams, vps, bps, ret) =>
+            // tparams are always disjoint from skolems!
+            FunctionType(tparams, vps map substitutedValueType, bps map substitutedBlockType, substitutedValueType(ret))
+          case BlockTypeApp(c, args) => BlockTypeApp(c, args map substitutedValueType)
+          case i: Interface          => i
+        }
+
+        skolems.foreach(computeSubstitutionFor)
+
+        subst
+      }
+
+      // compute type substitution from equivalence classes
+      val typeSubst: Substitutions = computeTypeSubstitution
 
       val substitutedResiduals = residual map { typeSubst.substitute }
 
