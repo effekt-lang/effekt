@@ -250,8 +250,8 @@ package object symbols {
       val ps = (vps ++ bps).mkString
 
       tparams match {
-        case Nil => s"$ps ⟹ $ret"
-        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $ret"
+        case Nil => s"$ps => $ret"
+        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps => $ret"
       }
     }
   }
