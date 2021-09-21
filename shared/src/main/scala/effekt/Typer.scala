@@ -30,6 +30,17 @@ import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
  * IDE support.
  * Also, after type checking, all definitions of the file will be annotated with their type.
  */
+case class TyperResult[+T](tpe: T, capt: CaptureSet)
+object / {
+  def unapply[T](t: TyperResult[T]): Option[(T, CaptureSet)] = Some((t.tpe, t.capt))
+}
+object TyperResult {
+  implicit class TypeOps[T](tpe: T) {
+    def /(capt: CaptureSet): TyperResult[T] = TyperResult(tpe, capt)
+  }
+}
+import TyperResult._
+
 class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   val phaseName = "typer"
@@ -66,16 +77,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
-  def checkExprAsBlock(expr: Term)(implicit C: Context): BlockType =
+  def checkExprAsBlock(expr: Term)(implicit C: Context): TyperResult[BlockType] =
     checkBlock(expr) {
       case source.Var(id) => id.symbol match {
-        case b: BlockSymbol => Context.lookup(b)
+        case b: BlockSymbol =>
+          // TODO this will be the most important change
+          Context.lookup(b) / CaptureSet(Set(CaptureOf(b)))
         case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
       }
 
       case source.Select(expr, selector) =>
         checkExprAsBlock(expr) match {
-          case i @ InterfaceType(interface, targs) =>
+          case (i @ InterfaceType(interface, targs) / capt) =>
             // (1) find the operation
             // try to find an operation with name "selector"
             val op = interface.ops.collect {
@@ -88,7 +101,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
             // (2) substitute type arguments
             val tsubst = (interface.tparams zip targs).toMap
-            tsubst.substitute(op.toType)
+            tsubst.substitute(op.toType) / capt
 
           case _ => Context.abort(s"Selection requires an interface type.")
         }
@@ -100,44 +113,45 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Term)(implicit C: Context): ValueType =
+  def checkExpr(expr: Term)(implicit C: Context): TyperResult[ValueType] =
     check(expr) {
-      case source.IntLit(n)     => TInt
-      case source.BooleanLit(n) => TBoolean
-      case source.UnitLit()     => TUnit
-      case source.DoubleLit(n)  => TDouble
-      case source.StringLit(s)  => TString
+      case source.IntLit(n)     => TInt / Pure
+      case source.BooleanLit(n) => TBoolean / Pure
+      case source.UnitLit()     => TUnit / Pure
+      case source.DoubleLit(n)  => TDouble / Pure
+      case source.StringLit(s)  => TString / Pure
 
       case source.If(cond, thn, els) =>
-        val cndTpe = cond checkAgainst TBoolean
-        val thnTpe = checkStmt(thn)
-        val elsTpe = checkStmt(els)
+        val cndTpe / cndCapt = cond checkAgainst TBoolean
+        val thnTpe / thnCapt = checkStmt(thn)
+        val elsTpe / elsCapt = checkStmt(els)
 
         Context.unify(thnTpe, elsTpe)
 
-        thnTpe
+        thnTpe / (cndCapt ++ thnCapt ++ elsCapt)
 
       case source.While(cond, block) =>
-        cond checkAgainst TBoolean
-        block checkAgainst TUnit
-        TUnit
+        val _ / cndCapt = cond checkAgainst TBoolean
+        val _ / blkCapt = block checkAgainst TUnit
+        TUnit / (cndCapt ++ blkCapt)
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
-        case x: ValueSymbol => Context.lookup(x)
+        case x: ValueSymbol => Context.lookup(x) / Pure
       }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val _ = expr checkAgainst Context.lookup(sym)
-        TUnit
+        val _ / capt = expr checkAgainst Context.lookup(sym)
+
+        TUnit / (capt + CaptureOf(sym))
 
       case c @ source.Call(e, targsTree, vargs, bargs) =>
-        val funTpe = checkExprAsBlock(e) match {
-          case b: FunctionType => b
-          case _               => Context.abort("Callee is required to have function type")
+        val funTpe / funCapt = checkExprAsBlock(e) match {
+          case TyperResult(b: FunctionType, capt) => b / capt
+          case _ => Context.abort("Callee is required to have function type")
         }
 
         val targs = targsTree map { _.resolve }
@@ -161,10 +175,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
         }
 
-        (vparams zip vargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
-        (bparams zip bargs) foreach { case (paramType, arg) => arg checkAgainst paramType }
+        var argCapt = Pure
+        (vparams zip vargs) foreach {
+          case (paramType, arg) =>
+            val _ / capt = arg checkAgainst paramType
+            argCapt ++= capt
+        }
+        (bparams zip bargs) foreach {
+          case (paramType, arg) =>
+            val _ / capt = arg checkAgainst paramType
+            argCapt ++= capt
+        }
 
-        ret
+        ret / (funCapt ++ argCapt)
 
       case source.TryHandle(prog, handlers) =>
 
@@ -173,7 +196,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         capabilities foreach Context.define
 
         // (2) check body
-        val ret = checkStmt(prog)
+        val ret / bodyCapt = checkStmt(prog)
+
+        var handlerCapt = Pure
 
         handlers foreach Context.withFocus { h =>
           // try { ... } with s: >>>State[Int]<<< { ... }
@@ -223,7 +248,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               Context.define(Context.symbolOf(resume), resumeType)
 
               // TODO does this need to be a fresh unification scope?
-              val opRet = Context in { body checkAgainst ret }
+              val opRet / opCapt = Context in { body checkAgainst ret }
+              handlerCapt ++= opCapt
 
               // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
               val inferredTpe = FunctionType(tparamSyms, vparamSyms.map { Context.lookup }, Nil, opRet)
@@ -233,39 +259,44 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           }
         }
 
-        ret
+        // TODO actually compute capture here
+        ret / (bodyCapt ++ handlerCapt)
 
       case source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
-        val tpe = checkExpr(sc)
+        val scTpe / scCapt = checkExpr(sc)
+
+        var capt = scCapt
 
         // (2) check exhaustivity
-        checkExhaustivity(tpe, clauses.map { _.pattern })
+        checkExhaustivity(scTpe, clauses.map { _.pattern })
 
         // (3) infer types for all clauses
-        val (fstTpe, _) :: tpes = clauses.map {
+        val (fstTpe / fstCapt, _) :: tpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
-            Context.define(checkPattern(tpe, p)) in {
+            Context.define(checkPattern(scTpe, p)) in {
               (checkStmt(body), body)
             }
         }
+        capt ++= fstCapt
 
         // (4) unify clauses and collect effects
         val tpeCases = tpes.foldLeft(fstTpe) {
-          case (expected, (clauseTpe, tree)) =>
+          case (expected, (clauseTpe / clauseCapt, tree)) =>
+            capt ++= clauseCapt
             Context.at(tree) { Context.unify(expected, clauseTpe) }
             expected
         }
-        tpeCases
+        tpeCases / capt
 
       case source.Select(expr, selector) =>
         Context.abort("Block in expression position: automatic boxing currently not supported.")
 
       case source.Hole(stmt) =>
         checkStmt(stmt)
-        THole
+        THole / Pure
     }
 
   //</editor-fold>
@@ -364,7 +395,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt)(implicit C: Context): ValueType =
+  def checkStmt(stmt: Stmt)(implicit C: Context): TyperResult[ValueType] =
     check(stmt) {
       case source.DefStmt(b, rest) =>
         val t = Context in { precheckDef(b); checkDef(b) }
@@ -424,34 +455,36 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         sym.vparams foreach Context.define
         sym.bparams foreach Context.define
 
-        sym.ret match {
+        val tpe / capt = sym.ret match {
           case Some(tpe) =>
-            val _ = body checkAgainst tpe
+            val _ / capt = body checkAgainst tpe
             Context.assignType(d, tpe)
-            tpe
+            tpe / capt
           case None =>
-            val tpe = checkStmt(body)
+            val tpe / capt = checkStmt(body)
             Context.define(sym, sym.toType(tpe))
             Context.assignType(d, tpe)
-            tpe
+            tpe / capt
         }
+        println(s"Capture of ${id} = $capt")
+        tpe
       }
 
       case d @ source.ValDef(id, annot, binding) =>
-        val t = d.symbol.tpe match {
+        val tpe / capt = d.symbol.tpe match {
           case Some(t) =>
             binding checkAgainst t
           case None => checkStmt(binding)
         }
-        Context.define(d.symbol, t)
+        Context.define(d.symbol, tpe)
 
       case d @ source.VarDef(id, annot, binding) =>
-        val t = d.symbol.tpe match {
+        val tpe / capt = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding)
         }
-        Context.define(d.symbol, t)
-        t
+        Context.define(d.symbol, tpe)
+        tpe
 
       case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
         d.symbol.vparams map { p => Context.define(p) }
@@ -465,25 +498,30 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-  def checkBlockArgument(arg: source.BlockArg)(implicit C: Context) = arg match {
+  def checkBlockArgument(arg: source.BlockArg)(implicit C: Context): TyperResult[BlockType] = arg match {
     case arg: source.FunctionArg  => checkFunctionArgument(arg)
     case arg: source.InterfaceArg => checkCapabilityArgument(arg)
   }
 
-  def checkCapabilityArgument(arg: source.InterfaceArg)(implicit C: Context) = arg.definition.tpe
+  // TODO change, right now everything is tracked!
+  def checkCapabilityArgument(arg: source.InterfaceArg)(implicit C: Context): TyperResult[BlockType] =
+    arg.definition.tpe / CaptureSet(Set(CaptureOf(arg.definition)))
 
   // Example.
   //   BlockParam: def foo { f: Int => String / Print }
   //   BlockArg: foo { n => println("hello" + n) }
   //     or
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
-  def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context) = arg match {
+  def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context): TyperResult[FunctionType] = arg match {
     case source.FunctionArg(vparams, bparams, body) =>
       vparams.foreach { p => Context.define(p.symbol) }
       bparams.foreach { p => Context.define(p.symbol) }
+
       // TODO should we open a new unifcation scope here?
-      val ret = checkStmt(body)
-      FunctionType(Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret)
+      val ret / capt = checkStmt(body)
+
+      // TODO compute correct capture set
+      FunctionType(Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capt
   }
 
   //</editor-fold>
@@ -503,43 +541,46 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   private implicit class ExprOps(expr: Term) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(expr) {
-      C.unify(tpe, checkExpr(expr))
-      tpe
+    def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(expr) {
+      val got / capt = checkExpr(expr)
+      C.unify(tpe, got)
+      tpe / capt
     }
   }
 
   private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): ValueType = Context.at(stmt) {
-      C.unify(tpe, checkStmt(stmt))
-      tpe
+    def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(stmt) {
+      val got / capt = checkStmt(stmt)
+      C.unify(tpe, got)
+      tpe / capt
     }
   }
 
   private implicit class BlockArgOps(block: source.BlockArg) {
-    def checkAgainst(tpe: BlockType)(implicit C: Context): BlockType = Context.at(block) {
-      C.unify(tpe, checkBlockArgument(block))
-      tpe
+    def checkAgainst(tpe: BlockType)(implicit C: Context): TyperResult[BlockType] = Context.at(block) {
+      val got / capt = checkBlockArgument(block)
+      C.unify(tpe, got)
+      tpe / capt
     }
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def check[T <: Tree](t: T)(f: T => ValueType)(implicit C: Context): ValueType =
+  def check[T <: Tree](t: T)(f: T => TyperResult[ValueType])(implicit C: Context): TyperResult[ValueType] =
     Context.at(t) {
-      val got = f(t)
+      val got / capt = f(t)
       wellformed(got)
       C.assignType(t, got)
-      got
+      got / capt
     }
 
-  def checkBlock[T <: Tree](t: T)(f: T => BlockType)(implicit C: Context): BlockType =
+  def checkBlock[T <: Tree](t: T)(f: T => TyperResult[BlockType])(implicit C: Context): TyperResult[BlockType] =
     Context.at(t) {
-      val got = f(t)
+      val got / capt = f(t)
       wellformed(got)
       C.assignType(t, got)
-      got
+      got / capt
     }
 }
 

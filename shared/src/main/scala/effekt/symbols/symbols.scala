@@ -305,7 +305,11 @@ package object symbols {
 
   case class CaptureSet(captures: Set[Capture]) {
     override def toString = s"{${captures.mkString(", ")}}"
+
+    def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
+    def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   }
+  val Pure = CaptureSet(Set.empty)
 
   sealed class Capture(val name: Name) extends TypeSymbol
   case class CaptureOf(sym: TermSymbol) extends Capture(sym.name)
