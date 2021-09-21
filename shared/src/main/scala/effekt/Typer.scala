@@ -137,7 +137,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
-        case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
+        case b: VarBinder => Context.abort(s"Mutable variables not yet implemented.")
+        case b: BlockSymbol => Context.abort(s"Right now blocks cannot be used as expressions.")
         case x: ValueSymbol => Context.lookup(x) / Pure
       }
 

@@ -14,6 +14,9 @@ object substitutions {
   case class Eq(tpe1: ValueType, tpe2: ValueType, position: Tree) extends TypeConstraint
   case class EqBlock(tpe1: BlockType, tpe2: BlockType, position: Tree) extends TypeConstraint
 
+  sealed trait CaptureConstraint
+  case class Sub(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint
+
   private var scopeId: Int = 0
   /**
    * A substitution scope -- every fresh unification variable is associated with a scope.
