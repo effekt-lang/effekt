@@ -35,11 +35,13 @@ object substitutions {
      * These are the unification variables introduced in the current scope
      */
     private var skolems: List[UnificationVar] = Nil
+    private var capture_skolems: List[CaptureVar] = Nil
 
     /**
      * These are the constraints introduced in the current scope
      */
     private var constraints: List[TypeConstraint] = Nil
+    private var capture_constraints: List[CaptureConstraint] = Nil
 
     def requireEqual(t1: ValueType, t2: ValueType)(implicit C: Context) = constraints = Eq(t1, t2, C.focus) :: constraints
 
