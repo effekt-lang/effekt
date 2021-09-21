@@ -42,6 +42,11 @@ def test() = {
 
 def oneOf[A](fst: A, snd: A): A = fst
 
+def boxedTest { foo: State[Int] } = {
+  def boxed(b: (Int) => Int at { foo }): Int = 42;
+
+  ()
+}
 
 def residual() = {
   // this introduces a unification variable in the outer scope

@@ -410,14 +410,17 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.BoxedType(tpe) =>
-        BoxedType(resolve(tpe), Pure)
+      case source.BoxedType(tpe, capt) =>
+        BoxedType(resolve(tpe), resolve(capt))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type
     kinds.wellformed(res)
     res
   }
+
+  def resolve(capt: source.CaptureSet)(implicit C: Context): CaptureSet =
+    CaptureSet(capt.captures.map { id => CaptureOf(Context.resolveTerm(id).asBlockSymbol) }.toSet)
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
     val res = tpe match {

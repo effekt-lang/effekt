@@ -80,11 +80,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `include` = keyword("include")
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
+  lazy val `at` = keyword("at")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "for", "interface"
+    "match", "module", "import", "extern", "fun", "for", "interface", "at"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -452,7 +453,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
 
   lazy val valueType: P[ValueType] =
-    ( funType
+    ( boxedType
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | idRef ~ typeArgs ^^ ValueTypeApp
@@ -461,10 +462,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   // for now function types need to be parenthesized
-  lazy val funType: P[BoxedType] =
-    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ {
-      case params ~ ret => BoxedType(FunctionType(params, ret))
-    }
+  lazy val boxedType: P[BoxedType] = blockType ~ (`at` ~> captureSet) ^^ BoxedType
+
+  lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet
 
   lazy val interfaceType: P[BlockType] =
     ( idRef ~ typeArgs ^^ BlockTypeApp
