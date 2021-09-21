@@ -666,6 +666,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   def unify(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
   def unify(t1: BlockType, t2: BlockType) = scope.requireEqual(t1, t2)
+  def unify(c1: CaptureSet, c2: CaptureSet) = scope.requireEqual(c1, c2)
+  def sub(c1: CaptureSet, c2: CaptureSet) = scope.requireSub(c1, c2)
+
   def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
   def freshCaptVar(underlying: Capture) = scope.freshCaptVar(underlying)
 

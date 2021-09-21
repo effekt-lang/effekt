@@ -54,6 +54,10 @@ object substitutions {
 
     def requireEqual(t1: BlockType, t2: BlockType)(implicit C: Context) = constraints = EqBlock(t1, t2, C.focus) :: constraints
 
+    def requireEqual(capt1: CaptureSet, capt2: CaptureSet)(implicit C: Context) = capture_constraints = EqCapt(capt1, capt2, C.focus) :: capture_constraints
+
+    def requireSub(capt1: CaptureSet, capt2: CaptureSet)(implicit C: Context) = capture_constraints = Sub(capt1, capt2, C.focus) :: capture_constraints
+
     def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
 
     def instantiate(tpe: FunctionType): (List[UnificationVar], FunctionType) = {
