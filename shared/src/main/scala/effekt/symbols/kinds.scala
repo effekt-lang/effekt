@@ -5,6 +5,8 @@ import effekt.context.Context
 
 package object kinds {
 
+  def wellformed(capt: CaptureSet): Unit = ()
+
   def wellformed(tpe: Type)(implicit C: Context): Unit = tpe match {
     case t: ValueType => wellformed(t)
     case t: BlockType => wellformed(t)
@@ -34,11 +36,13 @@ package object kinds {
   }
 
   private def wellformedType(tpe: ValueType)(implicit C: Context): Kind = tpe match {
-    case BoxedType(tpe) =>
+    case BoxedType(tpe, capt) =>
+      wellformed(capt)
       wellformedType(tpe) match {
         case Kind.BType => Kind.VType
         case t          => C.abort(s"Expected a block type, but got: ${t}")
       }
+
     case _: TypeVar => Kind.VType
     case ValueTypeApp(tpe, args) =>
       val Kind.Fun(params, res) = wellformedType(tpe) match {

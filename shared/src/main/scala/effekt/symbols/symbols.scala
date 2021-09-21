@@ -178,7 +178,7 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class BoxedType(tpe: BlockType /*, region: Region */ ) extends ValueType
+  case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
 
   class TypeVar(val name: LocalName) extends ValueType with TypeSymbol
   object TypeVar {

@@ -291,7 +291,7 @@ trait AnnotationsDB { self: Context =>
         case _            => None
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap {
-        case symbols.BoxedType(tpe: BlockType) => Some(tpe)
+        case symbols.BoxedType(tpe: BlockType, capt) => Some(tpe)
         case _ => None
       }
     }

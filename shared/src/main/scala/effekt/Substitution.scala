@@ -112,6 +112,7 @@ object substitutions {
       object comparer extends TypeComparer {
         def scope = self
         def defer(t1: ValueType, t2: ValueType): Unit = residual = Eq(t1, t2, C.focus) :: residual
+
         def abort(msg: String) = C.abort(msg)
         def learn(x: UnificationVar, tpe: ValueType) = {
           // all existing solutions have to be compatible with the new one
@@ -156,7 +157,7 @@ object substitutions {
           case t: UnificationVar if t.scope == self => computeSubstitutionFor(t)
           case ValueTypeApp(c, args) => ValueTypeApp(c, args map substitutedValueType)
           case THole => THole
-          case BoxedType(btpe) => BoxedType(substitutedBlockType(btpe))
+          case BoxedType(btpe, capt) => BoxedType(substitutedBlockType(btpe), capt)
           case _ => tpe
         }
         def substitutedBlockType(tpe: BlockType): BlockType = tpe match {
@@ -195,8 +196,8 @@ object substitutions {
         substitutions.getOrElse(x, x)
       case ValueTypeApp(t, args) =>
         ValueTypeApp(t, args.map { substitute })
-      case BoxedType(tpe) =>
-        BoxedType(substitute(tpe))
+      case BoxedType(tpe, capt) =>
+        BoxedType(substitute(tpe), capt)
       case other => other
     }
 
@@ -227,6 +228,8 @@ object substitutions {
     def scope: UnificationScope
     def defer(t1: ValueType, t2: ValueType): Unit
 
+    def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
       case (t, s) if t == s => ()
       case (s: UnificationVar, t: ValueType) if s.scope == scope => learn(s, t)
@@ -246,7 +249,9 @@ object substitutions {
         (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
 
       case (THole, _) | (_, THole) => ()
-      case (BoxedType(tpe1), BoxedType(tpe2)) => unifyBlockTypes(tpe1, tpe2)
+      case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2)) =>
+        unifyBlockTypes(tpe1, tpe2)
+        unify(capt1, capt2)
 
       case (t, s) => abort(s"Expected ${t}, but got ${s}")
     }

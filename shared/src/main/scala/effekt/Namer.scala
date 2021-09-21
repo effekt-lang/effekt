@@ -411,7 +411,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       case source.ValueTypeTree(tpe) =>
         tpe
       case source.BoxedType(tpe) =>
-        BoxedType(resolve(tpe))
+        BoxedType(resolve(tpe), Pure)
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type
