@@ -81,8 +81,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     checkBlock(expr) {
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol =>
-          // TODO this will be the most important change
-          Context.lookup(b) / CaptureSet(Set(CaptureOf(b)))
+          val (tpe, capt) = Context.lookup(b)
+          tpe / capt
         case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
       }
 
@@ -137,7 +137,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
-        case b: VarBinder => Context.abort(s"Mutable variables not yet implemented.")
+        case b: VarBinder   => Context.abort(s"Mutable variables not yet implemented.")
         case b: BlockSymbol => Context.abort(s"Right now blocks cannot be used as expressions.")
         case x: ValueSymbol => Context.lookup(x) / Pure
       }
@@ -240,13 +240,16 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               val FunctionType(tparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
 
               // (4b) check the body of the clause
-              val resumeType = FunctionType(Nil, List(ret1), Nil, ret)
-
               val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
               val vparamSyms = vparams.map { p => p.symbol }
 
               vparamSyms foreach Context.define
-              Context.define(Context.symbolOf(resume), resumeType)
+
+              // TODO add constraints on resume capture
+              val resumeType = FunctionType(Nil, List(ret1), Nil, ret)
+              val resumeSym = Context.symbolOf(resume).asBlockSymbol
+              val resumeCapture = C.freshCaptVar(CaptureOf(resumeSym))
+              Context.define(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
 
               // TODO does this need to be a fresh unification scope?
               val opRet / opCapt = Context in { body checkAgainst ret }
@@ -420,29 +423,31 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   // we also need to create fresh capture variables to collect constraints
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
-      d.symbol.ret.foreach { annot =>
-        Context.define(d.symbol, d.symbol.toType)
+      val funSym = d.symbol
+      funSym.ret.foreach { annot =>
+        val funCapt = C.freshCaptVar(CaptureOf(funSym))
+        Context.define(d.symbol, d.symbol.toType, CaptureSet(Set(funCapt)))
       }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      Context.define(d.symbol, d.symbol.toType)
+      Context.define(d.symbol, d.symbol.toType, Pure)
 
     case d @ source.InterfaceDef(id, tparams, ops) =>
       d.symbol.ops.foreach { op =>
         val tpe = op.toType
         wellformed(tpe)
-        Context.define(op, tpe)
+        Context.define(op, tpe, Pure)
       }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        Context.define(sym, sym.toType)
+        Context.define(sym, sym.toType, Pure)
 
         sym.fields.foreach { field =>
           val tpe = field.toType
           wellformed(tpe)
-          Context.define(field, tpe)
+          Context.define(field, tpe, Pure)
         }
       }
 
@@ -463,10 +468,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             tpe / capt
           case None =>
             val tpe / capt = checkStmt(body)
-            Context.define(sym, sym.toType(tpe))
+            Context.define(sym, sym.toType(tpe), capt)
             Context.assignType(d, tpe)
             tpe / capt
         }
+
+        // TODO do something with the annotated capture set.
+        // for example, unify with capt
+
         println(s"Capture of ${id} = $capt")
         tpe
       }
@@ -624,8 +633,9 @@ trait TyperOps extends ContextOps { self: Context =>
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
     blockTypingContext foreach {
-      case (s, tpe) =>
+      case (s, (tpe, capt)) =>
         assignType(s, tpe)
+        assignCaptureSet(s, capt)
         println(s"${s.name} : $tpe")
     }
   }
@@ -644,7 +654,7 @@ trait TyperOps extends ContextOps { self: Context =>
     // The unification variables now go out of scope:
     // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
     valueTypingContext = valueTypingContext.view.mapValues { subst.substitute }.toMap
-    blockTypingContext = blockTypingContext.view.mapValues { subst.substitute }.toMap
+    blockTypingContext = blockTypingContext.view.mapValues { case (tpe, capt) => (subst.substitute(tpe), capt) }.toMap
     outerScope.addAll(cs)
 
     println(s"leaving scope ${scope.id}")
@@ -657,6 +667,7 @@ trait TyperOps extends ContextOps { self: Context =>
   def unify(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
   def unify(t1: BlockType, t2: BlockType) = scope.requireEqual(t1, t2)
   def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
+  def freshCaptVar(underlying: Capture) = scope.freshCaptVar(underlying)
 
   // Inferred types
   // ==============
@@ -684,7 +695,7 @@ trait TyperOps extends ContextOps { self: Context =>
   // ====================
   // since symbols are unique, we can use mutable state instead of reader
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
-  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+  private var blockTypingContext: Map[Symbol, (BlockType, CaptureSet)] = Map.empty
 
   // first tries to find the type in the local typing context
   // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
@@ -692,20 +703,20 @@ trait TyperOps extends ContextOps { self: Context =>
     valueTypingContext.getOrElse(s, valueTypeOf(s))
 
   private[typer] def lookup(s: BlockSymbol) =
-    blockTypingContext.getOrElse(s, blockTypeOf(s))
+    blockTypingContext.getOrElse(s, (blockTypeOf(s), captureOf(s)))
 
-  private[typer] def define(s: Symbol, t: ValueType): Context = {
-    valueTypingContext += (s -> t); this
+  private[typer] def define(s: Symbol, tpe: ValueType): Context = {
+    valueTypingContext += (s -> tpe); this
   }
 
-  private[typer] def define(s: Symbol, t: BlockType): Context = {
-    blockTypingContext += (s -> t); this
+  private[typer] def define(s: Symbol, tpe: BlockType, capt: CaptureSet): Context = {
+    blockTypingContext += (s -> (tpe, capt)); this
   }
 
-  private[typer] def define(bs: Map[Symbol, Type]): Context = {
+  private[typer] def define(bs: Map[Symbol, ValueType]): Context = {
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => define(v, t)
-      case (v: BlockSymbol, t: FunctionType) => define(v, t)
+      //        case (v: BlockSymbol, t: FunctionType) => define(v, t)
       case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
     }; this
   }
@@ -717,7 +728,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def define(p: BlockParam): Context = p match {
-    case s @ BlockParam(name, tpe) => define(s, tpe)
+    case s @ BlockParam(name, tpe) => define(s, tpe, CaptureSet(Set(CaptureOf(s))))
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
   }
 }

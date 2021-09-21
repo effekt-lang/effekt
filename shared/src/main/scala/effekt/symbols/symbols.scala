@@ -313,7 +313,7 @@ package object symbols {
 
   sealed class Capture(val name: Name) extends TypeSymbol
   case class CaptureOf(sym: TermSymbol) extends Capture(sym.name)
-  case class CaptureVar(underlying: Capture) extends Capture(underlying.name) {
+  case class CaptureVar(underlying: Capture, scope: UnificationScope) extends Capture(underlying.name) {
     override def toString = "?" + underlying.name + id
   }
 }

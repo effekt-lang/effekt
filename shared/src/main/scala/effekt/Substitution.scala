@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.{ Tree }
-import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureVar, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
+import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureVar, Capture, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -16,6 +16,7 @@ object substitutions {
 
   sealed trait CaptureConstraint
   case class Sub(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint
+  case class EqCapt(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint
 
   private var scopeId: Int = 0
   /**
@@ -28,6 +29,12 @@ object substitutions {
     def fresh(underlying: TypeVar): UnificationVar = {
       val x = UnificationVar(underlying, this)
       skolems = x :: skolems
+      x
+    }
+
+    def freshCaptVar(underlying: Capture): CaptureVar = {
+      val x = CaptureVar(underlying, this)
+      capture_skolems = x :: capture_skolems
       x
     }
 

@@ -99,6 +99,16 @@ object Annotations {
   )
 
   /**
+   * Block symbols are annotated with their capture set
+   *
+   * Block symbols without annotation are assumed to be tracked
+   */
+  val CaptureSet = Annotation[symbols.BlockSymbol, symbols.CaptureSet](
+    "CaptureSet",
+    "the capture set of block symbol"
+  )
+
+  /**
    * The module a given symbol is defined in
    */
   val SourceModule = Annotation[symbols.Symbol, symbols.Module](
@@ -211,7 +221,7 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, FunctionType, BlockType, ValueSymbol, BlockSymbol, Module }
+  import symbols.{ Symbol, Type, ValueType, FunctionType, BlockType, ValueSymbol, BlockSymbol, Module, CaptureSet }
 
   // Types
   // -----
@@ -236,6 +246,18 @@ trait AnnotationsDB { self: Context =>
   def assignType(s: Symbol, tpe: ValueType): Unit = s match {
     case b: ValueSymbol => annotate(Annotations.ValueType, b, tpe)
     case _              => panic(s"Trying to store a value type for non value '${s}'")
+  }
+
+  def assignCaptureSet(s: Symbol, capt: CaptureSet): Unit = s match {
+    case b: BlockSymbol => annotate(Annotations.CaptureSet, b, capt)
+    case _              => panic(s"Trying to store a capture set for non block '${s}'")
+  }
+
+  def captureOf(s: Symbol): CaptureSet = captureOption(s) getOrElse panic(s"Cannot find capture set for '${s}'")
+
+  def captureOption(s: Symbol): Option[CaptureSet] = s match {
+    case b: BlockSymbol => annotationOption(Annotations.CaptureSet, b)
+    case _              => panic(s"Trying to lookup a capture set for non block '${s}'")
   }
 
   def annotateResolvedType(tree: source.Type)(tpe: tree.resolved): Unit =
