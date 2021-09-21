@@ -312,24 +312,4 @@ package object symbols {
   case class CaptureVar(underlying: Capture) extends Capture(underlying.name) {
     override def toString = "?" + underlying.name + id
   }
-
-  //  trait CaptureSet
-  //
-  //  // we need at least two kinds of capture variables:
-  //  // 1) one that point to block parameters
-  //  // 2) one that is a unification variable
-  //  // typically, the second also has a pointer to the first
-  //
-  //  // TODO those should be symbols...
-  //  trait CaptVar extends CaptureSet
-  //
-  //  case class CaptParam(param: BlockParam) extends CaptVar
-  //  case class CaptRigid(underlying: CaptVar) extends CaptVar
-  //
-  //  case class Union(c1: CaptureSet, c2: CaptureSet) extends CaptureSet
-
-  // TODO:
-  //   represent function types as something like:
-  //    FunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[(BlockType, CaptVar)] ret: ValueType)
-
 }

@@ -130,6 +130,7 @@ object substitutions {
 
         def computeSubstitutionFor(x: UnificationVar): ValueType = subst.getOrElse(x, {
           val candidates = equivalences.solutions(x).map(substitutedValueType)
+          if (candidates.size > 1) { C.error(s"Type variable $x cannot be instantiated with both ${candidates.mkString(" and ")}") }
           // TODO check and error if multiple candidates
           subst += (x -> candidates.head)
           candidates.head
