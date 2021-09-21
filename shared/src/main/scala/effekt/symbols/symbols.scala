@@ -109,7 +109,8 @@ package object symbols {
 
     // invariant: only works if ret is defined!
     def toType: FunctionType = annotatedType.get
-    def toType(ret: ValueType): FunctionType = FunctionType(tparams, vparams map paramToType, bparams map paramToType, ret)
+    /** TODO: is this the right thing for cparams? */
+    def toType(ret: ValueType): FunctionType = FunctionType(tparams, Nil, vparams map paramToType, bparams map paramToType, ret)
     def annotatedType: Option[FunctionType] = ret map { toType }
   }
 
@@ -243,16 +244,23 @@ package object symbols {
    */
   sealed trait BlockType extends Type
 
-  case class FunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockType], ret: ValueType) extends BlockType {
+  case class FunctionType(tparams: List[TypeVar], cparams: List[CaptureVar], vparams: List[ValueType], bparams: List[BlockType], ret: ValueType) extends BlockType {
     override def toString: String = {
       val vps = s"(${vparams.map { _.toString }.mkString(", ")})"
       val bps = bparams.map { b => s"{${b.toString}}" }
       val ps = (vps ++ bps).mkString
 
-      tparams match {
-        case Nil => s"$ps => $ret"
-        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps => $ret"
+      val ts = tparams match {
+        case Nil => s""
+        case tps => s"[${tps.map { _.toString }.mkString(", ")}]"
       }
+
+      val cs = cparams match {
+        case Nil => s""
+        case cps => s"[${cps.map { _.toString }.mkString(", ")}]"
+      }
+
+      s"$ts $cs $ps => $ret"
     }
   }
 

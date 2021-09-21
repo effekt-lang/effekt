@@ -60,7 +60,8 @@ package object kinds {
   }
 
   private def wellformedType(tpe: BlockType)(implicit C: Context): Kind = tpe match {
-    case FunctionType(tparams, vparams, bparams, ret) =>
+    /** TODO: check cparams */
+    case FunctionType(tparams, cparams, vparams, bparams, ret) =>
       vparams.foreach { tpe => wellformed(tpe) }
       bparams.foreach { tpe => wellformed(tpe) }
       wellformed(ret)

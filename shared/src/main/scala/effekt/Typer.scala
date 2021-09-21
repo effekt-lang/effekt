@@ -159,7 +159,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         // (1) Instantiate blocktype
         // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-        val (rigids, bt @ FunctionType(_, vparams, bparams, ret)) = Context.instantiate(funTpe)
+        // TODO: do something about capture params
+        val (rigids, bt @ FunctionType(_, _, vparams, bparams, ret)) = Context.instantiate(funTpe)
 
         // (2) Wellformedness -- check arity
         if (targs.nonEmpty && targs.size != rigids.size)
@@ -237,7 +238,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               //   bar: [B](a: A) -> B
               // and substitute { A -> Int}
               //   barSubstituted: [B](a: Int) -> B
-              val FunctionType(tparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
+              // TODO: do something about capture set
+              val FunctionType(tparams1, cparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
 
               // (4b) check the body of the clause
               val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
@@ -246,7 +248,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               vparamSyms foreach Context.define
 
               // TODO add constraints on resume capture
-              val resumeType = FunctionType(Nil, List(ret1), Nil, ret)
+              val resumeType = FunctionType(Nil, Nil, List(ret1), Nil, ret)
               val resumeSym = Context.symbolOf(resume).asBlockSymbol
               val resumeCapture = C.freshCaptVar(CaptureOf(resumeSym))
               Context.define(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
@@ -256,8 +258,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               handlerCapt ++= opCapt
 
               // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
-              val inferredTpe = FunctionType(tparamSyms, vparamSyms.map { Context.lookup }, Nil, opRet)
-              val expectedTpe = FunctionType(tparams1, vparams1, bparams1, ret)
+              /** TODO: do something about capture set parameters */
+              val inferredTpe = FunctionType(tparamSyms, Nil, vparamSyms.map { Context.lookup }, Nil, opRet)
+              val expectedTpe = FunctionType(tparams1, cparams1, vparams1, bparams1, ret)
 
               Context.unify(inferredTpe, expectedTpe)
           }
@@ -531,14 +534,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       val ret / capt = checkStmt(body)
 
       // TODO compute correct capture set
-      FunctionType(Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capt
+      FunctionType(Nil, Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capt
   }
 
   //</editor-fold>
 
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
-    case FunctionType(tparams, vparams, bparams, ret) =>
+    /** TODO: do something about cparams */
+    case FunctionType(tparams, cparams, vparams, bparams, ret) =>
       freeTypeVars(vparams) ++ freeTypeVars(bparams) ++ freeTypeVars(ret) -- tparams.toSet
     // case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols

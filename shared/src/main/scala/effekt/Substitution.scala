@@ -61,14 +61,15 @@ object substitutions {
     def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
 
     def instantiate(tpe: FunctionType): (List[UnificationVar], FunctionType) = {
-      val FunctionType(tparams, vparams, bparams, ret) = tpe
+      val FunctionType(tparams, cparams, vparams, bparams, ret) = tpe
       val subst = tparams.map { p => p -> fresh(p) }.toMap
       val rigids = subst.values.toList
 
       val substitutedVparams = vparams map subst.substitute
       val substitutedBparams = bparams map subst.substitute
       val substitutedReturn = subst.substitute(ret)
-      (rigids, FunctionType(Nil, substitutedVparams, substitutedBparams, substitutedReturn))
+      /** TODO: do something about capture metavariables on a function type */
+      (rigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
@@ -161,9 +162,10 @@ object substitutions {
           case _ => tpe
         }
         def substitutedBlockType(tpe: BlockType): BlockType = tpe match {
-          case FunctionType(tparams, vps, bps, ret) =>
+          case FunctionType(tparams, cparams, vps, bps, ret) =>
             // tparams are always disjoint from skolems!
-            FunctionType(tparams, vps map substitutedValueType, bps map substitutedBlockType, substitutedValueType(ret))
+            // TODO: is this the right thing for capture parameters?
+            FunctionType(tparams, cparams, vps map substitutedValueType, bps map substitutedBlockType, substitutedValueType(ret))
           case BlockTypeApp(c, args) => BlockTypeApp(c, args map substitutedValueType)
           case i: Interface          => i
         }
@@ -208,10 +210,11 @@ object substitutions {
     }
 
     def substitute(t: FunctionType): FunctionType = t match {
-      case FunctionType(tps, vps, bps, ret) =>
+      case FunctionType(tps, cps, vps, bps, ret) =>
         // do not substitute with types parameters bound by this function!
         val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
-        FunctionType(tps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
+        // TODO: check capture parameters
+        FunctionType(tps, cps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
     }
 
     def substitute(c: TypeConstraint): TypeConstraint = c match {
@@ -267,7 +270,8 @@ object substitutions {
       if (tpe1 != tpe2) abort(s"Expected ${tpe1}, but got ${tpe2}")
 
     def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType): Unit = (tpe1, tpe2) match {
-      case (f1 @ FunctionType(tparams1, vparams1, bparams1, ret1), f2 @ FunctionType(tparams2, vparams2, bparams2, ret2)) =>
+      /** TODO: check if right thing for capture set parameters */
+      case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2)) =>
 
         if (tparams1.size != tparams2.size)
           abort(s"Type parameter count does not match $f1 vs. $f2")
@@ -278,7 +282,7 @@ object substitutions {
         if (bparams1.size != bparams2.size)
           abort(s"Block parameter count does not match $f1 vs. $f2")
 
-        val (rigids2, FunctionType(_, substVparams2, substBparams2, substRet2)) = scope.instantiate(f2)
+        val (rigids2, FunctionType(_, _, substVparams2, substBparams2, substRet2)) = scope.instantiate(f2)
 
         unifyValueTypes(ret1, substRet2)
 
