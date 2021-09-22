@@ -152,6 +152,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       }
       C.bind(C.inferredTypeOf(tree), Match(scrutinee, cs))
 
+    case source.Box(_, block) =>
+      Box(transform(block))
+
     // TODO generate "pure" applications again
     case c @ source.Call(e, _, vargs, bargs) =>
       val b = transformAsBlock(e)

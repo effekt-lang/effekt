@@ -149,6 +149,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         TUnit / (capt + CaptureOf(sym))
 
+      case source.Box(annotatedCapt, block) =>
+        val tpe / capt = checkBlockArgument(block)
+        val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(C.freshCaptVar())
+        C.sub(capt, expectedCapt)
+        BoxedType(tpe, expectedCapt) / Pure
+
       case c @ source.Call(e, targsTree, vargs, bargs) =>
         val funTpe / funCapt = checkExprAsBlock(e) match {
           case TyperResult(b: FunctionType, capt) => b / capt
@@ -683,6 +689,8 @@ trait TyperOps extends ContextOps { self: Context =>
   def sub(c1: CaptureSet, c2: Capture): Unit = sub(c1, CaptureSet(Set(c2)))
 
   def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
+
+  def freshCaptVar() = ???
   def freshCaptVar(underlying: Capture) = scope.freshCaptVar(underlying)
 
   // Inferred types

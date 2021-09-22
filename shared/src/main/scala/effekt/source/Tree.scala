@@ -176,6 +176,8 @@ case class Select(receiver: Term, selector: IdRef) extends Term
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
 case class Call(receiver: Term, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
 
+case class Box(capt: Option[CaptureSet], block: BlockArg) extends Term
+
 case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
 case class While(cond: Term, block: Stmt) extends Term
 
@@ -272,7 +274,7 @@ case class ValueTypeApp(id: IdRef, params: List[ValueType]) extends ValueType wi
 
 case class CaptureSet(captures: List[IdRef]) extends Resolvable {
   type resolved = symbols.CaptureSet
-  def resolve(implicit C: Context) = ???
+  def resolve(implicit C: Context): resolved = ???
 }
 
 sealed trait BlockType extends Type
