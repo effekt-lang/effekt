@@ -12,10 +12,10 @@ object substitutions {
 
   // TODO add some metadata to this constraint: aka. provenance of the types, source position of the constraint, expected / got?
   case class Eq(tpe1: ValueType, tpe2: ValueType, position: Tree) extends TypeConstraint {
-    override def toString = s"$tpe1 <:< $tpe2"
+    override def toString = s"$tpe1 =:= $tpe2"
   }
   case class EqBlock(tpe1: BlockType, tpe2: BlockType, position: Tree) extends TypeConstraint {
-    override def toString = s"$tpe1 <:< $tpe2"
+    override def toString = s"$tpe1 =:= $tpe2"
   }
 
   sealed trait CaptureConstraint
