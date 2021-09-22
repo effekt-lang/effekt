@@ -68,16 +68,20 @@ object substitutions {
 
     def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
 
-    def instantiate(tpe: FunctionType): (List[UnificationVar], FunctionType) = {
+    def instantiate(tpe: FunctionType): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
       val FunctionType(tparams, cparams, vparams, bparams, ret) = tpe
-      val subst = tparams.map { p => p -> fresh(p) }.toMap
-      val rigids = subst.values.toList
+      val typeSubst = tparams.map { p => p -> fresh(p) }.toMap
 
-      val substitutedVparams = vparams map subst.substitute
-      val substitutedBparams = bparams map subst.substitute
-      val substitutedReturn = subst.substitute(ret)
+      val captRigids = cparams map freshCaptVar
+      val captSubst = (cparams zip captRigids).map { case (p, r) => p -> CaptureSet(Set(r)) }.toMap
+
+      val typeRigids = typeSubst.values.toList
+
+      val substitutedVparams = vparams map typeSubst.substitute
+      val substitutedBparams = bparams map typeSubst.substitute
+      val substitutedReturn = captSubst.substitute(typeSubst.substitute(ret))
       /** TODO: do something about capture metavariables on a function type */
-      (rigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
+      (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
@@ -233,6 +237,44 @@ object substitutions {
     }
   }
 
+  // TODO generalize to a bi-substitution Map[Capture, (CaptureSet, CaptureSet)]
+  implicit class CaptureSubstitutionOps(substitutions: Map[Capture, CaptureSet]) {
+
+    def substitute(c: CaptureSet): CaptureSet = CaptureSet(c.captures.flatMap {
+      case c => substitutions.getOrElse(c, CaptureSet(Set(c))).captures
+    })
+
+    def substitute(t: ValueType): ValueType = t match {
+      case x: TypeVar            => x
+      case ValueTypeApp(t, args) => ValueTypeApp(t, args.map { substitute })
+      case BoxedType(tpe, capt)  => BoxedType(substitute(tpe), substitute(capt))
+      case other                 => other
+    }
+
+    def substitute(t: BlockType): BlockType = t match {
+      // TODO for now substitution doesn't do anything on capability types.
+      case b: InterfaceType => b
+      case b: FunctionType  => substitute(b)
+    }
+
+    def substitute(t: FunctionType): FunctionType = t match {
+      case FunctionType(tps, cps, vps, bps, ret) =>
+        // do not substitute with capture parameters bound by this function!
+        val substWithout = substitutions.filterNot { case (t, _) => cps.contains(t) }
+        FunctionType(tps, cps, vps map substitute, bps map substitute, substWithout.substitute(ret))
+    }
+
+    def substitute(c: TypeConstraint): TypeConstraint = c match {
+      case Eq(t1, t2, pos)      => Eq(substitute(t1), substitute(t2), pos)
+      case EqBlock(t1, t2, pos) => EqBlock(substitute(t1), substitute(t2), pos)
+    }
+
+    def substitute(c: CaptureConstraint): CaptureConstraint = c match {
+      case Sub(c1, c2, pos)    => Sub(substitute(c1), substitute(c2), pos)
+      case EqCapt(c1, c2, pos) => EqCapt(substitute(c1), substitute(c2), pos)
+    }
+  }
+
   trait TypeComparer {
 
     // "unification effects"
@@ -242,6 +284,7 @@ object substitutions {
     def defer(t1: ValueType, t2: ValueType): Unit
 
     def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+    def unify(c1: Capture, c2: Capture): Unit = ???
 
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
       case (t, s) if t == s => ()
@@ -292,11 +335,12 @@ object substitutions {
         if (bparams1.size != bparams2.size)
           abort(s"Block parameter count does not match $f1 vs. $f2")
 
-        val (rigids2, FunctionType(_, _, substVparams2, substBparams2, substRet2)) = scope.instantiate(f2)
+        val (trigids2, crigids2, FunctionType(_, _, substVparams2, substBparams2, substRet2)) = scope.instantiate(f2)
 
         unifyValueTypes(ret1, substRet2)
 
-        (tparams1 zip rigids2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
+        (tparams1 zip trigids2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
+        (cparams1 zip crigids2) foreach { case (t1, t2) => unify(t2, t1) }
         (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
         (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t2, t1) }
     }

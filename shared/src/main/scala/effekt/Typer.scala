@@ -160,10 +160,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // (1) Instantiate blocktype
         // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
         // TODO: do something about capture params
-        val (rigids, bt @ FunctionType(_, _, vparams, bparams, ret)) = Context.instantiate(funTpe)
+        val (trigids, crigids, bt @ FunctionType(_, _, vparams, bparams, ret)) = Context.instantiate(funTpe)
 
         // (2) Wellformedness -- check arity
-        if (targs.nonEmpty && targs.size != rigids.size)
+        if (targs.nonEmpty && targs.size != trigids.size)
           Context.abort(s"Wrong number of type arguments ${targs.size}")
 
         if (vparams.size != vargs.size)
@@ -174,7 +174,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         // (3) Unify with provided type arguments, if any.
         if (targs.nonEmpty) {
-          (rigids zip targs) map { case (r, a) => Context.unify(r, a) }
+          (trigids zip targs) map { case (r, a) => Context.unify(r, a) }
         }
 
         var argCapt = Pure
@@ -183,9 +183,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             val _ / capt = arg checkAgainst paramType
             argCapt ++= capt
         }
-        (bparams zip bargs) foreach {
-          case (paramType, arg) =>
+        (bparams zip bargs zip crigids) foreach {
+          case ((paramType, arg), cvar) =>
             val _ / capt = arg checkAgainst paramType
+
+            // here we use unify, not sub since this really models substitution
+            C.unify(capt, cvar)
             argCapt ++= capt
         }
 
@@ -671,7 +674,13 @@ trait TyperOps extends ContextOps { self: Context =>
   def unify(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
   def unify(t1: BlockType, t2: BlockType) = scope.requireEqual(t1, t2)
   def unify(c1: CaptureSet, c2: CaptureSet) = scope.requireEqual(c1, c2)
+
   def sub(c1: CaptureSet, c2: CaptureSet) = scope.requireSub(c1, c2)
+
+  // these are different methods because those are constraints that we like to introduce
+  // might help refactoring later
+  def unify(c1: CaptureSet, c2: Capture): Unit = unify(c1, CaptureSet(Set(c2)))
+  def sub(c1: CaptureSet, c2: Capture): Unit = sub(c1, CaptureSet(Set(c2)))
 
   def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
   def freshCaptVar(underlying: Capture) = scope.freshCaptVar(underlying)
