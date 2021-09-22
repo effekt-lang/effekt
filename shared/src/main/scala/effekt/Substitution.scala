@@ -11,12 +11,20 @@ object substitutions {
   sealed trait TypeConstraint
 
   // TODO add some metadata to this constraint: aka. provenance of the types, source position of the constraint, expected / got?
-  case class Eq(tpe1: ValueType, tpe2: ValueType, position: Tree) extends TypeConstraint
-  case class EqBlock(tpe1: BlockType, tpe2: BlockType, position: Tree) extends TypeConstraint
+  case class Eq(tpe1: ValueType, tpe2: ValueType, position: Tree) extends TypeConstraint {
+    override def toString = s"$tpe1 <:< $tpe2"
+  }
+  case class EqBlock(tpe1: BlockType, tpe2: BlockType, position: Tree) extends TypeConstraint {
+    override def toString = s"$tpe1 <:< $tpe2"
+  }
 
   sealed trait CaptureConstraint
-  case class Sub(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint
-  case class EqCapt(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint
+  case class Sub(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint {
+    override def toString = s"$capt1 <:< $capt2"
+  }
+  case class EqCapt(capt1: CaptureSet, capt2: CaptureSet, position: Tree) extends CaptureConstraint {
+    override def toString = s"$capt1 =:= $capt2"
+  }
 
   private var scopeId: Int = 0
   /**
@@ -174,6 +182,8 @@ object substitutions {
 
         subst
       }
+
+      println(s"Capture constraints: ${capture_constraints}")
 
       // compute type substitution from equivalence classes
       val typeSubst: Substitutions = computeTypeSubstitution
