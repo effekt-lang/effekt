@@ -92,6 +92,22 @@ object substitutions {
 
       var residual: List[TypeConstraint] = Nil
 
+
+
+      // Notes on Constraints
+      // --------------------
+      // Set[Constraint], alreadySeen: Set[Constraint], Map[EquiUniVar, (List[CaptureSet], List[CaptureSet])]
+      //
+      // {exc} <: ?C
+      // ?C <: {amb}
+      //
+      // ?C =:= ?D // this amounts to a substitution
+      // ?C <: ?D /\ ?D <: ?C
+      //
+      // [?D, exc] <: ?C <: [amb]
+      // {exc} <: {amb}
+      // ?D <: {amb}
+
       // This implements a simple union-find -- not very efficient
       object equivalences {
         import scala.collection.mutable
