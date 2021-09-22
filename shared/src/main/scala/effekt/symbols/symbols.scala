@@ -109,8 +109,7 @@ package object symbols {
 
     // invariant: only works if ret is defined!
     def toType: FunctionType = annotatedType.get
-    /** TODO: is this the right thing for cparams? */
-    def toType(ret: ValueType): FunctionType = FunctionType(tparams, Nil, vparams map paramToType, bparams map paramToType, ret)
+    def toType(ret: ValueType): FunctionType = FunctionType(tparams, bparams map CaptureOf, vparams map paramToType, bparams map paramToType, ret)
     def annotatedType: Option[FunctionType] = ret map { toType }
   }
 
@@ -244,7 +243,7 @@ package object symbols {
    */
   sealed trait BlockType extends Type
 
-  case class FunctionType(tparams: List[TypeVar], cparams: List[CaptureVar], vparams: List[ValueType], bparams: List[BlockType], ret: ValueType) extends BlockType {
+  case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], ret: ValueType) extends BlockType {
     override def toString: String = {
       val vps = s"(${vparams.map { _.toString }.mkString(", ")})"
       val bps = bparams.map { b => s"{${b.toString}}" }
