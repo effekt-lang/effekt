@@ -274,7 +274,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idDef ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, tpe) }
 
   lazy val blockParamSig: P[BlockParam] =
-    idDef ~ (`:` ~> interfaceType) ^^ BlockParam
+    idDef ~ (`:` ~> blockType) ^^ BlockParam
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -462,21 +462,25 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   // for now function types need to be parenthesized
-  lazy val boxedType: P[BoxedType] = blockType ~ (`at` ~> captureSet) ^^ BoxedType
+  lazy val boxedType: P[BoxedType] = functionType ~ (`at` ~> captureSet) ^^ BoxedType
 
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet
 
-  lazy val interfaceType: P[BlockType] =
+  lazy val blockType: P[BlockType] =
     ( idRef ~ typeArgs ^^ BlockTypeApp
-    | blockType
-    | capabilityType
+    | functionType
+    | interfaceType
     )
 
-  lazy val capabilityType: P[InterfaceType] =
+  lazy val interfaceType: P[InterfaceType] =
     idRef ^^ InterfaceType
 
-  lazy val blockType: P[FunctionType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ { case vps ~ ret => FunctionType(Nil, vps, Nil, ret) }
+  lazy val valueTypeParams: P[List[ValueType]] = (`(` ~> manySep(valueType, `,`) <~ `)`)
+  lazy val maybeValueTypeParams = (valueTypeParams | success(Nil))
+  lazy val namedBlockType: P[(Option[IdDef], BlockType)] = `{` ~> (idDef <~ `:`).? ~ blockType <~ `}` ^^ { case name ~ tpe => (name, tpe) }
+
+  lazy val functionType: P[FunctionType] =
+    ( maybeTypeParams ~ maybeValueTypeParams ~ many(namedBlockType) ~ (`=>` ~/> valueType) ^^ FunctionType
     | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => FunctionType(Nil, List(t), Nil, e) }
     )
 

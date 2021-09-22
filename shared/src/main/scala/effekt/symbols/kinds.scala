@@ -32,7 +32,7 @@ package object kinds {
     def ValueTypeFun(params: List[Kind]): Kind =
       if (params.isEmpty) Kind.VType else Kind.Fun(params, Kind.VType)
     def BlockTypeFun(params: List[Kind]): Kind =
-      if (params.isEmpty) Kind.VType else Kind.Fun(params, Kind.BType)
+      if (params.isEmpty) Kind.BType else Kind.Fun(params, Kind.BType)
   }
 
   private def wellformedType(tpe: ValueType)(implicit C: Context): Kind = tpe match {
