@@ -70,9 +70,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         val tps = tparams map resolve
         val vps = vparams map resolve
         val bps = bparams map resolve
+        // TODO check whether this scope actually changes anything
         val ret = Context scoped {
           Context.bindValue(vps)
           Context.bindBlock(bps)
+
           annot map resolve
         }
         UserFunction(uniqueId, tps, vps, bps, ret, f)
@@ -152,6 +154,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.BlockParam(id, tpe) =>
       val p = BlockParam(Name.local(id), resolve(tpe))
       Context.define(id, p)
+      Context.bind(CaptureOf(p))
 
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
@@ -161,6 +164,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
+      // TODO bind the variable as capture
       Context.define(id, VarBinder(Name.local(id), tpe, d))
 
     // FunDef, EffDef, and DataDef have already been resolved as part of the module declaration
@@ -298,9 +302,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       }
 
     case source.FunctionArg(vparams, bparams, stmt) =>
-      val vps = vparams map resolve
-      val bps = bparams map resolve
       Context scoped {
+        val vps = vparams map resolve
+        val bps = bparams map resolve
         Context.bindValue(vps)
         Context.bindBlock(bps)
         resolveGeneric(stmt)
@@ -351,6 +355,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(Name.local(id), resolve(tpe))
       Context.assignSymbol(id, sym)
+      Context.bind(CaptureOf(sym))
       sym
   }
 
@@ -420,7 +425,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def resolve(capt: source.CaptureSet)(implicit C: Context): CaptureSet =
-    CaptureSet(capt.captures.map { id => CaptureOf(Context.resolveTerm(id).asBlockSymbol) }.toSet)
+    CaptureSet(capt.captures.map { C.resolveCapture }.toSet)
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
     val res = tpe match {
@@ -436,11 +441,25 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(tpe: source.FunctionType)(implicit C: Context): FunctionType = {
-    /** TODO: is this the right thing for capture sets */
-    val res = FunctionType(Nil, Nil, tpe.vparams.map(resolve), Nil, resolve(tpe.ret))
-    C.annotateResolvedType(tpe)(res)
-    res
+  def resolve(tpe: source.FunctionType)(implicit C: Context): FunctionType = tpe match {
+    case source.FunctionType(tparams, vparams, bparams, ret) => Context scoped {
+      val tps = tparams map resolve
+      val vps = vparams.map(resolve)
+      // TODO associate IdDef with capture param
+      val (cps, blockTypes) = bparams.map {
+        case (id, tpe) =>
+          val name = id.map(Name.local).getOrElse(NoName)
+          (CaptureParam(name), tpe)
+      }.unzip
+
+      val bps = blockTypes.map(resolve)
+
+      cps foreach Context.bind
+      val retTpe = resolve(ret)
+      val res = FunctionType(tps, cps, vps, bps, retTpe)
+      C.annotateResolvedType(tpe)(res)
+      res
+    }
   }
 
   def resolve(tpe: source.InterfaceType)(implicit C: Context): InterfaceType = {
@@ -530,13 +549,20 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
 
+  private[namer] def bind(s: Capture): Unit = scope.define(s.name.name, s)
+
   private[namer] def bindValue(params: List[ValueParam]): Context = {
     params.foreach { p => bind(p) }
     this
   }
 
   private[namer] def bindBlock(params: List[BlockParam]): Context = {
-    params.foreach { p => bind(p) }
+    params.foreach { p =>
+      // bind the block parameter as a term
+      bind(p)
+      // also introduce a capture variable
+      bind(CaptureOf(p))
+    }
     this
   }
 
@@ -563,6 +589,12 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def resolveType(id: Id): TypeSymbol = at(id) {
     val sym = scope.lookupType(id.name)
+    assignSymbol(id, sym)
+    sym
+  }
+
+  private[namer] def resolveCapture(id: Id): Capture = at(id) {
+    val sym = scope.lookupCapture(id.name)
     assignSymbol(id, sym)
     sym
   }

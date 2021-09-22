@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.{ Tree }
-import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureVar, Capture, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
+import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureUnificationVar, Capture, CaptureOf, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -32,8 +32,8 @@ object substitutions {
       x
     }
 
-    def freshCaptVar(underlying: Capture): CaptureVar = {
-      val x = CaptureVar(underlying, this)
+    def freshCaptVar(underlying: Capture): CaptureUnificationVar = {
+      val x = CaptureUnificationVar(underlying, this)
       capture_skolems = x :: capture_skolems
       x
     }
@@ -42,7 +42,7 @@ object substitutions {
      * These are the unification variables introduced in the current scope
      */
     private var skolems: List[UnificationVar] = Nil
-    private var capture_skolems: List[CaptureVar] = Nil
+    private var capture_skolems: List[CaptureUnificationVar] = Nil
 
     /**
      * These are the constraints introduced in the current scope
@@ -192,7 +192,7 @@ object substitutions {
   trait RegionEq
 
   // Substitution is independent of the unifier
-  implicit class SubstitutionOps(substitutions: Map[TypeVar, ValueType]) {
+  implicit class ValueSubstitutionOps(substitutions: Map[TypeVar, ValueType]) {
     def substitute(t: ValueType): ValueType = t match {
       case x: TypeVar =>
         substitutions.getOrElse(x, x)

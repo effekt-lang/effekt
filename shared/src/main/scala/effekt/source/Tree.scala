@@ -287,7 +287,7 @@ case class BlockTypeApp(id: IdRef, params: List[ValueType]) extends BlockType wi
 }
 
 // TODO generalize to blocks that can take blocks
-case class FunctionType(vparams: List[ValueType], ret: ValueType) extends BlockType {
+case class FunctionType(tparams: List[Id], vparams: List[ValueType], bparams: List[(Option[IdDef], BlockType)], ret: ValueType) extends BlockType {
   type resolved = symbols.FunctionType
 }
 

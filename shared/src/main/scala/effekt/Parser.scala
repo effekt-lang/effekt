@@ -476,8 +476,8 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ^^ InterfaceType
 
   lazy val blockType: P[FunctionType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ FunctionType
-    | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => FunctionType(List(t), e) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ^^ { case vps ~ ret => FunctionType(Nil, vps, Nil, ret) }
+    | valueType ~ (`=>` ~/> valueType) ^^ { case t ~ e => FunctionType(Nil, List(t), Nil, e) }
     )
 
   // === AST Helpers ===

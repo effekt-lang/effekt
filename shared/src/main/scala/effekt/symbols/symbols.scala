@@ -318,9 +318,23 @@ package object symbols {
   }
   val Pure = CaptureSet(Set.empty)
 
-  sealed class Capture(val name: Name) extends TypeSymbol
-  case class CaptureOf(sym: TermSymbol) extends Capture(sym.name)
-  case class CaptureVar(underlying: Capture, scope: UnificationScope) extends Capture(underlying.name) {
+  sealed trait Capture extends TypeSymbol {
+    val name: Name
+  }
+
+  // TODO we could fuse CaptureOf and CaptureParam into one constructor
+  case class CaptureOf(sym: TermSymbol) extends Capture {
+    val name = sym.name
+    // we compare captures of term symbols by comparing the term symbols
+    override def equals(other: Any): Boolean = other match {
+      case CaptureOf(otherSym) => sym == otherSym
+      case _                   => false
+    }
+    override def hashCode: Int = sym.hashCode + 13
+  }
+  case class CaptureParam(name: Name) extends Capture
+  case class CaptureUnificationVar(underlying: Capture, scope: UnificationScope) extends Capture {
+    val name = underlying.name
     override def toString = "?" + underlying.name + id
   }
 }
