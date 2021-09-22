@@ -81,11 +81,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
   lazy val `at` = keyword("at")
+  lazy val `box` = keyword("box")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "for", "interface", "at"
+    "match", "module", "import", "extern", "fun", "for", "interface", "at", "box"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -370,8 +371,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | whileExpr
     | funCall
     | handleExpr
+    | boxExpr
     | primExpr
     )
+
+  lazy val boxExpr: P[Term] = `box` ~> captureSet.? ~ blockArg ^^ Box
 
   lazy val funCall: P[Term] =
     funCall ~ maybeTypeArgs ~ arguments ^^ { case fun ~ targs ~ (vargs ~ bargs) => Call(fun, targs, vargs, bargs) } | primExpr
