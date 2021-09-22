@@ -151,7 +151,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Box(annotatedCapt, block) =>
         val tpe / capt = checkBlockArgument(block)
-        val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(C.freshCaptVar())
+        val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
         C.sub(capt, expectedCapt)
         BoxedType(tpe, expectedCapt) / Pure
 
@@ -690,7 +690,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
   def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
 
-  def freshCaptVar() = ???
+  // TODO this is only for synthesized capture sets (i.e. when box isn't annotated)
+  def freshCaptVar() = scope.freshCaptVar(CaptureParam(NoName))
   def freshCaptVar(underlying: Capture) = scope.freshCaptVar(underlying)
 
   // Inferred types
