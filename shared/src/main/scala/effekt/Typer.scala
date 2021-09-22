@@ -151,6 +151,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Box(annotatedCapt, block) =>
         val tpe / capt = checkBlockArgument(block)
+        // box { ... }  ~>  box ?C { ... }
         val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
         C.sub(capt, expectedCapt)
         BoxedType(tpe, expectedCapt) / Pure
@@ -176,7 +177,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           Context.error(s"Wrong number of value arguments, given ${vargs.size}, but function expects ${vparams.size}.")
 
         if (bparams.size != bargs.size)
-          Context.error(s"Wrong number of block arguments, given ${vargs.size}, but function expects ${vparams.size}.")
+          Context.error(s"Wrong number of block arguments, given ${bargs.size}, but function expects ${bparams.size}.")
 
         // (3) Unify with provided type arguments, if any.
         if (targs.nonEmpty) {
@@ -489,6 +490,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // for example, unify with capt
 
         println(s"Capture of ${id} = $capt")
+        // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
+        val (_, precheckedCapt) = C.lookup(sym)
+        C.unify(capt, precheckedCapt)
         tpe
       }
 
