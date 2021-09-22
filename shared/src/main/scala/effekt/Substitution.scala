@@ -86,7 +86,8 @@ object substitutions {
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
     def solve(implicit C: Context): (Substitutions, List[TypeConstraint]) = {
-      var cs = constraints
+      var tcs = constraints
+      var ccs = capture_constraints
       var cache: List[TypeConstraint] = Nil
 
       var residual: List[TypeConstraint] = Nil
@@ -126,6 +127,8 @@ object substitutions {
         def scope = self
         def defer(t1: ValueType, t2: ValueType): Unit = residual = Eq(t1, t2, C.focus) :: residual
 
+        def unify(c1: CaptureSet, c2: CaptureSet): Unit = ccs = EqCapt(c1, c2, C.focus) :: ccs
+
         def abort(msg: String) = C.abort(msg)
         def learn(x: UnificationVar, tpe: ValueType) = {
           // all existing solutions have to be compatible with the new one
@@ -134,10 +137,10 @@ object substitutions {
         }
       }
 
-      def push(c: Eq): Unit = cs = c :: cs
-      def pop() = { val el = cs.head; cs = cs.tail; el }
+      def push(c: Eq): Unit = tcs = c :: tcs
+      def pop() = { val el = tcs.head; tcs = tcs.tail; el }
 
-      while (cs.nonEmpty) pop() match {
+      while (tcs.nonEmpty) pop() match {
         case c @ Eq(x, y, pos) if !cache.contains(c) => C.at(pos) {
           cache = c :: cache
           comparer.unifyValueTypes(x, y)
@@ -187,7 +190,7 @@ object substitutions {
         subst
       }
 
-      println(s"Capture constraints: ${capture_constraints}")
+      println(s"Capture constraints: ${ccs}")
 
       // compute type substitution from equivalence classes
       val typeSubst: Substitutions = computeTypeSubstitution
@@ -282,9 +285,9 @@ object substitutions {
     def abort(msg: String): Nothing
     def scope: UnificationScope
     def defer(t1: ValueType, t2: ValueType): Unit
+    def unify(c1: CaptureSet, c2: CaptureSet): Unit
 
-    def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
-    def unify(c1: Capture, c2: Capture): Unit = ???
+    def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
       case (t, s) if t == s => ()
