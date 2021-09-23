@@ -107,6 +107,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.Select(receiver, selector) =>
       Select(transformAsBlock(receiver), selector.name)
 
+    case source.Unbox(b) =>
+      Unbox(transform(b))
+
     case _ =>
       C.abort("Value in block position: automatic unboxing currently not supported.")
   }
@@ -154,6 +157,8 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     case source.Box(_, block) =>
       Box(transform(block))
+
+    case source.Unbox(b) => C.abort("Block in expression position: automatic boxing currently not supported.")
 
     // TODO generate "pure" applications again
     case c @ source.Call(e, _, vargs, bargs) =>

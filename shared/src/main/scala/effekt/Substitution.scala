@@ -104,7 +104,10 @@ object substitutions {
         var residual: List[EqCapt] = Nil
 
         def pop() = { val c = unsolved.head; unsolved = unsolved.tail; c }
-        def push(eq: EqCapt) = unsolved = unsolved :+ eq
+        def push(eq: EqCapt) = {
+          println(s"Repushing $eq")
+          unsolved = unsolved :+ eq
+        }
         def unify(c1: Set[Capture], c2: Set[Capture], pos: Tree) = {
           val (concrete1, unification1) = c1.partition { c => !c.isInstanceOf[CaptureUnificationVar] }
           val (concrete2, unification2) = c2.partition { c => !c.isInstanceOf[CaptureUnificationVar] }

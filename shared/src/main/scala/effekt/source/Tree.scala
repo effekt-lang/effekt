@@ -178,6 +178,8 @@ case class Call(receiver: Term, targs: List[ValueType], vargs: List[Term], bargs
 
 case class Box(capt: Option[CaptureSet], block: BlockArg) extends Term
 
+case class Unbox(term: Term) extends Term
+
 case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
 case class While(cond: Term, block: Stmt) extends Term
 

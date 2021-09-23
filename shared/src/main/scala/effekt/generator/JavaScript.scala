@@ -172,7 +172,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case PureApp(b, targs, vargs, bargs) => toDoc(b) <> parens(hsep((vargs map toDoc) ++ (bargs map toDoc), comma))
 
-    case Box(e) => toDoc(e)
+    case Box(e) => parens(toDoc(e))
   })
 
   def toDoc(s: Stmt)(implicit C: Context): Doc =

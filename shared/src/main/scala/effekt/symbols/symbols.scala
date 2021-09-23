@@ -178,7 +178,9 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
+  case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType {
+    override def toString = s"($tpe) at $capt"
+  }
 
   class TypeVar(val name: LocalName) extends ValueType with TypeSymbol
   object TypeVar {

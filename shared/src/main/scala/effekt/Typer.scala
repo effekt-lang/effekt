@@ -79,6 +79,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
    */
   def checkExprAsBlock(expr: Term)(implicit C: Context): TyperResult[BlockType] =
     checkBlock(expr) {
+      case source.Unbox(expr) =>
+        val vtpe / capt1 = checkExpr(expr)
+        // TODO here we also need unification variables for block types!
+        // C.unify(tpe, BoxedType())
+        vtpe match {
+          case BoxedType(btpe, capt2) => btpe / (capt1 ++ capt2)
+          case _ => Context.abort(s"Unbox requires a boxed type, but got $vtpe")
+        }
+
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol =>
           val (tpe, capt) = Context.lookup(b)
@@ -150,11 +159,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         TUnit / (capt + CaptureOf(sym))
 
       case source.Box(annotatedCapt, block) =>
+        // by introducing a unification scope here, we know that `capt` cannot contain fresh unification variables.
         val tpe / capt = Context withUnificationScope { checkBlockArgument(block) }
         // box { ... }  ~>  box ?C { ... }
         val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
         C.sub(capt, expectedCapt)
         BoxedType(tpe, expectedCapt) / Pure
+
+      case source.Unbox(expr) =>
+        Context.abort("Block in expression position: automatic boxing currently not supported.")
 
       case c @ source.Call(e, targsTree, vargs, bargs) =>
         val funTpe / funCapt = checkExprAsBlock(e) match {

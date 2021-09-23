@@ -27,7 +27,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, sel) =>
       toDoc(b) <> "." <> sel
     case Extern(_, ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
-    case Unbox(e)            => toDoc(e)
+    case Unbox(e)            => "unbox" <+> toDoc(e)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
@@ -42,7 +42,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
 
     case PureApp(b, targs, vargs, bargs) => toDoc(b) <> parens(hsep(vargs map toDoc, comma)) <> braces(hsep(bargs map toDoc, space))
 
-    case Box(b) => toDoc(b)
+    case Box(b) => "box" <+> toDoc(b)
   }
 
   def toDoc(s: Stmt): Doc =
