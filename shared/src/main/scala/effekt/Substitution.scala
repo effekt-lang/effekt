@@ -284,9 +284,14 @@ object substitutions {
       val typeSubst: Substitutions = computeTypeSubstitution
 
       // also solve set constraints
-      val (captSubst, residualCapts) = setsolver(ccs.collect { case e: EqCapt => e })
+      val (eqConstraints, subConstraints) = ccs.partitionMap {
+        case e: EqCapt => Left(e)
+        case e: Sub    => Right(e)
+      }
+      val (captSubst, residualCapts) = setsolver(eqConstraints)
 
       // TODO check that subsumption constraints hold!
+      println(subConstraints)
 
       // update type substitution with capture sets
       val updatedTypeSubst = typeSubst.view.mapValues { t => captSubst.substitute(t) }.toMap
