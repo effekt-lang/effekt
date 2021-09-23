@@ -313,6 +313,8 @@ package object symbols {
   case class CaptureSet(captures: Set[Capture]) {
     override def toString = s"{${captures.mkString(", ")}}"
 
+    // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
+    def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
     def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
     def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   }

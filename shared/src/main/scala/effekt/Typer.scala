@@ -459,10 +459,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       val funSym = d.symbol
-      funSym.ret.foreach { annot =>
-        val funCapt = C.freshCaptVar(CaptureOf(funSym))
-        Context.define(d.symbol, d.symbol.toType, CaptureSet(Set(funCapt)))
-      }
+      val funCapt = CaptureSet(Set(C.freshCaptVar(CaptureOf(funSym))))
+      Context.define(funSym, funCapt)
+      funSym.ret.foreach { annot => Context.define(d.symbol, d.symbol.toType) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.define(d.symbol, d.symbol.toType, Pure)
@@ -496,25 +495,20 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         sym.vparams foreach Context.define
         sym.bparams foreach Context.define
 
+        val precheckedCapt = C.lookupCapture(sym)
+
         val tpe / capt = sym.ret match {
-          case Some(tpe) =>
-            val _ / capt = body checkAgainst tpe
-            Context.assignType(d, tpe)
-            tpe / capt
-          case None =>
-            val tpe / capt = checkStmt(body)
-            Context.define(sym, sym.toType(tpe), capt)
-            Context.assignType(d, tpe)
-            tpe / capt
+          case Some(tpe) => body checkAgainst tpe
+          case None      => checkStmt(body)
         }
+        // TODO check whether the subtraction here works in presence of unifcation variabels
+        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf).toSet)
 
-        // TODO do something with the annotated capture set.
-        // for example, unify with capt
+        Context.define(sym, sym.toType(tpe), captWithoutBoundParams)
+        Context.assignType(d, tpe)
 
-        println(s"Capture of ${id} = $capt")
         // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
-        val (_, precheckedCapt) = C.lookup(sym)
-        C.unify(capt, precheckedCapt)
+        C.unify(captWithoutBoundParams, precheckedCapt)
         tpe
       }
 
@@ -671,11 +665,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
-    blockTypingContext foreach {
-      case (s, (tpe, capt)) =>
-        assignType(s, tpe)
-        assignCaptureSet(s, capt)
-        println(s"${s.name} : $tpe @ $capt")
+    blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    captureContext foreach {
+      case (s, c) =>
+        println(s"${s} @ $c");
+        assignCaptureSet(s, c)
     }
   }
 
@@ -693,16 +687,14 @@ trait TyperOps extends ContextOps { self: Context =>
     // The unification variables now go out of scope:
     // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
     valueTypingContext = valueTypingContext.view.mapValues { t => captSubst.substitute(typeSubst.substitute(t)) }.toMap
-    blockTypingContext = blockTypingContext.view.mapValues {
-      case (tpe, capt) =>
-        (captSubst.substitute(typeSubst.substitute(tpe)), captSubst.substitute(capt))
-    }.toMap
+    blockTypingContext = blockTypingContext.view.mapValues { t => captSubst.substitute(typeSubst.substitute(t)) }.toMap
+    captureContext = captureContext.view.mapValues { c => captSubst.substitute(c) }.toMap
     outerScope.addAllType(cs)
     outerScope.addAllCapt(ccs)
 
-    println(s"leaving scope ${scope.id}")
-    println(s"found substitutions: ${typeSubst}")
-    println(s"unsolved constraints: ${cs}")
+    //    println(s"leaving scope ${scope.id}")
+    //    println(s"found substitutions: ${typeSubst}")
+    //    println(s"unsolved constraints: ${cs}")
     scope = outerScope
     res
   }
@@ -750,22 +742,37 @@ trait TyperOps extends ContextOps { self: Context =>
   // ====================
   // since symbols are unique, we can use mutable state instead of reader
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
-  private var blockTypingContext: Map[Symbol, (BlockType, CaptureSet)] = Map.empty
+  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+  private var captureContext: Map[Symbol, CaptureSet] = Map.empty
 
   // first tries to find the type in the local typing context
   // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
   private[typer] def lookup(s: ValueSymbol) =
     valueTypingContext.getOrElse(s, valueTypeOf(s))
 
-  private[typer] def lookup(s: BlockSymbol) =
-    blockTypingContext.getOrElse(s, (blockTypeOf(s), captureOf(s)))
+  private[typer] def lookup(s: BlockSymbol) = (lookupType(s), lookupCapture(s))
+
+  private[typer] def lookupType(s: BlockSymbol) =
+    blockTypingContext.getOrElse(s, blockTypeOf(s))
+
+  private[typer] def lookupCapture(s: BlockSymbol) =
+    captureContext.getOrElse(s, captureOf(s))
 
   private[typer] def define(s: Symbol, tpe: ValueType): Context = {
     valueTypingContext += (s -> tpe); this
   }
 
   private[typer] def define(s: Symbol, tpe: BlockType, capt: CaptureSet): Context = {
-    blockTypingContext += (s -> (tpe, capt)); this
+    define(s, tpe); define(s, capt); this
+  }
+
+  private[typer] def define(s: Symbol, tpe: BlockType): Context = {
+    blockTypingContext += (s -> tpe)
+    this
+  }
+
+  private[typer] def define(s: Symbol, capt: CaptureSet): Context = {
+    captureContext += (s -> capt); this
   }
 
   private[typer] def define(bs: Map[Symbol, ValueType]): Context = {
