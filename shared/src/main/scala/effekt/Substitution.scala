@@ -314,16 +314,15 @@ object substitutions {
     }
 
     def substitute(t: BlockType): BlockType = t match {
-      // TODO for now substitution doesn't do anything on capability types.
-      case b: InterfaceType => b
-      case b: FunctionType  => substitute(b)
+      case b: Interface           => b
+      case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
+      case b: FunctionType        => substitute(b)
     }
 
     def substitute(t: FunctionType): FunctionType = t match {
       case FunctionType(tps, cps, vps, bps, ret) =>
         // do not substitute with types parameters bound by this function!
         val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
-        // TODO: check capture parameters
         FunctionType(tps, cps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
     }
 
@@ -347,9 +346,9 @@ object substitutions {
     }
 
     def substitute(t: BlockType): BlockType = t match {
-      // TODO for now substitution doesn't do anything on capability types.
-      case b: InterfaceType => b
-      case b: FunctionType  => substitute(b)
+      case b: Interface           => b
+      case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
+      case b: FunctionType        => substitute(b)
     }
 
     def substitute(t: FunctionType): FunctionType = t match {
