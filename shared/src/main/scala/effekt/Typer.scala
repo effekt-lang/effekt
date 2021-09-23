@@ -150,7 +150,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         TUnit / (capt + CaptureOf(sym))
 
       case source.Box(annotatedCapt, block) =>
-        val tpe / capt = checkBlockArgument(block)
+        val tpe / capt = Context withUnificationScope { checkBlockArgument(block) }
         // box { ... }  ~>  box ?C { ... }
         val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
         C.sub(capt, expectedCapt)
@@ -485,16 +485,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def checkDef(d: Def)(implicit C: Context): Unit = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) => Context.withUnificationScope {
+      case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
         val sym = d.symbol
         sym.vparams foreach Context.define
         sym.bparams foreach Context.define
 
         val precheckedCapt = C.lookupCapture(sym)
 
-        val tpe / capt = sym.ret match {
-          case Some(tpe) => body checkAgainst tpe
-          case None      => checkStmt(body)
+        val tpe / capt = Context.withUnificationScope {
+          sym.ret match {
+            case Some(tpe) => body checkAgainst tpe
+            case None      => checkStmt(body)
+          }
         }
         // TODO check whether the subtraction here works in presence of unifcation variabels
         val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf).toSet)
@@ -505,7 +507,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
         C.unify(captWithoutBoundParams, precheckedCapt)
         tpe
-      }
 
       case d @ source.ValDef(id, annot, binding) =>
         val tpe / capt = d.symbol.tpe match {
@@ -526,7 +527,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
         d.symbol.vparams map { p => Context.define(p) }
 
-      // all other defintions have already been prechecked
+      // all other definitions have already been prechecked
       case d => ()
     }
   }
