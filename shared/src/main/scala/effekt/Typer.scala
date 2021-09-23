@@ -545,9 +545,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case arg: source.InterfaceArg => checkCapabilityArgument(arg)
   }
 
-  // TODO change, right now everything is tracked!
   def checkCapabilityArgument(arg: source.InterfaceArg)(implicit C: Context): TyperResult[BlockType] =
-    arg.definition.tpe / CaptureSet(Set(CaptureOf(arg.definition)))
+    C.blockTypeOf(arg.definition) / C.captureOf(arg.definition)
 
   // Example.
   //   BlockParam: def foo { f: Int => String / Print }
@@ -555,15 +554,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //     or
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
   def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context): TyperResult[FunctionType] = arg match {
-    case source.FunctionArg(vparams, bparams, body) =>
+    case source.FunctionArg(tparams, vparams, bparams, body) =>
+      val tparamSymbols = tparams.map { p => p.symbol.asTypeVar }
+      tparamSymbols.foreach { p => Context.define(p, p) }
       vparams.foreach { p => Context.define(p.symbol) }
       bparams.foreach { p => Context.define(p.symbol) }
+      val capts = bparams.map { p => CaptureOf(p.symbol) }
 
-      // TODO should we open a new unifcation scope here?
+      // TODO should we open a new unification scope here?
       val ret / capt = checkStmt(body)
 
-      // TODO compute correct capture set
-      FunctionType(Nil, Nil, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capt
+      FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / (capt -- CaptureSet(capts.toSet))
   }
 
   //</editor-fold>

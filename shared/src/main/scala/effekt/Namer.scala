@@ -301,8 +301,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(body)
       }
 
-    case source.FunctionArg(vparams, bparams, stmt) =>
+    case source.FunctionArg(tparams, vparams, bparams, stmt) =>
       Context scoped {
+        val tps = tparams map resolve
         val vps = vparams map resolve
         val bps = bparams map resolve
         Context.bindValue(vps)

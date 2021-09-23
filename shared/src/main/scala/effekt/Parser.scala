@@ -287,12 +287,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Arguments
    */
   lazy val blockArg: P[BlockArg] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case vps ~ body => FunctionArg(vps, Nil, body) }
+    ( `{` ~> maybeTypeParams ~ valueParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case tps ~ vps ~ body => FunctionArg(tps, vps, Nil, body) }
     | (`{` ~> idRef <~ `}`) ^^ InterfaceArg
     )
-
-  lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParams //| (idDef ^^ { id => List(ValueParam(id, None)) })
 
   lazy val valueArgs: P[List[Term]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | failure("Expected a value argument list")

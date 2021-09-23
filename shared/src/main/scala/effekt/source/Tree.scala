@@ -87,7 +87,7 @@ case class ValueParam(id: IdDef, tpe: ValueType) extends Definition { type symbo
 case class BlockParam(id: IdDef, tpe: BlockType) extends Definition { type symbol = symbols.BlockParam }
 
 sealed trait BlockArg extends Tree
-case class FunctionArg(vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
+case class FunctionArg(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
 
 // TODO we might want to add anonymous instances here
 case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
