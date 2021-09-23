@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.{ Tree }
-import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureUnificationVar, Capture, CaptureOf, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
+import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureUnificationVar, Capture, CaptureParam, CaptureOf, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -92,7 +92,90 @@ object substitutions {
 
       var residual: List[TypeConstraint] = Nil
 
+      // an experimental set solver
+      def setsolver(cs: List[EqCapt]): (Map[Capture, CaptureSet], List[EqCapt]) = {
+        var unsolved = cs
+        var cache: List[EqCapt] = Nil
+        var subst: Map[Capture, CaptureSet] = Map.empty
+        var residual: List[EqCapt] = Nil
 
+        def pop() = { val c = unsolved.head; unsolved = unsolved.tail; c }
+        def push(eq: EqCapt) = unsolved = unsolved :+ eq
+        def unify(c1: Set[Capture], c2: Set[Capture], pos: Tree) = {
+          val (concrete1, unification1) = c1.partition { c => !c.isInstanceOf[CaptureUnificationVar] }
+          val (concrete2, unification2) = c2.partition { c => !c.isInstanceOf[CaptureUnificationVar] }
+
+          if (unification1.isEmpty && unification2.isEmpty && concrete1 != concrete2) {
+            println(s"comparing: $concrete1 and $concrete2")
+            C.at(pos) { C.error(s"Capture set $concrete1 is not equal to $concrete2") }
+          }
+          residual = EqCapt(CaptureSet(c1), CaptureSet(c2), pos) :: residual
+        }
+
+        def learn(x: CaptureUnificationVar, c: Set[Capture]): Unit = {
+          val newSubst = Map[Capture, CaptureSet](x -> CaptureSet(c))
+          subst = newSubst ++ subst.view.mapValues(c => newSubst.substitute(c)).toMap
+          unsolved = unsolved.map { case EqCapt(c1, c2, pos) => EqCapt(subst.substitute(c1), subst.substitute(c2), pos) }
+          residual = residual.map { case EqCapt(c1, c2, pos) => EqCapt(subst.substitute(c1), subst.substitute(c2), pos) }
+        }
+
+        while (unsolved.nonEmpty) pop() match {
+          // drop trivial constraints
+          case EqCapt(xs, ys, pos) if xs == ys => ()
+
+          // {?C} =:= ...
+          case Components(List(x), Nil, vars2, con2, pos) =>
+            // recursive: ?C =:= ?C union {c, a, b} union ?D
+            //              ?C !-> {c, a, b} union ?D
+            learn(x, vars2.toSet - x ++ con2.toSet)
+
+          // ... =:= {?C}
+          case Components(vars1, con1, List(x), Nil, pos) =>
+            learn(x, vars1.toSet - x ++ con1.toSet)
+
+          // {a, b, c} =:= {c, a, b}
+          case Components(Nil, con1, Nil, con2, pos) => unify(con1.toSet, con2.toSet, pos)
+
+          // ?C union {a, c, b} =:= ?C union {a, b, c}
+          case Components(List(x), con1, List(y), con2, pos) if x == y => unify(con1.toSet, con2.toSet, pos)
+
+          // ?C union {a, b} =:= {a, b, c}
+          case Components(List(x), con1, Nil, con2, pos) => learn(x, con2.toSet -- con1.toSet)
+
+          // {a, b, c} =:= ?C union {a, b}
+          case Components(Nil, con1, List(x), con2, pos) => learn(x, con1.toSet -- con2.toSet)
+
+          // cannot solve eq right now
+          // TODO make sure we terminate by keeping a generation and a seen set
+          case eq => push(eq)
+        }
+
+        (subst, residual)
+      }
+
+      object Components {
+        def unapply(eq: EqCapt): Option[(List[CaptureUnificationVar], List[Capture], List[CaptureUnificationVar], List[Capture], Tree)] = eq match {
+          case EqCapt(CaptureSet(c1), CaptureSet(c2), pos) =>
+            val vars1 = c1.collect { case c: CaptureUnificationVar if c.scope == self => c }
+            val con1 = c1 -- vars1
+            val vars2 = c2.collect { case c: CaptureUnificationVar if c.scope == self => c }
+            val con2 = c2 -- vars2
+            Some((vars1.toList, con1.toList, vars2.toList, con2.toList, pos))
+        }
+
+      }
+
+      object OneVar {
+        def unapply(eq: EqCapt): Option[(CaptureUnificationVar, Set[Capture], Tree)] = eq match {
+          case EqCapt(Singleton(x: CaptureUnificationVar), CaptureSet(c2), pos) if x.scope == self => Some(x, c2, pos)
+          case EqCapt(CaptureSet(c2), Singleton(x: CaptureUnificationVar), pos) if x.scope == self => Some(x, c2, pos)
+          case _ => None
+        }
+      }
+
+      object Singleton {
+        def unapply(c: CaptureSet): Option[Capture] = c.captures.headOption
+      }
 
       // Notes on Constraints
       // --------------------
@@ -207,6 +290,8 @@ object substitutions {
       }
 
       println(s"Capture constraints: ${ccs}")
+      val sol = setsolver(ccs.collect { case e: EqCapt => e })
+      println(s"Solution: ${sol}")
 
       // compute type substitution from equivalence classes
       val typeSubst: Substitutions = computeTypeSubstitution

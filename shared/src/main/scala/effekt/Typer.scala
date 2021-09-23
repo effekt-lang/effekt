@@ -201,6 +201,28 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         ret / (funCapt ++ argCapt)
 
+      // Sketch for type checking handlers:
+      // 1) create new unification scope and check handled program (`prog`) with
+      //    capability in scope
+      // 2) solve unification scope.
+      // 3) subtract capability from inferred capture Cp. Outer unification variables cannot possibly contain
+      //    the fresh capability.
+      // 4) Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
+      // 5) Check all handler bodies and collect all inferred capture sets Ch
+      // 6) Ck = (Cp - cap) union (UNION Ch)
+      // 7) solve this second unification scope
+
+      //
+      //   Ceven = Codd union {flip}
+      //   Codd = Ceven union {fail}
+      // substitute:
+      //   Ceven = Codd union {flip}
+      //   Codd = (Codd union {flip}) union {fail}
+      // recursion -- instantiate with {}:
+      //   Codd = {flip, fail}
+      // substitute back into first constraint:
+      //   Ceven = {flip, fail} union {flip}
+      //   Ceven = {flip, fail}
       case source.TryHandle(prog, handlers) =>
 
         // (1) bind capability types in type environment
