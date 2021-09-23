@@ -211,18 +211,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       // 5) Check all handler bodies and collect all inferred capture sets Ch
       // 6) Ck = (Cp - cap) union (UNION Ch)
       // 7) solve this second unification scope
-
-      //
-      //   Ceven = Codd union {flip}
-      //   Codd = Ceven union {fail}
-      // substitute:
-      //   Ceven = Codd union {flip}
-      //   Codd = (Codd union {flip}) union {fail}
-      // recursion -- instantiate with {}:
-      //   Codd = {flip, fail}
-      // substitute back into first constraint:
-      //   Ceven = {flip, fail} union {flip}
-      //   Ceven = {flip, fail}
       case source.TryHandle(prog, handlers) =>
 
         // (1) bind capability types in type environment
