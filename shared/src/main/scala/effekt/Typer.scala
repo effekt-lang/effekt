@@ -201,93 +201,100 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         ret / (funCapt ++ argCapt)
 
-      // Sketch for type checking handlers:
-      // 1) create new unification scope and check handled program (`prog`) with
-      //    capability in scope
-      // 2) solve unification scope.
-      // 3) subtract capability from inferred capture Cp. Outer unification variables cannot possibly contain
-      //    the fresh capability.
-      // 4) Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
-      // 5) Check all handler bodies and collect all inferred capture sets Ch
-      // 6) Ck = (Cp - cap) union (UNION Ch)
-      // 7) solve this second unification scope
       case source.TryHandle(prog, handlers) =>
 
-        // (1) bind capability types in type environment
-        val capabilities = handlers.map { h => h.capability.symbol }
-        capabilities foreach Context.define
+        val capabilityParams = handlers.map { h => h.capability.symbol }
 
-        // (2) check body
-        val ret / bodyCapt = checkStmt(prog)
-
-        var handlerCapt = Pure
-
-        handlers foreach Context.withFocus { h =>
-          // try { ... } with s: >>>State[Int]<<< { ... }
-          val annotatedType @ InterfaceType(interface, targs) = h.capability.symbol.tpe.asInterfaceType
-
-          val tparams = interface.tparams
-          val tsubst = (tparams zip targs).toMap
-
-          // (3) check all operations are covered
-          val covered = h.clauses.map { _.definition }
-          val notCovered = interface.ops.toSet -- covered.toSet
-
-          if (notCovered.nonEmpty) {
-            val explanation = notCovered.map { op => s"${op.name} of interface ${op.effect.name}" }.mkString(", ")
-            Context.error(s"Missing definitions for operations: ${explanation}")
-          }
-
-          if (covered.size > covered.distinct.size)
-            Context.error(s"Duplicate definitions of operations")
-
-          // (4) actually check each clause
-          h.clauses foreach Context.withFocus {
-            // TODO what is with type parameters of operation clauses?
-            case d @ source.OpClause(op, tparams, vparams, body, resume) =>
-
-              val declaration = d.definition
-
-              // (4a) the effect operation might refer to type parameters of the interface
-              //   i.e. interface Foo[A] { def bar[B](a: A): B }
-              //
-              // at the handle site, we might have
-              //   try { ... } with f: Foo[Int] { def bar[C](a: Int): C }
-              //
-              // So as a first step, we need to obtain the function type of the declaration bar:
-              //   bar: [B](a: A) -> B
-              // and substitute { A -> Int}
-              //   barSubstituted: [B](a: Int) -> B
-              // TODO: do something about capture set
-              val FunctionType(tparams1, cparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
-
-              // (4b) check the body of the clause
-              val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
-              val vparamSyms = vparams.map { p => p.symbol }
-
-              vparamSyms foreach Context.define
-
-              // TODO add constraints on resume capture
-              val resumeType = FunctionType(Nil, Nil, List(ret1), Nil, ret)
-              val resumeSym = Context.symbolOf(resume).asBlockSymbol
-              val resumeCapture = C.freshCaptVar(CaptureOf(resumeSym))
-              Context.define(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
-
-              // TODO does this need to be a fresh unification scope?
-              val opRet / opCapt = Context in { body checkAgainst ret }
-              handlerCapt ++= opCapt
-
-              // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
-              /** TODO: do something about capture set parameters */
-              val inferredTpe = FunctionType(tparamSyms, Nil, vparamSyms.map { Context.lookup }, Nil, opRet)
-              val expectedTpe = FunctionType(tparams1, cparams1, vparams1, bparams1, ret)
-
-              Context.unify(inferredTpe, expectedTpe)
-          }
+        // (1) create new unification scope and check handled program (`prog`) with capabilities in scope
+        val ret / bodyCapt = Context.withUnificationScope {
+          // bind capability types in type environment
+          capabilityParams foreach Context.define
+          checkStmt(prog)
         }
+        // TODO check that the capabilities do NOT occur free in `ret`
 
-        // TODO actually compute capture here
-        ret / (bodyCapt ++ handlerCapt)
+        // subtract capability from inferred capture Cp. Outer unification variables cannot possibly contain the fresh capability.
+        val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(capabilityParams.map(CaptureOf).toSet)
+
+        // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
+        Context.withUnificationScope {
+
+          var handlerCapt = Pure
+
+          // the capture variable for the continuation ?Ck
+          val resumeCapture = C.freshCaptVar()
+
+          // Check all handler bodies and collect all inferred capture sets Ch
+          handlers foreach Context.withFocus { h =>
+            // try { ... } with s: >>>State[Int]<<< { ... }
+            val annotatedType @ InterfaceType(interface, targs) = h.capability.symbol.tpe.asInterfaceType
+
+            val tparams = interface.tparams
+            val tsubst = (tparams zip targs).toMap
+
+            // (3) check all operations are covered
+            val covered = h.clauses.map { _.definition }
+            val notCovered = interface.ops.toSet -- covered.toSet
+
+            if (notCovered.nonEmpty) {
+              val explanation = notCovered.map { op => s"${op.name} of interface ${op.effect.name}" }.mkString(", ")
+              Context.error(s"Missing definitions for operations: ${explanation}")
+            }
+
+            if (covered.size > covered.distinct.size)
+              Context.error(s"Duplicate definitions of operations")
+
+            // (4) actually check each clause
+            h.clauses foreach Context.withFocus {
+              // TODO what is with type parameters of operation clauses?
+              case d @ source.OpClause(op, tparams, vparams, body, resume) =>
+
+                val declaration = d.definition
+
+                // (4a) the effect operation might refer to type parameters of the interface
+                //   i.e. interface Foo[A] { def bar[B](a: A): B }
+                //
+                // at the handle site, we might have
+                //   try { ... } with f: Foo[Int] { def bar[C](a: Int): C }
+                //
+                // So as a first step, we need to obtain the function type of the declaration bar:
+                //   bar: [B](a: A) -> B
+                // and substitute { A -> Int}
+                //   barSubstituted: [B](a: Int) -> B
+                // TODO: do something about capture set
+                val FunctionType(tparams1, cparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
+
+                // (4b) check the body of the clause
+                val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
+                val vparamSyms = vparams.map { p => p.symbol }
+
+                vparamSyms foreach Context.define
+
+                // TODO add constraints on resume capture
+                val resumeType = FunctionType(Nil, Nil, List(ret1), Nil, ret)
+                val resumeSym = Context.symbolOf(resume).asBlockSymbol
+
+                Context.define(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
+
+                // TODO does this need to be a fresh unification scope?
+                val opRet / opCapt = Context in { body checkAgainst ret }
+                handlerCapt ++= opCapt
+
+                // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
+                /** TODO: do something about capture set parameters */
+                val inferredTpe = FunctionType(tparamSyms, Nil, vparamSyms.map { Context.lookup }, Nil, opRet)
+                val expectedTpe = FunctionType(tparams1, cparams1, vparams1, bparams1, ret)
+
+                Context.unify(inferredTpe, expectedTpe)
+            }
+          }
+
+          // Ck = (Cp - cap) union (UNION Ch)
+          val residualCapt = bodyCaptWithoutCapabilities ++ handlerCapt
+          C.unify(CaptureSet(Set(resumeCapture)), residualCapt)
+
+          ret / residualCapt
+        }
 
       case source.Match(sc, clauses) =>
 
@@ -534,7 +541,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   }
 
   def checkCapabilityArgument(arg: source.InterfaceArg)(implicit C: Context): TyperResult[BlockType] =
-    C.blockTypeOf(arg.definition) / C.captureOf(arg.definition)
+    C.lookupType(arg.definition) / C.lookupCapture(arg.definition)
 
   // Example.
   //   BlockParam: def foo { f: Int => String / Print }
