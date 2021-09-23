@@ -675,7 +675,7 @@ trait TyperOps extends ContextOps { self: Context =>
       case (s, (tpe, capt)) =>
         assignType(s, tpe)
         assignCaptureSet(s, capt)
-        println(s"${s.name} : $tpe")
+        println(s"${s.name} : $tpe @ $capt")
     }
   }
 

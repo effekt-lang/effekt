@@ -120,8 +120,8 @@ object substitutions {
         }
 
         while (unsolved.nonEmpty) pop() match {
-          // drop trivial constraints
-          case EqCapt(xs, ys, pos) if xs == ys => ()
+          // drop empty constraints
+          case Components(Nil, Nil, Nil, Nil, pos) => ()
 
           // {?C} =:= ...
           case Components(List(x), Nil, vars2, con2, pos) =>
