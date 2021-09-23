@@ -143,12 +143,6 @@ object substitutions {
           // ?C union {a, c, b} =:= ?C union {a, b, c}
           case Components(List(x), con1, List(y), con2, pos) if x == y => unify(con1.toSet, con2.toSet, pos)
 
-          // ?C union {a, b} =:= {a, b, c}
-          case Components(List(x), con1, Nil, con2, pos) => learn(x, con2.toSet -- con1.toSet)
-
-          // {a, b, c} =:= ?C union {a, b}
-          case Components(Nil, con1, List(x), con2, pos) => learn(x, con1.toSet -- con2.toSet)
-
           // cannot solve eq right now
           // TODO make sure we terminate by keeping a generation and a seen set
           case eq => push(eq)
