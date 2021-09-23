@@ -81,7 +81,6 @@ object substitutions {
       val substitutedVparams = vparams map typeSubst.substitute
       val substitutedBparams = bparams map typeSubst.substitute
       val substitutedReturn = captSubst.substitute(typeSubst.substitute(ret))
-      /** TODO: do something about capture metavariables on a function type */
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
 
@@ -271,7 +270,6 @@ object substitutions {
         def substitutedBlockType(tpe: BlockType): BlockType = tpe match {
           case FunctionType(tparams, cparams, vps, bps, ret) =>
             // tparams are always disjoint from skolems!
-            // TODO: is this the right thing for capture parameters?
             FunctionType(tparams, cparams, vps map substitutedValueType, bps map substitutedBlockType, substitutedValueType(ret))
           case BlockTypeApp(c, args) => BlockTypeApp(c, args map substitutedValueType)
           case i: Interface          => i
@@ -302,9 +300,6 @@ object substitutions {
   }
 
   type Substitutions = Map[TypeVar, ValueType]
-
-  // TODO add back, but as inequalities
-  trait RegionEq
 
   // Substitution is independent of the unifier
   implicit class ValueSubstitutionOps(substitutions: Map[TypeVar, ValueType]) {
@@ -338,7 +333,6 @@ object substitutions {
     }
   }
 
-  // TODO generalize to a bi-substitution Map[Capture, (CaptureSet, CaptureSet)]
   implicit class CaptureSubstitutionOps(substitutions: Map[Capture, CaptureSet]) {
 
     def substitute(c: CaptureSet): CaptureSet = CaptureSet(c.captures.flatMap {
