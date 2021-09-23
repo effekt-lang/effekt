@@ -222,7 +222,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           var handlerCapt = Pure
 
           // the capture variable for the continuation ?Ck
-          val resumeCapture = C.freshCaptVar()
+          val resumeCapture = C.freshCaptVar(CaptureParam(LocalName("$resume")))
 
           // Check all handler bodies and collect all inferred capture sets Ch
           handlers foreach Context.withFocus { h =>
@@ -680,6 +680,10 @@ trait TyperOps extends ContextOps { self: Context =>
     val res = block
     // leaving scope: solve here and check all are local unification variables are defined...
     val (typeSubst, captSubst, cs, ccs) = scope.solve
+
+    // TODO applying the substitution to the environment is not enough! We also need to substitute into types and captures
+    // that are locally in scope in Typer...
+
     // The unification variables now go out of scope:
     // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
     valueTypingContext = valueTypingContext.view.mapValues { t => captSubst.substitute(typeSubst.substitute(t)) }.toMap
@@ -691,6 +695,7 @@ trait TyperOps extends ContextOps { self: Context =>
     //    println(s"leaving scope ${scope.id}")
     //    println(s"found substitutions: ${typeSubst}")
     //    println(s"unsolved constraints: ${cs}")
+    println(s"Found capture substitution: ${captSubst}")
     scope = outerScope
     res
   }
