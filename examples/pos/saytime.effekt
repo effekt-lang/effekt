@@ -1,0 +1,17 @@
+interface Console {
+  def println[A](a: A): Unit
+}
+interface Time {
+  def now(): Int
+}
+
+def testModule { console: Console } { time: Time } = {
+
+  def sayHello() = console.println("Hello!")
+  def currentTime() = time.now()
+  def sayTime() = console.println("The current time is: " ++ show(time.now()))
+
+  ()
+}
+
+def main() = ()
