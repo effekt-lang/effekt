@@ -93,6 +93,10 @@ object substitutions {
       var residual: List[TypeConstraint] = Nil
 
       // an experimental set solver
+      // this is still experimental since:
+      // - we don't guarantee it terminates
+      // - it doesn't account for interaction with type constraint solving (while solving types, we might encounter new
+      //   set constraints, but NOT vice versa).
       def setsolver(cs: List[EqCapt]): (Map[Capture, CaptureSet], List[EqCapt]) = {
         var unsolved = cs
         var cache: List[EqCapt] = Nil
