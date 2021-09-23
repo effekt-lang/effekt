@@ -66,7 +66,8 @@ object substitutions {
 
     def requireSub(capt1: CaptureSet, capt2: CaptureSet)(implicit C: Context) = capture_constraints = Sub(capt1, capt2, C.focus) :: capture_constraints
 
-    def addAll(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
+    def addAllType(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
+    def addAllCapt(cs: List[CaptureConstraint]): Unit = capture_constraints = capture_constraints ++ cs
 
     def instantiate(tpe: FunctionType): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
       val FunctionType(tparams, cparams, vparams, bparams, ret) = tpe
@@ -85,7 +86,7 @@ object substitutions {
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
-    def solve(implicit C: Context): (Substitutions, List[TypeConstraint]) = {
+    def solve(implicit C: Context): (Substitutions, Map[Capture, CaptureSet], List[TypeConstraint], List[EqCapt]) = {
       var tcs = constraints
       var ccs = capture_constraints
       var cache: List[TypeConstraint] = Nil
@@ -167,18 +168,6 @@ object substitutions {
             Some((vars1.toList, con1.toList, vars2.toList, con2.toList, pos))
         }
 
-      }
-
-      object OneVar {
-        def unapply(eq: EqCapt): Option[(CaptureUnificationVar, Set[Capture], Tree)] = eq match {
-          case EqCapt(Singleton(x: CaptureUnificationVar), CaptureSet(c2), pos) if x.scope == self => Some(x, c2, pos)
-          case EqCapt(CaptureSet(c2), Singleton(x: CaptureUnificationVar), pos) if x.scope == self => Some(x, c2, pos)
-          case _ => None
-        }
-      }
-
-      object Singleton {
-        def unapply(c: CaptureSet): Option[Capture] = c.captures.headOption
       }
 
       // Notes on Constraints
@@ -293,16 +282,20 @@ object substitutions {
         subst
       }
 
-      println(s"Capture constraints: ${ccs}")
-      val sol = setsolver(ccs.collect { case e: EqCapt => e })
-      println(s"Solution: ${sol}")
-
       // compute type substitution from equivalence classes
       val typeSubst: Substitutions = computeTypeSubstitution
 
-      val substitutedResiduals = residual map { typeSubst.substitute }
+      // also solve set constraints
+      val (captSubst, residualCapts) = setsolver(ccs.collect { case e: EqCapt => e })
 
-      (typeSubst, substitutedResiduals)
+      // TODO check that subsumption constraints hold!
+
+      // update type substitution with capture sets
+      val updatedTypeSubst = typeSubst.view.mapValues { t => captSubst.substitute(t) }.toMap
+
+      val substitutedResiduals = residual map { t => captSubst.substitute(updatedTypeSubst.substitute(t)) }
+
+      (updatedTypeSubst, captSubst, substitutedResiduals, residualCapts)
     }
 
     override def toString = s"Scope$id"

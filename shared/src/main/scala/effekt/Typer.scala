@@ -689,15 +689,19 @@ trait TyperOps extends ContextOps { self: Context =>
     println(s"entering scope ${scope.id}")
     val res = block
     // leaving scope: solve here and check all are local unification variables are defined...
-    val (subst, cs) = scope.solve
+    val (typeSubst, captSubst, cs, ccs) = scope.solve
     // The unification variables now go out of scope:
     // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
-    valueTypingContext = valueTypingContext.view.mapValues { subst.substitute }.toMap
-    blockTypingContext = blockTypingContext.view.mapValues { case (tpe, capt) => (subst.substitute(tpe), capt) }.toMap
-    outerScope.addAll(cs)
+    valueTypingContext = valueTypingContext.view.mapValues { t => captSubst.substitute(typeSubst.substitute(t)) }.toMap
+    blockTypingContext = blockTypingContext.view.mapValues {
+      case (tpe, capt) =>
+        (captSubst.substitute(typeSubst.substitute(tpe)), captSubst.substitute(capt))
+    }.toMap
+    outerScope.addAllType(cs)
+    outerScope.addAllCapt(ccs)
 
     println(s"leaving scope ${scope.id}")
-    println(s"found substitutions: ${subst}")
+    println(s"found substitutions: ${typeSubst}")
     println(s"unsolved constraints: ${cs}")
     scope = outerScope
     res
