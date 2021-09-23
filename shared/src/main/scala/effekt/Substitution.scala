@@ -413,12 +413,15 @@ object substitutions {
       case (t, s) => abort(s"Expected ${t}, but got ${s}")
     }
 
-    def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType): Unit =
-      // TODO implement properly
-      if (tpe1 != tpe2) abort(s"Expected ${tpe1}, but got ${tpe2}")
+    def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType): Unit = (tpe1, tpe2) match {
+      case (t1: Interface, t2: Interface) => if (t1 != t2) abort(s"Expected ${t1}, but got ${t2}")
+      case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
+        unifyInterfaceTypes(c2, c2)
+        (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
+      case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
+    }
 
     def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType): Unit = (tpe1, tpe2) match {
-      /** TODO: check if right thing for capture set parameters */
       case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2)) =>
 
         if (tparams1.size != tparams2.size)
