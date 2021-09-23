@@ -161,6 +161,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       resolveGeneric(binding)
       Context.define(id, ValBinder(Name.local(id), tpe, d))
 
+    case d @ source.Box(capt, block) =>
+      capt foreach resolve
+      resolveGeneric(block)
+
     case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
@@ -425,8 +429,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     res
   }
 
-  def resolve(capt: source.CaptureSet)(implicit C: Context): CaptureSet =
-    CaptureSet(capt.captures.map { C.resolveCapture }.toSet)
+  def resolve(capt: source.CaptureSet)(implicit C: Context): CaptureSet = {
+    val captResolved = CaptureSet(capt.captures.map { C.resolveCapture }.toSet)
+    C.annotateResolvedCapture(capt)(captResolved)
+    captResolved
+  }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
     val res = tpe match {

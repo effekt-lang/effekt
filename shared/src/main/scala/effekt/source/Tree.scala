@@ -276,7 +276,7 @@ case class ValueTypeApp(id: IdRef, params: List[ValueType]) extends ValueType wi
 
 case class CaptureSet(captures: List[IdRef]) extends Resolvable {
   type resolved = symbols.CaptureSet
-  def resolve(implicit C: Context): resolved = ???
+  def resolve(implicit C: Context): resolved = C.resolvedCapture(this)
 }
 
 sealed trait BlockType extends Type

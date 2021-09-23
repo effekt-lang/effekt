@@ -241,7 +241,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `pure`.? ^^ { _.isDefined }
 
   lazy val interfaceDef: P[Def] =
-    `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> operation)  <~ `}`) ^^ InterfaceDef
+    `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> operation)  <~ `}`) ^^ InterfaceDef
 
   lazy val operation: P[Operation] =
     idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> valueType) ^^ Operation

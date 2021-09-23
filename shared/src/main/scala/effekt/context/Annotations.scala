@@ -159,6 +159,11 @@ object Annotations {
     "the resolved type for"
   )
 
+  val Capture = Annotation[source.CaptureSet, symbols.CaptureSet](
+    "Capture",
+    "the resolved capture set for"
+  )
+
   /**
    * The block type of a block argument as annotated by typer
    */
@@ -265,6 +270,12 @@ trait AnnotationsDB { self: Context =>
 
   def resolvedType(tree: source.Type): tree.resolved =
     annotation(Annotations.Type, tree).asInstanceOf[tree.resolved]
+
+  def annotateResolvedCapture(tree: source.CaptureSet)(capt: tree.resolved): Unit =
+    annotate(Annotations.Capture, tree, capt)
+
+  def resolvedCapture(tree: source.CaptureSet): tree.resolved =
+    annotation(Annotations.Capture, tree)
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
