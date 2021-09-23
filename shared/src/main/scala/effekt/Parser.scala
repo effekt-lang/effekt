@@ -287,7 +287,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Arguments
    */
   lazy val blockArg: P[BlockArg] =
-    ( `{` ~> maybeTypeParams ~ valueParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case tps ~ vps ~ body => FunctionArg(tps, vps, Nil, body) }
+    ( `{` ~> maybeTypeParams ~ valueParams ~ many(blockParam) ~  (`=>` ~/> stmts <~ `}`) ^^ FunctionArg
     | (`{` ~> idRef <~ `}`) ^^ InterfaceArg
     )
 
