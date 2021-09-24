@@ -311,7 +311,7 @@ object substitutions {
 
     // amounts to first substituting this, then other
     def updateWith(other: Substitutions): Substitutions =
-      Substitutions(values.view.mapValues { t => other.substitute(t) }.toMap, captures.view.mapValues { t => other.substitute(t) }.toMap)
+      Substitutions(values.view.mapValues { t => other.substitute(t) }.toMap, captures.view.mapValues { t => other.substitute(t) }.toMap) ++ other
 
     // amounts to parallel substitution
     def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)

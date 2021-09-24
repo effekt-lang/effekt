@@ -160,7 +160,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Box(annotatedCapt, block) =>
         // by introducing a unification scope here, we know that `capt` cannot contain fresh unification variables.
-        val tpe / capt = Context withUnificationScope { checkBlockArgument(block) }
+        val tpe1 / capt1 = Context withUnificationScope { checkBlockArgument(block) }
+        val tpe / capt = C.subst.substitute(tpe1) / C.subst.substitute(capt1)
+
         // box { ... }  ~>  box ?C { ... }
         val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
         C.sub(capt, expectedCapt)
@@ -219,18 +221,21 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val capabilityParams = handlers.map { h => h.capability.symbol }
 
         // (1) create new unification scope and check handled program (`prog`) with capabilities in scope
-        val ret / bodyCapt = Context.withUnificationScope {
+        val ret1 / bodyCapt1 = Context.withUnificationScope {
           // bind capability types in type environment
           capabilityParams foreach Context.define
           checkStmt(prog)
         }
+        // TODO factor this substitution into withUnificationScope
+        val ret / bodyCapt = C.subst.substitute(ret1) / C.subst.substitute(bodyCapt1)
+
         // TODO check that the capabilities do NOT occur free in `ret`
 
         // subtract capability from inferred capture Cp. Outer unification variables cannot possibly contain the fresh capability.
         val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(capabilityParams.map(CaptureOf).toSet)
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
-        Context.withUnificationScope {
+        val resTpe1 / resCapt1 = Context.withUnificationScope {
 
           var handlerCapt = Pure
 
@@ -308,6 +313,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
           ret / residualCapt
         }
+        C.subst.substitute(resTpe1) / C.subst.substitute(resCapt1)
 
       case source.Match(sc, clauses) =>
 
@@ -505,12 +511,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val precheckedCapt = C.lookupCapture(sym)
 
-        val tpe / capt = Context.withUnificationScope {
+        val tpe1 / capt1 = Context.withUnificationScope {
           sym.ret match {
             case Some(tpe) => body checkAgainst tpe
             case None      => checkStmt(body)
           }
         }
+        val tpe / capt = C.subst.substitute(tpe1) / C.subst.substitute(capt1)
+
         // TODO check whether the subtraction here works in presence of unifcation variabels
         val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf).toSet)
 
@@ -717,7 +725,7 @@ trait TyperOps extends ContextOps { self: Context =>
     //    println(s"leaving scope ${scope.id}")
     //    println(s"found substitutions: ${typeSubst}")
     //    println(s"unsolved constraints: ${cs}")
-    println(s"Found capture substitution: ${subst}")
+    println(s"Found substitution: ${subst}")
     scope = outerScope
     res
   }
