@@ -71,21 +71,18 @@ object substitutions {
 
     def instantiate(tpe: FunctionType): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
       val FunctionType(tparams, cparams, vparams, bparams, ret) = tpe
-      val typeSubst = tparams.map { p => p -> fresh(p) }.toMap
-
+      val typeRigids = tparams map fresh
       val captRigids = cparams map freshCaptVar
-      val captSubst = (cparams zip captRigids).map { case (p, r) => p -> CaptureSet(Set(r)) }.toMap
+      val subst = Substitutions(tparams zip typeRigids, cparams zip captRigids.map(c => CaptureSet(Set(c))))
 
-      val typeRigids = typeSubst.values.toList
-
-      val substitutedVparams = vparams map typeSubst.substitute
-      val substitutedBparams = bparams map typeSubst.substitute
-      val substitutedReturn = captSubst.substitute(typeSubst.substitute(ret))
+      val substitutedVparams = vparams map subst.substitute
+      val substitutedBparams = bparams map subst.substitute
+      val substitutedReturn = subst.substitute(ret)
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
-    def solve(implicit C: Context): (Substitutions, Map[Capture, CaptureSet], List[TypeConstraint], List[EqCapt]) = {
+    def solve(implicit C: Context): (Substitutions, List[TypeConstraint], List[EqCapt]) = {
       var tcs = constraints
       var ccs = capture_constraints
       var cache: List[TypeConstraint] = Nil
@@ -163,7 +160,6 @@ object substitutions {
             val con2 = c2 -- vars2
             Some((vars1.toList, con1.toList, vars2.toList, con2.toList, pos))
         }
-
       }
 
       // Notes on Constraints
@@ -247,7 +243,7 @@ object substitutions {
 
       def computeTypeSubstitution: Substitutions = {
 
-        var subst: Substitutions = Map.empty
+        var subst: Map[TypeVar, ValueType] = Map.empty
 
         def computeSubstitutionFor(x: UnificationVar): ValueType = subst.getOrElse(x, {
           val candidates = equivalences.solutions(x).map(substitutedValueType)
@@ -278,6 +274,7 @@ object substitutions {
       }
 
       // compute type substitution from equivalence classes
+      // this might introduce new constraints on captures sets
       val typeSubst: Substitutions = computeTypeSubstitution
 
       // also solve set constraints
@@ -287,31 +284,56 @@ object substitutions {
       }
       val (captSubst, residualCapts) = setsolver(eqConstraints)
 
+      val subst = typeSubst ++ captSubst
+
       // TODO check that subsumption constraints hold!
       println(subConstraints)
 
       // update type substitution with capture sets
-      val updatedTypeSubst = typeSubst.view.mapValues { t => captSubst.substitute(t) }.toMap
+      val updatedSubst = subst.updateWith(captSubst)
 
-      val substitutedResiduals = residual map { t => captSubst.substitute(updatedTypeSubst.substitute(t)) }
+      val substitutedResiduals = residual map { t => updatedSubst.substitute(t) }
 
-      (updatedTypeSubst, captSubst, substitutedResiduals, residualCapts)
+      (updatedSubst, substitutedResiduals, residualCapts)
     }
 
     override def toString = s"Scope$id"
   }
 
-  type Substitutions = Map[TypeVar, ValueType]
+  /**
+   * Substitutions not only have unification variables as keys, since we also use the same mechanics to
+   * instantiate type schemes
+   */
+  case class Substitutions(
+    values: Map[TypeVar, ValueType],
+    captures: Map[Capture, CaptureSet]
+  ) {
 
-  // Substitution is independent of the unifier
-  implicit class ValueSubstitutionOps(substitutions: Map[TypeVar, ValueType]) {
+    // amounts to first substituting this, then other
+    def updateWith(other: Substitutions): Substitutions =
+      Substitutions(values.view.mapValues { t => other.substitute(t) }.toMap, captures.view.mapValues { t => other.substitute(t) }.toMap)
+
+    // amounts to parallel substitution
+    def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)
+
+    // shadowing
+    private def without(tps: List[TypeVar], cps: List[Capture]): Substitutions =
+      Substitutions(
+        values.filterNot { case (t, _) => tps.contains(t) },
+        captures.filterNot { case (t, _) => cps.contains(t) }
+      )
+
+    def substitute(c: CaptureSet): CaptureSet = CaptureSet(c.captures.flatMap {
+      case c => captures.getOrElse(c, CaptureSet(Set(c))).captures
+    })
+
     def substitute(t: ValueType): ValueType = t match {
       case x: TypeVar =>
-        substitutions.getOrElse(x, x)
+        values.getOrElse(x, x)
       case ValueTypeApp(t, args) =>
         ValueTypeApp(t, args.map { substitute })
       case BoxedType(tpe, capt) =>
-        BoxedType(substitute(tpe), capt)
+        BoxedType(substitute(tpe), substitute(capt))
       case other => other
     }
 
@@ -324,40 +346,8 @@ object substitutions {
     def substitute(t: FunctionType): FunctionType = t match {
       case FunctionType(tps, cps, vps, bps, ret) =>
         // do not substitute with types parameters bound by this function!
-        val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
+        val substWithout = without(tps, cps)
         FunctionType(tps, cps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret))
-    }
-
-    def substitute(c: TypeConstraint): TypeConstraint = c match {
-      case Eq(t1, t2, pos)      => Eq(substitute(t1), substitute(t2), pos)
-      case EqBlock(t1, t2, pos) => EqBlock(substitute(t1), substitute(t2), pos)
-    }
-  }
-
-  implicit class CaptureSubstitutionOps(substitutions: Map[Capture, CaptureSet]) {
-
-    def substitute(c: CaptureSet): CaptureSet = CaptureSet(c.captures.flatMap {
-      case c => substitutions.getOrElse(c, CaptureSet(Set(c))).captures
-    })
-
-    def substitute(t: ValueType): ValueType = t match {
-      case x: TypeVar            => x
-      case ValueTypeApp(t, args) => ValueTypeApp(t, args.map { substitute })
-      case BoxedType(tpe, capt)  => BoxedType(substitute(tpe), substitute(capt))
-      case other                 => other
-    }
-
-    def substitute(t: BlockType): BlockType = t match {
-      case b: Interface           => b
-      case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
-      case b: FunctionType        => substitute(b)
-    }
-
-    def substitute(t: FunctionType): FunctionType = t match {
-      case FunctionType(tps, cps, vps, bps, ret) =>
-        // do not substitute with capture parameters bound by this function!
-        val substWithout = substitutions.filterNot { case (t, _) => cps.contains(t) }
-        FunctionType(tps, cps, vps map substitute, bps map substitute, substWithout.substitute(ret))
     }
 
     def substitute(c: TypeConstraint): TypeConstraint = c match {
@@ -370,6 +360,15 @@ object substitutions {
       case EqCapt(c1, c2, pos) => EqCapt(substitute(c1), substitute(c2), pos)
     }
   }
+
+  object Substitutions {
+    val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[Capture, CaptureSet])
+    def apply(values: List[(TypeVar, ValueType)], captures: List[(Capture, CaptureSet)]): Substitutions = Substitutions(values.toMap, captures.toMap)
+  }
+
+  // TODO Mostly for backwards compat
+  implicit def typeMapToSubstitution(values: Map[TypeVar, ValueType]): Substitutions = Substitutions(values, Map.empty[Capture, CaptureSet])
+  implicit def captMapToSubstitution(captures: Map[Capture, CaptureSet]): Substitutions = Substitutions(Map.empty[TypeVar, ValueType], captures)
 
   trait TypeComparer {
 

@@ -652,6 +652,11 @@ trait TyperOps extends ContextOps { self: Context =>
   private var annotations: Annotations = Annotations.empty
 
   /**
+   * The substitutions learnt so far
+   */
+  private var substitutions: Substitutions = Substitutions.empty
+
+  /**
    * We need to substitute after solving and update the DB again, later.
    */
   private var inferredValueTypes: List[(Tree, ValueType)] = Nil
@@ -664,6 +669,7 @@ trait TyperOps extends ContextOps { self: Context =>
     inferredBlockTypes = List.empty
     valueTypingContext = Map.empty
     blockTypingContext = Map.empty
+    substitutions = Substitutions.empty
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
@@ -678,7 +684,7 @@ trait TyperOps extends ContextOps { self: Context =>
     blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
     captureContext foreach {
       case (s, c) =>
-        println(s"${s} @ $c");
+        println(s"${s} :${lookupType(s.asBlockSymbol)} @ $c");
         assignCaptureSet(s, c)
     }
   }
@@ -693,23 +699,25 @@ trait TyperOps extends ContextOps { self: Context =>
     println(s"entering scope ${scope.id}")
     val res = block
     // leaving scope: solve here and check all are local unification variables are defined...
-    val (typeSubst, captSubst, cs, ccs) = scope.solve
+    val (subst, cs, ccs) = scope.solve
 
     // TODO applying the substitution to the environment is not enough! We also need to substitute into types and captures
     // that are locally in scope in Typer...
 
     // The unification variables now go out of scope:
-    // use the substitution to update the defined symbols (typing context) and inferred types (annotated trees).
-    valueTypingContext = valueTypingContext.view.mapValues { t => captSubst.substitute(typeSubst.substitute(t)) }.toMap
-    blockTypingContext = blockTypingContext.view.mapValues { t => captSubst.substitute(typeSubst.substitute(t)) }.toMap
-    captureContext = captureContext.view.mapValues { c => captSubst.substitute(c) }.toMap
+    // use the new substitution to update the defined symbols (typing context) and inferred types (annotated trees).
+    valueTypingContext = valueTypingContext.view.mapValues { t => subst.substitute(t) }.toMap
+    blockTypingContext = blockTypingContext.view.mapValues { t => subst.substitute(t) }.toMap
+    captureContext = captureContext.view.mapValues { c => subst.substitute(c) }.toMap
+    substitutions = substitutions.updateWith(subst)
+
     outerScope.addAllType(cs)
     outerScope.addAllCapt(ccs)
 
     //    println(s"leaving scope ${scope.id}")
     //    println(s"found substitutions: ${typeSubst}")
     //    println(s"unsolved constraints: ${cs}")
-    println(s"Found capture substitution: ${captSubst}")
+    println(s"Found capture substitution: ${subst}")
     scope = outerScope
     res
   }
@@ -719,6 +727,8 @@ trait TyperOps extends ContextOps { self: Context =>
   def unify(c1: CaptureSet, c2: CaptureSet) = scope.requireEqual(c1, c2)
 
   def sub(c1: CaptureSet, c2: CaptureSet) = scope.requireSub(c1, c2)
+
+  def subst: Substitutions = substitutions
 
   // these are different methods because those are constraints that we like to introduce
   // might help refactoring later
