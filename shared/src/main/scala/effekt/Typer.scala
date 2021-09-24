@@ -230,7 +230,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val ret / bodyCapt = Context.at(prog) {
           Context.withUnificationScope {
             // bind capability types in type environment
-            capabilityParams foreach Context.define
+            capabilityParams foreach Context.bind
             checkStmt(prog)
           }
         }
@@ -292,13 +292,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
                 val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
                 val vparamSyms = vparams.map { p => p.symbol }
 
-                vparamSyms foreach Context.define
+                vparamSyms foreach Context.bind
 
                 // TODO add constraints on resume capture
                 val resumeType = FunctionType(Nil, Nil, List(ret1), Nil, ret)
                 val resumeSym = Context.symbolOf(resume).asBlockSymbol
 
-                Context.define(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
+                Context.bind(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
 
                 // TODO does this need to be a fresh unification scope?
                 val opRet / opCapt = Context in { body checkAgainst ret }
@@ -334,7 +334,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // (3) infer types for all clauses
         val (fstTpe / fstCapt, _) :: tpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
-            Context.define(checkPattern(scTpe, p)) in {
+            Context in {
+              Context.bind(checkPattern(scTpe, p))
               (checkStmt(body), body)
             }
         }
@@ -479,28 +480,28 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       val funSym = d.symbol
       val funCapt = CaptureSet(Set(C.freshCaptVar(CaptureOf(funSym))))
-      Context.define(funSym, funCapt)
-      funSym.ret.foreach { annot => Context.define(d.symbol, d.symbol.toType) }
+      Context.bind(funSym, funCapt)
+      funSym.ret.foreach { annot => Context.bind(d.symbol, d.symbol.toType) }
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-      Context.define(d.symbol, d.symbol.toType, Pure)
+      Context.bind(d.symbol, d.symbol.toType, Pure)
 
     case d @ source.InterfaceDef(id, tparams, ops) =>
       d.symbol.ops.foreach { op =>
         val tpe = op.toType
         wellformed(tpe)
-        Context.define(op, tpe, Pure)
+        Context.bind(op, tpe, Pure)
       }
 
     case source.DataDef(id, tparams, ctors) =>
       ctors.foreach { ctor =>
         val sym = ctor.symbol
-        Context.define(sym, sym.toType, Pure)
+        Context.bind(sym, sym.toType, Pure)
 
         sym.fields.foreach { field =>
           val tpe = field.toType
           wellformed(tpe)
-          Context.define(field, tpe, Pure)
+          Context.bind(field, tpe, Pure)
         }
       }
 
@@ -511,8 +512,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     d match {
       case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
         val sym = d.symbol
-        sym.vparams foreach Context.define
-        sym.bparams foreach Context.define
+        sym.vparams foreach Context.bind
+        sym.bparams foreach Context.bind
 
         val precheckedCapt = C.lookupCapture(sym)
 
@@ -528,8 +529,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // TODO check whether the subtraction here works in presence of unifcation variabels
         val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf).toSet)
 
-        Context.define(sym, sym.toType(tpe), captWithoutBoundParams)
-        Context.assignType(d, tpe)
+        Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
+        Context.annotateInferredType(d, tpe)
 
         // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
         C.unify(captWithoutBoundParams, precheckedCapt)
@@ -541,18 +542,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             binding checkAgainst t
           case None => checkStmt(binding)
         }
-        Context.define(d.symbol, tpe)
+        Context.bind(d.symbol, tpe)
 
       case d @ source.VarDef(id, annot, binding) =>
         val tpe / capt = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding)
         }
-        Context.define(d.symbol, tpe)
+        Context.bind(d.symbol, tpe)
         tpe
 
       case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
-        d.symbol.vparams map { p => Context.define(p) }
+        d.symbol.vparams map { p => Context.bind(p) }
 
       // all other definitions have already been prechecked
       case d => ()
@@ -579,9 +580,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context): TyperResult[FunctionType] = arg match {
     case source.FunctionArg(tparams, vparams, bparams, body) =>
       val tparamSymbols = tparams.map { p => p.symbol.asTypeVar }
-      tparamSymbols.foreach { p => Context.define(p, p) }
-      vparams.foreach { p => Context.define(p.symbol) }
-      bparams.foreach { p => Context.define(p.symbol) }
+      tparamSymbols.foreach { p => Context.bind(p, p) }
+      vparams.foreach { p => Context.bind(p.symbol) }
+      bparams.foreach { p => Context.bind(p.symbol) }
       val capts = bparams.map { p => CaptureOf(p.symbol) }
 
       // TODO should we open a new unification scope here?
@@ -638,7 +639,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context.at(t) {
       val got / capt = f(t)
       wellformed(got)
-      C.assignType(t, got)
+      C.annotateInferredType(t, got)
+      C.annotateInferredCapt(t, capt)
       got / capt
     }
 
@@ -646,7 +648,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     Context.at(t) {
       val got / capt = f(t)
       wellformed(got)
-      C.assignType(t, got)
+      C.annotateInferredType(t, got)
+      C.annotateInferredCapt(t, capt)
       got / capt
     }
 }
@@ -759,8 +762,9 @@ trait TyperOps extends ContextOps { self: Context =>
   // Inferred types
   // ==============
 
-  private[typer] def assignType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
-  private[typer] def assignType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
+  private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
+  private[typer] def annotateInferredType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
+  private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
   // The "Typing Context"
   // ====================
@@ -782,39 +786,28 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def lookupCapture(s: BlockSymbol) =
     captureContext.getOrElse(s, captureOf(s))
 
-  private[typer] def define(s: Symbol, tpe: ValueType): Context = {
-    valueTypingContext += (s -> tpe); this
-  }
+  private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
 
-  private[typer] def define(s: Symbol, tpe: BlockType, capt: CaptureSet): Context = {
-    define(s, tpe); define(s, capt); this
-  }
+  private[typer] def bind(s: Symbol, tpe: BlockType, capt: CaptureSet): Unit = { bind(s, tpe); bind(s, capt) }
 
-  private[typer] def define(s: Symbol, tpe: BlockType): Context = {
-    blockTypingContext += (s -> tpe)
-    this
-  }
+  private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
 
-  private[typer] def define(s: Symbol, capt: CaptureSet): Context = {
-    captureContext += (s -> capt); this
-  }
+  private[typer] def bind(s: Symbol, capt: CaptureSet): Unit = captureContext += (s -> capt)
 
-  private[typer] def define(bs: Map[Symbol, ValueType]): Context = {
+  private[typer] def bind(bs: Map[Symbol, ValueType]): Unit =
     bs foreach {
-      case (v: ValueSymbol, t: ValueType) => define(v, t)
-      //        case (v: BlockSymbol, t: FunctionType) => define(v, t)
+      case (v: ValueSymbol, t: ValueType) => bind(v, t)
+      //        case (v: BlockSymbol, t: FunctionType) => bind(v, t)
       case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
-    }; this
-  }
+    }
 
-  private[typer] def define(p: ValueParam): Context = p match {
-    case s @ ValueParam(name, tpe) =>
-      define(s, tpe); this
+  private[typer] def bind(p: ValueParam): Unit = p match {
+    case s @ ValueParam(name, tpe) => bind(s, tpe)
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
   }
 
-  private[typer] def define(p: BlockParam): Context = p match {
-    case s @ BlockParam(name, tpe) => define(s, tpe, CaptureSet(Set(CaptureOf(s))))
+  private[typer] def bind(p: BlockParam): Unit = p match {
+    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(Set(CaptureOf(s))))
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
   }
 }
