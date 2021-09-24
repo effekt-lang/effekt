@@ -56,6 +56,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // to allow mutually recursive defs
         module.defs.foreach { d => precheckDef(d) }
         module.defs.foreach { d => checkDef(d) }
+        TUnit / Pure
       }
     }
 
@@ -160,8 +161,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Box(annotatedCapt, block) =>
         // by introducing a unification scope here, we know that `capt` cannot contain fresh unification variables.
-        val tpe1 / capt1 = Context withUnificationScope { checkBlockArgument(block) }
-        val tpe / capt = C.subst.substitute(tpe1) / C.subst.substitute(capt1)
+        val tpe / capt = Context withUnificationScope { checkBlockArgument(block) }
 
         // box { ... }  ~>  box ?C { ... }
         val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
@@ -221,13 +221,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val capabilityParams = handlers.map { h => h.capability.symbol }
 
         // (1) create new unification scope and check handled program (`prog`) with capabilities in scope
-        val ret1 / bodyCapt1 = Context.withUnificationScope {
+        val ret / bodyCapt = Context.withUnificationScope {
           // bind capability types in type environment
           capabilityParams foreach Context.define
           checkStmt(prog)
         }
-        // TODO factor this substitution into withUnificationScope
-        val ret / bodyCapt = C.subst.substitute(ret1) / C.subst.substitute(bodyCapt1)
 
         // TODO check that the capabilities do NOT occur free in `ret`
 
@@ -235,7 +233,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(capabilityParams.map(CaptureOf).toSet)
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
-        val resTpe1 / resCapt1 = Context.withUnificationScope {
+        Context.withUnificationScope {
 
           var handlerCapt = Pure
 
@@ -313,7 +311,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
           ret / residualCapt
         }
-        C.subst.substitute(resTpe1) / C.subst.substitute(resCapt1)
 
       case source.Match(sc, clauses) =>
 
@@ -701,11 +698,11 @@ trait TyperOps extends ContextOps { self: Context =>
   // ===========
 
   // opens a fresh unification scope
-  private[typer] def withUnificationScope[R](block: => R): R = {
+  private[typer] def withUnificationScope[T <: Type](block: => TyperResult[T]): TyperResult[T] = {
     val outerScope = scope
     scope = new UnificationScope
     println(s"entering scope ${scope.id}")
-    val res = block
+    val tpe / capt = block
     // leaving scope: solve here and check all are local unification variables are defined...
     val (subst, cs, ccs) = scope.solve
 
@@ -727,7 +724,11 @@ trait TyperOps extends ContextOps { self: Context =>
     //    println(s"unsolved constraints: ${cs}")
     println(s"Found substitution: ${subst}")
     scope = outerScope
-    res
+
+    tpe match {
+      case t: ValueType => subst.substitute(t).asInstanceOf[T] / subst.substitute(capt)
+      case t: BlockType => subst.substitute(t).asInstanceOf[T] / subst.substitute(capt)
+    }
   }
 
   def unify(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
