@@ -90,6 +90,9 @@ trait Intelligence {
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(sym) {
 
+    case o: Operation =>
+      SymbolInfo(o, "Operation", Some(DeclPrinter(o)), None)
+
     case b: BuiltinFunction =>
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 

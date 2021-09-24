@@ -108,6 +108,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               case List(op) => op
               case _        => Context.abort(s"Multiple operations match ${selector} in type ${i}")
             }
+            // assign the resolved operation to the identifier
+            Context.assignSymbol(selector, op)
 
             // (2) substitute type arguments
             val tsubst = (interface.tparams zip targs).toMap
