@@ -101,16 +101,12 @@ object substitutions {
         var residual: List[EqCapt] = Nil
 
         def pop() = { val c = unsolved.head; unsolved = unsolved.tail; c }
-        def push(eq: EqCapt) = {
-          println(s"Repushing $eq")
-          unsolved = unsolved :+ eq
-        }
+        def push(eq: EqCapt) = { unsolved = unsolved :+ eq }
         def unify(c1: Set[Capture], c2: Set[Capture], pos: Tree) = {
           val (concrete1, unification1) = c1.partition { c => !c.isInstanceOf[CaptureUnificationVar] }
           val (concrete2, unification2) = c2.partition { c => !c.isInstanceOf[CaptureUnificationVar] }
 
           if (unification1.isEmpty && unification2.isEmpty && concrete1 != concrete2) {
-            println(s"comparing: $concrete1 and $concrete2")
             C.at(pos) { C.error(s"Capture set $concrete1 is not equal to $concrete2") }
           }
           residual = EqCapt(CaptureSet(c1), CaptureSet(c2), pos) :: residual
@@ -315,7 +311,6 @@ object substitutions {
             case c: CaptureUnificationVar => Left(c)
             case c => Right(c)
           }
-          println(s"Checking $c")
           val diff = concrete1.toSet -- concrete2.toSet
           if (vars1.isEmpty && vars2.isEmpty) {
             if (!diff.isEmpty) C.at(pos) { C.abort(s"Capture $diff not allowed here!") } else None

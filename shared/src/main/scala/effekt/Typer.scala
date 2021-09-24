@@ -684,17 +684,10 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-
-    println(">>>>>>>>>>>>>>>>>\nDone Typechecking!\n>>>>>>>>>>>>>>>>>\n")
-
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
     blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
-    captureContext foreach {
-      case (s, c) =>
-        println(s"${s} :${lookupType(s.asBlockSymbol)} @ $c");
-        assignCaptureSet(s, c)
-    }
+    captureContext foreach { case (s, c) => assignCaptureSet(s, c) }
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!
@@ -710,7 +703,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def withUnificationScope[T <: Type](block: => TyperResult[T]): TyperResult[T] = {
     val outerScope = scope
     scope = new UnificationScope
-    println(s"entering scope ${scope.id}")
     val tpe / capt = block
     // leaving scope: solve here and check all are local unification variables are defined...
     val (subst, cs, ccs) = scope.solve
@@ -727,11 +719,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
     outerScope.addAllType(cs)
     outerScope.addAllCapt(ccs)
-
-    //    println(s"leaving scope ${scope.id}")
-    //    println(s"found substitutions: ${typeSubst}")
-    //    println(s"unsolved constraints: ${cs}")
-    println(s"Found substitution: ${subst}")
     scope = outerScope
 
     tpe match {
