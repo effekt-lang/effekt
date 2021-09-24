@@ -82,7 +82,7 @@ object substitutions {
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
-    def solve(implicit C: Context): (Substitutions, List[TypeConstraint], List[EqCapt]) = {
+    def solve(implicit C: Context): (Substitutions, List[TypeConstraint], List[CaptureConstraint]) = {
       var tcs = constraints
       var ccs = capture_constraints
       var cache: List[TypeConstraint] = Nil
@@ -154,6 +154,14 @@ object substitutions {
       object Components {
         def unapply(eq: EqCapt): Option[(List[CaptureUnificationVar], List[Capture], List[CaptureUnificationVar], List[Capture], Tree)] = eq match {
           case EqCapt(CaptureSet(c1), CaptureSet(c2), pos) =>
+            val vars1 = c1.collect { case c: CaptureUnificationVar if c.scope == self => c }
+            val con1 = c1 -- vars1
+            val vars2 = c2.collect { case c: CaptureUnificationVar if c.scope == self => c }
+            val con2 = c2 -- vars2
+            Some((vars1.toList, con1.toList, vars2.toList, con2.toList, pos))
+        }
+        def unapply(eq: Sub): Option[(List[CaptureUnificationVar], List[Capture], List[CaptureUnificationVar], List[Capture], Tree)] = eq match {
+          case Sub(CaptureSet(c1), CaptureSet(c2), pos) =>
             val vars1 = c1.collect { case c: CaptureUnificationVar if c.scope == self => c }
             val con1 = c1 -- vars1
             val vars2 = c2.collect { case c: CaptureUnificationVar if c.scope == self => c }
@@ -284,17 +292,45 @@ object substitutions {
       }
       val (captSubst, residualCapts) = setsolver(eqConstraints)
 
+      // Check that we found a concrete substitution for every capture skolem
+      capture_skolems foreach { c =>
+        val cset = captSubst.getOrElse(c, C.abort(s"Cannot infer capture set for ${c}"))
+        val concrete = cset.captures.forall {
+          case y: CaptureUnificationVar => y.scope != self
+          case tpe => true
+        }
+        if (!concrete) { C.abort(s"Cannot infer capture set for ${c}, only found ${cset}") }
+      }
+
       val subst = typeSubst ++ captSubst
 
       // TODO check that subsumption constraints hold!
-      println(subConstraints)
+      val residualSub = subConstraints map (captSubst.substitute) flatMap {
+        case c @ Components(Nil, con1, Nil, con2, pos) =>
+          val (vars1, concrete1) = con1.partitionMap {
+            case c: CaptureUnificationVar => Left(c)
+            case c => Right(c)
+          }
+          val (vars2, concrete2) = con2.partitionMap {
+            case c: CaptureUnificationVar => Left(c)
+            case c => Right(c)
+          }
+          println(s"Checking $c")
+          val diff = concrete1.toSet -- concrete2.toSet
+          if (vars1.isEmpty && vars2.isEmpty) {
+            if (!diff.isEmpty) C.at(pos) { C.abort(s"Capture $diff not allowed here!") } else None
+          } else {
+            Some(c)
+          }
+        case _ => C.panic(s"All capture variables should have been substituted")
+      }
 
       // update type substitution with capture sets
       val updatedSubst = subst.updateWith(captSubst)
 
       val substitutedResiduals = residual map { t => updatedSubst.substitute(t) }
 
-      (updatedSubst, substitutedResiduals, residualCapts)
+      (updatedSubst, substitutedResiduals, residualCapts ++ residualSub)
     }
 
     override def toString = s"Scope$id"
@@ -308,6 +344,12 @@ object substitutions {
     values: Map[TypeVar, ValueType],
     captures: Map[Capture, CaptureSet]
   ) {
+
+    def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
+    def isDefinedAt(c: Capture) = captures.isDefinedAt(c)
+
+    def get(t: TypeVar) = values.get(t)
+    def get(c: Capture) = captures.get(c)
 
     // amounts to first substituting this, then other
     def updateWith(other: Substitutions): Substitutions =
@@ -358,6 +400,9 @@ object substitutions {
     def substitute(c: CaptureConstraint): CaptureConstraint = c match {
       case Sub(c1, c2, pos)    => Sub(substitute(c1), substitute(c2), pos)
       case EqCapt(c1, c2, pos) => EqCapt(substitute(c1), substitute(c2), pos)
+    }
+    def substitute(c: Sub): Sub = c match {
+      case Sub(c1, c2, pos) => Sub(substitute(c1), substitute(c2), pos)
     }
   }
 

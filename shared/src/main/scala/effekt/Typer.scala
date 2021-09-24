@@ -161,12 +161,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case source.Box(annotatedCapt, block) =>
         // by introducing a unification scope here, we know that `capt` cannot contain fresh unification variables.
-        val tpe / capt = Context withUnificationScope { checkBlockArgument(block) }
+        val inferredTpe / inferredCapt = Context.at(block) { Context withUnificationScope { checkBlockArgument(block) } }
 
         // box { ... }  ~>  box ?C { ... }
-        val expectedCapt = annotatedCapt.map(c => c.resolve).getOrElse(CaptureSet(Set(C.freshCaptVar())))
-        C.sub(capt, expectedCapt)
-        BoxedType(tpe, expectedCapt) / Pure
+        val capt = annotatedCapt.map { c =>
+          val expected = c.resolve
+          C.sub(inferredCapt, expected)
+          expected
+        }.getOrElse(inferredCapt)
+
+        // If there is no annotated capture set, we simply use the inferred one. This might lead to type errors
+        // up higher.
+        BoxedType(inferredTpe, capt) / Pure
 
       case source.Unbox(expr) =>
         Context.abort("Block in expression position: automatic boxing currently not supported.")
@@ -221,10 +227,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val capabilityParams = handlers.map { h => h.capability.symbol }
 
         // (1) create new unification scope and check handled program (`prog`) with capabilities in scope
-        val ret / bodyCapt = Context.withUnificationScope {
-          // bind capability types in type environment
-          capabilityParams foreach Context.define
-          checkStmt(prog)
+        val ret / bodyCapt = Context.at(prog) {
+          Context.withUnificationScope {
+            // bind capability types in type environment
+            capabilityParams foreach Context.define
+            checkStmt(prog)
+          }
         }
 
         // TODO check that the capabilities do NOT occur free in `ret`
@@ -508,13 +516,14 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val precheckedCapt = C.lookupCapture(sym)
 
-        val tpe1 / capt1 = Context.withUnificationScope {
-          sym.ret match {
-            case Some(tpe) => body checkAgainst tpe
-            case None      => checkStmt(body)
+        val tpe / capt = Context.at(body) {
+          Context.withUnificationScope {
+            sym.ret match {
+              case Some(tpe) => body checkAgainst tpe
+              case None      => checkStmt(body)
+            }
           }
         }
-        val tpe / capt = C.subst.substitute(tpe1) / C.subst.substitute(capt1)
 
         // TODO check whether the subtraction here works in presence of unifcation variabels
         val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf).toSet)
