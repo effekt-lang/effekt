@@ -659,13 +659,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private var scope: UnificationScope = new UnificationScope
 
   /**
-   * Annotations added by typer
-   *
-   * The annotations are immutable and can be backtracked.
-   */
-  private var annotations: Annotations = Annotations.empty
-
-  /**
    * The substitutions learnt so far
    */
   private var substitutions: Substitutions = Substitutions.empty
@@ -675,21 +668,19 @@ trait TyperOps extends ContextOps { self: Context =>
    */
   private var inferredValueTypes: List[(Tree, ValueType)] = Nil
   private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
+  private var inferredCaptures: List[(Tree, CaptureSet)] = Nil
 
   private[typer] def initTyperstate(): Unit = {
     scope = new UnificationScope
-    annotations = Annotations.empty
     inferredValueTypes = List.empty
     inferredBlockTypes = List.empty
+    inferredCaptures = List.empty
     valueTypingContext = Map.empty
     blockTypingContext = Map.empty
     substitutions = Substitutions.empty
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    // TODO substitute and commit
-    annotations.commit()
-    //    annotate(Annotations.Unifier, module, currentUnifier)
 
     println(">>>>>>>>>>>>>>>>>\nDone Typechecking!\n>>>>>>>>>>>>>>>>>\n")
 
@@ -701,6 +692,12 @@ trait TyperOps extends ContextOps { self: Context =>
         println(s"${s} :${lookupType(s.asBlockSymbol)} @ $c");
         assignCaptureSet(s, c)
     }
+
+    // Update and write out all inferred types and captures for LSP support
+    // This info is currently also used by Transformer!
+    inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, subst.substitute(tpe)) }
+    inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
+    inferredCaptures foreach { case (t, capt) => annotate(Annotations.InferredCapture, t, subst.substitute(capt)) }
   }
 
   // Unification
@@ -762,24 +759,8 @@ trait TyperOps extends ContextOps { self: Context =>
   // Inferred types
   // ==============
 
-  private[typer] def assignType(t: Tree, e: ValueType): Context = {
-    annotations.annotate(Annotations.InferredType, t, e)
-    this
-  }
-
-  // TODO actually store in DB
-  private[typer] def assignType(t: Tree, e: BlockType): Context = this
-
-  // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Context = {
-    annotations.annotate(Annotations.BlockArgumentType, t, tpe)
-    this
-  }
-
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
-    annotations.annotate(Annotations.TypeArguments, call, targs)
-    this
-  }
+  private[typer] def assignType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
+  private[typer] def assignType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
 
   // The "Typing Context"
   // ====================

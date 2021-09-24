@@ -68,10 +68,19 @@ object Annotations {
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  // TODO rename to Type
-  val InferredType = Annotation[source.Tree, symbols.ValueType](
-    "Type",
-    "the inferred type of"
+  val InferredValueType = Annotation[source.Tree, symbols.ValueType](
+    "ValueType",
+    "the inferred value type of"
+  )
+
+  val InferredBlockType = Annotation[source.Tree, symbols.BlockType](
+    "BlockType",
+    "the inferred block type of"
+  )
+
+  val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
+    "CaptureSet",
+    "the inferred capture of"
   )
 
   /**
@@ -163,14 +172,6 @@ object Annotations {
     "Capture",
     "the resolved capture set for"
   )
-
-  /**
-   * The block type of a block argument as annotated by typer
-   */
-  val BlockArgumentType = Annotation[source.FunctionArg, symbols.FunctionType](
-    "BlockArgumentType",
-    "the inferred type for block argument"
-  )
 }
 
 /**
@@ -235,7 +236,7 @@ trait AnnotationsDB { self: Context =>
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[ValueType] =
-    annotationOption(Annotations.InferredType, t)
+    annotationOption(Annotations.InferredValueType, t)
 
   def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
