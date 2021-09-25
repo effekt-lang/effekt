@@ -533,6 +533,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
         Context.annotateInferredType(d, tpe)
+        Context.annotateInferredCapt(d, captWithoutBoundParams)
 
         // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
         C.unify(captWithoutBoundParams, precheckedCapt)
@@ -566,7 +567,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="arguments and parameters">
 
-  def checkBlockArgument(arg: source.BlockArg)(implicit C: Context): TyperResult[BlockType] = arg match {
+  def checkBlockArgument(arg: source.BlockArg)(implicit C: Context): TyperResult[BlockType] = checkBlock(arg) {
     case arg: source.FunctionArg  => checkFunctionArgument(arg)
     case arg: source.InterfaceArg => checkCapabilityArgument(arg)
   }

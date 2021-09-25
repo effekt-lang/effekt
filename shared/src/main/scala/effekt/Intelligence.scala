@@ -2,9 +2,8 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.{ ModuleDecl, Tree }
-
 import org.bitbucket.inkytonik.kiama
-import kiama.util.Position
+import kiama.util.{ Position, Source }
 
 trait Intelligence {
 
@@ -87,6 +86,22 @@ trait Intelligence {
               | |:------------- |:------------- |
               | | `${outerTpe}` | `${innerTpe}` |
               |""".stripMargin
+
+  // For now we only show captures of function definitions and calls to box
+  def getInferredCaptures(src: Source)(implicit C: Context): Vector[(Position, CaptureSet)] =
+    C.allCaptures.filter {
+      case (t, c) =>
+        val p = C.positions.getStart(t)
+        p.isDefined && p.get.source == src
+    }.collect {
+      case (t: source.FunDef, c) => for {
+        pos <- C.positions.getStart(t)
+      } yield (pos, c)
+      case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
+        pos <- C.positions.getStart(block)
+        capt <- C.inferredCaptureOption(block)
+      } yield (pos, capt)
+    }.flatten
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(sym) {
 

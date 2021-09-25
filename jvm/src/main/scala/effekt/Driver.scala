@@ -11,11 +11,16 @@ import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ Client, CompilerWithConfig, IO, Services, Source }
+
 import java.io.{ InputStream, OutputStream }
-
 import effekt.util.messages.FatalPhaseError
-import org.eclipse.lsp4j.jsonrpc.Launcher
 
+import com.google.gson.JsonObject
+import org.eclipse.lsp4j.{ ExecuteCommandParams }
+import org.eclipse.lsp4j.jsonrpc.Launcher
+import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
+
+import java.util.concurrent.CompletableFuture
 import scala.concurrent.ExecutionException
 import scala.sys.process.Process
 
@@ -176,7 +181,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   }
 
   private def launch(config: EffektConfig, in: InputStream, out: OutputStream): Unit = {
-    val services = new Services(this, config)
+    val services = new LSPServices(this, config)
     val launcherBase =
       new Launcher.Builder[Client]()
         .setLocalService(services)
@@ -187,6 +192,32 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     val client = launcher.getRemoteProxy()
     connect(client)
     launcher.startListening()
+  }
+
+  /**
+   * Extends Kiama's LSP support with executeCommand as specified in the LSP
+   *
+   * The parameters are passed as an array, potentially containing gson.Json objects or primitives.
+   * The first argument is required to be { uri: String } and used to obtain the source.
+   */
+  def executeCommand(source: Source, executeCommandParams: ExecuteCommandParams): Option[Any] = None
+
+  class LSPServices(server: Driver, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig](server, config) {
+
+    @JsonNotification("workspace/executeCommand")
+    def commands(params: ExecuteCommandParams): CompletableFuture[Any] =
+      CompletableFuture.completedFuture {
+        (for {
+          firstArg <- params.getArguments.toArray.headOption
+          uri <- try {
+            // ad-hoc parsing of json:
+            // we require that the first argument is a json object with a field { uri: String }
+            Some(firstArg.asInstanceOf[JsonObject].getAsJsonPrimitive("uri").getAsString)
+          } catch { case e: Throwable => None }
+          src <- server.sources.get(uri)
+          res <- server.executeCommand(src, params)
+        } yield res).getOrElse(null)
+      }
   }
 
   /**

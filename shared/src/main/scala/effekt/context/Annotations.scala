@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.util.messages.ErrorReporter
-import org.bitbucket.inkytonik.kiama.util.Memoiser
+import org.bitbucket.inkytonik.kiama.util.{ Memoiser, Source }
 
 case class Annotation[K, V](name: String, description: String) {
   type Value = V
@@ -243,6 +243,14 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
+  def inferredCaptureOption(t: source.Tree): Option[CaptureSet] =
+    annotationOption(Annotations.InferredCapture, t)
+
+  def inferredCaptureOf(t: source.Tree): CaptureSet =
+    inferredCaptureOption(t).getOrElse {
+      panic(s"Internal Error: Missing capture of source expression: '${t}'")
+    }
+
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
@@ -394,6 +402,14 @@ trait AnnotationsDB { self: Context =>
   def sourceSymbols: Vector[Symbol] =
     annotations.keys.collect {
       case s: Symbol if hasAnnotation(Annotations.SourceModule, s) => s
+    }
+
+  // (s: Source)
+  // positions.getStart(t).exists(p => p.source == s) &&
+  def allCaptures =
+    annotations.keys.collect {
+      case t: source.Tree if hasAnnotation(Annotations.InferredCapture, t) =>
+        (t, annotation(Annotations.InferredCapture, t))
     }
 
   /**

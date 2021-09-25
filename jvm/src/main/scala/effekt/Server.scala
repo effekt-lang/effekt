@@ -5,7 +5,7 @@ import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, Tree }
 import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
-import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
+import org.eclipse.lsp4j.{ DocumentSymbol, ExecuteCommandParams, SymbolKind }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -59,7 +59,7 @@ trait LSPServer extends Driver with Intelligence {
   } yield info
 
   // The implementation in kiama.Server does not support file sources
-  override def locationOfNode(node: Tree): Location = {
+  override def locationOfNode(node: Tree): Location =
     (positions.getStart(node), positions.getFinish(node)) match {
       case (start @ Some(st), finish @ Some(_)) =>
         val s = convertPosition(start)
@@ -68,6 +68,10 @@ trait LSPServer extends Driver with Intelligence {
       case _ =>
         null
     }
+
+  def positionToLocation(p: Position): Location = {
+    val s = convertPosition(Some(p))
+    new Location(p.source.name, new LSPRange(s, s))
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
@@ -142,6 +146,19 @@ trait LSPServer extends Driver with Intelligence {
     val tpe2 = inferred
     tpe1 != tpe2
   }
+
+  case class Capture(location: Location, captureText: String)
+
+  override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
+    if (params.getCommand == "inferredCaptures") {
+      for {
+        // TODO it seems this is not enough to run the frontend. On startup the editor doesn't display captures...
+        mod <- context.frontend(src)(context)
+        res = getInferredCaptures(src)(context).map { case (p, c) => Capture(positionToLocation(p), c.toString) }.toArray
+      } yield res
+    } else {
+      None
+    }
 }
 
 /**
