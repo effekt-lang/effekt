@@ -96,7 +96,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
       }
 
-      case source.Select(expr, selector) =>
+      case s @ source.Select(expr, selector) =>
         checkExprAsBlock(expr) match {
           case (i @ InterfaceType(interface, targs) / capt) =>
             // (1) find the operation
@@ -104,9 +104,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             val op = interface.ops.collect {
               case op if op.name.name == selector.name => op
             } match {
-              case Nil      => Context.abort(s"Cannot select ${selector} in type ${i}")
+              case Nil      => Context.at(s) { Context.abort(s"Cannot select ${selector} in type ${i}") }
               case List(op) => op
-              case _        => Context.abort(s"Multiple operations match ${selector} in type ${i}")
+              case _        => Context.at(s) { Context.abort(s"Multiple operations match ${selector} in type ${i}") }
             }
             // assign the resolved operation to the identifier
             Context.assignSymbol(selector, op)

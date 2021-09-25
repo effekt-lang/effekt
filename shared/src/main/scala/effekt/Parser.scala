@@ -357,7 +357,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( callExpr ~ some(`.` ~> idRef) ~ maybeTypeArgs ~ arguments ^^ {
         case firstTarget ~ accesses ~ targs ~ (vargs ~ bargs) =>
           val selection = accesses.foldLeft(firstTarget) {
-            case (firstArg, id) => Select(firstArg, id)
+            case (firstArg, id) => Select(firstArg, id).withPositionOf(id)
           }
           Call(selection, targs, vargs, bargs)
       }
