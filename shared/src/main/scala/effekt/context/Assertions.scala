@@ -69,10 +69,6 @@ object assertions {
       case t: VarBinder => t
       case _ => reporter.abort("Expected a mutable variable")
     }
-    def asBinder: Binder = s match {
-      case t: Binder => t
-      case _ => reporter.abort("Expected a binder")
-    }
     def asType: Type = s match {
       case t: Type => t
       case _ => reporter.abort("Expected a type")

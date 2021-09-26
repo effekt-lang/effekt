@@ -73,7 +73,8 @@ trait Intelligence {
 
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
-    case u: Binder       => Some(u.decl)
+    case u: ValBinder    => Some(u.decl)
+    case u: VarBinder    => Some(u.decl)
     // case d: EffectOp     => C.definitionTreeOption(d.effect)
     case a: Anon         => Some(a.decl)
     case u               => C.definitionTreeOption(u)
