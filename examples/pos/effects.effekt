@@ -29,6 +29,22 @@ def bar(): Int = {
   }
 }
 
+interface State {
+  def get(): Int
+  def put(b: Int): Unit
+}
+
+def state[R](init: Int) { prog: { State } => R }: R = {
+  val f = try {
+    val result = prog { st }
+    box { (s: Int) => result }
+  } with st : State {
+    def get() = box { (s: Int) => (unbox resume(s))(s) }
+    def put(b: Int) = box { (s: Int) => (unbox resume(()))(b) }
+  };
+  (unbox f)(init)
+}
+
 // def bar { test : Test2 } = foo { test }
 
 def main() = println(bar())
