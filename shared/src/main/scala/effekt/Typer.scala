@@ -245,7 +245,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // check that none of the bound capabilities escapes through the return type
         val escape = freeCapture(ret) intersect boundCaptures
         if (escape.nonEmpty) {
-          C.at(prog) { C.error(s"The following capabilities escape through the return type: ${CaptureSet(escape)}") }
+          C.at(prog) { C.error(s"The return type is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}") }
         }
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
