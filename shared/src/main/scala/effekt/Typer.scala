@@ -237,10 +237,16 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           }
         }
 
-        // TODO check that the capabilities do NOT occur free in `ret`
+        val boundCaptures: Set[Capture] = capabilityParams.map(CaptureOf).toSet
 
         // subtract capability from inferred capture Cp. Outer unification variables cannot possibly contain the fresh capability.
-        val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(capabilityParams.map(CaptureOf).toSet)
+        val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(boundCaptures)
+
+        // check that none of the bound capabilities escapes through the return type
+        val escape = freeCapture(ret) intersect boundCaptures
+        if (escape.nonEmpty) {
+          C.at(prog) { C.error(s"The following capabilities escape through the return type: ${CaptureSet(escape)}") }
+        }
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
         Context.withUnificationScope {
@@ -596,17 +602,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //</editor-fold>
 
-  private def freeTypeVars(o: Any): Set[TypeVar] = o match {
-    case t: symbols.TypeVar => Set(t)
-    /** TODO: do something about cparams */
+  private def freeCapture(o: Any): Set[Capture] = o match {
+    case t: symbols.Capture   => Set(t)
+    case BoxedType(tpe, capt) => freeCapture(tpe) ++ capt.captures
     case FunctionType(tparams, cparams, vparams, bparams, ret) =>
-      freeTypeVars(vparams) ++ freeTypeVars(bparams) ++ freeTypeVars(ret) -- tparams.toSet
+      freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) -- cparams.toSet
     // case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
     case t: Iterable[t] =>
-      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+      t.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
     case p: Product =>
-      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+      p.productIterator.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
     case _ =>
       Set.empty
   }
