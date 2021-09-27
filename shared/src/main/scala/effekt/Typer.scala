@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
-import effekt.source.{ AnyPattern, Def, Term, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
+import effekt.source.{ AnyPattern, Def, DefStmt, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree }
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -55,7 +55,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // We split the type-checking of definitions into "pre-check" and "check"
         // to allow mutually recursive defs
         module.defs.foreach { d => precheckDef(d) }
-        module.defs.foreach { d => checkDef(d) }
+        module.defs.foreach { d => checkStmts(source.DefStmt(d, source.Return(source.UnitLit()))) }
         TUnit / Pure
       }
     }
@@ -469,18 +469,91 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt)(implicit C: Context): TyperResult[ValueType] =
+  def checkStmt(stmt: Stmt)(implicit C: Context): TyperResult[ValueType] = {
+    precheckStmts(stmt);
+    checkStmts(stmt)
+  }
+
+  def precheckStmts(stmt: Stmt)(implicit C: Context): Unit = stmt match {
+    case source.DefStmt(d, rest) =>
+      precheckDef(d); precheckStmts(rest)
+    case source.ExprStmt(d, rest) => precheckStmts(rest)
+    case source.BlockStmt(s)      => ()
+    case source.Return(e)         => ()
+  }
+
+  def checkStmts(stmt: Stmt)(implicit C: Context): TyperResult[ValueType] =
     check(stmt) {
-      case source.DefStmt(b, rest) =>
-        val t = Context in { precheckDef(b); checkDef(b) }
-        val r = checkStmt(rest)
-        r
+      case source.DefStmt(d @ source.FunDef(id, tparams, vparams, bparams, ret, body), rest) =>
+        val sym = d.symbol
+        sym.vparams foreach Context.bind
+        sym.bparams foreach Context.bind
+
+        val precheckedCapt = C.lookupCapture(sym)
+
+        val tpe / capt = Context.at(body) {
+          Context.withUnificationScope {
+            sym.ret match {
+              case Some(tpe) => body checkAgainst tpe
+              case None      => checkStmt(body)
+            }
+          }
+        }
+
+        // TODO check whether the subtraction here works in presence of unifcation variabels
+        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf))
+
+        Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
+        Context.annotateInferredType(d, tpe)
+        Context.annotateInferredCapt(d, captWithoutBoundParams)
+
+        // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
+        C.unify(captWithoutBoundParams, precheckedCapt)
+
+        checkStmts(rest)
+
+      case source.DefStmt(d @ source.ValDef(id, annot, binding), rest) =>
+        val tpeBind / captBind = d.symbol.tpe match {
+          case Some(t) =>
+            binding checkAgainst t
+          case None => checkStmt(binding)
+        }
+        Context.bind(d.symbol, tpeBind)
+
+        val tpeRest / captRest = checkStmts(rest)
+
+        tpeRest / (captBind ++ captRest)
+
+      case source.DefStmt(d @ source.VarDef(id, annot, binding), rest) =>
+        val sym = d.symbol
+
+        // TODO do not ignore the capture set here!
+        val tpeBind / captBind = sym.tpe match {
+          case Some(t) => binding checkAgainst t
+          case None    => checkStmt(binding)
+        }
+        val stTpe = BlockTypeApp(TState, List(tpeBind))
+
+        Context.bind(sym, stTpe, CaptureSet(CaptureOf(sym))) // TODO use correct capture set here
+
+        val tpeRest / captRest = checkStmts(rest)
+
+        // TODO check non escaping of sym
+        tpeRest / (captBind ++ captRest)
+
+      case source.DefStmt(d @ source.ExternFun(pure, id, tparams, vparams, tpe, body), rest) =>
+        d.symbol.vparams map { p => Context.bind(p) }
+        checkStmts(rest)
+
+      // All other defs have already been prechecked
+      case source.DefStmt(_, rest) =>
+        checkStmts(rest)
 
       // <expr> ; <stmt>
       case source.ExprStmt(e, rest) =>
-        val _ = checkExpr(e)
-        val r = checkStmt(rest)
-        r
+        val _ / captExpr = checkExpr(e)
+        val tpe / captRest = checkStmts(rest)
+        tpe / (captExpr ++ captRest)
 
       case source.Return(e)        => checkExpr(e)
 
@@ -521,65 +594,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       }
 
     case _ => ()
-  }
-
-  def checkDef(d: Def)(implicit C: Context): Unit = Context.at(d) {
-    d match {
-      case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
-        val sym = d.symbol
-        sym.vparams foreach Context.bind
-        sym.bparams foreach Context.bind
-
-        val precheckedCapt = C.lookupCapture(sym)
-
-        val tpe / capt = Context.at(body) {
-          Context.withUnificationScope {
-            sym.ret match {
-              case Some(tpe) => body checkAgainst tpe
-              case None      => checkStmt(body)
-            }
-          }
-        }
-
-        // TODO check whether the subtraction here works in presence of unifcation variabels
-        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf))
-
-        Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
-        Context.annotateInferredType(d, tpe)
-        Context.annotateInferredCapt(d, captWithoutBoundParams)
-
-        // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
-        C.unify(captWithoutBoundParams, precheckedCapt)
-        tpe
-
-      case d @ source.ValDef(id, annot, binding) =>
-        val tpe / capt = d.symbol.tpe match {
-          case Some(t) =>
-            binding checkAgainst t
-          case None => checkStmt(binding)
-        }
-        Context.bind(d.symbol, tpe)
-
-      // TODO check whether the state capability leaks
-      // also subtract effect from body
-      case d @ source.VarDef(id, annot, binding) =>
-        val sym = d.symbol
-
-        // TODO do not ignore the capture set here!
-        val tpe / capt = sym.tpe match {
-          case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding)
-        }
-        val stTpe = BlockTypeApp(TState, List(tpe))
-
-        Context.bind(sym, stTpe, CaptureSet(CaptureOf(sym))) // TODO use correct capture set here
-
-      case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
-        d.symbol.vparams map { p => Context.bind(p) }
-
-      // all other definitions have already been prechecked
-      case d => ()
-    }
   }
 
   //</editor-fold>
