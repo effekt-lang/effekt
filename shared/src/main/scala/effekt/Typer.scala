@@ -491,17 +491,23 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val precheckedCapt = C.lookupCapture(sym)
 
+        val lexical = CaptureOf(sym)
+
         val tpe / capt = Context.at(body) {
-          Context.withUnificationScope {
-            sym.ret match {
-              case Some(tpe) => body checkAgainst tpe
-              case None      => checkStmt(body)
+          Context.withRegion(lexical) {
+            Context.withUnificationScope {
+              sym.ret match {
+                case Some(tpe) => body checkAgainst tpe
+                case None      => checkStmt(body)
+              }
             }
           }
         }
 
-        // TODO check whether the subtraction here works in presence of unifcation variabels
-        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf))
+        if (freeCapture(tpe) contains lexical) Context.at(body) { Context.error(s"Self region ${id} must not escape as part of the function's return type") }
+
+        // TODO check whether the subtraction here works in presence of unification variables
+        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf)) -- CaptureSet(lexical)
 
         Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
         Context.annotateInferredType(d, tpe)
@@ -534,7 +540,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
         val stTpe = BlockTypeApp(TState, List(tpeBind))
 
-        Context.bind(sym, stTpe, CaptureSet(CaptureOf(sym))) // TODO use correct capture set here
+        // we use the current region as an approximation for the state
+        val captState = C.region // CaptureOf(sym)
+
+        Context.bind(sym, stTpe, CaptureSet(captState)) // TODO use correct capture set here
 
         val tpeRest / captRest = checkStmts(rest)
 
@@ -614,15 +623,23 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //     or
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
   def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context): TyperResult[FunctionType] = arg match {
-    case source.FunctionArg(tparams, vparams, bparams, body) =>
+    case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
+
+      // A synthetic symbol to identify the anonymous function
+      val funSym = Anon(decl)
+
       val tparamSymbols = tparams.map { p => p.symbol.asTypeVar }
       tparamSymbols.foreach { p => Context.bind(p, p) }
       vparams.foreach { p => Context.bind(p.symbol) }
       bparams.foreach { p => Context.bind(p.symbol) }
       val capts = bparams.map { p => CaptureOf(p.symbol) }
 
+      val lexical = CaptureOf(funSym)
+
       // TODO should we open a new unification scope here?
-      val ret / capt = checkStmt(body)
+      val ret / capt = Context.withRegion(lexical) { checkStmt(body) }
+
+      if (freeCapture(ret) contains lexical) { Context.at(body) { Context.error("The self region of the anonymous block argument must not leave through its type.") } }
 
       FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / (capt -- CaptureSet(capts))
   }
@@ -708,6 +725,13 @@ trait TyperOps extends ContextOps { self: Context =>
   private var inferredValueTypes: List[(Tree, ValueType)] = Nil
   private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
   private var inferredCaptures: List[(Tree, CaptureSet)] = Nil
+
+  /**
+   * The current lexical region used for mutable variables.
+   *
+   * None on the toplevel
+   */
+  private var lexicalRegion: Option[Capture] = None
 
   private[typer] def initTyperstate(): Unit = {
     scope = new UnificationScope
@@ -832,5 +856,16 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def bind(p: BlockParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(CaptureOf(s)))
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
+  }
+
+  // Lexical Regions
+  // ===============
+  def region: Capture = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
+  def withRegion[T](c: Capture)(prog: => T): T = {
+    val before = lexicalRegion
+    lexicalRegion = Some(c)
+    val res = prog
+    lexicalRegion = before
+    res
   }
 }

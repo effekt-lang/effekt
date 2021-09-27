@@ -125,22 +125,8 @@ package object symbols {
   /**
    * Anonymous symbols used to represent scopes / regions in the region checker
    */
-  sealed trait Anon extends TermSymbol {
+  case class Anon(decl: source.Tree) extends BlockSymbol {
     val name = NoName
-    def decl: source.Tree
-  }
-
-  case class BlockArg(decl: source.Tree) extends BlockSymbol with Anon
-
-  case class Lambda(vparams: List[ValueParam], decl: source.Tree) extends Fun with Anon {
-
-    // Lambdas currently do not have an annotated return type
-    def ret = None
-
-    // Lambdas currently do not take type parameters
-    def tparams = Nil
-
-    def bparams = Nil
   }
 
   /**
