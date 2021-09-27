@@ -73,7 +73,7 @@ object substitutions {
       val FunctionType(tparams, cparams, vparams, bparams, ret) = tpe
       val typeRigids = tparams map fresh
       val captRigids = cparams map freshCaptVar
-      val subst = Substitutions(tparams zip typeRigids, cparams zip captRigids.map(c => CaptureSet(Set(c))))
+      val subst = Substitutions(tparams zip typeRigids, cparams zip captRigids.map(c => CaptureSet(c)))
 
       val substitutedVparams = vparams map subst.substitute
       val substitutedBparams = bparams map subst.substitute

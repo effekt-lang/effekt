@@ -168,8 +168,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
-      // TODO bind the variable as capture
-      Context.define(id, VarBinder(Name.local(id), tpe, d))
+      val sym = VarBinder(Name.local(id), tpe, d)
+      val capt = CaptureOf(sym)
+      // TODO bind the variable as capture to then resolve the annotated type
+      Context.define(id, sym)
+      Context.bind(capt)
 
     // FunDef, EffDef, and DataDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>

@@ -149,7 +149,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
-        case b: VarBinder   => Context.abort(s"Mutable variables not yet implemented.")
+        case b: VarBinder => Context.lookup(b) match {
+          case (BlockTypeApp(TState, List(tpe)), capt) => tpe / capt
+          case _ => Context.panic(s"Builtin state cannot be typed.")
+        }
         case b: BlockSymbol => Context.abort(s"Right now blocks cannot be used as expressions.")
         case x: ValueSymbol => Context.lookup(x) / Pure
       }
@@ -157,9 +160,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val _ / capt = expr checkAgainst Context.lookup(sym)
+        val stTpe / stCapt = Context.lookup(sym) match {
+          case (BlockTypeApp(TState, List(tpe)), capt) => tpe / capt
+          case _ => Context.panic(s"Builtin state cannot be typed.")
+        }
+        val _ / exprCapt = expr checkAgainst stTpe
 
-        TUnit / (capt + CaptureOf(sym))
+        TUnit / (stCapt ++ exprCapt)
 
       case source.Box(annotatedCapt, block) =>
         // by introducing a unification scope here, we know that `capt` cannot contain fresh unification variables.
@@ -306,7 +313,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
                 val resumeType = FunctionType(Nil, Nil, List(ret1), Nil, ret)
                 val resumeSym = Context.symbolOf(resume).asBlockSymbol
 
-                Context.bind(resumeSym, resumeType, CaptureSet(Set(resumeCapture)))
+                Context.bind(resumeSym, resumeType, CaptureSet(resumeCapture))
 
                 // TODO does this need to be a fresh unification scope?
                 val opRet / opCapt = Context in { body checkAgainst ret }
@@ -323,7 +330,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
           // Ck = (Cp - cap) union (UNION Ch)
           val residualCapt = bodyCaptWithoutCapabilities ++ handlerCapt
-          C.unify(CaptureSet(Set(resumeCapture)), residualCapt)
+          C.unify(CaptureSet(resumeCapture), residualCapt)
 
           ret / residualCapt
         }
@@ -487,7 +494,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       val funSym = d.symbol
-      val funCapt = CaptureSet(Set(C.freshCaptVar(CaptureOf(funSym))))
+      val funCapt = CaptureSet(C.freshCaptVar(CaptureOf(funSym)))
       Context.bind(funSym, funCapt)
       funSym.ret.foreach { annot => Context.bind(d.symbol, d.symbol.toType) }
 
@@ -535,7 +542,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
 
         // TODO check whether the subtraction here works in presence of unifcation variabels
-        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf).toSet)
+        val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf))
 
         Context.bind(sym, sym.toType(tpe), captWithoutBoundParams)
         Context.annotateInferredType(d, tpe)
@@ -553,13 +560,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
         Context.bind(d.symbol, tpe)
 
+      // TODO check whether the state capability leaks
+      // also subtract effect from body
       case d @ source.VarDef(id, annot, binding) =>
-        val tpe / capt = d.symbol.tpe match {
+        val sym = d.symbol
+
+        // TODO do not ignore the capture set here!
+        val tpe / capt = sym.tpe match {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding)
         }
-        Context.bind(d.symbol, tpe)
-        tpe
+        val stTpe = BlockTypeApp(TState, List(tpe))
+
+        Context.bind(sym, stTpe, CaptureSet(CaptureOf(sym))) // TODO use correct capture set here
 
       case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
         d.symbol.vparams map { p => Context.bind(p) }
@@ -597,7 +610,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       // TODO should we open a new unification scope here?
       val ret / capt = checkStmt(body)
 
-      FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / (capt -- CaptureSet(capts.toSet))
+      FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / (capt -- CaptureSet(capts))
   }
 
   //</editor-fold>
@@ -803,7 +816,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def bind(p: BlockParam): Unit = p match {
-    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(Set(CaptureOf(s))))
+    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(CaptureOf(s)))
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
   }
 }

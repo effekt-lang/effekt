@@ -84,9 +84,9 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    //    case State(id, tpe, get, put, init, body) =>
-    //      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
-    //
+    case State(init, body) =>
+      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
+
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
       val cs = parens(jsArray(handlers))

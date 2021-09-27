@@ -8,6 +8,7 @@ import kiama.util.{ Position, Source }
 trait Intelligence {
 
   import effekt.symbols._
+  import symbols.builtins.TState
 
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
@@ -163,7 +164,9 @@ trait Intelligence {
       SymbolInfo(c, "Value binder", signature, None)
 
     case c: VarBinder =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      val signature = C.blockTypeOption(c).map {
+        case BlockTypeApp(TState, List(tpe)) => tpe
+      }.orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
 
       val ex =
         s"""|Like in other languages, mutable variable binders like `${c.name}`

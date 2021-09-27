@@ -150,7 +150,7 @@ package object symbols {
    */
 
   case class ValBinder(name: LocalName, tpe: Option[ValueType], decl: ValDef) extends ValueSymbol
-  case class VarBinder(name: LocalName, tpe: Option[ValueType], decl: VarDef) extends ValueSymbol
+  case class VarBinder(name: LocalName, tpe: Option[ValueType], decl: VarDef) extends BlockSymbol
 
   /**
    * Introduced by Transformer
@@ -317,7 +317,11 @@ package object symbols {
     def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
     def +(c: Capture): CaptureSet = CaptureSet(captures + c)
   }
-  val Pure = CaptureSet(Set.empty)
+  object CaptureSet {
+    def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
+    def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
+  }
+  val Pure = CaptureSet()
 
   sealed trait Capture extends TypeSymbol {
     val name: Name

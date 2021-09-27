@@ -4,6 +4,7 @@ package core
 import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
+import symbols.builtins.TState
 import effekt.context.assertions._
 
 class Transformer extends Phase[Module, core.ModuleDecl] {
@@ -50,13 +51,9 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, binding) =>
-      rest
-    //
-    //      val sym = v.symbol
-    //      val state = C.state(sym)
-    //      val b = transform(binding)
-    //      val params = List(core.BlockParam(state.param, state.param.tpe))
-    //      State(state.effect, C.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, rest))
+      val sym = v.symbol
+      val b = transform(binding)
+      State(b, BlockLit(List(), List(BlockParam(sym)), rest))
 
     case source.ExternType(id, tparams) =>
       rest
@@ -114,27 +111,29 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       C.abort("Value in block position: automatic unboxing currently not supported.")
   }
 
+  // TODO move and share
+  def getStateType(v: VarBinder)(implicit C: Context): ValueType = C.blockTypeOf(v) match {
+    case BlockTypeApp(TState, List(tpe)) => tpe
+  }
+
   def transform(tree: source.Term)(implicit C: Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
-      case sym: VarBinder   => UnitLit() // TODO implement
+      case sym: VarBinder =>
+        val tpe = getStateType(sym)
+        val get = App(Select(BlockVar(sym), "get"), Nil, Nil, Nil)
+        C.bind(tpe, get)
+        UnitLit()
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => C.abort("Block in expression position: automatic boxing currently not supported.")
     }
-    //      v.definition match {
-    //        case sym: VarBinder =>
-    //          val state = C.state(sym)
-    //          val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
-    //          C.bind(C.valueTypeOf(sym), get)
-    //        case sym => ValueVar(sym)
-    //      }
 
-    case a @ source.Assign(id, expr) => UnitLit() // TODO implement
-    //      val e = transform(expr)
-    //      val state = C.state(a.definition)
-    //      val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
-    //      C.bind(builtins.TUnit, put)
+    case a @ source.Assign(id, expr) =>
+      val e = transform(expr)
+      val sym = a.definition
+      val put = App(Select(BlockVar(sym), "put"), Nil, List(e), Nil)
+      C.bind(builtins.TUnit, put)
 
-    case l: source.Literal[t]        => transformLit(l)
+    case l: source.Literal[t] => transformLit(l)
 
     case source.If(cond, thn, els) =>
       val c = transform(cond)
@@ -257,31 +256,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  //  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: EffectOp, put: EffectOp)
-  //
-  //  private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
-  //    val tpe = C.valueTypeOf(binder)
-  //    val eff = UserEffect(binder.name, Nil)
-  //    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
-  //    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
-  //
-  //    val param = CapabilityParam(binder.name, CapabilityType(eff))
-  //    eff.ops = List(get, put)
-  //    StateCapability(param, eff, get, put)
-  //  }
-
-  /**
-   * Synthesized state effects for var-definitions
-   */
-  //  private var stateEffects: Map[VarBinder, StateCapability] = Map.empty
-
   /**
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */
   private var bindings: ListBuffer[(Tmp, symbols.ValueType, Stmt)] = ListBuffer()
 
   private[core] def initTransformerState() = {
-    // stateEffects = Map.empty
     bindings = ListBuffer()
   }
 
@@ -289,21 +269,9 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * Override the dynamically scoped `in` to also reset transformer state
    */
   override def in[T](block: => T): T = {
-    //    val before = stateEffects
     val result = super.in(block)
-    //    stateEffects = before
     result
   }
-
-  //  private[core] def state(binder: VarBinder): StateCapability = {
-  //    stateEffects.get(binder) match {
-  //      case Some(v) => v
-  //      case None =>
-  //        val cap = StateCapability(binder)
-  //        stateEffects = stateEffects + (binder -> cap)
-  //        cap
-  //    }
-  //  }
 
   /**
    * Introduces a binding for the given statement.
