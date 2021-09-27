@@ -641,7 +641,9 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       if (freeCapture(ret) contains lexical) { Context.at(body) { Context.error("The self region of the anonymous block argument must not leave through its type.") } }
 
-      FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / (capt -- CaptureSet(capts))
+      val capture = capt -- CaptureSet(capts) -- CaptureSet(lexical)
+
+      FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capture
   }
 
   //</editor-fold>
