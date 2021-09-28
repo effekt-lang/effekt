@@ -75,6 +75,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   // checks an expression in second-class position
   //<editor-fold desc="blocks">
 
+  def insertBoxing(expr: Term)(implicit C: Context): TyperResult[ValueType] =
+    Context.abort(s"Right now blocks cannot be used as expressions.")
+
+  def insertUnboxing(expr: Term)(implicit C: Context): TyperResult[BlockType] =
+    Context.abort(s"Currently expressions cannot be used as blocks.")
+
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
    */
@@ -93,7 +99,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         case b: BlockSymbol =>
           val (tpe, capt) = Context.lookup(b)
           tpe / capt
-        case e: ValueSymbol => Context.abort(s"Currently expressions cannot be used as blocks.")
+        case e: ValueSymbol => insertUnboxing(expr)
       }
 
       case s @ source.Select(expr, selector) =>
@@ -153,7 +159,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           case (BlockTypeApp(TState, List(tpe)), capt) => tpe / capt
           case _ => Context.panic(s"Builtin state cannot be typed.")
         }
-        case b: BlockSymbol => Context.abort(s"Right now blocks cannot be used as expressions.")
+        case b: BlockSymbol => insertBoxing(expr)
         case x: ValueSymbol => Context.lookup(x) / Pure
       }
 
@@ -183,8 +189,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // up higher.
         BoxedType(inferredTpe, capt) / Pure
 
-      case source.Unbox(expr) =>
-        Context.abort("Block in expression position: automatic boxing currently not supported.")
+      case source.Unbox(_) => insertBoxing(expr)
 
       case c @ source.Call(e, targsTree, vargs, bargs) =>
         val funTpe / funCapt = checkExprAsBlock(e) match {
@@ -371,8 +376,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         firstTpe / capt
 
-      case source.Select(expr, selector) =>
-        Context.abort("Block in expression position: automatic boxing currently not supported.")
+      case source.Select(_, _) =>
+        insertBoxing(expr)
 
       case source.Hole(stmt) =>
         checkStmt(stmt)
@@ -613,9 +618,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //<editor-fold desc="arguments and parameters">
 
   def checkBlockArgument(arg: source.BlockArg)(implicit C: Context): TyperResult[BlockType] = checkBlock(arg) {
-    case arg: source.FunctionArg => checkFunctionArgument(arg)
-    case arg: source.InterfaceArg =>
-      C.lookupType(arg.definition) / C.lookupCapture(arg.definition)
+    case arg: source.FunctionArg  => checkFunctionArgument(arg)
+    case arg: source.InterfaceArg => checkExprAsBlock(source.Var(arg.id).inheritPosition(arg))
     case source.UnboxArg(expr) =>
       val tpe / outerCapt = checkExpr(expr)
       // TODO this is a conservative approximation:
