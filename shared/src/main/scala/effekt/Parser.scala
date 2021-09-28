@@ -425,7 +425,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
 
   lazy val primExpr: P[Term] =
-    variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
+    variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)` | blockArg ^^ { b => Box(None, b) }
 
   lazy val variable: P[Term] =
     idRef ^^ Var
