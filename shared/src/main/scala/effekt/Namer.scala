@@ -8,6 +8,7 @@ import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions._
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
+import builtins.THole
 import scopes._
 
 /**
@@ -400,7 +401,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.IgnorePattern()     => Nil
     case source.LiteralPattern(lit) => Nil
     case source.AnyPattern(id) =>
-      val p = ValueParam(Name.local(id), ???) // TODO deal with non-type annotated patterns
+      val p = ValueParam(Name.local(id), THole) // TODO deal with non-type annotated patterns
       Context.assignSymbol(id, p)
       List(p)
     case source.TagPattern(id, patterns) =>

@@ -4,15 +4,22 @@ type Pair[A, B] {
   Pair(fst: A, snd: B)
 }
 
+type List[A] {
+  Cons(head: A, tail: List[A])
+  Nil()
+}
+
 def main() = {
   Pair(1, 2) match {
     case Pair(x, y) => println(x + y)
   }
-  Pair(Pair(1, 2), 3) match {
+  val z = Pair(Pair(1, 2), 3) match {
     case Pair(Pair(x, y), z) =>
-      println(x)
-      println(y)
-      println(z)
+      x + y + z
+  };
+  val z = [1, 2, 3] match {
+    case Nil() => 0
+    case Cons(x, tl) => x + 1
   }
   ()
 }

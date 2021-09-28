@@ -222,7 +222,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         }
         (bparams zip bargs zip crigids) foreach {
           case ((paramType, arg), cvar) =>
-            val _ / capt = arg checkAgainst paramType
+            val got / capt = checkBlockArgument(arg)
+            C.unify(paramType, got)
 
             // here we use unify, not sub since this really models substitution
             C.unify(capt, cvar)
@@ -339,7 +340,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
-        val scTpe / scCapt = checkExpr(sc)
+        val scTpe / scCapt = Context.withUnificationScope { checkExpr(sc) }
 
         var capt = scCapt
 
@@ -347,23 +348,28 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         checkExhaustivity(scTpe, clauses.map { _.pattern })
 
         // (3) infer types for all clauses
-        val (fstTpe / fstCapt, _) :: tpes = clauses.map {
+        // TODO here we would need multi arity constraints!
+        val (firstTpe / firstCapt, firstTree) :: clauseTpes = clauses.map {
           case c @ source.MatchClause(p, body) =>
-            Context in {
-              Context.bind(checkPattern(scTpe, p))
-              (checkStmt(body), body)
+            val res = Context.withUnificationScope {
+              Context in {
+                Context.bind(checkPattern(scTpe, p))
+                checkStmt(body)
+              }
             }
+            (res, body)
         }
-        capt ++= fstCapt
+
+        capt ++= firstCapt
 
         // (4) unify clauses and collect effects
-        val tpeCases = tpes.foldLeft(fstTpe) {
-          case (expected, (clauseTpe / clauseCapt, tree)) =>
+        clauseTpes foreach {
+          case (clauseTpe / clauseCapt, tree) =>
             capt ++= clauseCapt
-            Context.at(tree) { Context.unify(expected, clauseTpe) }
-            expected
+            Context.at(tree) { Context.unify(firstTpe, clauseTpe) }
         }
-        tpeCases / capt
+
+        firstTpe / capt
 
       case source.Select(expr, selector) =>
         Context.abort("Block in expression position: automatic boxing currently not supported.")
@@ -425,15 +431,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         case _         => Context.abort("Can only match on constructors")
       }
 
-      // TODO implement
+      // (4) Compute blocktype of this constructor with rigid type vars
+      // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
+      // constructors can't take block parameters, so we can ignore them safely
+      val (trigids, crigids, FunctionType(_, _, vpms, _, ret)) = Context.instantiate(sym.toType)
 
-      //      // (4) Compute blocktype of this constructor with rigid type vars
-      //      // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      //      // constructors can't take block parameters, so we can ignore them safely
-      //      val (rigids, FunctionType(_, vpms, _, ret)) = Unification.instantiate(sym.toType)
-      //
-      //      // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      //      Context.unify(ret, sc)
+      // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
+      Context.unify(ret, sc)
       //
       //      // (6) check for existential type variables
       //      // at the moment we do not allow existential type parameters on constructors.
@@ -441,28 +445,27 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       //      if (skolems.nonEmpty) {
       //        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
       //      }
-      //
-      //      // (7) refine parameter types of constructor
-      //      // i.e. `(Int, List[Int])`
-      //      val constructorParams = vpms map { p => Context.unifier substitute p }
-      //
-      //      // (8) check nested patterns
-      //      var bindings = Map.empty[Symbol, ValueType]
-      //
-      //      (patterns, constructorParams) match {
-      //        case (pats, pars) =>
-      //          if (pats.size != pars.size)
-      //            Context.error(s"Wrong number of pattern arguments, given ${pats.size}, expected ${pars.size}.")
-      //
-      //          (pats zip pars) foreach {
-      //            case (pat, par: ValueType) =>
-      //              bindings ++= checkPattern(par, pat)
-      //            case _ =>
-      //              Context.panic("Should not happen, since constructors can only take value parameters")
-      //          }
-      //      }
-      //      bindings
-      ???
+
+      //        // (7) refine parameter types of constructor
+      //        // i.e. `(Int, List[Int])`
+      //        val constructorParams = vpms map { p => Context.unifier substitute p }
+
+      // (8) check nested patterns
+      var bindings = Map.empty[Symbol, ValueType]
+
+      (patterns, vpms) match {
+        case (pats, pars) =>
+          if (pats.size != pars.size)
+            Context.error(s"Wrong number of pattern arguments, given ${pats.size}, expected ${pars.size}.")
+
+          (pats zip pars) foreach {
+            case (pat, par: ValueType) =>
+              bindings ++= checkPattern(par, pat)
+            case _ =>
+              Context.panic("Should not happen, since constructors can only take value parameters")
+          }
+      }
+      bindings
   }
 
   //</editor-fold>
@@ -614,10 +617,11 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
     case arg: source.InterfaceArg =>
       C.lookupType(arg.definition) / C.lookupCapture(arg.definition)
     case source.UnboxArg(expr) =>
-      val tpe / capt = checkExpr(expr)
-      // TODO the capture of the expr should be part of the capture of the call, but not the block argument!
+      val tpe / outerCapt = checkExpr(expr)
+      // TODO this is a conservative approximation:
+      //    the capture of the expr should be part of the capture of the call, but not the block argument!
       tpe match {
-        case BoxedType(btpe, capt) => btpe / capt
+        case BoxedType(btpe, capt) => btpe / (capt ++ outerCapt)
         case _                     => C.abort(s"Unboxing requires a boxed type, but got $tpe")
       }
   }
@@ -679,14 +683,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   private implicit class StmtOps(stmt: Stmt) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(stmt) {
       val got / capt = checkStmt(stmt)
-      C.unify(tpe, got)
-      tpe / capt
-    }
-  }
-
-  private implicit class BlockArgOps(block: source.BlockArg) {
-    def checkAgainst(tpe: BlockType)(implicit C: Context): TyperResult[BlockType] = Context.at(block) {
-      val got / capt = checkBlockArgument(block)
       C.unify(tpe, got)
       tpe / capt
     }
