@@ -743,6 +743,9 @@ trait TyperOps extends ContextOps { self: Context =>
   private var lexicalRegion: Option[Capture] = None
 
   private[typer] def initTyperstate(): Unit = {
+    // Clear annotations, we are about to recompute those
+    annotate(Annotations.CaptureForFile, module, Nil)
+
     scope = new UnificationScope
     inferredValueTypes = List.empty
     inferredBlockTypes = List.empty
@@ -762,7 +765,12 @@ trait TyperOps extends ContextOps { self: Context =>
     // This info is currently also used by Transformer!
     inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, subst.substitute(tpe)) }
     inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
-    inferredCaptures foreach { case (t, capt) => annotate(Annotations.InferredCapture, t, subst.substitute(capt)) }
+
+    val substitutedCaptures = inferredCaptures map { case (t, capt) => (t, subst.substitute(capt)) }
+    // TODO maybe this is not necessary anymore
+    substitutedCaptures foreach { case (t, capt) => annotate(Annotations.InferredCapture, t, capt) }
+
+    annotate(Annotations.CaptureForFile, module, substitutedCaptures)
   }
 
   // Unification

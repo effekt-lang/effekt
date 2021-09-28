@@ -84,6 +84,14 @@ object Annotations {
   )
 
   /**
+   * Used by LSP to list all captures
+   */
+  val CaptureForFile = Annotation[symbols.Module, List[(source.Tree, symbols.CaptureSet)]](
+    "CaptureSet",
+    "all inferred captures for file"
+  )
+
+  /**
    * Type arguments of a _function call_ as inferred by typer
    */
   val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
@@ -404,13 +412,9 @@ trait AnnotationsDB { self: Context =>
       case s: Symbol if hasAnnotation(Annotations.SourceModule, s) => s
     }
 
-  // (s: Source)
-  // positions.getStart(t).exists(p => p.source == s) &&
-  def allCaptures =
-    annotations.keys.collect {
-      case t: source.Tree if hasAnnotation(Annotations.InferredCapture, t) =>
-        (t, annotation(Annotations.InferredCapture, t))
-    }
+  // TODO running frontend is NOT the job of Annotations and should be moved to intelligence
+  def allCaptures(s: Source) =
+    tryModuleOf(s).flatMap { mod => annotationOption(Annotations.CaptureForFile, mod) }.getOrElse(Nil)
 
   /**
    * List all references for a symbol

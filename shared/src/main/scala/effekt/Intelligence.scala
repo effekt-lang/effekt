@@ -90,11 +90,11 @@ trait Intelligence {
               |""".stripMargin
 
   // For now we only show captures of function definitions and calls to box
-  def getInferredCaptures(src: Source)(implicit C: Context): Vector[(Position, CaptureSet)] =
-    C.allCaptures.filter {
+  def getInferredCaptures(src: Source)(implicit C: Context): List[(Position, CaptureSet)] =
+    C.allCaptures(src).filter {
       case (t, c) =>
         val p = C.positions.getStart(t)
-        p.isDefined && p.get.source == src
+        p.isDefined
     }.collect {
       case (t: source.FunDef, c) => for {
         pos <- C.positions.getStart(t)

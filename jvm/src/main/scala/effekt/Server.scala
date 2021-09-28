@@ -151,11 +151,7 @@ trait LSPServer extends Driver with Intelligence {
 
   override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
     if (params.getCommand == "inferredCaptures") {
-      for {
-        // TODO it seems this is not enough to run the frontend. On startup the editor doesn't display captures...
-        mod <- context.frontend(src)(context)
-        res = getInferredCaptures(src)(context).map { case (p, c) => Capture(positionToLocation(p), c.toString) }.toArray
-      } yield res
+      Some(getInferredCaptures(src)(context).map { case (p, c) => Capture(positionToLocation(p), c.toString) }.toArray)
     } else {
       None
     }
