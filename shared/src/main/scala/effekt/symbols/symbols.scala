@@ -87,6 +87,7 @@ package object symbols {
 
   sealed trait Param extends TermSymbol
   case class ValueParam(name: LocalName, tpe: ValueType) extends Param with ValueSymbol
+  case class MatchParam(name: LocalName) extends Param with ValueSymbol
 
   //  sealed trait InterfaceParam extends Param
   // TODO maybe revive the CapabilityParam below

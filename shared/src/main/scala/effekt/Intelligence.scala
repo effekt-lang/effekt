@@ -159,6 +159,9 @@ trait Intelligence {
     case c: ValueParam =>
       SymbolInfo(c, "Value parameter", Some(s"${c.name}: ${C.valueTypeOption(c).getOrElse(c.tpe)}"), None)
 
+    case c: MatchParam if C.valueTypeOption(c).isDefined =>
+      SymbolInfo(c, "Value parameter bound by a match", Some(s"${c.name}: ${C.valueTypeOption(c).get}"), None)
+
     case c: ValBinder =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value binder", signature, None)
