@@ -1,8 +1,7 @@
 package effekt
 
-import effekt.context.Context
 import effekt.source.{ Tree }
-import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureUnificationVar, Capture, CaptureParam, CaptureOf, FunctionType, InterfaceType, Type, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
+import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureUnificationVar, Capture, FunctionType, InterfaceType, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -58,13 +57,13 @@ object substitutions {
     private var constraints: List[TypeConstraint] = Nil
     private var capture_constraints: List[CaptureConstraint] = Nil
 
-    def requireEqual(t1: ValueType, t2: ValueType)(implicit C: Context) = constraints = Eq(t1, t2, C.focus) :: constraints
+    def requireEqual(t1: ValueType, t2: ValueType)(implicit C: ErrorReporter) = constraints = Eq(t1, t2, C.focus) :: constraints
 
-    def requireEqual(t1: BlockType, t2: BlockType)(implicit C: Context) = constraints = EqBlock(t1, t2, C.focus) :: constraints
+    def requireEqual(t1: BlockType, t2: BlockType)(implicit C: ErrorReporter) = constraints = EqBlock(t1, t2, C.focus) :: constraints
 
-    def requireEqual(capt1: CaptureSet, capt2: CaptureSet)(implicit C: Context) = capture_constraints = EqCapt(capt1, capt2, C.focus) :: capture_constraints
+    def requireEqual(capt1: CaptureSet, capt2: CaptureSet)(implicit C: ErrorReporter) = capture_constraints = EqCapt(capt1, capt2, C.focus) :: capture_constraints
 
-    def requireSub(capt1: CaptureSet, capt2: CaptureSet)(implicit C: Context) = capture_constraints = Sub(capt1, capt2, C.focus) :: capture_constraints
+    def requireSub(capt1: CaptureSet, capt2: CaptureSet)(implicit C: ErrorReporter) = capture_constraints = Sub(capt1, capt2, C.focus) :: capture_constraints
 
     def addAllType(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
     def addAllCapt(cs: List[CaptureConstraint]): Unit = capture_constraints = capture_constraints ++ cs
@@ -82,7 +81,7 @@ object substitutions {
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
-    def solve(implicit C: Context): (Substitutions, List[TypeConstraint], List[CaptureConstraint]) = {
+    def solve(implicit C: ErrorReporter): (Substitutions, List[TypeConstraint], List[CaptureConstraint]) = {
       var tcs = constraints
       var ccs = capture_constraints
       var cache: List[TypeConstraint] = Nil
