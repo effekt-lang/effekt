@@ -34,6 +34,8 @@ object lsp {
   class Range(val start: Position, val end: Position) extends js.Object
   class Location(val uri: DocumentUri, val range: Range) extends js.Object
 
+  class CaptureInfo(val pos: Position, val capture: String) extends js.Object
+
   // Diagnostics
   // -----------
   class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String) extends js.Object {
@@ -101,6 +103,14 @@ class LanguageServer extends Intelligence {
   @JSExport
   def readFile(path: String): String =
     file(path).read
+
+  @JSExport
+  def inferredCaptures(path: String): js.Array[lsp.CaptureInfo] = {
+    typecheck(path)
+    getInferredCaptures(VirtualFileSource(path)).map {
+      case (p, c) => new lsp.CaptureInfo(convertPosition(p), c.toString)
+    }.toJSArray
+  }
 
   @JSExport
   def compileFile(path: String): String =
