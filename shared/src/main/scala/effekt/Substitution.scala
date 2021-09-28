@@ -472,14 +472,16 @@ object substitutions {
         if (bparams1.size != bparams2.size)
           abort(s"Block parameter count does not match $f1 vs. $f2")
 
-        val (trigids2, crigids2, FunctionType(_, _, substVparams2, substBparams2, substRet2)) = scope.instantiate(f2)
+        if (cparams1.size != cparams2.size)
+          abort(s"Capture parameter count does not match $f1 vs. $f2")
 
-        unifyValueTypes(ret1, substRet2)
+        val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
 
-        (tparams1 zip trigids2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
-        (cparams1 zip crigids2) foreach { case (t1, t2) => unify(t2, t1) }
+        val (substVparams2, substBparams2, substRet2) = (vparams2 map subst.substitute, bparams2 map subst.substitute, subst.substitute(ret2))
+
         (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
         (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t2, t1) }
+        unifyValueTypes(ret1, substRet2)
     }
   }
 
