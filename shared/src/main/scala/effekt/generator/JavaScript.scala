@@ -56,7 +56,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case BlockLit(vps, bps, body) => jsLambda((vps map toDoc) ++ (bps map toDoc), toDoc(body))
     case Extern(pure, ps, body)   => jsLambda(ps map toDoc, body)
     case Unbox(e)                 => toDoc(e)
-    case Select(b, sel)           => toDoc(b) <> "." <> sel
+    case Select(b, sel)           => toDoc(b) <> "." <> jsEscape(sel)
   })
 
   // pretty print the statement in a javascript expression context
@@ -152,17 +152,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
-  // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
-  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    // case _: symbols.Capability => id.name.toString + "_" + id.id
-    // case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _ => toDoc(id.name)
-  }
+  def nameDef(id: Symbol)(implicit C: Context): Doc = jsEscape(id.name.toString)
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = jsNameRef(id.name)
-  // case _: symbols.Effect     => toDoc(id.name)
-  // case _: symbols.Capability => id.name.toString + "_" + id.id
-  // case _: symbols.EffectOp   => "op$" + id.name.toString
+  def nameRef(id: Symbol)(implicit C: Context): Doc = jsEscape(jsNameRef(id.name))
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit() => "$effekt.unit"
@@ -264,6 +256,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case other => "return" <+> toDocExpr(other)
   }
+
+  val reserved = List("get", "set", "yield")
+  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
   def jsNameRef(name: Name): String = name match {
     case LocalName(name)           => name

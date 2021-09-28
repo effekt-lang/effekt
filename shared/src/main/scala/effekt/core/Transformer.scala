@@ -128,7 +128,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         val tpe = getStateType(sym)
         val get = App(Select(BlockVar(sym), "get"), Nil, Nil, Nil)
         C.bind(tpe, get)
-        UnitLit()
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
