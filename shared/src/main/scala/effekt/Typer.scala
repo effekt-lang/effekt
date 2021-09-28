@@ -75,11 +75,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   // checks an expression in second-class position
   //<editor-fold desc="blocks">
 
-  def insertBoxing(expr: Term)(implicit C: Context): TyperResult[ValueType] =
-    Context.abort(s"Right now blocks cannot be used as expressions.")
+  def insertBoxing(expr: Term)(implicit C: Context): TyperResult[ValueType] = expr match {
+    case source.Var(id) => checkExpr(source.Box(None, source.InterfaceArg(id).inheritPosition(id)).inheritPosition(expr))
+    case _              => Context.abort("Currently automatic boxing is only supported for variables, please bind the block first.")
+  }
 
   def insertUnboxing(expr: Term)(implicit C: Context): TyperResult[BlockType] =
-    Context.abort(s"Currently expressions cannot be used as blocks.")
+    checkExprAsBlock(source.Unbox(expr).inheritPosition(expr))
 
   /**
    * We defer checking whether something is first-class or second-class to Typer now.

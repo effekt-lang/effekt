@@ -95,9 +95,15 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.StringLit(value)  => StringLit(value)
   }
 
+  def transformUnbox(tree: source.Term)(implicit C: Context): Block =
+    Unbox(transform(tree))
+
+  def transformBox(tree: source.Term)(implicit C: Context): Expr =
+    Box(transformAsBlock(tree))
+
   def transformAsBlock(tree: source.Term)(implicit C: Context): Block = withPosition(tree) {
     case v: source.Var => v.definition match {
-      case sym: ValueSymbol => C.abort("Value in block position: automatic unboxing currently not supported.")
+      case sym: ValueSymbol => transformUnbox(tree)
       case sym: BlockSymbol => BlockVar(sym)
     }
 
@@ -108,7 +114,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       Unbox(transform(b))
 
     case _ =>
-      C.abort("Value in block position: automatic unboxing currently not supported.")
+      transformUnbox(tree)
   }
 
   // TODO move and share
@@ -124,7 +130,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
         C.bind(tpe, get)
         UnitLit()
       case sym: ValueSymbol => ValueVar(sym)
-      case sym: BlockSymbol => C.abort("Block in expression position: automatic boxing currently not supported.")
+      case sym: BlockSymbol => transformBox(tree)
     }
 
     case a @ source.Assign(id, expr) =>
@@ -157,7 +163,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.Box(_, block) =>
       Box(transform(block))
 
-    case source.Unbox(b) => C.abort("Block in expression position: automatic boxing currently not supported.")
+    case source.Unbox(b) => transformBox(tree)
 
     // TODO generate "pure" applications again
     case c @ source.Call(e, _, vargs, bargs) =>
@@ -166,8 +172,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val bas = bargs map transform
       C.bind(C.inferredTypeOf(tree), App(b, Nil, vas, bas))
 
-    case source.Select(receiver, selector) =>
-      C.abort("Block in expression position: automatic boxing currently not supported.")
+    case source.Select(receiver, selector) => transformBox(tree)
 
     case source.TryHandle(prog, handlers) =>
 
@@ -204,7 +209,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
 
   def transform(arg: source.BlockArg)(implicit C: Context): core.Block = arg match {
     case source.FunctionArg(tparams, vparams, bparams, body) => BlockLit(vparams map transform, bparams map transform, transform(body))
-    case c @ source.InterfaceArg(id) => BlockVar(c.definition)
+    case c @ source.InterfaceArg(id) => transformAsBlock(source.Var(id))
     case source.UnboxArg(expr) => Unbox(transform(expr))
   }
 
