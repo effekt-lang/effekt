@@ -93,6 +93,7 @@ case class FunctionArg(tparams: List[Id], vparams: List[ValueParam], bparams: Li
 case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
   type symbol = symbols.BlockParam
 }
+case class UnboxArg(body: Term) extends BlockArg
 
 /**
  * Global and local definitions

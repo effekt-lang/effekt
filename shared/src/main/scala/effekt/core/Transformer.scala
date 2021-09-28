@@ -205,6 +205,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   def transform(arg: source.BlockArg)(implicit C: Context): core.Block = arg match {
     case source.FunctionArg(tparams, vparams, bparams, body) => BlockLit(vparams map transform, bparams map transform, transform(body))
     case c @ source.InterfaceArg(id) => BlockVar(c.definition)
+    case source.UnboxArg(expr) => Unbox(transform(expr))
   }
 
   def transform(p: source.ValueParam)(implicit C: Context): core.ValueParam = ValueParam(p.symbol)

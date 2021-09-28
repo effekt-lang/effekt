@@ -610,12 +610,17 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //<editor-fold desc="arguments and parameters">
 
   def checkBlockArgument(arg: source.BlockArg)(implicit C: Context): TyperResult[BlockType] = checkBlock(arg) {
-    case arg: source.FunctionArg  => checkFunctionArgument(arg)
-    case arg: source.InterfaceArg => checkCapabilityArgument(arg)
+    case arg: source.FunctionArg => checkFunctionArgument(arg)
+    case arg: source.InterfaceArg =>
+      C.lookupType(arg.definition) / C.lookupCapture(arg.definition)
+    case source.UnboxArg(expr) =>
+      val tpe / capt = checkExpr(expr)
+      // TODO the capture of the expr should be part of the capture of the call, but not the block argument!
+      tpe match {
+        case BoxedType(btpe, capt) => btpe / capt
+        case _                     => C.abort(s"Unboxing requires a boxed type, but got $tpe")
+      }
   }
-
-  def checkCapabilityArgument(arg: source.InterfaceArg)(implicit C: Context): TyperResult[BlockType] =
-    C.lookupType(arg.definition) / C.lookupCapture(arg.definition)
 
   // Example.
   //   BlockParam: def foo { f: Int => String / Print }
