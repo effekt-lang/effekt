@@ -375,8 +375,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
-  lazy val boxExpr: P[Term] = `box` ~> captureSet.? ~ blockArg ^^ Box
-  lazy val unboxExpr: P[Term] = `unbox` ~> expr ^^ Unbox
+  lazy val boxExpr: P[Term] =
+    ( `box` ~> captureSet ~ blockArg ^^ { case c ~ b => Box(Some(c), b) }
+    | `box` ~> blockArg ^^ { b => Box(None, b) }
+    )
+  lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox
 
   lazy val funCall: P[Term] =
     funCall ~ maybeTypeArgs ~ arguments ^^ { case fun ~ targs ~ (vargs ~ bargs) => Call(fun, targs, vargs, bargs) } | primExpr
