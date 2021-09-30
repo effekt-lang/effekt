@@ -90,6 +90,17 @@ class LanguageServer extends Intelligence {
   }.orNull
 
   @JSExport
+  def definitionAt(path: String, pos: lsp.Position): lsp.Location = {
+    val p = fromLSPPosition(pos, VirtualFileSource(path))
+    (for {
+      tree <- getDefinitionAt(p)
+      start <- positions.getStart(tree)
+      finish <- positions.getFinish(tree)
+      loc <- toLSPLocation(start, finish)
+    } yield loc).orNull
+  }
+
+  @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.buffer.clear()
     context.frontend(VirtualFileSource(path))
@@ -108,7 +119,7 @@ class LanguageServer extends Intelligence {
   def inferredCaptures(path: String): js.Array[lsp.CaptureInfo] = {
     typecheck(path)
     getInferredCaptures(VirtualFileSource(path)).map {
-      case (p, c) => new lsp.CaptureInfo(convertPosition(p), c.toString)
+      case (p, c) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
     }.toJSArray
   }
 
@@ -159,16 +170,21 @@ class LanguageServer extends Intelligence {
   }.orNull
 
   private def messageToDiagnostic(m: Message) = {
-    val from = messaging.start(m).map(convertPosition).getOrElse(null)
-    val to = messaging.finish(m).map(convertPosition).getOrElse(null)
+    val from = messaging.start(m).map(toLSPPosition).getOrElse(null)
+    val to = messaging.finish(m).map(toLSPPosition).getOrElse(null)
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), m.label)
   }
 
-  private def convertPosition(p: Position): lsp.Position =
+  private def toLSPPosition(p: Position): lsp.Position =
     new lsp.Position(p.line - 1, p.column - 1)
 
   private def fromLSPPosition(p: lsp.Position, source: Source): Position =
     Position(p.line + 1, p.character + 1, source)
+
+  private def toLSPLocation(from: Position, to: Position): Option[lsp.Location] = from.source match {
+    case VirtualFileSource(path) => Some(new lsp.Location(from.source.name, new lsp.Range(toLSPPosition(from), toLSPPosition(to))))
+    case _ => None
+  }
 
   private def convertSeverity(s: Severities.Severity): lsp.DiagnosticSeverity = s match {
     case Severities.Error       => lsp.DiagnosticSeverity.Error
