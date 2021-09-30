@@ -103,9 +103,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
 
   lazy val ident =
-    (not(anyKeyword) ~> name ^^ { n =>
-      if (additionalKeywords.contains(n)) { "_" + n } else { n }
-    }
+    (not(anyKeyword) ~> name
       | failure("Expected an identifier"))
 
   lazy val idDef: P[IdDef] = ident ^^ IdDef

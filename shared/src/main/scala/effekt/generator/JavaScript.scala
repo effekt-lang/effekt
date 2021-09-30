@@ -257,7 +257,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case other => "return" <+> toDocExpr(other)
   }
 
-  val reserved = List("get", "set", "yield")
+  val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this")
   def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
   def jsNameRef(name: Name): String = name match {

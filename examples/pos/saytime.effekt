@@ -1,5 +1,6 @@
 interface Console {
   def println[A](a: A): Unit
+
 }
 interface Time {
   def now(): Int

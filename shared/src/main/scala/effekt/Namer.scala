@@ -4,7 +4,7 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context, ContextOps }
+import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
@@ -180,6 +180,12 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         }
         Context.bindValue(sym.vparams)
         Context.bindBlock(sym.bparams)
+
+        // Bind self region, both under "this" and under "id"
+        val self = CaptureOf(sym)
+        Context.bind(self)
+        Context.bind("this", self)
+
         resolveGeneric(body)
       }
 
@@ -305,13 +311,21 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(body)
       }
 
-    case source.FunctionArg(tparams, vparams, bparams, stmt) =>
+    case f @ source.FunctionArg(tparams, vparams, bparams, stmt) =>
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
         val bps = bparams map resolve
         Context.bindValue(vps)
         Context.bindBlock(bps)
+
+        val self = CaptureOf(Anon(f))
+        Context.bind("this", self)
+        // We also need to attach this anonymous region to the function arg to find it in typer again
+        // Here we (ab)use InferredCapture for this
+        //
+        // it will be overriden by typer
+        C.annotate(Annotations.InferredCapture, f, CaptureSet(self))
         resolveGeneric(stmt)
       }
 
@@ -557,7 +571,9 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
 
-  private[namer] def bind(s: Capture): Unit = scope.define(s.name.name, s)
+  private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
+
+  private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
 
   private[namer] def bindValue(params: List[ValueParam]): Context = {
     params.foreach { p => bind(p) }

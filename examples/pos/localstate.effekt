@@ -13,9 +13,13 @@ interface Foo {}
 interface Bar {}
 def handler() = {
 
+  var y = 42
+
+  val x = box { () => var z = 0; val b: () => Int at { this } = box {() => z }; () }
+
   try {
     var x = 4;
-    val f = box { () => x };
+    val f = box {c1, c2} { () => x };
     ()
   } with c1 : Foo {}
     with c2 : Foo {}

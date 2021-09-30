@@ -640,24 +640,23 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
   def checkFunctionArgument(arg: source.FunctionArg)(implicit C: Context): TyperResult[FunctionType] = arg match {
     case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
-
-      // A synthetic symbol to identify the anonymous function
-      val funSym = Anon(decl)
-
       val tparamSymbols = tparams.map { p => p.symbol.asTypeVar }
       tparamSymbols.foreach { p => Context.bind(p, p) }
       vparams.foreach { p => Context.bind(p.symbol) }
       bparams.foreach { p => Context.bind(p.symbol) }
       val capts = bparams.map { p => CaptureOf(p.symbol) }
 
-      val lexical = CaptureOf(funSym)
+      // The self region is created by Namer and stored in the DB
+      val lexical = C.annotation(Annotations.InferredCapture, decl)
 
       // TODO should we open a new unification scope here?
-      val ret / capt = Context.withRegion(CaptureSet(lexical)) { checkStmt(body) }
+      val ret / capt = Context.withRegion(lexical) { checkStmt(body) }
 
-      if (freeCapture(ret) contains lexical) { Context.at(body) { Context.error("The self region of the anonymous block argument must not leave through its type.") } }
+      if (freeCapture(ret).intersect(lexical.captures).nonEmpty) {
+        Context.at(body) { Context.error("The self region of the anonymous block argument must not leave through its type.") }
+      }
 
-      val capture = capt -- CaptureSet(capts) -- CaptureSet(lexical)
+      val capture = capt -- CaptureSet(capts) -- lexical
 
       FunctionType(tparamSymbols, capts, vparams.map { p => p.symbol.tpe }, bparams.map { p => p.symbol.tpe }, ret) / capture
   }
