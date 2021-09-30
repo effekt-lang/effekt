@@ -27,7 +27,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     }.toList)
 
     val transformed = defs.foldRight(exports) {
-      case (d, r) => transform(d, r)
+      case (d, r) => transform(d, () => r)
     }
 
     ModuleDecl(path, imports.map { _.path }, transformed).inheritPosition(mod.decl)
@@ -36,45 +36,46 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   /**
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
-  def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+  def transform(d: source.Def, rest: () => Stmt)(implicit C: Context): Stmt = withPosition(d) {
     case f @ source.FunDef(id, _, vparams, bparams, _, body) =>
       val sym = f.symbol
       val vps = vparams map transform
       val bps = bparams map transform
-      Def(sym, C.interfaceTypeOf(sym), BlockLit(vps, bps, transform(body)), rest)
+      Def(sym, C.interfaceTypeOf(sym), BlockLit(vps, bps, transform(body)), rest())
 
     case d @ source.DataDef(id, _, ctors) =>
-      Data(d.symbol, ctors.map { c => c.symbol }, rest)
-
-    case v @ source.ValDef(id, _, binding) =>
-      Val(v.symbol, transform(binding), rest)
-
-    // This phase introduces capabilities for state effects
-    case v @ source.VarDef(id, _, binding) =>
-      val sym = v.symbol
-      val b = transform(binding)
-      State(b, BlockLit(List(), List(BlockParam(sym)), rest))
+      Data(d.symbol, ctors.map { c => c.symbol }, rest())
 
     case source.ExternType(id, tparams) =>
-      rest
+      rest()
 
     case f @ source.ExternFun(pure, id, tparams, vparams, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, C.blockTypeOf(sym), Extern(pure, vparams map transform, body), rest)
+      Def(f.symbol, C.blockTypeOf(sym), Extern(pure, vparams map transform, body), rest())
 
     case e @ source.ExternInclude(path) =>
-      Include(e.contents, rest)
+      Include(e.contents, rest())
 
     //    case e: source.ExternEffect =>
     //      rest
     //
     case d @ source.InterfaceDef(id, tparams, ops) =>
-      core.Interface(d.symbol, ops.map { e => e.symbol }, rest)
+      core.Interface(d.symbol, ops.map { e => e.symbol }, rest())
   }
 
   def transform(tree: source.Stmt)(implicit C: Context): Stmt = withPosition(tree) {
-    case source.DefStmt(d, rest) =>
-      transform(d, transform(rest))
+    case source.MutualStmt(defs, rest) =>
+      val thunk = defs.foldLeft(() => transform(rest)) { case (rest, d) => () => transform(d, rest) }
+      thunk()
+
+    case v @ source.ValDef(id, _, binding, rest) =>
+      Val(v.symbol, transform(binding), transform(rest))
+
+    // This phase introduces capabilities for state effects
+    case v @ source.VarDef(id, _, binding, rest) =>
+      val sym = v.symbol
+      val b = transform(binding)
+      State(b, BlockLit(List(), List(BlockParam(sym)), transform(rest)))
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>

@@ -83,11 +83,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `at` = keyword("at")
   lazy val `box` = keyword("box")
   lazy val `unbox` = keyword("unbox")
+  lazy val `return` = keyword("return")
 
   def keywordStrings: List[String] = List(
-    "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "for", "interface", "at", "box", "unbox"
+    "def", "val", "var", "true", "false", "else", "type",
+    "try", "with", "case", "do", "if", "while",
+    "match", "module", "import", "extern", "for", "interface", "at", "box", "unbox", "return"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -223,8 +224,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDef
-    | funDef
+    ( funDef
     | interfaceDef
     | dataDef
     | externType
@@ -241,10 +241,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `pure`.? ^^ { _.isDefined }
 
   lazy val interfaceDef: P[Def] =
-    `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> operation)  <~ `}`) ^^ InterfaceDef
+    `interface` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(operation)  <~ `}`) ^^ InterfaceDef
 
   lazy val operation: P[Operation] =
-    idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> valueType) ^^ Operation
+    ( `def` ~> idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> valueType) ^^ Operation
+    | failure("Expected a definition of an operation")
+    )
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType
@@ -273,7 +275,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val blockParam: P[BlockParam] = `{` ~> blockParamSig <~ `}`
 
   lazy val valueParam: P[ValueParam] =
-    idDef ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, tpe) }
+    ( idDef ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, tpe) }
+    | failure("Expected a value parameter")
+    )
 
   lazy val blockParamSig: P[BlockParam] =
     idDef ~ (`:` ~> blockType) ^^ BlockParam
@@ -316,19 +320,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    */
   lazy val stmts: P[Stmt] =
     ( (expr <~ `;`) ~ stmts ^^ ExprStmt
-    | (definition <~ `;`) ~ stmts ^^ DefStmt
-    | (varDef  <~ `;`) ~ stmts ^^ DefStmt
-    | (expr <~ `;`) ^^ Return
+    | someSep(definition, `;`) ~ stmts ^^ MutualStmt
+    | (`val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~> stmts) ^^ ValDef
+    | (`var` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~> stmts) ^^ VarDef
+    | (`return`.? ~> expr <~ `;`) ^^ Return
     | matchDef
     )
 
-  lazy val valDef: P[ValDef] =
-     `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef
-
-  lazy val varDef: P[VarDef] =
-     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ VarDef
-
-  // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
        case p ~ sc ~ body =>

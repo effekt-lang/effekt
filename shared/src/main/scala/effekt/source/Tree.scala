@@ -104,12 +104,7 @@ sealed trait Def extends Definition {
 case class FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[ValueType], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
-case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
-  type symbol = symbols.ValBinder
-}
-case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
-  type symbol = symbols.VarBinder
-}
+
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.Interface
 }
@@ -140,10 +135,16 @@ case class ExternInclude(path: String) extends Def {
 }
 
 sealed trait Stmt extends Tree
-case class DefStmt(d: Def, rest: Stmt) extends Stmt
+case class MutualStmt(defs: List[Def], rest: Stmt) extends Stmt
+case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, rest: Stmt) extends Stmt with Definition {
+  type symbol = symbols.ValBinder
+}
+case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, rest: Stmt) extends Stmt with Definition {
+  type symbol = symbols.VarBinder
+}
+case class BlockStmt(stmts: Stmt) extends Stmt
 case class ExprStmt(d: Term, rest: Stmt) extends Stmt
 case class Return(d: Term) extends Stmt
-case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
