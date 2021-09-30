@@ -163,7 +163,7 @@ package object symbols {
    * Types of first-class functions
    */
   case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType {
-    override def toString = s"($tpe) at $capt"
+    override def toString = s"$tpe at $capt"
   }
 
   class TypeVar(val name: LocalName) extends ValueType with TypeSymbol
@@ -230,6 +230,8 @@ package object symbols {
   sealed trait BlockType extends Type
 
   case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], ret: ValueType) extends BlockType {
+
+    //  For now, we do not print the capture parameters.
     override def toString: String = {
       val vps = s"(${vparams.map { _.toString }.mkString(", ")})"
       val bps = bparams.map { b => s"{${b.toString}}" }
@@ -240,12 +242,7 @@ package object symbols {
         case tps => s"[${tps.map { _.toString }.mkString(", ")}]"
       }
 
-      val cs = cparams match {
-        case Nil => s""
-        case cps => s"[${cps.map { _.toString }.mkString(", ")}]"
-      }
-
-      s"$ts $cs $ps => $ret"
+      s"$ts$ps => $ret"
     }
   }
 
@@ -327,6 +324,6 @@ package object symbols {
   case class CaptureParam(name: Name) extends Capture
   case class CaptureUnificationVar(underlying: Capture, scope: UnificationScope) extends Capture {
     val name = underlying.name
-    override def toString = "?" + underlying.name + id
+    override def toString = "?" + underlying.name //underlying.name + id
   }
 }
