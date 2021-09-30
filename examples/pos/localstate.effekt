@@ -1,0 +1,23 @@
+def main() = {
+  println("hello");
+  var x = 4;
+  println("world" ++ show(x));
+  x = 2;
+  println("world");
+  x = x + 1;
+  println(x);
+  x
+}
+
+interface Foo {}
+interface Bar {}
+def handler() = {
+
+  try {
+    var x = 4;
+    val f = box { () => x };
+    ()
+  } with c1 : Foo {}
+    with c2 : Foo {}
+
+}

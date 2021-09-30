@@ -388,7 +388,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
 
   lazy val handler: P[Handler] =
-    ( `with` ~> blockParamSig ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+    ( `with` ~> blockParamSig ~ (`{` ~> many(defClause) <~ `}`) ^^ {
       case cap ~ clauses =>
         Handler(cap, clauses)
       }

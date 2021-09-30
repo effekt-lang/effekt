@@ -106,15 +106,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       case s @ source.Select(expr, selector) =>
         checkExprAsBlock(expr) match {
-          case (i @ InterfaceType(interface, targs) / capt) =>
+          case ((i @ InterfaceType(interface, targs)) / capt) =>
             // (1) find the operation
             // try to find an operation with name "selector"
             val op = interface.ops.collect {
               case op if op.name.name == selector.name => op
             } match {
-              case Nil      => Context.at(s) { Context.abort(s"Cannot select ${selector} in type ${i}") }
+              case Nil      => Context.at(s) { Context.abort(s"Cannot select ${selector.name} in type ${i}") }
               case List(op) => op
-              case _        => Context.at(s) { Context.abort(s"Multiple operations match ${selector} in type ${i}") }
+              case _        => Context.at(s) { Context.abort(s"Multiple operations match ${selector.name} in type ${i}") }
             }
             // assign the resolved operation to the identifier
             Context.assignSymbol(selector, op)
@@ -243,12 +243,15 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         val capabilityParams = handlers.map { h => h.capability.symbol }
 
+        // the current region is delimited by this handler
+        val lexical = CaptureSet(capabilityParams map CaptureOf)
+
         // (1) create new unification scope and check handled program (`prog`) with capabilities in scope
         val ret / bodyCapt = Context.at(prog) {
           Context.withUnificationScope {
             // bind capability types in type environment
             capabilityParams foreach Context.bind
-            checkStmt(prog)
+            Context.withRegion(lexical) { checkStmt(prog) }
           }
         }
 
@@ -504,7 +507,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val lexical = CaptureOf(sym)
 
         val tpe / capt = Context.at(body) {
-          Context.withRegion(lexical) {
+          Context.withRegion(CaptureSet(lexical)) {
             Context.withUnificationScope {
               sym.ret match {
                 case Some(tpe) => body checkAgainst tpe
@@ -553,7 +556,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // we use the current region as an approximation for the state
         val captState = C.region // CaptureOf(sym)
 
-        Context.bind(sym, stTpe, CaptureSet(captState)) // TODO use correct capture set here
+        Context.bind(sym, stTpe, captState) // TODO use correct capture set here
 
         val tpeRest / captRest = checkStmts(rest)
 
@@ -652,7 +655,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       val lexical = CaptureOf(funSym)
 
       // TODO should we open a new unification scope here?
-      val ret / capt = Context.withRegion(lexical) { checkStmt(body) }
+      val ret / capt = Context.withRegion(CaptureSet(lexical)) { checkStmt(body) }
 
       if (freeCapture(ret) contains lexical) { Context.at(body) { Context.error("The self region of the anonymous block argument must not leave through its type.") } }
 
@@ -740,7 +743,7 @@ trait TyperOps extends ContextOps { self: Context =>
    *
    * None on the toplevel
    */
-  private var lexicalRegion: Option[Capture] = None
+  private var lexicalRegion: Option[CaptureSet] = None
 
   private[typer] def initTyperstate(): Unit = {
     // Clear annotations, we are about to recompute those
@@ -877,8 +880,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Lexical Regions
   // ===============
-  def region: Capture = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
-  def withRegion[T](c: Capture)(prog: => T): T = {
+  def region: CaptureSet = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
+  def withRegion[T](c: CaptureSet)(prog: => T): T = {
     val before = lexicalRegion
     lexicalRegion = Some(c)
     val res = prog
