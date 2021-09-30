@@ -267,7 +267,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         }
       }
       Context scoped {
-        caps foreach { Context.bind }
+        caps foreach { c => Context.bind(c); Context.bind(CaptureOf(c)) }
         resolveGeneric(body)
       }
     //
