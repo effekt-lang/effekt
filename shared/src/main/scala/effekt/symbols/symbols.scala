@@ -177,7 +177,7 @@ package object symbols {
    * Should neither occur in source programs, nor in infered types
    */
   case class UnificationVar(underlying: TypeVar, scope: UnificationScope) extends TypeVar(underlying.name) {
-    override def toString = s"?${scope.id}.${underlying.name}$id"
+    override def toString = underlying.name.toString // s"?${scope.id}.${underlying.name}$id"
   }
 
   case class ValueTypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
