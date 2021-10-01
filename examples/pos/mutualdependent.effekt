@@ -1,0 +1,15 @@
+interface Console { def log(): Unit }
+
+def mymodule { c: Console } {
+
+  def even { f : () => Unit } : () => Unit at {f} {
+    c.log();
+    odd { () => f() }
+  }
+
+  def odd { f : () => Unit } : () => Unit at {f} {
+    even { () => f() }
+  }
+
+  return ()
+}
