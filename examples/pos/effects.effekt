@@ -8,43 +8,68 @@ interface Test2 {
   def get2(): Int
 }
 
-def foo { test : Test1 }: Unit = {
+def foo { test : Test1 }: Unit {
   println(test.get1(true) + 1);
   try {
     test2.get2() + 1
   } with test2 : Test2 {
-    def get2() = resume(42)
+    def get2() { resume(42) }
   };
   foo { test }
 
 }
 
-def user { t: Test2 } = t.get2() + 1
+def user { t: Test2 } { t.get2() + 1 }
 
-def bar(): Int = {
+def bar(): Int {
   try {
     user { test2 }
   } with test2 : Test2 {
-    def get2() = resume(10) * resume(3)
+    def get2() { resume(10) * resume(3) }
   }
 }
 
-interface State {
-  def get(): Int
-  def put(b: Int): Unit
+interface State[S] {
+  def get(): S
+  def put(b: S): Unit
 }
 
-def state[R](init: Int) { prog: { State } => R }: R = {
+def state[S, R](init: S) { prog: { State[S] } => R }: R {
   val f = try {
-    val result = prog { st }
-    box { (s: Int) => result }
-  } with st : State {
-    def get() = box { (s: Int) => (unbox resume(s))(s) }
-    def put(b: Int) = box { (s: Int) => (unbox resume(()))(b) }
+    val result = prog { st };
+    box {prog} { (s: S) => result }
+  } with st : State[S] {
+    def get() { box { (s: S) => (unbox resume(s))(s) } }
+    def put(b: S) { box { (s: S) => (unbox resume(()))(b) } }
   };
   (unbox f)(init)
 }
 
+// trying to use the user definable state to implement a scheduler fails, since the type of state needs to
+// recursively refer to its own capability
+interface Yield { def yield(): Unit }
+// def scheduler { prog: {Yield} => Unit }: Unit = {
+//   state[() => Unit at {prog}, Unit](box {prog} { () => () }) {
+//       // parser bug...
+//       (){st: State[() => Unit at {prog}]} =>
+//     try {
+//       prog { yld }
+//     } with yld: Yield {
+//       def yield() = st.put(box {prog} { () => resume(()) })
+//     }
+//   }
+// }
+
+def scheduler { prog: {Yield} => Unit } {
+  var x: Int = 3;
+  x + 1;
+  val f = box { () => var y = 4; x + y };
+  ()
+  // val f = box { () => x }
+  // (unbox f)();
+  // ()
+}
+
 // def bar { test : Test2 } = foo { test }
 
-def main() = println(bar())
+def main() { println(bar()) }

@@ -129,7 +129,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Since Kiama already consumes whitespace:
    * the idea is to scroll back whitespaces until we find a newline
    */
-  lazy val `;` = new Parser[Unit] {
+  lazy val `;` = literal(";")
+
+  lazy val oldSemiParser = new Parser[Unit] {
 
     def apply(in: Input): ParseResult[Unit] = {
       val content = in.source.content
@@ -235,7 +237,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~ (`:` ~/> valueType).? ~ ( `=` ~/> stmt) ^^ FunDef
+    `def` ~/> idDef ~ maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~ (`:` ~/> valueType).? ~ (`{` ~/> stmts <~ `}`) ^^ FunDef
 
   lazy val maybePure: P[Boolean] =
     `pure`.? ^^ { _.isDefined }
@@ -319,22 +321,22 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Statements
    */
   lazy val stmts: P[Stmt] =
-    ( (expr <~ `;`) ~ stmts ^^ ExprStmt
-    | someSep(definition, `;`) ~ stmts ^^ MutualStmt
-    | (`val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~> stmts) ^^ ValDef
+    ( (expr <~ `;`) ~/ stmts ^^ ExprStmt
+    | some(definition) ~ stmts ^^ MutualStmt
+    | (`val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~/> stmts) ^^ ValDef
     | (`var` ~> idDef ~ (`:` ~/> valueType).? ~ (`in` ~> idRef).? ~ (`=` ~/> stmt)) ~ (`;` ~/> stmts) ^^ VarDef
-    | (`return`.? ~> expr <~ `;`) ^^ Return
+    | (`return`.? ~> expr <~ `;`.?) ^^ Return
     | matchDef
     )
 
   lazy val matchDef: P[Stmt] =
-     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
+     `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~/> stmts) ^^ {
        case p ~ sc ~ body =>
         Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
   lazy val dataDef: P[DataDef] =
-    `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef
+    `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(constructor) <~ `}`) ^^ DataDef
 
   lazy val constructor: P[Constructor] =
     idDef ~ valueParams ^^ Constructor
@@ -400,7 +402,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParams ~ implicitResume ~ (`=` ~/> stmt) ^^ {
+    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParams ~ implicitResume ~ (`{` ~/> stmts <~ `}`) ^^ {
       case id ~ tparams ~ vparams ~ resume ~ body => OpClause(id, tparams, vparams, body, resume)
     }
 

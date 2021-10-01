@@ -9,10 +9,10 @@ type List[A] {
   Nil()
 }
 
-def main() = {
+def main() {
   Pair(1, 2) match {
     case Pair(x, y) => println(x + y)
-  }
+  };
   val z = Pair(Pair(1, 2), 3) match {
     case Pair(Pair(x, y), z) =>
       x + y + z
@@ -20,6 +20,6 @@ def main() = {
   val z = [1, 2, 3] match {
     case Nil() => 0
     case Cons(x, tl) => x + 1
-  }
+  };
   ()
 }

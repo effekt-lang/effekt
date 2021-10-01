@@ -1,8 +1,8 @@
 module examples/pos/builtins
 
-type Color { Red(); Green(); Blue() }
+type Color { Red() Green() Blue() }
 
-def main() = {
+def main() {
     println(1);
     println("foo");
     println(true);

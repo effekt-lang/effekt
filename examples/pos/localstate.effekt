@@ -1,4 +1,4 @@
-def main() = {
+def simple() {
   println("hello");
   var x = 4;
   println("world" ++ show(x));
@@ -11,11 +11,11 @@ def main() = {
 
 interface Foo {}
 interface Bar {}
-def handler() = {
+def handler() {
 
-  var y = 42
+  var y = 42;
 
-  val x = box { () => var z = 0; val b: () => Int at { this } = box {() => z }; () }
+  val x = box { () => var z = 0; val b: () => Int at { this } = box {() => z }; () };
 
   try {
     var x = 4;
@@ -24,4 +24,30 @@ def handler() = {
   } with c1 : Foo {}
     with c2 : Foo {}
 
+}
+
+// TODO check call to this interface
+interface Free {
+  def next(): ({f : Free} => (Free at {f})) at {}
+}
+
+def newCounter { pool: Region } {
+  var state in pool = 0;
+  box { () => state = state + 1; state }
+}
+
+def main() {
+  region x {
+    val c1 = newCounter {x};
+    val c2 = newCounter {x};
+    val c3 = newCounter {x};
+    c1();c2();c1();
+    println(c1());
+    println(c2());
+
+    c3();c1();c1();
+    println(c1());
+    println(c2());
+    println(c3())
+  }
 }

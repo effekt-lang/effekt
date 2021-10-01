@@ -42,4 +42,4 @@ extern pure def onClick(node: Node)(handler: () => Unit): Node =
 extern def sleep(n: Int): Unit =
   "$effekt.callcc(k => window.setTimeout(() => k(null), n))"
 
-def clear(node: Node) = node.innerHTML("")
+def clear(node: Node) { node.innerHTML("") }

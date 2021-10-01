@@ -9,7 +9,7 @@ extern include "effekt_builtins.js"
 // Pattern Matching
 extern include "effekt_matching.js"
 
-def locally[R] { f: () => R }: R = f()
+def locally[R] { f: () => R }: R { f() }
 
 // Side effecting ops
 // ==================
@@ -169,4 +169,3 @@ extern pure def panic[R](msg: String): R =
 // TODO use a better timer
 extern def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
-
