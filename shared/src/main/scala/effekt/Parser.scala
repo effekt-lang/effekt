@@ -81,14 +81,16 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
   lazy val `at` = keyword("at")
+  lazy val `in` = keyword("in")
   lazy val `box` = keyword("box")
   lazy val `unbox` = keyword("unbox")
   lazy val `return` = keyword("return")
+  lazy val `region` = keyword("region")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "true", "false", "else", "type",
     "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "for", "interface", "at", "box", "unbox", "return"
+    "match", "module", "import", "extern", "for", "interface", "at", "box", "unbox", "return", "in", "region"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -320,7 +322,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( (expr <~ `;`) ~ stmts ^^ ExprStmt
     | someSep(definition, `;`) ~ stmts ^^ MutualStmt
     | (`val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~> stmts) ^^ ValDef
-    | (`var` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~> stmts) ^^ VarDef
+    | (`var` ~> idDef ~ (`:` ~/> valueType).? ~ (`in` ~> idRef).? ~ (`=` ~/> stmt)) ~ (`;` ~/> stmts) ^^ VarDef
     | (`return`.? ~> expr <~ `;`) ^^ Return
     | matchDef
     )
@@ -366,6 +368,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | whileExpr
     | funCall
     | handleExpr
+    | regionExpr
     | boxExpr
     | unboxExpr
     | primExpr
@@ -385,6 +388,9 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   lazy val handleExpr: P[Term] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle
+
+  lazy val regionExpr: P[Term] =
+    `region` ~/> idDef ~ stmt ^^ Region
 
   lazy val handler: P[Handler] =
     ( `with` ~> blockParamSig ~ (`{` ~> many(defClause) <~ `}`) ^^ {

@@ -139,7 +139,7 @@ case class MutualStmt(defs: List[Def], rest: Stmt) extends Stmt
 case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, rest: Stmt) extends Stmt with Definition {
   type symbol = symbols.ValBinder
 }
-case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, rest: Stmt) extends Stmt with Definition {
+case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt, rest: Stmt) extends Stmt with Definition {
   type symbol = symbols.VarBinder
 }
 case class BlockStmt(stmts: Stmt) extends Stmt
@@ -186,6 +186,10 @@ case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
 case class While(cond: Term, block: Stmt) extends Term
 
 case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
+
+case class Region(id: IdDef, body: Stmt) extends Term with Definition {
+  type symbol = symbols.BlockParam
+}
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.

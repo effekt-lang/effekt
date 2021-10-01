@@ -237,6 +237,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         ret / (funCapt ++ argCapt)
 
+      // TODO implement properly
+      case d @ source.Region(id, body) =>
+        val param = d.symbol
+        val capt = CaptureSet(CaptureOf(param))
+
+        Context.bind(param)
+        Context.withRegion(capt) {
+          // unification scope is important here to be able to check escaping
+          val tpe / bodyCapt = Context.withUnificationScope { checkStmt(body) }
+          checkNonEscape(capt, d, tpe)
+          tpe / (bodyCapt -- capt)
+        }
+
       case source.TryHandle(prog, handlers) =>
 
         val capabilityParams = handlers.map { h => h.capability.symbol }
@@ -259,10 +272,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         val bodyCaptWithoutCapabilities = bodyCapt -- CaptureSet(boundCaptures)
 
         // check that none of the bound capabilities escapes through the return type
-        val escape = freeCapture(ret) intersect boundCaptures
-        if (escape.nonEmpty) {
-          C.at(prog) { C.error(s"The return type is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}") }
-        }
+        checkNonEscape(CaptureSet(boundCaptures), prog, ret)
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
         Context.withUnificationScope {
@@ -387,6 +397,13 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         THole / Pure
     }
 
+  def checkNonEscape(bound: CaptureSet, prog: Tree, ret: ValueType)(implicit C: Context): Unit = {
+    val escape = freeCapture(ret) intersect bound.captures
+    if (escape.nonEmpty) {
+      C.at(prog) { C.error(s"The return type ${ret} is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}") }
+    }
+  }
+
   //</editor-fold>
 
   //<editor-fold desc="pattern matching">
@@ -503,8 +520,18 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       tpeRest / (captBind ++ captRest)
 
-    case d @ source.VarDef(id, annot, binding, rest) =>
+    case d @ source.VarDef(id, annot, reg, binding, rest) =>
       val sym = d.symbol
+
+      // we use the current region as an approximation for the state
+      val captState = reg map Context.symbolOf map {
+        case b: BlockSymbol =>
+          Context.lookup(b) match {
+            case (TRegion, capt) => capt
+            case _               => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+          }
+        case _ => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+      } getOrElse C.region
 
       val tpeBind / captBind = sym.tpe match {
         case Some(t) => binding checkAgainst t
@@ -512,14 +539,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       }
       val stTpe = BlockTypeApp(TState, List(tpeBind))
 
-      // we use the current region as an approximation for the state
-      val captState = C.region // CaptureOf(sym)
-
       Context.bind(sym, stTpe, captState)
 
       val tpeRest / captRest = checkStmt(rest)
 
-      // TODO check non escaping of sym
       tpeRest / (captBind ++ captRest)
 
     case source.ExprStmt(e, rest) =>
@@ -591,7 +614,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
           }
         }
 
-        if (freeCapture(tpe) contains lexical) Context.at(body) { Context.error(s"Self region ${id} must not escape as part of the function's return type") }
+        checkNonEscape(CaptureSet(lexical), d, tpe)
 
         // TODO check whether the subtraction here works in presence of unification variables
         val captWithoutBoundParams = capt -- CaptureSet(sym.bparams.map(CaptureOf)) -- CaptureSet(lexical)
@@ -652,9 +675,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       // TODO should we open a new unification scope here?
       val ret / capt = Context.withRegion(lexical) { checkStmt(body) }
 
-      if (freeCapture(ret).intersect(lexical.captures).nonEmpty) {
-        Context.at(body) { Context.error("The self region of the anonymous block argument must not leave through its type.") }
-      }
+      checkNonEscape(lexical, arg, ret)
 
       val capture = capt -- CaptureSet(capts) -- lexical
 

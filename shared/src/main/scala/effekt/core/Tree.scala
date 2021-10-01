@@ -77,8 +77,9 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(init: Stmt, body: Block) extends Stmt
+case class State(init: Stmt, region: Option[Symbol], body: Block) extends Stmt
 
+case class Region(body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 //// TODO change to Map
 case class Handler(tpe: InterfaceType, clauses: List[(Operation, BlockLit)]) extends Tree

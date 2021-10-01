@@ -72,10 +72,10 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       Val(v.symbol, transform(binding), transform(rest))
 
     // This phase introduces capabilities for state effects
-    case v @ source.VarDef(id, _, binding, rest) =>
+    case v @ source.VarDef(id, _, reg, binding, rest) =>
       val sym = v.symbol
       val b = transform(binding)
-      State(b, BlockLit(List(), List(BlockParam(sym)), transform(rest)))
+      State(b, reg.map { r => r.symbol }, BlockLit(List(), List(BlockParam(sym)), transform(rest)))
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
@@ -173,6 +173,12 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       C.bind(C.inferredTypeOf(tree), App(b, Nil, vas, bas))
 
     case source.Select(receiver, selector) => transformBox(tree)
+
+    case source.Region(id, body) =>
+      C.bind(
+        C.inferredTypeOf(tree),
+        Region(BlockLit(Nil, List(BlockParam(C.symbolOf(id).asInstanceOf[BlockSymbol])), transform(body)))
+      )
 
     case source.TryHandle(prog, handlers) =>
 

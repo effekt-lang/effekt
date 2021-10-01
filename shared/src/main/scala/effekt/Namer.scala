@@ -8,7 +8,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
-import builtins.THole
+import builtins.{ THole, TRegion }
 import scopes._
 
 /**
@@ -161,8 +161,9 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       capt foreach resolve
       resolveGeneric(block)
 
-    case d @ source.VarDef(id, annot, binding, rest) =>
+    case d @ source.VarDef(id, annot, reg, binding, rest) =>
       val tpe = annot.map(resolve)
+      reg foreach C.resolveTerm
       resolveGeneric(binding)
       val sym = VarBinder(Name.local(id), tpe, d)
       val capt = CaptureOf(sym)
@@ -240,6 +241,14 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
+
+    case source.Region(id, body) =>
+      val param = BlockParam(LocalName(id.name), TRegion)
+      Context scoped {
+        Context.assignSymbol(id, param)
+        Context.bind(param);
+        resolveGeneric(body)
+      }
 
     case source.TryHandle(body, handlers) =>
 

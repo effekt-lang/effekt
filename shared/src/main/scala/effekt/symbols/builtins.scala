@@ -32,11 +32,14 @@ object builtins {
     interface
   }
 
+  val TRegion = Interface(LocalName("Region"), Nil, Nil)
+
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
     "Boolean" -> TBoolean,
     "Unit" -> TUnit,
     "String" -> TString,
-    "Double" -> TDouble
+    "Double" -> TDouble,
+    "Region" -> TRegion
   )
 }
