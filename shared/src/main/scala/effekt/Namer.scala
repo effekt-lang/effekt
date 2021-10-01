@@ -247,6 +247,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context scoped {
         Context.assignSymbol(id, param)
         Context.bind(param);
+        Context.bind(CaptureOf(param))
         resolveGeneric(body)
       }
 
