@@ -684,21 +684,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   //</editor-fold>
 
-  private def freeCapture(o: Any): Set[Capture] = o match {
-    case t: symbols.Capture   => Set(t)
-    case BoxedType(tpe, capt) => freeCapture(tpe) ++ capt.captures
-    case FunctionType(tparams, cparams, vparams, bparams, ret) =>
-      freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) -- cparams.toSet
-    // case e: Effects            => freeTypeVars(e.toList)
-    case _: Symbol | _: String => Set.empty // don't follow symbols
-    case t: Iterable[t] =>
-      t.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
-    case p: Product =>
-      p.productIterator.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
-    case _ =>
-      Set.empty
-  }
-
   private implicit class ExprOps(expr: Term) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(expr) {
       val got / capt = checkExpr(expr)

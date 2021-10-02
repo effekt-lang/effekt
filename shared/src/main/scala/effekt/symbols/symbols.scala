@@ -233,16 +233,24 @@ package object symbols {
 
     //  For now, we do not print the capture parameters.
     override def toString: String = {
+      val free = freeCapture(ret)
       val vps = s"(${vparams.map { _.toString }.mkString(", ")})"
-      val bps = bparams.map { b => s"{${b.toString}}" }
+
+      val bps = (cparams zip bparams).map {
+        case (c, btpe) if free.contains(c) => s"{${c}: ${btpe.toString}}"
+        case (c, btpe)                     => s"{${btpe.toString}}"
+      }
       val ps = (vps ++ bps).mkString
 
       val ts = tparams match {
         case Nil => s""
         case tps => s"[${tps.map { _.toString }.mkString(", ")}]"
       }
-
-      s"$ts$ps => $ret"
+      if (ret.isInstanceOf[BoxedType]) {
+        s"$ts$ps => ($ret)"
+      } else {
+        s"$ts$ps => $ret"
+      }
     }
   }
 
@@ -300,6 +308,7 @@ package object symbols {
     def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
     def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
     def +(c: Capture): CaptureSet = CaptureSet(captures + c)
+    def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
   }
   object CaptureSet {
     def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
@@ -309,6 +318,7 @@ package object symbols {
 
   sealed trait Capture extends TypeSymbol {
     val name: Name
+    def concrete: Boolean
   }
 
   // TODO we could fuse CaptureOf and CaptureParam into one constructor
@@ -319,11 +329,30 @@ package object symbols {
       case CaptureOf(otherSym) => sym == otherSym
       case _                   => false
     }
+    def concrete = true
     override def hashCode: Int = sym.hashCode + 13
   }
-  case class CaptureParam(name: Name) extends Capture
+  case class CaptureParam(name: Name) extends Capture {
+    def concrete = true
+  }
   case class CaptureUnificationVar(underlying: Capture, scope: UnificationScope) extends Capture {
     val name = underlying.name
+    def concrete = false
     override def toString = "?" + underlying.name //underlying.name + id
+  }
+
+  def freeCapture(o: Any): Set[Capture] = o match {
+    case t: symbols.Capture   => Set(t)
+    case BoxedType(tpe, capt) => freeCapture(tpe) ++ capt.captures
+    case FunctionType(tparams, cparams, vparams, bparams, ret) =>
+      freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) -- cparams.toSet
+    // case e: Effects            => freeTypeVars(e.toList)
+    case _: Symbol | _: String => Set.empty // don't follow symbols
+    case t: Iterable[t] =>
+      t.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
+    case p: Product =>
+      p.productIterator.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
+    case _ =>
+      Set.empty
   }
 }

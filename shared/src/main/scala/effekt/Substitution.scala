@@ -1,7 +1,7 @@
 package effekt
 
-import effekt.source.{ Tree }
-import effekt.symbols.{ BlockTypeApp, BlockType, BoxedType, CaptureSet, CaptureUnificationVar, Capture, FunctionType, InterfaceType, TypeVar, UnificationVar, ValueType, ValueTypeApp, Interface }
+import effekt.source.Tree
+import effekt.symbols.{ BlockType, BlockTypeApp, BoxedType, Capture, CaptureSet, CaptureUnificationVar, FunctionType, Interface, InterfaceType, TypeVar, UnificationVar, ValueType, ValueTypeApp }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -68,16 +68,20 @@ object substitutions {
     def addAllType(cs: List[TypeConstraint]): Unit = constraints = constraints ++ cs
     def addAllCapt(cs: List[CaptureConstraint]): Unit = capture_constraints = capture_constraints ++ cs
 
-    def instantiate(tpe: FunctionType): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
+    def instantiate(tpe: FunctionType)(implicit C: ErrorReporter): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
       val FunctionType(tparams, cparams, vparams, bparams, ret) = tpe
       val typeRigids = tparams map fresh
       val captRigids = cparams map freshCaptVar
       val subst = Substitutions(tparams zip typeRigids, cparams zip captRigids.map(c => CaptureSet(c)))
 
-      val substitutedVparams = vparams map subst.substitute
-      val substitutedBparams = bparams map subst.substitute
-      val substitutedReturn = subst.substitute(ret)
-      (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
+      try {
+        val substitutedVparams = vparams map subst.substitute
+        val substitutedBparams = bparams map subst.substitute
+        val substitutedReturn = subst.substitute(ret)
+        (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn))
+      } catch {
+        case e: SubstitutionException => C.abort(s"Function type ${tpe} needs to be fully known -- maybe annotate the return type?")
+      }
     }
 
     // TODO factor into sumtype that's easier to test -- also try to get rid of Context -- we only need to for positioning and error reporting
@@ -334,6 +338,8 @@ object substitutions {
    * Substitutions not only have unification variables as keys, since we also use the same mechanics to
    * instantiate type schemes
    */
+  case class SubstitutionException(x: CaptureUnificationVar, subst: Map[Capture, CaptureSet]) extends Exception
+
   case class Substitutions(
     values: Map[TypeVar, ValueType],
     captures: Map[Capture, CaptureSet]
@@ -359,9 +365,14 @@ object substitutions {
         captures.filterNot { case (t, _) => cps.contains(t) }
       )
 
-    def substitute(c: CaptureSet): CaptureSet = CaptureSet(c.captures.flatMap {
-      case c => captures.getOrElse(c, CaptureSet(Set(c))).captures
-    })
+    // TODO we DO need to distinguish between substituting unification variables for unification variables
+    // and substituting concrete captures in unification variables... These are two fundamentally different operations.
+    def substitute(c: CaptureSet): CaptureSet = c.flatMap {
+      // we are probably instantiating a function type
+      case x: CaptureUnificationVar if captures.keys.exists(c => c.concrete) =>
+        throw SubstitutionException(x, captures)
+      case c => captures.getOrElse(c, CaptureSet(c))
+    }
 
     def substitute(t: ValueType): ValueType = t match {
       case x: TypeVar =>

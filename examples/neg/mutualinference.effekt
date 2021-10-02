@@ -3,7 +3,7 @@ interface Time { def now(): Unit }
 
 def mymodule { c: Console } { t : Time } {
 
-  def even { f : () => Unit } : () => Unit at {c, f} {
+  def even { f : () => Unit } {
     c.log();
     box { () => (unbox odd { () => f() })() }
   }
