@@ -3,15 +3,13 @@ interface Time { def now(): Unit }
 
 def mymodule { c: Console } { t : Time } {
 
-  def even { f : () => Unit } : () => Unit at {c, f} {
+  def even { f : () => Unit } : () => Unit at {c, f, t} {
     c.log();
     box { () => (unbox odd { () => f() })() }
   }
 
-  def odd { g : () => Unit } : () => Unit at {c, g} {
-    // {f}[f !-> t] fails
-    // t.now();
-    // val x = box { () => even { () => t.now() } };
+  def odd { g : () => Unit } : () => Unit at {c, g, t} {
+    t.now();
     box { () => (unbox even { () => g() })() }
   }
 

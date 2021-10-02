@@ -9,9 +9,8 @@ def mymodule { c: Console } { t : Time } {
   }
 
   def odd { g : () => Unit } : () => Unit at {c, g} {
-    // {f}[f !-> t] fails
-    // t.now();
-    // val x = box { () => even { () => t.now() } };
+    // ((){f: () => Unit} => (() => Unit at {?odd, f, c}))[f !-> ?C] fails
+    // because we cannot know whether f in ?odd
     box { () => (unbox even { () => g() })() }
   }
 
