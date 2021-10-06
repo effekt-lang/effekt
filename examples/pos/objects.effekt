@@ -2,7 +2,19 @@ interface Counter {
   def get(): Int
   def inc(): Unit
 }
-def main() {
+
+interface Console { def log(msg: String): Unit }
+
+def newCounter { r: Region }: Counter at {r} {
+  var state in r = 0;
+  def c = new Counter {
+    def get() { state }
+    def inc() { state = state + 1 }
+  };
+  c
+}
+
+def myModule { console: Console } {
 
   var state = 0;
 
@@ -11,10 +23,33 @@ def main() {
     def inc() { state = state + 1 }
   };
 
+  var otherState = 0;
+  def printCounter = new Counter {
+    def get() { otherState }
+    def inc() { console.log("incrementing counter"); otherState = otherState + 1 }
+  };
+
   c.inc();
   c.inc();
 
   println(c.get());
+
+  region pool {
+    // here we need to ANF manually at the moment
+    val _c1 = newCounter { pool };
+    val _c2 = newCounter { pool };
+
+    def c1 = unbox _c1;
+    def c2 = unbox _c2;
+
+    println(c1.get())
+  };
+
   ()
 
+}
+
+def main() {
+  def console = new Console { def log(s: String) { println(s) }};
+  myModule { console }
 }
