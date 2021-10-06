@@ -237,7 +237,11 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~ (`:` ~/> valueType).? ~ (`{` ~/> stmts <~ `}`) ^^ FunDef
+    `def` ~/>
+      ( idDef ~ (`:` ~> blockType).? ~ (`=` ~> block <~ `;`) ^^ BlockDef
+      | idDef ~ maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~ (`:` ~/> valueType).? ~ (`{` ~/> stmts <~ `}`) ^^ FunDef
+      )
+
 
   lazy val maybePure: P[Boolean] =
     `pure`.? ^^ { _.isDefined }
@@ -294,10 +298,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Arguments
    */
   lazy val blockArg: P[BlockArg] =
-    ( `{` ~> maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~  (`=>` ~/> stmts <~ `}`) ^^ FunctionArg
+    ( blockLit
     | (`{` ~> idRef <~ `}`) ^^ InterfaceArg
     | (`{` ~> `unbox` ~> expr <~ `}`) ^^ UnboxArg
     )
+
+  lazy val blockLit: P[FunctionArg] = `{` ~> maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~  (`=>` ~/> stmts <~ `}`) ^^ FunctionArg
 
   lazy val valueArgs: P[List[Term]] =
     `(` ~/> manySep(expr, `,`) <~ `)` | failure("Expected a value argument list")
@@ -376,10 +382,18 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | primExpr
     )
 
-  lazy val boxExpr: P[Term] =
-    ( `box` ~> captureSet ~ blockArg ^^ { case c ~ b => Box(Some(c), b) }
-    | `box` ~> blockArg ^^ { b => Box(None, b) }
+  // a variation of blockArg without mandatory braces
+  lazy val block: P[BlockArg] =
+    ( idRef ^^ InterfaceArg
+    | `unbox` ~/> variable ^^ UnboxArg // here we purposefully restrict ourselves to variables to enforce manual ANF for now
+    | blockLit
     )
+
+  lazy val boxExpr: P[Term] =
+    ( `box` ~> captureSet ~ block ^^ { case c ~ b => Box(Some(c), b) }
+    | `box` ~> block ^^ { b => Box(None, b) }
+    )
+
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox
 
   lazy val funCall: P[Term] =

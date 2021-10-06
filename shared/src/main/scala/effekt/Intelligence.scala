@@ -100,6 +100,9 @@ trait Intelligence {
       case (t: source.FunDef, c) => for {
         pos <- C.positions.getStart(t)
       } yield (pos, c)
+      case (t: source.BlockDef, c) => for {
+        pos <- C.positions.getStart(t)
+      } yield (pos, c)
       case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
         pos <- C.positions.getStart(block)
         capt <- C.inferredCaptureOption(block)
@@ -167,6 +170,10 @@ trait Intelligence {
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value binder", signature, None)
 
+    case c: DefBinder =>
+      val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Block binder", signature, None)
+
     case c: VarBinder =>
       val signature = C.blockTypeOption(c).map {
         case BlockTypeApp(TState, List(tpe)) => tpe
@@ -177,7 +184,7 @@ trait Intelligence {
             |can be modified (e.g., `${c.name} = VALUE`) by code that has `${c.name}`
             |in its lexical scope.
             |
-            |However, as opposed to other languages, variable binders in Effekt
+            |However, as opposed to other languages, variable binders
             |are stack allocated and show the right backtracking behavior in
             |combination with effect handlers.
          """.stripMargin

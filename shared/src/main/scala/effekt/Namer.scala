@@ -58,6 +58,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    */
   def preresolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
 
+    case f @ source.BlockDef(id, tpe, body) =>
+      val uniqueId = Context.freshNameFor(id)
+      val sym = DefBinder(uniqueId, tpe map resolve, f)
+      Context.define(id, sym)
+
     case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
       val uniqueId = Context.freshNameFor(id)
       // we create a new scope, since resolving type params introduces them in this scope
@@ -187,6 +192,15 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         Context.bind(self)
         Context.bind("this", self)
 
+        resolveGeneric(body)
+      }
+
+    case f @ source.BlockDef(id, tpe, body) =>
+      val sym = Context.symbolOf(f)
+      Context scoped {
+        val self = CaptureOf(sym)
+        Context.bind(self)
+        Context.bind("this", self)
         resolveGeneric(body)
       }
 

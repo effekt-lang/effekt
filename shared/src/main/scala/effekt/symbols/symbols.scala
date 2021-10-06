@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ BlockDef, Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import org.bitbucket.inkytonik.kiama.util.Source
 import effekt.substitutions._
@@ -138,6 +138,7 @@ package object symbols {
 
   case class ValBinder(name: LocalName, tpe: Option[ValueType], decl: ValDef) extends ValueSymbol
   case class VarBinder(name: LocalName, tpe: Option[ValueType], decl: VarDef) extends BlockSymbol
+  case class DefBinder(name: Name, tpe: Option[BlockType], decl: BlockDef) extends BlockSymbol
 
   /**
    * Introduced by Transformer

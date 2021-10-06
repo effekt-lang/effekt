@@ -104,6 +104,10 @@ sealed trait Def extends Definition {
 case class FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[ValueType], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
+// TODO BlockArg is not precisely the right syntactic category, but we reuse it for now.
+case class BlockDef(id: IdDef, tpe: Option[BlockType], block: BlockArg) extends Def {
+  type symbol = symbols.DefBinder
+}
 
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.Interface

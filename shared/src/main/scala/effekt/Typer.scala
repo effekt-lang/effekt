@@ -397,10 +397,10 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         THole / Pure
     }
 
-  def checkNonEscape(bound: CaptureSet, prog: Tree, ret: ValueType)(implicit C: Context): Unit = {
+  def checkNonEscape(bound: CaptureSet, prog: Tree, ret: Type)(implicit C: Context): Unit = {
     val escape = freeCapture(ret) intersect bound.captures
     if (escape.nonEmpty) {
-      C.at(prog) { C.error(s"The return type ${ret} is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}") }
+      C.at(prog) { C.error(s"The type ${ret} is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}") }
     }
   }
 
@@ -566,6 +566,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       Context.bind(funSym, funCapt)
       funSym.ret.foreach { annot => Context.bind(d.symbol, d.symbol.toType) }
 
+    case d @ source.BlockDef(id, tpe, body) =>
+      val blockSym = d.symbol
+      val blockCapt = CaptureSet(C.freshCaptVar(CaptureOf(blockSym)))
+      Context.bind(blockSym, blockCapt)
+      blockSym.tpe.foreach { annot => Context.bind(d.symbol, annot) }
+
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.bind(d.symbol, d.symbol.toType, Pure)
 
@@ -594,6 +600,31 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def checkDef(d: Def)(implicit C: Context): CaptureSet =
     Context.focusing(d) {
+      case d @ source.BlockDef(id, tpe, body) =>
+        val sym = d.symbol
+        val precheckedCapt = C.lookupCapture(sym)
+        val lexical = CaptureOf(sym)
+        val tpe / capt = Context.at(body) {
+          Context.withRegion(CaptureSet(lexical)) {
+            Context.withUnificationScope {
+              sym.tpe match {
+                case Some(tpe) => body checkAgainst tpe
+                case None      => checkBlockArgument(body)
+              }
+            }
+          }
+        }
+
+        checkNonEscape(CaptureSet(lexical), d, tpe)
+        Context.bind(sym, tpe, capt)
+        Context.annotateInferredType(d, tpe)
+        Context.annotateInferredCapt(d, capt)
+
+        // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
+        C.unify(capt, precheckedCapt)
+        // this is important for use vs. mention -- we annotate the block with the capture set and only require it, when it is USED
+        Pure
+
       case d @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
         val sym = d.symbol
         sym.vparams foreach Context.bind
@@ -687,6 +718,19 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
   private implicit class ExprOps(expr: Term) {
     def checkAgainst(tpe: ValueType)(implicit C: Context): TyperResult[ValueType] = Context.at(expr) {
       val got / capt = checkExpr(expr)
+      C.unify(tpe, got)
+      tpe / capt
+    }
+    def checkAgainst(tpe: BlockType)(implicit C: Context): TyperResult[BlockType] = Context.at(expr) {
+      val got / capt = checkExprAsBlock(expr)
+      C.unify(tpe, got)
+      tpe / capt
+    }
+  }
+
+  private implicit class BlockArgOps(expr: source.BlockArg) {
+    def checkAgainst(tpe: BlockType)(implicit C: Context): TyperResult[BlockType] = Context.at(expr) {
+      val got / capt = checkBlockArgument(expr)
       C.unify(tpe, got)
       tpe / capt
     }

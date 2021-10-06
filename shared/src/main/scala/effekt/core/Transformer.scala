@@ -37,6 +37,11 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: () => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+
+    case b @ source.BlockDef(id, tpe, block) =>
+      val sym = b.symbol
+      Def(sym, C.interfaceTypeOf(sym), transform(block), rest())
+
     case f @ source.FunDef(id, _, vparams, bparams, _, body) =>
       val sym = f.symbol
       val vps = vparams map transform
