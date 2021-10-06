@@ -1,0 +1,20 @@
+interface Counter {
+  def get(): Int
+  def inc(): Unit
+}
+def main() {
+
+  var state = 0;
+
+  def c = new Counter {
+    def get() { state }
+    def inc() { state = state + 1 }
+  };
+
+  c.inc();
+  c.inc();
+
+  println(c.get());
+  ()
+
+}
