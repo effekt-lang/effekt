@@ -277,7 +277,7 @@ package object symbols {
   case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType with TypeSymbol {
     def interface = this
   }
-  case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], annotatedReturn: ValueType, effect: Interface) extends Fun {
+  case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], annotatedReturn: ValueType, interface: Interface) extends Fun {
     def ret: Option[ValueType] = Some(annotatedReturn)
     def bparams = Nil
     //    def appliedEffect = if (effect.tparams.isEmpty) effect else EffectApp(effect, effect.tparams)

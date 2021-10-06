@@ -295,7 +295,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             val notCovered = interface.ops.toSet -- covered.toSet
 
             if (notCovered.nonEmpty) {
-              val explanation = notCovered.map { op => s"${op.name} of interface ${op.effect.name}" }.mkString(", ")
+              val explanation = notCovered.map { op => s"${op.name} of interface ${op.interface.name}" }.mkString(", ")
               Context.error(s"Missing definitions for operations: ${explanation}")
             }
 
@@ -685,6 +685,61 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         case BoxedType(btpe, capt) => btpe / (capt ++ outerCapt)
         case _                     => C.abort(s"Unboxing requires a boxed type, but got $tpe")
       }
+
+    // TODO share with effect handlers, this is mostly copy and pasted
+    case n @ source.NewArg(tpe, members) =>
+
+      // The self region is created by Namer and stored in the DB
+      val lexical = C.annotation(Annotations.InferredCapture, n)
+
+      var capt = Pure
+
+      // new >>>State[Int]<<< { ... }
+      val annotatedType @ InterfaceType(interface, targs) = tpe.resolve.asInterfaceType
+
+      val tparams = interface.tparams
+      val tsubst = (tparams zip targs).toMap
+
+      // (3) check all operations are covered
+      val covered = members.map { _.definition }
+      val notCovered = interface.ops.toSet -- covered.toSet
+
+      if (notCovered.nonEmpty) {
+        val explanation = notCovered.map { op => s"${op.name} of interface ${op.interface.name}" }.mkString(", ")
+        Context.error(s"Missing definitions for operations: ${explanation}")
+      }
+
+      if (covered.size > covered.distinct.size)
+        Context.error(s"Duplicate definitions of operations")
+
+      // (4) actually check each clause
+      members foreach Context.withFocus {
+        // TODO what is with type parameters of operation clauses?
+        case d @ source.OpClause(op, tparams, vparams, body, _) =>
+
+          val declaration = d.definition
+
+          val FunctionType(tparams1, cparams1, vparams1, bparams1, ret1) = tsubst.substitute(declaration.toType)
+
+          // (4b) check the body of the clause
+          val tparamSyms = tparams.map { t => t.symbol.asTypeVar }
+          val vparamSyms = vparams.map { p => p.symbol }
+
+          vparamSyms foreach Context.bind
+
+          // TODO does this need to be a fresh unification scope?
+          val opRet / opCapt = Context in { body checkAgainst ret1 }
+          capt ++= opCapt
+
+          // (4c) Note that the expected type is NOT the declared type but has to take the answer type into account
+          /** TODO: do something about capture set parameters */
+          val inferredTpe = FunctionType(tparamSyms, Nil, vparamSyms.map { Context.lookup }, Nil, opRet)
+          val expectedTpe = FunctionType(tparams1, cparams1, vparams1, bparams1, ret1)
+
+          Context.unify(inferredTpe, expectedTpe)
+      }
+
+      annotatedType / capt
   }
 
   // Example.

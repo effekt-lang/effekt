@@ -57,6 +57,9 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Extern(pure, ps, body)   => jsLambda(ps map toDoc, body)
     case Unbox(e)                 => toDoc(e)
     case Select(b, sel)           => toDoc(b) <> "." <> jsEscape(sel)
+    case New(tpe, members) => jsObject(members.map {
+      case (id, b) => nameDef(id) -> toDoc(b)
+    })
   })
 
   // pretty print the statement in a javascript expression context
@@ -200,6 +203,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
+
+    // we treat functions specially for recursion
+    // TODO fix this in namer and typer to rule out recursion for block defs!
     case Def(id, tpe, BlockLit(vps, bps, body), rest) =>
       jsFunction(nameDef(id), (vps map toDoc) ++ (bps map toDoc), toDocStmt(body)) <> emptyline <> toDocStmt(rest)
 
@@ -208,6 +214,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Def(id, tpe, Extern(true, ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> jsCall("$effekt.pure", body)) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, tpe, b, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(b) <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }

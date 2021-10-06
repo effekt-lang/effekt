@@ -95,6 +95,8 @@ case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
 }
 case class UnboxArg(body: Term) extends BlockArg
 
+case class NewArg(tpe: BlockType, clauses: List[OpClause]) extends BlockArg
+
 /**
  * Global and local definitions
  */

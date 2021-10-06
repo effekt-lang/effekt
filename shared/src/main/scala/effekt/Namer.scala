@@ -353,6 +353,34 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         resolveGeneric(stmt)
       }
 
+    case n @ source.NewArg(tpe, members) =>
+      Context scoped {
+
+        val self = CaptureOf(Anon(n))
+        Context.bind("this", self)
+        C.annotate(Annotations.InferredCapture, n, CaptureSet(self))
+
+        val interface = resolve(tpe).asInterfaceType.interface
+
+        members.foreach {
+          case source.OpClause(op, tparams, vparams, body, _) =>
+
+            // try to find the operation in the handled effect:
+            interface.ops.find { o => o.name.toString == op.name } map { opSym =>
+              Context.assignSymbol(op, opSym)
+            } getOrElse {
+              Context.abort(s"Operation ${op.name} is not part of interface ${interface}.")
+            }
+
+            val tps = tparams map resolve
+            val vps = vparams map resolve
+            Context scoped {
+              Context.bindValue(vps)
+              resolveGeneric(body)
+            }
+        }
+      }
+
     // (2) === Bound Occurrences ===
 
     case source.Call(target, targs, vargs, bargs) =>

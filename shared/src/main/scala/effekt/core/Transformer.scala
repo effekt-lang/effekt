@@ -222,6 +222,13 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
     case source.FunctionArg(tparams, vparams, bparams, body) => BlockLit(vparams map transform, bparams map transform, transform(body))
     case c @ source.InterfaceArg(id) => transformAsBlock(source.Var(id))
     case source.UnboxArg(expr) => Unbox(transform(expr))
+    case source.NewArg(tpe, members) => New(tpe.resolve.asInterfaceType, members map {
+      case op @ source.OpClause(id, tparams, vparams, body, resume) =>
+        val vps = vparams map transform
+        // currently the don't take block params
+        val opBlock = BlockLit(vps, List(), transform(body))
+        (op.definition, opBlock)
+    })
   }
 
   def transform(p: source.ValueParam)(implicit C: Context): core.ValueParam = ValueParam(p.symbol)

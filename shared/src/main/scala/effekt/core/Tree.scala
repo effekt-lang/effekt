@@ -51,6 +51,8 @@ case class Select(b: Block, selector: String) extends Block
 case class Extern(pure: Boolean, params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 
+case class New(tpe: InterfaceType, members: List[(Operation, BlockLit)]) extends Block
+
 /**
  * Statements
  */

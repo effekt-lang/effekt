@@ -86,11 +86,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `unbox` = keyword("unbox")
   lazy val `return` = keyword("return")
   lazy val `region` = keyword("region")
+  lazy val `new` = keyword("new")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "true", "false", "else", "type",
     "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "for", "interface", "at", "box", "unbox", "return", "in", "region"
+    "match", "module", "import", "extern", "for", "interface", "at", "box", "unbox", "return", "in", "region", "new"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -387,6 +388,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     ( idRef ^^ InterfaceArg
     | `unbox` ~/> variable ^^ UnboxArg // here we purposefully restrict ourselves to variables to enforce manual ANF for now
     | blockLit
+    | `new` ~> blockType ~ (`{` ~/> many(defClause) <~ `}`) ^^ NewArg
     )
 
   lazy val boxExpr: P[Term] =
