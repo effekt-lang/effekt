@@ -1,0 +1,11 @@
+interface Eff { def use(): Unit }
+def myModule { eff : Eff } {
+
+  val e1  = box { () => eff.use(); () };
+  def x = unbox e1;
+
+  def test1 = { () => x() };
+  def test2 = { () => test1(); var x = 42; x };
+
+  return ()
+}
