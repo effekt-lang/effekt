@@ -625,8 +625,8 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
         // since we do not have capture annotations for now, we do not need subsumption here and this is really equality
         C.unify(captWithoutBoundParams, precheckedCapt)
-
-        captWithoutBoundParams
+        // this is important for use vs. mention -- we annotate the block with the capture set and only require it, when it is USED
+        Pure
 
       case d @ source.ExternFun(pure, id, tparams, vparams, tpe, body) =>
         d.symbol.vparams map { p => Context.bind(p) }
