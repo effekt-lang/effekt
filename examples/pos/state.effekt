@@ -1,0 +1,29 @@
+interface State[T] {
+  def get(): T
+  def set(value: T): Unit
+}
+
+def handleState[S, R](init: S) { prog:  {State[S]} => R }: R {
+  val stateFun = try {
+    val res = prog { state };
+    return box {prog} { (s: S) => res }
+  } with state: State[S] {
+    def get() { box { (s: S) => (unbox resume(s))(s) } }
+    def set(v: S) { box { (_: S) => (unbox resume(()))(v) } }
+  };
+  (unbox stateFun)(init)
+}
+
+
+interface Amb { def flip(): Boolean }
+def main() {
+    try {
+      handleState(0) { {s: State[Int]} =>
+        println(s.get());
+        if (amb.flip()) {
+          s.set(1)
+        } else { () };
+        println(s.get())
+      }
+    } with amb: Amb { def flip() { resume(true); resume(false) } }
+}
