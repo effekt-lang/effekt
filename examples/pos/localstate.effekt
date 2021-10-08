@@ -9,6 +9,15 @@ def simple() {
   x
 }
 
+def lexicalRegion() {
+  region r {
+    var x = 42;
+    x = x + 1;
+    val f = box {() => x };
+    ()
+  }
+}
+
 interface Foo {}
 interface Bar {}
 def handler() {
