@@ -8,22 +8,28 @@ import immutable/option
 //
 // Translation from the Haskell implementation:
 //   https://hackage.haskell.org/package/dequeue-0.1.12/docs/src/Data-Dequeue.html#Dequeue
-record Dequeue[R](front: List[R], frontSize: Int, rear: List[R], rearSize: Int)
-
-def emptyQueue[R](): Dequeue[R] = Dequeue(Nil(), 0, Nil(), 0)
-
-def isEmpty[R](dq: Dequeue[R]): Boolean = dq match {
-    case Dequeue(f, fs, r, rs) => (fs == 0) && (rs == 0)
+type Dequeue[R]{
+    Dequeue(front: List[R], frontSize: Int, rear: List[R], rearSize: Int)
 }
 
-def size[R](dq: Dequeue[R]): Int = dq match {
+def emptyQueue[R](): Dequeue[R] { Dequeue(Nil(), 0, Nil(), 0) }
+
+def isEmpty[R](dq: Dequeue[R]): Boolean {
+  dq match {
+    case Dequeue(f, fs, r, rs) => (fs == 0) && (rs == 0)
+  }
+}
+
+def size[R](dq: Dequeue[R]): Int { dq match {
     case Dequeue(f, fs, r, rs) => fs + rs
 }
+}
 
-def first[R](dq: Dequeue[R]): Option[R] = dq match {
+def first[R](dq: Dequeue[R]): Option[R] { dq match {
     case Dequeue(f, fs, r, rs) =>
-      if ((fs == 0) && (rs == 1)) { r.headOption }
-      else { f.headOption }
+      if ((fs == 0) && (rs == 1)) { headOption(r) }
+      else { headOption(f) }
+}
 }
 
 def last[R](dq: Dequeue[R]): Option[R] = dq match {

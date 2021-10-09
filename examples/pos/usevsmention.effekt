@@ -19,30 +19,49 @@ def section2_1[T] { x : Read[T] } { y: Write[T] }  {
     // same here.
     val z2 = box { () => y.write(<>) };
 
+    def ignore { f: Write[T] }: Unit { () }
+    // here we are closer to mention, than to use
+    // ignore { y };
+
+    // in the monomorphic case, we can be more precise
+    def ignore2(f: Write[T] at {y}): Unit { () }
+    ignore2(y);
+
+    // and here
+    def z3 = y;
+
     ()
   };
   ()
 }
 
 interface UI { def use(): Unit }
+interface IO { def println(msg: String): Unit }
 
 // Section 2.3 argues that capabilities are sometimes too coarse grained.
 // The following example is difficult to express with capabilities and the authors also
 // fell back to effect systems in their own related work.
-def section2_3 { ui : UI } {
+def section2_3 { ui : UI } { io: IO } {
 
+  // this is to show that we distinguish between tracked and transparent bindings
   def aliased = ui;
 
   def setLabel(text: String): Unit { ui.use() }
 
-  def forkThread(run: () => Unit at {}): Unit { return () }
+  def forkThread(run: () => Unit at {io}): Unit { return () }
   def forkUIThread(run: () => Unit at {ui}): Unit { return () }
 
   forkThread({() =>
-    val tmp = 42;
+    val res = 42;
+
+    io.println(show(res));
+
 
     forkUIThread({() =>
-      setLabel("The result is " ++ show(tmp))
+      // direct
+      ui.use();
+      // indirect via closure
+      setLabel("The result is " ++ show(res))
     })
   });
   ()
@@ -70,4 +89,9 @@ def section3_1 { ui : UI } {
   def y = ui;
 
   return ()
+}
+
+
+def main() {
+    ()
 }

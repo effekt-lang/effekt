@@ -46,10 +46,14 @@ def newCounter { pool: Region } {
 }
 
 def main() {
-  region x {
+  var outer = 2;
+  region x { // x < main
     val c1 = newCounter {x};
     val c2 = newCounter {x};
     val c3 = newCounter {x};
+
+    // val z = box {x} { () => outer };
+
     c1();c2();c1();
     println(c1());
     println(c2());

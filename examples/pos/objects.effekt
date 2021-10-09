@@ -6,6 +6,7 @@ interface Counter {
 interface Console { def log(msg: String): Unit }
 
 def newCounter { r: Region }: Counter at {r} {
+
   var state in r = 0;
   def c = new Counter {
     def get() { state }
@@ -51,5 +52,10 @@ def myModule { console: Console } {
 
 def main() {
   def console = new Console { def log(s: String) { println(s) }};
+
+  def x: () => Unit = { () => println("") };
+
+  x();
+
   myModule { console }
 }
