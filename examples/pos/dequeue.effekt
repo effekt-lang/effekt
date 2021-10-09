@@ -1,0 +1,15 @@
+module examples/pos/dequeue
+
+import immutable/dequeue
+
+def main() {
+    val dq = emptyQueue[Int]();
+    val dq12 = pushFront(pushFront(dq, 1), 2);
+    println(dq12);
+    println(popFront(dq12));
+    val dq123 = pushBack(dq12, 3);
+    println(popFront(dq123));
+    println(popBack(dq123));
+    println(dequeueFirst(dq123));
+    println(dequeueLast(dq123))
+}

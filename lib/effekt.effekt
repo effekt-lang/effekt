@@ -155,6 +155,15 @@ extern pure def isUndefined[A](value: A): Boolean =
 extern pure def isNull[A](value: A): Boolean =
   "value === null"
 
+// Pairs
+// =====
+type Tuple2[A, B] { Tuple2(first: A, second: B) }
+type Tuple3[A, B, C]{ Tuple3(first: A, second: B, third: C) }
+type Tuple4[A, B, C, D]{ Tuple4(first: A, second: B, third: C, fourth: D) }
+type Tuple5[A, B, C, D, E]{ Tuple4(first: A, second: B, third: C, fourth: D, fifth: E) }
+type Tuple6[A, B, C, D, E, F]{ Tuple4(first: A, second: B, third: C, fourth: D, fifth: E, sixth: F) }
+
+
 // Exceptions
 // ==========
 // a fatal runtime error that cannot be caught

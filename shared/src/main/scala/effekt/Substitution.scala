@@ -443,9 +443,11 @@ object substitutions {
       case (s: UnificationVar, t: ValueType) => defer(s, t)
       case (s: ValueType, t: UnificationVar) => defer(s, t)
 
-      case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) if t1 == t2 =>
+      case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) =>
         if (args1.size != args2.size)
           abort(s"Argument count does not match $t1 vs. $t2")
+
+        unifyValueTypes(t1, t2)
 
         (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
 
@@ -454,7 +456,8 @@ object substitutions {
         unifyBlockTypes(tpe1, tpe2)
         unify(capt1, capt2)
 
-      case (t, s) => abort(s"Expected ${t}, but got ${s}")
+      case (t, s) =>
+        abort(s"Expected ${t}, but got ${s}")
     }
 
     def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType): Unit = (tpe1, tpe2) match {

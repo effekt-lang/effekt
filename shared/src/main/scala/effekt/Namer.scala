@@ -232,7 +232,10 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
           // define constructor
           Context.define(id, record: TermSymbol)
           // define record type
-          Context.define(id, record: TypeSymbol)
+          // since we do not offer record selection anyway, for now we do not bind the constructor as a type.
+          // it might clash with the name of the type, as in:
+          //    type Rec { Rec() }
+          // Context.define(id, record: TypeSymbol)
 
           // now also resolve fields
           record.fields = resolveFields(ps, record)
