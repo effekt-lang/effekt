@@ -1,0 +1,8 @@
+interface Foo {}
+def main() {
+  try {
+    val x1 : ((Int) => String) at {f} = box {f} { (n: Int) => "" };
+    ()
+  } with f : Foo {}
+
+}

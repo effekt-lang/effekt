@@ -1,0 +1,9 @@
+import immutable/list
+
+def main() {
+  val l = map([1, 2, 3]) { (a: Int) => a + 1 };
+
+ foreach(l) { (a: Int) =>
+    println(a)
+  }
+}

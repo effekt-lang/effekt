@@ -155,12 +155,41 @@ extern pure def isUndefined[A](value: A): Boolean =
 extern pure def isNull[A](value: A): Boolean =
   "value === null"
 
-
 // Exceptions
 // ==========
 // a fatal runtime error that cannot be caught
 extern pure def panic[R](msg: String): R =
   "(function() { throw msg })()"
+
+interface Exception[E] {
+  def raise[A](exception: E, msg: String): A
+}
+type RuntimeError { RuntimeError() }
+
+def raise[A](msg: String) { e: Exception[RuntimeError] }: A {
+  e.raise(RuntimeError(), msg)
+}
+// converts exceptions of (static) type E to an uncatchable panic that aborts the program
+def panicOn[E] { prog: {Exception[E]} => Unit }: Unit {
+  try { prog { exc } } with exc : Exception[E] {
+    def raise[A](exception: E, msg: String) { panic(msg) }
+  }
+}
+
+// reports exceptions of (static) type E to the console
+def report[E] { prog: {Exception[E]} => Unit }: Unit {
+  try { prog { exc } } with exc : Exception[E] {
+    def raise[A](exception: E, msg: String) { println(msg) }
+  }
+}
+
+// ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+def ignoring[E] { prog: {Exception[E]} => Unit }: Unit {
+  try { prog { exc } } with exc : Exception[E] {
+    def raise[A](exception: E, msg: String) { () }
+  }
+}
 
 // Benchmarking
 // ============

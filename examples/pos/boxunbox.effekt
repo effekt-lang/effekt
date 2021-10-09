@@ -1,0 +1,9 @@
+interface Dummy {}
+
+def mod { dummy : Dummy } {
+
+  val b: () => Int at {dummy} = box { () => (unbox (box { () => 42 }))() }
+  b
+}
+
+def main() { () }
