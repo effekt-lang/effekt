@@ -110,7 +110,7 @@ object substitutions {
           val (concrete2, unification2) = c2.partition { c => !c.isInstanceOf[CaptureUnificationVar] }
 
           if (unification1.isEmpty && unification2.isEmpty && concrete1 != concrete2) {
-            C.at(pos) { C.error(s"Capture set $concrete1 is not equal to $concrete2") }
+            C.at(pos) { C.error(s"Capture set ${CaptureSet(concrete1)} is not equal to ${CaptureSet(concrete2)}") }
           }
           residual = EqCapt(CaptureSet(c1), CaptureSet(c2), pos) :: residual
         }
@@ -316,7 +316,7 @@ object substitutions {
           }
           val diff = concrete1.toSet -- concrete2.toSet
           if (vars1.isEmpty && vars2.isEmpty) {
-            if (!diff.isEmpty) C.at(pos) { C.abort(s"Capture $diff not allowed here!") } else None
+            if (!diff.isEmpty) C.at(pos) { C.abort(s"Capture ${CaptureSet(diff)} not allowed here!") } else None
           } else {
             Some(c)
           }
