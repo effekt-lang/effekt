@@ -39,9 +39,12 @@ trait ModuleDB { self: Context =>
    */
   def moduleOf(source: Source): Module = {
     tryModuleOf(source).getOrElse {
-      abort(s"Cannot compile dependency: ${source.name}")
+      abort(s"Cannot compile dependency: ${stripSuffix(source.name)}")
     }
   }
+
+  private def stripSuffix(path: String): String =
+    path.stripSuffix(".effekt").stripSuffix(".md")
 
   /**
    * Tries to find a module for the given source, will run compiler on demand

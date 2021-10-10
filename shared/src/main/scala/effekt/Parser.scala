@@ -240,8 +240,13 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val funDef: P[Def] =
     `def` ~/>
       ( idDef ~ (`:` ~> blockType).? ~ (`=` ~> block <~ `;`) ^^ BlockDef
-      | idDef ~ maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~ (`:` ~/> valueType).? ~ (`{` ~/> stmts <~ `}`) ^^ FunDef
+      | idDef ~ maybeTypeParams ~ maybeValueParams ~ many(blockParam) ~ (`:` ~/> valueType).? ~ functionBody ^^ FunDef
       )
+
+  lazy val functionBody: P[Stmt] =
+    ( `{` ~/> stmts <~ `}`
+    | failure("Expected the body of a function definition, starting with {")
+    )
 
 
   lazy val maybePure: P[Boolean] =
@@ -334,6 +339,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | (`var` ~> idDef ~ (`:` ~/> valueType).? ~ (`in` ~> idRef).? ~ (`=` ~/> stmt)) ~ (`;` ~/> stmts) ^^ VarDef
     | (`return`.? ~> expr <~ `;`.?) ^^ Return
     | matchDef
+    | failure("Expected a statement")
     )
 
   lazy val matchDef: P[Stmt] =
@@ -389,6 +395,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | `unbox` ~/> variable ^^ UnboxArg // here we purposefully restrict ourselves to variables to enforce manual ANF for now
     | blockLit
     | `new` ~> blockType ~ (`{` ~/> many(defClause) <~ `}`) ^^ NewArg
+    | failure("Expected a block argument, which can be either an identifier, a call to unbox, a block literal, or an object (starting with new)")
     )
 
   lazy val boxExpr: P[Term] =
@@ -418,7 +425,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParams ~ implicitResume ~ (`{` ~/> stmts <~ `}`) ^^ {
+    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParams ~ implicitResume ~ functionBody ^^ {
       case id ~ tparams ~ vparams ~ resume ~ body => OpClause(id, tparams, vparams, body, resume)
     }
 
