@@ -543,7 +543,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
       val tpeRest / captRest = checkStmt(rest)
 
-      tpeRest / (captBind ++ captRest)
+      tpeRest / (captState ++ captBind ++ captRest)
 
     case source.ExprStmt(e, rest) =>
       val _ / captExpr = checkExpr(e)
