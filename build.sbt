@@ -60,6 +60,7 @@ lazy val testingDependencies = Seq(
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
   .settings(commonSettings)
+  .settings(noPublishSettings)
   .settings(
     name := "kiama"
   )
