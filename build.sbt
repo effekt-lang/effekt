@@ -68,7 +68,7 @@ lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("ki
     libraryDependencies ++= (replDependencies ++ lspDependencies)
   )
 
-lazy val root = project.in(file("."))
+lazy val root = project.in(file("effekt"))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
   .settings(Seq(
@@ -77,7 +77,7 @@ lazy val root = project.in(file("."))
 
 
 
-lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
+lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
     version := effektVersion
