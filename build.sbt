@@ -43,6 +43,30 @@ lazy val commonSettings = Seq(
 
 enablePlugins(ScalaJSPlugin)
 
+lazy val replDependencies = Seq(
+  "jline" % "jline" % "2.14.6",
+  "org.rogach" %% "scallop" % "3.4.0",
+)
+
+lazy val lspDependencies = Seq(
+  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.10.0",
+  "com.google.code.gson" % "gson" % "2.8.2"
+)
+
+lazy val testingDependencies = Seq(
+  "org.scala-sbt" %% "io" % "1.3.1" % "test",
+  "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
+)
+
+lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
+  .settings(commonSettings)
+  .settings(
+    name := "kiama"
+  )
+  .jvmSettings(
+    libraryDependencies ++= (replDependencies ++ lspDependencies)
+  )
+
 lazy val root = project.in(file("."))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
@@ -51,22 +75,17 @@ lazy val root = project.in(file("."))
   ))
 
 
+
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
   .settings(
     name := "effekt",
     version := effektVersion
   )
   .settings(commonSettings)
+  .dependsOn(kiama)
   .enablePlugins(NativeImagePlugin)
   .jvmSettings(
-    libraryDependencies ++= Seq(
-      "org.rogach" %% "scallop" % "3.4.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
-      "org.scala-sbt" %% "io" % "1.3.1" % "test",
-      "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
-    ),
-
+    libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
 
     // Test configuration
     // ------------------
@@ -141,7 +160,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
   )
   .jsSettings(
     libraryDependencies ++= Seq(
-      "org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
+      //"org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
     ),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 

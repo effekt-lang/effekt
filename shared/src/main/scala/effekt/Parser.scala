@@ -2,8 +2,8 @@ package effekt
 
 import effekt.context.Context
 import effekt.source._
-import org.bitbucket.inkytonik.kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import org.bitbucket.inkytonik.kiama.util.{ Position, Positions, Source }
+import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
+import kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
 

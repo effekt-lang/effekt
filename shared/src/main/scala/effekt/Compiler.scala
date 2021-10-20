@@ -7,7 +7,6 @@ import effekt.source.{ ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.Typer
 import effekt.util.{ SourceTask, VirtualSource }
-import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 

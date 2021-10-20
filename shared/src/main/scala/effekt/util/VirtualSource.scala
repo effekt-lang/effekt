@@ -2,7 +2,7 @@ package effekt
 package util
 
 import effekt.source.ModuleDecl
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 /**
  * Use by the REPL with synthesized modules. "input" contains the last REPL entry,
@@ -12,7 +12,7 @@ case class VirtualSource(virtualModule: ModuleDecl, input: Source) extends Sourc
   val name = input.name
   val content = input.content
 
-  // Are these every used?
-  def reader: java.io.Reader = ???
-  def useAsFile[T](fn: String => T): T = ???
+  // Are these ever used?
+  override def reader: java.io.Reader = ???
+  override def useAsFile[T](fn: String => T): T = ???
 }

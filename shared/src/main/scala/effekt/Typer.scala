@@ -11,8 +11,6 @@ import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.symbols.kinds._
-import effekt.util.messages.FatalPhaseError
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 
 /**
  * Typechecking

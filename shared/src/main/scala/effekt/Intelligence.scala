@@ -2,7 +2,6 @@ package effekt
 
 import effekt.context.Context
 import effekt.source.{ ModuleDecl, Tree }
-import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 
 trait Intelligence {

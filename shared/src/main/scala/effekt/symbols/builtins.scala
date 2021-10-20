@@ -1,7 +1,7 @@
 package effekt.symbols
 
 import effekt.source.ModuleDecl
-import org.bitbucket.inkytonik.kiama.util.StringSource
+import kiama.util.StringSource
 
 /**
  * The symbols, which are built into Effekt

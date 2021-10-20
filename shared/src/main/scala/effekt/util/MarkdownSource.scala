@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 case class MarkdownSource(source: Source) extends Source {
 

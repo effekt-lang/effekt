@@ -7,8 +7,8 @@ import effekt.core.TransformerOps
 import effekt.source.Tree
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
-import org.bitbucket.inkytonik.kiama.util.Positions
+import kiama.util.Messaging.Messages
+import kiama.util.Positions
 
 /**
  * Phases like Typer can add operations to the context by extending this trait

@@ -3,7 +3,6 @@ package effekt
 import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, Tree }
-import org.bitbucket.inkytonik.kiama
 import kiama.util.{ Position, Source }
 import org.eclipse.lsp4j.{ DocumentSymbol, ExecuteCommandParams, SymbolKind }
 

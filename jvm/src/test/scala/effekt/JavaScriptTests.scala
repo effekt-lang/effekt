@@ -5,8 +5,6 @@ import java.io.File
 import sbt.io._
 import sbt.io.syntax._
 
-import scala.util.matching._
-
 import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions

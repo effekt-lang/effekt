@@ -1,10 +1,10 @@
 package effekt.util
 
 import effekt.context.Context
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
+import kiama.util.Messaging.Messages
 
 import scala.collection.mutable
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 trait Task[In, Out] { self =>
 
