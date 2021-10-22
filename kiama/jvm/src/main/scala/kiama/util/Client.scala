@@ -33,7 +33,7 @@ case class OffsetRange(
 )
 
 /**
- * Extend standard language client with Monto support.
+ * Extend standard lsp4j language client with Monto support.
  */
 trait Client extends LanguageClient {
 

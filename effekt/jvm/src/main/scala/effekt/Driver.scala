@@ -9,7 +9,7 @@ import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util.{ Client, IO, Services, Source }
+import kiama.util.{ IO, Services, Source }
 import effekt.util.messages.FatalPhaseError
 
 import scala.sys.process.Process

@@ -14,16 +14,22 @@ package util
 /**
  * General support for applications that implement read-eval-print loops (REPLs).
  */
-trait REPLBase[C <: REPLConfig] {
+trait REPL[T, C <: REPLConfig] {
 
   import scala.annotation.tailrec
-  import kiama.util.{ Source, StringSource }
+  import kiama.parsing.{ NoSuccess, ParseResult, Success }
+  import kiama.util.Messaging.{ message, Messages }
   import org.rogach.scallop.exceptions.ScallopException
 
   /**
    * Banner message that is printed before the REPL starts.
    */
   def banner: String
+
+  /**
+   * Parse a source, returning a parse result.
+   */
+  def parse(source: Source): ParseResult[T]
 
   /**
    * The position store used by this REPL.
@@ -46,6 +52,11 @@ trait REPLBase[C <: REPLConfig] {
    * Create the configuration for a particular run of the REPL.
    */
   def createConfig(args: Seq[String]): C
+
+  /**
+   * Process a user input value in the given configuration.
+   */
+  def process(source: Source, t: T, config: C): Unit
 
   /**
    * Create and initialise the configuration for a particular run of the REPL.
@@ -149,44 +160,14 @@ trait REPLBase[C <: REPLConfig] {
   }
 
   /**
+   * Process a user input line by parsing it to get a value of type `T`,
+   * then passing it to the `process` method. Returns the configuration
+   * unchanged.
+   *
    * Process user input from the given source. The return value allows the
    * processing to optionally return a new configuration that will be used
    * in subsequent processing. A return value of `None` indicates that no
    * more lines from the current console should be processed.
-   */
-  def processline(source: Source, console: Console, config: C): Option[C]
-
-}
-
-/**
- * General support for applications that implement read-eval-print loops (REPLs).
- */
-trait REPL extends REPLBase[REPLConfig] {
-
-  def createConfig(args: Seq[String]): REPLConfig =
-    new REPLConfig(args)
-
-}
-
-/**
- * A REPL that parses its input lines into a value (such as an abstract syntax
- * tree), then processes them. Output is emitted using a configurable emitter.
- */
-trait ParsingREPLBase[T, C <: REPLConfig] extends REPLBase[C] {
-
-  import kiama.parsing.{ NoSuccess, ParseResult, Success }
-  import kiama.util.Messaging.{ message, Messages }
-  import kiama.util.Source
-
-  /**
-   * Parse a source, returning a parse result.
-   */
-  def parse(source: Source): ParseResult[T]
-
-  /**
-   * Process a user input line by parsing it to get a value of type `T`,
-   * then passing it to the `process` method. Returns the configuration
-   * unchanged.
    */
   def processline(source: Source, console: Console, config: C): Option[C] = {
     if (config.processWhitespaceLines() || (source.content.trim.length != 0)) {
@@ -205,33 +186,10 @@ trait ParsingREPLBase[T, C <: REPLConfig] extends REPLBase[C] {
   }
 
   /**
-   * Process a user input value in the given configuration.
-   */
-  def process(source: Source, t: T, config: C): Unit
-
-  /**
    * Output the messages in order of position using the given configuration,
    * which defaults to that configuration's output.
    */
   def report(source: Source, messages: Messages, config: C): Unit = {
     config.output().emit(messaging.formatMessages(messages))
   }
-
-}
-
-/**
- * A REPL that parses its input lines into a value (such as an abstract syntax
- * tree), then processes them. `C` is the type of the configuration.
- */
-trait ParsingREPLWithConfig[T, C <: REPLConfig] extends ParsingREPLBase[T, C]
-
-/**
- * A REPL that parses its input lines into a value (such as an abstract syntax
- * tree), then processes them. Output is emitted to standard output.
- */
-trait ParsingREPL[T] extends ParsingREPLWithConfig[T, REPLConfig] {
-
-  def createConfig(args: Seq[String]): REPLConfig =
-    new REPLConfig(args)
-
 }
