@@ -240,6 +240,12 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
 
   // Monto
 
+  // Monto is a service to send additional documents to the language client (like vscode). Depending on the client,
+  // they can be rendered in additional window panes. This features is mostly used to show intermediate representations
+  // and compilation output.
+  // The additional documents can be linked to the original source file, allowing users making connections between
+  // generated code and source code.
+
   case class RangePair(
     sstart: Int, send: Int,
     tstart: Int, tend: Int
