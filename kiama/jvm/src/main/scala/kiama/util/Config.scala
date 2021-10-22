@@ -122,9 +122,11 @@ class Config(args: Seq[String]) extends ScallopConf(args) {
   /**
    * The zero or more filenames that were specified positionally after all of the options.
    */
-  lazy val debugPort = number("debugPort", descr = "The port to listen to when debugging the language server",
+  lazy val debugPort = opt[Int]("debugPort", descr = "The port to listen to when debugging the language server",
     required = false,
-    default = Some(5007))
+    default = Some(5007),
+    noshort = true,
+    hidden = true)
 
   /**
    * The zero or more filenames that were specified positionally after all of the options.

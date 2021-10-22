@@ -136,7 +136,7 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
       import java.net.InetSocketAddress
       import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
 
-      val port = config.debugPort().toInt
+      val port = config.debugPort()
       val addr = new InetSocketAddress("localhost", port)
       val socket = AsynchronousServerSocketChannel.open().bind(addr);
 
