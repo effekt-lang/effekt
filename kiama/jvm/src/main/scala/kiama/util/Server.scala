@@ -22,7 +22,6 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
 
   import com.google.gson.{ JsonArray, JsonElement, JsonObject }
   import java.util.Collections
-  import java.util.concurrent.CompletableFuture
   import java.io.{ InputStream, OutputStream }
   import scala.concurrent.ExecutionException
   import output.PrettyPrinterTypes.{ Document, emptyDocument, LinkRange, LinkValue }

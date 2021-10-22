@@ -20,7 +20,6 @@ import org.rogach.scallop.ScallopConf
  */
 class Config(args: Seq[String]) extends ScallopConf(args) {
 
-  import kiama.util.{ FileConsole, JLineConsole, StringConsole }
   import org.rogach.scallop.{ ArgType, stringListConverter, ValueConverter }
 
   /**
