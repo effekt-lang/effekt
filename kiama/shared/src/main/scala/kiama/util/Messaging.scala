@@ -71,7 +71,6 @@ case class Message(value: AnyRef, label: String) {
 object Messaging {
 
   import kiama.relation.Tree
-  import kiama.util.Entity
   import kiama.util.Severities._
 
   /**
@@ -83,27 +82,6 @@ object Messaging {
    * Return a value representing no messages.
    */
   def noMessages = Vector[Message]()
-
-  /**
-   * If `f` is defined at `t` apply it and return the resulting sequence
-   * of messages. Otherwise, return an empty sequence.
-   */
-  def check[T](t: T)(f: PartialFunction[T, Messages]): Messages =
-    f.applyOrElse(t, (_: T) => noMessages)
-
-  /**
-   * Check that the entity `e` is used legally and return appropriate
-   * messages if not. If the entity is an error entity (unknown or multiply
-   * defined, keep silent on the grounds that the error has already been
-   * reported elsewhere (e.g., at the declaration site of the entity).
-   * Otherwise, if `f` is defined at `e` return the messages that `f (e)`
-   * evaluates to. If `f` is not defined at `e`, keep silent.
-   */
-  def checkUse[E <: Entity](e: E)(f: PartialFunction[E, Messages]): Messages =
-    if (e.isError)
-      noMessages
-    else
-      check(e)(f)
 
   /**
    * Recursively collect all messages in the given tree using the partial
