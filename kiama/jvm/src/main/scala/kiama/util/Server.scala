@@ -18,18 +18,49 @@ import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, _ }
  * A language server that is mixed with a compiler that provide the basis
  * for its services. Allows specialisation of configuration via `C`.
  */
-trait ServerWithConfig[N, T <: N, C <: Config] {
-
-  this: CompilerBase[N, T, C] =>
+trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageService[N] {
 
   import com.google.gson.{ JsonArray, JsonElement, JsonObject }
-  import java.io.PrintWriter
-  import java.lang.System.{ in, out }
   import java.util.Collections
+  import java.util.concurrent.CompletableFuture
+  import java.io.{ InputStream, OutputStream }
+  import scala.concurrent.ExecutionException
   import output.PrettyPrinterTypes.{ Document, emptyDocument, LinkRange, LinkValue }
   import kiama.util.Messaging.Messages
   import kiama.util.Severities._
   import org.eclipse.lsp4j.jsonrpc.Launcher
+
+  // Overriding endpoints to enable server functionality
+
+  override def run(config: C): Unit =
+    if (config.server())
+      launch(config)
+    else
+      super.run(config)
+
+  override def report(source: Source, messages: Messages, config: C): Unit =
+    if (config.server())
+      publishMessages(messages)
+    else
+      super.report(source, messages, config)
+
+  override def clearSyntacticMessages(source: Source, config: C): Unit =
+    if (config.server()) {
+      publishSourceProduct(source)
+      publishSourceTreeProduct(source)
+    }
+
+  // Monto support
+
+  override def publishSourceProduct(source: Source, document: => Document = emptyDocument): Unit = {
+    if (settingBool("showSource"))
+      publishProduct(source, "source", name, document)
+  }
+
+  override def publishSourceTreeProduct(source: Source, document: => Document = emptyDocument): Unit = {
+    if (settingBool("showSourceTree"))
+      publishProduct(source, "sourcetree", "scala", document)
+  }
 
   // Client saving
 
@@ -79,26 +110,71 @@ trait ServerWithConfig[N, T <: N, C <: Config] {
 
   // Launching
 
+  /**
+   * When the --debug flag is used together with --server, we open the
+   * server on port 5007 (or on --debugPort) instead of stdin and out. This way a modified
+   * vscode client can connect to the running server, aiding development
+   * of the language server and clients.
+   *
+   * In a vscode extension, the vscode client can connect to the server using
+   * the following example code:
+   *
+   *   let serverOptions = () => {
+   *     // Connect to language server via socket
+   *     let socket: any = net.connect({ port: 5007 });
+   *     let result: StreamInfo = {
+   *       writer: socket,
+   *       reader: socket
+   *     };
+   *     return Promise.resolve(result);
+   *   };
+   *
+   * @see https://github.com/microsoft/language-server-protocol/issues/160
+   */
   def launch(config: C): Unit = {
-    val services = new Services(this, config)
+    if (config.debug()) {
+      import java.net.InetSocketAddress
+      import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
+
+      val port = config.debugPort().toInt
+      val addr = new InetSocketAddress("localhost", port)
+      val socket = AsynchronousServerSocketChannel.open().bind(addr);
+
+      try {
+        println(s"Waiting on port ${port} for LSP clients to connect")
+        val ch = socket.accept().get();
+        println(s"Connected to LSP client")
+        val in = Channels.newInputStream(ch)
+        val out = Channels.newOutputStream(ch)
+        launch(config, in, out)
+      } catch {
+        case e: InterruptedException =>
+          e.printStackTrace()
+        case e: ExecutionException =>
+          e.printStackTrace()
+      } finally {
+        socket.close()
+      }
+    } else {
+      launch(config, System.in, System.out)
+    }
+  }
+
+  def launch(config: C, in: InputStream, out: OutputStream): Unit = {
+    val services = createServices(config)
     val launcherBase =
       new Launcher.Builder[Client]()
         .setLocalService(services)
         .setRemoteInterface(classOf[Client])
         .setInput(in)
         .setOutput(out)
-    val launcherFull =
-      if (config.debug()) {
-        val writer = new PrintWriter(System.err, true)
-        launcherBase.traceMessages(writer)
-      } else {
-        launcherBase
-      }
-    val launcher = launcherFull.create()
+    val launcher = launcherBase.create()
     val client = launcher.getRemoteProxy()
     connect(client)
     launcher.startListening()
   }
+
+  def createServices(config: C): Services[N, T, C] = new Services(this, config)
 
   // User messages
 
@@ -264,8 +340,70 @@ trait ServerWithConfig[N, T <: N, C <: Config] {
 
 }
 
+trait LanguageService[N] {
+
+  /**
+   * A representation of a simple named code action that replaces
+   * a tree node with other text.
+   */
+  // FIXME: can the "to" be a node too? But server can't access correct PP...
+  case class TreeAction(name: String, uri: String, from: N, to: String)
+
+  /**
+   * Return applicable code actions for the given position (if any).
+   * Each action is in terms of an old tree node and a new node that
+   * replaces it. Default is to return no actions.
+   */
+  def getCodeActions(position: Position): Option[Vector[TreeAction]] =
+    None
+
+  /**
+   * Return the corresponding definition node for the given position
+   * (if any). Default is to never return anything.
+   */
+  def getDefinition(position: Position): Option[N] =
+    None
+
+  /**
+   * Return a formatted version of the whole of the given source.
+   * By default, return `None` meaning there is no formatter.
+   */
+  def getFormatted(source: Source): Option[String] =
+    None
+
+  /**
+   * Return markdown hover markup for the given position (if any).
+   * Default is to never return anything.
+   */
+  def getHover(position: Position): Option[String] =
+    None
+
+  /**
+   * Return the corresponding reference nodes (uses) of the symbol
+   * at the given position (if any). If `includeDecl` is true, also
+   * include the declaration of the symbol. Default is to never return
+   * anything.
+   */
+  def getReferences(position: Position, includeDecl: Boolean): Option[Vector[N]] =
+    None
+
+  /**
+   * Return the symbols frmo a compilation unit. Default is to return
+   * no symbols.
+   */
+  def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
+    None
+
+  /**
+   * The parameters are passed as an array, potentially containing gson.Json objects or primitives.
+   * The first argument is required to be { uri: String } and used to obtain the source.
+   */
+  def executeCommand(source: Source, executeCommandParams: ExecuteCommandParams): Option[Any] = None
+
+}
+
 class Services[N, T <: N, C <: Config](
-  server: ServerWithConfig[N, T, C] with CompilerBase[N, T, C],
+  server: Server[N, T, C],
   config: C
 ) {
 
@@ -273,6 +411,7 @@ class Services[N, T <: N, C <: Config](
   import org.eclipse.lsp4j.jsonrpc.{ CancelChecker, CompletableFutures }
   import org.eclipse.lsp4j.jsonrpc.services._
   import scala.language.implicitConversions
+  import com.google.gson.JsonObject
 
   implicit def toJavaFunction[U, V](f: Function1[U, V]): java.util.function.Function[U, V] =
     new java.util.function.Function[U, V] {
@@ -453,6 +592,21 @@ class Services[N, T <: N, C <: Config](
           ) yield locations.toArray
         ).getOrElse(null)
     )
+
+  @JsonNotification("workspace/executeCommand")
+  def commands(params: ExecuteCommandParams): CompletableFuture[Any] =
+    CompletableFuture.completedFuture {
+      (for {
+        firstArg <- params.getArguments.toArray.headOption
+        uri <- try {
+          // ad-hoc parsing of json:
+          // we require that the first argument is a json object with a field { uri: String }
+          Some(firstArg.asInstanceOf[JsonObject].getAsJsonPrimitive("uri").getAsString)
+        } catch { case e: Throwable => None }
+        src <- server.sources.get(uri)
+        res <- server.executeCommand(src, params)
+      } yield res).getOrElse(null)
+    }
 
   // Workspace services
 

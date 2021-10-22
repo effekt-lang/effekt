@@ -9,24 +9,15 @@ import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util.{ Client, CompilerWithConfig, IO, Services, Source }
-
-import java.io.{ InputStream, OutputStream }
+import kiama.util.{ Client, IO, Services, Source }
 import effekt.util.messages.FatalPhaseError
 
-import com.google.gson.JsonObject
-import org.eclipse.lsp4j.{ ExecuteCommandParams }
-import org.eclipse.lsp4j.jsonrpc.Launcher
-import org.eclipse.lsp4j.jsonrpc.services.JsonNotification
-
-import java.util.concurrent.CompletableFuture
-import scala.concurrent.ExecutionException
 import scala.sys.process.Process
 
 /**
- * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
+ * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
  */
-trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
+trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -125,104 +116,15 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.
    * Not used anymore
    */
-  override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
-
-  /**
-   * Modified copy of kiama.ServerWithConfig.launch()
-   *
-   * When the --debug flag is used together with --server, we open the
-   * server on port 5007 instead of stdin and out. This way a modified
-   * vscode client can connect to the running server, aiding development
-   * of the language server and clients.
-   *
-   * In a vscode extension, the vscode client can connect to the server using
-   * the following example code:
-   *
-   *   let serverOptions = () => {
-   *     // Connect to language server via socket
-   *     let socket: any = net.connect({ port: 5007 });
-   *     let result: StreamInfo = {
-   *       writer: socket,
-   *       reader: socket
-   *     };
-   *     return Promise.resolve(result);
-   *   };
-   *
-   * @see https://github.com/microsoft/language-server-protocol/issues/160
-   */
-  override def launch(config: EffektConfig): Unit = {
-    if (config.debug()) {
-      import java.net.InetSocketAddress
-      import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
-
-      val port = 5007
-      val addr = new InetSocketAddress("localhost", port)
-      val socket = AsynchronousServerSocketChannel.open().bind(addr);
-
-      try {
-        println(s"Waiting on port ${port} for LSP clients to connect")
-        val ch = socket.accept().get();
-        println(s"Connected to LSP client")
-        val in = Channels.newInputStream(ch)
-        val out = Channels.newOutputStream(ch)
-        launch(config, in, out)
-      } catch {
-        case e: InterruptedException =>
-          e.printStackTrace()
-        case e: ExecutionException =>
-          e.printStackTrace()
-      } finally {
-        socket.close()
-      }
-    } else {
-      launch(config, System.in, System.out)
-    }
-  }
-
-  private def launch(config: EffektConfig, in: InputStream, out: OutputStream): Unit = {
-    val services = new LSPServices(this, config)
-    val launcherBase =
-      new Launcher.Builder[Client]()
-        .setLocalService(services)
-        .setRemoteInterface(classOf[Client])
-        .setInput(in)
-        .setOutput(out)
-    val launcher = launcherBase.create()
-    val client = launcher.getRemoteProxy()
-    connect(client)
-    launcher.startListening()
-  }
-
-  /**
-   * Extends Kiama's LSP support with executeCommand as specified in the LSP
-   *
-   * The parameters are passed as an array, potentially containing gson.Json objects or primitives.
-   * The first argument is required to be { uri: String } and used to obtain the source.
-   */
-  def executeCommand(source: Source, executeCommandParams: ExecuteCommandParams): Option[Any] = None
-
-  class LSPServices(server: Driver, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig](server, config) {
-
-    @JsonNotification("workspace/executeCommand")
-    def commands(params: ExecuteCommandParams): CompletableFuture[Any] =
-      CompletableFuture.completedFuture {
-        (for {
-          firstArg <- params.getArguments.toArray.headOption
-          uri <- try {
-            // ad-hoc parsing of json:
-            // we require that the first argument is a json object with a field { uri: String }
-            Some(firstArg.asInstanceOf[JsonObject].getAsJsonPrimitive("uri").getAsString)
-          } catch { case e: Throwable => None }
-          src <- server.sources.get(uri)
-          res <- server.executeCommand(src, params)
-        } yield res).getOrElse(null)
-      }
-  }
+  override final def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
 
   /**
    * Originally called by kiama, not used anymore.
    */
-  override def parse(source: Source): ParseResult[ModuleDecl] = ???
+  override final def parse(source: Source): ParseResult[ModuleDecl] = ???
 
-  def format(m: ModuleDecl): Document = ???
+  /**
+   * Originally called by kiama, not used anymore.
+   */
+  override final def format(m: ModuleDecl): Document = ???
 }

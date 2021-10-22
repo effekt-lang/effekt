@@ -19,12 +19,12 @@ package util
  * to the main processing of the compiler. `C` is the type of the
  * configuration.
  */
-trait CompilerBase[N, T <: N, C <: Config] extends ServerWithConfig[N, T, C] {
+trait Compiler[N, T <: N, C <: Config] {
 
   import kiama.output.PrettyPrinterTypes.{ Document, emptyDocument }
   import kiama.output.PrettyPrinter.{ any, pretty }
-  import kiama.util.Messaging.Messages
-  import org.eclipse.lsp4j.DocumentSymbol
+  import kiama.parsing.{ NoSuccess, ParseResult, Success }
+  import kiama.util.Messaging.{ message, Messages }
   import org.rogach.scallop.exceptions.ScallopException
   import scala.collection.mutable
 
@@ -97,12 +97,7 @@ trait CompilerBase[N, T <: N, C <: Config] extends ServerWithConfig[N, T, C] {
   /**
    * Run the compiler given a configuration.
    */
-  def run(config: C): Unit = {
-    if (config.server())
-      launch(config)
-    else
-      compileFiles(config)
-  }
+  def run(config: C): Unit = compileFiles(config)
 
   /**
    * Compile the files one by one.
@@ -159,128 +154,11 @@ trait CompilerBase[N, T <: N, C <: Config] extends ServerWithConfig[N, T, C] {
     }
   }
 
-  def publishSourceProduct(source: Source, document: => Document = emptyDocument): Unit = {
-    if (settingBool("showSource"))
-      publishProduct(source, "source", name, document)
-  }
-
-  def publishSourceTreeProduct(source: Source, document: => Document = emptyDocument): Unit = {
-    if (settingBool("showSourceTree"))
-      publishProduct(source, "sourcetree", "scala", document)
-  }
-
   /**
    * Make the contents of the given source, returning the AST wrapped in `Left`.
    * Return `Right` with messages if an AST cannot be made. `config` provides
    * access to all aspects of the configuration.
-   */
-  def makeast(source: Source, config: C): Either[T, Messages]
-
-  /**
-   * Function to process the input that was parsed. `source` is the input
-   * text processed by the compiler. `ast` is the abstract syntax tree
-   * produced by the parser from that text. `config` provides access to all
-   * aspects of the configuration.
-   */
-  def process(source: Source, ast: T, config: C): Unit
-
-  /**
-   * Format an abstract syntax tree for printing. Default: return an empty document.
-   */
-  def format(ast: T): Document
-
-  /**
-   * Output the messages in order of position to the configuration's output.
-   */
-  def report(source: Source, messages: Messages, config: C): Unit = {
-    if (config.server())
-      publishMessages(messages)
-    else
-      messaging.report(source, messages, config.output())
-  }
-
-  /**
-   * Clear any previously reported semantic messages. By default,
-   * clear the servers's source and sourcetree products.
-   */
-  def clearSyntacticMessages(source: Source, config: C): Unit = {
-    if (config.server()) {
-      publishSourceProduct(source)
-      publishSourceTreeProduct(source)
-    }
-  }
-
-  /**
-   * Clear any previously reported semantic messages. By default,
-   * do nothing.
-   */
-  def clearSemanticMessages(source: Source, config: C): Unit = {
-    // Do nothing
-  }
-
-  /**
-   * A representation of a simple named code action that replaces
-   * a tree node with other text.
-   */
-  // FIXME: can the "to" be a node too? But server can't access correct PP...
-  case class TreeAction(name: String, uri: String, from: N, to: String)
-
-  /**
-   * Return applicable code actions for the given position (if any).
-   * Each action is in terms of an old tree node and a new node that
-   * replaces it. Default is to return no actions.
-   */
-  def getCodeActions(position: Position): Option[Vector[TreeAction]] =
-    None
-
-  /**
-   * Return the corresponding definition node for the given position
-   * (if any). Default is to never return anything.
-   */
-  def getDefinition(position: Position): Option[N] =
-    None
-
-  /**
-   * Return a formatted version of the whole of the given source.
-   * By default, return `None` meaning there is no formatter.
-   */
-  def getFormatted(source: Source): Option[String] =
-    None
-
-  /**
-   * Return markdown hover markup for the given position (if any).
-   * Default is to never return anything.
-   */
-  def getHover(position: Position): Option[String] =
-    None
-
-  /**
-   * Return the corresponding reference nodes (uses) of the symbol
-   * at the given position (if any). If `includeDecl` is true, also
-   * include the declaration of the symbol. Default is to never return
-   * anything.
-   */
-  def getReferences(position: Position, includeDecl: Boolean): Option[Vector[N]] =
-    None
-
-  /**
-   * Return the symbols frmo a compilation unit. Default is to return
-   * no symbols.
-   */
-  def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
-    None
-}
-
-/**
- * A compiler that uses Parsers to produce positioned ASTs. `C` is the type of the
- * compiler configuration.
- */
-trait CompilerWithConfig[N, T <: N, C <: Config] extends CompilerBase[N, T, C] {
-
-  import kiama.parsing.{ NoSuccess, ParseResult, Success }
-  import kiama.util.Messaging.{ message, Messages }
-
-  /**
+   *
    * Make an AST by running the parser on the given source, returning messages
    * instead if the parse fails.
    */
@@ -307,15 +185,47 @@ trait CompilerWithConfig[N, T <: N, C <: Config] extends CompilerBase[N, T, C] {
    */
   def parse(source: Source): ParseResult[T]
 
-}
+  /**
+   * Function to process the input that was parsed. `source` is the input
+   * text processed by the compiler. `ast` is the abstract syntax tree
+   * produced by the parser from that text. `config` provides access to all
+   * aspects of the configuration.
+   */
+  def process(source: Source, ast: T, config: C): Unit
 
-/**
- * Specialisation of `CompilerWithConfig` that uses the default configuration
- * type.
- */
-trait Compiler[N, T <: N] extends CompilerWithConfig[N, T, Config] {
+  /**
+   * Format an abstract syntax tree for printing. Default: return an empty document.
+   */
+  def format(ast: T): Document
 
-  def createConfig(args: Seq[String]): Config =
-    new Config(args)
+  /**
+   * Output the messages in order of position to the configuration's output.
+   */
+  def report(source: Source, messages: Messages, config: C): Unit = {
+    messaging.report(source, messages, config.output())
+  }
 
+  /**
+   * Clear any previously reported syntactic messages. By default,
+   * clear the servers's source and sourcetree products.
+   */
+  def clearSyntacticMessages(source: Source, config: C): Unit = {
+    // Do nothing
+  }
+
+  /**
+   * Clear any previously reported semantic messages. By default,
+   * do nothing.
+   */
+  def clearSemanticMessages(source: Source, config: C): Unit = {
+    // Do nothing
+  }
+
+  def publishSourceProduct(source: Source, document: => Document = emptyDocument): Unit = {
+    // Do nothing
+  }
+
+  def publishSourceTreeProduct(source: Source, document: => Document = emptyDocument): Unit = {
+    // Do nothing
+  }
 }
