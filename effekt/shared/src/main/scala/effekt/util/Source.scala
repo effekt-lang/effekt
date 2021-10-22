@@ -27,10 +27,6 @@ case class MarkdownSource(source: Source) extends Source {
     }
     lines.mkString("\n")
   }
-
-  // Are these every used?
-  def reader: java.io.Reader = ???
-  def useAsFile[T](fn: String => T): T = ???
 }
 
 /**
@@ -40,8 +36,4 @@ case class MarkdownSource(source: Source) extends Source {
 case class VirtualSource(virtualModule: ModuleDecl, input: Source) extends Source {
   val name = input.name
   val content = input.content
-
-  // Are these ever used?
-  override def reader: java.io.Reader = ???
-  override def useAsFile[T](fn: String => T): T = ???
 }

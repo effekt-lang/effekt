@@ -11,8 +11,6 @@
 package kiama
 package util
 
-import java.io.Reader
-
 /**
  * A simple source of characters.
  */
@@ -90,38 +88,12 @@ trait Source {
     } else
       None
   }
-
-  /**
-   * Return a reader on this source. Not normally used by Kiama but
-   * useful if you want to use a source with other code that requires
-   * a reader.
-   */
-  def reader: Reader
-
-  /**
-   * Run a function using this source as a file. The content of the source will be
-   * in the file and the name of the file will be passed to `fn`.
-   */
-  def useAsFile[T](fn: String => T): T
-
 }
 
 /**
  * A source that is a string.
  */
-case class StringSource(content: String, name: String = "") extends Source {
-
-  def reader: Reader = IO.stringreader(content)
-
-  def useAsFile[T](fn: String => T): T = {
-    val filename = Filenames.makeTempFilename(name)
-    IO.createFile(filename, content)
-    val t = fn(filename)
-    IO.deleteFile(filename)
-    t
-  }
-
-}
+case class StringSource(content: String, name: String = "") extends Source
 
 /**
  * A source that is a named file.
@@ -131,10 +103,4 @@ case class FileSource(name: String, encoding: String = "UTF-8") extends Source {
   val shortName = Filenames.dropCurrentPath(name)
 
   lazy val content = scala.io.Source.fromFile(name, encoding).mkString
-
-  def reader: Reader = IO.filereader(name, encoding)
-
-  def useAsFile[T](fn: String => T): T =
-    fn(name)
-
 }

@@ -34,8 +34,4 @@ trait VirtualModuleDB extends ModuleDB { self: Context =>
 
 case class VirtualFileSource(name: String) extends Source {
   lazy val content = file(name).read
-
-  // Are these ever used?
-  override def reader: java.io.Reader = ???
-  override def useAsFile[T](fn: String => T): T = ???
 }
