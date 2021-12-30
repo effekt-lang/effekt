@@ -156,7 +156,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       parens("if" <+> toDoc(cond) <+> toDocInBlock(thn) <+> toDocInBlock(els))
 
     case While(cond, body) =>
-      parens("while" <+> toDocInBlock(cond) <+> toDoc(body, false))
+      parens("while" <+> toDocInBlock(cond) <+> toDocInBlock(body))
 
     // definitions can *only* occur at the top of a (begin ...)
     case Def(id, tpe, BlockLit(ps, body), rest) =>
@@ -293,6 +293,8 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
     case _: Data   => true
     case _: Record => true
     case _: Def    => true
+    // State requires a block since it inserts a definition
+    case _: State  => true
     case _         => false
   }
 }
