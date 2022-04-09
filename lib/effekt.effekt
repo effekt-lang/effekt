@@ -194,6 +194,20 @@ def report[E] { prog: Unit / Exception[E] }: Unit / Console =
 def ignoring[E] { prog: Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception, msg) = () }
 
+// Control Flow
+// ============
+def each(start: Int, end: Int) { action: (Int) => Unit } = {
+  var i = start;
+  while (i < end) {
+      action(i)
+      i = i + 1
+  }
+}
+
+def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
+
+
+
 // Benchmarking
 // ============
 

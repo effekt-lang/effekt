@@ -9,31 +9,32 @@ type List[A] {
   Cons(head: A, tail: List[A])
 }
 
-def map[A, B](l: List[A]) { f: A => B } : List[B] =
-  l match {
-    case Nil() => Nil[B]()
-    case Cons(a, rest) => Cons(f(a), map(rest) { a => f(a) })
+def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
+  var remainder = l
+  while(not(remainder.isEmpty)) {
+    remainder match {
+      case Nil() => ()
+      case Cons(a, as) => f(a); remainder = as
+    }
   }
+}
 
-def foreach[A](l: List[A]) { f: A => Unit } : Unit =
-  l match {
-    case Nil() => ()
-    case Cons(a, rest) =>
-      f(a);
-      foreach(rest) { a => f(a) }
-  }
+def map[A, B](l: List[A]) { f: A => B } : List[B] = {
+  var acc = Nil[B]()
+  l.foreach { el => acc = Cons(f(el), acc) }
+  acc.reverse
+}
 
-def size[A](l: List[A]): Int = l match {
-  case Nil() => 0
-  case Cons(_, rest) => 1 + rest.size
+def size[A](l: List[A]): Int = {
+  var n = 0;
+  l.foreach { _ => n = n + 1 };
+  n
 }
 
 def reverse[A](l: List[A]): List[A] = {
-  def reverseWith(l: List[A])(acc: List[A]): List[A] = l match {
-    case Nil() => acc
-    case Cons(a, rest) => rest.reverseWith(Cons(a, acc))
-  }
-  l.reverseWith(Nil())
+  var res = Nil[A]()
+  l.foreach { el => res = Cons(el, res) }
+  res
 }
 
 // [1,2,3].reverseOnto([4,5,6])
@@ -71,7 +72,11 @@ def isEmpty[A](l: List[A]): Boolean = l match {
   case Cons(a, rest) => false
 }
 
-// raises a runtime exception that can't be caught
+def nonEmpty[A](l: List[A]): Boolean = l match {
+  case Nil() => false
+  case Cons(a, rest) => true
+}
+
 def head[A](l: List[A]): A / Exception[EmptyList] = l match {
   case Nil() => raise(EmptyList(), "Trying to get the head of an empty list")
   case Cons(a, rest) => a
