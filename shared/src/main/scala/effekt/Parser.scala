@@ -474,7 +474,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ~ (`=` ~> expr) ^^ Assign
 
   lazy val ifExpr: P[Expr] =
-    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt) ^^ If
+    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If
 
   lazy val whileExpr: P[Expr] =
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While
