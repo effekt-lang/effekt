@@ -315,6 +315,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
+    | failure("Expected a block argument")
     )
 
   lazy val lambdaArgs: P[ValueParams] =
@@ -345,6 +346,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt
     | (expr <~ `;`) ^^ Return
     | matchDef
+    | failure("Expected a statement")
     )
 
   lazy val withStmt: P[Stmt] =
