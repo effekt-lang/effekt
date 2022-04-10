@@ -885,7 +885,7 @@ trait TyperOps extends ContextOps { self: Context =>
   // Inferred types
   // ==============
   private[typer] def assignType(t: Tree, e: Effectful): Context = {
-    annotations.annotate(Annotations.TypeAndEffect, t, e)
+    annotations.annotate(Annotations.InferredType, t, e)
     this
   }
 
