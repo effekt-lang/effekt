@@ -69,7 +69,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     // TODO also use language config for a better search
     if ((localLib / "effekt.effekt").exists) {
       // here we return the absolute path to avoid problems with LSP
-      return localLib.canonicalPath
+      return ("libraries" / "js" / "monadic").canonicalPath
     }
 
     // 4) next to Jar
