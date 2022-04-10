@@ -234,6 +234,9 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 extern def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
 
+extern pure def setTimeout(callback: () => Unit, timeout: Int): Unit =
+  "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
+
 // runs the block and returns the time in nanoseconds
 def timed { block: Unit }: Int = {
   val before = currentTimeNanos()
