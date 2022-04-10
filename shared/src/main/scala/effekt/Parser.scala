@@ -88,7 +88,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
-    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield", "Object"
+    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield", "Object", "require"
   )
 
   def keyword(s: String): Parser[String] =

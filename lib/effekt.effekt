@@ -135,6 +135,18 @@ extern pure def infixGt(x: Double, y: Double): Boolean =
 extern pure def infixGte(x: Double, y: Double): Boolean =
   "x >= y"
 
+extern pure def infixLt(x: String, y: String): Boolean =
+  "x < y"
+
+extern pure def infixLte(x: String, y: String): Boolean =
+  "x <= y"
+
+extern pure def infixGt(x: String, y: String): Boolean =
+  "x > y"
+
+extern pure def infixGte(x: String, y: String): Boolean =
+  "x >= y"
+
 // Boolean ops
 // ===========
 // for now those are considered eager
