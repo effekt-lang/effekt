@@ -10,6 +10,7 @@ package-lock.json
 bin/effekt.jar
 licenses/
 bin/
+.bsp/
 
 notes/
 artwork/
