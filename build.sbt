@@ -30,7 +30,7 @@ lazy val commonSettings = Seq(
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
-    "-language:implicitConversions",
+    "-language:implicitConversions"
   ),
   scalariformPreferences := scalariformPreferences.value
     .setPreference(AlignSingleLineCaseStatements, true)
@@ -42,7 +42,7 @@ lazy val commonSettings = Seq(
 
 enablePlugins(ScalaJSPlugin)
 
-lazy val root = project.in(file("."))
+lazy val root = project.in(file("effekt"))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
   .settings(Seq(
@@ -50,7 +50,8 @@ lazy val root = project.in(file("."))
   ))
 
 
-lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
+
+lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
     version := effektVersion
@@ -65,7 +66,6 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file(".
       "org.scala-sbt" %% "io" % "1.3.1" % "test",
       "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
     ),
-
 
     // Test configuration
     // ------------------
