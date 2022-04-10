@@ -24,6 +24,8 @@ extern pure def inspect[R](value: R): Unit =
 extern pure def random(): Double =
   "Math.random()"
 
+extern pure def timestamp(): Int =
+  "Date.now()"
 
 // String ops
 // ==========
