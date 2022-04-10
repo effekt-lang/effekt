@@ -65,7 +65,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
         val access = Var(fun.id).inheritPosition(fun)
         // heal the missing type
         // TODO refactor this
-        C.annotate(Annotations.TypeAndEffect, access, Effectful(C.valueTypeOf(fun.definition), Pure))
+        C.annotate(Annotations.InferredType, access, Effectful(C.valueTypeOf(fun.definition), Pure))
         ExprTarget(access)
       }
       rewrite(visit(c) { c => Call(target, targs, args) })
