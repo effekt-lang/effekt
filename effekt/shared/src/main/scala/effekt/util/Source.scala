@@ -1,8 +1,13 @@
 package effekt
 package util
 
+import effekt.source.ModuleDecl
+
 import kiama.util.Source
 
+/**
+ * A decorator for markdown sources -- useful for literate programming
+ */
 case class MarkdownSource(source: Source) extends Source {
 
   val fenceLine = """^```[^`\n]*$""".r
@@ -23,8 +28,13 @@ case class MarkdownSource(source: Source) extends Source {
     }
     lines.mkString("\n")
   }
+}
 
-  // Are these every used?
-  def reader: java.io.Reader = ???
-  def useAsFile[T](fn: String => T): T = ???
+/**
+ * Use by the REPL with synthesized modules. "input" contains the last REPL entry,
+ * not the whole source.
+ */
+case class VirtualSource(virtualModule: ModuleDecl, input: Source) extends Source {
+  val name = input.name
+  val content = input.content
 }
