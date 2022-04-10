@@ -5,7 +5,6 @@ import effekt.core._
 import effekt.symbols.Module
 import effekt.symbols.{ Name, Symbol, Wildcard }
 
-import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -98,7 +97,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
 
 trait ChezSchemeBase extends ParenPrettyPrinter {
 
-  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+  import kiama.output.PrettyPrinterTypes.Document
 
   val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
 

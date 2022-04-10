@@ -32,6 +32,7 @@ lazy val commonSettings = Seq(
     "-language:existentials",
     "-language:higherKinds",
     "-language:implicitConversions",
+    "-Ypatmat-exhaust-depth", "40"
   ),
   scalariformPreferences := scalariformPreferences.value
     .setPreference(AlignSingleLineCaseStatements, true)
@@ -42,6 +43,31 @@ lazy val commonSettings = Seq(
 )
 
 enablePlugins(ScalaJSPlugin)
+
+lazy val replDependencies = Seq(
+  "jline" % "jline" % "2.14.6",
+  "org.rogach" %% "scallop" % "3.4.0",
+)
+
+lazy val lspDependencies = Seq(
+  "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.12.0",
+  "com.google.code.gson" % "gson" % "2.8.2"
+)
+
+lazy val testingDependencies = Seq(
+  "org.scala-sbt" %% "io" % "1.3.1" % "test",
+  "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
+)
+
+lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
+  .settings(commonSettings)
+  .settings(noPublishSettings)
+  .settings(
+    name := "kiama"
+  )
+  .jvmSettings(
+    libraryDependencies ++= (replDependencies ++ lspDependencies)
+  )
 
 lazy val root = project.in(file("effekt"))
   .aggregate(effekt.js, effekt.jvm)
@@ -57,15 +83,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     version := effektVersion
   )
   .settings(commonSettings)
+  .dependsOn(kiama)
   .enablePlugins(NativeImagePlugin)
   .jvmSettings(
-    libraryDependencies ++= Seq(
-      "org.rogach" %% "scallop" % "3.4.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama" % "2.3.0",
-      "org.bitbucket.inkytonik.kiama" %% "kiama-extras" % "2.3.0",
-      "org.scala-sbt" %% "io" % "1.3.1" % "test",
-      "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
-    ),
+    libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
 
 
     // Test configuration
@@ -141,7 +162,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
   )
   .jsSettings(
     libraryDependencies ++= Seq(
-      "org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
+      //"org.bitbucket.inkytonik.kiama" %%% "kiama-scalajs" % "2.4.0-SNAPSHOT"
     ),
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 

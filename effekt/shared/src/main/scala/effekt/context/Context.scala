@@ -8,8 +8,8 @@ import effekt.regions.{ RegionCheckerOps, RegionReporter }
 import effekt.source.{ CapabilityPassingOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
-import org.bitbucket.inkytonik.kiama.util.Positions
+import kiama.util.Messaging.Messages
+import kiama.util.Positions
 
 import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
 

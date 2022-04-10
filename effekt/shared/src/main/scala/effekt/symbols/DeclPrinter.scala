@@ -2,7 +2,7 @@ package effekt
 package symbols
 
 import effekt.context.Context
-import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
+import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
 

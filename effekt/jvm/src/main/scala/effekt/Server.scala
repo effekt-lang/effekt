@@ -2,9 +2,9 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
-import effekt.source.{ FunDef, Hole, Tree }
-import org.bitbucket.inkytonik.kiama
-import kiama.util.{ Position, Source }
+import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
+
+import kiama.util.{ Position, Source, Services }
 import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
 
 /**
@@ -13,7 +13,7 @@ import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
  *     v
  * effekt.Compiler
  */
-trait LSPServer extends Driver with Intelligence {
+trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with Driver with Intelligence {
 
   object prettyCore extends PrettyPrinter
 
@@ -165,6 +165,11 @@ trait LSPServer extends Driver with Intelligence {
     val (tpe2 / effs2) = inferred
     tpe1 != tpe2 || effs1 != effs2
   }
+
+  override def createServices(config: EffektConfig) = new LSPServices(this, config)
+
+  // Class to easily test custom LSP services not (yet) meant to go into kiama.Services
+  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig](server, config) {}
 }
 
 /**

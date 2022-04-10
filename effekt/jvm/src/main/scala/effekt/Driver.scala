@@ -7,23 +7,22 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
-import org.bitbucket.inkytonik.kiama
+
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
-import kiama.util.{ Client, CompilerWithConfig, IO, Services, Source }
-import java.io.{ InputStream, OutputStream }
+import kiama.util.{ IO, Source }
 
 import effekt.util.messages.FatalPhaseError
-import effekt.util.paths._
-import org.eclipse.lsp4j.jsonrpc.Launcher
 
-import scala.concurrent.ExecutionException
+//TODO-LLVM import effekt.util.paths._
+//TODO-LLVMimport org.eclipse.lsp4j.jsonrpc.Launcher
+
 import scala.sys.process.Process
 
 /**
- * Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.CompilerWithConfig
+ * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
  */
-trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer =>
+trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer =>
 
   val name = "effekt"
 
@@ -157,75 +156,12 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   override def process(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = ???
 
   /**
-   * Modified copy of kiama.ServerWithConfig.launch()
-   *
-   * When the --debug flag is used together with --server, we open the
-   * server on port 5007 instead of stdin and out. This way a modified
-   * vscode client can connect to the running server, aiding development
-   * of the language server and clients.
-   *
-   * In a vscode extension, the vscode client can connect to the server using
-   * the following example code:
-   *
-   *   let serverOptions = () => {
-   *     // Connect to language server via socket
-   *     let socket: any = net.connect({ port: 5007 });
-   *     let result: StreamInfo = {
-   *       writer: socket,
-   *       reader: socket
-   *     };
-   *     return Promise.resolve(result);
-   *   };
-   *
-   * @see https://github.com/microsoft/language-server-protocol/issues/160
+   * Originally called by kiama, not used anymore.
    */
-  override def launch(config: EffektConfig): Unit = {
-    if (config.debug()) {
-      import java.net.InetSocketAddress
-      import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
-
-      val port = 5007
-      val addr = new InetSocketAddress("localhost", port)
-      val socket = AsynchronousServerSocketChannel.open().bind(addr);
-
-      try {
-        println(s"Waiting on port ${port} for LSP clients to connect")
-        val ch = socket.accept().get();
-        println(s"Connected to LSP client")
-        val in = Channels.newInputStream(ch)
-        val out = Channels.newOutputStream(ch)
-        launch(config, in, out)
-      } catch {
-        case e: InterruptedException =>
-          e.printStackTrace()
-        case e: ExecutionException =>
-          e.printStackTrace()
-      } finally {
-        socket.close()
-      }
-    } else {
-      launch(config, System.in, System.out)
-    }
-  }
-
-  private def launch(config: EffektConfig, in: InputStream, out: OutputStream): Unit = {
-    val services = new Services(this, config)
-    val launcherBase =
-      new Launcher.Builder[Client]()
-        .setLocalService(services)
-        .setRemoteInterface(classOf[Client])
-        .setInput(in)
-        .setOutput(out)
-    val launcher = launcherBase.create()
-    val client = launcher.getRemoteProxy()
-    connect(client)
-    launcher.startListening()
-  }
+  override final def parse(source: Source): ParseResult[ModuleDecl] = ???
 
   /**
    * Originally called by kiama, not used anymore.
    */
-  override def parse(source: Source): ParseResult[ModuleDecl] = ???
-
-  def format(m: ModuleDecl): Document = ???
+  override final def format(m: ModuleDecl): Document = ???
 }

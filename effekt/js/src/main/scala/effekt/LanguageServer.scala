@@ -4,8 +4,7 @@ import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.generator.JavaScriptVirtual
 import effekt.util.messages.FatalPhaseError
 import effekt.util.paths._
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-import org.bitbucket.inkytonik.kiama.util.{ Message, Messaging, Position, Positions, Severities, Source, StringSource }
+import kiama.util.{ Message, Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
 import js.JSConverters._

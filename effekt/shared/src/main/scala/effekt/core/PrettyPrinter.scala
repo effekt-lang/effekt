@@ -1,14 +1,14 @@
 package effekt
 package core
 
-import org.bitbucket.inkytonik.kiama.output.ParenPrettyPrinter
+import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
 import effekt.symbols.{ builtins, Name, Wildcard }
 
 class PrettyPrinter extends ParenPrettyPrinter {
 
-  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+  import kiama.output.PrettyPrinterTypes.Document
 
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)

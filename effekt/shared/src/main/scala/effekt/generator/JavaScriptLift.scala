@@ -3,7 +3,6 @@ package effekt.generator
 import effekt.context.Context
 import effekt.core._
 import effekt.symbols.{ Module, Wildcard }
-import org.bitbucket.inkytonik.kiama
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 

@@ -2,8 +2,8 @@ package effekt
 package context
 
 import effekt.symbols.Module
-import effekt.symbols.BlockSymbol
-import org.bitbucket.inkytonik.kiama.util.Source
+// TODO-LLVM import effekt.symbols.BlockSymbol
+import kiama.util.Source
 
 /**
  * The ModuleDB depends on three things:

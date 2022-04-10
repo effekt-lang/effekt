@@ -4,12 +4,12 @@ import effekt.source._
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
-import org.bitbucket.inkytonik.kiama
+
 import kiama.util.Messaging.{ Messages, message }
-import kiama.util.{ Console, ParsingREPLWithConfig, Source, StringSource }
+import kiama.util.{ Console, REPL, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
-class Repl(driver: Driver) extends ParsingREPLWithConfig[Tree, EffektConfig] {
+class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
 
   private implicit lazy val context = driver.context
 
