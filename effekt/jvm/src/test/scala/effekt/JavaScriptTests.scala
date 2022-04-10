@@ -46,14 +46,14 @@ trait TestUtils {
   lazy val examplesDir = new File("examples")
 
   //  val compiler = new effekt.Driver {}
-  //  val configs = compiler.createConfig(Seq("--lib", "lib"))
+  //  val configs = compiler.createConfig(Seq("--lib", "libraries/js/monadic"))
   //  configs.verify()
   //  compiler.compileFile("test.effekt", configs)
   //  effekt.util.Task.dump()
 
   def interpret(file: File): String = {
     val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "lib"))
+    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js/monadic"))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "")

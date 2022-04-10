@@ -88,7 +88,7 @@ class ChezSchemeTests extends AnyFunSpec {
       "--generator", s"chez-$variant",
       "--includes", "chez/common",
       "--includes", ".",
-      "--lib", s"chez/$variant"
+      "--lib", s"libraries/chez/$variant"
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
