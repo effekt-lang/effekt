@@ -13,7 +13,7 @@ import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.symbols.kinds._
 import effekt.util.messages.FatalPhaseError
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
+import kiama.util.Messaging.Messages
 
 /**
  * Output: the types we inferred for function like things are written into "types"
@@ -743,7 +743,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
    * are reported
    */
   private def Try[T](block: => T)(implicit C: Context): Either[Messages, T] = {
-    import org.bitbucket.inkytonik.kiama.util.Severities.Error
+    import kiama.util.Severities.Error
 
     val (msgs, optRes) = Context withMessages {
       try { Some(block) } catch {

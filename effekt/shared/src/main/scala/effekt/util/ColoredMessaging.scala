@@ -1,8 +1,8 @@
 package effekt
 package util
 
-import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
-import org.bitbucket.inkytonik.kiama.util.{ Message, Messaging, Positions, Position, Severities }
+import kiama.util.Messaging.Messages
+import kiama.util.{ Message, Messaging, Positions, Position, Severities }
 
 class ColoredMessaging(positions: Positions) extends Messaging(positions) {
 

@@ -1,7 +1,7 @@
 package effekt
 package util
 
-import org.bitbucket.inkytonik.kiama.util.Positions
+import kiama.util.Positions
 
 import scala.util.matching._
 

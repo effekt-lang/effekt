@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.symbols.Module
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 /**
  * The ModuleDB depends on three things:

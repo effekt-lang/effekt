@@ -3,7 +3,7 @@ package effekt.util
 import effekt.context.VirtualFileSource
 
 import scala.collection.mutable
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 class FileNotFound(filename: String) extends Exception(s"File not found: ${filename}")
 
