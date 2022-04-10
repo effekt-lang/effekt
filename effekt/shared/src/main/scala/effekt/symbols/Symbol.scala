@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import org.bitbucket.inkytonik.kiama.util.Counter
+import kiama.util.Counter
 
 /**
  * A symbol uniquely represents a code entity

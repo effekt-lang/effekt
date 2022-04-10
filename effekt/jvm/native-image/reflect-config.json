@@ -11,33 +11,33 @@
   "name":"java.lang.reflect.Method[]"
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.Client",
+  "name":"kiama.util.Client",
   "allDeclaredMethods":true
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.OffsetRange",
+  "name":"kiama.util.OffsetRange",
   "allDeclaredFields":true
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.OffsetRange[]"
+  "name":"kiama.util.OffsetRange[]"
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.Product",
+  "name":"kiama.util.Product",
   "allDeclaredFields":true
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.RangeEntry",
+  "name":"kiama.util.RangeEntry",
   "allDeclaredFields":true
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.RangeEntry[]"
+  "name":"kiama.util.RangeEntry[]"
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.Services",
+  "name":"kiama.util.Services",
   "allDeclaredMethods":true
 },
 {
-  "name":"org.bitbucket.inkytonik.kiama.util.SetTraceNotificationParams",
+  "name":"kiama.util.SetTraceNotificationParams",
   "allDeclaredFields":true
 },
 {

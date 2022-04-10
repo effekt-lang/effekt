@@ -2,7 +2,7 @@ package effekt
 package util
 
 import effekt.source.ModuleDecl
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 /**
  * Use by the REPL with synthesized modules. "input" contains the last REPL entry,

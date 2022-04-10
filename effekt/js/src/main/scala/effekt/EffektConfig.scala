@@ -2,7 +2,7 @@ package effekt
 
 import java.io.File
 
-import org.bitbucket.inkytonik.kiama.util.{ Emitter, OutputEmitter }
+import kiama.util.{ Emitter, OutputEmitter }
 
 trait EffektConfig {
 

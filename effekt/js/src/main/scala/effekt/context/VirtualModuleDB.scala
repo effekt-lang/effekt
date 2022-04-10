@@ -4,7 +4,7 @@ package context
 import effekt.util.Resources
 import effekt.util.paths._
 
-import org.bitbucket.inkytonik.kiama.util.Source
+import kiama.util.Source
 
 trait VirtualModuleDB extends ModuleDB { self: Context =>
 

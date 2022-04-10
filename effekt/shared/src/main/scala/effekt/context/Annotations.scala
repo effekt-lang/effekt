@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.util.messages.ErrorReporter
-import org.bitbucket.inkytonik.kiama.util.Memoiser
+import kiama.util.Memoiser
 
 case class Annotation[K, V](name: String, description: String) {
   type Value = V

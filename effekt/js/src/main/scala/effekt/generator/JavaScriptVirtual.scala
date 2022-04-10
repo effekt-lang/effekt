@@ -2,7 +2,7 @@ package effekt.generator
 
 import effekt.context.Context
 import effekt.core.ModuleDecl
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 
