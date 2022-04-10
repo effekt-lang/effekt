@@ -19,8 +19,7 @@
   "dependencies": {},
   "files": [
     "bin",
-    "lib",
-    "chez",
+    "libraries",
     "licenses"
   ],
   "bugs": {
@@ -30,7 +29,7 @@
   "directories": {
     "doc": "docs",
     "example": "examples",
-    "lib": "lib"
+    "libraries": "libraries"
   },
   "devDependencies": {}
 }

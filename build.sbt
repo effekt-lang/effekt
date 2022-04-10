@@ -92,7 +92,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // ------------------
     Test / parallelExecution := false,
 
-    Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt",
+    Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
     // show duration of the tests
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
@@ -121,7 +121,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     assemblyJarName in assembly := "effekt.jar",
 
     // we use the lib folder as resource directory to include it in the JAR
-    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
+    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "libraries",
 
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
 
@@ -190,7 +190,7 @@ lazy val versionGenerator = Def.task {
  */
 lazy val stdLibGenerator = Def.task {
 
-  val baseDir = (baseDirectory in ThisBuild).value / "lib"
+  val baseDir = (baseDirectory in ThisBuild).value / "libraries" / "js" / "monadic"
   val resources = baseDir ** "*.*"
 
   val sourceDir = (sourceManaged in Compile).value
