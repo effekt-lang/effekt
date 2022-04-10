@@ -102,6 +102,12 @@ extern pure def toInt(d: Double): Int =
 extern pure def toDouble(d: Int): Double =
   "d"
 
+extern pure def floor(d: Double): Int =
+  "Math.floor(d)"
+
+extern pure def ceil(d: Double): Int =
+  "Math.ceil(d)"
+
 
 // Comparison ops
 // ==============
