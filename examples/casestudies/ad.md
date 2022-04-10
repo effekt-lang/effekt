@@ -12,9 +12,12 @@ In this case study we reimplement automatic differentiation as presented in
 
 Instead of using the control operators `shift` and `reset`, we are using effects and
 handlers.
-```
-module examples/casestudies/ad
 
+```effekt:sketch:hide
+module examples/casestudies/ad
+```
+
+```effekt:prelude:hide
 import immutable/list
 import mutable/heap
 ```
@@ -176,4 +179,8 @@ def main() = {
   }
   println(result3)
 }
+```
+
+In the following REPL you can run the examples (try entering `main()`):
+```effekt:repl
 ```
