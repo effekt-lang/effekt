@@ -20,6 +20,7 @@ case class DefCnt(id: BlockSymbol, params: List[machine.Param], entry: BlockSymb
 case class DefFrm(id: BlockSymbol, params: List[machine.Param], env: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
 case class DefClo(id: BlockSymbol, params: List[machine.Param], env: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
 case class DefFun(typ: machine.Type, id: BlockSymbol, params: List[machine.Param], body: String) extends Top
+case class DefScn(id: BlockSymbol, env: List[machine.Param]) extends Top
 case class Include(content: String) extends Top
 
 case class BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminator: Terminator) extends Tree

@@ -98,6 +98,11 @@ object LLVMPrinter extends ParenPrettyPrinter {
         "alwaysinline" <+> llvmBlock(
           string(body)
         )
+    case DefScn(functionName, env) =>
+      // TODO make loadEnv work on sp directly and don't allocate spp
+      "define fastcc %Sp" <+> scanningName(functionName) <> argumentList(List("%Sp noalias %sp")) <+> llvmBlock(
+        "hallo"
+      )
     case Include(content) =>
       string(content)
   }
@@ -339,7 +344,6 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def load(spp: Doc, name: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
 
-    // TODO name for oldsp and newsp based on name of spp
     val ptrType = typ <> "*"
     val oldsp = freshLocalName("oldsp");
     val newsp = freshLocalName("newsp");
@@ -355,8 +359,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
   }
 
   def store(spp: Doc, basep: Doc, limitp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
-    // TODO remove parameters spp basep and limitp
 
+    // TODO remove parameters spp basep and limitp
     val ptrType = typ <> "*";
     val oldsp = freshLocalName("oldsp");
     val oldtypedsp = freshLocalName("oldtypedsp");
@@ -385,6 +389,9 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def globalName(id: Symbol): Doc =
     "@" <> nameDef(id)
+
+  def scanningName(id: Symbol): Doc =
+    "@scan_" <> nameDef(id)
 
   def nameDef(id: Symbol): Doc =
     id.name.toString + "_" + id.id
