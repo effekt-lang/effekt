@@ -191,7 +191,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case f: Field =>
           val List(arg: Expr) = as
           Select(arg, f)
-        case f: BlockSymbol if C.pureOrIO(fun) && args.forall { C.pureOrIO } =>
+        case f: BlockSymbol if C.pureOrIO(f) && args.forall { C.pureOrIO } =>
           Run(App(BlockVar(f), targs, as))
         case f: BlockSymbol =>
           C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
@@ -296,20 +296,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.Let(id, C.valueTypeOf(id), binding, body)
 
   def optimize(s: Stmt)(implicit C: Context): Stmt = {
-    object dontBindPureCalls extends core.Tree.Rewrite {
-      override def expr = {
-        case core.Run(core.Ret(e)) =>
-          println("Found case! ", e);
-          rewrite(e)
-      }
-    }
 
     // a very small and easy post processing step...
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
         case core.Run(core.Ret(e)) =>
-          println("Found case! ", e);
           rewrite(e)
       }
     }
@@ -395,7 +387,11 @@ trait TransformerOps extends ContextOps { Context: Context =>
 
   // we conservatively approximate to false
   def pureOrIO(t: source.Tree): Boolean = inferredRegionOption(t) match {
-    case Some(reg) if reg.subsetOf(Region(builtins.IOCapability)) => true
-    case _ => false
+    case Some(reg) => pureOrIO(reg)
+    case _         => false
   }
+
+  def pureOrIO(t: BlockSymbol): Boolean = pureOrIO(regionOf(t).asRegionSet)
+
+  def pureOrIO(r: RegionSet): Boolean = r.subsetOf(Region(builtins.IOCapability))
 }

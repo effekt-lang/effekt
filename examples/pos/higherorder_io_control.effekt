@@ -1,0 +1,15 @@
+import immutable/list
+
+def foo() = {
+
+  [1, 2, 3].foreach { x =>
+    println(x)
+  };
+
+  [1, 2, 3].foreach { x =>
+    raise(x.show)
+  };
+
+}
+
+def main() = report[RuntimeError] { foo() }
