@@ -52,6 +52,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Closure(b) => toDoc(b)
+    case Run(s)     => "run" <+> braces(toDoc(s)) <+> "}"
   }
 
   def argToDoc(e: Argument): Doc = e match {

@@ -5,6 +5,7 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
+import effekt.regions.{ Region, RegionSet }
 import effekt.source.ExternFlag
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
@@ -30,7 +31,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case (d, r) => transform(d, r)
     }
 
-    ModuleDecl(path, imports.map { _.path }, transformed).inheritPosition(tree)
+    val optimized = optimize(transformed)
+
+    ModuleDecl(path, imports.map { _.path }, optimized).inheritPosition(tree)
   }
 
   /**
@@ -48,6 +51,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
       core.Record(rec, rec.fields, rest)
+
+    case v @ source.ValDef(id, _, binding) if C.pureOrIO(binding) =>
+      Let(v.symbol, Run(transform(binding)), rest)
 
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest)
@@ -88,6 +94,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(d, transform(rest))
 
     // { e; stmt } --> { val _ = e; stmt }
+    case source.ExprStmt(e, rest) if C.pureOrIO(e) =>
+      val (expr, bs) = C.withBindings { transform(e) }
+      val let = Let(freshWildcardFor(e), expr, transform(rest))
+      if (bs.isEmpty) { let }
+      else { reifyBindings(let, bs) }
+
     case source.ExprStmt(e, rest) =>
       Val(freshWildcardFor(e), insertBindings { Ret(transform(e)) }, transform(rest))
 
@@ -169,8 +181,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // the type arguments, inferred by typer
       val targs = C.typeArguments(c)
 
-      // right now only builtin functions are pure of control effects
-      // later we can have effect inference to learn which ones are pure.
       sym match {
         case f: BuiltinFunction if ExternFlag.directStyle(f.purity) =>
           PureApp(BlockVar(f), targs, as)
@@ -181,6 +191,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case f: Field =>
           val List(arg: Expr) = as
           Select(arg, f)
+        case f: BlockSymbol if C.pureOrIO(fun) && args.forall { C.pureOrIO } =>
+          Run(App(BlockVar(f), targs, as))
         case f: BlockSymbol =>
           C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
         case f: ValueSymbol =>
@@ -259,7 +271,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def insertBindings(stmt: => Stmt)(implicit C: Context): Stmt = {
     val (body, bindings) = C.withBindings { stmt }
+    reifyBindings(body, bindings)
+  }
 
+  def reifyBindings(body: Stmt, bindings: ListBuffer[(Tmp, symbols.ValueType, Stmt)])(implicit C: Context): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
       case ((x, tpe, b), Ret(ValueVar(y))) if x == y => b
@@ -276,6 +291,30 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(implicit C: Context): core.Val =
     core.Val(id, C.valueTypeOf(id), binding, body)
+
+  def Let(id: ValueSymbol, binding: Expr, body: Stmt)(implicit C: Context): core.Let =
+    core.Let(id, C.valueTypeOf(id), binding, body)
+
+  def optimize(s: Stmt)(implicit C: Context): Stmt = {
+    object dontBindPureCalls extends core.Tree.Rewrite {
+      override def expr = {
+        case core.Run(core.Ret(e)) =>
+          println("Found case! ", e);
+          rewrite(e)
+      }
+    }
+
+    // a very small and easy post processing step...
+    // reduces run-return pairs
+    object eliminateReturnRun extends core.Tree.Rewrite {
+      override def expr = {
+        case core.Run(core.Ret(e)) =>
+          println("Found case! ", e);
+          rewrite(e)
+      }
+    }
+    eliminateReturnRun.rewrite(s)
+  }
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
@@ -352,5 +391,11 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val result = block
     bindings = before
     (result, b)
+  }
+
+  // we conservatively approximate to false
+  def pureOrIO(t: source.Tree): Boolean = inferredRegionOption(t) match {
+    case Some(reg) if reg.subsetOf(Region(builtins.IOCapability)) => true
+    case _ => false
   }
 }

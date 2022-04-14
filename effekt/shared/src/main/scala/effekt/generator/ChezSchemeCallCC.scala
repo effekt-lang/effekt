@@ -141,6 +141,8 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       schemeCall(nameRef(field), toDoc(b))
 
     case Closure(b) => toDoc(b)
+
+    case Run(s)     => toDoc(s, false)
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

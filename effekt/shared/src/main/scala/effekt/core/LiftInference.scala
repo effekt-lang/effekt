@@ -40,6 +40,9 @@ object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
     case Val(id, tpe, binding, body) =>
       Val(id, tpe, transform(binding), transform(body))
 
+    case Let(id, tpe, binding, body) =>
+      Let(id, tpe, transform(binding), transform(body))
+
     case State(id, tpe, get, put, init, body) =>
       State(id, tpe, get, put, transform(init), transform(body))
 
@@ -92,6 +95,7 @@ object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
     case PureApp(b: Block, targs, args: List[Argument]) => tree // we did not change them before -- why now?
     case Select(target: Expr, field: Symbol) => Select(transform(target), field)
     case Closure(b: Block) => Closure(transform(b))
+    case Run(s: Stmt) => Run(transform(s))
   }
 
   /**
