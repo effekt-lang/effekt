@@ -224,7 +224,15 @@ case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
 case class ExternEffect(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinEffect
 }
-case class ExternFun(pure: Boolean, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def {
+
+object ExternFlag extends Enumeration {
+  type Purity = Value
+  // Probably these three are not enough, yet.
+  val Pure, IO, Control = Value
+  def directStyle(p: Purity): Boolean = p == Pure || p == IO
+}
+
+case class ExternFun(purity: ExternFlag.Purity, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {

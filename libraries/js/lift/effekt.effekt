@@ -18,14 +18,14 @@ def locally[R] { f: R }: R = f()
 extern def println[R](value: R): Unit / Console =
   "println$impl(value)"
 
-extern pure def inspect[R](value: R): Unit =
+extern def inspect[R](value: R): Unit =
   "console.log(value)"
 
 // a fatal runtime error that cannot be caught
-extern pure def error[R](msg: String): R =
+extern def error[R](msg: String): R =
   "(function() { throw msg })()"
 
-extern pure def random(): Int =
+extern def random(): Int =
   "Math.random() * 100"
 
 
@@ -115,7 +115,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 
 // Current time in nanoseconds
 // TODO use a better timer
-extern def currentTimeNanos(): Int =
+extern control def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
 
 // runs the block and returns the time in nanoseconds

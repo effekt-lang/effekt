@@ -39,7 +39,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
-    var scope: Scope = toplevel(builtins.rootTypes)
+    var scope: Scope = toplevel(builtins.rootTerms, builtins.rootTypes)
 
     // process all imports, updating the terms and types in scope
     val imports = decl.imports map {

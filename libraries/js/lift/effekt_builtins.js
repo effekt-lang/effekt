@@ -22,7 +22,8 @@ function equals$impl(obj1, obj2) {
 }
 
 function println$impl(obj) {
-  return $effekt.delayed(() => { console.log(show(obj)); return $effekt.unit; });
+  //return $effekt.delayed(() => { console.log(show(obj)); return $effekt.unit; });
+  console.log(show(obj)); return $effekt.unit;
 }
 
 

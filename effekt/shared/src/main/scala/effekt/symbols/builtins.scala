@@ -22,11 +22,23 @@ object builtins {
 
   val THole = BuiltinType(name("Unknown"), Nil)
 
+  val IOEffect = BuiltinEffect(name("IO"), Nil)
+  val IOCapability = BuiltinCapability(IOEffect)
+
+  val ControlEffect = BuiltinEffect(name("Control"), Nil)
+  val ControlCapablity = BuiltinCapability(ControlEffect)
+
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
     "Boolean" -> TBoolean,
     "Unit" -> TUnit,
     "String" -> TString,
-    "Double" -> TDouble
+    "Double" -> TDouble,
+    "IO" -> IOEffect
+  )
+
+  // it is a set, because terms can be overloaded...
+  val rootTerms: Map[String, Set[TermSymbol]] = Map(
+    "io" -> Set(IOCapability)
   )
 }

@@ -5,6 +5,7 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
+import effekt.source.ExternFlag
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -171,7 +172,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // right now only builtin functions are pure of control effects
       // later we can have effect inference to learn which ones are pure.
       sym match {
-        case f: BuiltinFunction if f.pure =>
+        case f: BuiltinFunction if ExternFlag.directStyle(f.purity) =>
           PureApp(BlockVar(f), targs, as)
         case r: Record =>
           PureApp(BlockVar(r), targs, as)

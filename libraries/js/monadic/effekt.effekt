@@ -15,16 +15,16 @@ def locally[R] { f: R }: R = f()
 
 // Side effecting ops
 // ==================
-extern def println[R](value: R): Unit / Console =
+extern io def println[R](value: R): Unit =
   "println$impl(value)"
 
-extern pure def inspect[R](value: R): Unit =
+extern io def inspect[R](value: R): Unit =
   "console.log(value)"
 
-extern pure def random(): Double =
+extern io def random(): Double =
   "Math.random()"
 
-extern pure def timestamp(): Int =
+extern io def timestamp(): Int =
   "Date.now()"
 
 // String ops
@@ -191,7 +191,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // Exceptions
 // ==========
 // a fatal runtime error that cannot be caught
-extern pure def panic[R](msg: String): R =
+extern io def panic[R](msg: String): R =
   "(function() { throw msg })()"
 
 effect Exception[E] {
@@ -233,10 +233,10 @@ def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
 
 // Current time in nanoseconds
 // TODO use a better timer
-extern def currentTimeNanos(): Int =
+extern control def currentTimeNanos(): Int =
   "$effekt.delayed(() => new Date().getTime() * 1000)"
 
-extern pure def setTimeout(callback: () => Unit, timeout: Int): Unit =
+extern io def setTimeout(callback: () => Unit, timeout: Int): Unit =
   "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
 
 // runs the block and returns the time in nanoseconds

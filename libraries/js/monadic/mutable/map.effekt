@@ -14,5 +14,5 @@ def get[K, V](m: Map[K, V])(key: K): Option[V] =
 extern pure def unsafeGet[K, V](m: Map[K, V])(key: K): V =
     "m.get(key)"
 
-extern pure def update[K, V](m: Map[K, V])(key: K, value: V): Unit =
+extern io def update[K, V](m: Map[K, V])(key: K, value: V): Unit =
     "(function() { m.set(key, value); return $effekt.unit })()"
