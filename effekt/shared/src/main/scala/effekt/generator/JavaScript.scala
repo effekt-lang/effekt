@@ -86,7 +86,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall(toDoc(b), args map argToDoc)
 
     case If(cond, thn, els) =>
-      parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
+      parens(parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els))
 
     case While(cond, body) =>
       jsCall(
