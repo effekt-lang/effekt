@@ -22,13 +22,13 @@ extern pure def infixConcat(s1: String, s2: String): String =
 extern pure def show[R](value: R): String =
   "(show_impl value)"
 
-extern def println[R](r: R): Unit / Console =
+extern io def println[R](r: R): Unit / Console =
   "(println_impl r)"
 
-extern def error[R](msg: String): R =
+extern io def error[R](msg: String): R =
   "(raise msg)"
 
-extern pure def random(): Double =
+extern io def random(): Double =
   "(random 1.0)"
 
 // Math ops
@@ -155,8 +155,35 @@ record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
 record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
 record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
 
+// Exceptions
+// ==========
+// a fatal runtime error that cannot be caught
+extern io def panic[R](msg: String): R =
+  "(raise msg)"
+
+effect Exception[E] {
+  def raise[A](exception: E, msg: String): A
+}
+record RuntimeError()
+
+def raise[A](msg: String): A / Exception[RuntimeError] = raise(RuntimeError(), msg)
+
+// converts exceptions of (static) type E to an uncatchable panic that aborts the program
+def panicOn[E] { prog: Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception, msg) = panic(msg) }
+
+// reports exceptions of (static) type E to the console
+def report[E] { prog: Unit / Exception[E] }: Unit / Console =
+  try { prog() } with Exception[E] { def raise(exception, msg) = println(msg) }
+
+// ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+def ignoring[E] { prog: Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception, msg) = () }
+
+
 // Benchmarking
 // ============
 // should only be used with pure blocks
-extern def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console =
+extern control def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console =
   "(display (measure block warmup iterations))"

@@ -84,7 +84,18 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
         defineValue(nameDef(put), "setter") <> line <>
         schemeCall("state", toDoc(init, false), toDoc(block))
 
+    // funnily enough, in callcc, we actually need to wrap toplevel definitions into run
+    // pure function calls (that internally use control effects, handled away) still need to
+    // be run.
+    case Let(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), "(run (thunk " <> toDoc(binding) <> "))") <> line <> toDoc(body, toplevel)
+
     case other => super.toDoc(s, toplevel)
+  }
+
+  override def toDoc(e: Expr)(implicit C: Context): Doc = e match {
+    case Run(s) => toDocInBlock(s)
+    case other  => super.toDoc(other)
   }
 
   override def requiresBlock(s: Stmt): Boolean = s match {
@@ -142,7 +153,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
     case Closure(b) => toDoc(b)
 
-    case Run(s)     => "(run " <> toDoc(s, false) <> ")"
+    case Run(s)     => "(run " <> toDocInBlock(s) <> ")"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
@@ -192,6 +203,12 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
     case Val(id, tpe, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
+
+    case Let(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
+
+    case Let(id, tpe, binding, body) =>
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body, false))))
 
     case Ret(e) => toDoc(e)
 
