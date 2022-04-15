@@ -142,7 +142,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
     case Closure(b) => toDoc(b)
 
-    case Run(s)     => toDoc(s, false)
+    case Run(s)     => "(run " <> toDoc(s, false) <> ")"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
@@ -244,16 +244,24 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
   def generateConstructor(did: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
     val pred = nameDef(did) <> "?"
     val matcher = "match-" <> nameDef(did)
-
+    val recordType = did.name.toString <> "$Type" <> did.id.toString
     // rethrowing an effect causes some unexpected shadowing since the constructor and effect names are called the same.
     val constructor = if (did.isInstanceOf[effekt.symbols.Effect]) "make-" <> nameDef(did) else nameDef(did)
 
     val definition =
-      parens("define-record-type" <+> parens(did.name.toString <+> constructor <+> pred) <>
+      parens("define-record-type" <+> parens(recordType <+> constructor <+> pred) <>
         nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
           parens("nongenerative" <+> nameDef(did))))
 
     var fresh = 0;
+
+    val showRecord = {
+      val tpe = '"' <> did.name.toString <> '"'
+      val fieldNames = fields.map { f => space <> parens(nameRef(f) <+> "r") <> space }
+      parens("define" <+> parens("show" <> recordType <+> "r") <>
+        nest(line <>
+          "(string-append" <+> tpe <+> "\"(\"" <> hsep(fieldNames, " \", \" ") <> "\")\"" <> ")"))
+    }
 
     val matcherDef =
       parens("define-matcher" <+> matcher <+> pred <>
@@ -262,7 +270,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
           brackets(s"p${fresh}" <+> nameDef(f))
         }))))
 
-    s";;; Record definition for ${did.name}" <> line <> definition <> line <> matcherDef
+    s";;; Record definition for ${did.name}" <> line <> definition <> line <> matcherDef <> line
   }
 
   def defineValue(name: Doc, binding: Doc): Doc =
