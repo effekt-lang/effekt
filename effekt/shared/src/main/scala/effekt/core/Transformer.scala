@@ -301,8 +301,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
-        case core.Run(core.Ret(e)) =>
-          rewrite(e)
+        case core.Run(core.Ret(e)) => rewrite(e)
+      }
+      override def stmt = {
+        case core.Ret(core.Run(s)) => rewrite(s)
       }
     }
     eliminateReturnRun.rewrite(s)
