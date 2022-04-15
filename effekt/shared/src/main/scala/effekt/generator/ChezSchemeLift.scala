@@ -85,6 +85,12 @@ object ChezSchemeLiftPrinter extends ChezSchemeBase {
     case Val(Wildcard(_), tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), "_", toDoc(body, false))
 
+    case Let(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
+
+    case Let(id, tpe, binding, body) =>
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <> group(nest(line <> toDoc(body, toplevel))))
+
     case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
     case Val(id, tpe, binding, body) =>
