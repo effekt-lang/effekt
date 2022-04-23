@@ -1,17 +1,17 @@
 package effekt
 
 import effekt.source._
+import effekt.context.{ Context, IOModuleDB }
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
-
 import kiama.util.Messaging.{ Messages, message }
 import kiama.util.{ Console, REPL, Source, StringSource }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
 
-  private implicit lazy val context = driver.context
+  private implicit lazy val context: Context with IOModuleDB = driver.context
 
   override val messaging = new ColoredMessaging(positions)
 

@@ -4,7 +4,9 @@ import java.io.File
 
 import effekt.util.paths.file
 import kiama.util.REPLConfig
+
 import org.rogach.scallop.ScallopOption
+import org.rogach.scallop.{ fileConverter, fileListConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
