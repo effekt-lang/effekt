@@ -76,7 +76,7 @@ package object symbols {
      * The dependencies of a module might change, which triggers frontend on the same module
      * again. It is the same, since the source and AST did not change.
      */
-    def export(
+    def exports(
       imports: List[Module],
       terms: Map[String, Set[TermSymbol]],
       types: Map[String, TypeSymbol]

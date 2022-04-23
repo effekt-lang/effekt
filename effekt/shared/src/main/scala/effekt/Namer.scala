@@ -53,7 +53,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
     resolveGeneric(decl)
 
-    Context.module.export(imports, scope.terms.toMap, scope.types.toMap)
+    Context.module.exports(imports, scope.terms.toMap, scope.types.toMap)
     decl
   }
 
