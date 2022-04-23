@@ -20,7 +20,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.3",
+  scalaVersion := "3.1.0",
   scalacOptions ++= Seq(
     "-encoding", "utf8",
     "-deprecation",
@@ -30,8 +30,7 @@ lazy val commonSettings = Seq(
     "-feature",
     "-language:existentials",
     "-language:higherKinds",
-    "-language:implicitConversions",
-    "-Ypatmat-exhaust-depth", "40"
+    "-language:implicitConversions"
   ),
   scalariformPreferences := scalariformPreferences.value
     .setPreference(AlignSingleLineCaseStatements, true)
@@ -45,7 +44,7 @@ enablePlugins(ScalaJSPlugin)
 
 lazy val replDependencies = Seq(
   "jline" % "jline" % "2.14.6",
-  "org.rogach" %% "scallop" % "3.4.0",
+  "org.rogach" %% "scallop" % "4.1.0",
 )
 
 lazy val lspDependencies = Seq(
