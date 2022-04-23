@@ -83,7 +83,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
   )
   .settings(commonSettings)
   .dependsOn(kiama)
-  .enablePlugins(NativeImagePlugin)
+  // .enablePlugins(NativeImagePlugin)
   .jvmSettings(
     libraryDependencies ++= (replDependencies ++ lspDependencies ++ testingDependencies),
 
@@ -102,15 +102,15 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // Options to compile Effekt with native-image
     // -------------------------------------------
-    nativeImageOptions ++= Seq(
-      "--no-fallback",
-      "--initialize-at-build-time",
-      "--report-unsupported-elements-at-runtime",
-      "-H:+ReportExceptionStackTraces",
-      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
-      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
-      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
-    ),
+    //    nativeImageOptions ++= Seq(
+    //      "--no-fallback",
+    //      "--initialize-at-build-time",
+    //      "--report-unsupported-elements-at-runtime",
+    //      "-H:+ReportExceptionStackTraces",
+    //      "-H:IncludeResourceBundles=jline.console.completer.CandidateListCompletionHandler",
+    //      "-H:ReflectionConfigurationFiles=../../native-image/reflect-config.json",
+    //      "-H:DynamicProxyConfigurationFiles=../../native-image/dynamic-proxies.json"
+    //    ),
 
 
     // Assembling one big jar-file and packaging it
