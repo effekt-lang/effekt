@@ -54,7 +54,7 @@ lazy val lspDependencies = Seq(
 )
 
 lazy val testingDependencies = Seq(
-  "org.scala-sbt" %% "io" % "1.3.1" % "test",
+  "org.scala-sbt" %% "io" % "1.6.0" % "test",
   "org.scalatest" % "scalatest_2.13" % "3.1.1" % "test"
 )
 
