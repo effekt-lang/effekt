@@ -145,6 +145,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
           C.withCapabilities(effs) { caps =>
             source.BlockArg(ps ++ caps, rewrite(body))
           }
+        case _ => Context.panic("Invalid combination of arguments and parameter types")
       }
     }
 

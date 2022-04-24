@@ -68,6 +68,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       case l: List[ValueParam @unchecked] =>
         val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
         s"($vps)"
+      case _ => sys error "Parameter lists are either singleton block params or a list of value params."
     }.mkString
 
     s"$kw ${f.name}$tps$ps${ret.map { tpe => s": $tpe" }.getOrElse("")}"

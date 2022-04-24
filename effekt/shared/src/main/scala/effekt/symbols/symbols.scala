@@ -218,8 +218,9 @@ package object symbols {
       val BlockType(_, params, Effectful(ret, effs)) = tpe
       // copy and paste from BlockType.toString
       val ps = params.map {
-        case List(b: BlockType)             => s"{${b.toString}}"
+        case List(b: BlockType) => s"{${b.toString}}"
         case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
       }.mkString("")
 
       val effects = effs.toList
@@ -266,8 +267,9 @@ package object symbols {
   case class BlockType(tparams: List[TypeVar], params: Sections, ret: Effectful) extends InterfaceType {
     override def toString: String = {
       val ps = params.map {
-        case List(b: BlockType)             => s"{${b.toString}}"
+        case List(b: BlockType) => s"{${b.toString}}"
         case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
       }.mkString("")
 
       tparams match {
