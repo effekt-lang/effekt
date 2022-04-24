@@ -20,7 +20,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.3",
+  scalaVersion := "3.1.2",
   scalacOptions ++= Seq(
     "-encoding", "utf8",
     "-deprecation",
