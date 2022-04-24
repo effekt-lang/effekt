@@ -468,6 +468,9 @@ object Tree {
 
       case Hole(stmts) =>
         Hole(rewrite(stmts))
+
+      case Lambda(id, params, body) =>
+        Lambda(id, params, rewrite(body))
     }
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {

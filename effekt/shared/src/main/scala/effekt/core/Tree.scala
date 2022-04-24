@@ -136,6 +136,7 @@ object Tree {
         PureApp(rewrite(b), targs, args map rewrite)
       case Select(target, field) =>
         Select(rewrite(target), field)
+      case Closure(b)    => Closure(rewrite(b))
       case v: ValueVar   => v
       case l: Literal[_] => l
     }
@@ -188,6 +189,8 @@ object Tree {
         Member(rewrite(b), field)
       case Extern(params, body) =>
         Extern(params map rewrite, body)
+      case Unbox(e) =>
+        Unbox(rewrite(e))
       case b: BlockVar => b
     }
     def rewrite(e: Pattern): Pattern = e match {

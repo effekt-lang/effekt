@@ -215,6 +215,7 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
 
         // we are using the capability, so we should only run in their region
         case (param, arg: CapabilityArg) => reg ++= Region(arg.definition)
+        case _ => Context.panic("Unreachable case")
       }
 
       // check constraints again after substitution
@@ -241,6 +242,8 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
         Context.at(tree) {
           Context.abort(s"Region mismatch: expected $exp but got $got")
         }
+
+      case RegionEq(_, _, _) => Context.panic("All region variables should've been resolved by now.")
     }
 
   def bindRegions(params: List[ParamSection])(implicit C: Context): RegionSet = {
@@ -352,13 +355,14 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
     case RegionEq(RegionSet(exp), RegionSet(got), tree) => at(tree) {
       abort(s"Region mismatch: expected $exp but got $got")
     }
+    case RegionEq(_, _, _) => panic("All region variables should've been resolved by now.")
   }
 
   /**
    * If unification is successful returns a new list of remaining constraints: Right(List[RegionEq])
    * If unification fails, returns the conflicting constraint.
    */
-  private def unifyAndSubstitute(cs: List[RegionEq]): Either[RegionEq, List[RegionEq]] = cs.distinct match {
+  private def unifyAndSubstitute(cs: List[RegionEq]): Either[RegionEq, List[RegionEq]] = (cs.distinct: @unchecked) match {
 
     // if both are instantiated -> compare their sets
     case (r @ RegionEq(RegionSet(x), RegionSet(y), _)) :: rest =>
