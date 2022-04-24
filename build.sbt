@@ -150,6 +150,11 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     generateLicenses := {
       Process("mvn license:download-licenses license:add-third-party").!!
+
+      val kiamaFolder = (ThisBuild / baseDirectory).value / "kiama"
+      val licenseFolder = (ThisBuild / baseDirectory).value / "licenses"
+      IO.copyFile(kiamaFolder / "LICENSE", licenseFolder / "kiama-license.txt")
+      IO.copyFile(kiamaFolder / "README.md", licenseFolder / "kiama-readme.txt")
     },
 
     updateVersions := {
