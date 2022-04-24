@@ -251,21 +251,25 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // (2) check exhaustivity
         checkExhaustivity(tpe, clauses.map { _.pattern })
 
-        // (3) infer types for all clauses
-        val (fstTpe, _) :: tpes = clauses.map {
-          case c @ source.MatchClause(p, body) =>
-            Context.define(checkPattern(tpe, p)) in {
-              (checkStmt(body, expected), body)
-            }
-        }
+        // Clauses could in general be empty if there are no constructors
+        // In that case the scrutinee couldn't have been constructed and
+        // we can unify with everything.
+        var resTpe: ValueType = THole
+        var resEff = effs
 
-        // (4) unify clauses and collect effects
-        val (tpeCases / effsCases) = tpes.foldLeft(fstTpe) {
-          case (expected / effs, (clauseTpe / clauseEffs, tree)) =>
-            Context.at(tree) { Context.unify(expected, clauseTpe) }
-            expected / (effs ++ clauseEffs)
+        clauses.foreach {
+          case source.MatchClause(p, body) =>
+            // (3) infer types for all clauses
+            val (clTpe / clEff) = Context.define(checkPattern(tpe, p)) in { checkStmt(body, expected) }
+
+            // (4) unify clauses and collect effects
+            Context.at(body) { Context.unify(resTpe, clTpe) }
+            resEff = resEff ++ clEff
+
+            // replace if type is more specific
+            if (resTpe == THole) { resTpe = clTpe }
         }
-        tpeCases / (effsCases ++ effs)
+        resTpe / resEff
 
       case source.Hole(stmt) =>
         val tpe / effs = checkStmt(stmt, None)
@@ -432,7 +436,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case d @ source.FunDef(id, tparams, params, ret, body) =>
         val sym = d.symbol
         Context.define(sym.params)
-        sym.ret match {
+        (sym.ret: @unchecked) match {
           case Some(tpe / funEffs) =>
             val (_ / effs) = body checkAgainst tpe
             Context.wellscoped(effs)
@@ -521,6 +525,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
             }
             (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
         }.toMap
+      case (_, _) => Context.panic("Internal Compiler Error: cannot match arguments with the expected types")
     }.toMap
   }
 
