@@ -96,10 +96,10 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
     // show duration of the tests
-    testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
+    Test / testOptions += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
 
     // disable tests for assembly to speed up build
-    test in assembly := {},
+    assembly / test := {},
 
 
     // Options to compile Effekt with native-image
@@ -117,21 +117,21 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // Assembling one big jar-file and packaging it
     // --------------------------------------------
-    mainClass in assembly := Some("effekt.Server"),
+    assembly / mainClass := Some("effekt.Server"),
 
-    assemblyJarName in assembly := "effekt.jar",
+    assembly / assemblyJarName := "effekt.jar",
 
     // we use the lib folder as resource directory to include it in the JAR
-    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "libraries",
+    Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "libraries",
 
-    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
+    Compile / unmanagedResourceDirectories += (ThisBuild / baseDirectory).value / "licenses",
 
 
     assembleBinary := {
       val jarfile = assembly.value
 
       // prepend shebang to make jar file executable
-      val binary = (baseDirectory in ThisBuild).value / "bin" / "effekt"
+      val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
       IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
@@ -173,7 +173,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
   )
 
 lazy val versionGenerator = Def.task {
-  val sourceDir = (sourceManaged in Compile).value
+  val sourceDir = (Compile / sourceManaged).value
   val sourceFile = sourceDir / "effekt" / "util" / "Version.scala"
 
   IO.write(sourceFile,
@@ -193,10 +193,10 @@ lazy val versionGenerator = Def.task {
  */
 lazy val stdLibGenerator = Def.task {
 
-  val baseDir = (baseDirectory in ThisBuild).value / "libraries" / "js" / "monadic"
+  val baseDir = (ThisBuild / baseDirectory).value / "libraries" / "js" / "monadic"
   val resources = baseDir ** "*.*"
 
-  val sourceDir = (sourceManaged in Compile).value
+  val sourceDir = (Compile / sourceManaged).value
   val sourceFile = sourceDir / "Resources.scala"
 
   if (!sourceFile.exists() || sourceFile.lastModified() < baseDir.lastModified()) {
