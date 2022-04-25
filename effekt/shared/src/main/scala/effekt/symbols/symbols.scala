@@ -37,7 +37,11 @@ package object symbols {
     decl: ModuleDecl,
     source: Source
   ) extends Symbol {
-    val name = Name.module(decl.path)
+
+    val name = {
+      val segments = decl.path.split("/")
+      QualifiedName(segments.tail.toList, segments.head)
+    }
 
     def path = decl.path
 
@@ -99,7 +103,7 @@ package object symbols {
     override def toString = s"@${tpe.eff.name}"
   }
 
-  case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name("resume", module) }
+  case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name.local("resume") }
 
   /**
    * Right now, parameters are a union type of a list of value params and one block param.
@@ -148,7 +152,7 @@ package object symbols {
    * Anonymous symbols used to represent scopes / regions in the region checker
    */
   sealed trait Anon extends TermSymbol {
-    val name = Name("<anon>")
+    val name = NoName
     def decl: source.Tree
   }
 
@@ -184,8 +188,8 @@ package object symbols {
   /**
    * Introduced by Transformer
    */
-  case class Wildcard(module: Module) extends ValueSymbol { val name = Name("_", module) }
-  case class Tmp(module: Module) extends ValueSymbol { val name = Name("tmp" + Symbol.fresh.next(), module) }
+  case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }
+  case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
   /**
    * A symbol that represents a termlevel capability

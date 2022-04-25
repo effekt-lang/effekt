@@ -3,7 +3,7 @@ package effekt.generator
 import effekt.context.Context
 import effekt.context.assertions._
 import effekt.core._
-import effekt.symbols.{ Module, Name, Symbol, Wildcard }
+import effekt.symbols.{ Module, Name, NoName, LocalName, QualifiedName, Symbol, Wildcard }
 import effekt.symbols
 
 import kiama.output.ParenPrettyPrinter
@@ -13,7 +13,6 @@ import kiama.util.Source
 import effekt.util.paths._
 
 import scala.language.implicitConversions
-import effekt.symbols.NestedName
 
 class JavaScript extends Generator {
 
@@ -114,7 +113,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall(
         "module.exports = Object.assign",
         jsModuleName(path),
-        jsObject(exports.map { e => toDoc(e.name) -> toDoc(e.name) })
+        jsObject(exports.map { e => nameDef(e) -> nameDef(e) })
       )
 
     case other =>
@@ -158,22 +157,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
-  // we prefix op$ to effect operations to avoid clashes with reserved names like `get` and `set`
-  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _                     => toDoc(id.name)
-  }
+  def nameDef(id: Symbol)(implicit C: Context): Doc = jsEscape(id.name.toString)
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _ => id.name match {
-      case name: NestedName if name.parent != C.module.name => link(name, jsModuleName(name.parent) + "." + name.localName)
-      case name => toDoc(name)
-    }
-  }
+  def nameRef(id: Symbol)(implicit C: Context): Doc = jsEscape(jsNameRef(id.name))
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "$effekt.unit"
@@ -187,7 +173,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     }, comma))
 
     case Select(b, field) =>
-      toDoc(b) <> "." <> nameDef(field)
+      toDoc(b) <> "." <> nameRef(field)
 
     case Closure(e) => toDoc(e)
   })
@@ -282,9 +268,19 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case other => "return" <+> toDocExpr(other)
   }
 
-  def jsModuleName(path: String): String = jsModuleName(Name.module(path))
+  val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this")
+  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
-  def jsModuleName(name: Name): String = "$" + name.qualifiedName.replace('.', '_')
+  def jsNameRef(name: Name)(implicit C: Context): String = name match {
+    case LocalName(name) => name
+    case QualifiedName(Nil, name) => name
+    // TODO this is rather fragile...
+    case QualifiedName(path, name) if C.module.path == path.mkString("/") => name
+    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + name
+    case NoName => sys error "Trying to generate code for an anonymous entity"
+  }
+
+  def jsModuleName(path: String): String = "$" + path.replace('/', '_')
 
   def jsLambda(params: List[Doc], body: Doc) =
     parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))

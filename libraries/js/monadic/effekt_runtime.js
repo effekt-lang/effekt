@@ -46,10 +46,10 @@ const $runtime = (function() {
   function Cell(init) {
     var _value = init;
     return {
-      "op$get": function() {
+      "$get": function() {
         return $effekt.pure(_value)
       },
-      "op$put": function(v) {
+      "put": function(v) {
         _value = v;
         return $effekt.pure($effekt.unit)
       },

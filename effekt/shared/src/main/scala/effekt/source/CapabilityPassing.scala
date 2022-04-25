@@ -191,7 +191,7 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
     }
     // additional block parameters for capabilities
     val params = caps.map { sym =>
-      val id = IdDef(sym.name.localName)
+      val id = IdDef(sym.name.name)
       assignSymbol(id, sym)
       source.CapabilityParam(id, source.CapabilityType(sym.effect))
     }
@@ -204,7 +204,7 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
 
   private[source] def capabilityReferenceFor(e: Effect): IdRef =
     capabilities.get(e).map { c =>
-      val id = IdRef(c.name.localName)
+      val id = IdRef(c.name.name)
       assignSymbol(id, c)
       //Var(id)
       id
