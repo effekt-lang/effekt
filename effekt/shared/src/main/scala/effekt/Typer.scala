@@ -562,7 +562,7 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
               Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
             }
           }
-          val r = checkCallTo(call, sym.name.localName, tpe, targs, args, expected)
+          val r = checkCallTo(call, sym.name.name, tpe, targs, args, expected)
           (r, C.backupTyperstate())
         }
       }
@@ -617,7 +617,12 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
         // reraise all and abort
         val msgs = failed.flatMap {
           // TODO also print signature!
-          case (block, msgs) => msgs.map { m => m.copy(label = s"Possible overload ${block.name.qualifiedName}: ${m.label}") }
+          case (block, msgs) =>
+            val fullname = block.name match {
+              case q: QualifiedName => q.qualifiedName
+              case n                => n.name
+            }
+            msgs.map { m => m.copy(label = s"Possible overload ${fullname}: ${m.label}") }
         }.toVector
 
         C.reraise(msgs)

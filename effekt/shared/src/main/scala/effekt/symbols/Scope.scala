@@ -43,20 +43,24 @@ object scopes {
     def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
       types.update(key, sym)
 
-    def enter: Scope = BlockScope(this)
+    def enterLocal: Scope = LocalScope(this)
+    // TODO rename global to "static" scope
+    def enterGlobal(implicit C: Context): Scope = GlobalScope(this)
 
     def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
       tms.foreach { case (n, syms) => syms.foreach { sym => define(n, sym) } }
       tps.foreach { case (n, sym) => define(n, sym) }
     }
 
-    def enterWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
-      val scope = BlockScope(this)
+    def enterGlobalWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+      val scope = GlobalScope(this)
       scope.defineAll(tms, tps)
       scope
     }
 
     def leave(implicit C: Context): Scope
+
+    def isGlobal: Boolean = true
   }
 
   case class EmptyScope() extends Scope {
@@ -78,7 +82,9 @@ object scopes {
       C.abort("Internal Compiler Error: Leaving top level scope")
   }
 
-  case class BlockScope(parent: Scope) extends Scope {
+  trait BlockScope extends Scope {
+
+    def parent: Scope
 
     def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol =
       terms.get(key).map { bindings =>
@@ -114,6 +120,16 @@ object scopes {
     override def toString = s"BlockScope(${terms.keySet.mkString(", ")}) :: $parent"
   }
 
+  case class LocalScope(parent: Scope) extends BlockScope {
+    override def enterGlobal(implicit C: Context): Scope =
+      C.abort("Cannot open a global scope inside a local scope")
+
+    override def isGlobal: Boolean = false
+  }
+
+  // A global namespace
+  case class GlobalScope(parent: Scope) extends BlockScope
+
   def toplevel(types: Map[String, TypeSymbol])(implicit C: Context): Scope =
-    EmptyScope().enterWith(Map.empty, types)
+    EmptyScope().enterGlobalWith(Map.empty, types)
 }

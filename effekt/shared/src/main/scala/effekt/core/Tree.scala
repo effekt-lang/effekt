@@ -104,7 +104,7 @@ case class Here() extends Scope
 case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
-case class ScopeId() extends Symbol { val name = Name(s"ev${id}", effekt.symbols.builtins.prelude) }
+case class ScopeId() extends Symbol { val name = Name.local(s"ev${id}") }
 
 object Tree {
 
