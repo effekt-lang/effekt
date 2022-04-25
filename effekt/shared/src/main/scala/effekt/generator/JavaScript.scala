@@ -57,7 +57,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case BlockLit(ps, body) =>
       jsLambda(ps map toDoc, toDoc(body))
     case Member(b, id) =>
-      toDoc(b) <> "." <> nameDef(id)
+      toDoc(b) <> "." <> nameRef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
     case Unbox(e) => toDoc(e)
@@ -157,9 +157,19 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
-  def nameDef(id: Symbol)(implicit C: Context): Doc = jsEscape(id.name.toString)
+  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
+    case _: symbols.Capability => id.name.toString + "_" + id.id
+    case _: symbols.EffectOp   => "op$" + id.name.toString
+    case _                     => jsEscape(id.name.toString)
+  }
 
-  def nameRef(id: Symbol)(implicit C: Context): Doc = jsEscape(jsNameRef(id.name))
+  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
+    case _: symbols.Effect     => toDoc(id.name)
+    case _: symbols.Capability => id.name.toString + "_" + id.id
+    case _: symbols.EffectOp   => "op$" + id.name.toString
+    case _: symbols.Field      => jsEscape(id.name.name)
+    case _                     => jsEscape(jsNameRef(id.name))
+  }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
     case UnitLit()     => "$effekt.unit"
@@ -276,7 +286,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case QualifiedName(Nil, name) => name
     // TODO this is rather fragile...
     case QualifiedName(path, name) if C.module.path == path.mkString("/") => name
-    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + name
+    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + jsEscape(name)
     case NoName => sys error "Trying to generate code for an anonymous entity"
   }
 
