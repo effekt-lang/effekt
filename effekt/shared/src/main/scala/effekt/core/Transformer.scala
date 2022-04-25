@@ -48,17 +48,6 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       val rec = d.symbol
       core.Record(rec, rec.fields, rest)
 
-    case v @ source.ValDef(id, _, binding) =>
-      Val(v.symbol, transform(binding), rest)
-
-    // This phase introduces capabilities for state effects
-    case v @ source.VarDef(id, _, binding) =>
-      val sym = v.symbol
-      val state = C.state(sym)
-      val b = transform(binding)
-      val params = List(core.BlockParam(state.param, state.param.tpe))
-      State(state.effect, C.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, rest))
-
     case source.ExternType(id, tparams) =>
       rest
 
@@ -83,8 +72,23 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
   }
 
   def transform(tree: source.Stmt)(implicit C: Context): Stmt = withPosition(tree) {
-    case source.DefStmt(d, rest) =>
-      transform(d, transform(rest))
+    case source.MutualStmt(defs, rest) =>
+      // check whether the traversal is correct in this order!
+      val traverse = defs.foldLeft(() => transform(rest)) {
+        case (rest, d) => () => transform(d, rest())
+      }
+      traverse()
+
+    case v @ source.ValDef(id, _, binding, rest) =>
+      Val(v.symbol, transform(binding), transform(rest))
+
+    // This phase introduces capabilities for state effects
+    case v @ source.VarDef(id, _, binding, rest) =>
+      val sym = v.symbol
+      val state = C.state(sym)
+      val b = transform(binding)
+      val params = List(core.BlockParam(state.param, state.param.tpe))
+      State(state.effect, C.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, transform(rest)))
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>

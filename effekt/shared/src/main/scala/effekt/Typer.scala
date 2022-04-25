@@ -370,10 +370,35 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
 
   def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): Effectful =
     checkAgainst(stmt, expected) {
-      case source.DefStmt(b, rest) =>
-        val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
+      case source.MutualStmt(defs, rest) =>
+        val effDefs = Context in {
+          defs foreach precheckDef
+          var effs = Pure
+          defs foreach { d =>
+            val (_ / eff) = synthDef(d)
+            effs = effs ++ eff
+          }
+          effs
+        }
         val (r / effStmt) = checkStmt(rest, expected)
-        r / (effBinding ++ effStmt)
+        r / (effDefs ++ effStmt)
+
+      case d @ source.ValDef(id, annot, binding, rest) =>
+        val (t / effBinding) = d.symbol.tpe match {
+          case Some(t) =>
+            binding checkAgainst t
+          case None => checkStmt(binding, None)
+        }
+        Context.define(d.symbol, t)
+        checkStmt(rest, expected)
+
+      case d @ source.VarDef(id, annot, binding, rest) =>
+        val (t / effBinding) = d.symbol.tpe match {
+          case Some(t) => binding checkAgainst t
+          case None    => checkStmt(binding, None)
+        }
+        Context.define(d.symbol, t)
+        checkStmt(rest, expected)
 
       // <expr> ; <stmt>
       case source.ExprStmt(e, rest) =>
@@ -455,23 +480,6 @@ class Typer extends Phase[ModuleDecl, ModuleDecl] {
       case d @ source.EffDef(id, tparams, ops) =>
         Context.withEffect(d.symbol)
         TUnit / Pure
-
-      case d @ source.ValDef(id, annot, binding) =>
-        val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) =>
-            binding checkAgainst t
-          case None => checkStmt(binding, None)
-        }
-        Context.define(d.symbol, t)
-        t / effBinding
-
-      case d @ source.VarDef(id, annot, binding) =>
-        val (t / effBinding) = d.symbol.tpe match {
-          case Some(t) => binding checkAgainst t
-          case None    => checkStmt(binding, None)
-        }
-        Context.define(d.symbol, t)
-        t / effBinding
 
       case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
         Context.define(d.symbol.params)

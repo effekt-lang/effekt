@@ -62,12 +62,6 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
    */
   def preresolve(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
 
-    case d @ source.ValDef(id, annot, binding) =>
-      ()
-
-    case d @ source.VarDef(id, annot, binding) =>
-      ()
-
     case f @ source.FunDef(id, tparams, params, annot, body) =>
       val uniqueId = Context.freshNameFor(id)
       // we create a new scope, since resolving type params introduces them in this scope
@@ -173,11 +167,11 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       decls foreach { preresolve }
       resolveAll(decls)
 
-    case source.DefStmt(d, rest) =>
+    case source.MutualStmt(d, rest) =>
       // resolve declarations but do not resolve bodies
-      preresolve(d)
+      d foreach preresolve
       // resolve bodies
-      resolveGeneric(d)
+      d foreach resolveGeneric
       resolveGeneric(rest)
 
     case source.ValueParam(id, tpe) =>
@@ -186,15 +180,17 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case source.BlockParam(id, tpe) =>
       Context.define(id, BlockParam(Name.local(id), resolve(tpe)))
 
-    case d @ source.ValDef(id, annot, binding) =>
+    case d @ source.ValDef(id, annot, binding, rest) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
-      Context.define(id, ValBinder(C.nameFor(id), tpe, d))
+      Context.define(id, ValBinder(C.nameFor(id), tpe))
+      resolveGeneric(rest)
 
-    case d @ source.VarDef(id, annot, binding) =>
+    case d @ source.VarDef(id, annot, binding, rest) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
-      Context.define(id, VarBinder(C.nameFor(id), tpe, d))
+      Context.define(id, VarBinder(C.nameFor(id), tpe))
+      resolveGeneric(rest)
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, ret, body) =>

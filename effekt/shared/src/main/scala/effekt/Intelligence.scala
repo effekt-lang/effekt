@@ -72,11 +72,8 @@ trait Intelligence {
   } yield decl
 
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
-    case u: UserFunction => Some(u.decl)
-    case u: Binder       => Some(u.decl)
-    case d: EffectOp     => C.definitionTreeOption(d.effect)
-    case a: Anon         => Some(a.decl)
-    case u               => C.definitionTreeOption(u)
+    case d: EffectOp => C.definitionTreeOption(d.effect)
+    case u           => C.definitionTreeOption(u)
   }
 
   // For now, only show the first call target

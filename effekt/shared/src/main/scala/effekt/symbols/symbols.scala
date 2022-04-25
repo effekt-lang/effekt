@@ -173,10 +173,9 @@ package object symbols {
    */
   sealed trait Binder extends ValueSymbol {
     def tpe: Option[ValueType]
-    def decl: Def
   }
-  case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder
-  case class VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder
+  case class ValBinder(name: Name, tpe: Option[ValueType]) extends Binder
+  case class VarBinder(name: Name, tpe: Option[ValueType]) extends Binder
 
   /**
    * Synthetic symbol representing potentially multiple call targets

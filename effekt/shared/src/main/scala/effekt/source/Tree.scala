@@ -146,7 +146,7 @@ sealed trait Reference extends Named {
  *
  * Only a subset of definitions (FunDef and EffDef) is allowed on the toplevel
  *
- * A module declartion, the path should be an Effekt include path, not a system dependent file path
+ * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
 case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
@@ -180,12 +180,6 @@ sealed trait Def extends Definition {
 }
 case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
-}
-case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
-  type symbol = symbols.ValBinder
-}
-case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
-  type symbol = symbols.VarBinder
 }
 case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.UserEffect
@@ -234,10 +228,17 @@ case class ExternInclude(path: String) extends Def {
 }
 
 sealed trait Stmt extends Tree
-case class DefStmt(d: Def, rest: Stmt) extends Stmt
+case class MutualStmt(defs: List[Def], rest: Stmt) extends Stmt
+case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt, rest: Stmt) extends Stmt with Definition {
+  type symbol = symbols.ValBinder
+}
+case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt, rest: Stmt) extends Stmt with Definition {
+  type symbol = symbols.VarBinder
+}
+
+case class BlockStmt(stmts: Stmt) extends Stmt
 case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
 case class Return(d: Expr) extends Stmt
-case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
@@ -479,12 +480,6 @@ object Tree {
       case FunDef(id, tparams, params, ret, body) =>
         FunDef(id, tparams, params, ret, rewrite(body))
 
-      case ValDef(id, annot, binding) =>
-        ValDef(id, annot, rewrite(binding))
-
-      case VarDef(id, annot, binding) =>
-        VarDef(id, annot, rewrite(binding))
-
       case d: EffDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d
@@ -500,8 +495,14 @@ object Tree {
     def rewrite(t: Stmt)(implicit C: Context): Stmt = visit(t) {
       case s if stmt.isDefinedAt(s) => stmt(C)(s)
 
-      case DefStmt(d, rest) =>
-        DefStmt(rewrite(d), rewrite(rest))
+      case MutualStmt(d, rest) =>
+        MutualStmt(d map rewrite, rewrite(rest))
+
+      case ValDef(id, annot, binding, rest) =>
+        ValDef(id, annot, rewrite(binding), rewrite(rest))
+
+      case VarDef(id, annot, binding, rest) =>
+        VarDef(id, annot, rewrite(binding), rewrite(rest))
 
       case ExprStmt(e, rest) =>
         ExprStmt(rewrite(e), rewrite(rest))

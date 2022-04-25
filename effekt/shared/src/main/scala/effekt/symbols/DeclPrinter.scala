@@ -23,7 +23,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       val effs = ops.map { op => format("def", op, op.ret.get) }
       "effect" <+> name.toString <> tps <+> braces(nest(line <> vsep(effs)) <> line)
 
-    case b @ ValBinder(name, tps, decl) =>
+    case b @ ValBinder(name, tps) =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
       s"val ${name}: ${tpe}"
 

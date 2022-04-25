@@ -79,11 +79,12 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val `include` = keyword("include")
   lazy val `pure` = keyword("pure")
   lazy val `record` = keyword("record")
+  lazy val `return` = keyword("return")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "for"
+    "match", "module", "import", "extern", "fun", "for", "return"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -219,8 +220,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
    * Definitions
    */
   lazy val definition: P[Def] =
-    ( valDef
-    | funDef
+    ( funDef
     | effectDef
     | typeDef
     | effectAliasDef
@@ -342,9 +342,10 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
   lazy val stmts: P[Stmt] =
     ( withStmt
     | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
-    | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (expr <~ `;`) ^^ Return.apply
+    | (some(definition) <~ `;`) ~ stmts ^^ MutualStmt.apply
+    | (`val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~/> stmts) ^^ ValDef.apply
+    | (`var` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt)) ~ (`;` ~/> stmts) ^^ VarDef.apply
+    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply
     | matchDef
     | failure("Expected a statement")
     )
@@ -362,12 +363,6 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
           Return(Call(tgt, tps, args :+ BlockArg(List(ValueParams(Nil)), body)) withPositionOf id)
        }
     )
-
-  lazy val valDef: P[ValDef] =
-     `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
-
-  lazy val varDef: P[VarDef] =
-     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ VarDef.apply
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =

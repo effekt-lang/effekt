@@ -176,11 +176,11 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       val Effectful(symbols.FunType(tpe, funReg), _) = Context.inferredTypeOf(e)
       reg ++ funReg.asRegionSet
 
-    case VarDef(id, _, binding) =>
-      Context.annotateRegions(id.symbol, Context.dynamicRegion)
-      val reg = check(binding)
+    case VarDef(id, _, binding, rest) =>
       // associate the mutable variable binding with the current scope
-      reg
+      Context.annotateRegions(id.symbol, Context.dynamicRegion)
+      check(binding)
+      check(rest)
 
     case Var(id) if id.symbol.isInstanceOf[symbols.VarBinder] =>
       Context.regionOf(id.symbol).asRegionSet
@@ -453,7 +453,7 @@ trait RegionReporter { self: Context =>
       }
       TraceItem(s"Function ${id.name} is called, which closes over '${reg}'", tgt, rest) :: Nil
 
-    case DefStmt(d, rest) =>
+    case MutualStmt(defs, rest) =>
       explainEscape(reg, rest, seen)
 
     // here we could follow value and variable binders
