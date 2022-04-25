@@ -30,9 +30,8 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
 
   val phaseName = "namer"
 
-  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = {
+  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
     Some(resolve(mod))
-  }
 
   def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
     var scope: Scope = toplevel(builtins.rootTypes)
@@ -86,7 +85,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       Context.define(id, sym)
 
     case source.EffDef(id, tparams, ops) =>
-      val effectName = Name.qualified(id)
+      val effectName = C.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
         val tps = tparams map resolve
@@ -100,13 +99,13 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
         tps.foreach { t => Context.bind(t) }
-        TypeAlias(Name.qualified(id), tps, resolve(tpe))
+        TypeAlias(C.nameFor(id), tps, resolve(tpe))
       }
       Context.define(id, alias)
 
     case source.EffectDef(id, effs) =>
       val alias = Context scoped {
-        EffectAlias(Name.qualified(id), Nil, resolve(effs))
+        EffectAlias(C.nameFor(id), Nil, resolve(effs))
       }
       Context.define(id, alias)
 
@@ -190,12 +189,12 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
-      Context.define(id, ValBinder(Name.local(id), tpe, d))
+      Context.define(id, ValBinder(C.nameFor(id), tpe, d))
 
     case d @ source.VarDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
       resolveGeneric(binding)
-      Context.define(id, VarBinder(Name.local(id), tpe, d))
+      Context.define(id, VarBinder(C.nameFor(id), tpe, d))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, ret, body) =>
@@ -212,8 +211,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
       val effectSym = Context.resolveType(id).asUserEffect
       effectSym.ops = ops.map {
         case source.Operation(id, tparams, params, ret) =>
-          // effect operations are always selected, no functions are generated, so we use a local name here
-          val name = Name.local(id)
+          val name = C.nameFor(id)
 
           Context scoped {
             // the parameters of the effect are in scope
@@ -542,15 +540,13 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def nameFor(id: String): Name = {
     if (scope.isGlobal) Name.qualified(id, module)
-    else LocalName(id)
+    else Name.local(id)
   }
 
   // TODO we only want to add a seed to a name under the following conditions:
   // - there is already another instance of that name in the same
   //   namespace.
   // - if it is not already fully qualified
-  private[namer] def freshLocalName(id: Id): LocalName = LocalName(freshTermName(id))
-
   private[namer] def freshNameFor(id: Id): Name = nameFor(freshTermName(id))
 
   private[namer] def freshTermName(id: Id): String = {
