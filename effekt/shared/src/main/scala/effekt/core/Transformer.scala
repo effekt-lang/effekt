@@ -97,7 +97,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       transform(b)
   }
 
-  def transformLit[T](tree: source.Literal[T])(implicit C: Context): Literal[T] = withPosition(tree) {
+  def transformLit[T](tree: source.Literal[T])(implicit C: Context): Literal[T] = withPosition[source.Literal[T], Literal[T]](tree) {
     case source.UnitLit()         => UnitLit()
     case source.IntLit(value)     => IntLit(value)
     case source.BooleanLit(value) => BooleanLit(value)

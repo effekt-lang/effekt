@@ -219,8 +219,6 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
           brackets(toDoc(pattern) <+> b.params.foldRight(schemeLambda(Nil, toDoc(b.body, false))) {
             case (p, body) => schemeLambda(List(nameDef(p.id)), body)
           })
-
-        case (pattern, b) => sys error "Right hand side of a matcher needs to be a block definition"
       }
       schemeCall("pattern-match", toDoc(sc) :: parens(vsep(clauses, line)) :: Nil)
 

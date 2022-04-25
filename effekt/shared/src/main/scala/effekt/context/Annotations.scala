@@ -312,7 +312,6 @@ trait AnnotationsDB { self: Context =>
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: InterfaceType => Some(b)
-        case _                => None
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")
     }

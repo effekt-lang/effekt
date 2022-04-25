@@ -12,6 +12,7 @@ package kiama
 package util
 
 import org.rogach.scallop.ScallopConf
+import org.rogach.scallop.intConverter
 
 /**
  * Configurations for Kiama programs. `args` gives the command-line

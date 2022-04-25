@@ -47,14 +47,14 @@ object Trampolines {
           a match {
             case Done(v)       => f(v).resume
             case More(k)       => Left(() => k() flatMap f)
-            case FlatMap(b, g) => b.flatMap((x: Any) => g(x) flatMap f).resume
+            case FlatMap(b, g) => b.flatMap(x => g(x) flatMap f).resume
           }
       }
 
     def flatMap[B](f: A => Trampoline[B]): Trampoline[B] =
       this match {
         case FlatMap(a, g) =>
-          FlatMap(a, (x: Any) => g(x) flatMap f)
+          FlatMap(a, x => g(x) flatMap f)
         case x =>
           FlatMap(x, f)
       }
