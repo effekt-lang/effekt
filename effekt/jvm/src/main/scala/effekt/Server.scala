@@ -32,7 +32,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
    */
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     super.afterCompilation(source, config)
-    for (mod <- C.frontend(source); core <- C.middleend(source); js <- C.generate(source)) {
+    for (mod <- C.frontend(source); core <- C.middleend(source); js <- C.compileSeparate(source)) {
 
       if (C.config.server() && settingBool("showCore")) {
         publishProduct(source, "target", "effekt", prettyCore.format(core))

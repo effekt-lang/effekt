@@ -241,7 +241,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     val src = VirtualSource(ast, source)
 
     for {
-      _ <- context.generate(src)
+      _ <- context.compileSeparate(src)
       mod <- context.frontend(src)
     } driver.eval(mod)
 

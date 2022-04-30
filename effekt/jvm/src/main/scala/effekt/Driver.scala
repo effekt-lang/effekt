@@ -66,7 +66,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     C.setup(config)
 
     for {
-      doc <- C.generate(src)
+      doc <- C.compileSeparate(src)
       if config.interpret()
       mod <- C.frontend(src)
     } eval(mod)

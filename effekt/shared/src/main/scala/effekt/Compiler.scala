@@ -41,6 +41,10 @@ case class NameResolved(source: Source, tree: ModuleDecl, mod: symbols.Module) e
 // this might change when we switch to elaboration.
 case class Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
 case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl) extends PhaseResult
+// A compilation unit consisting of all transitive dependencies in topological ordering.
+case class CompilationUnit(main: CoreTransformed, dependencies: List[CoreTransformed]) extends PhaseResult {
+  val source = main.source
+}
 
 // TODO MAYBE PASS INPUTS AS PART OF CONTEXT???
 // TODO try not to mix Compiler and Context into one object.
@@ -94,11 +98,17 @@ trait Compiler {
   //
   //  }
 
-  /**
-   * Full compiler pipeline
-   */
-  val Compiler = Phase.cached("compiler") {
-    Frontend andThen Middleend // TODO andThen Backend
+  // TODO better name for Lower...
+  object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
+    val phaseName = "collect-dependencies"
+    def run(main: CoreTransformed)(implicit C: Context) =
+      val dependencies = main.mod.dependencies flatMap { dep =>
+        // We already ran the frontend on the dependencies (since they are discovered
+        // dynamically). The results are cached, so it doesn't hurt dramatically to run
+        // the frontend again. However, the indirection via dep.source is not very elegant.
+        (Frontend andThen Middleend)(dep.source)
+      }
+      Some(CompilationUnit(main, dependencies))
   }
 
   // Compiler Interface
@@ -111,15 +121,26 @@ trait Compiler {
   def frontend(source: Source)(implicit C: Context): Option[Module] =
     Frontend(source).map { res => res.mod }
 
+  // TODO deprecate
   def middleend(source: Source)(implicit C: Context): Option[core.ModuleDecl] =
-    Compiler(source).map { res => res.core }
-
-  // TODO Currently the backend is not cached at all
-  def generate(source: Source)(implicit C: Context): Option[Document] =
-    codeGenerator.apply(source)
+    (Frontend andThen Middleend)(source).map { res => res.core }
 
   /**
-   * Hook potentially used by the generators
+   * This is used from the JS implementation ([[effekt.LanguageServer]]) and also
+   * from the LSP server ([[effekt.Server]]) after compilation.
+   *
+   * TODO Currently the backend is not cached at all
+   */
+  def compileSeparate(source: Source)(implicit C: Context): Option[Document] =
+    (Frontend andThen Middleend andThen codeGenerator.compileSeparate).apply(source)
+
+  def compileWhole(source: Source)(implicit C: Context): Option[Unit] =
+    (Frontend andThen Middleend andThen LowerDependencies andThen codeGenerator.compileWhole).apply(source)
+
+  /**
+   * Hook that has to be used by the generators to write to files.
+   *
+   * For the compiler to be executable in the webbrowser, we need to virtualize the file system.
    */
   def saveOutput(doc: String, path: String)(implicit C: Context): Unit
 }
