@@ -63,18 +63,6 @@ package object symbols {
       case e: Effect => e
     })
 
-    // the transformed ast after frontend
-    private var _ast = decl
-    def ast = _ast
-
-    /**
-     * Should be called once after frontend
-     */
-    def setAst(ast: ModuleDecl): this.type = {
-      _ast = ast
-      this
-    }
-
     /**
      * It is actually possible, that exports is invoked on a single module multiple times:
      * The dependencies of a module might change, which triggers frontend on the same module

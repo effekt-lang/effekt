@@ -16,7 +16,7 @@ import effekt.util.paths._
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezSchemeMonadic extends Generator {
+object ChezSchemeMonadic extends Generator {
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
@@ -32,7 +32,7 @@ class ChezSchemeMonadic extends Generator {
     mod <- C.frontend(src)
     _ = C.checkMain(mod)
     deps = mod.dependencies.flatMap(dep => compile(dep))
-    core <- C.backend(src)
+    core <- C.middleend(src)
     result = ChezSchemeMonadicPrinter.compilationUnit(mod, core, deps)
     _ = C.saveOutput(result.layout, path(mod))
   } yield result
@@ -41,7 +41,7 @@ class ChezSchemeMonadic extends Generator {
    * Compiles only the given module, does not compile dependencies
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.backend(mod.source)
+    core <- C.middleend(mod.source)
     doc = ChezSchemeMonadicPrinter.format(core)
   } yield doc
 }

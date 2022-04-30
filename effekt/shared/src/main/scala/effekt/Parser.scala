@@ -1,22 +1,40 @@
 package effekt
 
 import effekt.context.Context
-import effekt.source._
+import effekt.source.*
+import effekt.util.{ SourceTask, VirtualSource }
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Source }
 
 import scala.language.implicitConversions
+
+object Parser extends Phase[Source, Parsed] {
+
+  val phaseName = "parser"
+
+  /**
+   * Note: The parser needs to be created freshly since otherwise the memo tables will maintain wrong results for
+   * new input sources. Even though the contents differ, two sources are considered equal since only the paths are
+   * compared.
+   */
+  def parser(implicit C: Context) = new EffektParsers(C.positions)
+
+  def run(source: Source)(implicit C: Context) = source match {
+    case VirtualSource(decl, _) => Some(decl)
+    case source =>
+      //println(s"parsing ${source.name}")
+      parser.parse(source)
+  } map { tree => Parsed(source, tree) }
+}
 
 /**
  * TODO at the moment parsing is still very slow. I tried to address this prematurily
  * by adding cuts and using PackratParser for nonterminals. Maybe moving to a separate lexer phase
  * could help remove more backtracking?
  */
-class Parser(positions: Positions) extends Parsers(positions) with Phase[Source, ModuleDecl] {
+class EffektParsers(positions: Positions) extends Parsers(positions) {
 
-  val phaseName = "parser"
-
-  def run(source: Source)(implicit C: Context): Option[ModuleDecl] =
+  def parse(source: Source)(implicit C: Context): Option[ModuleDecl] =
     parseAll(program, source) match {
       case Success(ast, _) =>
         Some(ast)

@@ -7,19 +7,19 @@ import effekt.regions.RegionChecker
 import effekt.source.{ CapabilityPassing, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.Typer
-import effekt.util.{ SourceTask, VirtualSource }
-
+import effekt.util.messages.FatalPhaseError
+import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
 /**
- * "Pure" compiler without reading or writing to files
+ * A "pure" compiler without reading or writing to files.
  *
  * All methods return Option, the errors are reported in the given context
  *
  * We distinguish between Phases and Tasks. Phases, by default, perform no memoization
  * while task use the "build system" abstraction in `Task`, track dependencies and
- * avoid rebuilding by memoization.
+ * avoid rebuilding by memoization. Tasks can be constructed
  *
  * The Compiler is set up in the following large tasks that consist of potentially multiple phases
  *
@@ -34,87 +34,89 @@ import kiama.util.{ Positions, Source }
  * (4) Code Gen  (core.Tree   -> Document)     Generate code in a target language
  *
  */
+sealed trait PhaseResult { val source: Source }
+case class Parsed(source: Source, tree: ModuleDecl) extends PhaseResult
+case class NameResolved(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
+// we can notice that nameresolved and typechecked has the same fields. Typer writes to the DB.
+// this might change when we switch to elaboration.
+case class Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
+case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl) extends PhaseResult
+
+// TODO MAYBE PASS INPUTS AS PART OF CONTEXT???
+// TODO try not to mix Compiler and Context into one object.
+// -> but we have a mutual dependency: frontend uses ModuleDB and ModuleDB (in Context) uses frontend
+
+// TODO maybe add the currently processed SOURCE to Context
+// like
+// // the currently processed module
+//  var module: Module = _
+//
+// we might also be able to drop Module.decl since we now have PhaseResult.
 trait Compiler {
 
   val positions: Positions
 
   /**
-   * (1) Parser
-   *
-   * Note: The parser needs to be created freshly since otherwise the memo tables will maintain wrong results for
-   * new input sources. Even though the contents differ, two sources are considered equal since only the paths are
-   * compared.
+   * Frontend
    */
-  def parser = new Parser(positions)
+  private val Frontend = Phase.cached("frontend") {
+    Parser andThen
+      // performs name analysis and associates Id-trees with symbols
+      Namer andThen
+      // type checks and annotates trees with inferred types and effects
+      Typer andThen
+      // uses annotated effects to translate to explicit capability passing
+      CapabilityPassing andThen
+      // infers regions and prevents escaping of first-class functions
+      RegionChecker
+  }
 
   /**
-   * (2) Frontend
+   * Middleend
    */
-  val frontendPhases: List[Phase[ModuleDecl, ModuleDecl]] = List(
-    // performs name analysis and associates Id-trees with symbols
-    new Namer,
-    // type checks and annotates trees with inferred types and effects
-    new Typer,
-    // uses annotated effects to translate to explicit capability passing
-    new CapabilityPassing,
-    // infers regions and prevents escaping of first-class functions
-    new RegionChecker
-  )
+  private val Middleend = Phase.cached("middleend") {
+    Transformer
+  }
 
   /**
-   * (3) Backend
-   */
-  object transformer extends Transformer
-  val backendPhases: List[Phase[core.ModuleDecl, core.ModuleDecl]] = List(
-    // optional phase, only run for `Config.requiresLift`
-    new LiftInference
-  )
-
-  /**
-   * (4) Code Generation
+   * Backend
    */
   def codeGenerator(implicit C: Context) = C.config.generator() match {
-    case "js"           => new effekt.generator.JavaScript
-    case "js-lift"      => new effekt.generator.JavaScriptLift
-    case "chez-callcc"  => new effekt.generator.ChezSchemeCallCC
-    case "chez-monadic" => new effekt.generator.ChezSchemeMonadic
-    case "chez-lift"    => new effekt.generator.ChezSchemeLift
+    case "js"           => effekt.generator.JavaScriptMonadic
+    case "js-lift"      => effekt.generator.JavaScriptLift
+    case "chez-callcc"  => effekt.generator.ChezSchemeCallCC
+    case "chez-monadic" => effekt.generator.ChezSchemeMonadic
+    case "chez-lift"    => /* LiftInference andThen */ effekt.generator.ChezSchemeLift
   }
 
-  // Tasks
-  // =====
+  // STUB
+  //  object Backend extends Phase[CoreTransformed, Document] {
+  //
+  //  }
 
-  object getAST extends SourceTask[ModuleDecl]("ast") {
-    def run(source: Source)(implicit C: Context): Option[ModuleDecl] = source match {
-      case VirtualSource(decl, _) => Some(decl)
-      case _ => parser(source)
-    }
+  /**
+   * Full compiler pipeline
+   */
+  val Compiler = Phase.cached("compiler") {
+    Frontend andThen Middleend // TODO andThen Backend
   }
 
-  object frontend extends SourceTask[Module]("frontend") {
-    def run(source: Source)(implicit C: Context): Option[Module] = for {
-      ast <- getAST(source)
-      mod = Module(ast, source)
-      transformedAst <- C.using(module = mod, focus = ast) {
-        Phase.run(ast, frontendPhases)
-      }
-    } yield mod.setAst(transformedAst)
-  }
+  // Compiler Interface
+  // ==================
+  // As it is used by other parts of the language implementation
 
-  object backend extends SourceTask[core.ModuleDecl]("backend") {
-    def run(source: Source)(implicit C: Context): Option[core.ModuleDecl] = for {
-      mod <- frontend(source)
-      core <- C.using(module = mod) { transformer(mod) }
-      transformed <- C.using(module = mod) {
-        Phase.run(core, backendPhases)
-      }
-    } yield transformed
-  }
+  def getAST(source: Source)(implicit C: Context): Option[ModuleDecl] =
+    Parser(source).map { res => res.tree }
 
-  object generate extends SourceTask[Document]("generate") {
-    def run(source: Source)(implicit C: Context): Option[Document] =
-      codeGenerator.apply(source)
-  }
+  def frontend(source: Source)(implicit C: Context): Option[Module] =
+    Frontend(source).map { res => res.mod }
+
+  def middleend(source: Source)(implicit C: Context): Option[core.ModuleDecl] =
+    Compiler(source).map { res => res.core }
+
+  // TODO Currently the backend is not cached at all
+  def generate(source: Source)(implicit C: Context): Option[Document] =
+    codeGenerator.apply(source)
 
   /**
    * Hook potentially used by the generators

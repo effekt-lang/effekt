@@ -53,7 +53,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
    * and everything else that can occur on the top-level.
    */
   override def parse(source: Source): ParseResult[Tree] = {
-    val parsers = new Parser(positions)
+    val parsers = new EffektParsers(positions)
     parsers.parseAll(parsers.repl, source)
   }
 

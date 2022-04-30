@@ -7,7 +7,7 @@ import scala.util.matching._
 
 object Highlight {
 
-  object parser extends Parser(new Positions)
+  object parser extends EffektParsers(new Positions)
 
   case class Token(r: Regex, highlight: String => String = identity) {
     def apply(in: String): Option[(String, String)] =

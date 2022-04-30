@@ -10,7 +10,7 @@ import effekt.util.paths._
 
 import scala.language.implicitConversions
 
-class JavaScriptLift extends Generator {
+object JavaScriptLift extends Generator {
 
   val prettyPrinter: JavaScriptLiftPrinter = new JavaScriptLiftPrinter {}
 
@@ -34,7 +34,7 @@ class JavaScriptLift extends Generator {
    * Compiles only the given module, does not compile dependencies
    */
   def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.backend(mod.source)
+    core <- C.middleend(mod.source)
     // setting the scope to mod is important to generate qualified names
     doc = C.using(module = mod) { prettyPrinter.format(core) }
     _ = C.saveOutput(doc.layout, path(mod))

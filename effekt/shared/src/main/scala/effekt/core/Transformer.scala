@@ -6,17 +6,17 @@ import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions.SymbolAssertions
 
-class Transformer extends Phase[Module, core.ModuleDecl] {
+object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   val phaseName = "transformer"
 
-  def run(mod: Module)(implicit C: Context): Option[ModuleDecl] = Context in {
+  def run(input: Typechecked)(implicit C: Context) =
+    val Typechecked(source, tree, mod) = input
     C.initTransformerState()
-    Some(transform(mod))
-  }
+    Some(CoreTransformed(source, tree, mod, transform(mod, tree)))
 
-  def transform(mod: Module)(implicit C: Context): ModuleDecl = {
-    val source.ModuleDecl(path, imports, defs) = mod.ast
+  def transform(mod: Module, tree: source.ModuleDecl)(implicit C: Context): ModuleDecl = {
+    val source.ModuleDecl(path, imports, defs) = tree
     val exports: Stmt = Exports(path, mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
@@ -29,7 +29,7 @@ class Transformer extends Phase[Module, core.ModuleDecl] {
       case (d, r) => transform(d, r)
     }
 
-    ModuleDecl(path, imports.map { _.path }, transformed).inheritPosition(mod.decl)
+    ModuleDecl(path, imports.map { _.path }, transformed).inheritPosition(tree)
   }
 
   /**

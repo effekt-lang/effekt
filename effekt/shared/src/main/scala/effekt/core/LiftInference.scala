@@ -4,15 +4,16 @@ package core
 import effekt.symbols.Symbol
 import effekt.context.Context
 
-class LiftInference extends Phase[ModuleDecl, ModuleDecl] {
+object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
 
   val phaseName = "lift-inference"
 
-  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
+  def run(input: CoreTransformed)(implicit C: Context): Option[CoreTransformed] =
     if (C.config.requiresLift()) {
-      Some(transform(mod)(Environment(Map.empty), C))
+      val transformed = transform(input.core)(Environment(Map.empty), C)
+      Some(input.copy(core = transformed))
     } else {
-      Some(mod)
+      Some(input)
     }
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
