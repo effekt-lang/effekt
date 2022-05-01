@@ -85,7 +85,7 @@ class ChezSchemeTests extends AnyFunSpec {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
-      "--generator", s"chez-$variant",
+      "--backend", s"chez-$variant",
       "--includes", "libraries/chez/common",
       "--includes", ".",
       "--lib", s"libraries/chez/$variant"

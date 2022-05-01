@@ -66,9 +66,9 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     C.setup(config)
 
     for {
-      doc <- C.compileSeparate(src)
+      _ <- C.compileWhole(src)
       if config.interpret()
-      mod <- C.frontend(src)
+      mod <- C.runFrontend(src)
     } eval(mod)
 
     afterCompilation(source, config)
@@ -80,7 +80,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
   }
 
   def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
-    C.config.generator() match {
+    C.config.backend() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
     }
@@ -89,7 +89,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
   def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val jsFile = C.codeGenerator.path(mod)
+      val jsFile = C.Backend.path(mod)
       val jsScript = s"require('${jsFile}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
@@ -102,7 +102,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
   def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val csFile = C.codeGenerator.path(mod)
+      val csFile = C.Backend.path(mod)
       val command = Process(Seq("scheme", "--script", csFile))
       C.config.output().emit(command.!!)
     } catch {

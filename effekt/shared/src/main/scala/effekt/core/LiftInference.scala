@@ -9,12 +9,8 @@ object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
   val phaseName = "lift-inference"
 
   def run(input: CoreTransformed)(implicit C: Context): Option[CoreTransformed] =
-    if (C.config.requiresLift()) {
-      val transformed = transform(input.core)(Environment(Map.empty), C)
-      Some(input.copy(core = transformed))
-    } else {
-      Some(input)
-    }
+    val transformed = transform(input.core)(Environment(Map.empty), C)
+    Some(input.copy(core = transformed))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =

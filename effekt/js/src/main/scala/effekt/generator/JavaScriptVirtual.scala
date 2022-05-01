@@ -6,7 +6,7 @@ import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 
-class JavaScriptVirtual extends JavaScript {
+object JavaScriptVirtual extends JavaScript {
   override val prettyPrinter: JavaScriptPrinter = new JSVirtualPrinter {}
 }
 

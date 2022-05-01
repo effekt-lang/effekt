@@ -241,8 +241,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     val src = VirtualSource(ast, source)
 
     for {
-      _ <- context.compileSeparate(src)
-      mod <- context.frontend(src)
+      _ <- context.compileWhole(src)
+      mod <- context.runFrontend(src)
     } driver.eval(mod)
 
     report(source, context.buffer.get, config)
@@ -251,14 +251,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
   private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
-    context.frontend(src) map { f } getOrElse {
+    context.runFrontend(src) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
-    context.frontend(source) map { f } getOrElse {
+    context.runFrontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }

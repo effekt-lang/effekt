@@ -37,10 +37,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     required = false
   )
 
-  val generator: ScallopOption[String] = choice(
+  val backend: ScallopOption[String] = choice(
     choices = List("js", "js-lift", "chez-callcc", "chez-monadic", "chez-lift"),
-    name = "generator",
-    descr = "The code generator that should be used",
+    name = "backend",
+    descr = "The backend that should be used",
     default = Some("js"),
     noshort = true
   )
@@ -95,8 +95,6 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def includes() = libPath :: includePath()
 
   def requiresCompilation(): Boolean = !server()
-
-  def requiresLift(): Boolean = generator().endsWith("lift")
 
   def interpret(): Boolean = !server() && !compile()
 

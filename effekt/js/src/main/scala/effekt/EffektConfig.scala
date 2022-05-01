@@ -10,7 +10,7 @@ trait EffektConfig {
 
   def includes(): List[File] = Nil
 
-  def generator(): String = "js"
+  def backend(): String = "js"
 
   def outputPath(): String = "out"
 

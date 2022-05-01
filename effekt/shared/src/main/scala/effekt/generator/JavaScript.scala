@@ -1,24 +1,38 @@
 package effekt.generator
 
 import effekt.context.Context
-import effekt.context.assertions._
-import effekt.core._
-import effekt.symbols.{ Module, Name, NoName, LocalName, QualifiedName, Symbol, Wildcard }
-import effekt.symbols
-
+import effekt.context.assertions.*
+import effekt.core.*
+import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, Wildcard }
+import effekt.{ CompilationUnit, CoreTransformed, Phase, symbols }
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-
-import effekt.util.paths._
+import effekt.util.paths.*
 
 import scala.language.implicitConversions
 
-object JavaScriptMonadic extends JavaScript
-
-class JavaScript extends Generator {
-
+object JavaScriptMonadic extends JavaScript {
   val prettyPrinter: JavaScriptPrinter = new JavaScriptPrinter {}
+}
+
+trait JavaScript extends Backend {
+
+  def prettyPrinter: JavaScriptPrinter
+
+  /**
+   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   */
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
+    dependencies.foreach { dep => compile(dep) }
+    Some(compile(main))
+  }
+
+  /**
+   * Entrypoint used by the LSP server to show the compiled output
+   */
+  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
+    C.using(module = input.mod) { Some(prettyPrinter.format(input.core)) }
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
@@ -27,24 +41,14 @@ class JavaScript extends Generator {
     (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
 
   /**
-   * This is only called on the main entry point, we have to manually traverse the dependencies
-   * and write them.
-   */
-  def run(src: Source)(implicit C: Context): Option[Document] = for {
-    mod <- C.frontend(src)
-    _ = mod.dependencies.flatMap(compile)
-    doc <- compile(mod)
-  } yield doc
-
-  /**
    * Compiles only the given module, does not compile dependencies
+   *
+   * Writes the compiled result into a file.
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.middleend(mod.source)
-    // setting the scope to mod is important to generate qualified names
-    doc = C.using(module = mod) { prettyPrinter.format(core) }
-    _ = C.saveOutput(doc.layout, path(mod))
-  } yield doc
+  private def compile(in: CoreTransformed)(implicit C: Context): Unit =
+    compileSeparate(in).foreach { doc =>
+      C.saveOutput(doc.layout, path(in.mod))
+    }
 }
 
 /**

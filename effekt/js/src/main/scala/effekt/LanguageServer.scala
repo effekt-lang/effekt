@@ -61,7 +61,7 @@ class LanguageServer extends Intelligence {
     /**
      * Don't output amdefine module declarations
      */
-    override def codeGenerator(implicit C: Context) = new JavaScriptVirtual
+    override def Backend(implicit C: Context) = new JavaScriptVirtual
 
     override def saveOutput(js: String, path: String)(implicit C: Context): Unit = {
       file(path).write(js)
@@ -89,7 +89,7 @@ class LanguageServer extends Intelligence {
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.buffer.clear()
-    context.frontend(VirtualFileSource(path))
+    context.runFrontend(VirtualFileSource(path))
     context.buffer.get.distinct.map(messageToDiagnostic).toJSArray
   }
 
@@ -111,7 +111,7 @@ class LanguageServer extends Intelligence {
   def compileString(content: String): String = {
     val src = StringSource(content)
 
-    val mod = context.frontend(src).getOrElse {
+    val mod = context.runFrontend(src).getOrElse {
       throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
     }
 
@@ -134,8 +134,8 @@ class LanguageServer extends Intelligence {
     context.setup(config)
 
     for {
-      mod <- context.frontend(src)
-      _ <- context.compileSeparate(src)
+      mod <- context.runFrontend(src)
+      _ <- context.compileWhole(src)
       program = output.toString()
       command = s"""(function(loader) {
         | var module = {}

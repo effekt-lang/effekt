@@ -1,44 +1,47 @@
-package effekt.generator
+package effekt
+package generator
 
 import effekt.context.Context
-import effekt.core._
+import effekt.core.*
 import effekt.symbols.{ Module, Wildcard }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-
-import effekt.util.paths._
+import effekt.util.paths.*
 
 import scala.language.implicitConversions
 
-object JavaScriptLift extends Generator {
+object JavaScriptLift extends Backend {
 
   val prettyPrinter: JavaScriptLiftPrinter = new JavaScriptLiftPrinter {}
+
+  /**
+   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   */
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
+    dependencies.foreach { dep => compile(dep) }
+    Some(compile(main))
+  }
+
+  /**
+   * Entrypoint used by the LSP server to show the compiled output
+   */
+  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
+    C.using(module = input.mod) { Some(prettyPrinter.format(input.core)) }
+
+  /**
+   * Compiles only the given module, does not compile dependencies
+   */
+  private def compile(in: CoreTransformed)(implicit C: Context): Unit =
+    LiftInference(in).foreach { lifted =>
+      val doc = prettyPrinter.format(lifted.core)
+      C.saveOutput(doc.layout, path(in.mod))
+    }
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
-
-  /**
-   * This is only called on the main entry point, we have to manually traverse the dependencies
-   * and write them.
-   */
-  def run(src: Source)(implicit C: Context): Option[Document] = for {
-    mod <- C.frontend(src)
-    _ = mod.dependencies.flatMap(compile)
-    doc <- compile(mod)
-  } yield doc
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.middleend(mod.source)
-    // setting the scope to mod is important to generate qualified names
-    doc = C.using(module = mod) { prettyPrinter.format(core) }
-    _ = C.saveOutput(doc.layout, path(mod))
-  } yield doc
 }
 
 /**
