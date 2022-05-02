@@ -81,6 +81,21 @@ case class CompilationUnit(main: CoreTransformed, dependencies: List[CoreTransfo
 trait Compiler {
 
   /**
+   * @note The result of parsing needs to be cached.
+   *
+   *       [[Intelligence]] uses both the results of [[getAST]] and [[runFrontend]].
+   *       Since we associate trees and symbols by the *object identity* of the tree,
+   *       running parser multiple times on the same input results in different trees.
+   *       In consequence, the symbols can't be found anymore. To avoid this, we
+   *       use a separate task for parsing.
+   *
+   *       Having access to the parse trees separately is also helpful for programs
+   *       that fail in later phases (for instance type checking). This way some
+   *       editor services can be provided, even in presence of errors.
+   */
+  private val CachedParser = Phase.cached("cached-parser") { Parser }
+
+  /**
    * Frontend
    */
   private val Frontend = Phase.cached("frontend") {
@@ -88,7 +103,7 @@ trait Compiler {
        * Parses a file to a syntax tree
        *   [[Source]] --> [[Parsed]]
        */
-      Parser andThen
+      CachedParser andThen
       /**
        * Performs name analysis and associates Id-trees with symbols
        *    [[Parsed]] --> [[NameResolved]]
@@ -151,7 +166,7 @@ trait Compiler {
    * Used by LSP server (Intelligence) to map positions to source trees
    */
   def getAST(source: Source)(implicit C: Context): Option[ModuleDecl] =
-    Parser(source).map { res => res.tree }
+    CachedParser(source).map { res => res.tree }
 
   /**
    * Called by ModuleDB (and indirectly by Namer) to run the frontend for a
