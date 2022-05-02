@@ -61,7 +61,7 @@ class LanguageServer extends Intelligence {
     /**
      * Don't output amdefine module declarations
      */
-    override def Backend(implicit C: Context) = new JavaScriptVirtual
+    override def Backend(implicit C: Context) = JavaScriptVirtual
 
     override def saveOutput(js: String, path: String)(implicit C: Context): Unit = {
       file(path).write(js)
