@@ -116,6 +116,7 @@ trait Compiler {
    */
   private val Middleend = Phase.cached("middleend") {
     Transformer
+    // here optimization passes on Core will be added.
   }
 
   /**

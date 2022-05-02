@@ -68,12 +68,17 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     for {
       _ <- C.compileWhole(src)
       if config.interpret()
+      // TODO refactor -- this is only necessary to extract the path of the module
       mod <- C.runFrontend(src)
     } eval(mod)
 
+    // This reports error messages
     afterCompilation(source, config)
   }
 
+  /**
+   * Overridden in [[Server]] to also publish core and js compilation results to VSCode
+   */
   def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // report messages
     report(source, C.buffer.get, config)
@@ -99,6 +104,9 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     }
   }
 
+  /**
+   * Precondition: the module has been compiled to a file that can be loaded.
+   */
   def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
