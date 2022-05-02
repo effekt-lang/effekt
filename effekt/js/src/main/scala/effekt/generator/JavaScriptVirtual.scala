@@ -17,7 +17,7 @@ trait JSVirtualPrinter extends JavaScriptPrinter {
   def virtual(m: ModuleDecl)(implicit C: Context): Doc = {
     val deps = m.imports
     val imports = vsep(deps.map { i =>
-      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("load", "'" + i + "'")
+      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("load", "'" + moduleFile(i) + "'")
     }, semi)
 
     imports <> emptyline <> toDoc(m)

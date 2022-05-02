@@ -15,11 +15,14 @@ object JavaScriptLift extends Backend {
   val prettyPrinter: JavaScriptLiftPrinter = new JavaScriptLiftPrinter {}
 
   /**
-   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
-    dependencies.foreach { dep => compile(dep) }
-    Some(compile(main))
+    val compiledDependencies = dependencies.flatMap { dep => compile(dep) }.toMap
+    compile(main).map {
+      case (mainFile, result) =>
+        Compiled(mainFile, compiledDependencies.updated(mainFile, result))
+    }
   }
 
   /**
@@ -31,10 +34,10 @@ object JavaScriptLift extends Backend {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  private def compile(in: CoreTransformed)(implicit C: Context): Unit =
-    LiftInference(in).foreach { lifted =>
+  private def compile(in: CoreTransformed)(implicit C: Context) =
+    LiftInference(in).map { lifted =>
       val doc = prettyPrinter.format(lifted.core)
-      C.saveOutput(doc.layout, path(in.mod))
+      (path(in.mod), doc)
     }
 
   /**

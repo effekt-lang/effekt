@@ -235,18 +235,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     case _ => ()
   }
 
-  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
-    context.setup(config)
-
-    val src = VirtualSource(ast, source)
-
-    for {
-      _ <- context.compileWhole(src)
-      mod <- context.runFrontend(src)
-    } driver.eval(mod)
-
-    report(source, context.buffer.get, config)
-  }
+  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit =
+    driver.compileSource(VirtualSource(ast, source), config)
 
   private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)

@@ -62,11 +62,6 @@ class LanguageServer extends Intelligence {
      * Don't output amdefine module declarations
      */
     override def Backend(implicit C: Context) = JavaScriptVirtual
-
-    override def saveOutput(js: String, path: String)(implicit C: Context): Unit = {
-      file(path).write(js)
-      output.append(js)
-    }
   }
 
   object messaging extends Messaging(positions)
@@ -74,8 +69,6 @@ class LanguageServer extends Intelligence {
   context.setup(config)
 
   var source = StringSource("")
-
-  var output: StringBuilder = new StringBuilder()
 
   @JSExport
   def infoAt(path: String, pos: lsp.Position): String = {
@@ -102,50 +95,20 @@ class LanguageServer extends Intelligence {
     file(path).read
 
   @JSExport
-  def compileFile(path: String): String =
-    context.compileSeparate(VirtualFileSource(path + ".effekt")).getOrElse {
-      throw js.JavaScriptException(s"Cannot compile ${path}")
-    }.layout
+  def lastModified(path: String): Long =
+    file(path).lastModified
 
   @JSExport
-  def compileString(content: String): String = {
-    val src = StringSource(content)
-
-    val mod = context.runFrontend(src).getOrElse {
-      throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
+  def compileFile(path: String): String = {
+    val Compiled(main, outputFiles) = context.compileWhole(VirtualFileSource(path)).getOrElse {
+      throw js.JavaScriptException(s"Cannot compile ${path}")
     }
-
-    try {
-      context.checkMain(mod)
-      context.compileSeparate(StringSource(content)).getOrElse {
-        throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
-      }.layout
-    } catch {
-      case FatalPhaseError(msg) =>
-        throw js.JavaScriptException(msg)
-    }
+    outputFiles.foreach { case (path, doc) => saveOutput(path, doc.layout) }
+    main
   }
 
-  @JSExport
-  def evaluate(s: String): Unit = {
-    val src = StringSource(s)
-
-    output = new StringBuilder
-    context.setup(config)
-
-    for {
-      mod <- context.runFrontend(src)
-      _ <- context.compileWhole(src)
-      program = output.toString()
-      command = s"""(function(loader) {
-        | var module = {}
-        |$program
-        |
-        |return ${mod.name}.main().run();
-        |})(this)
-        |""".stripMargin
-    } yield scalajs.js.eval(command)
-  }.orNull
+  private def saveOutput(path: String, js: String)(implicit C: Context): Unit =
+    file(path).write(js)
 
   private def messageToDiagnostic(m: Message) = {
     val from = messaging.start(m).map(convertPosition).getOrElse(null)

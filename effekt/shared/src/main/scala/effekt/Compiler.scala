@@ -78,6 +78,11 @@ case class CompilationUnit(main: CoreTransformed, dependencies: List[CoreTransfo
   val source = main.source
 }
 
+/**
+ * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
+ */
+case class Compiled(mainFile: String, outputFiles: Map[String, Document])
+
 trait Compiler {
 
   /**
@@ -99,11 +104,11 @@ trait Compiler {
    * Frontend
    */
   private val Frontend = Phase.cached("frontend") {
-      /**
-       * Parses a file to a syntax tree
-       *   [[Source]] --> [[Parsed]]
-       */
-      CachedParser andThen
+    /**
+     * Parses a file to a syntax tree
+     *   [[Source]] --> [[Parsed]]
+     */
+    CachedParser andThen
       /**
        * Performs name analysis and associates Id-trees with symbols
        *    [[Parsed]] --> [[NameResolved]]
@@ -147,7 +152,8 @@ trait Compiler {
 
   object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
     val phaseName = "lower-dependencies"
-    def run(main: CoreTransformed)(implicit C: Context) =
+    def run(main: CoreTransformed)(implicit C: Context) = {
+      C.checkMain(main.mod)
       val dependencies = main.mod.dependencies flatMap { dep =>
         // We already ran the frontend on the dependencies (since they are discovered
         // dynamically). The results are cached, so it doesn't hurt dramatically to run
@@ -155,6 +161,7 @@ trait Compiler {
         (Frontend andThen Middleend)(dep.source)
       }
       Some(CompilationUnit(main, dependencies))
+    }
   }
 
   // Compiler Interface
@@ -196,13 +203,6 @@ trait Compiler {
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
-  def compileWhole(source: Source)(implicit C: Context): Option[Unit] =
+  def compileWhole(source: Source)(implicit C: Context): Option[Compiled] =
     (Frontend andThen Middleend andThen LowerDependencies andThen Backend.whole).apply(source)
-
-  /**
-   * Hook that has to be used by the generators to write to files.
-   *
-   * For the compiler to be executable in the webbrowser, we need to virtualize the file system.
-   */
-  def saveOutput(doc: String, path: String)(implicit C: Context): Unit
 }

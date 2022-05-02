@@ -1,10 +1,10 @@
-package effekt.generator
+package effekt
+package generator
 
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.*
 import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, Wildcard }
-import effekt.{ CompilationUnit, CoreTransformed, Phase, symbols }
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -21,11 +21,14 @@ trait JavaScript extends Backend {
   def prettyPrinter: JavaScriptPrinter
 
   /**
-   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
-    dependencies.foreach { dep => compile(dep) }
-    Some(compile(main))
+    val compiledDependencies = dependencies.flatMap { dep => compile(dep) }.toMap
+    compile(main).map {
+      case (mainFile, result) =>
+        Compiled(mainFile, compiledDependencies.updated(mainFile, result))
+    }
   }
 
   /**
@@ -45,9 +48,9 @@ trait JavaScript extends Backend {
    *
    * Writes the compiled result into a file.
    */
-  private def compile(in: CoreTransformed)(implicit C: Context): Unit =
-    compileSeparate(in).foreach { doc =>
-      C.saveOutput(doc.layout, path(in.mod))
+  private def compile(in: CoreTransformed)(implicit C: Context): Option[(String, Document)] =
+    compileSeparate(in).map { doc =>
+      (path(in.mod), doc)
     }
 }
 

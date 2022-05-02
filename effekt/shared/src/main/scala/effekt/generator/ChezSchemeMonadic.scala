@@ -1,6 +1,6 @@
-package effekt.generator
+package effekt
+package generator
 
-import effekt.{ CompilationUnit, CoreTransformed, Phase }
 import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.Module
@@ -18,12 +18,13 @@ import effekt.util.paths.*
 object ChezSchemeMonadic extends Backend {
 
   /**
-   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
     val deps = dependencies.map { dep => compile(dep) }
     val res = ChezSchemeMonadicPrinter.compilationUnit(main.mod, main.core, deps)
-    C.saveOutput(res.layout, path(main.mod))
+    val mainFile = path(main.mod)
+    Some(Compiled(mainFile, Map(mainFile -> res)))
   }
 
   /**

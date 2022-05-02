@@ -28,16 +28,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
-  object context extends Context(positions) with IOModuleDB {
-    /**
-     * Output: JavaScript -> File
-     */
-    override def saveOutput(doc: String, path: String)(implicit C: Context): Unit =
-      if (C.config.requiresCompilation()) {
-        C.config.outputPath().mkdirs
-        IO.createFile(path, doc)
-      }
-  }
+  object context extends Context(positions) with IOModuleDB
 
   /**
    * If no file names are given, run the REPL
@@ -57,7 +48,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
    *
    * In LSP mode: invoked for each file opened in an editor
    */
-  override def compileSource(source: Source, config: EffektConfig): Unit = {
+  override def compileSource(source: Source, config: EffektConfig): Unit = try {
     val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
 
     sources(source.name) = src
@@ -65,16 +56,29 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     implicit val C = context
     C.setup(config)
 
-    for {
-      _ <- C.compileWhole(src)
-      if config.interpret()
-      // TODO refactor -- this is only necessary to extract the path of the module
-      mod <- C.runFrontend(src)
-    } eval(mod)
+    val Compiled(main, outputFiles) = C.compileWhole(src).getOrElse { return }
 
+    outputFiles.foreach {
+      case (filename, doc) =>
+        saveOutput(filename, doc.layout)
+    }
+
+    if (config.interpret()) {
+      // type check single file -- `mod` is necessary for positions in error reporting.
+      val mod = C.runFrontend(src).getOrElse { return }
+      C.at(mod.decl) { eval(main) }
+    }
+  } finally {
     // This reports error messages
-    afterCompilation(source, config)
+    afterCompilation(source, config)(context)
   }
+
+  // TODO check whether we still need requiresCompilation
+  private def saveOutput(path: String, doc: String)(implicit C: Context): Unit =
+    if (C.config.requiresCompilation()) {
+      C.config.outputPath().mkdirs
+      IO.createFile(path, doc)
+    }
 
   /**
    * Overridden in [[Server]] to also publish core and js compilation results to VSCode
@@ -84,40 +88,33 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     report(source, C.buffer.get, config)
   }
 
-  def eval(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def eval(path: String)(implicit C: Context): Unit =
     C.config.backend() match {
-      case gen if gen.startsWith("js")   => evalJS(mod)
-      case gen if gen.startsWith("chez") => evalCS(mod)
+      case gen if gen.startsWith("js")   => evalJS(path)
+      case gen if gen.startsWith("chez") => evalCS(path)
     }
-  }
 
-  def evalJS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalJS(path: String)(implicit C: Context): Unit =
     try {
-      C.checkMain(mod)
-      val jsFile = C.Backend.path(mod)
-      val jsScript = s"require('${jsFile}').main().run()"
+      val jsScript = s"require('${path}').main().run()"
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
     } catch {
       case FatalPhaseError(e) =>
         C.error(e)
     }
-  }
 
   /**
    * Precondition: the module has been compiled to a file that can be loaded.
    */
-  def evalCS(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def evalCS(path: String)(implicit C: Context): Unit =
     try {
-      C.checkMain(mod)
-      val csFile = C.Backend.path(mod)
-      val command = Process(Seq("scheme", "--script", csFile))
+      val command = Process(Seq("scheme", "--script", path))
       C.config.output().emit(command.!!)
     } catch {
       case FatalPhaseError(e) =>
         C.error(e)
     }
-  }
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)

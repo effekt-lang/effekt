@@ -15,9 +15,9 @@ trait BackendPhase {
   def path(m: Module)(implicit C: Context): String
 
   /**
-   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   * Entrypoint used by REPL and Driver to compile a file and execute it
    */
-  def whole: Phase[CompilationUnit, Unit]
+  def whole: Phase[CompilationUnit, Compiled]
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
@@ -32,9 +32,9 @@ trait BackendPhase {
 trait Backend extends BackendPhase {
 
   /**
-   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   * Entrypoint used by REPL and Driver to compile a file and execute it
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context): Unit
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context): Option[Compiled]
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
@@ -42,6 +42,6 @@ trait Backend extends BackendPhase {
   def compileSeparate(input: CoreTransformed)(implicit C: Context): Option[Document]
 
   // Using the two methods above, we can implement the required phases.
-  val whole = Phase("compile-whole") { input => Some(compileWhole(input.main, input.dependencies)) }
+  val whole = Phase("compile-whole") { input => compileWhole(input.main, input.dependencies) }
   val separate = Phase("compile-separate") { compileSeparate }
 }

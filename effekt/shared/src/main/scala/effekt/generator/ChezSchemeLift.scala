@@ -1,6 +1,6 @@
-package effekt.generator
+package effekt
+package generator
 
-import effekt.{ CompilationUnit, CoreTransformed, Phase }
 import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.Module
@@ -14,17 +14,15 @@ import effekt.util.paths.*
 object ChezSchemeLift extends Backend {
 
   /**
-   * This is only called on the main entry point, we have to manually traverse the dependencies
-   * and write them.
-   *
-   * Backends should use Context.saveOutput to write files to also work with virtual file systems
+   * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
     C.checkMain(main.mod)
+    val mainFile = path(main.mod)
     val deps = dependencies.flatMap { dep => compile(dep) }
-    LiftInference(main).foreach { lifted =>
+    LiftInference(main).map { lifted =>
       val result = ChezSchemeLiftPrinter.compilationUnit(main.mod, lifted.core, deps)
-      C.saveOutput(result.layout, path(main.mod))
+      Compiled(mainFile, Map(mainFile -> result))
     }
   }
 
