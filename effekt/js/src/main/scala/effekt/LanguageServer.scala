@@ -101,8 +101,14 @@ class LanguageServer extends Intelligence {
     val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
       throw js.JavaScriptException(s"Cannot compile ${path}")
     }
-    mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
-    mainOutputPath
+    try {
+      context.checkMain(mainCore.mod)
+      mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
+      mainOutputPath
+    } catch {
+      case FatalPhaseError(msg) =>
+        throw js.JavaScriptException(msg)
+    }
   }
 
   /**
