@@ -38,6 +38,7 @@ object lsp {
   class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String) extends js.Object {
     val source = "effekt"
   }
+
   type DiagnosticSeverity = Int
   object DiagnosticSeverity {
     val Error = 1
@@ -45,7 +46,6 @@ object lsp {
     val Information = 3
     val Hint = 4
   }
-
 }
 
 /**
@@ -68,8 +68,6 @@ class LanguageServer extends Intelligence {
 
   context.setup(config)
 
-  var source = StringSource("")
-
   @JSExport
   def infoAt(path: String, pos: lsp.Position): String = {
     val p = fromLSPPosition(pos, VirtualFileSource(path))
@@ -87,9 +85,8 @@ class LanguageServer extends Intelligence {
   }
 
   @JSExport
-  def writeFile(path: String, contents: String): Unit = {
+  def writeFile(path: String, contents: String): Unit =
     file(path).write(contents)
-  }
 
   @JSExport
   def readFile(path: String): String =
@@ -101,19 +98,36 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def compileFile(path: String): String = {
-    val Compiled(main, outputFiles) = context.compileWhole(VirtualFileSource(path)).getOrElse {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
       throw js.JavaScriptException(s"Cannot compile ${path}")
     }
-    outputFiles.foreach { case (path, doc) => saveOutput(path, doc.layout) }
-    main
+    mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
+    mainOutputPath
   }
 
-  private def saveOutput(path: String, js: String)(implicit C: Context): Unit =
-    file(path).write(js)
+  /**
+   * Has the side effect of saving to generated output to a file
+   */
+  private def compileSingle(src: Source)(implicit C: Context): Option[(String, CoreTransformed)] =
+    context.compileSeparate(src).map {
+      case (core, doc) =>
+        val path = JavaScriptVirtual.path(core.mod)
+        writeFile(path, doc.layout)
+        (path, core)
+    }
+
+  // Here we cache the full pipeline for a single file, including writing the result
+  // to an output file. This is important since we only want to write the file, when it
+  // really changed. Writing will change the timestamp and lazy reloading of modules
+  // on the JS side uses the timestamp to determine whether we need to re-eval a
+  // module or not.
+  private val compileCached = Phase.cached("compile-cached") {
+    Phase("compile") { compileSingle }
+  }
 
   private def messageToDiagnostic(m: Message) = {
-    val from = messaging.start(m).map(convertPosition).getOrElse(null)
-    val to = messaging.finish(m).map(convertPosition).getOrElse(null)
+    val from = messaging.start(m).map(convertPosition).orNull
+    val to = messaging.finish(m).map(convertPosition).orNull
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), m.label)
   }
 
@@ -128,11 +142,6 @@ class LanguageServer extends Intelligence {
     case Severities.Warning     => lsp.DiagnosticSeverity.Warning
     case Severities.Information => lsp.DiagnosticSeverity.Information
     case Severities.Hint        => lsp.DiagnosticSeverity.Hint
-  }
-
-  @JSExport
-  def updateContents(input: String) = {
-    source = StringSource(input)
   }
 }
 

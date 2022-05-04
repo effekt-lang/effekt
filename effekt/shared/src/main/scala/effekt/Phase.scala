@@ -28,7 +28,8 @@ import kiama.util.Source
  * an [[Context.error]] and the phase returns [[None]].
  *
  * @note Caching intermediate "micro-phases" somehow leads to inconsistencies and should
- *       be avoided (until we know exactly why).
+ *       be avoided (The problem is that Typer performs backtracking; caching could potentially
+ *       interact with the backtracking behavior).
  */
 trait Phase[In, Out] { curr =>
 
@@ -65,11 +66,14 @@ object Phase {
       case (prev, phase) => prev.flatMap { a => phase(a) }
     }
 
-  def cached[From, To](name: String)(phase: Phase[From, To])(implicit cacheKey: Fingerprint[From]): Phase[From, To] = {
+  /**
+   * Constructs a cached version of this phase. The
+   */
+  def cached[From, To](name: String, cacheBy: From => Long)(phase: Phase[From, To]): Phase[From, To] = {
     object task extends Task[From, To] {
       val taskName = name
       def run(input: From)(implicit C: Context) = phase.run(input)
-      def fingerprint(input: From) = cacheKey.fingerprint(input)
+      def fingerprint(input: From) = cacheBy(input)
     }
 
     // The returned phase uses task.apply to lookup the results in the cache
@@ -78,6 +82,12 @@ object Phase {
       def run(input: From)(implicit C: Context): Option[To] = task.apply(input)
     }
   }
+
+  /**
+   * The most common use case: using the lastModified timestamp on the Source as cache key.
+   */
+  def cached[To](name: String)(phase: Phase[Source, To]): Phase[Source, To] =
+    cached(name, cacheBy = paths.lastModified) { phase }
 
   /**
    * Smart constructor for creating phases.
@@ -93,22 +103,4 @@ object Phase {
     val phaseName = name
     def run(input: From)(implicit C: Context) = impl(input)
   }
-}
-
-
-/**
- * A type class witnessing that we can compute the fingerprint of T
- *
- * Used for caching tasks.
- *
- * TODO there are only two instances. Maybe remove abstraction again.
- */
-trait Fingerprint[T] {
-  def fingerprint(value: T): Long
-}
-implicit object sourceFingerprint extends Fingerprint[Source] {
-  def fingerprint(source: Source) = paths.lastModified(source)
-}
-implicit def phaseResultFingerprint[T <: PhaseResult]: Fingerprint[T] = new Fingerprint[T] {
-  def fingerprint(result: T) = paths.lastModified(result.source)
 }

@@ -39,10 +39,10 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     val showAnything = settingBool("showCore") || settingBool("showTarget")
     if (!showAnything) return ;
 
-    for (mod <- C.runFrontend(source); core <- C.getCore(source); js <- C.compileSeparate(source)) {
+    for ((transformed, js) <- C.compileSeparate(source)) {
 
       if (settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", prettyCore.format(core))
+        publishProduct(source, "target", "effekt", prettyCore.format(transformed.core))
       }
 
       if (settingBool("showTarget")) {

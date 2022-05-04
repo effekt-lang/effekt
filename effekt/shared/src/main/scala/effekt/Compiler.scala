@@ -9,6 +9,8 @@ import effekt.symbols.Module
 import effekt.typer.Typer
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
+import effekt.generator.Backend
+
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -134,7 +136,7 @@ trait Compiler {
   /**
    * Middleend
    */
-  private val Middleend = Phase.cached("middleend") {
+  private val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
     Transformer
     // here optimization passes on Core will be added.
   }
@@ -142,7 +144,7 @@ trait Compiler {
   /**
    * Backend
    */
-  def Backend(implicit C: Context) = C.config.backend() match {
+  def Backend(implicit C: Context): Backend = C.config.backend() match {
     case "js"           => effekt.generator.JavaScriptMonadic
     case "js-lift"      => effekt.generator.JavaScriptLift
     case "chez-callcc"  => effekt.generator.ChezSchemeCallCC
@@ -197,7 +199,7 @@ trait Compiler {
    *
    * TODO Currently the backend is not cached at all
    */
-  def compileSeparate(source: Source)(implicit C: Context): Option[Document] =
+  def compileSeparate(source: Source)(implicit C: Context): Option[(CoreTransformed, Document)] =
     (Frontend andThen Middleend andThen Backend.separate).apply(source)
 
   /**
