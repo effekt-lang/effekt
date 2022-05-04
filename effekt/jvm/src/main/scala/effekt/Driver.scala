@@ -51,6 +51,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
   override def compileSource(source: Source, config: EffektConfig): Unit = try {
     val src = if (source.name.endsWith(".md")) { MarkdownSource(source) } else { source }
 
+    // remember that we have seen this source, this is used by LSP (kiama.util.Server)
     sources(source.name) = src
 
     implicit val C = context

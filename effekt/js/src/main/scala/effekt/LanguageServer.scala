@@ -87,8 +87,9 @@ class LanguageServer extends Intelligence {
   }
 
   @JSExport
-  def writeFile(path: String, contents: String): Unit =
+  def writeFile(path: String, contents: String): Unit = {
     file(path).write(contents)
+  }
 
   @JSExport
   def readFile(path: String): String =
