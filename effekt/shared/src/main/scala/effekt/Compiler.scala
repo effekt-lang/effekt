@@ -185,12 +185,6 @@ trait Compiler {
     Frontend(source).map { res => res.mod }
 
   /**
-   * Only used by LSP server (afterCompilation) to display generated core in a separate buffer
-   */
-  def getCore(source: Source)(implicit C: Context): Option[core.ModuleDecl] =
-    (Frontend andThen Middleend)(source).map { res => res.core }
-
-  /**
    * This is used from the JS implementation ([[effekt.LanguageServer]]) and also
    * from the LSP server ([[effekt.Server]]) after compilation.
    *
