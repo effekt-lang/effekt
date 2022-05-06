@@ -1,49 +1,49 @@
-package effekt.generator
+package effekt
+package generator
 
 import effekt.context.Context
-import effekt.core._
+import effekt.core.*
 import effekt.symbols.Module
 import effekt.symbols.Wildcard
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 import scala.language.implicitConversions
-
-import effekt.util.paths._
+import effekt.util.paths.*
 
 /**
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezSchemeMonadic extends Generator {
+object ChezSchemeMonadic extends Backend {
+
+  /**
+   * Returns [[Compiled]], containing the files that should be written to.
+   */
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
+    val deps = dependencies.map { dep => compile(dep) }
+    val res = ChezSchemeMonadicPrinter.compilationUnit(main.mod, main.core, deps)
+    val mainFile = path(main.mod)
+    Some(Compiled(mainFile, Map(mainFile -> res)))
+  }
+
+  /**
+   * Entrypoint used by the LSP server to show the compiled output
+   */
+  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
+    C.using(module = input.mod) { Some(compile(input)) }
+
+  /**
+   * Compiles only the given module, does not compile dependencies
+   */
+  private def compile(in: CoreTransformed)(implicit C: Context): Document =
+    ChezSchemeMonadicPrinter.format(in.core)
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
-
-  /**
-   * This is only called on the main entry point, we have to manually traverse the dependencies
-   * and write them.
-   */
-  def run(src: Source)(implicit C: Context): Option[Document] = for {
-    mod <- C.frontend(src)
-    _ = C.checkMain(mod)
-    deps = mod.dependencies.flatMap(dep => compile(dep))
-    core <- C.backend(src)
-    result = ChezSchemeMonadicPrinter.compilationUnit(mod, core, deps)
-    _ = C.saveOutput(result.layout, path(mod))
-  } yield result
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.backend(mod.source)
-    doc = ChezSchemeMonadicPrinter.format(core)
-  } yield doc
 }
 
 object ChezSchemeMonadicPrinter extends ChezSchemeBase {

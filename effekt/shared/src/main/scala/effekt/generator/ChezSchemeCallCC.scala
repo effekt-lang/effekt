@@ -1,51 +1,50 @@
-package effekt.generator
+package effekt
+package generator
 
+import effekt.{ CompilationUnit, CoreTransformed, Phase }
 import effekt.context.Context
-import effekt.core._
+import effekt.core.*
 import effekt.symbols.Module
 import effekt.symbols.{ Name, Symbol, Wildcard }
-
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-import effekt.context.assertions._
+import effekt.context.assertions.*
 
 import scala.language.implicitConversions
-
-import effekt.util.paths._
+import effekt.util.paths.*
 
 /**
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
  */
-class ChezSchemeCallCC extends Generator {
+object ChezSchemeCallCC extends Backend {
 
   /**
-   * This is used for both: writing the files to and generating the `require` statements.
+   * Returns [[Compiled]], containing the files that should be written to.
    */
-  def path(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
+    C.checkMain(main.mod)
+    val deps = dependencies.map { dep => compile(dep) }
+    val result = ChezSchemeCallCCPrinter.compilationUnit(main.mod, main.core, deps)
+    val mainFile = path(main.mod)
+    Some(Compiled(mainFile, Map(mainFile -> result)))
+  }
 
   /**
-   * This is only called on the main entry point, we have to manually traverse the dependencies
-   * and write them.
+   * Entrypoint used by the LSP server to show the compiled output
    */
-  def run(src: Source)(implicit C: Context): Option[Document] = for {
-    mod <- C.frontend(src)
-    _ = C.checkMain(mod)
-    deps = mod.dependencies.flatMap(dep => compile(dep))
-    core <- C.backend(src)
-    result = ChezSchemeCallCCPrinter.compilationUnit(mod, core, deps)
-    _ = C.saveOutput(result.layout, path(mod))
-  } yield result
+  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
+    C.using(module = input.mod) { Some(compile(input)) }
 
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.backend(mod.source)
-    doc = ChezSchemeCallCCPrinter.format(core)
-  } yield doc
+  private def compile(in: CoreTransformed)(implicit C: Context): Document =
+    ChezSchemeCallCCPrinter.format(in.core)
+
+  def path(m: Module)(implicit C: Context): String =
+    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 }
 
 object ChezSchemeCallCCPrinter extends ChezSchemeBase {

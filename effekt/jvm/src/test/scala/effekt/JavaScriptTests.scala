@@ -52,6 +52,8 @@ trait TestUtils {
   //  effekt.util.Task.dump()
 
   def interpret(file: File): String = {
+    // this resets the caches before each test:
+    // effekt.util.Task.reset()
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js/monadic"))
     configs.verify()

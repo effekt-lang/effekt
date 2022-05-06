@@ -8,7 +8,7 @@ import kiama.util.Source
  * The ModuleDB depends on three things:
  * - method `contentsOf` to resolve FFI includes (js files)
  * - method `findSource` to resolve module sources (effekt files)
- * - field `compiler` to run the compiler on sources, on demand
+ * - field `Compiler.frontend` to run the compiler on sources, on demand
  */
 trait ModuleDB { self: Context =>
 
@@ -50,7 +50,7 @@ trait ModuleDB { self: Context =>
    * Tries to find a module for the given source, will run compiler on demand
    */
   def tryModuleOf(source: Source): Option[Module] = for {
-    mod <- frontend(source)(this)
+    mod <- runFrontend(source)(this)
   } yield mod
 
   /**

@@ -26,12 +26,17 @@ import scopes._
  * 2. look at the bodies of effect declarations and type definitions
  * 3. look into the bodies of functions
  */
-class Namer extends Phase[ModuleDecl, ModuleDecl] {
+object Namer extends Phase[Parsed, NameResolved] {
 
   val phaseName = "namer"
 
-  def run(mod: ModuleDecl)(implicit C: Context): Option[ModuleDecl] =
-    Some(resolve(mod))
+  def run(input: Parsed)(implicit C: Context): Option[NameResolved] = {
+    val Parsed(source, tree) = input
+    //println(s"Creating a new module for ${tree.path}")
+    val mod = Module(tree, source)
+    C.using(module = mod, focus = tree) { resolve(tree) }
+    Some(NameResolved(source, tree, mod))
+  }
 
   def resolve(decl: ModuleDecl)(implicit C: Context): ModuleDecl = {
     var scope: Scope = toplevel(builtins.rootTypes)

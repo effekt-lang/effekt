@@ -30,6 +30,15 @@ trait Task[In, Out] { self =>
 
   def fingerprint(key: In): Long
 
+  def cached: Task[In, Out] = new Task[In, Out] {
+    val taskName = s"${self.taskName}"
+
+    def run(input: In)(implicit C: Context): Option[Out] =
+      self.apply(input)
+
+    def fingerprint(key: In): Long = self.fingerprint(key)
+  }
+
   /**
    * sequentially composes two tasks
    */
@@ -38,6 +47,9 @@ trait Task[In, Out] { self =>
 
     def run(input: In)(implicit C: Context): Option[Out2] =
       self.run(input).flatMap(other.run)
+
+    //    override def apply(input: In)(implicit C: Context): Option[Out2] =
+    //      self.apply(input).flatMap(other.apply)
 
     def fingerprint(key: In): Long = self.fingerprint(key)
   }
@@ -78,6 +90,8 @@ object Task { build =>
    * A heterogenous store from Target to Trace
    */
   val db = mutable.HashMap.empty[Target[Any, Any], Trace[Any]]
+
+  def reset(): Unit = db.clear()
 
   case class Info(target: Target[_, _], hash: Long) {
     def isValid: Boolean = target.fingerprint == hash

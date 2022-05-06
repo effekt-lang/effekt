@@ -32,13 +32,20 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
    */
   override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     super.afterCompilation(source, config)
-    for (mod <- C.frontend(source); core <- C.backend(source); js <- C.generate(source)) {
 
-      if (C.config.server() && settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", prettyCore.format(core))
+    // don't do anything, if we aren't running as a language server
+    if (!C.config.server()) return ;
+
+    val showAnything = settingBool("showCore") || settingBool("showTarget")
+    if (!showAnything) return ;
+
+    for ((transformed, js) <- C.compileSeparate(source)) {
+
+      if (settingBool("showCore")) {
+        publishProduct(source, "target", "effekt", prettyCore.format(transformed.core))
       }
 
-      if (C.config.server() && settingBool("showTarget")) {
+      if (settingBool("showTarget")) {
         publishProduct(source, "target", "js", js)
       }
     }
@@ -71,10 +78,13 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
   }
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
+    // TODO the following two statements should be swapped. Currently, this causes a
+    //  cache lookup and a fingerprint for each symbol that we compiled.
     sym <- context.sourceSymbols
+    currentMod <- context.runFrontend(source)(context)
     if !sym.synthetic
     mod = context.sourceModuleOf(sym)
-    if mod.source == source
+    if currentMod == mod
     id <- context.definitionTreeOption(sym)
     decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
     kind <- getSymbolKind(sym)

@@ -1,49 +1,48 @@
-package effekt.generator
+package effekt
+package generator
 
 import effekt.context.Context
-import effekt.core._
+import effekt.core.*
 import effekt.symbols.Module
 import effekt.symbols.Wildcard
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 import scala.language.implicitConversions
+import effekt.util.paths.*
 
-import effekt.util.paths._
+object ChezSchemeLift extends Backend {
 
-/**
- * It would be nice if Core could have an Effect Declaration or
- * translate effect declarations to Records...
- */
-class ChezSchemeLift extends Generator {
+  /**
+   * Returns [[Compiled]], containing the files that should be written to.
+   */
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
+    C.checkMain(main.mod)
+    val mainFile = path(main.mod)
+    val deps = dependencies.flatMap { dep => compile(dep) }
+    LiftInference(main).map { lifted =>
+      val result = ChezSchemeLiftPrinter.compilationUnit(main.mod, lifted.core, deps)
+      Compiled(mainFile, Map(mainFile -> result))
+    }
+  }
+
+  /**
+   * Entrypoint used by the LSP server to show the compiled output
+   */
+  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
+    C.using(module = input.mod) { compile(input) }
+
+  /**
+   * Compiles only the given module, does not compile dependencies
+   */
+  private def compile(in: CoreTransformed)(implicit C: Context): Option[Document] =
+    LiftInference(in).map { lifted => ChezSchemeLiftPrinter.format(lifted.core) }
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
-
-  /**
-   * This is only called on the main entry point, we have to manually traverse the dependencies
-   * and write them.
-   */
-  def run(src: Source)(implicit C: Context): Option[Document] = for {
-    mod <- C.frontend(src)
-    _ = C.checkMain(mod)
-    deps = mod.dependencies.flatMap(dep => compile(dep))
-    core <- C.backend(mod.source)
-    result = ChezSchemeLiftPrinter.compilationUnit(mod, core, deps)
-    _ = C.saveOutput(result.layout, path(mod))
-  } yield result
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   */
-  def compile(mod: Module)(implicit C: Context): Option[Document] = for {
-    core <- C.backend(mod.source)
-    doc = ChezSchemeLiftPrinter.format(core)
-  } yield doc
 }
 
 object ChezSchemeLiftPrinter extends ChezSchemeBase {

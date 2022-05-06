@@ -53,7 +53,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
    * and everything else that can occur on the top-level.
    */
   override def parse(source: Source): ParseResult[Tree] = {
-    val parsers = new Parser(positions)
+    val parsers = new EffektParsers(positions)
     parsers.parseAll(parsers.repl, source)
   }
 
@@ -235,30 +235,20 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     case _ => ()
   }
 
-  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit = {
-    context.setup(config)
-
-    val src = VirtualSource(ast, source)
-
-    for {
-      _ <- context.generate(src)
-      mod <- context.frontend(src)
-    } driver.eval(mod)
-
-    report(source, context.buffer.get, config)
-  }
+  private def runCompiler(source: Source, ast: ModuleDecl, config: EffektConfig): Unit =
+    driver.compileSource(VirtualSource(ast, source), config)
 
   private def runFrontend(source: Source, ast: ModuleDecl, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     val src = VirtualSource(ast, source)
-    context.frontend(src) map { f } getOrElse {
+    context.runFrontend(src) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
-    context.frontend(source) map { f } getOrElse {
+    context.runFrontend(source) map { f } getOrElse {
       report(source, context.buffer.get, context.config)
     }
   }

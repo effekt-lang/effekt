@@ -24,40 +24,41 @@ import kiama.util.Messaging.Messages
  *  Also annotates every lambda with a fresh region variable and collects equality constraints
  *  between regions
  */
-class Typer extends Phase[ModuleDecl, ModuleDecl] {
+object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
 
-  def run(module: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
-    val mod = Context.module
+  def run(input: NameResolved)(implicit C: Context) = C.using(module = input.mod, focus = input.tree) {
+    try {
+      val NameResolved(source, tree, mod) = input
 
-    // Effects that are lexically in scope at the top level
-    val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
-    Context.initTyperstate(toplevelEffects)
+      // Effects that are lexically in scope at the top level
+      val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
+      Context.initTyperstate(toplevelEffects)
 
-    Context in {
-      // We split the type-checking of definitions into "pre-check" and "check"
-      // to allow mutually recursive defs
-      module.defs.foreach { d => precheckDef(d) }
-      module.defs.foreach { d =>
-        val (_ / effs) = synthDef(d)
-        if (effs.nonEmpty)
-          Context.at(d) {
-            Context.error("Unhandled effects: " + effs)
-          }
+      Context in {
+        // We split the type-checking of definitions into "pre-check" and "check"
+        // to allow mutually recursive defs
+        tree.defs.foreach { d => precheckDef(d) }
+        tree.defs.foreach { d =>
+          val (_ / effs) = synthDef(d)
+          if (effs.nonEmpty)
+            Context.at(d) {
+              Context.error("Unhandled effects: " + effs)
+            }
+        }
       }
-    }
 
-    if (C.buffer.hasErrors) {
-      None
-    } else {
-      Some(module)
+      if (C.buffer.hasErrors) {
+        None
+      } else {
+        Some(Typechecked(source, tree, mod))
+      }
+    } finally {
+      // Store the backtrackable annotations into the global DB
+      // This is done regardless of errors, since
+      Context.commitTypeAnnotations()
     }
-  } finally {
-    // Store the backtrackable annotations into the global DB
-    // This is done regardless of errors, since
-    Context.commitTypeAnnotations()
-
   }
 
   //<editor-fold desc="expressions">

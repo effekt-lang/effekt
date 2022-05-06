@@ -38,6 +38,7 @@ object lsp {
   class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String) extends js.Object {
     val source = "effekt"
   }
+
   type DiagnosticSeverity = Int
   object DiagnosticSeverity {
     val Error = 1
@@ -45,7 +46,6 @@ object lsp {
     val Information = 3
     val Hint = 4
   }
-
 }
 
 /**
@@ -61,21 +61,12 @@ class LanguageServer extends Intelligence {
     /**
      * Don't output amdefine module declarations
      */
-    override def codeGenerator(implicit C: Context) = new JavaScriptVirtual
-
-    override def saveOutput(js: String, path: String)(implicit C: Context): Unit = {
-      file(path).write(js)
-      output.append(js)
-    }
+    override def Backend(implicit C: Context) = JavaScriptVirtual
   }
 
   object messaging extends Messaging(positions)
 
   context.setup(config)
-
-  var source = StringSource("")
-
-  var output: StringBuilder = new StringBuilder()
 
   @JSExport
   def infoAt(path: String, pos: lsp.Position): String = {
@@ -89,7 +80,7 @@ class LanguageServer extends Intelligence {
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.buffer.clear()
-    context.frontend(VirtualFileSource(path))
+    context.runFrontend(VirtualFileSource(path))
     context.buffer.get.distinct.map(messageToDiagnostic).toJSArray
   }
 
@@ -102,54 +93,47 @@ class LanguageServer extends Intelligence {
     file(path).read
 
   @JSExport
-  def compileFile(path: String): String =
-    context.generate(VirtualFileSource(path + ".effekt")).getOrElse {
-      throw js.JavaScriptException(s"Cannot compile ${path}")
-    }.layout
+  def lastModified(path: String): Long =
+    file(path).lastModified
 
   @JSExport
-  def compileString(content: String): String = {
-    val src = StringSource(content)
-
-    val mod = context.frontend(src).getOrElse {
-      throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
+  def compileFile(path: String): String = {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
+      throw js.JavaScriptException(s"Cannot compile ${path}")
     }
-
     try {
-      context.checkMain(mod)
-      context.generate(StringSource(content)).getOrElse {
-        throw js.JavaScriptException(s"Cannot compile, check REPL for errors")
-      }.layout
+      context.checkMain(mainCore.mod)
+      mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
+      mainOutputPath
     } catch {
       case FatalPhaseError(msg) =>
         throw js.JavaScriptException(msg)
     }
   }
 
-  @JSExport
-  def evaluate(s: String): Unit = {
-    val src = StringSource(s)
+  /**
+   * Has the side effect of saving to generated output to a file
+   */
+  private def compileSingle(src: Source)(implicit C: Context): Option[(String, CoreTransformed)] =
+    context.compileSeparate(src).map {
+      case (core, doc) =>
+        val path = JavaScriptVirtual.path(core.mod)
+        writeFile(path, doc.layout)
+        (path, core)
+    }
 
-    output = new StringBuilder
-    context.setup(config)
-
-    for {
-      mod <- context.frontend(src)
-      _ <- context.generate(src)
-      program = output.toString()
-      command = s"""(function(loader) {
-        | var module = {}
-        |$program
-        |
-        |return ${mod.name}.main().run();
-        |})(this)
-        |""".stripMargin
-    } yield scalajs.js.eval(command)
-  }.orNull
+  // Here we cache the full pipeline for a single file, including writing the result
+  // to an output file. This is important since we only want to write the file, when it
+  // really changed. Writing will change the timestamp and lazy reloading of modules
+  // on the JS side uses the timestamp to determine whether we need to re-eval a
+  // module or not.
+  private val compileCached = Phase.cached("compile-cached") {
+    Phase("compile") { compileSingle }
+  }
 
   private def messageToDiagnostic(m: Message) = {
-    val from = messaging.start(m).map(convertPosition).getOrElse(null)
-    val to = messaging.finish(m).map(convertPosition).getOrElse(null)
+    val from = messaging.start(m).map(convertPosition).orNull
+    val to = messaging.finish(m).map(convertPosition).orNull
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), m.label)
   }
 
@@ -164,11 +148,6 @@ class LanguageServer extends Intelligence {
     case Severities.Warning     => lsp.DiagnosticSeverity.Warning
     case Severities.Information => lsp.DiagnosticSeverity.Information
     case Severities.Hint        => lsp.DiagnosticSeverity.Hint
-  }
-
-  @JSExport
-  def updateContents(input: String) = {
-    source = StringSource(input)
   }
 }
 

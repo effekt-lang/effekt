@@ -6,37 +6,42 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.{ Binder, BlockSymbol, Effectful, Symbol, UserFunction, ValueSymbol }
 import effekt.context.assertions.SymbolAssertions
 
-class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
+object RegionChecker extends Phase[Typechecked, Typechecked] {
 
   val phaseName = "region-checker"
 
-  def run(input: ModuleDecl)(implicit C: Context): Option[ModuleDecl] = try {
-    Context.initRegionstate()
-    Context.unifyAndSubstitute()
+  def run(input: Typechecked)(implicit C: Context): Option[Typechecked] =
+    val Typechecked(source, tree, mod) = input
+    C.using(module = mod, focus = tree) {
+      Context.initRegionstate()
+      Context.unifyAndSubstitute()
 
-    // this should go into a precheck method
-    input.defs.foreach {
-      case f: FunDef =>
-        Context.annotateRegions(f.symbol, C.staticRegion)
-      case f: ExternFun =>
-        Context.annotateRegions(f.symbol, Region.empty)
-      case d: DataDef =>
-        d.ctors.foreach { c =>
-          Context.annotateRegions(c.symbol, Region.empty)
+      try {
+        // this should go into a precheck method
+        tree.defs.foreach {
+          case f: FunDef =>
+            Context.annotateRegions(f.symbol, C.staticRegion)
+          case f: ExternFun =>
+            Context.annotateRegions(f.symbol, Region.empty)
+          case d: DataDef =>
+            d.ctors.foreach { c =>
+              Context.annotateRegions(c.symbol, Region.empty)
+            }
+          case d: RecordDef =>
+            val sym = d.symbol
+            Context.annotateRegions(sym, Region.empty)
+            sym.fields.foreach { f =>
+              Context.annotateRegions(f, Region.empty)
+            }
+          case _ => ()
         }
-      case d: RecordDef =>
-        val sym = d.symbol
-        Context.annotateRegions(sym, Region.empty)
-        sym.fields.foreach { f =>
-          Context.annotateRegions(f, Region.empty)
-        }
-      case _ => ()
+        check(tree)
+        Some(input)
+      } finally {
+        Context.commitConstraints()
+      }
     }
-    check(input)
-    Some(input)
-  } finally {
-    Context.commitConstraints()
-  }
+
 
   // A traversal with the side effect to annotate all functions with their region
   // it returns a _concrete_ region set, all region variables have to be resolved
