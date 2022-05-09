@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef, ExternFlag }
 import effekt.context.Context
 import effekt.regions.{ Region, RegionSet, RegionVar }
 import kiama.util.Source
@@ -184,6 +184,9 @@ package object symbols {
    */
   trait Capability extends BlockSymbol {
     def effect: Effect
+  }
+  case class BuiltinCapability(effect: Effect) extends Capability {
+    override val name = effect.name
   }
 
   /**
@@ -424,7 +427,7 @@ package object symbols {
     override def builtin = true
   }
 
-  case class BuiltinFunction(name: Name, tparams: List[TypeVar], params: Params, ret: Option[Effectful], pure: Boolean = true, body: String = "") extends Fun with BlockSymbol with Builtin
+  case class BuiltinFunction(name: Name, tparams: List[TypeVar], params: Params, ret: Option[Effectful], purity: ExternFlag.Purity = ExternFlag.Pure, body: String = "") extends Fun with BlockSymbol with Builtin
   case class BuiltinType(name: Name, tparams: List[TypeVar]) extends ValueType with TypeSymbol with Builtin
   case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends Effect with TypeSymbol with Builtin
 

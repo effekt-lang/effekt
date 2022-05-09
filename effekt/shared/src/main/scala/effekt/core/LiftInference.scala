@@ -40,6 +40,9 @@ object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
     case Val(id, tpe, binding, body) =>
       Val(id, tpe, transform(binding), transform(body))
 
+    case Let(id, tpe, binding, body) =>
+      Let(id, tpe, transform(binding), transform(body))
+
     case State(id, tpe, get, put, init, body) =>
       State(id, tpe, get, put, transform(init), transform(body))
 
@@ -54,15 +57,16 @@ object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
       val transformedHandler = handler.map { transform }
       Handle(transformedBody, transformedHandler)
 
-    case App(b: Block, targs, args: List[Argument]) => b match {
-      case b: Extern => App(b, targs, liftArguments(args))
-      // TODO also for "pure" and "toplevel" functions
-      case b: BlockVar if b.id.builtin => App(b, targs, liftArguments(args))
+    case App(b: Block, targs, args: List[Argument]) =>
+      b match {
+        case b: Extern => App(b, targs, liftArguments(args))
+        // TODO also for "pure" and "toplevel" functions
+        case b: BlockVar if b.id.builtin => App(b, targs, liftArguments(args))
 
-      // [[ Eff.op(arg) ]] = Eff(ev).op(arg)
-      case Member(b, field) => App(Member(ScopeApp(transform(b), env.evidenceFor(b)), field), targs, liftArguments(args))
-      case b => App(ScopeApp(transform(b), env.evidenceFor(b)), targs, liftArguments(args))
-    }
+        // [[ Eff.op(arg) ]] = Eff(ev).op(arg)
+        case Member(b, field) => App(Member(ScopeApp(transform(b), env.evidenceFor(b)), field), targs, liftArguments(args))
+        case b => App(ScopeApp(transform(b), env.evidenceFor(b)), targs, liftArguments(args))
+      }
 
     // TODO either the implementation of match should provide evidence
     // or we should not abstract over evidence!
@@ -88,10 +92,14 @@ object LiftInference extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(tree: Expr)(implicit env: Environment, C: Context): Expr = tree match {
     case l: Literal[_] => l
-    case v: ValueVar => v
-    case PureApp(b: Block, targs, args: List[Argument]) => tree // we did not change them before -- why now?
+    case v: ValueVar   => v
+    case PureApp(b: Block, targs, args: List[Argument]) =>
+      // the arguments might contain expressions that in turn might contain statements...
+      PureApp(b, targs, liftArguments(args))
     case Select(target: Expr, field: Symbol) => Select(transform(target), field)
-    case Closure(b: Block) => Closure(transform(b))
+    case Closure(b: Block)                   => Closure(transform(b))
+    case Run(s: Stmt) =>
+      Run(transform(s))
   }
 
   /**

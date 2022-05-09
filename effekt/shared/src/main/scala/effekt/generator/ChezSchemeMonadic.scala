@@ -84,10 +84,16 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
     case Val(Wildcard(_), tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), "_", toDoc(body, false))
 
-    case Ret(e) => schemeCall("pure", List(toDoc(e)))
-
     case Val(id, tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))
+
+    case Let(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
+
+    case Let(id, tpe, binding, body) =>
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <> group(nest(line <> toDoc(body, toplevel))))
+
+    case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
     case State(eff, tpe, get, put, init, block) =>
       schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))

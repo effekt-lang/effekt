@@ -39,6 +39,8 @@ case class StringLit(value: String) extends Literal[String]
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Closure(b: Block) extends Expr
+// only inserted by the transformer if stmt is pure / io
+case class Run(s: Stmt) extends Expr
 
 /**
  * Blocks
@@ -67,6 +69,7 @@ case class Unbox(e: Expr) extends Block
 sealed trait Stmt extends Tree
 case class Def(id: BlockSymbol, tpe: InterfaceType, block: Block, rest: Stmt) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
+case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
 case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
@@ -122,55 +125,62 @@ object Tree {
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
   trait Rewrite {
     // Hooks to override
-    def expr: PartialFunction[Expr, Expr] = t => t
-    def stmt: PartialFunction[Stmt, Stmt] = t => t
-    def param: PartialFunction[Param, Param] = t => t
-    def block: PartialFunction[Block, Block] = t => t
-    def pattern: PartialFunction[Pattern, Pattern] = t => t
-    def handler: PartialFunction[Handler, Handler] = t => t
+    def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
+    def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def param: PartialFunction[Param, Param] = PartialFunction.empty
+    def block: PartialFunction[Block, Block] = PartialFunction.empty
+    def pattern: PartialFunction[Pattern, Pattern] = PartialFunction.empty
+    def handler: PartialFunction[Handler, Handler] = PartialFunction.empty
 
     // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: Expr): Expr = e match {
-      case e if expr.isDefinedAt(e) => expr(e)
-      case PureApp(b, targs, args) =>
-        PureApp(rewrite(b), targs, args map rewrite)
-      case Select(target, field) =>
-        Select(rewrite(target), field)
-      case Closure(b)    => Closure(rewrite(b))
-      case v: ValueVar   => v
-      case l: Literal[_] => l
-    }
-    def rewrite(e: Stmt): Stmt = e match {
-      case e if stmt.isDefinedAt(e) => stmt(e)
-      case Def(id, tpe, block, rest) =>
-        Def(id, tpe, rewrite(block), rewrite(rest))
-      case Val(id, tpe, binding, body) =>
-        Val(id, tpe, rewrite(binding), rewrite(body))
-      case Data(id, ctors, rest) =>
-        Data(id, ctors, rewrite(rest))
-      case Record(id, fields, rest) =>
-        Record(id, fields, rewrite(rest))
-      case App(b, targs, args) =>
-        App(rewrite(b), targs, args map rewrite)
-      case If(cond, thn, els) =>
-        If(rewrite(cond), rewrite(thn), rewrite(els))
-      case While(cond, body) =>
-        While(rewrite(cond), rewrite(body))
-      case Ret(e: Expr) =>
-        Ret(rewrite(e))
-      case Include(contents, rest) =>
-        Include(contents, rewrite(rest))
-      case State(id, tpe, get, put, init, body) =>
-        State(id, tpe, get, put, rewrite(init), rewrite(body))
-      case Handle(body, handler) =>
-        Handle(rewrite(body), handler map rewrite)
-      case Match(scrutinee, clauses) =>
-        Match(rewrite(scrutinee), clauses map {
-          case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
-        })
-      case e: Exports   => e
-      case h: Hole.type => h
-    }
+    def rewrite(e: Expr): Expr =
+      e match {
+        case e if expr.isDefinedAt(e) => expr(e)
+        case PureApp(b, targs, args) =>
+          PureApp(rewrite(b), targs, args map rewrite)
+        case Select(target, field) =>
+          Select(rewrite(target), field)
+        case v: ValueVar   => v
+        case l: Literal[_] => l
+        case Closure(b)    => Closure(rewrite(b))
+        case Run(s)        => Run(rewrite(s))
+      }
+
+    def rewrite(e: Stmt): Stmt =
+      e match {
+        case e if stmt.isDefinedAt(e) => stmt(e)
+        case Def(id, tpe, block, rest) =>
+          Def(id, tpe, rewrite(block), rewrite(rest))
+        case Val(id, tpe, binding, body) =>
+          Val(id, tpe, rewrite(binding), rewrite(body))
+        case Let(id, tpe, binding, body) =>
+          Let(id, tpe, rewrite(binding), rewrite(body))
+        case Data(id, ctors, rest) =>
+          Data(id, ctors, rewrite(rest))
+        case Record(id, fields, rest) =>
+          Record(id, fields, rewrite(rest))
+        case App(b, targs, args) =>
+          App(rewrite(b), targs, args map rewrite)
+        case If(cond, thn, els) =>
+          If(rewrite(cond), rewrite(thn), rewrite(els))
+        case While(cond, body) =>
+          While(rewrite(cond), rewrite(body))
+        case Ret(e: Expr) =>
+          Ret(rewrite(e))
+        case Include(contents, rest) =>
+          Include(contents, rewrite(rest))
+        case State(id, tpe, get, put, init, body) =>
+          State(id, tpe, get, put, rewrite(init), rewrite(body))
+        case Handle(body, handler) =>
+          Handle(rewrite(body), handler map rewrite)
+        case Match(scrutinee, clauses) =>
+          Match(rewrite(scrutinee), clauses map {
+            case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
+          })
+        case e: Exports   => e
+        case h: Hole.type => h
+      }
+
     def rewrite(e: Param): Param = e match {
       case e if param.isDefinedAt(e) => param(e)
       case e => e

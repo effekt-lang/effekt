@@ -84,7 +84,18 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
         defineValue(nameDef(put), "setter") <> line <>
         schemeCall("state", toDoc(init, false), toDoc(block))
 
+    // funnily enough, in callcc, we actually need to wrap toplevel definitions into run
+    // pure function calls (that internally use control effects, handled away) still need to
+    // be run.
+    case Let(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), "(run (thunk " <> toDoc(binding) <> "))") <> line <> toDoc(body, toplevel)
+
     case other => super.toDoc(s, toplevel)
+  }
+
+  override def toDoc(e: Expr)(implicit C: Context): Doc = e match {
+    case Run(s) => toDocInBlock(s)
+    case other  => super.toDoc(other)
   }
 
   override def requiresBlock(s: Stmt): Boolean = s match {
@@ -141,6 +152,8 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
       schemeCall(nameRef(field), toDoc(b))
 
     case Closure(b) => toDoc(b)
+
+    case Run(s)     => "(run " <> toDocInBlock(s) <> ")"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
@@ -190,6 +203,12 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
 
     case Val(id, tpe, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
+
+    case Let(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
+
+    case Let(id, tpe, binding, body) =>
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body, false))))
 
     case Ret(e) => toDoc(e)
 
@@ -242,16 +261,24 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
   def generateConstructor(did: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
     val pred = nameDef(did) <> "?"
     val matcher = "match-" <> nameDef(did)
-
+    val recordType = did.name.toString <> "$Type" <> did.id.toString
     // rethrowing an effect causes some unexpected shadowing since the constructor and effect names are called the same.
     val constructor = if (did.isInstanceOf[effekt.symbols.Effect]) "make-" <> nameDef(did) else nameDef(did)
 
     val definition =
-      parens("define-record-type" <+> parens(did.name.toString <+> constructor <+> pred) <>
+      parens("define-record-type" <+> parens(recordType <+> constructor <+> pred) <>
         nest(line <> parens("fields" <+> nest(line <> vsep(fields.map { f => parens("immutable" <+> nameDef(f) <+> nameDef(f)) }))) <> line <>
           parens("nongenerative" <+> nameDef(did))))
 
     var fresh = 0;
+
+    val showRecord = {
+      val tpe = '"' <> did.name.toString <> '"'
+      val fieldNames = fields.map { f => space <> parens(nameRef(f) <+> "r") <> space }
+      parens("define" <+> parens("show" <> recordType <+> "r") <>
+        nest(line <>
+          "(string-append" <+> tpe <+> "\"(\"" <> hsep(fieldNames, " \", \" ") <> "\")\"" <> ")"))
+    }
 
     val matcherDef =
       parens("define-matcher" <+> matcher <+> pred <>
@@ -260,7 +287,7 @@ trait ChezSchemeBase extends ParenPrettyPrinter {
           brackets(s"p${fresh}" <+> nameDef(f))
         }))))
 
-    s";;; Record definition for ${did.name}" <> line <> definition <> line <> matcherDef
+    s";;; Record definition for ${did.name}" <> line <> definition <> line <> matcherDef <> line
   }
 
   def defineValue(name: Doc, binding: Doc): Doc =

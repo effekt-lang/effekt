@@ -86,7 +86,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall(toDoc(b), args map argToDoc)
 
     case If(cond, thn, els) =>
-      parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els)
+      parens(parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els))
 
     case While(cond, body) =>
       jsCall(
@@ -125,8 +125,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
         jsObject(exports.map { e => nameDef(e) -> nameDef(e) })
       )
 
-    case other =>
-      sys error s"Cannot print ${other} in expression position"
+    case other => jsCall(parens(jsLambda(Nil, jsBlock(toDocStmt(other)))), Nil)
   }
 }
 
@@ -195,6 +194,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
       toDoc(b) <> "." <> nameRef(field)
 
     case Closure(e) => toDoc(e)
+
+    case Run(s)     => toDoc(s) <> ".run()"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
@@ -245,6 +246,12 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
 
+    case Let(Wildcard(_), tpe, binding, body) =>
+      toDoc(binding) <> ";" <> emptyline <> toDocStmt(body)
+
+    case Let(id, tpe, binding, body) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ";" <> emptyline <> toDocStmt(body)
+
     case other => "return" <+> toDocExpr(other)
   }
 
@@ -266,7 +273,10 @@ trait JavaScriptBase extends ParenPrettyPrinter {
    */
   def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
     case Val(id, tpe, binding, body) =>
-      "var" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
+
+    case Let(id, tpe, binding, body) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ";" <> emptyline <> toDocTopLevel(body)
 
     case Def(id, tpe, BlockLit(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)

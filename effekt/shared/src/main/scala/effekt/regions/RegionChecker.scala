@@ -22,7 +22,15 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
           case f: FunDef =>
             Context.annotateRegions(f.symbol, C.staticRegion)
           case f: ExternFun =>
-            Context.annotateRegions(f.symbol, Region.empty)
+            val reg =
+              if (f.purity == ExternFlag.IO) {
+                Region(symbols.builtins.IOCapability)
+              } else if (f.purity == ExternFlag.Control) {
+                Region(symbols.builtins.ControlCapablity)
+              } else {
+                Region.empty
+              }
+            Context.annotateRegions(f.symbol, reg)
           case d: DataDef =>
             d.ctors.foreach { c =>
               Context.annotateRegions(c.symbol, Region.empty)

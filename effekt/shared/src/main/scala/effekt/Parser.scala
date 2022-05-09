@@ -96,6 +96,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `extern` = keyword("extern")
   lazy val `include` = keyword("include")
   lazy val `pure` = keyword("pure")
+  lazy val `control` = keyword("control")
+  lazy val `io` = keyword("io")
   lazy val `record` = keyword("record")
 
   def keywordStrings: List[String] = List(
@@ -254,9 +256,6 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val funDef: P[Def] =
     `def` ~/> idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ FunDef.apply
 
-  lazy val maybePure: P[Boolean] =
-    `pure`.? ^^ { _.isDefined }
-
   lazy val effectDef: P[Def] =
     ( `effect` ~> effectOp ^^ {
         case op =>
@@ -275,9 +274,15 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> (maybePure <~ `def`) ~/ idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
+    `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ some(params) ~ (`:` ~> effectful) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
       case pure ~ id ~ tparams ~ params ~ tpe ~ body => ExternFun(pure, id, tparams, params, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
+
+  lazy val externFlag: P[ExternFlag.Purity] =
+    ( `pure` ^^^ ExternFlag.Pure
+    | `io` ^^^ ExternFlag.IO
+    | `control` ^^^ ExternFlag.Control
+    )
 
   lazy val externInclude: P[Def] =
     `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\"")) }

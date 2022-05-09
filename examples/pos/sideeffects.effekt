@@ -1,0 +1,36 @@
+module examples/pos/sideeffects
+
+import immutable/list
+
+effect Get(): Int
+
+def foo() = println("hello2")
+def bar() = println(Get())
+
+
+def test1() = {
+  println("hello1");
+  foo();
+  println("hello3");
+}
+
+def test2() = {
+  println("hello1");
+  bar();
+  println("hello3");
+}
+
+def test3() = {
+  [1, 2].foreach { el => test1() };
+  [1, 2].foreach { el => test2() };
+  [1, 2].foreach { el => test1() }
+}
+
+def main() = try {
+  println("---")
+  test1();
+  println("---")
+  test2();
+  println("---")
+  test3()
+} with Get { () => resume(42) }

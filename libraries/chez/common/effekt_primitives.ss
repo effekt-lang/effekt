@@ -21,9 +21,29 @@
 (define (show-number n)
   (if (integer? n) (number->string (exact n)) (number->string n)))
 
+; here we use eval to find the show function defined with the record...
+; (define (show-record rec)
+;   (let* ([rtd (record-rtd rec)]
+;          [showName (string-append "show" (generic-show (record-type-name rtd)))]
+;          [showFun (eval (string->symbol showName))])
+;   (showFun rec)))
+
+; we needed to add a unique id to the types in order to prevent duplicate definitions
+; now for printing, we need to strip the unique id (starting with $) again.
+(define (strip-type-name tpe)
+  (define out "")
+  (define found #f)
+  (for-each
+    (lambda (el)
+      (if (char=? el #\$) (set! found #t) #f)
+      (if found #f (set! out (string-append out (string el)))))
+    (string->list tpe))
+  out)
+
 (define (show-record rec)
   (let* ([rtd (record-rtd rec)]
-         [tpe (generic-show (record-type-name rtd))]
+         [unique-tpe (generic-show (record-type-name rtd))]
+         [tpe (strip-type-name unique-tpe)]
          [fields (record-type-field-names rtd)]
          [n (vector-length fields)])
      (define out (string-append tpe "("))
