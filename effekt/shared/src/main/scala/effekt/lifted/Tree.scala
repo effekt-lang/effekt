@@ -14,7 +14,7 @@ sealed trait Tree extends Product {
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ModuleDecl(path: String, imports: List[String], defs: Stmt) extends Tree
+case class ModuleDecl(path: String, imports: List[String], defs: Stmt, exports: List[Symbol]) extends Tree
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -77,7 +77,6 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Ret(e: Expr) extends Stmt
-case class Exports(path: String, exports: List[Symbol]) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree

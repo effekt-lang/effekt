@@ -117,13 +117,6 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Hole =>
       jsCall("$effekt.hole", Nil)
 
-    case Exports(path, exports) =>
-      jsCall(
-        "module.exports = Object.assign",
-        jsModuleName(path),
-        jsObject(exports.map { e => nameDef(e) -> nameDef(e) })
-      )
-
     case other => jsCall(parens(jsLambda(Nil, jsBlock(toDocStmt(other)))), Nil)
   }
 }
@@ -156,7 +149,11 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   }
 
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    "var" <+> jsModuleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs)
+    "var" <+> jsModuleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs) <> emptyline <> jsCall(
+      "module.exports = Object.assign",
+      jsModuleName(m.path),
+      jsObject(m.exports.map { e => nameDef(e) -> nameDef(e) })
+    )
 
   def toDoc(b: Block)(implicit C: Context): Doc
 
@@ -293,7 +290,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
 
-    case other => "return" <+> toDocExpr(other)
+    case other => toDocExpr(other)
   }
 
   val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this")

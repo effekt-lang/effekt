@@ -19,21 +19,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(mod: Module, tree: source.ModuleDecl)(implicit C: Context): ModuleDecl = {
     val source.ModuleDecl(path, imports, defs) = tree
-    val exports: Stmt = Exports(path, mod.terms.flatMap {
+    val exports = mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
         case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
       }
-    }.toList)
+    }.toList
 
-    val transformed = defs.foldRight(exports) {
+    val transformed = defs.foldRight(Ret(UnitLit()) : Stmt) {
       case (d, r) => transform(d, r)
     }
 
     val optimized = optimize(transformed)
 
-    ModuleDecl(path, imports.map { _.path }, optimized).inheritPosition(tree)
+    ModuleDecl(path, imports.map { _.path }, optimized, exports).inheritPosition(tree)
   }
 
   /**

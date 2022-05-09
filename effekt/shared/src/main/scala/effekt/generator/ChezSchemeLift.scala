@@ -93,7 +93,10 @@ object ChezSchemeLiftPrinter extends ChezSchemeLiftedBase {
     case Let(id, tpe, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <> group(nest(line <> toDoc(body, toplevel))))
 
-    case Ret(e) => schemeCall("pure", List(toDoc(e)))
+    // do not return on the toplevel
+    case Ret(e) if toplevel => ""
+
+    case Ret(e)             => schemeCall("pure", List(toDoc(e)))
 
     case Val(id, tpe, binding, body) =>
       schemeCall("then", toDoc(binding, false), nameDef(id), toDoc(body, false))
@@ -211,7 +214,10 @@ trait ChezSchemeLiftedBase extends ChezSchemePrinterUtils {
     case Let(id, tpe, binding, body) =>
       parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body, false))))
 
-    case Ret(e) => toDoc(e)
+    // do not return on the toplevel
+    case Ret(e) if toplevel => ""
+
+    case Ret(e)             => toDoc(e)
 
     case Handle(body, handler: List[Handler]) =>
       val handlers: List[Doc] = handler.map { h =>
@@ -241,10 +247,7 @@ trait ChezSchemeLiftedBase extends ChezSchemePrinterUtils {
       }
       schemeCall("pattern-match", toDoc(sc) :: parens(vsep(clauses, line)) :: Nil)
 
-    // only export main for now
-    case Exports(path, exports) => ""
-
-    case other                  => sys error s"Can't print: ${other}"
+    case other => sys error s"Can't print: ${other}"
   }
 
   def toDoc(p: Pattern)(implicit C: Context): Doc = p match {

@@ -78,9 +78,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
       "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
     case Ret(e) =>
       toDoc(e)
-    // don't print exports for now
-    case Exports(path, exports) =>
-      emptyDoc
     case Handle(body, hs) =>
       // TODO pretty print correctly
       val handlers = hs map { handler =>

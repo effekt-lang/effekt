@@ -5,7 +5,6 @@ import effekt.Phase
 import effekt.context.Context
 import effekt.lifted
 import effekt.core
-import effekt.lifted.{ App, Argument, Block, BlockLit, BlockParam, BlockVar, Closure, Data, Def, Exports, Expr, Extern, Handle, Handler, Hole, If, Include, Literal, Match, Member, ModuleDecl, PureApp, Record, Ret, Select, State, Stmt, Unbox, Val, ValueParam, ValueVar, While }
 import effekt.symbols.Symbol
 
 object LiftInference extends Phase[CoreTransformed, CoreLifted] {
@@ -18,7 +17,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =
-    ModuleDecl(mod.path, mod.imports, transform(mod.defs))
+    ModuleDecl(mod.path, mod.imports, transform(mod.defs), mod.exports)
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, tpe)
@@ -93,9 +92,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Ret(e) =>
       Ret(transform(e))
-
-    case core.Exports(path, exports) =>
-      Exports(path, exports)
 
     case core.Include(contents, rest) => Include(contents, transform(rest))
 
