@@ -9,7 +9,7 @@ import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 import scala.language.implicitConversions
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 
 import effekt.util.paths.*
 
