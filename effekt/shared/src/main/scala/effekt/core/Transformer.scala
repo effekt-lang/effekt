@@ -4,7 +4,7 @@ package core
 import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 import effekt.regions.{ Region, RegionSet }
 import effekt.source.ExternFlag
 

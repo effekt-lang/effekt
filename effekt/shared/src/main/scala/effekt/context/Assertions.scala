@@ -12,7 +12,7 @@ object assertions {
    * The Assertions trait is designed to keep all error messages
    * in one place
    */
-  implicit class SymbolAssertions(s: Symbol)(implicit reporter: ErrorReporter) {
+  extension(s: Symbol)(using reporter: ErrorReporter) {
 
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
@@ -92,7 +92,7 @@ object assertions {
     }
   }
 
-  implicit class TypeAssertions(t: source.Type)(implicit reporter: ErrorReporter) {
+  extension(t: source.Type)(using reporter: ErrorReporter) {
     def asTypeVar: source.TypeVar = t match {
       case t: source.TypeVar => t
       case _ => reporter.abort("Expected a value type")

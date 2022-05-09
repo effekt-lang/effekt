@@ -5,7 +5,7 @@ package typer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 import effekt.regions.Region
 import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
@@ -28,7 +28,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
 
-  def run(input: NameResolved)(implicit C: Context) = C.using(module = input.mod, focus = input.tree) {
+  def run(input: NameResolved)(using Context) = Context.using(module = input.mod, focus = input.tree) {
     try {
       val NameResolved(source, tree, mod) = input
 
@@ -49,7 +49,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
       }
 
-      if (C.buffer.hasErrors) {
+      if (Context.buffer.hasErrors) {
         None
       } else {
         Some(Typechecked(source, tree, mod))
@@ -63,7 +63,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[ValueType])(implicit C: Context): Effectful =
+  def checkExpr(expr: Expr, expected: Option[ValueType])(using Context): Effectful =
     checkAgainst(expr, expected) {
       case source.IntLit(n)     => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
@@ -285,7 +285,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
    * can be improved a lot.
    */
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(implicit C: Context): Unit = {
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context): Unit = {
     val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
 
     if (catchall)
@@ -315,7 +315,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
-  def checkPattern(sc: ValueType, pattern: MatchPattern)(implicit C: Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
+  def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
     case p @ source.LiteralPattern(lit) =>
@@ -369,7 +369,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(implicit C: Context): Effectful =
+  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context): Effectful =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
         val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
@@ -389,7 +389,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
-  def precheckDef(d: Def)(implicit C: Context): Unit = Context.focusing(d) {
+  def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tparams, params, ret, body) =>
       d.symbol.ret.foreach { annot => Context.assignType(d.symbol, d.symbol.toType) }
 
@@ -432,7 +432,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case _                   => ()
   }
 
-  def synthDef(d: Def)(implicit C: Context): Effectful = Context.at(d) {
+  def synthDef(d: Def)(using Context): Effectful = Context.at(d) {
     d match {
       case d @ source.FunDef(id, tparams, params, ret, body) =>
         val sym = d.symbol
@@ -490,9 +490,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * Invariant: Only call this on declarations that are fully annotated
    */
-  def extractAllTypes(params: Params)(implicit C: Context): Sections = params map extractTypes
+  def extractAllTypes(params: Params)(using Context): Sections = params map extractTypes
 
-  def extractTypes(params: List[Param])(implicit C: Context): List[Type] = params map {
+  def extractTypes(params: List[Param])(using Context): List[Type] = params map {
     case BlockParam(_, tpe) => tpe
     case ValueParam(_, Some(tpe)) => tpe
     case _ => Context.panic("Cannot extract type")
@@ -506,7 +506,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     atCallee: List[List[Type]],
     // we ask for the source Params here, since it might not be annotated
     atCaller: List[source.ParamSection]
-  )(implicit C: Context): Map[Symbol, Type] = {
+  )(using Context): Map[Symbol, Type] = {
 
     if (atCallee.size != atCaller.size)
       Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
@@ -543,7 +543,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
-  )(implicit C: Context): Effectful = {
+  )(using Context): Effectful = {
 
     val scopes = target.definition match {
       // an overloaded call target
@@ -554,13 +554,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // TODO improve: stop typechecking if one scope was successful
 
-    val stateBefore = C.backupTyperstate()
+    val stateBefore = Context.backupTyperstate()
 
     // TODO try to avoid duplicate error messages
     val results = scopes map { scope =>
       scope.toList.map { sym =>
         sym -> Try {
-          C.restoreTyperstate(stateBefore)
+          Context.restoreTyperstate(stateBefore)
           val tpe = Context.blockTypeOption(sym).getOrElse {
             if (sym.isInstanceOf[ValueSymbol]) {
               Context.abort(s"Expected a function type.")
@@ -569,7 +569,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             }
           }
           val r = checkCallTo(call, sym.name.name, tpe, targs, args, expected)
-          (r, C.backupTyperstate())
+          (r, Context.backupTyperstate())
         }
       }
     }
@@ -584,9 +584,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Exactly one successful result in the current scope
       case List((sym, (tpe, st))) =>
         // use the typer state after this checking pass
-        C.restoreTyperstate(st)
+        Context.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget symbol
-        C.assignSymbol(target.id, sym)
+        Context.assignSymbol(target.id, sym)
 
         return tpe
 
@@ -603,21 +603,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
               |${sucMsgs}
               |""".stripMargin
 
-        C.abort(explanation)
+        Context.abort(explanation)
     }
 
     errors match {
       case Nil =>
-        C.abort("Cannot typecheck call, no function found")
+        Context.abort("Cannot typecheck call, no function found")
 
       // exactly one error
       case List((sym, errs)) =>
         val msg = errs.head
         val msgs = errs.tail
-        C.buffer.append(msgs)
+        Context.buffer.append(msgs)
         // reraise and abort
         // TODO clean this up
-        C.at(msg.value.asInstanceOf[Tree]) { C.abort(msg.label) }
+        Context.at(msg.value.asInstanceOf[Tree]) { Context.abort(msg.label) }
 
       case failed =>
         // reraise all and abort
@@ -631,9 +631,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
             msgs.map { m => m.copy(label = s"Possible overload ${fullname}: ${m.label}") }
         }.toVector
 
-        C.reraise(msgs)
+        Context.reraise(msgs)
 
-        C.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
+        Context.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
     }
   }
 
@@ -644,7 +644,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
-  )(implicit C: Context): Effectful = {
+  )(using Context): Effectful = {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
@@ -753,7 +753,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * In the case of nested calls, currently only the errors of the innermost failing call
    * are reported
    */
-  private def Try[T](block: => T)(implicit C: Context): Either[Messages, T] = {
+  private def Try[T](block: => T)(using C: Context): Either[Messages, T] = {
     import kiama.util.Severities.Error
 
     val (msgs, optRes) = Context withMessages {
@@ -787,26 +787,26 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Set.empty
   }
 
-  private implicit class ExprOps(expr: Expr) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
+  extension (expr: Expr) {
+    def checkAgainst(tpe: ValueType)(using Context): Effectful =
       checkExpr(expr, Some(tpe))
   }
 
-  private implicit class StmtOps(stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(implicit C: Context): Effectful =
+  extension (stmt: Stmt) {
+    def checkAgainst(tpe: ValueType)(using Context): Effectful =
       checkStmt(stmt, Some(tpe))
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(implicit C: Context): Effectful =
+  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Effectful)(using Context): Effectful =
     Context.at(t) {
       val (got / effs) = f(t)
       wellformed(got)
       wellformed(effs)
       expected foreach { Context.unify(_, got) }
-      C.assignType(t, got / effs)
+      Context.assignType(t, got / effs)
       got / effs
     }
 }

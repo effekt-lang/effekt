@@ -3,7 +3,7 @@ package source
 
 import effekt.context.{ Context, ContextOps, Annotations }
 import effekt.symbols._
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 import effekt.source.Tree.Rewrite
 import effekt.substitutions._
 

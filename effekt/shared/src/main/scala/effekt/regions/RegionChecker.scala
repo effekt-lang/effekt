@@ -4,7 +4,7 @@ package regions
 import effekt.source._
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.{ Binder, BlockSymbol, Effectful, Symbol, UserFunction, ValueSymbol }
-import effekt.context.assertions.SymbolAssertions
+import effekt.context.assertions._
 
 object RegionChecker extends Phase[Typechecked, Typechecked] {
 
