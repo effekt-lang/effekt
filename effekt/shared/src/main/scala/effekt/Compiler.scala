@@ -1,7 +1,8 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.{ LiftInference, Transformer }
+import effekt.core.Transformer
+import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.regions.RegionChecker
 import effekt.source.{ CapabilityPassing, ModuleDecl }
@@ -69,6 +70,11 @@ case class Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module) ex
  * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
  */
 case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl) extends PhaseResult
+
+/**
+ * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
+ */
+case class CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl) extends PhaseResult
 
 /**
  * The result of [[LowerDependencies]] running all phases up to (including) ANF transformation on
@@ -146,7 +152,6 @@ trait Compiler {
    */
   def Backend(implicit C: Context): Backend = C.config.backend() match {
     case "js"           => effekt.generator.JavaScriptMonadic
-    case "js-lift"      => effekt.generator.JavaScriptLift
     case "chez-callcc"  => effekt.generator.ChezSchemeCallCC
     case "chez-monadic" => effekt.generator.ChezSchemeMonadic
     case "chez-lift"    => effekt.generator.ChezSchemeLift

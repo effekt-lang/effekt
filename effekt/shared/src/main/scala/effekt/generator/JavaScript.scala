@@ -70,7 +70,6 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
     case Unbox(e) => toDoc(e)
-    case _        => sys error "Unsupported block in plain JS pretty printer"
   })
 
   // pretty print the statement in a javascript expression context
