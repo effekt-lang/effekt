@@ -72,7 +72,7 @@ case class Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module) ex
 case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl) extends PhaseResult
 
 /**
- * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
+ * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
  */
 case class CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl) extends PhaseResult
 
