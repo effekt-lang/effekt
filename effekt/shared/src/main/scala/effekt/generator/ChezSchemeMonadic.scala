@@ -71,7 +71,6 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
     case Unbox(e) => toDoc(e)
-    case _        => sys error "Lifts not supported"
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
@@ -99,13 +98,5 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
       schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
 
     case other => super.toDoc(s, toplevel)
-  }
-
-  def toDoc(a: Scope)(implicit C: Context): Doc = a match {
-    case Here() => "here"
-    case Nested(scopes) =>
-      val ss: List[Doc] = scopes.map(a => toDoc(a))
-      schemeCall("nested", ss)
-    case ScopeVar(id) => nameRef(id)
   }
 }

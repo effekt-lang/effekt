@@ -52,11 +52,6 @@ case class BlockParam(id: BlockSymbol, tpe: InterfaceType) extends Param
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: BlockSymbol) extends Block
 
-// introduced by lift inference only
-case class ScopeAbs(scope: Symbol, body: Block) extends Block
-case class ScopeApp(b: Block, evidence: Scope) extends Block
-case class Lifted(s: Scope, b: Block) extends Block
-
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: EffectOp) extends Block
@@ -95,19 +90,6 @@ case class State(id: UserEffect, tpe: ValueType, get: EffectOp, put: EffectOp, i
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: UserEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
-
-/**
- * Explicit Lifts
- * ---
- * introduced by lift inference only
- * TODO maybe add a separate core language with explicit lifts
- */
-sealed trait Scope extends Tree
-case class Here() extends Scope
-case class Nested(list: List[Scope]) extends Scope
-case class ScopeVar(id: Symbol) extends Scope
-
-case class ScopeId() extends Symbol { val name = Name.local(s"ev${id}") }
 
 object Tree {
 
@@ -187,12 +169,6 @@ object Tree {
     }
     def rewrite(e: Block): Block = e match {
       case e if block.isDefinedAt(e) => block(e)
-      case ScopeAbs(scope, body) =>
-        ScopeAbs(scope, rewrite(body))
-      case ScopeApp(b, evidence) =>
-        ScopeApp(rewrite(b), evidence)
-      case Lifted(s, b) =>
-        Lifted(s, rewrite(b))
       case BlockLit(params, body) =>
         BlockLit(params map rewrite, rewrite(body))
       case Member(b, field) =>

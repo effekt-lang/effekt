@@ -27,9 +27,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
-    case Lifted(ev, b)    => "lift" <> parens(toDoc(ev) <> comma <+> toDoc(b))
-    case ScopeApp(b, sc)  => toDoc(b) <> brackets(toDoc(sc))
-    case ScopeAbs(id, b)  => brackets(toDoc(id.name)) <+> "=>" <+> toDoc(b)
     case Unbox(e)         => toDoc(e)
   }
 
@@ -59,8 +56,6 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
   }
-
-  def toDoc(s: Scope): Doc = ???
 
   def toDoc(s: Stmt): Doc =
     if (requiresBlock(s))
