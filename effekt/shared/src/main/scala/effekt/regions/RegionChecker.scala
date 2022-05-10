@@ -10,46 +10,46 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
 
   val phaseName = "region-checker"
 
-  def run(input: Typechecked)(implicit C: Context): Option[Typechecked] =
-    val Typechecked(source, tree, mod) = input
-    C.using(module = mod, focus = tree) {
-      Context.initRegionstate()
-      Context.unifyAndSubstitute()
+  def run(input: Typechecked)(implicit C: Context): Option[Typechecked] = Some(input)
 
-      try {
-        // this should go into a precheck method
-        tree.defs.foreach {
-          case f: FunDef =>
-            Context.annotateRegions(f.symbol, C.staticRegion)
-          case f: ExternFun =>
-            val reg =
-              if (f.purity == ExternFlag.IO) {
-                Region(symbols.builtins.IOCapability)
-              } else if (f.purity == ExternFlag.Control) {
-                Region(symbols.builtins.ControlCapablity)
-              } else {
-                Region.empty
-              }
-            Context.annotateRegions(f.symbol, reg)
-          case d: DataDef =>
-            d.ctors.foreach { c =>
-              Context.annotateRegions(c.symbol, Region.empty)
-            }
-          case d: RecordDef =>
-            val sym = d.symbol
-            Context.annotateRegions(sym, Region.empty)
-            sym.fields.foreach { f =>
-              Context.annotateRegions(f, Region.empty)
-            }
-          case _ => ()
-        }
-        check(tree)
-        Some(input)
-      } finally {
-        Context.commitConstraints()
-      }
-    }
-
+  //    val Typechecked(source, tree, mod) = input
+  //    C.using(module = mod, focus = tree) {
+  //      Context.initRegionstate()
+  //      Context.unifyAndSubstitute()
+  //
+  //      try {
+  //        // this should go into a precheck method
+  //        tree.defs.foreach {
+  //          case f: FunDef =>
+  //            Context.annotateRegions(f.symbol, C.staticRegion)
+  //          case f: ExternFun =>
+  //            val reg =
+  //              if (f.purity == ExternFlag.IO) {
+  //                Region(symbols.builtins.IOCapability)
+  //              } else if (f.purity == ExternFlag.Control) {
+  //                Region(symbols.builtins.ControlCapablity)
+  //              } else {
+  //                Region.empty
+  //              }
+  //            Context.annotateRegions(f.symbol, reg)
+  //          case d: DataDef =>
+  //            d.ctors.foreach { c =>
+  //              Context.annotateRegions(c.symbol, Region.empty)
+  //            }
+  //          case d: RecordDef =>
+  //            val sym = d.symbol
+  //            Context.annotateRegions(sym, Region.empty)
+  //            sym.fields.foreach { f =>
+  //              Context.annotateRegions(f, Region.empty)
+  //            }
+  //          case _ => ()
+  //        }
+  //        check(tree)
+  //        Some(input)
+  //      } finally {
+  //        Context.commitConstraints()
+  //      }
+  //    }
 
   // A traversal with the side effect to annotate all functions with their region
   // it returns a _concrete_ region set, all region variables have to be resolved

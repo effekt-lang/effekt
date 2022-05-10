@@ -131,12 +131,7 @@ trait Compiler {
        * Uses annotated effects to translate to explicit capability passing
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      CapabilityPassing andThen
-      /**
-       * Infers regions and prevents escaping of first-class functions
-       *   [[Typechecked]] --> [[Typechecked]]
-       */
-      RegionChecker
+      CapabilityPassing
   }
 
   /**

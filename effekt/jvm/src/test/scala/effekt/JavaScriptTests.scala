@@ -13,11 +13,16 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends AnyFunSpec with TestUtils {
 
+  lazy val ignored: List[File] = List(
+    examplesDir / "neg" / "lambdas",
+    examplesDir / "neg" / "issue50.effekt"
+  )
+
   runTestsIn(examplesDir)
 
   def runTestsIn(dir: File): Unit = describe(dir.getName) {
     dir.listFiles.foreach {
-      case f if f.isDirectory => runTestsIn(f)
+      case f if f.isDirectory && !ignored.contains(f) => runTestsIn(f)
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
@@ -28,7 +33,9 @@ class JavaScriptTests extends AnyFunSpec with TestUtils {
           sys error s"Missing checkfile for ${f.getPath}"
         }
 
-        it(f.getName) {
+        if (ignored.contains(f)) {
+          ignore(f.getName) { () }
+        } else it(f.getName) {
           val out = interpret(f)
 
           if (checkfile.exists()) {
