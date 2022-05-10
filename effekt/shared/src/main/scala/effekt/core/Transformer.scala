@@ -137,7 +137,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case l @ source.Lambda(id, params, body) =>
       val tpe = C.blockTypeOf(l.symbol)
-      val effs = tpe.effects.userEffects
       val ps = transformParams(params)
       Closure(BlockLit(ps, transform(body)))
 
@@ -316,11 +315,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: CapabilityParam, effect: UserEffect, get: EffectOp, put: EffectOp)
+  case class StateCapability(param: CapabilityParam, effect: ControlEffect, get: EffectOp, put: EffectOp)
 
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
-    val eff = UserEffect(binder.name, Nil)
+    val eff = ControlEffect(binder.name, Nil)
     val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe, Pure, eff)
     val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit, Pure, eff)
 

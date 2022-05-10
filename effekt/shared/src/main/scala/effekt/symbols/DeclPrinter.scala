@@ -15,10 +15,10 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   def toDoc(t: Symbol, context: Context): Doc = t match {
 
-    case e @ UserEffect(name, tparams, List(op)) =>
+    case e @ ControlEffect(name, tparams, List(op)) =>
       format("effect", op, op.annotatedResult, op.annotatedEffects)
 
-    case e @ UserEffect(name, tparams, ops) =>
+    case e @ ControlEffect(name, tparams, ops) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       val effs = ops.map { op => format("def", op, op.annotatedResult, op.annotatedEffects) }
       "effect" <+> name.toString <> tps <+> braces(nest(line <> vsep(effs)) <> line)

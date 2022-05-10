@@ -198,7 +198,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             effects = effects :+ effect
           }
 
-          val effectSymbol: UserEffect = h.definition
+          val effectSymbol: ControlEffect = h.definition
 
           val tparams = effectSymbol.tparams
           val targs = h.effect.tparams.map(_.resolve)
@@ -418,8 +418,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
-      if (d.symbol.effects.userDefined.nonEmpty) {
-        Context.abort("User defined effects on extern defs not allowed")
+      if (d.symbol.effects.controlEffects.nonEmpty) {
+        Context.abort("Unhandled control effects on extern defs not allowed")
       }
 
     case d @ source.EffDef(id, tparams, ops) =>
@@ -905,15 +905,15 @@ trait TyperOps extends ContextOps { self: Context =>
   // =====================================
   private[typer] def effects: Effects = lexicalEffects
 
-  private[typer] def withEffect(e: UserEffect): Context = {
+  private[typer] def withEffect(e: ControlEffect): Context = {
     lexicalEffects += e
     this
   }
 
   private[typer] def wellscoped(a: Effects): Unit = {
     // here we only care for the effect itself, not its type arguments
-    val forbidden = Effects(a.userEffects.collect {
-      case e: UserEffect      => e
+    val forbidden = Effects(a.controlEffects.toList.collect {
+      case e: ControlEffect      => e
       case EffectApp(e, args) => e
       case e: EffectAlias     => e
     }) -- effects

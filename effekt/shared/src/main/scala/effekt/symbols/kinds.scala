@@ -80,7 +80,7 @@ package object kinds {
     case EffectAlias(_, tparams, effs) =>
       wellformed(effs)
       Kind.EffectFun(tparams map { p => Kind.Type })
-    case UserEffect(_, tparams, _) =>
+    case ControlEffect(_, tparams, _) =>
       Kind.EffectFun(tparams map { p => Kind.Type })
     case BuiltinEffect(_, tparams) =>
       Kind.EffectFun(tparams map { p => Kind.Type })

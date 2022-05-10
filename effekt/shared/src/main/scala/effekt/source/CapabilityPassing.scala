@@ -24,7 +24,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   override def defn(implicit C: Context) = {
     case f @ FunDef(id, tparams, params, ret, body) =>
       val sym = f.symbol
-      val effs = sym.effects.userEffects
+      val effs = sym.effects.controlEffects
 
       C.withCapabilities(effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
@@ -45,7 +45,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
       val self = subst.substitute(op.appliedEffect)
-      val others = subst.substitute(op.otherEffects.userDefined)
+      val others = subst.substitute(op.otherEffects.controlEffects)
 
       val transformedArgs = args.map { a => rewrite(a) }
 
@@ -77,10 +77,10 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
-      val effects = effs.userDefined.toList.map(subst.substitute)
+      val effects = effs.controlEffects.toList.map(subst.substitute)
 
       val transformedArgs = args.map { a => rewrite(a) }
-      val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val capabilityArgs = effects.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       Call(fun, targs, transformedArgs ++ capabilityArgs)
 
@@ -90,16 +90,16 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val FunType(BlockType(tparams, params, ret, effs), _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
-      val effects = effs.userDefined.toList.map(subst.substitute)
+      val effects = effs.controlEffects.toList.map(subst.substitute)
 
       val transformedArgs = args.map { a => rewrite(a) }
-      val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val capabilityArgs = effects.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       Call(ExprTarget(transformedExpr), targs, transformedArgs ++ capabilityArgs)
 
     case f @ source.Lambda(id, params, body) =>
       val sym = f.symbol
-      val effs = sym.effects.userEffects
+      val effs = sym.effects.controlEffects
 
       C.withCapabilities(effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
@@ -108,7 +108,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     case TryHandle(prog, handlers) =>
 
       // here we need to use the effects on the handlers!
-      val effects = handlers.map(_.effect.resolve)
+      val effects = Effects(handlers.map(_.effect.resolve))
 
       val (caps, body) = C.withCapabilities(effects) { caps =>
         (caps, rewrite(prog))
@@ -135,7 +135,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {
     case b @ source.BlockArg(ps, body) =>
       // here we use the blocktype as inferred by typer (after substitution)
-      val effs = C.blockTypeOf(b).effects.userEffects
+      val effs = C.blockTypeOf(b).effects.controlEffects
       C.withCapabilities(effs) { caps =>
         source.BlockArg(ps ++ caps, rewrite(body))
       }
@@ -172,10 +172,10 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
    * runs the given block, binding the provided capabilities, so that
    * "resolveCapability" will find them.
    */
-  private[source] def withCapabilities[R](effs: List[Effect])(block: List[source.CapabilityParam] => R): R = Context in {
+  private[source] def withCapabilities[R](effs: Effects)(block: List[source.CapabilityParam] => R): R = Context in {
 
     // create a fresh cabability-symbol for each bound effect
-    val caps = effs.map { eff =>
+    val caps = effs.toList.map { eff =>
       val tpe = CapabilityType(eff)
       val sym = CapabilityParam(eff.name.rename(_ + "$capability"), tpe)
       assignType(sym, tpe)

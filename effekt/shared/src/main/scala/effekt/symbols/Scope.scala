@@ -99,7 +99,7 @@ object scopes {
         case (Some(List(t)), None) => t
         case (None, Some(t)) => t
         // give precendence to the type level effect, if an equally named effect op is in scope
-        case (Some(List(t1: EffectOp)), Some(t2: UserEffect)) => t2
+        case (Some(List(t1: EffectOp)), Some(t2: ControlEffect)) => t2
         case (Some(t1), Some(t2)) =>
           C.abort(s"Ambiguous reference to ${key}. Can refer to a term or a type.")
         case (None, None) => parent.lookupFirst(key)

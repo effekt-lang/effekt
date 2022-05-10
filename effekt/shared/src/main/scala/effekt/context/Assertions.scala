@@ -22,9 +22,9 @@ object assertions {
       case t: BlockParam => t
       case _ => reporter.abort("Expected a block parameter")
     }
-    def asUserEffect: UserEffect = s match {
-      case t: UserEffect => t
-      case _ => reporter.abort("Expected a user defined effect")
+    def asControlEffect: ControlEffect = s match {
+      case t: ControlEffect => t
+      case _ => reporter.abort("Expected a user defined control effect")
     }
     def asEffectOp: EffectOp = s match {
       case t: EffectOp => t

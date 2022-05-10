@@ -188,7 +188,7 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
   type symbol = symbols.VarBinder
 }
 case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
-  type symbol = symbols.UserEffect
+  type symbol = symbols.ControlEffect
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
   type symbol = symbols.EffectOp
@@ -311,7 +311,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
  */
 case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
   def id = effect.id
-  type symbol = symbols.UserEffect
+  type symbol = symbols.ControlEffect
 }
 case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.EffectOp

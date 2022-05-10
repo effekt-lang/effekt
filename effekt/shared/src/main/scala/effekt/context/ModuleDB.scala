@@ -75,9 +75,9 @@ trait ModuleDB { self: Context =>
     }
 
     val tpe = C.blockTypeOf(main)
-    val userEffects = tpe.effects.userDefined
-    if (userEffects.nonEmpty) {
-      C.abort(s"Main cannot have user defined effects, but includes effects: ${userEffects}")
+    val controlEffects = tpe.effects.controlEffects
+    if (controlEffects.nonEmpty) {
+      C.abort(s"Main cannot have user defined effects, but includes effects: ${controlEffects}")
     }
   }
 }

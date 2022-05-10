@@ -96,7 +96,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         val tps = tparams map resolve
         // we do not resolve the effect operations here to allow them to refer to types that are defined
         // later in the file
-        UserEffect(effectName, tps)
+        ControlEffect(effectName, tps)
       }
       Context.define(id, effectSym)
 
@@ -213,7 +213,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
     case source.EffDef(id, tparams, ops) =>
-      val effectSym = Context.resolveType(id).asUserEffect
+      val effectSym = Context.resolveType(id).asControlEffect
       effectSym.ops = ops.map {
         case source.Operation(id, tparams, params, ret) =>
           val name = C.nameFor(id)
@@ -285,16 +285,16 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Handler(effect, _, clauses) =>
 
-      def extractUserEffect(e: Effect): UserEffect = e match {
-        case EffectApp(e, args) => extractUserEffect(e)
-        case e: UserEffect      => e
+      def extractControlEffect(e: Effect): ControlEffect = e match {
+        case EffectApp(e, args) => extractControlEffect(e)
+        case e: ControlEffect   => e
         case b: BuiltinEffect =>
           Context.abort(s"Cannot handle built in effects like ${b}")
         case b: EffectAlias =>
           Context.abort(s"Cannot only handle concrete effects, but $b is an effect alias")
       }
 
-      val eff: UserEffect = Context.at(effect) { extractUserEffect(resolve(effect)) }
+      val eff: ControlEffect = Context.at(effect) { extractControlEffect(resolve(effect)) }
 
       clauses.foreach {
         case source.OpClause(op, params, body, resumeId) =>

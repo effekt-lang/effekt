@@ -341,8 +341,8 @@ package object symbols {
     override def dealias: List[Effect] = effs.dealias
   }
 
-  case class UserEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], resultType: ValueType, otherEffects: Effects, effect: UserEffect) extends Fun {
+  case class ControlEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
+  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], resultType: ValueType, otherEffects: Effects, effect: ControlEffect) extends Fun {
     def annotatedResult = Some(resultType)
     def annotatedEffects = Some(otherEffects + appliedEffect)
 
@@ -384,15 +384,8 @@ package object symbols {
     def filterNot(p: Effect => Boolean): Effects =
       Effects(effects.filterNot(p))
 
-    def userDefined: Effects =
+    def controlEffects: Effects =
       filterNot(_.builtin)
-
-    def userEffects: List[Effect] =
-      effects collect {
-        case u: UserEffect => u
-        // we assume that only UserEffects can be applied to type arguments for now
-        case u: EffectApp  => u
-      }
 
     def dealias: List[Effect] = effects.flatMap { _.dealias }
 
