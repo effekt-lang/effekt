@@ -232,9 +232,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   }
 
+  def transform(block: source.BlockArg)(implicit C: Context): core.BlockLit = block match {
+    case source.BlockArg(params, body) => BlockLit(transformParams(params), transform(body))
+  }
+
   def transform(arg: source.ArgSection)(implicit C: Context): List[core.Argument] = arg match {
     case source.ValueArgs(args)        => args.map(transform)
-    case source.BlockArg(params, body) => List(BlockLit(transformParams(params), transform(body)))
+    case b : source.BlockArg           => List(transform(b))
     case c @ source.CapabilityArg(id)  => List(BlockVar(c.definition))
   }
 

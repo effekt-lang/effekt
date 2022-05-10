@@ -115,8 +115,9 @@ package object symbols {
     def ret: Option[Effectful]
 
     // invariant: only works if ret is defined!
-    def toType: BlockType = BlockType(tparams, paramsToTypes(params), ret.get)
+    def toType: BlockType = annotatedType.get
     def toType(ret: Effectful): BlockType = BlockType(tparams, paramsToTypes(params), ret)
+    def annotatedType: Option[BlockType] = ret map { toType }
 
     def effects(implicit C: Context): Effects =
       ret.orElse { C.blockTypeOption(this).map { _.ret } }.getOrElse {

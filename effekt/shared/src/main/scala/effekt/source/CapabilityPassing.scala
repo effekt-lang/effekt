@@ -49,7 +49,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val self = subst.substitute(op.appliedEffect)
       val others = subst.substitute(op.otherEffects.userDefined)
 
-      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
+      val transformedArgs = args.map { a => rewrite(a) }
 
       val capabilityArgs = others.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
       val receiver = C.capabilityReferenceFor(self)
@@ -81,7 +81,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.userDefined.toList.map(subst.substitute)
 
-      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
+      val transformedArgs = args.map { a => rewrite(a) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       Call(fun, targs, transformedArgs ++ capabilityArgs)
@@ -94,7 +94,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.userDefined.toList.map(subst.substitute)
 
-      val transformedArgs = (args zip params).map { case (a, p) => rewrite(a, p) }
+      val transformedArgs = args.map { a => rewrite(a) }
       val capabilityArgs = effects.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
       Call(ExprTarget(transformedExpr), targs, transformedArgs ++ capabilityArgs)
@@ -134,20 +134,14 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       TryHandle(body, hs)
   }
 
-  def rewrite(arg: ArgSection, param: List[symbols.Type])(implicit C: Context): ArgSection =
-    visit(arg) { arg =>
-      (arg, param) match {
-        case (ValueArgs(as), _) =>
-          ValueArgs(as.map(rewrite))
-        case (b @ source.BlockArg(ps, body), List(p: BlockType)) =>
-          // here we use the blocktype as inferred by typer (after substitution)
-          val effs = C.blockTypeOf(b).ret.effects.userEffects
-          C.withCapabilities(effs) { caps =>
-            source.BlockArg(ps ++ caps, rewrite(body))
-          }
-        case _ => Context.panic("Invalid combination of arguments and parameter types")
+  override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {
+    case b @ source.BlockArg(ps, body) =>
+      // here we use the blocktype as inferred by typer (after substitution)
+      val effs = C.blockTypeOf(b).ret.effects.userEffects
+      C.withCapabilities(effs) { caps =>
+        source.BlockArg(ps ++ caps, rewrite(body))
       }
-    }
+  }
 
   /**
    * Copies all annotations and position information from source to target

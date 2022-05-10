@@ -521,10 +521,14 @@ object Tree {
         BlockStmt(rewrite(b))
     }
 
-    def rewrite(t: ArgSection)(implicit C: Context): ArgSection = visit(t) {
-      case ValueArgs(as)      => ValueArgs(as.map(rewrite))
+    def rewrite(b: BlockArg)(implicit C: Context): BlockArg = b match {
       case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
-      case CapabilityArg(id)  => t
+    }
+
+    def rewrite(t: ArgSection)(implicit C: Context): ArgSection = visit(t) {
+      case ValueArgs(as)    => ValueArgs(as.map(rewrite))
+      case b: BlockArg      => rewrite(b)
+      case c: CapabilityArg => c
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
