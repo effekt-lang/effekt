@@ -136,6 +136,7 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
       import java.nio.channels.{ AsynchronousServerSocketChannel, Channels }
 
       val port = config.debugPort()
+      println("Starting debugging lsp server on port " + port)
       val addr = new InetSocketAddress("localhost", port)
       val socket = AsynchronousServerSocketChannel.open().bind(addr);
 
@@ -352,7 +353,7 @@ trait LanguageService[N] {
    * a tree node with other text.
    */
   // FIXME: can the "to" be a node too? But server can't access correct PP...
-  case class TreeAction(name: String, uri: String, from: N, to: String)
+  case class TreeAction(name: String, uri: String, rangeFrom: Position, rangeTo: Position, to: String)
 
   /**
    * Return applicable code actions for the given position (if any).
@@ -512,9 +513,8 @@ class Services[N, T <: N, C <: Config](
             position <- positionOfNotification(params.getTextDocument, params.getRange.getStart);
             treeActions <- server.getCodeActions(position);
             codeActions = treeActions.map {
-              case server.TreeAction(name, uri, oldNode, newText) =>
-                val indText = server.positions.indent(newText, oldNode)
-                val textEdit = new TextEdit(server.rangeOfNode(oldNode), indText)
+              case server.TreeAction(name, uri, posFrom, posTo, newText) =>
+                val textEdit = new TextEdit(server.convertRange(Some(posFrom), Some(posTo)), newText)
                 val changes = Map(uri -> seqToJavaList(List(textEdit)))
                 val workspaceEdit = new WorkspaceEdit(mapToJavaMap(changes))
                 val action = new CodeAction(name)

@@ -131,6 +131,12 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     case _         => None
   }
 
+  def CodeAction(description: String, oldNode: Any, newText: String): Option[TreeAction] =
+    for {
+      posFrom <- positions.getStart(oldNode)
+      posTo <- positions.getFinish(oldNode)
+    } yield TreeAction(description, posFrom.source.name, posFrom, posTo, newText)
+
   /**
    * TODO it would be great, if Kiama would allow setting the position of the code action separately
    * from the node to replace. Here, we replace the annotated return type, but would need the
@@ -140,37 +146,32 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
    * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
    */
   def inferEffectsAction(fun: FunDef)(implicit C: Context): Option[TreeAction] = for {
-    pos <- positions.getStart(fun)
-    ret <- fun.ret
     // the inferred type
-    tpe <- C.inferredTypeAndEffectOption(fun)
+    (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
     // the annotated type
     ann = for {
       result <- fun.symbol.annotatedResult
       effects <- fun.symbol.annotatedEffects
     } yield (result, effects)
-    if ann.map { needsUpdate(_, tpe) }.getOrElse(true)
-  } yield TreeAction(
-    "Update return type with inferred effects",
-    pos.source.name,
-    ret,
-    tpe.toString
-  )
+    if ann.map { needsUpdate(_, (tpe, eff)) }.getOrElse(true)
+    res <- CodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
+  } yield res
 
   def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
-    pos <- positions.getStart(hole)
     holeTpe <- C.inferredTypeOption(hole)
     contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {
         text <- positions.textOf(exp)
-      } yield TreeAction("Close hole", pos.source.name, hole, text)
+        res <- CodeAction("Close hole", hole, text)
+      } yield res
 
       // <{ s1 ; s2; ... }>
       case Hole(stmts) => for {
         text <- positions.textOf(stmts)
-      } yield TreeAction("Close hole", pos.source.name, hole, s"locally { ${text} }")
+        res <- CodeAction("Close hole", hole, s"locally { ${text} }")
+      } yield res
     }
   } yield res
 

@@ -9,7 +9,7 @@ def flipTrue { prog: Unit / Flip }: Unit =
     resume(true); resume(false)
   }
 
-def main(): Unit / { Console } = {
+def main(): Unit / { Console} = {
 
   try {
 
