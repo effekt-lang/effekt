@@ -123,7 +123,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.define(sym.params)
 
         expected match {
-          case Some(exp @ FunType(BlockType(_, ps, ret, effs), reg)) =>
+          case Some(exp @ FunType(FunctionType(_, ps, ret, effs), reg)) =>
             checkAgainstDeclaration("lambda", ps, params)
             val (retGot / effsGot) = body checkAgainst ret
             Context.unify(ret, retGot)
@@ -131,7 +131,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val diff = effsGot -- effs
 
             val reg = Region.fresh(l)
-            val got = FunType(BlockType(Nil, ps, retGot, effs), reg)
+            val got = FunType(FunctionType(Nil, ps, retGot, effs), reg)
 
             Context.unify(exp, got)
 
@@ -146,7 +146,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val (ret / effs) = checkStmt(body, None)
             Context.wellscoped(effs)
             val ps = extractAllTypes(sym.params)
-            val tpe = BlockType(Nil, ps, ret, effs)
+            val tpe = FunctionType(Nil, ps, ret, effs)
 
             // we make up a fresh region variable that will be checked later by the region checker
             val reg = Region.fresh(l)
@@ -171,7 +171,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Call(source.ExprTarget(e), targs, args) =>
         val (funTpe / funEffs) = checkExpr(e, None)
 
-        val tpe: BlockType = funTpe.dealias match {
+        val tpe: FunctionType = funTpe.dealias match {
           case f: FunType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
@@ -220,7 +220,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val effectOp = d.definition
 
               // (1) Instantiate block type of effect operation
-              val (rigids, BlockType(tparams, pms, tpe, effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
+              val (rigids, FunctionType(tparams, pms, tpe, effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
 
               // (2) unify with given type arguments for effect (i.e., A, B, ...):
               //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
@@ -239,10 +239,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
               // (5) synthesize type of continuation
               val resumeType = if (effectOp.isBidirectional) {
                 // resume { e }
-                BlockType(Nil, List(List(BlockType(Nil, List(Nil), substTpe, substEffs))), ret, Pure)
+                FunctionType(Nil, List(List(FunctionType(Nil, List(Nil), substTpe, substEffs))), ret, Pure)
               } else {
                 // resume(v)
-                BlockType(Nil, List(List(substTpe)), ret, Pure)
+                FunctionType(Nil, List(List(substTpe)), ret, Pure)
               }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
@@ -354,7 +354,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, BlockType(_, pms, ret, _)) = Unification.instantiate(sym.toType)
+      val (rigids, FunctionType(_, pms, ret, _)) = Unification.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.unify(ret, sc)
@@ -538,7 +538,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
 
     (atCallee zip atCaller).flatMap[(Symbol, Type)] {
-      case (List(b1: BlockType), b2: source.BlockParam) =>
+      case (List(b1: FunctionType), b2: source.BlockParam) =>
         Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
 
       case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
@@ -666,7 +666,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkCallTo(
     call: source.Call,
     name: String,
-    funTpe: BlockType,
+    funTpe: FunctionType,
     targs: List[ValueType],
     args: List[source.ArgSection],
     expected: Option[Type]
@@ -674,7 +674,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, bt @ BlockType(_, params, ret, retEffs)) = Unification.instantiate(funTpe)
+    val (rigids, bt @ FunctionType(_, params, ret, retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -710,7 +710,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
-      case (List(bt: BlockType), arg: source.BlockArg) =>
+      case (List(bt: FunctionType), arg: source.BlockArg) =>
         checkBlockArgument(bt, arg)
 
       case (_, _) =>
@@ -732,8 +732,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     //   BlockArg: foo { n => println("hello" + n) }
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val bt @ BlockType(Nil, params, tpe1, handled) = Context.unifier substitute tpe
+    def checkBlockArgument(tpe: FunctionType, arg: source.BlockArg): Unit = Context.at(arg) {
+      val bt @ FunctionType(Nil, params, tpe1, handled) = Context.unifier substitute tpe
 
       // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
       Context.annotateBlockArgument(arg, bt)
@@ -803,7 +803,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
-    case BlockType(tparams, params, ret, effs) =>
+    case FunctionType(tparams, params, ret, effs) =>
       freeTypeVars(params) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tparams.toSet
     case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
@@ -856,7 +856,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * We need to substitute after solving and update the DB again, later.
    */
   private var inferredValueTypes: List[(Tree, ValueType)] = Nil
-  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
+  private var inferredBlockTypes: List[(Tree, FunctionType)] = Nil
   private var inferredEffects: List[(Tree, Effects)] = Nil
   private var inferredRegions: List[(Tree, Region)] = Nil
 
@@ -871,7 +871,7 @@ trait TyperOps extends ContextOps { self: Context =>
   // ====================
   // since symbols are unique, we can use mutable state instead of reader
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
-  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+  private var blockTypingContext: Map[Symbol, FunctionType] = Map.empty
   private var regionContext: Map[Symbol, Region] = Map.empty
 
   // first tries to find the type in the local typing context
@@ -889,9 +889,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
 
-  private[typer] def bind(s: Symbol, tpe: BlockType, capt: Region): Unit = { bind(s, tpe); bind(s, capt) }
+  private[typer] def bind(s: Symbol, tpe: FunctionType, capt: Region): Unit = { bind(s, tpe); bind(s, capt) }
 
-  private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
+  private[typer] def bind(s: Symbol, tpe: FunctionType): Unit = blockTypingContext += (s -> tpe)
 
   private[typer] def bind(s: Symbol, capt: Region): Unit = regionContext += (s -> capt)
 
@@ -1018,7 +1018,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: BlockType): Context = {
+  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: FunctionType): Context = {
     annotations.annotate(Annotations.BlockArgumentType, t, tpe)
     this
   }
@@ -1032,14 +1032,14 @@ trait TyperOps extends ContextOps { self: Context =>
     assignType(s, t); this
   }
 
-  private[typer] def define(s: Symbol, t: InterfaceType): Context = {
+  private[typer] def define(s: Symbol, t: BlockType): Context = {
     assignType(s, t); this
   }
 
   private[typer] def define(bs: Map[Symbol, Type]): Context = {
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => define(v, t)
-      case (v: BlockSymbol, t: BlockType) => define(v, t)
+      case (v: BlockSymbol, t: FunctionType) => define(v, t)
       case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
     }; this
   }
@@ -1053,7 +1053,7 @@ trait TyperOps extends ContextOps { self: Context =>
     this
   }
 
-  private[typer] def annotateTarget(t: source.CallTarget, tpe: BlockType): Unit = {
+  private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
     annotations.annotate(Annotations.TargetType, t, tpe)
   }
 

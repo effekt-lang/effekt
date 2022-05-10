@@ -453,7 +453,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         tpe
       case source.FunType(tpe @ source.BlockType(params, ret, effs)) =>
         val (terms, effects) = resolveTermsOrTypes(effs.effs)
-        val btpe = BlockType(Nil, List(params.map(resolve)), resolve(ret), Effects(effects))
+        val btpe = FunctionType(Nil, List(params.map(resolve)), resolve(ret), Effects(effects))
         FunType(btpe, Region(terms))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
@@ -484,10 +484,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Effect(e, args) => Right(EffectApp(Context.resolveType(e).asEffect, args.map(resolve)))
   }
 
-  def resolve(blockType: source.BlockType)(implicit C: Context): BlockType = {
+  def resolve(blockType: source.BlockType)(implicit C: Context): FunctionType = {
     val tpe = resolve(blockType.result)
     val eff = resolve(blockType.effects)
-    val res = BlockType(Nil, List(blockType.params.map(resolve)), tpe, eff)
+    val res = FunctionType(Nil, List(blockType.params.map(resolve)), tpe, eff)
     C.annotateResolvedType(blockType)(res)
     res
   }

@@ -85,7 +85,7 @@ package object symbols {
 
   // TODO everywhere else the two universes are called "value" and "block"
   sealed trait TrackedParam extends Param
-  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
+  case class BlockParam(name: Name, tpe: FunctionType) extends TrackedParam with BlockSymbol
   case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
     def effect = tpe.eff
     override def toString = s"@${tpe.eff.name}"
@@ -116,9 +116,9 @@ package object symbols {
     def annotatedEffects: Option[Effects]
 
     // invariant: only works if ret is defined!
-    def toType: BlockType = annotatedType.get
-    def toType(result: ValueType, effects: Effects): BlockType = BlockType(tparams, paramsToTypes(params), result, effects)
-    def annotatedType: Option[BlockType] = for { result <- annotatedResult; effects <- annotatedEffects } yield toType(result, effects)
+    def toType: FunctionType = annotatedType.get
+    def toType(result: ValueType, effects: Effects): FunctionType = FunctionType(tparams, paramsToTypes(params), result, effects)
+    def annotatedType: Option[FunctionType] = for { result <- annotatedResult; effects <- annotatedEffects } yield toType(result, effects)
 
     def effects(implicit C: Context): Effects =
       annotatedType.map { tpe => tpe.effects }.orElse { C.blockTypeOption(this).map { _.effects } }.getOrElse {
@@ -206,13 +206,13 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class FunType(tpe: BlockType, region: Region) extends ValueType {
+  case class FunType(tpe: FunctionType, region: Region) extends ValueType {
     override def toString: String = {
 
-      val BlockType(_, params, ret, effs) = tpe
+      val FunctionType(_, params, ret, effs) = tpe
       // copy and paste from BlockType.toString
       val ps = params.map {
-        case List(b: BlockType) => s"{${b.toString}}"
+        case List(b: FunctionType) => s"{${b.toString}}"
         case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
         case _ => sys error "Parameter lists are either singleton block params or a list of value params."
       }.mkString("")
@@ -255,13 +255,13 @@ package object symbols {
     }
   }
 
-  sealed trait InterfaceType extends Type
-  case class CapabilityType(eff: Effect) extends InterfaceType
+  sealed trait BlockType extends Type
+  case class CapabilityType(eff: Effect) extends BlockType
 
-  case class BlockType(tparams: List[TypeVar], params: Sections, result: ValueType, effects: Effects) extends InterfaceType {
+  case class FunctionType(tparams: List[TypeVar], params: Sections, result: ValueType, effects: Effects) extends BlockType {
     override def toString: String = {
       val ps = params.map {
-        case List(b: BlockType) => s"{${b.toString}}"
+        case List(b: FunctionType) => s"{${b.toString}}"
         case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
         case _ => sys error "Parameter lists are either singleton block params or a list of value params."
       }.mkString("")

@@ -398,7 +398,7 @@ case class CapabilityType(eff: symbols.Effect) extends Type {
   type resolved = symbols.CapabilityType
 }
 case class BlockType(params: List[ValueType], result: ValueType, effects: Effects) extends Type {
-  type resolved = symbols.BlockType
+  type resolved = symbols.FunctionType
 }
 
 case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
