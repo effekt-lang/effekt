@@ -86,8 +86,8 @@ trait Intelligence {
   }
 
   def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
-    outerTpe <- C.inferredTypeOption(hole)
-    innerTpe <- C.inferredTypeOption(hole.stmts)
+    outerTpe <- C.inferredTypeAndEffectOption(hole)
+    innerTpe <- C.inferredTypeAndEffectOption(hole.stmts)
   } yield s"""| | Outside       | Inside        |
               | |:------------- |:------------- |
               | | `${outerTpe}` | `${innerTpe}` |

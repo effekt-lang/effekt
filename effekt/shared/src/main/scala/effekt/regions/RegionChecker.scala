@@ -151,7 +151,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
       var reg = bodyRegion -- boundRegions
 
       // check that boundRegions do not escape as part of an inferred type
-      val t @ Effectful(tpe, _) = C.inferredTypeOf(body)
+      val t @ (tpe, _) = C.inferredTypeAndEffectOf(body)
 
       val escapes = Context.freeRegionVariables(t) intersect boundRegions
       if (escapes.nonEmpty) {
@@ -186,7 +186,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
 
     case ExprTarget(e) =>
       val reg = check(e)
-      val Effectful(symbols.FunType(tpe, funReg), _) = Context.inferredTypeOf(e)
+      val symbols.FunType(tpe, funReg) = Context.inferredTypeOf(e)
       reg ++ funReg.asRegionSet
 
     case VarDef(id, _, binding) =>
@@ -212,7 +212,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
     case c @ Call(id: IdTarget, _, args) if id.definition.isInstanceOf[symbols.Fun] =>
       var reg = check(id)
       val fun = id.definition.asFun
-      val Effectful(tpe, _) = Context.inferredTypeOf(c)
+      val tpe = Context.inferredTypeOf(c)
 
       // there can be more args than params (for capability args)
       val params = fun.params.padTo(args.size, null)
@@ -238,7 +238,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
 
     // calls to unknown functions (block arguments, lambdas, etc.)
     case c @ Call(target, _, args) =>
-      val Effectful(tpe, _) = Context.inferredTypeOf(c)
+      val tpe = Context.inferredTypeOf(c)
       args.foldLeft(check(target)) { case (reg, arg) => reg ++ check(arg) }
 
     case c: CapabilityArg => Region(c.definition)
@@ -510,7 +510,7 @@ trait RegionReporter { self: Context =>
   }
 
   private def mentionsInType(t: Tree, reg: Symbol): Boolean =
-    freeRegionVariables(inferredTypeOf(t)).contains(reg)
+    freeRegionVariables(inferredTypeAndEffectOf(t)).contains(reg)
 
   private def uses(t: Tree, reg: Symbol): Boolean =
     inferredRegionOption(t).exists(_.contains(reg))

@@ -39,7 +39,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       val tpe @ BlockType(tparams, params, ret / _) = C.blockTypeOf(op)
 
-      val (_ / effs) = C.inferredTypeOf(c)
+      val effs = C.inferredEffectOf(c)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
@@ -65,7 +65,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
         val access = Var(fun.id).inheritPosition(fun)
         // heal the missing type
         // TODO refactor this
-        C.annotate(Annotations.InferredType, access, Effectful(C.valueTypeOf(fun.definition), Pure))
+        C.annotate(Annotations.InferredType, access, C.valueTypeOf(fun.definition))
         ExprTarget(access)
       }
       rewrite(visit(c) { c => Call(target, targs, args) })
@@ -89,7 +89,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, args) =>
       val transformedExpr = rewrite(expr)
-      val (FunType(BlockType(tparams, params, ret / effs), _) / _) = C.inferredTypeOf(expr)
+      val FunType(BlockType(tparams, params, ret / effs), _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.userDefined.toList.map(subst.substitute)

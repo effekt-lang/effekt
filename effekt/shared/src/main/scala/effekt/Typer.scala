@@ -138,7 +138,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.unify(exp, got)
 
             Context.assignType(sym, sym.toType(result))
-            Context.assignType(l, result)
+            Context.assignType(l, ret)
+            Context.assignEffect(l, effs)
             Context.annotateRegions(sym, reg)
 
             got / diff
@@ -147,14 +148,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val (ret / effs) = checkStmt(body, None)
             Context.wellscoped(effs)
             val ps = extractAllTypes(sym.params)
-            val tpe = BlockType(Nil, ps, ret / effs)
+            val tpe = BlockType(Nil, ps, Effectful(ret, effs))
 
             // we make up a fresh region variable that will be checked later by the region checker
             val reg = Region.fresh(l)
             val funTpe = FunType(tpe, reg)
 
-            Context.assignType(sym, sym.toType(ret / effs))
-            Context.assignType(l, ret / effs)
+            Context.assignType(sym, sym.toType(Effectful(ret, effs)))
+            Context.assignType(l, ret)
+            Context.assignEffect(l, effs)
             Context.annotateRegions(sym, reg)
 
             expected.foreach { exp =>
@@ -464,14 +466,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(Effectful(tpe, funEffs)) =>
             val (_ / effs) = body checkAgainst tpe
             Context.wellscoped(effs)
-            Context.assignType(d, Effectful(tpe, effs))
+            Context.assignType(d, tpe)
+            Context.assignEffect(d, effs)
 
             () / (effs -- funEffs) // the declared effects are considered as bound
           case None =>
             val (tpe / effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
             Context.assignType(sym, sym.toType(tpe / effs))
-            Context.assignType(d, tpe / effs)
+            Context.assignType(d, tpe)
+            Context.assignEffect(d, effs)
 
             () / Pure // all effects are handled by the function itself (since they are inferred)
         }
@@ -830,7 +834,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       wellformed(got)
       wellformed(effs)
       expected foreach { Context.unify(_, got) }
-      Context.assignType(t, got / effs)
+      Context.assignType(t, got)
+      Context.assignEffect(t, effs)
       got / effs
     }
 }
@@ -919,8 +924,13 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Inferred types
   // ==============
-  private[typer] def assignType(t: Tree, e: Effectful): Context = {
+  private[typer] def assignType(t: Tree, e: ValueType): Context = {
     annotations.annotate(Annotations.InferredType, t, e)
+    this
+  }
+
+  private[typer] def assignEffect(t: Tree, e: Effects): Context = {
+    annotations.annotate(Annotations.InferredEffect, t, e)
     this
   }
 
