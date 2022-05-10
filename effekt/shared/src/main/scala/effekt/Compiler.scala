@@ -160,7 +160,6 @@ trait Compiler {
   object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
     val phaseName = "lower-dependencies"
     def run(main: CoreTransformed)(implicit C: Context) = {
-      C.checkMain(main.mod)
       val dependencies = main.mod.dependencies flatMap { dep =>
         // We already ran the frontend on the dependencies (since they are discovered
         // dynamically). The results are cached, so it doesn't hurt dramatically to run
