@@ -848,6 +848,71 @@ private[typer] case class TyperState(effects: Effects, annotations: Annotations,
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
+   * The substitutions learnt so far
+   */
+  private var substitutions: Substitutions = Map.empty
+
+  /**
+   * We need to substitute after solving and update the DB again, later.
+   */
+  private var inferredValueTypes: List[(Tree, ValueType)] = Nil
+  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
+  private var inferredEffects: List[(Tree, Effects)] = Nil
+  private var inferredRegions: List[(Tree, Region)] = Nil
+
+  /**
+   * The current lexical region used for mutable variables.
+   *
+   * None on the toplevel
+   */
+  private var lexicalRegion: Option[Region] = None
+
+  // The "Typing Context"
+  // ====================
+  // since symbols are unique, we can use mutable state instead of reader
+  private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
+  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+  private var regionContext: Map[Symbol, Region] = Map.empty
+
+  // first tries to find the type in the local typing context
+  // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
+  private[typer] def lookup(s: ValueSymbol) =
+    valueTypingContext.getOrElse(s, valueTypeOf(s))
+
+  private[typer] def lookup(s: BlockSymbol) = (lookupType(s), lookupRegion(s))
+
+  private[typer] def lookupType(s: BlockSymbol) =
+    blockTypingContext.get(s).orElse(blockTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
+
+  private[typer] def lookupRegion(s: BlockSymbol) =
+    regionContext.getOrElse(s, regionOf(s))
+
+  private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
+
+  private[typer] def bind(s: Symbol, tpe: BlockType, capt: Region): Unit = { bind(s, tpe); bind(s, capt) }
+
+  private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
+
+  private[typer] def bind(s: Symbol, capt: Region): Unit = regionContext += (s -> capt)
+
+  private[typer] def bind(bs: Map[Symbol, ValueType]): Unit =
+    bs foreach {
+      case (v: ValueSymbol, t: ValueType) => bind(v, t)
+      //        case (v: BlockSymbol, t: FunctionType) => bind(v, t)
+      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
+    }
+
+  private[typer] def bind(p: ValueParam): Unit = p match {
+    case s @ ValueParam(name, Some(tpe)) => bind(s, tpe)
+    case s => panic(s"Internal Error: Cannot add $s to typing context.")
+  }
+
+  private[typer] def bind(p: BlockParam): Unit = p match {
+    case s @ BlockParam(name, tpe) => bind(s, tpe, Region(s)) // bind(s, tpe, CaptureSet(CaptureOf(s)))
+  }
+
+
+  /**
    * the effects, whose declarations are _lexically_ in scope
    */
   private var lexicalEffects: Effects = Pure
@@ -901,6 +966,24 @@ trait TyperOps extends ContextOps { self: Context =>
     annotate(Annotations.Unifier, module, currentUnifier)
   }
 
+  private[typer] def commitTypeAnnotationsNew(): Unit = {
+    // now also store the typing context in the global database:
+    valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    //regionContext foreach { case (s, c) => assignCaptureSet(s, c) }
+
+    // Update and write out all inferred types and captures for LSP support
+    // This info is currently also used by Transformer!
+    inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, tpe) }// subst.substitute(tpe)) }
+    inferredEffects foreach { case (t, eff) => annotate(Annotations.InferredEffect, t, eff) }//subst.substitute(tpe)) }
+    inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, tpe)} //subst.substitute(tpe)) }
+
+    val substitutedRegions = inferredRegions map { case (t, capt) => (t, capt.asRegionSet) }//(t, subst.substitute(capt)) }
+    substitutedRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt) }
+
+    //annotate(Annotations.CaptureForFile, module, substitutedRegions)
+  }
+
   // Effects that are in the lexical scope
   // =====================================
   private[typer] def effects: Effects = lexicalEffects
@@ -925,7 +1008,7 @@ trait TyperOps extends ContextOps { self: Context =>
   // Inferred types
   // ==============
   private[typer] def assignType(t: Tree, e: ValueType): Context = {
-    annotations.annotate(Annotations.InferredType, t, e)
+    annotations.annotate(Annotations.InferredValueType, t, e)
     this
   }
 

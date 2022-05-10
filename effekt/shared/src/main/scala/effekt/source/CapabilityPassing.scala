@@ -63,7 +63,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
         val access = Var(fun.id).inheritPosition(fun)
         // heal the missing type
         // TODO refactor this
-        C.annotate(Annotations.InferredType, access, C.valueTypeOf(fun.definition))
+        C.annotate(Annotations.InferredValueType, access, C.valueTypeOf(fun.definition))
         ExprTarget(access)
       }
       rewrite(visit(c) { c => Call(target, targs, args) })
