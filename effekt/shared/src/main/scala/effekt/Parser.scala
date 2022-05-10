@@ -417,15 +417,15 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   /**
    * Expressions
    */
-  lazy val expr:    P[Expr] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
-  lazy val orExpr:  P[Expr] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
-  lazy val andExpr: P[Expr] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
-  lazy val eqExpr:  P[Expr] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
-  lazy val relExpr: P[Expr] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
-  lazy val addExpr: P[Expr] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
-  lazy val mulExpr: P[Expr] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
+  lazy val expr:    P[Term] = matchExpr | assignExpr | orExpr | failure("Expected an expression")
+  lazy val orExpr:  P[Term] = orExpr  ~ "||" ~/ andExpr ^^ binaryOp | andExpr
+  lazy val andExpr: P[Term] = andExpr ~ "&&" ~/ eqExpr ^^ binaryOp | eqExpr
+  lazy val eqExpr:  P[Term] = eqExpr  ~ oneof("==", "!=") ~/ relExpr ^^ binaryOp | relExpr
+  lazy val relExpr: P[Term] = relExpr ~ oneof("<=", ">=", "<", ">") ~/ addExpr ^^ binaryOp | addExpr
+  lazy val addExpr: P[Term] = addExpr ~ oneof("++", "+", "-") ~/ mulExpr ^^ binaryOp | mulExpr
+  lazy val mulExpr: P[Term] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
-  lazy val accessExpr: P[Expr] =
+  lazy val accessExpr: P[Term] =
     callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ many(args)) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
         case (firstArg, id ~ targs ~ otherArgs) =>
@@ -434,7 +434,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       }
     }
 
-  lazy val callExpr: P[Expr] =
+  lazy val callExpr: P[Term] =
     ( ifExpr
     | whileExpr
     | funCall
@@ -449,17 +449,17 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | `(` ~> expr <~ `)` ^^ ExprTarget.apply
     )
 
-  lazy val funCall: P[Expr] =
+  lazy val funCall: P[Term] =
     callTarget ~ maybeTypeArgs ~ some(args) ^^ Call.apply
 
-  lazy val matchExpr: P[Expr] =
+  lazy val matchExpr: P[Term] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr.apply
 
   // TODO deprecate doExpr
-  lazy val doExpr: P[Expr] =
+  lazy val doExpr: P[Term] =
     `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call.apply
 
-  lazy val handleExpr: P[Expr] =
+  lazy val handleExpr: P[Term] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle.apply
 
   lazy val handler: P[Handler] =
@@ -495,22 +495,22 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val implicitResume: P[IdDef] = success(IdDef("resume"))
 
 
-  lazy val assignExpr: P[Expr] =
+  lazy val assignExpr: P[Term] =
     idRef ~ (`=` ~> expr) ^^ Assign.apply
 
-  lazy val ifExpr: P[Expr] =
+  lazy val ifExpr: P[Term] =
     `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If.apply
 
-  lazy val whileExpr: P[Expr] =
+  lazy val whileExpr: P[Term] =
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While.apply
 
-  lazy val primExpr: P[Expr] =
+  lazy val primExpr: P[Term] =
     variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`
 
-  lazy val variable: P[Expr] =
+  lazy val variable: P[Term] =
     idRef ^^ Var.apply
 
-  lazy val hole: P[Expr] =
+  lazy val hole: P[Term] =
     ( `<>` ^^^ Hole(Return(UnitLit()))
     | `<{` ~> stmts <~ `}>` ^^ Hole.apply
     )
@@ -521,19 +521,19 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val lambdaExpr: P[Lambda] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Lambda(IdDef("<lambda>"), List(ps), body) }
 
-  lazy val listLiteral: P[Expr] =
+  lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }
 
-  lazy val tupleLiteral: P[Expr] =
+  lazy val tupleLiteral: P[Term] =
     `(` ~> expr ~ (`,` ~/> someSep(expr, `,`) <~ `)`) ^^ { case tup @ (first ~ rest) => TupleTree(first :: rest) withPositionOf tup }
 
-  private def NilTree: Expr =
+  private def NilTree: Term =
     Call(IdTarget(IdRef("Nil")), Nil, List(ValueArgs(Nil)))
 
-  private def ConsTree(el: Expr, rest: Expr): Expr =
+  private def ConsTree(el: Term, rest: Term): Term =
     Call(IdTarget(IdRef("Cons")), Nil, List(ValueArgs(List(el, rest))))
 
-  private def TupleTree(args: List[Expr]): Expr =
+  private def TupleTree(args: List[Term]): Term =
     Call(IdTarget(IdRef(s"Tuple${args.size}")), Nil, List(ValueArgs(args)))
 
   /**
@@ -582,7 +582,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   // === AST Helpers ===
 
-  private def binaryOp(lhs: Expr, op: String, rhs: Expr): Expr =
+  private def binaryOp(lhs: Term, op: String, rhs: Term): Term =
      Call(IdTarget(IdRef(opName(op))), Nil, List(ValueArgs(List(lhs, rhs))))
 
   private def opName(op: String): String = op match {

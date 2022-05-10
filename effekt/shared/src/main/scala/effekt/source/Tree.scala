@@ -166,7 +166,7 @@ case class BlockParam(id: IdDef, tpe: BlockType) extends TrackedParam { type sym
 case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends TrackedParam { type symbol = symbols.CapabilityParam }
 
 sealed trait ArgSection extends Tree
-case class ValueArgs(args: List[Expr]) extends ArgSection
+case class ValueArgs(args: List[Term]) extends ArgSection
 case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
 case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
   type symbol = symbols.CapabilityParam
@@ -243,25 +243,25 @@ case class ExternInclude(path: String) extends Def {
 
 sealed trait Stmt extends Tree
 case class DefStmt(d: Def, rest: Stmt) extends Stmt
-case class ExprStmt(d: Expr, rest: Stmt) extends Stmt
-case class Return(d: Expr) extends Stmt
+case class ExprStmt(d: Term, rest: Stmt) extends Stmt
+case class Return(d: Term) extends Stmt
 case class BlockStmt(stmts: Stmt) extends Stmt
 
 /**
  * In our source language, almost everything is an expression.
  * Effectful calls, if, while, ...
  */
-sealed trait Expr extends Tree
+sealed trait Term extends Tree
 
 // Variable / Value use
-case class Var(id: IdRef) extends Expr with Reference {
+case class Var(id: IdRef) extends Term with Reference {
   type symbol = symbols.ValueSymbol with symbols.TermSymbol
 }
-case class Assign(id: IdRef, expr: Expr) extends Expr with Reference {
+case class Assign(id: IdRef, expr: Term) extends Term with Reference {
   type symbol = symbols.VarBinder
 }
 
-sealed trait Literal[T] extends Expr {
+sealed trait Literal[T] extends Term {
   def value: T
 }
 case class UnitLit() extends Literal[Unit] { def value = () }
@@ -276,13 +276,13 @@ case class StringLit(value: String) extends Literal[String]
  * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
  * its parameter symbols.
  */
-case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Expr with Definition {
+case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Term with Definition {
   type symbol = symbols.Lambda
 }
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
-case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Expr
+case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Term
 
 sealed trait CallTarget extends Tree
 case class IdTarget(id: IdRef) extends CallTarget with Reference {
@@ -292,12 +292,12 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.EffectOp
 }
-case class ExprTarget(receiver: Expr) extends CallTarget
+case class ExprTarget(receiver: Term) extends CallTarget
 
-case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
-case class While(cond: Expr, block: Stmt) extends Expr
+case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
+case class While(cond: Term, block: Stmt) extends Term
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -317,9 +317,9 @@ case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: I
   type symbol = symbols.EffectOp
 }
 
-case class Hole(stmts: Stmt) extends Expr
+case class Hole(stmts: Stmt) extends Term
 
-case class MatchExpr(scrutinee: Expr, clauses: List[MatchClause]) extends Expr
+case class MatchExpr(scrutinee: Term, clauses: List[MatchClause]) extends Term
 case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
 sealed trait MatchPattern extends Tree
@@ -437,7 +437,7 @@ object Tree {
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
   trait Rewrite {
     // Hooks to override
-    def expr(implicit C: Context): PartialFunction[Expr, Expr] = PartialFunction.empty
+    def expr(implicit C: Context): PartialFunction[Term, Term] = PartialFunction.empty
     def stmt(implicit C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn(implicit C: Context): PartialFunction[Def, Def] = PartialFunction.empty
 
@@ -453,7 +453,7 @@ object Tree {
         ModuleDecl(path, imports, defs.map(rewrite))
     }
 
-    def rewrite(e: Expr)(implicit C: Context): Expr = visit(e) {
+    def rewrite(e: Term)(implicit C: Context): Term = visit(e) {
       case e if expr.isDefinedAt(e) => expr(C)(e)
       case v: Var                   => v
       case l: Literal[t]            => l

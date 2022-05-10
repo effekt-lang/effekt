@@ -118,7 +118,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.StringLit(value)  => StringLit(value)
   }
 
-  def transform(tree: source.Expr)(implicit C: Context): Expr = withPosition(tree) {
+  def transform(tree: source.Term)(implicit C: Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
         val state = C.state(sym)
@@ -257,7 +257,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       (core.TagPattern(p.definition, patterns), params.flatten)
   }
 
-  def transform(exprs: List[source.Expr])(implicit C: Context): List[Expr] =
+  def transform(exprs: List[source.Term])(implicit C: Context): List[Expr] =
     exprs.map(transform)
 
   def freshWildcardFor(e: source.Tree)(implicit C: Context): Wildcard = {

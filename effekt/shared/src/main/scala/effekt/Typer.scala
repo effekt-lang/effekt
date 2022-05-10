@@ -7,7 +7,7 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
 import effekt.regions.Region
-import effekt.source.{ AnyPattern, Def, Expr, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
+import effekt.source.{ AnyPattern, Def, Term, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
@@ -84,7 +84,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Expr, expected: Option[ValueType])(using Context): TyperResult[ValueType] =
+  def checkExpr(expr: Term, expected: Option[ValueType])(using Context): TyperResult[ValueType] =
     checkAgainst(expr, expected) {
       case source.IntLit(n)     => TInt / Pure
       case source.BooleanLit(n) => TBoolean / Pure
@@ -717,7 +717,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.error("Wrong type of argument section")
     }
 
-    def checkValueArgument(tpe: ValueType, arg: source.Expr): Unit = Context.at(arg) {
+    def checkValueArgument(tpe: ValueType, arg: source.Term): Unit = Context.at(arg) {
       val tpe1 = Context.unifier substitute tpe // apply what we already know.
       val (tpe2 / exprEffs) = arg checkAgainst tpe1
 
@@ -815,7 +815,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Set.empty
   }
 
-  extension (expr: Expr) {
+  extension (expr: Term) {
     def checkAgainst(tpe: ValueType)(using Context): TyperResult[ValueType] =
       checkExpr(expr, Some(tpe))
   }
