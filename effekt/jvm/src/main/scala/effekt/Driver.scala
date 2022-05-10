@@ -69,6 +69,8 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       val mod = C.runFrontend(src).getOrElse { return }
       C.at(mod.decl) { C.checkMain(mod); eval(main) }
     }
+  } catch {
+    case FatalPhaseError(msg) => context.error(msg)
   } finally {
     // This reports error messages
     afterCompilation(source, config)(context)
