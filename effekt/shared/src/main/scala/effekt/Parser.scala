@@ -551,21 +551,24 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   // for now function types need to be parenthesized
   lazy val funType: P[FunType] =
-    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ {
-      case params ~ ret => FunType(BlockType(params, ret))
+    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ {
+      case params ~ ret ~ eff => FunType(BlockType(params, ret, eff))
     }
 
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> effectful) ^^ BlockType.apply
-    | valueType ~ (`=>` ~/> effectful) ^^ { case t ~ e => BlockType(List(t), e) }
-    | effectful ^^ { e => BlockType(Nil, e) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ BlockType.apply
+    | valueType ~ (`=>` ~/> valueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => BlockType(List(t), ret, eff) }
+    | valueType ~ maybeEffects ^^ { case ret ~ eff => BlockType(Nil, ret, eff) }
     )
 
-  lazy val effectful: P[Effectful] =
-    valueType ~ (`/` ~/> effects).? ^^ {
-      case t ~ Some(es) => Effectful(t, es)
-      case t ~ None => Effectful(t, Effects.Pure)
+  lazy val maybeEffects: P[Effects] =
+    (`/` ~/> effects).? ^^ {
+      case Some(es) => es
+      case None => Effects.Pure
     }
+
+  lazy val effectful: P[Effectful] =
+    valueType ~ maybeEffects ^^ Effectful.apply
 
   lazy val effects: P[Effects] =
     ( effectType ^^ { e => Effects(e) }

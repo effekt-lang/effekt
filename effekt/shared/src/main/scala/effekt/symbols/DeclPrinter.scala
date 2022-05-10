@@ -16,11 +16,11 @@ object DeclPrinter extends ParenPrettyPrinter {
   def toDoc(t: Symbol, context: Context): Doc = t match {
 
     case e @ UserEffect(name, tparams, List(op)) =>
-      format("effect", op, op.ret.get)
+      format("effect", op, op.annotatedResult, op.annotatedEffects)
 
     case e @ UserEffect(name, tparams, ops) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
-      val effs = ops.map { op => format("def", op, op.ret.get) }
+      val effs = ops.map { op => format("def", op, op.annotatedResult, op.annotatedEffects) }
       "effect" <+> name.toString <> tps <+> braces(nest(line <> vsep(effs)) <> line)
 
     case b @ ValBinder(name, tps, decl) =>
@@ -42,12 +42,12 @@ object DeclPrinter extends ParenPrettyPrinter {
     case DataType(name, tparams, ctors) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       val ctrs = ctors map { ctor =>
-        format("def", ctor, ctor.ret.get)
+        format("def", ctor, ctor.annotatedResult, ctor.annotatedEffects)
       }
       "type" <+> name.toString <> tps <+> braces(nest(line <> vsep(ctrs)) <> line)
 
     case f: BuiltinFunction =>
-      format("extern def", f, f.ret.get)
+      format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
     case BuiltinEffect(name, tparams) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
@@ -58,10 +58,11 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"extern type ${name}$tps"
 
     case c: Fun =>
-      format("def", c, context.blockTypeOption(c).map(_.ret))
+      val tpe = context.blockTypeOption(c)
+      format("def", c, tpe.map { _.result }, tpe.map { _.effects })
   }
-  def format(kw: String, f: Fun, ret: Effectful): Doc = format(kw, f, Some(ret))
-  def format(kw: String, f: Fun, ret: Option[Effectful]): Doc = {
+
+  def format(kw: String, f: Fun, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
     val ps = f.params.map {
       case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
@@ -71,6 +72,11 @@ object DeclPrinter extends ParenPrettyPrinter {
       case _ => sys error "Parameter lists are either singleton block params or a list of value params."
     }.mkString
 
-    s"$kw ${f.name}$tps$ps${ret.map { tpe => s": $tpe" }.getOrElse("")}"
+    val returnType = for {
+      tpe <- result
+      eff <- effects
+    } yield s": $tpe / $eff"
+
+    s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
   }
 }

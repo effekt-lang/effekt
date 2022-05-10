@@ -137,17 +137,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case l @ source.Lambda(id, params, body) =>
       val tpe = C.blockTypeOf(l.symbol)
-      val effs = tpe.ret.effects.userEffects
+      val effs = tpe.effects.userEffects
       val ps = transformParams(params)
       Closure(BlockLit(ps, transform(body)))
 
     case source.If(cond, thn, els) =>
       val c = transform(cond)
-      val exprTpe = C.inferredTypeOf(tree).tpe
+      val exprTpe = C.inferredTypeOf(tree)
       C.bind(exprTpe, If(c, transform(thn), transform(els)))
 
     case source.While(cond, body) =>
-      val exprTpe = C.inferredTypeOf(tree).tpe
+      val exprTpe = C.inferredTypeOf(tree)
       C.bind(exprTpe, While(insertBindings { Ret(transform(cond)) }, transform(body)))
 
     case source.MatchExpr(sc, clauses) =>
@@ -158,19 +158,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val (p, ps) = transform(pattern)
           (p, BlockLit(ps, transform(body)))
       }
-      C.bind(C.inferredTypeOf(tree).tpe, Match(scrutinee, cs))
+      C.bind(C.inferredTypeOf(tree), Match(scrutinee, cs))
 
     case c @ source.Call(source.ExprTarget(expr), _, args) =>
       val e = transform(expr)
       val as = args.flatMap(transform)
-      C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(e), Nil, as))
+      C.bind(C.inferredTypeOf(tree), App(Unbox(e), Nil, as))
 
     case c @ source.Call(source.MemberTarget(block, op), _, args) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
 
       val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
-      C.bind(C.inferredTypeOf(tree).tpe, app)
+      C.bind(C.inferredTypeOf(tree), app)
 
     case c @ source.Call(fun: source.IdTarget, _, args) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
@@ -194,9 +194,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case f: BlockSymbol if C.pureOrIO(f) && args.forall { C.pureOrIO } =>
           Run(App(BlockVar(f), targs, as))
         case f: BlockSymbol =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(BlockVar(f), targs, as))
+          C.bind(C.inferredTypeOf(tree), App(BlockVar(f), targs, as))
         case f: ValueSymbol =>
-          C.bind(C.inferredTypeOf(tree).tpe, App(Unbox(ValueVar(f)), targs, as))
+          C.bind(C.inferredTypeOf(tree), App(Unbox(ValueVar(f)), targs, as))
       }
 
     case source.TryHandle(prog, handlers) =>
@@ -225,10 +225,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           })
       }
 
-      C.bind(C.inferredTypeOf(tree).tpe, Handle(body, hs))
+      C.bind(C.inferredTypeOf(tree), Handle(body, hs))
 
     case source.Hole(stmts) =>
-      C.bind(C.inferredTypeOf(tree).tpe, Hole)
+      C.bind(C.inferredTypeOf(tree), Hole)
 
   }
 
@@ -264,7 +264,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def freshWildcardFor(e: source.Tree)(implicit C: Context): Wildcard = {
     val x = Wildcard(C.module)
     C.inferredTypeOption(e) match {
-      case Some(t / _) => C.assignType(x, t)
+      case Some(t) => C.assignType(x, t)
       case _           => C.abort("Internal Error: Missing type of source expression.")
     }
     x
@@ -321,8 +321,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = UserEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe / Pure, eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit / Pure, eff)
+    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe, Pure, eff)
+    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit, Pure, eff)
 
     val param = CapabilityParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)

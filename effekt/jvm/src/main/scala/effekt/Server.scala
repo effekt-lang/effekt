@@ -143,10 +143,13 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     pos <- positions.getStart(fun)
     ret <- fun.ret
     // the inferred type
-    tpe <- C.inferredTypeOption(fun)
+    tpe <- C.inferredTypeAndEffectOption(fun)
     // the annotated type
-    ann = fun.symbol.ret
-    if ann.map { a => needsUpdate(a, tpe) }.getOrElse(true)
+    ann = for {
+      result <- fun.symbol.annotatedResult
+      effects <- fun.symbol.annotatedEffects
+    } yield (result, effects)
+    if ann.map { needsUpdate(_, tpe) }.getOrElse(true)
   } yield TreeAction(
     "Update return type with inferred effects",
     pos.source.name,
@@ -156,8 +159,8 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
 
   def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
     pos <- positions.getStart(hole)
-    (holeTpe / _) <- C.inferredTypeOption(hole)
-    (contentTpe / _) <- C.inferredTypeOption(hole.stmts)
+    holeTpe <- C.inferredTypeOption(hole)
+    contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
     res <- hole match {
       case Hole(source.Return(exp)) => for {
@@ -171,9 +174,9 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     }
   } yield res
 
-  def needsUpdate(annotated: Effectful, inferred: Effectful)(implicit C: Context): Boolean = {
-    val (tpe1 / effs1) = annotated
-    val (tpe2 / effs2) = inferred
+  def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(implicit C: Context): Boolean = {
+    val (tpe1, effs1) = annotated
+    val (tpe2, effs2) = inferred
     tpe1 != tpe2 || effs1 != effs2
   }
 
