@@ -67,8 +67,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     if (config.interpret()) {
       // type check single file -- `mod` is necessary for positions in error reporting.
       val mod = C.runFrontend(src).getOrElse { return }
-      C.checkMain(mod)
-      C.at(mod.decl) { eval(main) }
+      C.at(mod.decl) { C.checkMain(mod); eval(main) }
     }
   } finally {
     // This reports error messages
