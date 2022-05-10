@@ -397,7 +397,7 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 case class CapabilityType(eff: symbols.Effect) extends Type {
   type resolved = symbols.CapabilityType
 }
-case class BlockType(params: List[ValueType], ret: Effectful) extends Type {
+case class BlockType(params: List[ValueType], result: ValueType, effects: Effects) extends Type {
   type resolved = symbols.BlockType
 }
 
@@ -410,6 +410,8 @@ case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with R
     if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
   }
 }
+
+// We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
 case class Effects(effs: List[Effect]) extends Tree

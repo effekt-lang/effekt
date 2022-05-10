@@ -44,8 +44,6 @@ object TyperResult {
 }
 import TyperResult._
 
-// this is only for migration, until Effectful is dropped
-implicit def typerResultFromEffectful(e: Effectful): TyperResult[ValueType] = TyperResult(e.tpe, e.effects)
 
 object Typer extends Phase[NameResolved, Typechecked] {
 

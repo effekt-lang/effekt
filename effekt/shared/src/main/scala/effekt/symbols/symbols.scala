@@ -200,7 +200,6 @@ package object symbols {
   type Sections = List[List[Type]]
 
   sealed trait ValueType extends Type {
-    def /(effs: Effects): Effectful = Effectful(this, effs)
     def dealias: ValueType = this
   }
 
@@ -413,14 +412,6 @@ package object symbols {
   }
 
   lazy val Pure = new Effects(Nil)
-
-  case class Effectful(tpe: ValueType, effects: Effects) {
-    override def toString = if (effects.isEmpty) tpe.toString else s"$tpe / $effects"
-  }
-
-  object / {
-    def unapply(e: Effectful): Option[(ValueType, Effects)] = Some(e.tpe, e.effects)
-  }
 
   /**
    * Builtins

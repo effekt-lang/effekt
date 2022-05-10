@@ -85,7 +85,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           C.bindParams(ps)
           annot map resolve
         }
-        UserFunction(uniqueId, tps, ps, ret.map { _.tpe }, ret.map { _.effects }, f)
+        UserFunction(uniqueId, tps, ps, ret.map { _._1 }, ret.map { _._2 }, f)
       }
       Context.define(id, sym)
 
@@ -154,7 +154,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val ps: Params = params map resolve
-        val Effectful(tpe, eff) = resolve(ret)
+        val (tpe, eff) = resolve(ret)
         BuiltinFunction(name, tps, ps, tpe, eff, pure, body)
       })
     }
@@ -227,7 +227,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
-            val Effectful(result, effects) = resolve(ret)
+            val (result, effects) = resolve(ret)
 
             val op = EffectOp(name, effectSym.tparams ++ tps, params map resolve, result, effects, effectSym)
             Context.define(id, op)
@@ -451,8 +451,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
-        val (terms, effects) = resolveTermsOrTypes(effs)
+      case source.FunType(tpe @ source.BlockType(params, ret, effs)) =>
+        val (terms, effects) = resolveTermsOrTypes(effs.effs)
         val btpe = BlockType(Nil, List(params.map(resolve)), resolve(ret), Effects(effects))
         FunType(btpe, Region(terms))
     }
@@ -485,7 +485,8 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(blockType: source.BlockType)(implicit C: Context): BlockType = {
-    val Effectful(tpe, eff) = resolve(blockType.ret)
+    val tpe = resolve(blockType.result)
+    val eff = resolve(blockType.effects)
     val res = BlockType(Nil, List(blockType.params.map(resolve)), tpe, eff)
     C.annotateResolvedType(blockType)(res)
     res
@@ -509,8 +510,8 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
     Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
-  def resolve(e: source.Effectful)(implicit C: Context): Effectful =
-    Effectful(resolve(e.tpe), resolve(e.eff))
+  def resolve(e: source.Effectful)(implicit C: Context): (ValueType, Effects) =
+    (resolve(e.tpe), resolve(e.eff))
 
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
