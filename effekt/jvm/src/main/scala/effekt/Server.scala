@@ -145,8 +145,11 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     // the inferred type
     tpe <- C.inferredTypeAndEffectOption(fun)
     // the annotated type
-    ann = fun.symbol.ret
-    if ann.map { a => needsUpdate((a.tpe, a.effects), tpe) }.getOrElse(true)
+    ann = for {
+      result <- fun.symbol.annotatedResult
+      effects <- fun.symbol.annotatedEffects
+    } yield (result, effects)
+    if ann.map { needsUpdate(_, tpe) }.getOrElse(true)
   } yield TreeAction(
     "Update return type with inferred effects",
     pos.source.name,

@@ -3,7 +3,7 @@ package regions
 
 import effekt.source._
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.symbols.{ Binder, BlockSymbol, Effectful, Symbol, UserFunction, ValueSymbol }
+import effekt.symbols.{ Binder, BlockSymbol, Symbol, UserFunction, ValueSymbol }
 import effekt.context.assertions._
 
 object RegionChecker extends Phase[Typechecked, Typechecked] {
@@ -75,7 +75,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
 
       // check that the self region (used by resume and variables) does not escape the scope
       val tpe = Context.blockTypeOf(sym)
-      val escapes = Context.freeRegionVariables(tpe.ret) intersect selfRegion
+      val escapes = (Context.freeRegionVariables(tpe.result) ++ Context.freeRegionVariables(tpe.effects)) intersect selfRegion
       if (escapes.nonEmpty) {
         Context.explain(sym, body)
         Context.abort(s"A value that is introduced in '${id.name}' leaves its scope.")
@@ -112,7 +112,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
 
       // check that the self region does not escape as part of the lambdas type
       val tpe = Context.blockTypeOf(sym)
-      val escapes = Context.freeRegionVariables(tpe.ret) intersect selfRegion
+      val escapes = (Context.freeRegionVariables(tpe.result) ++ Context.freeRegionVariables(tpe.effects)) intersect selfRegion
       if (escapes.nonEmpty) {
         Context.explain(sym, body)
         Context.abort(s"A value that is introduced in this lambda leaves its scope.")

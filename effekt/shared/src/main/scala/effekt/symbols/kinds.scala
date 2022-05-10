@@ -25,15 +25,11 @@ package object kinds {
     case _ => C.abort(s"Expected an effect but got a type ${eff}")
   }
 
-  def wellformed(e: Effectful)(implicit C: Context): Unit = {
-    wellformed(e.tpe)
-    wellformed(e.effects)
-  }
-
   def wellformed(b: BlockType)(implicit C: Context): Unit = b match {
-    case BlockType(tparams, params: Sections, ret) =>
+    case BlockType(tparams, params: Sections, ret, effs) =>
       params.flatten.foreach { tpe => wellformed(tpe) }
       wellformed(ret)
+      wellformed(effs)
   }
 
   private sealed trait Kind

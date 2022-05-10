@@ -85,7 +85,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           C.bindParams(ps)
           annot map resolve
         }
-        UserFunction(uniqueId, tps, ps, ret, f)
+        UserFunction(uniqueId, tps, ps, ret.map { _.tpe }, ret.map { _.effects }, f)
       }
       Context.define(id, sym)
 
@@ -154,8 +154,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val ps: Params = params map resolve
-        val tpe = resolve(ret)
-        BuiltinFunction(name, tps, ps, Some(tpe), pure, body)
+        val Effectful(tpe, eff) = resolve(ret)
+        BuiltinFunction(name, tps, ps, tpe, eff, pure, body)
       })
     }
 
@@ -227,7 +227,9 @@ object Namer extends Phase[Parsed, NameResolved] {
             // The type parameters of an effect op are:
             //   1) all type parameters on the effect, followed by
             //   2) the annotated type parameters on the concrete operation
-            val op = EffectOp(name, effectSym.tparams ++ tps, params map resolve, resolve(ret), effectSym)
+            val Effectful(result, effects) = resolve(ret)
+
+            val op = EffectOp(name, effectSym.tparams ++ tps, params map resolve, result, effects, effectSym)
             Context.define(id, op)
             op
           }
@@ -451,7 +453,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         tpe
       case source.FunType(tpe @ source.BlockType(params, source.Effectful(ret, source.Effects(effs)))) =>
         val (terms, effects) = resolveTermsOrTypes(effs)
-        val btpe = BlockType(Nil, List(params.map(resolve)), Effectful(resolve(ret), Effects(effects)))
+        val btpe = BlockType(Nil, List(params.map(resolve)), resolve(ret), Effects(effects))
         FunType(btpe, Region(terms))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
@@ -482,9 +484,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Effect(e, args) => Right(EffectApp(Context.resolveType(e).asEffect, args.map(resolve)))
   }
 
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = {
-    val res = BlockType(Nil, List(tpe.params.map(resolve)), resolve(tpe.ret))
-    C.annotateResolvedType(tpe)(res)
+  def resolve(blockType: source.BlockType)(implicit C: Context): BlockType = {
+    val Effectful(tpe, eff) = resolve(blockType.ret)
+    val res = BlockType(Nil, List(blockType.params.map(resolve)), tpe, eff)
+    C.annotateResolvedType(blockType)(res)
     res
   }
 

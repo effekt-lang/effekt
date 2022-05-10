@@ -163,7 +163,7 @@ trait Intelligence {
     case c: ResumeParam =>
       val tpe = C.blockTypeOption(c)
       val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
-      val hint = tpe.map { tpe => s"(i.e., `${tpe.ret.tpe}`)" }.getOrElse { " " }
+      val hint = tpe.map { tpe => s"(i.e., `${tpe.result}`)" }.getOrElse { " " }
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound

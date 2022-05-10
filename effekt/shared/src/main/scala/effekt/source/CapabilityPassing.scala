@@ -37,9 +37,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
       val op = fun.definition.asEffectOp
 
-      val tpe @ BlockType(tparams, params, ret / _) = C.blockTypeOf(op)
-
-      val effs = C.inferredEffectOf(c)
+      val tpe @ BlockType(tparams, _, _, _) = C.blockTypeOf(op)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
@@ -75,7 +73,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) =>
 
       val sym: Symbol = fun.definition
-      val BlockType(tparams, params, ret / effs) = C.blockTypeOf(sym)
+      val BlockType(tparams, _, _, effs) = C.blockTypeOf(sym)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
@@ -89,7 +87,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, args) =>
       val transformedExpr = rewrite(expr)
-      val FunType(BlockType(tparams, params, ret / effs), _) = C.inferredTypeOf(expr)
+      val FunType(BlockType(tparams, params, ret, effs), _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.userDefined.toList.map(subst.substitute)
@@ -137,7 +135,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {
     case b @ source.BlockArg(ps, body) =>
       // here we use the blocktype as inferred by typer (after substitution)
-      val effs = C.blockTypeOf(b).ret.effects.userEffects
+      val effs = C.blockTypeOf(b).effects.userEffects
       C.withCapabilities(effs) { caps =>
         source.BlockArg(ps ++ caps, rewrite(body))
       }
