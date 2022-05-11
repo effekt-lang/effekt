@@ -180,13 +180,13 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
       case b: BlockSymbol =>
         Context.regionOf(b).asRegionSet
       case t: ValueSymbol =>
-        val symbols.FunType(tpe, reg) = Context.valueTypeOf(t).dealias
+        val symbols.BoxedType(tpe, reg) = Context.valueTypeOf(t).dealias
         reg.asRegionSet
     }
 
     case ExprTarget(e) =>
       val reg = check(e)
-      val symbols.FunType(tpe, funReg) = Context.inferredTypeOf(e)
+      val symbols.BoxedType(tpe, funReg) = Context.inferredTypeOf(e)
       reg ++ funReg.asRegionSet
 
     case VarDef(id, _, binding) =>
@@ -263,11 +263,6 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
     var regs: RegionSet = Region.empty
     params.foreach {
       case b: BlockParam =>
-        val sym = b.symbol
-        val reg = Region(sym)
-        Context.annotateRegions(sym, reg)
-        regs ++= reg
-      case b: CapabilityParam =>
         val sym = b.symbol
         val reg = Region(sym)
         Context.annotateRegions(sym, reg)
@@ -407,7 +402,7 @@ trait RegionCheckerOps extends ContextOps { self: Context =>
    */
   private[regions] def freeRegionVariables(o: Any): RegionSet = o match {
     case _: Symbol | _: String => Region.empty // don't follow symbols
-    case symbols.FunType(tpe, reg) =>
+    case symbols.BoxedType(tpe, reg) =>
       freeRegionVariables(tpe) ++ reg.asRegionSet
     case e: symbols.Effects => freeRegionVariables(e.toList)
     case t: Iterable[t] =>

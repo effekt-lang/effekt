@@ -344,15 +344,15 @@ object Namer extends Phase[Parsed, NameResolved] {
       targs foreach resolve
       resolveAll(args)
 
-    case source.Var(id)        => Context.resolveVar(id)
+    case source.Var(id)           => Context.resolveVar(id)
 
-    case tpe: source.ValueType => resolve(tpe)
-    case tpe: source.BlockType => resolve(tpe)
+    case tpe: source.ValueType    => resolve(tpe)
+    case tpe: source.FunctionType => resolve(tpe)
 
     // THIS COULD ALSO BE A TYPE!
-    case id: Id                => Context.resolveTerm(id)
+    case id: Id                   => Context.resolveTerm(id)
 
-    case other                 => resolveAll(other)
+    case other                    => resolveAll(other)
   }
 
   // TODO move away
@@ -397,10 +397,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     case ps: source.ValueParams => resolve(ps)
     case source.BlockParam(id, tpe) =>
       val sym = BlockParam(Name.local(id), resolve(tpe))
-      Context.assignSymbol(id, sym)
-      List(sym)
-    case source.CapabilityParam(id, tpe) =>
-      val sym = CapabilityParam(Name.local(id), resolve(tpe))
       Context.assignSymbol(id, sym)
       List(sym)
   }
@@ -451,10 +447,12 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.FunType(tpe @ source.BlockType(params, ret, effs)) =>
+      case source.BoxedType(tpe @ source.FunctionType(params, ret, effs)) =>
         val (terms, effects) = resolveTermsOrTypes(effs.effs)
         val btpe = FunctionType(Nil, List(params.map(resolve)), resolve(ret), Effects(effects))
-        FunType(btpe, Region(terms))
+        BoxedType(btpe, Region(terms))
+      // TODO boxed capabilities are currently not implemented
+      case source.BoxedType(tpe) => ???
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type
@@ -484,11 +482,16 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Effect(e, args) => Right(EffectApp(Context.resolveType(e).asEffect, args.map(resolve)))
   }
 
-  def resolve(blockType: source.BlockType)(implicit C: Context): FunctionType = {
-    val tpe = resolve(blockType.result)
-    val eff = resolve(blockType.effects)
-    val res = FunctionType(Nil, List(blockType.params.map(resolve)), tpe, eff)
-    C.annotateResolvedType(blockType)(res)
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
+    case t: source.FunctionType   => resolve(t)
+    case t: source.CapabilityType => resolve(t)
+  }
+
+  def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = {
+    val tpe = resolve(funTpe.result)
+    val eff = resolve(funTpe.effects)
+    val res = FunctionType(Nil, List(funTpe.params.map(resolve)), tpe, eff)
+    C.annotateResolvedType(funTpe)(res)
     res
   }
 

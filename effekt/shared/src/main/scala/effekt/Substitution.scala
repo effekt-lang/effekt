@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, FunType, BlockType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, BoxedType, BlockType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -17,8 +17,8 @@ object substitutions {
         substitutions.getOrElse(x, x)
       case TypeApp(t, args) =>
         TypeApp(t, args.map { substitute })
-      case FunType(tpe, reg) =>
-        FunType(substitute(tpe), reg)
+      case BoxedType(tpe, reg) =>
+        BoxedType(substitute(tpe), reg)
       case other => other
     }
 
@@ -167,7 +167,7 @@ object substitutions {
         case (THole, _) | (_, THole) =>
           Unifier.empty
 
-        case (FunType(tpe1, reg1), FunType(tpe2, reg2)) =>
+        case (BoxedType(tpe1, reg1), BoxedType(tpe2, reg2)) =>
           unifyTypes(tpe1, tpe2).equalRegions(reg1, reg2)
 
         case (t, s) =>
@@ -233,13 +233,13 @@ object substitutions {
         case x: TypeVar => x
         case TypeApp(t, args) =>
           TypeApp(t, args.map { visitValueType })
-        case FunType(tpe, reg) =>
+        case BoxedType(tpe, reg) =>
           // this is the **only** interesting case...
           // vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
           val copy = Region.fresh(C.focus)
           copy.instantiate(reg)
           // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          FunType(visitBlockType(tpe), copy)
+          BoxedType(visitBlockType(tpe), copy)
         case other => other
       }
 

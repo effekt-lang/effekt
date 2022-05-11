@@ -84,12 +84,13 @@ package object symbols {
   case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
 
   // TODO everywhere else the two universes are called "value" and "block"
+
   sealed trait TrackedParam extends Param
-  case class BlockParam(name: Name, tpe: FunctionType) extends TrackedParam with BlockSymbol
-  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
-    def effect = tpe.eff
-    override def toString = s"@${tpe.eff.name}"
-  }
+  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
+  //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
+  //    def effect = tpe.eff
+  //    override def toString = s"@${tpe.eff.name}"
+  //  }
 
   case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name.local("resume") }
 
@@ -159,13 +160,7 @@ package object symbols {
   case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }
   case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
-  /**
-   * A symbol that represents a termlevel capability
-   */
-  trait Capability extends BlockSymbol {
-    def effect: Effect
-  }
-  case class BuiltinCapability(effect: Effect) extends Capability {
+  case class BuiltinCapability(effect: Effect) extends BlockSymbol {
     override val name = effect.name
   }
 
@@ -186,7 +181,7 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class FunType(tpe: FunctionType, region: Region) extends ValueType {
+  case class BoxedType(tpe: FunctionType, region: Region) extends ValueType {
     override def toString: String = {
 
       val FunctionType(_, params, ret, effs) = tpe
@@ -236,7 +231,7 @@ package object symbols {
   }
 
   sealed trait BlockType extends Type
-  case class CapabilityType(eff: Effect) extends BlockType
+  case class CapabilityType(effect: Effect) extends BlockType
 
   case class FunctionType(tparams: List[TypeVar], params: Sections, result: ValueType, effects: Effects) extends BlockType {
     override def toString: String = {
@@ -269,7 +264,7 @@ package object symbols {
       case t: TypeConstructor => Some(t)
       case TypeApp(tpe, args) => unapply(tpe)
       case t: BuiltinType     => None
-      case t: FunType         => None
+      case t: BoxedType       => None
     }
   }
 

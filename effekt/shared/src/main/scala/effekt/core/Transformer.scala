@@ -244,7 +244,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =
     ps.flatMap {
       case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
-      case b @ source.CapabilityParam(id, _) => List(BlockParam(b.symbol))
       case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
     }
 
@@ -315,7 +314,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: CapabilityParam, effect: ControlEffect, get: EffectOp, put: EffectOp)
+  case class StateCapability(param: BlockParam, effect: ControlEffect, get: EffectOp, put: EffectOp)
 
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
@@ -323,7 +322,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe, Pure, eff)
     val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit, Pure, eff)
 
-    val param = CapabilityParam(binder.name, CapabilityType(eff))
+    val param = BlockParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)
     StateCapability(param, eff, get, put)
   }

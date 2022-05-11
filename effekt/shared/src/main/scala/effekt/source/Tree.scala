@@ -156,19 +156,16 @@ case class Import(path: String) extends Tree
  */
 sealed trait ParamSection extends Tree
 case class ValueParams(params: List[ValueParam]) extends ParamSection
+
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
 
-// TODO fuse into one kind of parameter
-
-sealed trait TrackedParam extends ParamSection with Definition
-case class BlockParam(id: IdDef, tpe: BlockType) extends TrackedParam { type symbol = symbols.BlockParam }
-case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends TrackedParam { type symbol = symbols.CapabilityParam }
+case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Term]) extends ArgSection
 case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
 case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
-  type symbol = symbols.CapabilityParam
+  type symbol = symbols.BlockParam
 }
 
 /**
@@ -308,7 +305,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-case class Handler(effect: Effect, capability: Option[CapabilityParam] = None, clauses: List[OpClause]) extends Reference {
+case class Handler(effect: Effect, capability: Option[BlockParam] = None, clauses: List[OpClause]) extends Reference {
   def id = effect.id
   type symbol = symbols.ControlEffect
 }
@@ -370,6 +367,10 @@ sealed trait Type extends Tree with Resolvable {
   type resolved <: symbols.Type
   def resolve(implicit C: Context) = C.resolvedType(this)
 }
+
+/**
+ * Value Types
+ */
 sealed trait ValueType extends Type {
   type resolved <: symbols.ValueType
 }
@@ -382,7 +383,7 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 /**
  * Types of first-class functions
  */
-case class FunType(tpe: BlockType) extends ValueType
+case class BoxedType(tpe: BlockType) extends ValueType
 
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
@@ -392,11 +393,21 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
   type symbol = symbols.DataType
 }
 
+/**
+ * Block Types
+ */
+sealed trait BlockType extends Type
+
 // for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.Effect) extends Type {
+case class CapabilityType(eff: symbols.Effect) extends BlockType {
   type resolved = symbols.CapabilityType
 }
-case class BlockType(params: List[ValueType], result: ValueType, effects: Effects) extends Type {
+
+//case class BlockTypeApp(id: IdRef, params: List[ValueType]) extends BlockType with Reference {
+//  type symbol = symbols.Symbol with symbols.InterfaceType
+//}
+
+case class FunctionType(params: List[ValueType], result: ValueType, effects: Effects) extends BlockType {
   type resolved = symbols.FunctionType
 }
 

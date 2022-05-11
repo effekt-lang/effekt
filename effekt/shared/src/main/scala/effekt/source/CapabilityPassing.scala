@@ -87,7 +87,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, args) =>
       val transformedExpr = rewrite(expr)
-      val FunType(FunctionType(tparams, params, ret, effs), _) = C.inferredTypeOf(expr)
+      val BoxedType(FunctionType(tparams, params, ret, effs), _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.controlEffects.toList.map(subst.substitute)
@@ -156,7 +156,7 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
   /**
    * Used to map each lexically scoped capability to its termsymbol
    */
-  private var capabilities: Map[Effect, symbols.Capability] = Map.empty
+  private var capabilities: Map[Effect, symbols.BlockParam] = Map.empty
 
   /**
    * Override the dynamically scoped `in` to also reset transformer state
@@ -172,23 +172,24 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
    * runs the given block, binding the provided capabilities, so that
    * "resolveCapability" will find them.
    */
-  private[source] def withCapabilities[R](effs: Effects)(block: List[source.CapabilityParam] => R): R = Context in {
+  private[source] def withCapabilities[R](effs: Effects)(block: List[source.BlockParam] => R): R = Context in {
 
     // create a fresh cabability-symbol for each bound effect
     val caps = effs.toList.map { eff =>
       val tpe = CapabilityType(eff)
-      val sym = CapabilityParam(eff.name.rename(_ + "$capability"), tpe)
+      val sym = BlockParam(eff.name.rename(_ + "$capability"), tpe)
       assignType(sym, tpe)
-      sym
+      (sym, eff)
     }
     // additional block parameters for capabilities
-    val params = caps.map { sym =>
+    val params = caps.map { case (sym, eff) =>
       val id = IdDef(sym.name.name)
       assignSymbol(id, sym)
-      source.CapabilityParam(id, source.CapabilityType(sym.effect))
+      source.BlockParam(id, source.CapabilityType(eff))
     }
     // update state with capabilities
-    capabilities = capabilities ++ caps.map { c => (c.effect -> c) }.toMap
+    val newCapabilities = caps.map { case (sym, eff) => (eff -> sym) }.toMap
+    capabilities = capabilities ++ newCapabilities
 
     // run block
     block(params)

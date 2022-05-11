@@ -123,7 +123,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.define(sym.params)
 
         expected match {
-          case Some(exp @ FunType(FunctionType(_, ps, ret, effs), reg)) =>
+          case Some(exp @ BoxedType(FunctionType(_, ps, ret, effs), reg)) =>
             checkAgainstDeclaration("lambda", ps, params)
             val (retGot / effsGot) = body checkAgainst ret
             Context.unify(ret, retGot)
@@ -131,7 +131,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val diff = effsGot -- effs
 
             val reg = Region.fresh(l)
-            val got = FunType(FunctionType(Nil, ps, retGot, effs), reg)
+            val got = BoxedType(FunctionType(Nil, ps, retGot, effs), reg)
 
             Context.unify(exp, got)
 
@@ -150,7 +150,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
             // we make up a fresh region variable that will be checked later by the region checker
             val reg = Region.fresh(l)
-            val funTpe = FunType(tpe, reg)
+            val funTpe = BoxedType(tpe, reg)
 
             Context.assignType(sym, sym.toType(ret, effs))
             Context.assignType(l, ret)
@@ -172,7 +172,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val (funTpe / funEffs) = checkExpr(e, None)
 
         val tpe: FunctionType = funTpe.dealias match {
-          case f: FunType => f.tpe
+          case f: BoxedType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
         val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, args, expected)
@@ -863,7 +863,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     ps map {
       _ map {
         case BlockParam(_, tpe)      => tpe
-        case CapabilityParam(_, tpe) => tpe
         case v: ValueParam           => v.tpe.get
         case r: ResumeParam          => sys error "Internal Error: No type annotated on resumption parameter"
       }
@@ -901,7 +900,7 @@ trait TyperOps extends ContextOps { self: Context =>
   // ====================
   // since symbols are unique, we can use mutable state instead of reader
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
-  private var blockTypingContext: Map[Symbol, FunctionType] = Map.empty
+  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
   private var regionContext: Map[Symbol, Region] = Map.empty
 
   // first tries to find the type in the local typing context
@@ -919,9 +918,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
 
-  private[typer] def bind(s: Symbol, tpe: FunctionType, capt: Region): Unit = { bind(s, tpe); bind(s, capt) }
+  private[typer] def bind(s: Symbol, tpe: BlockType, capt: Region): Unit = { bind(s, tpe); bind(s, capt) }
 
-  private[typer] def bind(s: Symbol, tpe: FunctionType): Unit = blockTypingContext += (s -> tpe)
+  private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
 
   private[typer] def bind(s: Symbol, capt: Region): Unit = regionContext += (s -> capt)
 

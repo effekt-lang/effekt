@@ -550,15 +550,15 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   // for now function types need to be parenthesized
-  lazy val funType: P[FunType] =
+  lazy val funType: P[BoxedType] =
     (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ {
-      case params ~ ret ~ eff => FunType(BlockType(params, ret, eff))
+      case params ~ ret ~ eff => BoxedType(FunctionType(params, ret, eff))
     }
 
-  lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ BlockType.apply
-    | valueType ~ (`=>` ~/> valueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => BlockType(List(t), ret, eff) }
-    | valueType ~ maybeEffects ^^ { case ret ~ eff => BlockType(Nil, ret, eff) }
+  lazy val blockType: P[FunctionType] =
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ FunctionType.apply
+    | valueType ~ (`=>` ~/> valueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), ret, eff) }
+    | valueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
     )
 
   lazy val maybeEffects: P[Effects] =

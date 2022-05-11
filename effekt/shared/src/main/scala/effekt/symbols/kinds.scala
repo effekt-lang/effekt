@@ -8,7 +8,7 @@ package object kinds {
   def wellformed(tpe: Type)(implicit C: Context): Unit = tpe match {
     case t: ValueType      => wellformed(t)
     case t: FunctionType   => wellformed(t)
-    case t: CapabilityType => wellformed(t.eff)
+    case t: CapabilityType => wellformed(t.effect)
   }
 
   def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { eff => wellformed(eff) }
@@ -44,7 +44,7 @@ package object kinds {
   }
 
   private def wellformedType(tpe: ValueType)(implicit C: Context): Kind = tpe match {
-    case FunType(tpe, region) =>
+    case BoxedType(tpe, region) =>
       wellformed(tpe); Kind.Type
     case _: TypeVar => Kind.Type
     case TypeApp(tpe, args) =>

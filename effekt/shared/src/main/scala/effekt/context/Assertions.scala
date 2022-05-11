@@ -92,6 +92,13 @@ object assertions {
     }
   }
 
+  extension(t: symbols.Type)(using reporter: ErrorReporter) {
+    def asCapabilityType: CapabilityType = t match {
+      case t: CapabilityType => t
+      case _ => reporter.abort("Expected a capability type")
+    }
+  }
+
   extension(t: source.Type)(using reporter: ErrorReporter) {
     def asTypeVar: source.TypeVar = t match {
       case t: source.TypeVar => t
