@@ -50,6 +50,8 @@ abstract class Context(val positions: Positions)
   // bring the context itself in scope
   implicit val context: Context = this
 
+  val LLVM_VERSION: String = "11"
+
   // the currently processed module
   var module: Module = _
 
@@ -100,5 +102,4 @@ abstract class Context(val positions: Positions)
     _buffer = bufferBefore
     (msgs, res)
   }
-
 }
