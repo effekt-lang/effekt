@@ -50,7 +50,8 @@ abstract class Context(val positions: Positions)
   // bring the context itself in scope
   implicit val context: Context = this
 
-  val LLVM_VERSION: String = "11"
+  val DEFAULT_LLVM_VERSION: String = "12"
+  var LLVM_VERSION: String = DEFAULT_LLVM_VERSION
 
   // the currently processed module
   var module: Module = _
@@ -69,6 +70,9 @@ abstract class Context(val positions: Positions)
   def setup(cfg: EffektConfig): Unit = {
     buffer.clear()
     _config = cfg
+
+    val llvm_version = sys.env("EFFEKT_LLVM_VERSION")
+    LLVM_VERSION = if (llvm_version != "") llvm_version else DEFAULT_LLVM_VERSION
   }
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
