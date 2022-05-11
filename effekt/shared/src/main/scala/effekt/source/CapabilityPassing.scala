@@ -24,7 +24,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   override def defn(implicit C: Context) = {
     case f @ FunDef(id, tparams, params, ret, body) =>
       val sym = f.symbol
-      val effs = sym.effects.controlEffects
+      val effs = Context.functionTypeOf(sym).effects.controlEffects
 
       C.withCapabilities(effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))
@@ -99,7 +99,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
     case f @ source.Lambda(id, params, body) =>
       val sym = f.symbol
-      val effs = sym.effects.controlEffects
+      val effs = Context.functionTypeOf(sym).effects.controlEffects
 
       C.withCapabilities(effs) { caps =>
         f.copy(params = params ++ caps, body = rewrite(body))

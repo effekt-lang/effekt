@@ -99,31 +99,11 @@ package object symbols {
   // TODO Introduce ParamSection also on symbol level and then use Params for types
   type Params = List[List[Param]]
 
-  def paramsToTypes(ps: Params): Sections =
-    ps map {
-      _ map {
-        case BlockParam(_, tpe)      => tpe
-        case CapabilityParam(_, tpe) => tpe
-        case v: ValueParam           => v.tpe.get
-        case r: ResumeParam          => sys error "Internal Error: No type annotated on resumption parameter"
-      }
-    }
-
   trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
     def params: Params
     def annotatedResult: Option[ValueType]
     def annotatedEffects: Option[Effects]
-
-    // invariant: only works if ret is defined!
-    def toType: FunctionType = annotatedType.get
-    def toType(result: ValueType, effects: Effects): FunctionType = FunctionType(tparams, paramsToTypes(params), result, effects)
-    def annotatedType: Option[FunctionType] = for { result <- annotatedResult; effects <- annotatedEffects } yield toType(result, effects)
-
-    def effects(implicit C: Context): Effects =
-      annotatedType.map { tpe => tpe.effects }.orElse { C.functionTypeOption(this).map { _.effects } }.getOrElse {
-        C.abort(s"Result type of recursive function ${name} needs to be annotated")
-      }
   }
 
   case class UserFunction(

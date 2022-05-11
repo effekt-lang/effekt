@@ -107,7 +107,6 @@ sealed trait Id extends Tree {
   def name: String
   def symbol(implicit C: Context): Symbol = C.symbolOf(this)
   def clone(implicit C: Context): Id
-
 }
 case class IdDef(name: String) extends Id {
   def clone(implicit C: Context): Id = {

@@ -838,6 +838,36 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.assignEffect(t, effs)
       got / effs
     }
+
+  /**
+   * Helper methods on function symbols to retreive its type
+   * either from being annotated or by looking it up (if already typechecked...)
+   */
+  extension (fun: Fun)(using Context) {
+    // invariant: only works if ret is defined!
+    def toType: FunctionType =
+      annotatedType.get
+    def toType(result: ValueType, effects: Effects): FunctionType =
+      FunctionType(fun.tparams, paramsToTypes(fun.params), result, effects)
+    def annotatedType: Option[FunctionType] =
+      for { result <- fun.annotatedResult; effects <- fun.annotatedEffects } yield toType(result, effects)
+
+    def effects: Effects =
+      annotatedType
+        .map { tpe => tpe.effects }
+        .orElse { Context.functionTypeOption(fun).map { _.effects } }
+        .getOrElse { Context.abort(s"Result type of recursive function ${fun.name} needs to be annotated") }
+  }
+
+  def paramsToTypes(ps: Params): Sections =
+    ps map {
+      _ map {
+        case BlockParam(_, tpe)      => tpe
+        case CapabilityParam(_, tpe) => tpe
+        case v: ValueParam           => v.tpe.get
+        case r: ResumeParam          => sys error "Internal Error: No type annotated on resumption parameter"
+      }
+    }
 }
 
 /**
