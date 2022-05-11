@@ -122,7 +122,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
           runFrontend(source, module.make(e), config) { mod =>
             // TODO this is a bit ad-hoc
             val mainSym = mod.terms("main").head
-            val mainTpe = context.blockTypeOf(mainSym)
+            val mainTpe = context.functionTypeOf(mainSym)
             output.emitln(mainTpe.result)
           }
 
@@ -224,7 +224,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
           case v: ValueSymbol =>
             Some(context.valueTypeOf(v))
           case b: BlockSymbol =>
-            Some(context.blockTypeOf(b))
+            Some(context.functionTypeOf(b))
           case t =>
             None
         }) map { tpe =>

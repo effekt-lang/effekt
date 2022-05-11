@@ -58,7 +58,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"extern type ${name}$tps"
 
     case c: Fun =>
-      val tpe = context.blockTypeOption(c)
+      val tpe = context.functionTypeOption(c)
       format("def", c, tpe.map { _.result }, tpe.map { _.effects })
   }
 

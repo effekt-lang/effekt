@@ -43,7 +43,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.FunDef(id, _, params, _, body) =>
       val sym = f.symbol
       val ps = transformParams(params)
-      Def(sym, C.interfaceTypeOf(sym), BlockLit(ps, transform(body)), rest)
+      Def(sym, C.blockTypeOf(sym), BlockLit(ps, transform(body)), rest)
 
     case d @ source.DataDef(id, _, ctors) =>
       Data(d.symbol, ctors.map { c => c.symbol }, rest)
@@ -77,7 +77,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, C.blockTypeOf(sym), Extern(transformParams(params), body), rest)
+      Def(f.symbol, C.functionTypeOf(sym), Extern(transformParams(params), body), rest)
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest)
@@ -136,7 +136,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case l: source.Literal[t] => transformLit(l)
 
     case l @ source.Lambda(id, params, body) =>
-      val tpe = C.blockTypeOf(l.symbol)
+      val tpe = C.functionTypeOf(l.symbol)
       val ps = transformParams(params)
       Closure(BlockLit(ps, transform(body)))
 
@@ -290,7 +290,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.ValueParam(id, C.valueTypeOf(id))
 
   def BlockParam(id: BlockSymbol)(implicit C: Context): core.BlockParam =
-    core.BlockParam(id, C.interfaceTypeOf(id))
+    core.BlockParam(id, C.blockTypeOf(id))
 
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(implicit C: Context): core.Val =
     core.Val(id, C.valueTypeOf(id), binding, body)

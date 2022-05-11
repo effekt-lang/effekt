@@ -121,7 +121,7 @@ package object symbols {
     def annotatedType: Option[FunctionType] = for { result <- annotatedResult; effects <- annotatedEffects } yield toType(result, effects)
 
     def effects(implicit C: Context): Effects =
-      annotatedType.map { tpe => tpe.effects }.orElse { C.blockTypeOption(this).map { _.effects } }.getOrElse {
+      annotatedType.map { tpe => tpe.effects }.orElse { C.functionTypeOption(this).map { _.effects } }.getOrElse {
         C.abort(s"Result type of recursive function ${name} needs to be annotated")
       }
   }

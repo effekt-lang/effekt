@@ -220,7 +220,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val effectOp = d.definition
 
               // (1) Instantiate block type of effect operation
-              val (rigids, FunctionType(tparams, pms, tpe, effs)) = Unification.instantiate(Context.blockTypeOf(effectOp))
+              val (rigids, FunctionType(tparams, pms, tpe, effs)) = Unification.instantiate(Context.functionTypeOf(effectOp))
 
               // (2) unify with given type arguments for effect (i.e., A, B, ...):
               //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
@@ -587,7 +587,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       scope.toList.map { sym =>
         sym -> Try {
           Context.restoreTyperstate(stateBefore)
-          val tpe = Context.blockTypeOption(sym).getOrElse {
+          val tpe = Context.functionTypeOption(sym).getOrElse {
             if (sym.isInstanceOf[ValueSymbol]) {
               Context.abort(s"Expected a function type.")
             } else {
@@ -620,7 +620,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case results =>
         val sucMsgs = results.map {
           case (sym, tpe) =>
-            s"- ${sym.name} of type ${Context.blockTypeOf(sym)}"
+            s"- ${sym.name} of type ${Context.functionTypeOf(sym)}"
         }.mkString("\n")
 
         val explanation =
@@ -882,7 +882,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def lookup(s: BlockSymbol) = (lookupType(s), lookupRegion(s))
 
   private[typer] def lookupType(s: BlockSymbol) =
-    blockTypingContext.get(s).orElse(blockTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
+    blockTypingContext.get(s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
 
   private[typer] def lookupRegion(s: BlockSymbol) =
     regionContext.getOrElse(s, regionOf(s))

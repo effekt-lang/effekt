@@ -98,7 +98,7 @@ trait Intelligence {
     case b: BuiltinFunction =>
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 
-    case f: UserFunction if C.blockTypeOption(f).isDefined =>
+    case f: UserFunction if C.functionTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
 
     case f: BuiltinEffect =>
@@ -146,7 +146,7 @@ trait Intelligence {
       SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
 
     case c: BlockParam =>
-      val signature = C.blockTypeOption(c).map { tpe => s"{ ${c.name}: ${tpe} }" }
+      val signature = C.functionTypeOption(c).map { tpe => s"{ ${c.name}: ${tpe} }" }
 
       val ex =
         s"""|Blocks, like `${c.name}`, are similar to functions in other languages.
@@ -161,7 +161,7 @@ trait Intelligence {
       SymbolInfo(c, "Block parameter", signature, Some(ex))
 
     case c: ResumeParam =>
-      val tpe = C.blockTypeOption(c)
+      val tpe = C.functionTypeOption(c)
       val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
       val hint = tpe.map { tpe => s"(i.e., `${tpe.result}`)" }.getOrElse { " " }
 

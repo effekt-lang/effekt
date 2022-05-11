@@ -321,14 +321,14 @@ trait AnnotationsDB { self: Context =>
 
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
-    case s: BlockSymbol => interfaceTypeOf(s)
+    case s: BlockSymbol => blockTypeOf(s)
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
-  def blockTypeOf(s: Symbol): FunctionType =
-    blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
+  def functionTypeOf(s: Symbol): FunctionType =
+    functionTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
 
-  def blockTypeOption(s: Symbol): Option[FunctionType] =
+  def functionTypeOption(s: Symbol): Option[FunctionType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: FunctionType => Some(b)
@@ -342,10 +342,10 @@ trait AnnotationsDB { self: Context =>
       }
     }
 
-  def interfaceTypeOf(s: Symbol): BlockType =
-    interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
+  def blockTypeOf(s: Symbol): BlockType =
+    blockTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
 
-  def interfaceTypeOption(s: Symbol): Option[BlockType] =
+  def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: BlockType => Some(b)
@@ -368,13 +368,13 @@ trait AnnotationsDB { self: Context =>
   def annotateCalltarget(t: source.CallTarget, tpe: FunctionType): Unit =
     annotate(Annotations.TargetType, t, tpe)
 
-  def blockTypeOf(t: source.CallTarget): FunctionType =
+  def functionTypeOf(t: source.CallTarget): FunctionType =
     annotation(Annotations.TargetType, t)
 
-  def blockTypeOption(t: source.CallTarget): Option[FunctionType] =
+  def functionTypeOption(t: source.CallTarget): Option[FunctionType] =
     annotationOption(Annotations.TargetType, t)
 
-  def blockTypeOf(t: source.BlockArg): FunctionType =
+  def functionTypeOf(t: source.BlockArg): FunctionType =
     annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
@@ -409,7 +409,7 @@ trait AnnotationsDB { self: Context =>
     annotation(Annotations.SourceModule, sym)
 
   /**
-   * Searching the defitions for a Reference
+   * Searching the definitions for a Reference
    *
    * This one can fail.
    */

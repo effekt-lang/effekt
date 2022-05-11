@@ -74,7 +74,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
       val reg = bodyRegion -- boundRegions -- selfRegion
 
       // check that the self region (used by resume and variables) does not escape the scope
-      val tpe = Context.blockTypeOf(sym)
+      val tpe = Context.functionTypeOf(sym)
       val escapes = (Context.freeRegionVariables(tpe.result) ++ Context.freeRegionVariables(tpe.effects)) intersect selfRegion
       if (escapes.nonEmpty) {
         Context.explain(sym, body)
@@ -111,7 +111,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
       }.getOrElse { inferredReg }
 
       // check that the self region does not escape as part of the lambdas type
-      val tpe = Context.blockTypeOf(sym)
+      val tpe = Context.functionTypeOf(sym)
       val escapes = (Context.freeRegionVariables(tpe.result) ++ Context.freeRegionVariables(tpe.effects)) intersect selfRegion
       if (escapes.nonEmpty) {
         Context.explain(sym, body)

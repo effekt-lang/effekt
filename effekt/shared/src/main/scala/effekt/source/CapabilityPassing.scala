@@ -37,7 +37,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
       val op = fun.definition.asEffectOp
 
-      val tpe @ FunctionType(tparams, _, _, _) = C.blockTypeOf(op)
+      val tpe @ FunctionType(tparams, _, _, _) = C.functionTypeOf(op)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
@@ -73,7 +73,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     case c @ Call(fun: IdTarget, targs, args) =>
 
       val sym: Symbol = fun.definition
-      val FunctionType(tparams, _, _, effs) = C.blockTypeOf(sym)
+      val FunctionType(tparams, _, _, effs) = C.functionTypeOf(sym)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
@@ -135,7 +135,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {
     case b @ source.BlockArg(ps, body) =>
       // here we use the blocktype as inferred by typer (after substitution)
-      val effs = C.blockTypeOf(b).effects.controlEffects
+      val effs = C.functionTypeOf(b).effects.controlEffects
       C.withCapabilities(effs) { caps =>
         source.BlockArg(ps ++ caps, rewrite(body))
       }

@@ -69,12 +69,12 @@ trait ModuleDB { self: Context =>
 
     val main = mains.head
 
-    val mainParams = C.blockTypeOf(main).params
+    val mainParams = C.functionTypeOf(main).params
     if ((mainParams.size != 1) || (mainParams.head != Nil)) {
       C.abort("Main does not take arguments")
     }
 
-    val tpe = C.blockTypeOf(main)
+    val tpe = C.functionTypeOf(main)
     val controlEffects = tpe.effects.controlEffects
     if (controlEffects.nonEmpty) {
       C.abort(s"Main cannot have user defined effects, but includes effects: ${controlEffects}")

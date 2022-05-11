@@ -50,7 +50,7 @@ object assertions {
       case t: ValueType => t
       case _ => reporter.abort("Expected a value type")
     }
-    def asBlockType: FunctionType = s match {
+    def asFunctionType: FunctionType = s match {
       case t: FunctionType => t
       case _ => reporter.abort("Expected a block type")
     }
