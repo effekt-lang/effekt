@@ -245,9 +245,9 @@ case class BlockStmt(stmts: Stmt) extends Stmt
  */
 sealed trait Term extends Tree
 
-// Variable / Value use
+// Variable / Value use (can now also stand for blocks)
 case class Var(id: IdRef) extends Term with Reference {
-  type symbol = symbols.ValueSymbol with symbols.TermSymbol
+  type symbol = symbols.TermSymbol
 }
 case class Assign(id: IdRef, expr: Term) extends Term with Reference {
   type symbol = symbols.VarBinder

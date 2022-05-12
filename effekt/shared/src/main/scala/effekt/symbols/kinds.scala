@@ -53,7 +53,7 @@ package object kinds {
     case BoxedType(tpe, region) =>
       wellformed(tpe); Kind.Type
     case _: TypeVar => Kind.Type
-    case TypeApp(tpe, args) =>
+    case ValueTypeApp(tpe, args) =>
       val Kind.Fun(params, res) = wellformedType(tpe) match {
         case t: Kind.Fun => t
         case _           => C.abort(s"Expected a type constructor, but got: ${tpe}")

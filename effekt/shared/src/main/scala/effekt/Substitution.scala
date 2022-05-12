@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, BoxedType, BlockType, RigidVar, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, BoxedType, BlockType, RigidVar, Type, ValueTypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -15,8 +15,8 @@ object substitutions {
     def substitute(t: ValueType): ValueType = t match {
       case x: TypeVar =>
         substitutions.getOrElse(x, x)
-      case TypeApp(t, args) =>
-        TypeApp(t, args.map { substitute })
+      case ValueTypeApp(t, args) =>
+        ValueTypeApp(t, args.map { substitute })
       case BoxedType(tpe, reg) =>
         BoxedType(substitute(tpe), reg)
       case other => other
@@ -149,7 +149,7 @@ object substitutions {
         case (s: ValueType, t: RigidVar) =>
           Unifier(t -> s)
 
-        case (TypeApp(t1, args1), TypeApp(t2, args2)) if t1 == t2 =>
+        case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) if t1 == t2 =>
           if (args1.size != args2.size)
             return UnificationError(s"Argument count does not match $t1 vs. $t2")
 
@@ -225,8 +225,8 @@ object substitutions {
 
       def visitValueType(t: ValueType): ValueType = t match {
         case x: TypeVar => x
-        case TypeApp(t, args) =>
-          TypeApp(t, args.map { visitValueType })
+        case ValueTypeApp(t, args) =>
+          ValueTypeApp(t, args.map { visitValueType })
         case BoxedType(tpe, reg) =>
           // this is the **only** interesting case...
           // vvvvvvvvvvvvvvvvvvvvvvvvvvvvv

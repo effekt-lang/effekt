@@ -127,7 +127,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformAsBlock(tree: source.Term)(using Context): Block = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: ValueSymbol => ??? // transformUnbox(tree)
-      //case sym: BlockSymbol => BlockVar(sym)
+      case sym: BlockSymbol => BlockVar(sym)
     }
     case _ => ??? // https://github.com/effekt-lang/effekt/blob/31b05ba42df031a325245c30220aa5d9bb33a7ff/effekt/shared/src/main/scala/effekt/core/Transformer.scala#L110-L124
   }
@@ -139,7 +139,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
         Context.bind(Context.valueTypeOf(sym), get)
       case sym: ValueSymbol => ValueVar(sym)
-      //case sym: BlockSymbol => ??? // transformBox(tree)
+      case sym: BlockSymbol => ??? // transformBox(tree)
     }
 
     case a @ source.Assign(id, expr) =>

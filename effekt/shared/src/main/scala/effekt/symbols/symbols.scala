@@ -120,8 +120,6 @@ package object symbols {
     def decl: source.Tree
   }
 
-  case class BlockArg(decl: source.Tree) extends Anon
-
   case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Fun with Anon {
     // Lambdas currently do not have an annotated return type
     def annotatedResult = None
@@ -218,13 +216,13 @@ package object symbols {
     // override def toString = "?" + underlying.name + id
   }
 
-  case class TypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
+  case class ValueTypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
 
     override def dealias: ValueType = tpe match {
       case TypeAlias(name, tparams, tpe) =>
         (tparams zip args).toMap.substitute(tpe).dealias
-      case other => TypeApp(other.dealias, args.map { _.dealias })
+      case other => ValueTypeApp(other.dealias, args.map { _.dealias })
     }
   }
 
@@ -258,12 +256,12 @@ package object symbols {
   sealed trait TypeConstructor extends TypeSymbol with ValueType
   object TypeConstructor {
     def unapply(t: ValueType): Option[TypeConstructor] = t match {
-      case t: TypeVar         => None
-      case t: TypeAlias       => unapply(t.dealias)
-      case t: TypeConstructor => Some(t)
-      case TypeApp(tpe, args) => unapply(tpe)
-      case t: BuiltinType     => None
-      case t: BoxedType       => None
+      case t: TypeVar              => None
+      case t: TypeAlias            => unapply(t.dealias)
+      case t: TypeConstructor      => Some(t)
+      case ValueTypeApp(tpe, args) => unapply(tpe)
+      case t: BuiltinType          => None
+      case t: BoxedType            => None
     }
   }
 
@@ -288,7 +286,7 @@ package object symbols {
   case class Field(name: Name, param: ValueParam, rec: Record) extends Fun with Synthetic {
     val tparams = rec.tparams
     val tpe = param.tpe.get
-    val vparams = List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams))))
+    val vparams = List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else ValueTypeApp(rec, rec.tparams))))
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
     def annotatedEffects = Some(Pure)
