@@ -94,15 +94,10 @@ package object symbols {
 
   case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name.local("resume") }
 
-  /**
-   * Right now, parameters are a union type of a list of value params and one block param.
-   */
-  // TODO Introduce ParamSection also on symbol level and then use Params for types
-  type Params = List[List[Param]]
-
   trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
-    def params: Params
+    def vparams: List[ValueParam]
+    def bparams: List[BlockParam]
     def annotatedResult: Option[ValueType]
     def annotatedEffects: Option[Effects]
   }
@@ -110,7 +105,8 @@ package object symbols {
   case class UserFunction(
     name: Name,
     tparams: List[TypeVar],
-    params: Params,
+    vparams: List[ValueParam],
+    bparams: List[BlockParam],
     annotatedResult: Option[ValueType],
     annotatedEffects: Option[Effects],
     decl: FunDef
@@ -126,7 +122,7 @@ package object symbols {
 
   case class BlockArg(decl: source.Tree) extends Anon
 
-  case class Lambda(params: Params, decl: source.Tree) extends Fun with Anon {
+  case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Fun with Anon {
     // Lambdas currently do not have an annotated return type
     def annotatedResult = None
     def annotatedEffects = None
@@ -172,7 +168,7 @@ package object symbols {
   /**
    * like Params but without name binders
    */
-  type Sections = List[List[Type]]
+  type Sections = List[Type]
 
   sealed trait ValueType extends Type {
     def dealias: ValueType = this
@@ -182,28 +178,30 @@ package object symbols {
    * Types of first-class functions
    */
   case class BoxedType(tpe: FunctionType, region: Region) extends ValueType {
-    override def toString: String = {
+    // TODO move rendering to different component
 
-      val FunctionType(_, params, ret, effs) = tpe
-      // copy and paste from BlockType.toString
-      val ps = params.map {
-        case List(b: FunctionType) => s"{${b.toString}}"
-        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
-        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
-      }.mkString("")
-
-      val effects = effs.toList
-      val regs = region match {
-        case RegionSet(r) => r.regions.toList
-        // to not confuse users, we render uninstantiated region variables as ?
-        case e            => List("?")
-      }
-      val both: List[String] = (effects ++ regs).map { _.toString }
-
-      val tpeString = if (both.isEmpty) ret.toString else s"$ret / { ${both.mkString(", ")} }"
-
-      s"$ps ⟹ $tpeString"
-    }
+    //    override def toString: String = {
+    //
+    //      val FunctionType(_, params, ret, effs) = tpe
+    //      // copy and paste from BlockType.toString
+    //      val ps = params.map {
+    //        case List(b: FunctionType) => s"{${b.toString}}"
+    //        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+    //        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
+    //      }.mkString("")
+    //
+    //      val effects = effs.toList
+    //      val regs = region match {
+    //        case RegionSet(r) => r.regions.toList
+    //        // to not confuse users, we render uninstantiated region variables as ?
+    //        case e            => List("?")
+    //      }
+    //      val both: List[String] = (effects ++ regs).map { _.toString }
+    //
+    //      val tpeString = if (both.isEmpty) ret.toString else s"$ret / { ${both.mkString(", ")} }"
+    //
+    //      s"$ps ⟹ $tpeString"
+    //    }
   }
 
   class TypeVar(val name: Name) extends ValueType with TypeSymbol
@@ -233,19 +231,20 @@ package object symbols {
   sealed trait BlockType extends Type
   case class CapabilityType(effect: Effect) extends BlockType
 
-  case class FunctionType(tparams: List[TypeVar], params: Sections, result: ValueType, effects: Effects) extends BlockType {
-    override def toString: String = {
-      val ps = params.map {
-        case List(b: FunctionType) => s"{${b.toString}}"
-        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
-        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
-      }.mkString("")
-
-      tparams match {
-        case Nil => s"$ps ⟹ $result / $effects"
-        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $result / $effects"
-      }
-    }
+  case class FunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {
+    // TODO move rendering
+    //    override def toString: String = {
+    //      val ps = params.map {
+    //        case List(b: FunctionType) => s"{${b.toString}}"
+    //        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
+    //        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
+    //      }.mkString("")
+    //
+    //      tparams match {
+    //        case Nil => s"$ps ⟹ $result / $effects"
+    //        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $result / $effects"
+    //      }
+    //    }
   }
 
   case class TypeAlias(name: Name, tparams: List[TypeVar], tpe: ValueType) extends ValueType with TypeSymbol {
@@ -275,7 +274,8 @@ package object symbols {
    */
   case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Fun with Synthetic {
     // Parameter and return type of the constructor:
-    lazy val params = List(fields.map { f => f.param })
+    lazy val vparams = fields.map { f => f.param }
+    val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
     def annotatedEffects = Some(Pure)
   }
@@ -288,7 +288,8 @@ package object symbols {
   case class Field(name: Name, param: ValueParam, rec: Record) extends Fun with Synthetic {
     val tparams = rec.tparams
     val tpe = param.tpe.get
-    val params = List(List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams)))))
+    val vparams = List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else TypeApp(rec, rec.tparams))))
+    val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
     def annotatedEffects = Some(Pure)
   }
@@ -317,7 +318,8 @@ package object symbols {
   }
 
   case class ControlEffect(name: Name, tparams: List[TypeVar], var ops: List[EffectOp] = Nil) extends Effect with TypeSymbol
-  case class EffectOp(name: Name, tparams: List[TypeVar], params: List[List[ValueParam]], resultType: ValueType, otherEffects: Effects, effect: ControlEffect) extends Fun {
+  case class EffectOp(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: ControlEffect) extends Fun {
+    val bparams = List.empty[BlockParam]
     def annotatedResult = Some(resultType)
     def annotatedEffects = Some(otherEffects + appliedEffect)
 
@@ -391,7 +393,8 @@ package object symbols {
   case class BuiltinFunction(
     name: Name,
     tparams: List[TypeVar],
-    params: Params,
+    vparams: List[ValueParam],
+    bparams: List[BlockParam],
     result: ValueType,
     effects: Effects,
     purity: ExternFlag.Purity = ExternFlag.Pure,

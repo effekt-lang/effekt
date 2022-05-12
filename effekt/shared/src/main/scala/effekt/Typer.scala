@@ -117,21 +117,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
         TUnit / eff
 
       // TODO share code with FunDef
-      case l @ source.Lambda(id, params, body) =>
+      case l @ source.Lambda(id, vparams, bparams, body) =>
         val sym = l.symbol
         // currently expects params to be fully annotated
-        Context.define(sym.params)
+        sym.vparams foreach Context.define
+        sym.bparams foreach Context.define
 
         expected match {
-          case Some(exp @ BoxedType(FunctionType(_, ps, ret, effs), reg)) =>
-            checkAgainstDeclaration("lambda", ps, params)
+          case Some(exp @ BoxedType(FunctionType(_, vps, bps, ret, effs), reg)) =>
+            checkAgainstDeclaration("lambda", (vps, bps), (vparams, bparams))
             val (retGot / effsGot) = body checkAgainst ret
             Context.unify(ret, retGot)
 
             val diff = effsGot -- effs
 
             val reg = Region.fresh(l)
-            val got = BoxedType(FunctionType(Nil, ps, retGot, effs), reg)
+            val got = BoxedType(FunctionType(Nil, vps, bps, retGot, effs), reg)
 
             Context.unify(exp, got)
 
@@ -145,8 +146,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ =>
             val (ret / effs) = checkStmt(body, None)
             Context.wellscoped(effs)
-            val ps = extractAllTypes(sym.params)
-            val tpe = FunctionType(Nil, ps, ret, effs)
+            val vps = sym.vparams map {
+              case ValueParam(id, Some(tpe)) => tpe
+              case _ => Context.abort("Type needs to be annotated.")
+            }
+            val bps = sym.bparams map {
+              case BlockParam(id, tpe) => tpe
+            }
+
+            val tpe = FunctionType(Nil, vps, bps, ret, effs)
 
             // we make up a fresh region variable that will be checked later by the region checker
             val reg = Region.fresh(l)
@@ -164,21 +172,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
             funTpe / Pure // all effects are handled by the function itself (since they are inferred)
         }
 
-      case c @ source.Call(t: source.IdTarget, targs, args) => {
-        checkOverloadedCall(c, t, targs map { _.resolve }, args, expected)
+      case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) => {
+        checkOverloadedCall(c, t, targs map { _.resolve }, vargs, bargs, expected)
       }
 
-      case c @ source.Call(source.ExprTarget(e), targs, args) =>
+      case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
         val (funTpe / funEffs) = checkExpr(e, None)
 
         val tpe: FunctionType = funTpe.dealias match {
           case f: BoxedType => f.tpe
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
-        val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, args, expected)
+        val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         t / (eff ++ funEffs)
 
-      case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
+      case c @ source.Call(source.MemberTarget(receiver, id), targs, vargs, bargs) =>
         Context.panic("Method call syntax not allowed in source programs.")
 
       case source.TryHandle(prog, handlers) =>
@@ -220,7 +228,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val effectOp = d.definition
 
               // (1) Instantiate block type of effect operation
-              val (rigids, FunctionType(tparams, pms, tpe, effs)) = Unification.instantiate(Context.functionTypeOf(effectOp))
+              val (rigids, FunctionType(tparams, vps, Nil, tpe, effs)) = Unification.instantiate(Context.functionTypeOf(effectOp))
 
               // (2) unify with given type arguments for effect (i.e., A, B, ...):
               //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
@@ -229,20 +237,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
 
               // (3) substitute what we know so far
-              val substPms = Context.unifier substitute pms
+              val substVps = vps map Context.unifier.substitute
               val substTpe = Context.unifier substitute tpe
               val substEffs = Context.unifier substitute effectOp.otherEffects
 
               // (4) check parameters
-              val ps = checkAgainstDeclaration(op.name, substPms, params)
+              val ps = checkAgainstDeclaration(op.name, (substVps, Nil), (params, Nil))
 
               // (5) synthesize type of continuation
               val resumeType = if (effectOp.isBidirectional) {
                 // resume { e }
-                FunctionType(Nil, List(List(FunctionType(Nil, List(Nil), substTpe, substEffs))), ret, Pure)
+                FunctionType(Nil, Nil, List(FunctionType(Nil, Nil, Nil, substTpe, substEffs)), ret, Pure)
               } else {
                 // resume(v)
-                FunctionType(Nil, List(List(substTpe)), ret, Pure)
+                FunctionType(Nil, List(substTpe), Nil, ret, Pure)
               }
 
               Context.define(ps).define(Context.symbolOf(resume), resumeType) in {
@@ -354,7 +362,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, FunctionType(_, pms, ret, _)) = Unification.instantiate(sym.toType)
+      val (rigids, FunctionType(_, vps, _, ret, _)) = Unification.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.unify(ret, sc)
@@ -368,23 +376,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (7) refine parameter types of constructor
       // i.e. `(Int, List[Int])`
-      val constructorParams = Context.unifier substitute pms
+      val constructorParams = vps map Context.unifier.substitute
 
       // (8) check nested patterns
       var bindings = Map.empty[Symbol, ValueType]
 
-      (List(patterns) zip constructorParams) foreach {
-        case (pats, pars) =>
-          if (pats.size != pars.size)
-            Context.error(s"Wrong number of pattern arguments, given ${pats.size}, expected ${pars.size}.")
+      if (patterns.size != constructorParams.size)
+          Context.error(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${constructorParams.size}.")
 
-          (pats zip pars) foreach {
-            case (pat, par: ValueType) =>
-              bindings ++= checkPattern(par, pat)
-            case _ =>
-              Context.panic("Should not happen, since constructors can only take value parameters")
-          }
+      (patterns zip constructorParams) foreach {
+        case (pat, par: ValueType) =>
+          bindings ++= checkPattern(par, pat)
       }
+
       bindings
   }
 
@@ -413,10 +417,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
   // not really checking, only if defs are fully annotated, we add them to the typeDB
   // this is necessary for mutually recursive definitions
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
-    case d @ source.FunDef(id, tparams, params, ret, body) =>
+    case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
       d.symbol.annotatedType.foreach { tpe => Context.assignType(d.symbol, tpe) }
 
-    case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
+    case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
       Context.assignType(d.symbol, d.symbol.toType)
       if (d.symbol.effects.controlEffects.nonEmpty) {
         Context.abort("Unhandled control effects on extern defs not allowed")
@@ -457,9 +461,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def synthDef(d: Def)(using Context): TyperResult[Unit] = Context.at(d) {
     d match {
-      case d @ source.FunDef(id, tparams, params, ret, body) =>
+      case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
         val sym = d.symbol
-        Context.define(sym.params)
+        sym.vparams foreach Context.define
+        sym.bparams foreach Context.define
         (sym.annotatedType: @unchecked) match {
           case Some(annotated) =>
             val (tpe / effs) = body checkAgainst annotated.result
@@ -499,8 +504,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.define(d.symbol, t)
         () / effBinding
 
-      case d @ source.ExternFun(pure, id, tparams, params, tpe, body) =>
-        Context.define(d.symbol.params)
+      case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
+        d.symbol.vparams foreach Context.define
+        d.symbol.bparams foreach Context.define
         () / Pure
 
       // all other defintions have already been prechecked
@@ -514,45 +520,32 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //<editor-fold desc="arguments and parameters">
 
   /**
-   * Invariant: Only call this on declarations that are fully annotated
-   */
-  def extractAllTypes(params: Params)(using Context): Sections = params map extractTypes
-
-  def extractTypes(params: List[Param])(using Context): List[Type] = params map {
-    case BlockParam(_, tpe) => tpe
-    case ValueParam(_, Some(tpe)) => tpe
-    case _ => Context.panic("Cannot extract type")
-  }
-
-  /**
    * Returns the binders that will be introduced to check the corresponding body
    */
   def checkAgainstDeclaration(
     name: String,
-    atCallee: List[List[Type]],
+    atCallee: (List[ValueType], List[BlockType]),
     // we ask for the source Params here, since it might not be annotated
-    atCaller: List[source.ParamSection]
-  )(using Context): Map[Symbol, Type] = {
+    atCaller: (List[source.ValueParam], List[source.BlockParam])
+  )(using Context): Map[Symbol, ValueType] = {
 
-    if (atCallee.size != atCaller.size)
-      Context.error(s"Wrong number of argument sections, given ${atCaller.size}, but ${name} expects ${atCallee.size}.")
+    val (calleeVps, calleeBps) = atCallee
+    val (callerVps, callerBps) = atCaller
 
-    (atCallee zip atCaller).flatMap[(Symbol, Type)] {
-      case (List(b1: FunctionType), b2: source.BlockParam) =>
-        Context.at(b2) { Context.panic("Internal Compiler Error: Not yet supported") }
+    if (calleeVps.size != callerVps.size)
+      Context.abort(s"Wrong number of value arguments, given ${callerVps.size}, but ${name} expects ${calleeVps.size}.")
 
-      case (ps1: List[ValueType @unchecked], source.ValueParams(ps2)) =>
-        if (ps1.size != ps2.size)
-          Context.error(s"Wrong number of arguments, given ${ps2.size}, but ${name} expects ${ps1.size}.")
-        (ps1 zip ps2).map[(Symbol, Type)] {
-          case (decl, p @ source.ValueParam(id, annot)) =>
-            val annotType = annot.map(_.resolve)
-            annotType.foreach { t =>
-              Context.at(p) { Context.unify(decl, t) }
-            }
-            (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
-        }.toMap
-      case (_, _) => Context.panic("Internal Compiler Error: cannot match arguments with the expected types")
+    if (calleeBps.size != callerBps.size)
+      Context.abort(s"Wrong number of block arguments, given ${callerBps.size}, but ${name} expects ${calleeBps.size}.")
+
+    // TODO check block arguments
+    (calleeVps zip callerVps).map[(Symbol, ValueType)] {
+      case (decl, p @ source.ValueParam(id, annot)) =>
+        val annotType = annot.map(_.resolve)
+        annotType.foreach { t =>
+          Context.at(p) { Context.unify(decl, t) }
+        }
+        (p.symbol, annotType.getOrElse(decl)) // use the annotation, if present.
     }.toMap
   }
 
@@ -567,7 +560,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     call: source.Call,
     target: source.IdTarget,
     targs: List[ValueType],
-    args: List[source.ArgSection],
+    vargs: List[source.Term],
+    bargs: List[source.BlockArg],
     expected: Option[Type]
   )(using Context): TyperResult[ValueType] = {
 
@@ -594,7 +588,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
             }
           }
-          val r = checkCallTo(call, sym.name.name, tpe, targs, args, expected)
+          val r = checkCallTo(call, sym.name.name, tpe, targs, vargs, bargs, expected)
           (r, Context.backupTyperstate())
         }
       }
@@ -668,13 +662,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
     name: String,
     funTpe: FunctionType,
     targs: List[ValueType],
-    args: List[source.ArgSection],
+    vargs: List[source.Term],
+    bargs: List[source.BlockArg],
     expected: Option[Type]
   )(using Context): TyperResult[ValueType] = {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, bt @ FunctionType(_, params, ret, retEffs)) = Unification.instantiate(funTpe)
+    val (rigids, bt @ FunctionType(_, vps, bps, ret, retEffs)) = Unification.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -692,30 +687,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     var effs = retEffs
 
-    if (params.size != args.size)
-      Context.error(s"Wrong number of argument sections, given ${args.size}, but ${name} expects ${params.size}.")
+    if (vps.size != vargs.size)
+      Context.error(s"Wrong number of value arguments, given ${vargs.size}, but ${name} expects ${vps.size}.")
 
-    def checkArgumentSection(ps: List[Type], args: source.ArgSection): Unit = (ps, args) match {
-      case (ps: List[Type], source.ValueArgs(as)) =>
-        if (ps.size != as.size)
-          Context.error(s"Wrong number of arguments. Argument section of ${name} requires ${ps.size}, but ${as.size} given.")
-
-        // check that types are actually value types
-        val vps = ps map {
-          case tpe: ValueType => tpe
-          case _ =>
-            Context.error("Wrong argument type, expected a value argument")
-            return
-        }
-
-        (vps zip as) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
-
-      case (List(bt: FunctionType), arg: source.BlockArg) =>
-        checkBlockArgument(bt, arg)
-
-      case (_, _) =>
-        Context.error("Wrong type of argument section")
-    }
+    (vps zip vargs) foreach { case (tpe, expr) => checkValueArgument(tpe, expr) }
 
     def checkValueArgument(tpe: ValueType, arg: source.Term): Unit = Context.at(arg) {
       val tpe1 = Context.unifier substitute tpe // apply what we already know.
@@ -727,19 +702,31 @@ object Typer extends Phase[NameResolved, Typechecked] {
       effs = effs ++ exprEffs
     }
 
+    if (bps.size != bargs.size)
+      Context.error(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${bps.size}.")
+
+    (bps zip bargs) foreach { case (tpe, expr) => checkBlockArgument(tpe, expr) }
+
+     def checkBlockArgument(tpe: BlockType, arg: source.BlockArg): Unit = (tpe, arg) match {
+       case (tpe: FunctionType, arg: source.FunctionArg) => checkFunctionArgument(tpe, arg)
+       case _ => ???
+     }
+
     // Example.
     //   BlockParam: def foo { f: Int => String / Print }
     //   BlockArg: foo { n => println("hello" + n) }
     //     or
     //   BlockArg: foo { (n: Int) => println("hello" + n) }
-    def checkBlockArgument(tpe: FunctionType, arg: source.BlockArg): Unit = Context.at(arg) {
-      val bt @ FunctionType(Nil, params, tpe1, handled) = Context.unifier substitute tpe
+    def checkFunctionArgument(tpe: FunctionType, arg: source.FunctionArg): Unit = Context.at(arg) {
+
+      val bt @ FunctionType(Nil, vps, bps, tpe1, handled) = Context.unifier substitute tpe
 
       // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
       Context.annotateBlockArgument(arg, bt)
 
       Context.define {
-        checkAgainstDeclaration("block", params, arg.params)
+        val r = checkAgainstDeclaration("block", (vps, bps), (arg.vparams, arg.bparams))
+        r
       }
 
       val (tpe2 / stmtEffs) = arg.body checkAgainst tpe1
@@ -747,8 +734,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.unify(tpe1, tpe2)
       effs = (effs ++ (stmtEffs -- handled))
     }
-
-    (params zip args) foreach { case (ps, as) => checkArgumentSection(ps, as) }
 
     //    println(
     //      s"""|Results of checking application of ${sym.name}
@@ -803,8 +788,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
-    case FunctionType(tparams, params, ret, effs) =>
-      freeTypeVars(params) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tparams.toSet
+    case FunctionType(tps, vps, bps, ret, effs) =>
+      freeTypeVars(vps) ++ freeTypeVars(bps) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tps.toSet
     case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
     case t: Iterable[t] =>
@@ -848,7 +833,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def toType: FunctionType =
       annotatedType.get
     def toType(result: ValueType, effects: Effects): FunctionType =
-      FunctionType(fun.tparams, paramsToTypes(fun.params), result, effects)
+      FunctionType(fun.tparams, fun.vparams.map { p => p.tpe.get }, fun.bparams.map { p => p.tpe }, result, effects)
     def annotatedType: Option[FunctionType] =
       for { result <- fun.annotatedResult; effects <- fun.annotatedEffects } yield toType(result, effects)
 
@@ -859,14 +844,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         .getOrElse { Context.abort(s"Result type of recursive function ${fun.name} needs to be annotated") }
   }
 
-  def paramsToTypes(ps: Params): Sections =
-    ps map {
-      _ map {
-        case BlockParam(_, tpe)      => tpe
-        case v: ValueParam           => v.tpe.get
-        case r: ResumeParam          => sys error "Internal Error: No type annotated on resumption parameter"
-      }
-    }
 }
 
 /**
@@ -1047,7 +1024,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.BlockArg, tpe: FunctionType): Context = {
+  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Context = {
     annotations.annotate(Annotations.BlockArgumentType, t, tpe)
     this
   }
@@ -1073,14 +1050,14 @@ trait TyperOps extends ContextOps { self: Context =>
     }; this
   }
 
-  private[typer] def define(ps: List[List[Param]]): Context = {
-    ps.flatten.foreach {
+  private[typer] def define(ps: ValueParam): Context =
+    ps match {
       case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
-      case s @ BlockParam(name, tpe) => define(s, tpe)
       case s => panic(s"Internal Error: Cannot add $s to context.")
     }
     this
-  }
+
+  private[typer] def define(b: BlockParam): Context = define(b, b.tpe)
 
   private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
     annotations.annotate(Annotations.TargetType, t, tpe)

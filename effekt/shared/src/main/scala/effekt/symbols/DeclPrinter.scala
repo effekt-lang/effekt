@@ -64,19 +64,16 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   def format(kw: String, f: Fun, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
-    val ps = f.params.map {
-      case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
-      case l: List[ValueParam @unchecked] =>
-        val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
-        s"($vps)"
-      case _ => sys error "Parameter lists are either singleton block params or a list of value params."
-    }.mkString
+
+    val valueParams = f.vparams.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
+    val vps = if valueParams.isEmpty then "" else s"($valueParams)"
+    val bps = f.bparams.map { b => s"{ ${b.name}: ${b.tpe} }" }.mkString("")
 
     val returnType = for {
       tpe <- result
       eff <- effects
     } yield s": $tpe / $eff"
 
-    s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
+    s"$kw ${f.name}$tps$vps$bps${returnType.getOrElse("")}"
   }
 }

@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions._
 import effekt.regions.Region
-import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree, ValueParams }
+import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
 
@@ -73,19 +73,21 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.VarDef(id, annot, binding) =>
       ()
 
-    case f @ source.FunDef(id, tparams, params, annot, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
       val uniqueId = Context.freshNameFor(id)
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
         val tps = tparams map resolve
         // TODO resolve(ParamSection) loses structural information about value params and block params.
         //   we should refactor!
-        val ps = params map resolve
+        val vps = vparams map resolve
+        val bps = bparams map resolve
         val ret = Context scoped {
-          C.bindParams(ps)
+          C.bindValue(vps)
+          C.bindBlock(bps)
           annot map resolve
         }
-        UserFunction(uniqueId, tps, ps, ret.map { _._1 }, ret.map { _._2 }, f)
+        UserFunction(uniqueId, tps, vps, bps, ret.map { _._1 }, ret.map { _._2 }, f)
       }
       Context.define(id, sym)
 
@@ -149,13 +151,14 @@ object Namer extends Phase[Parsed, NameResolved] {
         BuiltinEffect(C.nameFor(id), tps)
       })
 
-    case source.ExternFun(pure, id, tparams, params, ret, body) => {
+    case source.ExternFun(pure, id, tparams, vparams, bparams, ret, body) => {
       val name = Context.freshNameFor(id)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        val ps: Params = params map resolve
+        val vps = vparams map resolve
+        val bps = bparams map resolve
         val (tpe, eff) = resolve(ret)
-        BuiltinFunction(name, tps, ps, tpe, eff, pure, body)
+        BuiltinFunction(name, tps, vps, bps, tpe, eff, pure, body)
       })
     }
 
@@ -202,13 +205,18 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, VarBinder(C.nameFor(id), tpe, d))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
-    case f @ source.FunDef(id, tparams, vparams, ret, body) =>
+    case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
       val sym = Context.symbolOf(f)
       Context scoped {
-        sym.tparams.foreach { p =>
-          Context.bind(p)
-        }
-        Context.bindParams(sym.params)
+        sym.tparams.foreach { p => Context.bind(p) }
+        Context.bindValue(sym.vparams)
+        Context.bindBlock(sym.bparams)
+
+        //        // Bind self region, both under "this" and under "id"
+        //        val self = CaptureOf(sym)
+        //        Context.bind(self)
+        //        Context.bind("this", self)
+
         resolveGeneric(body)
       }
 
@@ -229,7 +237,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             //   2) the annotated type parameters on the concrete operation
             val (result, effects) = resolve(ret)
 
-            val op = EffectOp(name, effectSym.tparams ++ tps, params map resolve, result, effects, effectSym)
+            val op = EffectOp(name, effectSym.tparams ++ tps, params map { p => resolve(p) }, result, effects, effectSym)
             Context.define(id, op)
             op
           }
@@ -264,7 +272,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.ExternType(id, tparams) => ()
     case source.ExternEffect(id, tparams) => ()
-    case source.ExternFun(pure, id, tparams, params, ret, body) => ()
+    case source.ExternFun(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternInclude(path) => ()
 
     case source.If(cond, thn, els) =>
@@ -321,28 +329,33 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case source.BlockArg(params, stmt) =>
-      val ps = params.map(resolve)
+    case source.FunctionArg(vparams, bparams, stmt) =>
       Context scoped {
-        Context.bindParams(ps)
+        val vps = vparams map resolve
+        val bps = bparams map resolve
+        Context.bindValue(vps)
+        Context.bindBlock(bps)
         resolveGeneric(stmt)
       }
 
-    case l @ source.Lambda(id, params, stmt) =>
-      val ps = params.map(resolve)
+    case l @ source.Lambda(id, vparams, bparams, stmt) =>
+      val vps = vparams map resolve
+      val bps = bparams map resolve
       Context scoped {
-        Context.bindParams(ps)
+        Context.bindValue(vps)
+        Context.bindBlock(bps)
         resolveGeneric(stmt)
       }
-      val sym = Lambda(ps, l)
+      val sym = Lambda(vps, bps, l)
       Context.define(id, sym)
 
     // (2) === Bound Occurrences ===
 
-    case source.Call(target, targs, args) =>
+    case source.Call(target, targs, vargs, bargs) =>
       resolve(target)
       targs foreach resolve
-      resolveAll(args)
+      resolveAll(vargs)
+      resolveAll(bargs)
 
     case source.Var(id)           => Context.resolveVar(id)
 
@@ -356,23 +369,21 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   // TODO move away
-  def resolveFields(params: source.ValueParams, record: Record)(implicit C: Context): List[Field] = Context.focusing(params) {
-    case ps @ source.ValueParams(params) =>
+  def resolveFields(params: List[source.ValueParam], record: Record)(implicit C: Context): List[Field] = {
+    val paramSyms = Context scoped {
+      // Bind the type parameters
+      record.tparams.foreach { t => Context.bind(t) }
+      params map resolve
+    }
 
-      val paramSyms = Context scoped {
-        // Bind the type parameters
-        record.tparams.foreach { t => Context.bind(t) }
-        resolve(ps)
-      }
-
-      (paramSyms zip params) map {
-        case (paramSym, paramTree) =>
-          val fieldId = paramTree.id.clone
-          val name = Context.freshNameFor(fieldId)
-          val fieldSym = Field(name, paramSym, record)
-          Context.define(fieldId, fieldSym)
-          fieldSym
-      }
+    (paramSyms zip params) map {
+      case (paramSym, paramTree) =>
+        val fieldId = paramTree.id.clone
+        val name = Context.freshNameFor(fieldId)
+        val fieldSym = Field(name, paramSym, record)
+        Context.define(fieldId, fieldSym)
+        fieldSym
+    }
   }
 
   def resolveAll(obj: Any)(implicit C: Context): Unit = obj match {
@@ -393,19 +404,23 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Importantly, resolving them will *not* add the parameters as binding occurence in the current scope.
    * This is done separately by means of `bind`
    */
-  def resolve(params: source.ParamSection)(implicit C: Context): List[Param] = Context.focusing(params) {
-    case ps: source.ValueParams => resolve(ps)
-    case source.BlockParam(id, tpe) =>
-      val sym = BlockParam(Name.local(id), resolve(tpe))
-      Context.assignSymbol(id, sym)
-      List(sym)
+  def resolve(params: List[source.Param])(implicit C: Context): List[Param] =
+    params map resolve
+
+  def resolve(param: source.Param)(implicit C: Context): Param = param match {
+    case p: source.ValueParam => resolve(p)
+    case p: source.BlockParam => resolve(p)
   }
-  def resolve(ps: source.ValueParams)(implicit C: Context): List[ValueParam] =
-    ps.params map { p =>
-      val sym = ValueParam(Name.local(p.id), p.tpe.map(resolve))
-      Context.assignSymbol(p.id, sym)
-      sym
-    }
+  def resolve(p: source.ValueParam)(implicit C: Context): ValueParam = {
+    val sym = ValueParam(Name.local(p.id), p.tpe.map(resolve))
+    Context.assignSymbol(p.id, sym)
+    sym
+  }
+  def resolve(p: source.BlockParam)(implicit C: Context): BlockParam = {
+    val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
+    Context.assignSymbol(p.id, sym)
+    sym
+  }
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
     case source.IdTarget(id) => Context.resolveCalltarget(id)
@@ -447,9 +462,10 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.resolveType(id).asValueType
       case source.ValueTypeTree(tpe) =>
         tpe
-      case source.BoxedType(tpe @ source.FunctionType(params, ret, effs)) =>
+      // TODO reconsider reusing the same set for terms and types...
+      case source.BoxedType(tpe @ source.FunctionType(vparams, ret, effs)) =>
         val (terms, effects) = resolveTermsOrTypes(effs.effs)
-        val btpe = FunctionType(Nil, List(params.map(resolve)), resolve(ret), Effects(effects))
+        val btpe = FunctionType(Nil, vparams.map(resolve), Nil, resolve(ret), Effects(effects))
         BoxedType(btpe, Region(terms))
       // TODO boxed capabilities are currently not implemented
       case source.BoxedType(tpe) => ???
@@ -490,7 +506,8 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = {
     val tpe = resolve(funTpe.result)
     val eff = resolve(funTpe.effects)
-    val res = FunctionType(Nil, List(funTpe.params.map(resolve)), tpe, eff)
+    val vps = funTpe.vparams.map(resolve)
+    val res = FunctionType(Nil, vps, Nil, tpe, eff)
     C.annotateResolvedType(funTpe)(res)
     res
   }
@@ -583,23 +600,15 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
 
-  private[namer] def bindParams(params: Params): Context = {
-    params.flatten.foreach { p => bind(p) }
-    this
-  }
-
-  private[namer] def bindValue(params: List[ValueParam]): Context = {
+  private[namer] def bindParams(params: List[Param]) =
     params.foreach { p => bind(p) }
-    this
-  }
 
-  private[namer] def bindBlock(params: List[BlockParam]): Context = {
-    params.foreach { p =>
-      // bind the block parameter as a term
-      bind(p)
-    }
-    this
-  }
+  private[namer] def bindValue(params: List[ValueParam]) =
+    params.foreach { p => bind(p) }
+
+  private[namer] def bindBlock(params: List[BlockParam]) =
+    // bind the block parameter as a term
+    params.foreach { p => bind(p) }
 
   /**
    * Tries to find a _unique_ term symbol in the current scope under name id.

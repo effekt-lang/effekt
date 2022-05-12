@@ -154,17 +154,17 @@ case class Import(path: String) extends Tree
 /**
  * Parameters and arguments
  */
-sealed trait ParamSection extends Tree
-case class ValueParams(params: List[ValueParam]) extends ParamSection
-
-case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
-
-case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
+sealed trait Param extends Definition
+case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Param { type symbol = symbols.ValueParam }
+case class BlockParam(id: IdDef, tpe: BlockType) extends Param { type symbol = symbols.BlockParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Term]) extends ArgSection
-case class BlockArg(params: List[ParamSection], body: Stmt) extends ArgSection
-case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
+// TODO Rename to FunctionArg and add type parameters
+
+sealed trait BlockArg extends Tree
+case class FunctionArg(vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
+case class CapabilityArg(id: IdRef) extends BlockArg with Reference {
   type symbol = symbols.BlockParam
 }
 
@@ -174,7 +174,7 @@ case class CapabilityArg(id: IdRef) extends ArgSection with Reference {
 sealed trait Def extends Definition {
   def id: IdDef
 }
-case class FunDef(id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Option[Effectful], body: Stmt) extends Def {
+case class FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt) extends Def {
   type symbol = symbols.UserFunction
 }
 case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
@@ -186,16 +186,16 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
   type symbol = symbols.ControlEffect
 }
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParams], ret: Effectful) extends Definition {
+case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition {
   type symbol = symbols.EffectOp
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
 }
-case class Constructor(id: IdDef, params: ValueParams) extends Definition {
+case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition {
   type symbol = symbols.Record
 }
-case class RecordDef(id: IdDef, tparams: List[Id], fields: ValueParams) extends Def {
+case class RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam]) extends Def {
   type symbol = symbols.Record
 }
 
@@ -228,7 +228,7 @@ object ExternFlag extends Enumeration {
   def directStyle(p: Purity): Boolean = p == Pure || p == IO
 }
 
-case class ExternFun(purity: ExternFlag.Purity, id: IdDef, tparams: List[Id], params: List[ParamSection], ret: Effectful, body: String) extends Def {
+case class ExternFun(purity: ExternFlag.Purity, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {
@@ -271,14 +271,16 @@ case class StringLit(value: String) extends Literal[String]
  *
  * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
  * its parameter symbols.
+ *
+ * TODO factor into Box and BlockArg
  */
-case class Lambda(id: IdDef, params: List[ParamSection], body: Stmt) extends Term with Definition {
+case class Lambda(id: IdDef, vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term with Definition {
   type symbol = symbols.Lambda
 }
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
-case class Call(target: CallTarget, targs: List[ValueType], args: List[ArgSection]) extends Term
+case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
 
 sealed trait CallTarget extends Tree
 case class IdTarget(id: IdRef) extends CallTarget with Reference {
@@ -309,7 +311,7 @@ case class Handler(effect: Effect, capability: Option[BlockParam] = None, clause
   def id = effect.id
   type symbol = symbols.ControlEffect
 }
-case class OpClause(id: IdRef, params: List[ParamSection], body: Stmt, resume: IdDef) extends Reference {
+case class OpClause(id: IdRef, vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.EffectOp
 }
 
@@ -407,7 +409,7 @@ case class CapabilityType(eff: symbols.Effect) extends BlockType {
 //  type symbol = symbols.Symbol with symbols.InterfaceType
 //}
 
-case class FunctionType(params: List[ValueType], result: ValueType, effects: Effects) extends BlockType {
+case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Effects) extends BlockType {
   type resolved = symbols.FunctionType
 }
 
@@ -480,8 +482,8 @@ object Tree {
       case MatchExpr(sc, clauses) =>
         MatchExpr(rewrite(sc), clauses.map(rewrite))
 
-      case Call(fun, targs, args) =>
-        Call(fun, targs, args.map(rewrite))
+      case Call(fun, targs, vargs, bargs) =>
+        Call(fun, targs, vargs.map(rewrite), bargs.map(rewrite))
 
       case TryHandle(prog, handlers) =>
         TryHandle(rewrite(prog), handlers.map(rewrite))
@@ -489,15 +491,15 @@ object Tree {
       case Hole(stmts) =>
         Hole(rewrite(stmts))
 
-      case Lambda(id, params, body) =>
-        Lambda(id, params, rewrite(body))
+      case Lambda(id, vps, bps, body) =>
+        Lambda(id, vps, bps, rewrite(body))
     }
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
       case t if defn.isDefinedAt(t) => defn(C)(t)
 
-      case FunDef(id, tparams, params, ret, body) =>
-        FunDef(id, tparams, params, ret, rewrite(body))
+      case FunDef(id, tparams, vparams, bparams, ret, body) =>
+        FunDef(id, tparams, vparams, bparams, ret, rewrite(body))
 
       case ValDef(id, annot, binding) =>
         ValDef(id, annot, rewrite(binding))
@@ -534,13 +536,12 @@ object Tree {
     }
 
     def rewrite(b: BlockArg)(implicit C: Context): BlockArg = b match {
-      case BlockArg(ps, body) => BlockArg(ps, rewrite(body))
+      case b: FunctionArg   => rewrite(b)
+      case b: CapabilityArg => b
     }
 
-    def rewrite(t: ArgSection)(implicit C: Context): ArgSection = visit(t) {
-      case ValueArgs(as)    => ValueArgs(as.map(rewrite))
-      case b: BlockArg      => rewrite(b)
-      case c: CapabilityArg => c
+    def rewrite(b: FunctionArg)(implicit C: Context): FunctionArg = b match {
+      case FunctionArg(vps, bps, body) => FunctionArg(vps, bps, rewrite(body))
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {

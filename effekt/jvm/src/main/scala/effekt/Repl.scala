@@ -311,12 +311,12 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
       val body = Return(expr)
 
       ModuleDecl("interactive", Import("effekt") :: imports,
-        definitions :+ FunDef(IdDef("main"), Nil, List(ValueParams(Nil)), None,
+        definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,
           body))
     }
 
     def makeEval(expr: Term): ModuleDecl =
-      make(Call(IdTarget(IdRef("println")), Nil, List(ValueArgs(List(expr)))))
+      make(Call(IdTarget(IdRef("println")), Nil, List(expr), Nil))
   }
   lazy val emptyModule = ReplModule(Nil, Nil)
 }

@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, BoxedType, BlockType, RigidVar, Sections, Type, TypeApp, TypeVar, ValueType }
+import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, BoxedType, BlockType, RigidVar, Type, TypeApp, TypeVar, ValueType }
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -35,16 +35,9 @@ object substitutions {
     }
 
     def substitute(t: FunctionType): FunctionType = t match {
-      case FunctionType(tps, ps, ret, effs) =>
-        val substWithout = substitutions.filterNot { case (t, _) => ps.contains(t) }
-        FunctionType(tps, substWithout.substitute(ps), substWithout.substitute(ret), substWithout.substitute(effs))
-    }
-
-    def substitute(t: Sections): Sections = t map {
-      _ map {
-        case v: ValueType => substitute(v)
-        case b: BlockType => substitute(b)
-      }
+      case FunctionType(tps, vps, bps, ret, effs) =>
+        val substWithout = substitutions.filterNot { case (t, _) => tps.contains(t) }
+        FunctionType(tps, vps map substWithout.substitute, bps map substWithout.substitute, substWithout.substitute(ret), substWithout.substitute(effs))
     }
   }
 
@@ -136,7 +129,7 @@ object substitutions {
           unifyValueTypes(t, s)
 
         case (t: FunctionType, s: FunctionType) =>
-          unifyBlockTypes(t, s)
+          unifyFunctionTypes(t, s)
 
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")
@@ -174,26 +167,27 @@ object substitutions {
           UnificationError(s"Expected ${t}, but got ${s}")
       }
 
-    def unifyBlockTypes(tpe1: FunctionType, tpe2: FunctionType)(implicit C: Context): UnificationResult =
+    def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(implicit C: Context): UnificationResult = ???
+
+    def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(implicit C: Context): UnificationResult =
       (tpe1, tpe2) match {
         // TODO also consider type parameters here
-        case (f1 @ FunctionType(_, args1, ret1, eff1), f2 @ FunctionType(_, args2, ret2, eff2)) =>
+        case (f1 @ FunctionType(tps1, vps1, bps1, ret1, eff1), f2 @ FunctionType(tps2, vps2, bps2, ret2, eff2)) =>
 
-          if (args1.size != args2.size) {
-            return UnificationError(s"Section count does not match $f1 vs. $f2")
+          if (tps1.size != tps2.size || vps1.size != vps2.size || bps1.size != bps2.size) {
+            return UnificationError(s"Argument count does not match $f1 vs. $f2")
           }
+
+          // TODO substitute type parameters
+          //   https://github.com/effekt-lang/effekt/blob/31b05ba42df031a325245c30220aa5d9bb33a7ff/effekt/shared/src/main/scala/effekt/Substitution.scala#L477-L498
 
           // We don't unify effects here, instead we simply gather them
           // Two effects State[?X1] and State[?X2] are assumed to be disjoint until we know that ?X1 and ?X2 are equal.
-          val ret = unifyTypes(ret1, ret2)
+          var unifier = unifyTypes(ret1, ret2)
+          (vps1 zip vps2).foreach { case (tpe1, tpe2) => unifier = unifier union unifyValueTypes(tpe1, tpe2) }
+          (bps1 zip bps2).foreach { case (tpe1, tpe2) => unifier = unifier union unifyBlockTypes(tpe1, tpe2) }
 
-          (args1 zip args2).foldLeft(ret) {
-            case (u, (as1, as2)) =>
-              if (as1.size != as2.size)
-                return UnificationError(s"Argument count does not match $f1 vs. $f2")
-
-              (as1 zip as2).foldLeft(u) { case (u, (a1, a2)) => u union unifyTypes(a1, a2) }
-          }
+          unifier
       }
 
     /**
@@ -202,17 +196,18 @@ object substitutions {
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
      */
     def instantiate(tpe: FunctionType)(implicit C: Context): (List[RigidVar], FunctionType) = {
-      val FunctionType(tparams, params, ret, effs) = tpe
+      val FunctionType(tparams, vparams, bparams, ret, effs) = tpe
       val subst = tparams.map { p => p -> RigidVar(p) }.toMap
       val rigids = subst.values.toList
 
-      val substitutedParams = subst.substitute(params)
+      val substitutedValueParams = vparams map subst.substitute
+      val substitutedBlockParams = bparams map subst.substitute
 
       // here we also replace all region variables by copies to allow
       // substitution in RegionChecker.
       val substitutedReturn = subst.substitute(freshRegions(ret))
       val substitutedEffects = subst.substitute(freshRegions(effs))
-      (rigids, FunctionType(Nil, substitutedParams, substitutedReturn, substitutedEffects))
+      (rigids, FunctionType(Nil, substitutedValueParams, substitutedBlockParams, substitutedReturn, substitutedEffects))
     }
 
     /**
@@ -222,11 +217,10 @@ object substitutions {
     def freshRegions[T](t: T)(implicit C: Context): T = {
 
       def generic[T](t: T): T = t match {
-        case t: ValueType => visitValueType(t).asInstanceOf[T]
-        case b: FunctionType => visitBlockType(b).asInstanceOf[T]
-        case e: Effects => visitEffects(e).asInstanceOf[T]
-        case s: List[List[Type] @unchecked] => visitSections(s).asInstanceOf[T]
-        case other => C.panic(s"Don't know how to traverse ${t}")
+        case t: ValueType    => visitValueType(t).asInstanceOf[T]
+        case b: FunctionType => visitFunctionType(b).asInstanceOf[T]
+        case e: Effects      => visitEffects(e).asInstanceOf[T]
+        case other           => C.panic(s"Don't know how to traverse ${t}")
       }
 
       def visitValueType(t: ValueType): ValueType = t match {
@@ -239,7 +233,7 @@ object substitutions {
           val copy = Region.fresh(C.focus)
           copy.instantiate(reg)
           // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          BoxedType(visitBlockType(tpe), copy)
+          BoxedType(visitFunctionType(tpe), copy)
         case other => other
       }
 
@@ -251,18 +245,16 @@ object substitutions {
         case e                     => e
       }
 
-      def visitBlockType(t: FunctionType): FunctionType = t match {
-        case FunctionType(tps, ps, ret, eff) =>
-          FunctionType(tps, visitSections(ps), visitValueType(ret), visitEffects(eff))
+      def visitBlockType(t: BlockType): BlockType = t match {
+        case f: FunctionType   => visitFunctionType(f)
+        case c: CapabilityType => c // TODO cover case
       }
 
-      def visitSections(t: Sections): Sections = t map {
-        _ map {
-          case v: ValueType      => visitValueType(v)
-          case b: FunctionType   => visitBlockType(b)
-          case b: CapabilityType => b
-        }
+      def visitFunctionType(t: FunctionType): FunctionType = t match {
+        case FunctionType(tps, vps, bps, ret, eff) =>
+          FunctionType(tps, vps map visitValueType, bps map visitBlockType, visitValueType(ret), visitEffects(eff))
       }
+
       generic(t)
     }
   }

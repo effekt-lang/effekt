@@ -40,9 +40,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
   def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
-    case f @ source.FunDef(id, _, params, _, body) =>
+    case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
-      val ps = transformParams(params)
+      val ps = (vps map transform) ++ (bps map transform)
       Def(sym, C.blockTypeOf(sym), BlockLit(ps, transform(body)), rest)
 
     case d @ source.DataDef(id, _, ctors) =>
@@ -75,9 +75,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.EffectDef(id, effs) =>
       rest
 
-    case f @ source.ExternFun(pure, id, tparams, params, ret, body) =>
+    case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, C.functionTypeOf(sym), Extern(transformParams(params), body), rest)
+      Def(f.symbol, C.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest)
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest)
@@ -135,10 +135,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case l: source.Literal[t] => transformLit(l)
 
-    case l @ source.Lambda(id, params, body) =>
+    case l @ source.Lambda(id, vps, bps, body) =>
       val tpe = C.functionTypeOf(l.symbol)
-      val ps = transformParams(params)
-      Closure(BlockLit(ps, transform(body)))
+      Closure(BlockLit((vps map transform) ++ (bps map transform), transform(body)))
 
     case source.If(cond, thn, els) =>
       val c = transform(cond)
@@ -159,23 +158,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       C.bind(C.inferredTypeOf(tree), Match(scrutinee, cs))
 
-    case c @ source.Call(source.ExprTarget(expr), _, args) =>
+    case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
       val e = transform(expr)
-      val as = args.flatMap(transform)
-      C.bind(C.inferredTypeOf(tree), App(Unbox(e), Nil, as))
+      val valueArgs = vargs.map(transform)
+      val blockArgs = bargs.map(transform)
+      C.bind(C.inferredTypeOf(tree), App(Unbox(e), Nil, valueArgs ++ blockArgs))
 
-    case c @ source.Call(source.MemberTarget(block, op), _, args) =>
+    case c @ source.Call(source.MemberTarget(block, op), _, vargs, bargs) =>
       // the type arguments, inferred by typer
       // val targs = C.typeArguments(c)
-
-      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, args.flatMap(transform))
+      val valueArgs = vargs.map(transform)
+      val blockArgs = bargs.map(transform)
+      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, valueArgs ++ blockArgs)
       C.bind(C.inferredTypeOf(tree), app)
 
-    case c @ source.Call(fun: source.IdTarget, _, args) =>
+    case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       val sym: Symbol = fun.definition
 
-      val as = args.flatMap(transform)
+      val as = vargs.map(transform) ++ bargs.map(transform)
 
       // the type arguments, inferred by typer
       val targs = C.typeArguments(c)
@@ -190,7 +191,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case f: Field =>
           val List(arg: Expr) = as
           Select(arg, f)
-        case f: BlockSymbol if C.pureOrIO(f) && args.forall { C.pureOrIO } =>
+        case f: BlockSymbol if C.pureOrIO(f) && bargs.forall { C.pureOrIO } =>
           Run(App(BlockVar(f), targs, as))
         case f: BlockSymbol =>
           C.bind(C.inferredTypeOf(tree), App(BlockVar(f), targs, as))
@@ -213,8 +214,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
-            case op @ source.OpClause(id, params, body, resume) =>
-              val ps = transformParams(params)
+            case op @ source.OpClause(id, vps, body, resume) =>
+              val ps = vps map transform
 
               // introduce a block parameter for resume
               val resumeParam = BlockParam(resume.symbol.asInstanceOf[BlockSymbol])
@@ -231,21 +232,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   }
 
-  def transform(block: source.BlockArg)(implicit C: Context): core.BlockLit = block match {
-    case source.BlockArg(params, body) => BlockLit(transformParams(params), transform(body))
+  def transform(block: source.BlockArg)(implicit C: Context): core.Block = block match {
+    case source.FunctionArg(vps, bps, body) =>
+      BlockLit((vps map transform) ++ (bps map transform), transform(body))
+    case c @ source.CapabilityArg(id) => BlockVar(c.definition)
   }
 
-  def transform(arg: source.ArgSection)(implicit C: Context): List[core.Argument] = arg match {
-    case source.ValueArgs(args)        => args.map(transform)
-    case b : source.BlockArg           => List(transform(b))
-    case c @ source.CapabilityArg(id)  => List(BlockVar(c.definition))
+  def transform(block: source.FunctionArg)(implicit C: Context): core.BlockLit = block match {
+    case source.FunctionArg(vps, bps, body) => BlockLit((vps map transform) ++ (bps map transform), transform(body))
   }
 
-  def transformParams(ps: List[source.ParamSection])(implicit C: Context): List[core.Param] =
-    ps.flatMap {
-      case b @ source.BlockParam(id, _)      => List(BlockParam(b.symbol))
-      case v @ source.ValueParams(ps)        => ps.map { p => ValueParam(p.symbol) }
-    }
+  def transform(p: source.BlockParam)(implicit C: Context): core.BlockParam = BlockParam(p.symbol)
+  def transform(p: source.ValueParam)(implicit C: Context): core.ValueParam = ValueParam(p.symbol)
 
   def transform(tree: source.MatchPattern)(implicit C: Context): (Pattern, List[core.ValueParam]) = tree match {
     case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
@@ -319,8 +317,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = ControlEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, List(Nil), tpe, Pure, eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(List(ValueParam(binder.name, Some(tpe)))), builtins.TUnit, Pure, eff)
+    val get = EffectOp(binder.name.rename(name => "get"), Nil, Nil, tpe, Pure, eff)
+    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Pure, eff)
 
     val param = BlockParam(binder.name, CapabilityType(eff))
     eff.ops = List(get, put)

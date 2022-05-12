@@ -13,11 +13,6 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends AnyFunSpec with TestUtils {
 
-  lazy val ignored: List[File] = List(
-    examplesDir / "neg" / "lambdas",
-    examplesDir / "neg" / "issue50.effekt"
-  )
-
   runTestsIn(examplesDir)
 
   def runTestsIn(dir: File): Unit = describe(dir.getName) {
@@ -48,6 +43,11 @@ class JavaScriptTests extends AnyFunSpec with TestUtils {
 }
 
 trait TestUtils {
+
+  lazy val ignored: List[File] = List(
+    examplesDir / "neg" / "lambdas",
+    examplesDir / "neg" / "issue50.effekt"
+  )
 
   // The sources of all testfiles are stored here:
   lazy val examplesDir = new File("examples")
@@ -81,13 +81,15 @@ trait TestUtils {
    */
   def generateCheckFilesIn(dir: File, regenerateAll: Boolean): Unit = {
     dir.listFiles.foreach {
-      case f if f.isDirectory => generateCheckFilesIn(f, regenerateAll)
+      case f if f.isDirectory && !ignored.contains(f) => generateCheckFilesIn(f, regenerateAll)
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
         val checkfile = path / (baseName + ".check")
 
-        if (regenerateAll || f.lastModified() > checkfile.lastModified()) {
+        val isIgnored = ignored.contains(f)
+        val shouldGenerate = regenerateAll || f.lastModified() > checkfile.lastModified()
+        if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
           val out = interpret(f)
           // save checkfile in source folder (e.g. examples/)

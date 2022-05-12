@@ -177,7 +177,7 @@ object Annotations {
   /**
    * The block type of a block argument as annotated by typer
    */
-  val BlockArgumentType = Annotation[source.BlockArg, symbols.FunctionType](
+  val BlockArgumentType = Annotation[source.FunctionArg, symbols.FunctionType](
     "BlockArgumentType",
     "the inferred type for block argument"
   )
@@ -374,7 +374,7 @@ trait AnnotationsDB { self: Context =>
   def functionTypeOption(t: source.CallTarget): Option[FunctionType] =
     annotationOption(Annotations.TargetType, t)
 
-  def functionTypeOf(t: source.BlockArg): FunctionType =
+  def functionTypeOf(t: source.FunctionArg): FunctionType =
     annotation(Annotations.BlockArgumentType, t)
 
   // Symbols

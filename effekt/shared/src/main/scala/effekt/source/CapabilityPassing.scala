@@ -22,22 +22,22 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     Some(input.copy(tree = transformedTree))
 
   override def defn(implicit C: Context) = {
-    case f @ FunDef(id, tparams, params, ret, body) =>
+    case f @ FunDef(id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
       val effs = Context.functionTypeOf(sym).effects.controlEffects
 
       C.withCapabilities(effs) { caps =>
-        f.copy(params = params ++ caps, body = rewrite(body))
+        f.copy(bparams = bps ++ caps, body = rewrite(body))
       }
   }
 
   override def expr(implicit C: Context) = {
 
     // an effect call -- translate to method call
-    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[EffectOp] =>
+    case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[EffectOp] =>
       val op = fun.definition.asEffectOp
 
-      val tpe @ FunctionType(tparams, _, _, _) = C.functionTypeOf(op)
+      val tpe @ FunctionType(tparams, _, _, _, _) = C.functionTypeOf(op)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
@@ -47,17 +47,18 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val self = subst.substitute(op.appliedEffect)
       val others = subst.substitute(op.otherEffects.controlEffects)
 
-      val transformedArgs = args.map { a => rewrite(a) }
+      val transformedValueArgs = vargs.map { a => rewrite(a) }
+      val transformedBlockArgs = bargs.map { a => rewrite(a) }
 
       val capabilityArgs = others.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
       val receiver = C.capabilityReferenceFor(self)
 
       val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
       C.annotateCalltarget(target, tpe)
-      Call(target, targs, transformedArgs ++ capabilityArgs)
+      Call(target, targs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
 
     // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
-    case c @ Call(fun: IdTarget, targs, args) if fun.definition.isInstanceOf[VarBinder] =>
+    case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[VarBinder] =>
 
       val target = visit[source.CallTarget](fun) { _ =>
         val access = Var(fun.id).inheritPosition(fun)
@@ -66,43 +67,45 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
         C.annotate(Annotations.InferredValueType, access, C.valueTypeOf(fun.definition))
         ExprTarget(access)
       }
-      rewrite(visit(c) { c => Call(target, targs, args) })
+      rewrite(visit(c) { c => Call(target, targs, vargs, bargs) })
 
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
-    case c @ Call(fun: IdTarget, targs, args) =>
+    case c @ Call(fun: IdTarget, targs, vargs, bargs) =>
 
       val sym: Symbol = fun.definition
-      val FunctionType(tparams, _, _, effs) = C.functionTypeOf(sym)
+      val FunctionType(tparams, _, _, _, effs) = C.functionTypeOf(sym)
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.controlEffects.toList.map(subst.substitute)
 
-      val transformedArgs = args.map { a => rewrite(a) }
+      val valueArgs = vargs.map { a => rewrite(a) }
+      val blockArgs = bargs.map { a => rewrite(a) }
       val capabilityArgs = effects.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
-      Call(fun, targs, transformedArgs ++ capabilityArgs)
+      Call(fun, targs, valueArgs, blockArgs ++ capabilityArgs)
 
     // TODO share code with Call case above
-    case c @ Call(ExprTarget(expr), targs, args) =>
+    case c @ Call(ExprTarget(expr), targs, vargs, bargs) =>
       val transformedExpr = rewrite(expr)
-      val BoxedType(FunctionType(tparams, params, ret, effs), _) = C.inferredTypeOf(expr)
+      val BoxedType(FunctionType(tparams, vps, bps, ret, effs), _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
       val effects = effs.controlEffects.toList.map(subst.substitute)
 
-      val transformedArgs = args.map { a => rewrite(a) }
+      val valueArgs = vargs.map { a => rewrite(a) }
+      val blockArgs = bargs.map { a => rewrite(a) }
       val capabilityArgs = effects.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
 
-      Call(ExprTarget(transformedExpr), targs, transformedArgs ++ capabilityArgs)
+      Call(ExprTarget(transformedExpr), targs, valueArgs, blockArgs ++ capabilityArgs)
 
-    case f @ source.Lambda(id, params, body) =>
+    case f @ source.Lambda(id, vparams, bparams, body) =>
       val sym = f.symbol
       val effs = Context.functionTypeOf(sym).effects.controlEffects
 
       C.withCapabilities(effs) { caps =>
-        f.copy(params = params ++ caps, body = rewrite(body))
+        f.copy(bparams = bparams ++ caps, body = rewrite(body))
       }
 
     case TryHandle(prog, handlers) =>
@@ -132,12 +135,12 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       TryHandle(body, hs)
   }
 
-  override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {
-    case b @ source.BlockArg(ps, body) =>
+  override def rewrite(b: source.FunctionArg)(implicit C: Context): source.FunctionArg = visit(b) {
+    case b @ source.FunctionArg(vps, bps, body) =>
       // here we use the blocktype as inferred by typer (after substitution)
       val effs = C.functionTypeOf(b).effects.controlEffects
       C.withCapabilities(effs) { caps =>
-        source.BlockArg(ps ++ caps, rewrite(body))
+        source.FunctionArg(vps, bps ++ caps, rewrite(body))
       }
   }
 

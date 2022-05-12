@@ -25,9 +25,15 @@ package object kinds {
     case _ => C.abort(s"Expected an effect but got a type ${eff}")
   }
 
+  def wellformed(tpe: BlockType)(implicit C: Context): Unit = tpe match {
+    case b: FunctionType   => wellformed(b)
+    case c: CapabilityType => ()
+  }
+
   def wellformed(b: FunctionType)(implicit C: Context): Unit = b match {
-    case FunctionType(tparams, params: Sections, ret, effs) =>
-      params.flatten.foreach { tpe => wellformed(tpe) }
+    case FunctionType(tparams, vps, bps, ret, effs) =>
+      vps.foreach { tpe => wellformed(tpe) }
+      bps.foreach { tpe => wellformed(tpe) }
       wellformed(ret)
       wellformed(effs)
   }
