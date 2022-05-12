@@ -28,7 +28,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }.toList
 
     val transformed = defs.foldRight(Ret(UnitLit()) : Stmt) {
-      case (d, r) => transform(d, r)
+      case (d, r) => transform(d, () => r)
     }
 
     val optimized = optimize(transformed)
@@ -39,24 +39,24 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   /**
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
-  def transform(d: source.Def, rest: => Stmt)(implicit C: Context): Stmt = withPosition(d) {
+  def transform(d: source.Def, rest: () => Stmt)(implicit C: Context): Stmt = withPosition(d) {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
       val ps = (vps map transform) ++ (bps map transform)
-      Def(sym, C.blockTypeOf(sym), BlockLit(ps, transform(body)), rest)
+      Def(sym, C.blockTypeOf(sym), BlockLit(ps, transform(body)), rest())
 
     case d @ source.DataDef(id, _, ctors) =>
-      Data(d.symbol, ctors.map { c => c.symbol }, rest)
+      Data(d.symbol, ctors.map { c => c.symbol }, rest())
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      core.Record(rec, rec.fields, rest)
+      core.Record(rec, rec.fields, rest())
 
     case v @ source.ValDef(id, _, binding) if C.pureOrIO(binding) =>
-      Let(v.symbol, Run(transform(binding)), rest)
+      Let(v.symbol, Run(transform(binding)), rest())
 
     case v @ source.ValDef(id, _, binding) =>
-      Val(v.symbol, transform(binding), rest)
+      Val(v.symbol, transform(binding), rest())
 
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, binding) =>
@@ -64,34 +64,34 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val state = C.state(sym)
       val b = transform(binding)
       val params = List(core.BlockParam(state.param, state.param.tpe))
-      State(state.effect, C.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, rest))
+      State(state.effect, C.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, rest()))
 
     case source.ExternType(id, tparams) =>
-      rest
+      rest()
 
     case source.TypeDef(id, tparams, tpe) =>
-      rest
+      rest()
 
     case source.EffectDef(id, effs) =>
-      rest
+      rest()
 
     case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, C.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest)
+      Def(f.symbol, C.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
 
     case e @ source.ExternInclude(path) =>
-      Include(e.contents, rest)
+      Include(e.contents, rest())
 
     case e: source.ExternEffect =>
-      rest
+      rest()
 
     case d @ source.EffDef(id, tparams, ops) =>
-      core.Record(d.symbol, ops.map { e => e.symbol }, rest)
+      core.Record(d.symbol, ops.map { e => e.symbol }, rest())
   }
 
   def transform(tree: source.Stmt)(implicit C: Context): Stmt = withPosition(tree) {
     case source.DefStmt(d, rest) =>
-      transform(d, transform(rest))
+      transform(d, () => transform(rest))
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) if C.pureOrIO(e) =>
