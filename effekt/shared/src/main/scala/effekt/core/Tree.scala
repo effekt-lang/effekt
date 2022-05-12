@@ -38,7 +38,7 @@ case class StringLit(value: String) extends Literal[String]
 
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
-case class Closure(b: Block) extends Expr
+case class Box(b: Block) extends Expr
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
 
@@ -123,7 +123,7 @@ object Tree {
           Select(rewrite(target), field)
         case v: ValueVar   => v
         case l: Literal[_] => l
-        case Closure(b)    => Closure(rewrite(b))
+        case Box(b)        => Box(rewrite(b))
         case Run(s)        => Run(rewrite(s))
       }
 

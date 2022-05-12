@@ -118,9 +118,9 @@ trait ChezSchemeBase extends ChezSchemePrinterUtils {
     case Select(b, field) =>
       schemeCall(nameRef(field), toDoc(b))
 
-    case Closure(b) => toDoc(b)
+    case Box(b) => toDoc(b)
 
-    case Run(s)     => "(run " <> toDocInBlock(s) <> ")"
+    case Run(s) => "(run " <> toDocInBlock(s) <> ")"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

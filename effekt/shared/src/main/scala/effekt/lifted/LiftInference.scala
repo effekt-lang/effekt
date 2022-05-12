@@ -104,7 +104,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.PureApp(b: core.Block, targs, args: List[core.Argument]) =>
       PureApp(transform(b), targs, liftArguments(args))
     case core.Select(target, field) => Select(transform(target), field)
-    case core.Closure(b)                   => Closure(transform(b))
+    case core.Box(b)                   => Closure(transform(b))
     case core.Run(s) =>
       Run(transform(s))
   }
