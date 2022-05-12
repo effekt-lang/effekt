@@ -342,17 +342,18 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     some(blockArg)
 
   lazy val blockArg: P[FunctionArg] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(ps, Nil, body) }
+    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(Nil, ps, Nil, body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
       FunctionArg(
+        Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
-        Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
+        Return(Match(Var(IdRef(name)), cs))) withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => FunctionArg(Nil, Nil, s) }
+    | `{` ~> stmts <~ `}` ^^ { s => FunctionArg(Nil, Nil, Nil, s) }
     | failure("Expected a block argument")
     )
 
@@ -398,12 +399,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
           (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(FunctionArg(params, Nil, body)) withPositionOf params))
+          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, params, Nil, body)) withPositionOf params))
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, Nil, body)) withPositionOf id))
+          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, Nil, Nil, body)) withPositionOf id))
        }
     )
 
@@ -417,7 +418,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val matchDef: P[Stmt] =
      `val` ~> pattern ~ (`=` ~/> expr) ~ (`;` ~> stmts) ^^ {
        case p ~ sc ~ body =>
-        Return(MatchExpr(sc, List(MatchClause(p, body)))) withPositionOf p
+        Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
   lazy val typeDef: P[TypeDef] =
@@ -477,7 +478,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val matchExpr: P[Term] =
-    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ MatchExpr.apply
+    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ Match.apply
 
   // TODO deprecate doExpr
   lazy val doExpr: P[Term] =
@@ -494,7 +495,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         Handler(effect, None, clauses)
       }
     | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
-      case effect ~ resume ~ FunctionArg(vparams, _, body) =>
+      case effect ~ resume ~ FunctionArg(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
         Handler(effect, None, List(OpClause(synthesizedId, vparams, body, resume) withPositionOf effect))
       }

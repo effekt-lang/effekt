@@ -148,7 +148,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val exprTpe = C.inferredTypeOf(tree)
       C.bind(exprTpe, While(insertBindings { Ret(transform(cond)) }, transform(body)))
 
-    case source.MatchExpr(sc, clauses) =>
+    case source.Match(sc, clauses) =>
       val scrutinee = transform(sc)
 
       val cs: List[(Pattern, BlockLit)] = clauses.map {
@@ -233,13 +233,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(block: source.BlockArg)(implicit C: Context): core.Block = block match {
-    case source.FunctionArg(vps, bps, body) =>
+    case source.FunctionArg(tps, vps, bps, body) =>
       BlockLit((vps map transform) ++ (bps map transform), transform(body))
-    case c @ source.CapabilityArg(id) => BlockVar(c.definition)
+    case c @ source.InterfaceArg(id) => BlockVar(c.definition)
   }
 
   def transform(block: source.FunctionArg)(implicit C: Context): core.BlockLit = block match {
-    case source.FunctionArg(vps, bps, body) => BlockLit((vps map transform) ++ (bps map transform), transform(body))
+    case source.FunctionArg(tps, vps, bps, body) => BlockLit((vps map transform) ++ (bps map transform), transform(body))
   }
 
   def transform(p: source.BlockParam)(implicit C: Context): core.BlockParam = BlockParam(p.symbol)

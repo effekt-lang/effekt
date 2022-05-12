@@ -274,7 +274,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
-      case source.MatchExpr(sc, clauses) =>
+      case source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]

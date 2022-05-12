@@ -50,7 +50,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val transformedValueArgs = vargs.map { a => rewrite(a) }
       val transformedBlockArgs = bargs.map { a => rewrite(a) }
 
-      val capabilityArgs = others.toList.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val capabilityArgs = others.toList.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
       val receiver = C.capabilityReferenceFor(self)
 
       val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
@@ -82,7 +82,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
-      val capabilityArgs = effects.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val capabilityArgs = effects.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
 
       Call(fun, targs, valueArgs, blockArgs ++ capabilityArgs)
 
@@ -96,7 +96,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
-      val capabilityArgs = effects.map { e => CapabilityArg(C.capabilityReferenceFor(e)) }
+      val capabilityArgs = effects.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
 
       Call(ExprTarget(transformedExpr), targs, valueArgs, blockArgs ++ capabilityArgs)
 
@@ -136,11 +136,11 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   }
 
   override def rewrite(b: source.FunctionArg)(implicit C: Context): source.FunctionArg = visit(b) {
-    case b @ source.FunctionArg(vps, bps, body) =>
+    case b @ source.FunctionArg(tps, vps, bps, body) =>
       // here we use the blocktype as inferred by typer (after substitution)
       val effs = C.functionTypeOf(b).effects.controlEffects
       C.withCapabilities(effs) { caps =>
-        source.FunctionArg(vps, bps ++ caps, rewrite(body))
+        source.FunctionArg(tps, vps, bps ++ caps, rewrite(body))
       }
   }
 

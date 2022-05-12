@@ -145,7 +145,7 @@ sealed trait Reference extends Named {
  *
  * Only a subset of definitions (FunDef and EffDef) is allowed on the toplevel
  *
- * A module declartion, the path should be an Effekt include path, not a system dependent file path
+ * A module declaration, the path should be an Effekt include path, not a system dependent file path
  *
  */
 case class ModuleDecl(path: String, imports: List[Import], defs: List[Def]) extends Tree
@@ -158,13 +158,9 @@ sealed trait Param extends Definition
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Param { type symbol = symbols.ValueParam }
 case class BlockParam(id: IdDef, tpe: BlockType) extends Param { type symbol = symbols.BlockParam }
 
-sealed trait ArgSection extends Tree
-case class ValueArgs(args: List[Term]) extends ArgSection
-// TODO Rename to FunctionArg and add type parameters
-
 sealed trait BlockArg extends Tree
-case class FunctionArg(vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
-case class CapabilityArg(id: IdRef) extends BlockArg with Reference {
+case class FunctionArg(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
+case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
   type symbol = symbols.BlockParam
 }
 
@@ -317,7 +313,7 @@ case class OpClause(id: IdRef, vparams: List[ValueParam], body: Stmt, resume: Id
 
 case class Hole(stmts: Stmt) extends Term
 
-case class MatchExpr(scrutinee: Term, clauses: List[MatchClause]) extends Term
+case class Match(scrutinee: Term, clauses: List[MatchClause]) extends Term
 case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
 sealed trait MatchPattern extends Tree
@@ -479,8 +475,8 @@ object Tree {
       case While(cond, body) =>
         While(rewrite(cond), rewrite(body))
 
-      case MatchExpr(sc, clauses) =>
-        MatchExpr(rewrite(sc), clauses.map(rewrite))
+      case Match(sc, clauses) =>
+        Match(rewrite(sc), clauses.map(rewrite))
 
       case Call(fun, targs, vargs, bargs) =>
         Call(fun, targs, vargs.map(rewrite), bargs.map(rewrite))
@@ -536,12 +532,12 @@ object Tree {
     }
 
     def rewrite(b: BlockArg)(implicit C: Context): BlockArg = b match {
-      case b: FunctionArg   => rewrite(b)
-      case b: CapabilityArg => b
+      case b: FunctionArg  => rewrite(b)
+      case b: InterfaceArg => b
     }
 
     def rewrite(b: FunctionArg)(implicit C: Context): FunctionArg = b match {
-      case FunctionArg(vps, bps, body) => FunctionArg(vps, bps, rewrite(body))
+      case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
     }
 
     def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
