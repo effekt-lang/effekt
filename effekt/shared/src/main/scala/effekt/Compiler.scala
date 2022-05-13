@@ -4,7 +4,6 @@ import effekt.context.Context
 import effekt.core.Transformer
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.regions.RegionChecker
 import effekt.source.{ CapabilityPassing, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.Typer
