@@ -341,16 +341,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(stmt)
       }
 
-    case l @ source.Lambda(id, vparams, bparams, stmt) =>
-      val vps = vparams map resolve
-      val bps = bparams map resolve
-      Context scoped {
-        Context.bindValue(vps)
-        Context.bindBlock(bps)
-        resolveGeneric(stmt)
-      }
-      val sym = Lambda(vps, bps, l)
-      Context.define(id, sym)
+    case source.Box(block) =>
+      resolveGeneric(block)
 
     // (2) === Bound Occurrences ===
 

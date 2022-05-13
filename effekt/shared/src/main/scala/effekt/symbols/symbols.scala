@@ -175,7 +175,7 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class BoxedType(tpe: FunctionType, region: Region) extends ValueType {
+  case class BoxedType(tpe: BlockType, region: Region) extends ValueType {
     // TODO move rendering to different component
 
     //    override def toString: String = {
@@ -227,6 +227,9 @@ package object symbols {
   }
 
   sealed trait BlockType extends Type
+
+  // this is called "InterfaceType" in SystemC
+  //  https://github.com/effekt-lang/effekt/blob/31b05ba42df031a325245c30220aa5d9bb33a7ff/effekt/shared/src/main/scala/effekt/symbols/symbols.scala#L258
   case class CapabilityType(effect: Effect) extends BlockType
 
   case class FunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {

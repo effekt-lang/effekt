@@ -336,7 +336,7 @@ trait AnnotationsDB { self: Context =>
       }
       case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
         v.dealias match {
-          case symbols.BoxedType(tpe, _) => Some(tpe)
+          case symbols.BoxedType(tpe: FunctionType, _) => Some(tpe)
           case _ => None
         }
       }

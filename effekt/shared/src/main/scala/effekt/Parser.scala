@@ -545,8 +545,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
 
-  lazy val lambdaExpr: P[Lambda] =
-    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Lambda(IdDef("<lambda>"), ps, Nil, body) }
+  lazy val lambdaExpr: P[Box] =
+    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(FunctionArg(Nil, ps, Nil, body)) }
 
   lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }

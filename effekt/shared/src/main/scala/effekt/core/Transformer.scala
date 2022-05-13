@@ -150,9 +150,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case l: source.Literal[t] => transformLit(l)
 
-    case l @ source.Lambda(id, vps, bps, body) =>
-      val tpe = Context.functionTypeOf(l.symbol)
-      Box(BlockLit((vps map transform) ++ (bps map transform), transform(body)))
+    case l @ source.Box(block) =>
+      Box(transform(block))
 
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)

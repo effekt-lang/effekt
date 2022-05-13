@@ -13,7 +13,10 @@ object assertions {
    * in one place
    */
   extension(s: Symbol)(using reporter: ErrorReporter) {
-
+    def asTypeVar: TypeVar = s match {
+      case t: TypeVar => t
+      case _ => reporter.abort("Expected a type variable")
+    }
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
       case _ => reporter.abort("Expected a value parameter")

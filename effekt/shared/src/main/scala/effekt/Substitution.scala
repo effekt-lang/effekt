@@ -2,7 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.regions.{ Region, RegionEq }
-import effekt.symbols.{ FunctionType, CapabilityType, Effect, Effects, EffectApp, BoxedType, BlockType, RigidVar, Type, ValueTypeApp, TypeVar, ValueType }
+import effekt.symbols._
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
 
@@ -233,7 +233,7 @@ object substitutions {
           val copy = Region.fresh(C.focus)
           copy.instantiate(reg)
           // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-          BoxedType(visitFunctionType(tpe), copy)
+          BoxedType(visitBlockType(tpe), copy)
         case other => other
       }
 

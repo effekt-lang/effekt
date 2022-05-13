@@ -264,15 +264,8 @@ case class StringLit(value: String) extends Literal[String]
 
 /**
  * Represents a first-class function
- *
- * Maybe surprisingly, lambdas definitions. This makes it easier to associate it with
- * its parameter symbols.
- *
- * TODO factor into Box and BlockArg
  */
-case class Lambda(id: IdDef, vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term with Definition {
-  type symbol = symbols.Lambda
-}
+case class Box(block: BlockArg) extends Term
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
@@ -487,8 +480,8 @@ object Tree {
       case Hole(stmts) =>
         Hole(rewrite(stmts))
 
-      case Lambda(id, vps, bps, body) =>
-        Lambda(id, vps, bps, rewrite(body))
+      case Box(b) =>
+        Box(rewrite(b))
     }
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {

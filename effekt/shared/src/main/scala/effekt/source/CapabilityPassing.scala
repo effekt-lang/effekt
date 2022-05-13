@@ -100,14 +100,6 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       Call(ExprTarget(transformedExpr), targs, valueArgs, blockArgs ++ capabilityArgs)
 
-    case f @ source.Lambda(id, vparams, bparams, body) =>
-      val sym = f.symbol
-      val effs = Context.functionTypeOf(sym).effects.controlEffects
-
-      C.withCapabilities(effs) { caps =>
-        f.copy(bparams = bparams ++ caps, body = rewrite(body))
-      }
-
     case TryHandle(prog, handlers) =>
 
       // here we need to use the effects on the handlers!
