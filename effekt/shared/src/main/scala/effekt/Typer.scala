@@ -772,6 +772,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //</editor-fold>
 
+  //<editor-fold desc="Helpers and Extension Methods">
+
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
     case FunctionType(tps, vps, bps, ret, effs) =>
@@ -828,7 +830,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         .map { tpe => tpe.effects }
         .getOrElse { Context.lookupFunctionType(fun).effects }
   }
-
+  //</editor-fold>
 }
 
 /**
@@ -844,23 +846,19 @@ trait TyperOps extends ContextOps { self: Context =>
   private var substitutions: Substitutions = Map.empty
 
   /**
-   * We need to substitute after solving and update the DB again, later.
-   */
-  private var inferredValueTypes: List[(Tree, ValueType)] = Nil
-  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
-  private var inferredEffects: List[(Tree, Effects)] = Nil
-  private var inferredRegions: List[(Tree, Region)] = Nil
-
-  /**
    * The current lexical region used for mutable variables.
    *
    * None on the toplevel
    */
   private var lexicalRegion: Option[Region] = None
 
+
   // The "Typing Context"
   // ====================
   // since symbols are unique, we can use mutable state instead of reader
+
+  //<editor-fold desc="Typing Context">
+
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
   private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
   private var regionContext: Map[Symbol, Region] = Map.empty
@@ -910,6 +908,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def bind(p: BlockParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, Region(s)) // bind(s, tpe, CaptureSet(CaptureOf(s)))
   }
+  //</editor-fold>
 
 
   /**
@@ -1006,6 +1005,15 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Inferred types
   // ==============
+  // We first store the inferred types here, before substituting and committing to DB, later.
+
+  //<editor-fold desc="Inferred Types">
+
+  private var inferredValueTypes: List[(Tree, ValueType)] = Nil
+  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
+  private var inferredEffects: List[(Tree, Effects)] = Nil
+  private var inferredRegions: List[(Tree, Region)] = Nil
+
 
   private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
   private[typer] def annotateInferredType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
@@ -1030,6 +1038,8 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
     annotations.annotate(Annotations.TargetType, t, tpe)
   }
+
+  //</editor-fold>
 
   // Unification
   // ===========
