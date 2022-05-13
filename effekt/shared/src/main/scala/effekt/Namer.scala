@@ -6,7 +6,6 @@ package namer
  */
 import effekt.context.{ Context, ContextOps }
 import effekt.context.assertions._
-import effekt.regions.Region
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols._
 import scopes._
@@ -461,7 +460,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case source.BoxedType(tpe @ source.FunctionType(vparams, ret, effs)) =>
         val (terms, effects) = resolveTermsOrTypes(effs.effs)
         val btpe = FunctionType(Nil, vparams.map(resolve), Nil, resolve(ret), Effects(effects))
-        BoxedType(btpe, Region.empty)
+        BoxedType(btpe, CaptureSet.empty)
       // TODO boxed capabilities are currently not implemented
       case source.BoxedType(tpe) => ???
     }

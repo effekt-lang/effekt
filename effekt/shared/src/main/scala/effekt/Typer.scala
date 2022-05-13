@@ -6,7 +6,6 @@ package typer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
-import effekt.regions.Region
 import effekt.source.{ AnyPattern, Def, Term, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
 import effekt.substitutions._
 import effekt.symbols._
@@ -113,7 +112,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case b => Context.abort(s"Expected ${b} but got a first-class function")
         }
         val Result(inferredTpe, inferredEff) = checkBlockArgument(block, blockType)
-        Result(BoxedType(inferredTpe, Region.empty), inferredEff)
+        Result(BoxedType(inferredTpe, CaptureSet.empty), inferredEff)
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) => {
         checkOverloadedCall(c, t, targs map { _.resolve }, vargs, bargs, expected)
@@ -840,7 +839,7 @@ trait TyperOps extends ContextOps { self: Context =>
    *
    * None on the toplevel
    */
-  private var lexicalRegion: Option[Region] = None
+  private var lexicalRegion: Option[Capture] = None
 
   /**
    * The effects, whose declarations are _lexically_ in scope
@@ -856,7 +855,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
   private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
-  private var regionContext: Map[Symbol, Region] = Map.empty
+  private var captureContext: Map[Symbol, CaptureSet] = Map.empty
 
   // first tries to find the type in the local typing context
   // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
@@ -878,15 +877,15 @@ trait TyperOps extends ContextOps { self: Context =>
     blockTypingContext.get(s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
 
   private[typer] def lookupRegion(s: BlockSymbol) =
-    regionContext.getOrElse(s, regionOf(s))
+    captureContext.getOrElse(s, captureOf(s))
 
   private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
 
-  private[typer] def bind(s: Symbol, tpe: BlockType, capt: Region): Unit = { bind(s, tpe); bind(s, capt) }
+  private[typer] def bind(s: Symbol, tpe: BlockType, capt: CaptureSet): Unit = { bind(s, tpe); bind(s, capt) }
 
   private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
 
-  private[typer] def bind(s: Symbol, capt: Region): Unit = regionContext += (s -> capt)
+  private[typer] def bind(s: Symbol, capt: CaptureSet): Unit = captureContext += (s -> capt)
 
   private[typer] def bind(bs: Map[Symbol, ValueType]): Unit =
     bs foreach {
@@ -901,7 +900,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def bind(p: BlockParam): Unit = p match {
-    case s @ BlockParam(name, tpe) => bind(s, tpe, Region(s)) // bind(s, tpe, CaptureSet(CaptureOf(s)))
+    case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(CaptureOf(s)))
   }
   //</editor-fold>
 
@@ -956,7 +955,7 @@ trait TyperOps extends ContextOps { self: Context =>
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
     blockTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
-    //regionContext foreach { case (s, c) => assignCaptureSet(s, c) }
+    //captureContext foreach { case (s, c) => assignCaptureSet(s, c) }
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!
@@ -1002,7 +1001,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private var inferredValueTypes: List[(Tree, ValueType)] = Nil
   private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
   private var inferredEffects: List[(Tree, Effects)] = Nil
-  private var inferredRegions: List[(Tree, Region)] = Nil
+  private var inferredRegions: List[(Tree, Capture)] = Nil
 
 
   private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes

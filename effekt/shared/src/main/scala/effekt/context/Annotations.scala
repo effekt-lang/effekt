@@ -185,9 +185,9 @@ object Annotations {
   /*
    * The region a given symbol can be used in
    */
-  val Regions = Annotation[symbols.Symbol, regions.Region](
-    "Regions",
-    "the regions associated with symbol"
+  val Captures = Annotation[symbols.Symbol, symbols.CaptureSet](
+    "Captures",
+    "the capture set associated with symbol"
   )
 
   /**
@@ -199,11 +199,11 @@ object Annotations {
   )
 
   /**
-   * Similar to TypeAndEffect: the region of a program inferred by RegionChecker
+   * Similar to TypeAndEffect: the capture set of a program
    */
-  val InferredRegion = Annotation[source.Tree, regions.RegionSet](
-    "InferredRegion",
-    "the inferred region for source tree"
+  val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
+    "InferredCapture",
+    "the inferred capture for source tree"
   )
 
 }
@@ -296,11 +296,11 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
-  def inferredRegion(t: source.Tree): regions.RegionSet =
-    annotation(Annotations.InferredRegion, t)
+  def inferredCapture(t: source.Tree): symbols.CaptureSet =
+    annotation(Annotations.InferredCapture, t)
 
-  def inferredRegionOption(t: source.Tree): Option[regions.RegionSet] =
-    annotationOption(Annotations.InferredRegion, t)
+  def inferredCaptureOption(t: source.Tree): Option[symbols.CaptureSet] =
+    annotationOption(Annotations.InferredCapture, t)
 
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: BlockType): Unit = s match {
@@ -455,9 +455,9 @@ trait AnnotationsDB { self: Context =>
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
 
-  def annotateRegions(sym: Symbol, r: regions.Region): Unit =
-    annotate(Annotations.Regions, sym, r)
+  def annotateCapture(sym: Symbol, r: symbols.CaptureSet): Unit =
+    annotate(Annotations.Captures, sym, r)
 
-  def regionOf(sym: Symbol): regions.Region =
-    annotation(Annotations.Regions, sym)
+  def captureOf(sym: Symbol): symbols.CaptureSet =
+    annotation(Annotations.Captures, sym)
 }

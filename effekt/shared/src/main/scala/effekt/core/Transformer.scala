@@ -5,7 +5,6 @@ import scala.collection.mutable.ListBuffer
 import effekt.context.{ Context, ContextOps }
 import effekt.symbols._
 import effekt.context.assertions._
-import effekt.regions.{ Region, RegionSet }
 import effekt.source.ExternFlag
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
@@ -402,12 +401,12 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   // we conservatively approximate to false
-  def pureOrIO(t: source.Tree): Boolean = inferredRegionOption(t) match {
+  def pureOrIO(t: source.Tree): Boolean = inferredCaptureOption(t) match {
     case Some(reg) => pureOrIO(reg)
     case _         => false
   }
 
   def pureOrIO(t: BlockSymbol): Boolean = false //pureOrIO(regionOf(t).asRegionSet)
 
-  def pureOrIO(r: RegionSet): Boolean = false //r.subsetOf(Region(builtins.IOCapability))
+  def pureOrIO(r: CaptureSet): Boolean = false //r.subsetOf(Region(builtins.IOCapability))
 }

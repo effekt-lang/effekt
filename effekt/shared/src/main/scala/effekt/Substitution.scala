@@ -1,7 +1,6 @@
 package effekt
 
 import effekt.context.Context
-import effekt.regions.{ Region, RegionEq }
 import effekt.symbols._
 import effekt.symbols.builtins.THole
 import effekt.util.messages.ErrorReporter
@@ -46,15 +45,14 @@ object substitutions {
     def union(other: UnificationResult): UnificationResult
     def checkFullyDefined(rigids: List[RigidVar]): UnificationResult
     def getUnifier(implicit error: ErrorReporter): Unifier
-    def equalRegions(r1: Region, r2: Region)(implicit C: Context): UnificationResult
   }
 
-  case class Unifier(substitutions: Map[TypeVar, ValueType], constraints: Set[RegionEq] = Set.empty) extends UnificationResult {
+  case class Unifier(substitutions: Map[TypeVar, ValueType]) extends UnificationResult {
 
     def getUnifier(implicit error: ErrorReporter): Unifier = this
 
     def addAll(unifier: Map[TypeVar, ValueType]): Unifier =
-      Unifier(substitutions ++ unifier, constraints)
+      Unifier(substitutions ++ unifier)
 
     def add(k: TypeVar, v: ValueType): UnificationResult = {
       substitutions.get(k).foreach { v2 =>
@@ -67,15 +65,12 @@ object substitutions {
       // Do we need an occurs check?
       val newSubst = Map(k -> v)
       val improvedSubst: Substitutions = substitutions.map { case (rigid, tpe) => (rigid, newSubst substitute tpe) }
-      Unifier(improvedSubst + (k -> improvedSubst.substitute(v)), constraints)
+      Unifier(improvedSubst + (k -> improvedSubst.substitute(v)))
     }
 
-    def equalRegions(r1: Region, r2: Region)(implicit C: Context): Unifier =
-      this.copy(constraints = constraints + RegionEq(r1, r2, C.focus))
-
     def union(other: UnificationResult): UnificationResult = other match {
-      case Unifier(subst, constr) =>
-        val bothConstraints: UnificationResult = Unifier(subst, constr ++ constraints)
+      case Unifier(subst) =>
+        val bothConstraints: UnificationResult = Unifier(subst)
         substitutions.foldLeft(bothConstraints) { case (u, (k, v)) => u.add(k, v) }
       case err: UnificationError => err
     }
@@ -104,7 +99,6 @@ object substitutions {
     def add(k: TypeVar, v: ValueType) = this
     def union(other: UnificationResult) = this
     def checkFullyDefined(rigids: List[RigidVar]) = this
-    def equalRegions(r1: Region, r2: Region)(implicit C: Context) = this
   }
 
   /**
@@ -161,7 +155,7 @@ object substitutions {
           Unifier.empty
 
         case (BoxedType(tpe1, reg1), BoxedType(tpe2, reg2)) =>
-          unifyTypes(tpe1, tpe2).equalRegions(reg1, reg2)
+          unifyTypes(tpe1, tpe2)
 
         case (t, s) =>
           UnificationError(s"Expected ${t}, but got ${s}")

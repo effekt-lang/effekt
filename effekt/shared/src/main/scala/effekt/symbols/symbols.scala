@@ -2,7 +2,6 @@ package effekt
 
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef, ExternFlag }
 import effekt.context.Context
-import effekt.regions.{ Region, RegionSet, RegionVar }
 import kiama.util.Source
 import effekt.substitutions._
 
@@ -175,7 +174,7 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class BoxedType(tpe: BlockType, region: Region) extends ValueType {
+  case class BoxedType(tpe: BlockType, capture: CaptureSet) extends ValueType {
     // TODO move rendering to different component
 
     //    override def toString: String = {
@@ -383,6 +382,63 @@ package object symbols {
   }
 
   lazy val Pure = new Effects(Nil)
+
+  /**
+   * Capture Sets
+   */
+
+  case class CaptureSet(captures: Set[Capture]) {
+    override def toString = s"{${captures.mkString(", ")}}"
+
+    // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
+    def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
+    def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
+    def +(c: Capture): CaptureSet = CaptureSet(captures + c)
+    def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
+  }
+  object CaptureSet {
+    def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
+    def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
+    def empty = CaptureSet()
+  }
+
+  sealed trait Capture extends TypeSymbol {
+    val name: Name
+    def concrete: Boolean
+  }
+
+  // TODO we could fuse CaptureOf and CaptureParam into one constructor
+
+  /**
+   * Represents the capture of a term symbol as written in a user program.
+   *
+   * For example in `def hof { f: () => Unit }: () => Unit at {>>>f<<<}`
+   */
+  case class CaptureOf(sym: TermSymbol) extends Capture {
+    val name = sym.name
+    // we compare captures of term symbols by comparing the term symbols
+    override def equals(other: Any): Boolean = other match {
+      case CaptureOf(otherSym) => sym == otherSym
+      case _                   => false
+    }
+    def concrete = true
+    override def hashCode: Int = sym.hashCode + 13
+  }
+
+  /**
+   * Capture parameters are currently used for synthesized parametrization over capture sets
+   *
+   * For instance for the capture set of the continuation.
+   * Can later be used to explicitly quantify over regions.
+   */
+  case class CaptureParam(name: Name) extends Capture {
+    def concrete = true
+  }
+  case class CaptureUnificationVar(underlying: Capture /*, scope: UnificationScope*/ ) extends Capture {
+    val name = underlying.name
+    def concrete = false
+    override def toString = "?" + underlying.name //underlying.name + id
+  }
 
   /**
    * Builtins
