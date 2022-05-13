@@ -33,17 +33,7 @@ import scala.language.implicitConversions
  * IDE support.
  * Also, after type checking, all definitions of the file will be annotated with their type.
  */
-case class TyperResult[+T](tpe: T, effects: Effects)
-object / {
-  def unapply[T](t: TyperResult[T]): Option[(T, Effects)] = Some((t.tpe, t.effects))
-}
-object TyperResult {
-  extension [T](tpe: T) {
-    def /(effects: Effects): TyperResult[T] = TyperResult(tpe, effects)
-  }
-}
-import TyperResult._
-
+case class Result[+T](tpe: T, effects: Effects)
 
 object Typer extends Phase[NameResolved, Typechecked] {
 
@@ -62,7 +52,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // to allow mutually recursive defs
         tree.defs.foreach { d => precheckDef(d) }
         tree.defs.foreach { d =>
-          val (_ / effs) = synthDef(d)
+          val Result(_, effs) = synthDef(d)
           if (effs.nonEmpty)
             Context.at(d) {
               Context.error("Unhandled effects: " + effs)
@@ -84,37 +74,37 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def checkExpr(expr: Term, expected: Option[ValueType])(using Context): TyperResult[ValueType] =
+  def checkExpr(expr: Term, expected: Option[ValueType])(using Context): Result[ValueType] =
     checkAgainst(expr, expected) {
-      case source.IntLit(n)     => TInt / Pure
-      case source.BooleanLit(n) => TBoolean / Pure
-      case source.UnitLit()     => TUnit / Pure
-      case source.DoubleLit(n)  => TDouble / Pure
-      case source.StringLit(s)  => TString / Pure
+      case source.IntLit(n)     => Result(TInt, Pure)
+      case source.BooleanLit(n) => Result(TBoolean, Pure)
+      case source.UnitLit()     => Result(TUnit, Pure)
+      case source.DoubleLit(n)  => Result(TDouble, Pure)
+      case source.StringLit(s)  => Result(TString, Pure)
 
       case source.If(cond, thn, els) =>
-        val (cndTpe / cndEffs) = cond checkAgainst TBoolean
-        val (thnTpe / thnEffs) = checkStmt(thn, expected)
-        val (elsTpe / elsEffs) = els checkAgainst thnTpe
+        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+        val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
+        val Result(elsTpe, elsEffs) = els checkAgainst thnTpe
 
-        thnTpe / (cndEffs ++ thnEffs ++ elsEffs)
+        Result(thnTpe, cndEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, block) =>
-        val (_ / condEffs) = cond checkAgainst TBoolean
-        val (_ / blockEffs) = block checkAgainst TUnit
-        TUnit / (condEffs ++ blockEffs)
+        val Result(_, condEffs) = cond checkAgainst TBoolean
+        val Result(_, blockEffs) = block checkAgainst TUnit
+        Result(TUnit, condEffs ++ blockEffs)
 
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
-        case e: ValueSymbol => Context.lookup(e) / Pure
+        case e: ValueSymbol => Result(Context.lookup(e), Pure)
       }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val (_ / eff) = expr checkAgainst Context.lookup(sym)
-        TUnit / eff
+        val Result(_, eff) = expr checkAgainst Context.lookup(sym)
+        Result(TUnit, eff)
 
       // TODO share code with FunDef
       case l @ source.Box(block) =>
@@ -122,29 +112,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case BoxedType(b, _) => b
           case b => Context.abort(s"Expected ${b} but got a first-class function")
         }
-        val inferredTpe / inferredEff = checkBlockArgument(block, blockType)
-        BoxedType(inferredTpe, Region.empty) / inferredEff
+        val Result(inferredTpe, inferredEff) = checkBlockArgument(block, blockType)
+        Result(BoxedType(inferredTpe, Region.empty), inferredEff)
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) => {
         checkOverloadedCall(c, t, targs map { _.resolve }, vargs, bargs, expected)
       }
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
-        val (funTpe / funEffs) = checkExpr(e, None)
+        val Result(funTpe, funEffs) = checkExpr(e, None)
 
         val tpe: FunctionType = funTpe.dealias match {
           case BoxedType(f: FunctionType, _) => f
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
-        val (t / eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
-        t / (eff ++ funEffs)
+        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
+        Result(t, eff ++ funEffs)
 
       case c @ source.Call(source.MemberTarget(receiver, id), targs, vargs, bargs) =>
         Context.panic("Method call syntax not allowed in source programs.")
 
       case source.TryHandle(prog, handlers) =>
 
-        val (ret / effs) = checkStmt(prog, expected)
+        val Result(ret, effs) = checkStmt(prog, expected)
 
         var effects: List[symbols.Effect] = Nil
 
@@ -217,7 +207,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
               Context.bind(Context.symbolOf(resume), resumeType)
               Context in {
-                val (_ / heffs) = body checkAgainst ret
+                val Result(_, heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
 
                 val typesInEffects = freeTypeVars(heffs)
@@ -235,13 +225,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
-        ret / ((effs -- Effects(effects)) ++ handlerEffs)
+        Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
 
       case source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
-        val (tpe / effs) = checkExpr(sc, None)
+        val Result(tpe, effs) = checkExpr(sc, None)
 
         // (2) check exhaustivity
         checkExhaustivity(tpe, clauses.map { _.pattern })
@@ -256,7 +246,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case source.MatchClause(p, body) =>
             // (3) infer types for all clauses
             Context.bind(checkPattern(tpe, p))
-            val (clTpe / clEff) = Context in { checkStmt(body, expected) }
+            val Result(clTpe, clEff) = Context in { checkStmt(body, expected) }
 
             // (4) unify clauses and collect effects
             Context.at(body) { Context.unify(resTpe, clTpe) }
@@ -265,11 +255,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // replace if type is more specific
             if (resTpe == THole) { resTpe = clTpe }
         }
-        resTpe / resEff
+        Result(resTpe, resEff)
 
       case source.Hole(stmt) =>
-        val tpe / effs = checkStmt(stmt, None)
-        expected.getOrElse(THole) / Pure
+        val Result(tpe, effs) = checkStmt(stmt, None)
+        Result(expected.getOrElse(THole), Pure)
     }
 
   //</editor-fold>
@@ -360,18 +350,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="statements and definitions">
 
-  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context): TyperResult[ValueType] =
+  def checkStmt(stmt: Stmt, expected: Option[ValueType])(using Context): Result[ValueType] =
     checkAgainst(stmt, expected) {
       case source.DefStmt(b, rest) =>
-        val (t / effBinding) = Context in { precheckDef(b); synthDef(b) }
-        val (r / effStmt) = checkStmt(rest, expected)
-        r / (effBinding ++ effStmt)
+        val Result(t, effBinding) = Context in { precheckDef(b); synthDef(b) }
+        val Result(r, effStmt) = checkStmt(rest, expected)
+        Result(r, effBinding ++ effStmt)
 
       // <expr> ; <stmt>
       case source.ExprStmt(e, rest) =>
-        val (_ / eff1) = checkExpr(e, None)
-        val (r / eff2) = checkStmt(rest, expected)
-        r / (eff1 ++ eff2)
+        val Result(_, eff1) = checkExpr(e, None)
+        val Result(r, eff2) = checkStmt(rest, expected)
+        Result(r, eff1 ++ eff2)
 
       case source.Return(e)        => checkExpr(e, expected)
 
@@ -423,7 +413,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case _                   => ()
   }
 
-  def synthDef(d: Def)(using Context): TyperResult[Unit] = Context.at(d) {
+  def synthDef(d: Def)(using Context): Result[Unit] = Context.at(d) {
     d match {
       case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
         val sym = d.symbol
@@ -431,14 +421,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         sym.bparams foreach Context.bind
         (sym.annotatedType: @unchecked) match {
           case Some(annotated) =>
-            val (tpe / effs) = body checkAgainst annotated.result
+            val Result(tpe, effs) = body checkAgainst annotated.result
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
 
-            () / (effs -- annotated.effects) // the declared effects are considered as bound
+            Result((), effs -- annotated.effects) // the declared effects are considered as bound
           case None =>
-            val (tpe / effs) = checkStmt(body, None)
+            val Result(tpe, effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
 
             val funType = sym.toType(tpe, effs)
@@ -446,38 +436,38 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
 
-            () / Pure // all effects are handled by the function itself (since they are inferred)
+            Result((), Pure) // all effects are handled by the function itself (since they are inferred)
         }
 
       case d @ source.EffDef(id, tparams, ops) =>
         Context.withEffect(d.symbol)
-        () / Pure
+        Result((), Pure)
 
       case d @ source.ValDef(id, annot, binding) =>
-        val (t / effBinding) = d.symbol.tpe match {
+        val Result(t, effBinding) = d.symbol.tpe match {
           case Some(t) =>
             binding checkAgainst t
           case None => checkStmt(binding, None)
         }
         Context.bind(d.symbol, t)
-        () / effBinding
+        Result((), effBinding)
 
       case d @ source.VarDef(id, annot, binding) =>
-        val (t / effBinding) = d.symbol.tpe match {
+        val Result(t, effBinding) = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding, None)
         }
         Context.bind(d.symbol, t)
-        () / effBinding
+        Result((), effBinding)
 
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
-        () / Pure
+        Result((), Pure)
 
       // all other defintions have already been prechecked
       case d =>
-        () / Pure
+        Result((), Pure)
     }
   }
 
@@ -485,7 +475,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Function calls, arguments, and parameters">
 
-  def checkBlockArgument(arg: source.BlockArg, expected: Option[BlockType])(implicit C: Context): TyperResult[BlockType] =
+  def checkBlockArgument(arg: source.BlockArg, expected: Option[BlockType])(implicit C: Context): Result[BlockType] =
     (arg, expected) match {
       case (arg: source.FunctionArg, Some(tpe: FunctionType)) =>
         checkFunctionArgument(arg, tpe)
@@ -509,7 +499,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //   BlockArg: foo { n => println("hello" + n) }
   //     or
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
-  def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(implicit C: Context): TyperResult[FunctionType] = Context.focusing(arg) {
+  def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(implicit C: Context): Result[FunctionType] = Context.focusing(arg) {
     case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
 
       // (1) Apply what we already know.
@@ -551,7 +541,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           got
       }
       val adjustedReturn = Context.unifier substitute tpe1
-      val (bodyType / bodyEffs) = body checkAgainst adjustedReturn
+      val Result(bodyType, bodyEffs) = body checkAgainst adjustedReturn
 
       val adjustedHandled = Context.unifier substitute handled
       val effs = bodyEffs -- adjustedHandled
@@ -561,7 +551,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
       Context.annotateBlockArgument(arg, tpe)
 
-      tpe / effs
+      Result(tpe, effs)
   }
 
   def findFunctionTypeFor(sym: TermSymbol)(using Context): FunctionType = sym match {
@@ -586,7 +576,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
     expected: Option[Type]
-  )(using Context): TyperResult[ValueType] = {
+  )(using Context): Result[ValueType] = {
 
     val scopes = target.definition match {
       // an overloaded call target
@@ -682,7 +672,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
     expected: Option[Type]
-  )(using Context): TyperResult[ValueType] = {
+  )(using Context): Result[ValueType] = {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
@@ -712,12 +702,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     (vps zip vargs) foreach { case (tpe, expr) =>
       val tpe1 = Context.unifier substitute tpe // apply what we already know.
-      val (_ / eff) = checkExpr(expr, Some(tpe1))
+      val Result(_, eff) = checkExpr(expr, Some(tpe1))
       effs = effs ++ eff
     }
 
     (bps zip bargs) foreach { case (tpe, expr) =>
-      val (_ / eff) = checkBlockArgument(expr, Some(tpe))
+      val Result(_, eff) = checkBlockArgument(expr, Some(tpe))
       effs = effs ++ eff
     }
 
@@ -743,7 +733,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val substRet = Context.unifier.substitute(ret)
     val substEff = Context.unifier.substitute(effs)
-    substRet / substEff
+    Result(substRet, substEff)
   }
 
   /**
@@ -789,27 +779,27 @@ object Typer extends Phase[NameResolved, Typechecked] {
   }
 
   extension (expr: Term) {
-    def checkAgainst(tpe: ValueType)(using Context): TyperResult[ValueType] =
+    def checkAgainst(tpe: ValueType)(using Context): Result[ValueType] =
       checkExpr(expr, Some(tpe))
   }
 
   extension (stmt: Stmt) {
-    def checkAgainst(tpe: ValueType)(using Context): TyperResult[ValueType] =
+    def checkAgainst(tpe: ValueType)(using Context): Result[ValueType] =
       checkStmt(stmt, Some(tpe))
   }
 
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => TyperResult[ValueType])(using Context): TyperResult[ValueType] =
+  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Result[ValueType])(using Context): Result[ValueType] =
     Context.at(t) {
-      val (got / effs) = f(t)
+      val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs)
       expected foreach { Context.unify(_, got) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs)
-      got / effs
+      Result(got, effs)
     }
 
   /**
@@ -851,6 +841,11 @@ trait TyperOps extends ContextOps { self: Context =>
    * None on the toplevel
    */
   private var lexicalRegion: Option[Region] = None
+
+  /**
+   * The effects, whose declarations are _lexically_ in scope
+   */
+  private var lexicalEffects: Effects = Pure
 
 
   // The "Typing Context"
@@ -910,11 +905,6 @@ trait TyperOps extends ContextOps { self: Context =>
   }
   //</editor-fold>
 
-
-  /**
-   * the effects, whose declarations are _lexically_ in scope
-   */
-  private var lexicalEffects: Effects = Pure
 
   /**
    * Annotations added by typer
@@ -1021,7 +1011,7 @@ trait TyperOps extends ContextOps { self: Context =>
   //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
 
-  // TODO also first store those annotations locally in typer, before substituting and commiting to
+  // TODO also first store those annotations locally in typer, before substituting and committing to
   //  annotations DB.
 
   // this also needs to be backtrackable to interact correctly with overload resolution
