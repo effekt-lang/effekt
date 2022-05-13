@@ -409,5 +409,5 @@ trait TransformerOps extends ContextOps { Context: Context =>
 
   def pureOrIO(t: BlockSymbol): Boolean = false //pureOrIO(regionOf(t).asRegionSet)
 
-  def pureOrIO(r: RegionSet): Boolean = r.subsetOf(Region(builtins.IOCapability))
+  def pureOrIO(r: RegionSet): Boolean = false //r.subsetOf(Region(builtins.IOCapability))
 }

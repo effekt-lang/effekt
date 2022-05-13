@@ -964,8 +964,8 @@ trait TyperOps extends ContextOps { self: Context =>
     inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
     inferredEffects foreach { case (t, eff) => annotate(Annotations.InferredEffect, t, subst.substitute(eff)) }
 
-    val substitutedRegions = inferredRegions map { case (t, capt) => (t, capt.asRegionSet) }//(t, subst.substitute(capt)) }
-    substitutedRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt) }
+//    val substitutedRegions = inferredRegions map { case (t, capt) => (t, capt.asRegionSet) }//(t, subst.substitute(capt)) }
+    //inferredRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt.asInstanceOf[RegionSet]) }
 
     //annotate(Annotations.CaptureForFile, module, substitutedRegions)
     annotate(Annotations.Unifier, module, currentUnifier)

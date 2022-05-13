@@ -230,9 +230,11 @@ object substitutions {
         case BoxedType(tpe, reg) =>
           // this is the **only** interesting case...
           // vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-          val copy = Region.fresh(C.focus)
-          copy.instantiate(reg)
+          //          val copy = Region.fresh(C.focus)
+          //          copy.instantiate(reg)
           // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+          val copy = reg
+
           BoxedType(visitBlockType(tpe), copy)
         case other => other
       }

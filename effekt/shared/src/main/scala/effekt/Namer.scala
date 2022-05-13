@@ -461,7 +461,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case source.BoxedType(tpe @ source.FunctionType(vparams, ret, effs)) =>
         val (terms, effects) = resolveTermsOrTypes(effs.effs)
         val btpe = FunctionType(Nil, vparams.map(resolve), Nil, resolve(ret), Effects(effects))
-        BoxedType(btpe, Region(terms))
+        BoxedType(btpe, Region.empty)
       // TODO boxed capabilities are currently not implemented
       case source.BoxedType(tpe) => ???
     }
