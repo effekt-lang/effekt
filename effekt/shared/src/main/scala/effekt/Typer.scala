@@ -107,13 +107,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
-        case e: ValueSymbol => Context.valueTypeOf(e) / Pure
+        case e: ValueSymbol => Context.lookup(e) / Pure
       }
 
       case e @ source.Assign(id, expr) =>
         // assert that it is a mutable variable
         val sym = e.definition.asVarBinder
-        val (_ / eff) = expr checkAgainst Context.valueTypeOf(sym)
+        val (_ / eff) = expr checkAgainst Context.lookup(sym)
         TUnit / eff
 
       // TODO share code with FunDef
@@ -181,7 +181,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val effectOp = d.definition
 
               // (1) Instantiate block type of effect operation
-              val (rigids, FunctionType(tparams, vps, Nil, tpe, effs)) = Unification.instantiate(Context.functionTypeOf(effectOp))
+              val (rigids, FunctionType(tparams, vps, Nil, tpe, effs)) = Unification.instantiate(Context.lookupFunctionType(effectOp))
 
               // (2) unify with given type arguments for effect (i.e., A, B, ...):
               //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
@@ -203,7 +203,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   val sym = param.symbol
                   val annotType = sym.tpe
                   annotType.foreach { t => Context.at(param) { Context.unify(decl, t) }}
-                  Context.define(sym, annotType.getOrElse(decl))
+                  Context.bind(sym, annotType.getOrElse(decl))
               }
 
               // (5) synthesize type of continuation
@@ -215,7 +215,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 FunctionType(Nil, List(substTpe), Nil, ret, Pure)
               }
 
-              Context.define(Context.symbolOf(resume), resumeType) in {
+              Context.bind(Context.symbolOf(resume), resumeType)
+              Context in {
                 val (_ / heffs) = body checkAgainst ret
                 handlerEffs = handlerEffs ++ heffs
 
@@ -254,7 +255,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         clauses.foreach {
           case source.MatchClause(p, body) =>
             // (3) infer types for all clauses
-            val (clTpe / clEff) = Context.define(checkPattern(tpe, p)) in { checkStmt(body, expected) }
+            Context.bind(checkPattern(tpe, p))
+            val (clTpe / clEff) = Context in { checkStmt(body, expected) }
 
             // (4) unify clauses and collect effects
             Context.at(body) { Context.unify(resTpe, clTpe) }
@@ -425,22 +427,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
     d match {
       case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
         val sym = d.symbol
-        sym.vparams foreach Context.define
-        sym.bparams foreach Context.define
+        sym.vparams foreach Context.bind
+        sym.bparams foreach Context.bind
         (sym.annotatedType: @unchecked) match {
           case Some(annotated) =>
             val (tpe / effs) = body checkAgainst annotated.result
             Context.wellscoped(effs)
-            Context.assignType(d, tpe)
-            Context.assignEffect(d, effs)
+            Context.annotateInferredType(d, tpe)
+            Context.annotateInferredEffects(d, effs)
 
             () / (effs -- annotated.effects) // the declared effects are considered as bound
           case None =>
             val (tpe / effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
-            Context.assignType(sym, sym.toType(tpe, effs))
-            Context.assignType(d, tpe)
-            Context.assignEffect(d, effs)
+
+            val funType = sym.toType(tpe, effs)
+            Context.assignType(sym, funType)
+            Context.annotateInferredType(d, tpe)
+            Context.annotateInferredEffects(d, effs)
 
             () / Pure // all effects are handled by the function itself (since they are inferred)
         }
@@ -455,7 +459,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             binding checkAgainst t
           case None => checkStmt(binding, None)
         }
-        Context.define(d.symbol, t)
+        Context.bind(d.symbol, t)
         () / effBinding
 
       case d @ source.VarDef(id, annot, binding) =>
@@ -463,12 +467,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding, None)
         }
-        Context.define(d.symbol, t)
+        Context.bind(d.symbol, t)
         () / effBinding
 
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
-        d.symbol.vparams foreach Context.define
-        d.symbol.bparams foreach Context.define
+        d.symbol.vparams foreach Context.bind
+        d.symbol.bparams foreach Context.bind
         () / Pure
 
       // all other defintions have already been prechecked
@@ -534,7 +538,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               got
           } getOrElse { adjusted }
           // bind types to check body
-          Context.define(param.symbol, tpe)
+          Context.bind(param.symbol, tpe)
           tpe
       }
       val blockTypes = (bparams zip bps) map {
@@ -543,7 +547,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val got = param.symbol.tpe
           Context.at(param) { Context.unify(adjusted, got) }
           // bind types to check body
-          Context.define(param.symbol, got)
+          Context.bind(param.symbol, got)
           got
       }
       val adjustedReturn = Context.unifier substitute tpe1
@@ -558,6 +562,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.annotateBlockArgument(arg, tpe)
 
       tpe / effs
+  }
+
+  def findFunctionTypeFor(sym: TermSymbol)(using Context): FunctionType = sym match {
+    case b: BlockSymbol => Context.lookupFunctionType(b)
+    case v: ValueSymbol => Context.lookup(v) match {
+      case BoxedType(b: FunctionType, _) => b
+      case b => Context.abort(s"Required function type, but got ${b}")
+    }
   }
 
   /**
@@ -592,13 +604,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       scope.toList.map { sym =>
         sym -> Try {
           Context.restoreTyperstate(stateBefore)
-          val tpe = Context.functionTypeOption(sym).getOrElse {
-            if (sym.isInstanceOf[ValueSymbol]) {
-              Context.abort(s"Expected a function type.")
-            } else {
-              Context.abort(s"Cannot find type for ${sym.name} -- if it is a recursive definition try to annotate the return type.")
-            }
-          }
+          val tpe = findFunctionTypeFor(sym)
           val r = checkCallTo(call, sym.name.name, tpe, targs, vargs, bargs, expected)
           (r, Context.backupTyperstate())
         }
@@ -625,7 +631,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case results =>
         val sucMsgs = results.map {
           case (sym, tpe) =>
-            s"- ${sym.name} of type ${Context.functionTypeOf(sym)}"
+            s"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
         }.mkString("\n")
 
         val explanation =
@@ -799,8 +805,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       wellformed(got)
       wellformed(effs)
       expected foreach { Context.unify(_, got) }
-      Context.assignType(t, got)
-      Context.assignEffect(t, effs)
+      Context.annotateInferredType(t, got)
+      Context.annotateInferredEffects(t, effs)
       got / effs
     }
 
@@ -820,8 +826,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def effects: Effects =
       annotatedType
         .map { tpe => tpe.effects }
-        .orElse { Context.functionTypeOption(fun).map { _.effects } }
-        .getOrElse { Context.abort(s"Result type of recursive function ${fun.name} needs to be annotated") }
+        .getOrElse { Context.lookupFunctionType(fun).effects }
   }
 
 }
@@ -842,7 +847,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * We need to substitute after solving and update the DB again, later.
    */
   private var inferredValueTypes: List[(Tree, ValueType)] = Nil
-  private var inferredBlockTypes: List[(Tree, FunctionType)] = Nil
+  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
   private var inferredEffects: List[(Tree, Effects)] = Nil
   private var inferredRegions: List[(Tree, Region)] = Nil
 
@@ -865,10 +870,19 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def lookup(s: ValueSymbol) =
     valueTypingContext.getOrElse(s, valueTypeOf(s))
 
-  private[typer] def lookup(s: BlockSymbol) = (lookupType(s), lookupRegion(s))
+  private[typer] def lookup(s: BlockSymbol) = (lookupBlockType(s), lookupRegion(s))
 
-  private[typer] def lookupType(s: BlockSymbol) =
-    blockTypingContext.get(s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
+  private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType =
+    blockTypingContext.get(s)
+     .map {
+       case f: FunctionType => f
+       case tpe => abort(s"Expected function type, but got ${tpe}.")
+     }
+     .orElse(functionTypeOption(s))
+     .getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
+
+  private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
+    blockTypingContext.get(s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
 
   private[typer] def lookupRegion(s: BlockSymbol) =
     regionContext.getOrElse(s, regionOf(s))
@@ -948,26 +962,25 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    annotations.commit()
-    annotate(Annotations.Unifier, module, currentUnifier)
-  }
+    val subst = unifier.substitutions
 
-  private[typer] def commitTypeAnnotationsNew(): Unit = {
     // now also store the typing context in the global database:
-    valueTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
-    blockTypingContext foreach { case (s, tpe) => assignType(s, tpe) }
+    valueTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
+    blockTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
     //regionContext foreach { case (s, c) => assignCaptureSet(s, c) }
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!
-    inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, tpe) }// subst.substitute(tpe)) }
-    inferredEffects foreach { case (t, eff) => annotate(Annotations.InferredEffect, t, eff) }//subst.substitute(tpe)) }
-    inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, tpe)} //subst.substitute(tpe)) }
+    inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, subst.substitute(tpe)) }
+    inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
+    inferredEffects foreach { case (t, eff) => annotate(Annotations.InferredEffect, t, subst.substitute(eff)) }
 
     val substitutedRegions = inferredRegions map { case (t, capt) => (t, capt.asRegionSet) }//(t, subst.substitute(capt)) }
     substitutedRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt) }
 
     //annotate(Annotations.CaptureForFile, module, substitutedRegions)
+    annotate(Annotations.Unifier, module, currentUnifier)
+    annotations.commit()
   }
 
   // Effects that are in the lexical scope
@@ -993,15 +1006,15 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Inferred types
   // ==============
-  private[typer] def assignType(t: Tree, e: ValueType): Context = {
-    annotations.annotate(Annotations.InferredValueType, t, e)
-    this
-  }
 
-  private[typer] def assignEffect(t: Tree, e: Effects): Context = {
-    annotations.annotate(Annotations.InferredEffect, t, e)
-    this
-  }
+  private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
+  private[typer] def annotateInferredType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
+  private[typer] def annotateInferredEffects(t: Tree, e: Effects) = inferredEffects = (t -> e) :: inferredEffects
+  //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
+
+
+  // TODO also first store those annotations locally in typer, before substituting and commiting to
+  //  annotations DB.
 
   // this also needs to be backtrackable to interact correctly with overload resolution
   private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Context = {
@@ -1013,31 +1026,6 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.annotate(Annotations.TypeArguments, call, targs)
     this
   }
-
-  private[typer] def define(s: Symbol, t: ValueType): Context = {
-    assignType(s, t); this
-  }
-
-  private[typer] def define(s: Symbol, t: BlockType): Context = {
-    assignType(s, t); this
-  }
-
-  private[typer] def define(bs: Map[Symbol, Type]): Context = {
-    bs foreach {
-      case (v: ValueSymbol, t: ValueType) => define(v, t)
-      case (v: BlockSymbol, t: FunctionType) => define(v, t)
-      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
-    }; this
-  }
-
-  private[typer] def define(ps: ValueParam): Context =
-    ps match {
-      case s @ ValueParam(name, Some(tpe)) => define(s, tpe)
-      case s => panic(s"Internal Error: Cannot add $s to context.")
-    }
-    this
-
-  private[typer] def define(b: BlockParam): Context = define(b, b.tpe)
 
   private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
     annotations.annotate(Annotations.TargetType, t, tpe)
