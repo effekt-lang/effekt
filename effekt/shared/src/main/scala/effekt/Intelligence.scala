@@ -74,7 +74,7 @@ trait Intelligence {
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
-    case d: EffectOp     => C.definitionTreeOption(d.effect)
+    case d: Operation    => C.definitionTreeOption(d.effect)
     case a: Anon         => Some(a.decl)
     case u               => C.definitionTreeOption(u)
   }
@@ -109,7 +109,7 @@ trait Intelligence {
 
       SymbolInfo(f, "Builtin Effect", None, Some(ex))
 
-    case f: EffectOp =>
+    case f: Operation =>
       val ex =
         s"""|Effect operations, like `${f.name}` allow to express non-local control flow.
             |

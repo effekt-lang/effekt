@@ -191,14 +191,6 @@ object Annotations {
   )
 
   /**
-   * The unifier as computed by typer when type checking the module
-   */
-  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
-    "Unifier",
-    "the unifier for module"
-  )
-
-  /**
    * Similar to TypeAndEffect: the capture set of a program
    */
   val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](

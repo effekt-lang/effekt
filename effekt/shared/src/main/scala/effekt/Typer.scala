@@ -135,96 +135,105 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         val Result(ret, effs) = checkStmt(prog, expected)
 
-        var effects: List[symbols.Effect] = Nil
+        var effects: List[symbols.InterfaceType] = Nil
 
         var handlerEffs = Pure
 
-        handlers foreach Context.withFocus { h =>
-          val effect: Effect = h.effect.resolve
+        // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
+        Context.withUnificationScope {
 
-          if (effects contains effect) {
-            Context.error(s"Effect ${effect} is handled twice.")
-          } else {
-            effects = effects :+ effect
-          }
+          // the capture variable for the continuation ?Ck
+          //val resumeCapture = C.freshCaptVar(CaptureParam(LocalName("$resume")))
 
-          val effectSymbol: ControlEffect = h.definition
+          handlers foreach Context.withFocus { h =>
+            val effect: InterfaceType = h.effect.resolve
 
-          val tparams = effectSymbol.tparams
-          val targs = h.effect.tparams.map(_.resolve)
+            if (effects contains effect) {
+              Context.error(s"Effect ${effect} is handled twice.")
+            } else {
+              effects = effects :+ effect
+            }
 
-          val covered = h.clauses.map { _.definition }
-          val notCovered = effectSymbol.ops.toSet -- covered.toSet
+            val effectSymbol: Interface = h.definition
 
-          if (notCovered.nonEmpty) {
-            val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-            Context.error(s"Missing definitions for effect operations: ${explanation}")
-          }
+            val tparams = effectSymbol.tparams
+            val targs = h.effect.tparams.map(_.resolve)
+            val tsubst = (tparams zip targs).toMap
 
-          if (covered.size > covered.distinct.size) {
-            Context.error(s"Duplicate definitions of effect operations")
-          }
+            // (3) check all operations are covered
+            val covered = h.clauses.map { _.definition }
+            val notCovered = effectSymbol.ops.toSet -- covered.toSet
 
-          h.clauses foreach Context.withFocus {
-            case d @ source.OpClause(op, params, body, resume) =>
-              val effectOp = d.definition
+            if (notCovered.nonEmpty) {
+              val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
+              Context.error(s"Missing definitions for effect operations: ${explanation}")
+            }
 
-              // (1) Instantiate block type of effect operation
-              val (rigids, FunctionType(tparams, vps, Nil, tpe, effs)) = Unification.instantiate(Context.lookupFunctionType(effectOp))
+            if (covered.size > covered.distinct.size)
+              Context.error(s"Duplicate definitions of effect operations")
 
-              // (2) unify with given type arguments for effect (i.e., A, B, ...):
-              //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-              //     The parameters C, D, ... are existentials
-              val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
-              Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
+            h.clauses foreach Context.withFocus {
+              case d @ source.OpClause(op, params, body, resume) =>
+                val declaration = d.definition
 
-              // (3) substitute what we know so far
-              val substVps = vps map Context.unifier.substitute
-              val substTpe = Context.unifier substitute tpe
-              val substEffs = Context.unifier substitute effectOp.otherEffects
+                // (1) Instantiate block type of effect operation
+                val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, effs)) = Context.instantiate(Context.lookupFunctionType(declaration))
 
-              // (4) check parameters
-              if (substVps.size != params.size)
-                Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${substVps.size}.")
+                // (2) unify with given type arguments for effect (i.e., A, B, ...):
+                //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+                //     The parameters C, D, ... are existentials
+                val existentials: List[TypeVar] = rigids.drop(targs.size).map { r => TypeVar(r.name) }
 
-              (params zip substVps).foreach {
-                case (param, decl) =>
-                  val sym = param.symbol
-                  val annotType = sym.tpe
-                  annotType.foreach { t => Context.at(param) { Context.unify(decl, t) }}
-                  Context.bind(sym, annotType.getOrElse(decl))
-              }
+                // TODO
+                //Context.addToUnifier(((rigids: List[TypeVar]) zip (targs ++ existentials)).toMap)
 
-              // (5) synthesize type of continuation
-              val resumeType = if (effectOp.isBidirectional) {
-                // resume { e }
-                FunctionType(Nil, Nil, List(FunctionType(Nil, Nil, Nil, substTpe, substEffs)), ret, Pure)
-              } else {
-                // resume(v)
-                FunctionType(Nil, List(substTpe), Nil, ret, Pure)
-              }
+                // (3) substitute what we know so far
+                val substVps = vps map Context.subst.substitute
+                val substTpe = Context.subst substitute tpe
+                val substEffs = Context.subst substitute declaration.otherEffects
 
-              Context.bind(Context.symbolOf(resume), resumeType)
-              Context in {
-                val Result(_, heffs) = body checkAgainst ret
-                handlerEffs = handlerEffs ++ heffs
+                // (4) check parameters
+                if (substVps.size != params.size)
+                  Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${substVps.size}.")
 
-                val typesInEffects = freeTypeVars(heffs)
-                existentials.foreach { t =>
-                  if (typesInEffects.contains(t)) {
-                    Context.error(s"Type variable ${t} escapes its scope as part of the effect types: $heffs")
+                (params zip substVps).foreach {
+                  case (param, decl) =>
+                    val sym = param.symbol
+                    val annotType = sym.tpe
+                    annotType.foreach { t => Context.at(param) { Context.unify(decl, t) }}
+                    Context.bind(sym, annotType.getOrElse(decl))
+                }
+
+                // (5) synthesize type of continuation
+                val resumeType = if (declaration.isBidirectional) {
+                  // resume { e }
+                  FunctionType(Nil, Nil, Nil, List(FunctionType(Nil, Nil, Nil, Nil, substTpe, substEffs)), ret, Pure)
+                } else {
+                  // resume(v)
+                  FunctionType(Nil, Nil, List(substTpe), Nil, ret, Pure)
+                }
+
+                Context.bind(Context.symbolOf(resume), resumeType)
+                Context in {
+                  val Result(_, heffs) = body checkAgainst ret
+                  handlerEffs = handlerEffs ++ heffs
+
+                  val typesInEffects = freeTypeVars(heffs)
+                  existentials.foreach { t =>
+                    if (typesInEffects.contains(t)) {
+                      Context.error(s"Type variable ${t} escapes its scope as part of the effect types: $heffs")
+                    }
                   }
                 }
-              }
+            }
           }
+          val unusedEffects = Effects(effects) -- effs
+
+          if (unusedEffects.nonEmpty)
+            Context.warning("Handling effects that are not used: " + unusedEffects)
+
+          Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
         }
-
-        val unusedEffects = Effects(effects) -- effs
-
-        if (unusedEffects.nonEmpty)
-          Context.warning("Handling effects that are not used: " + unusedEffects)
-
-        Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
 
       case source.Match(sc, clauses) =>
 
@@ -315,21 +324,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, FunctionType(_, vps, _, ret, _)) = Unification.instantiate(sym.toType)
+      val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.unify(ret, sc)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
-      val skolems = Context.skolems(rigids)
-      if (skolems.nonEmpty) {
-        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
-      }
+      //      val skolems = Context.skolems(rigids)
+      //      if (skolems.nonEmpty) {
+      //        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
+      //      }
 
       // (7) refine parameter types of constructor
       // i.e. `(Int, List[Int])`
-      val constructorParams = vps map Context.unifier.substitute
+      val constructorParams = vps map Context.subst.substitute
 
       // (8) check nested patterns
       var bindings = Map.empty[Symbol, ValueType]
@@ -486,8 +495,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case None => Context.abort("Expected type needs to be known for function arguments at the moment.")
         }
         val bps = bparams.map { p => p.symbol.tpe }
-        val ret = RigidVar(TypeVar(Name.local("ReturnType")))
-        val tpe = FunctionType(tps, vps, bps, ret, Pure)
+        val ret = Context.freshTypeVar(TypeVar(Name.local("ReturnType")))
+        val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
         checkFunctionArgument(arg, tpe)
       case _ =>
         Context.abort("Can only type check function arguments, right now. Not capability arguments.")
@@ -502,7 +511,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
 
       // (1) Apply what we already know.
-      val bt @ FunctionType(tps, vps, bps, tpe1, handled) = Context.unifier substitute expected
+      val bt @ FunctionType(tps, cps, vps, bps, tpe1, handled) = Context.subst substitute expected
 
       // (2) Check wellformedness
       if (tps.size != tparams.size)
@@ -516,12 +525,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeVar }
-      if (tps.nonEmpty) { Context.addToUnifier((tps zip typeParams).toMap) }
+      val typeSubst = (tps zip typeParams).toMap
 
       // (4) Check type annotations against declaration
       val valueTypes = (vparams zip vps) map {
         case (param, exp) =>
-          val adjusted = Context.unifier substitute exp
+          val adjusted = typeSubst substitute exp
           val tpe = param.symbol.tpe.map { got =>
               Context.at(param) { Context.unify(adjusted, got) }
               got
@@ -532,20 +541,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
       val blockTypes = (bparams zip bps) map {
         case (param, exp) =>
-          val adjusted = Context.unifier substitute exp
+          val adjusted = typeSubst substitute exp
           val got = param.symbol.tpe
           Context.at(param) { Context.unify(adjusted, got) }
           // bind types to check body
           Context.bind(param.symbol, got)
           got
       }
-      val adjustedReturn = Context.unifier substitute tpe1
+      val captureParams = bparams.map { p => CaptureOf(p.symbol) }
+      val adjustedReturn = typeSubst substitute tpe1
       val Result(bodyType, bodyEffs) = body checkAgainst adjustedReturn
 
-      val adjustedHandled = Context.unifier substitute handled
+      val adjustedHandled = typeSubst substitute handled
       val effs = bodyEffs -- adjustedHandled
 
-      val tpe = FunctionType(typeParams, valueTypes, blockTypes, bodyType, adjustedHandled)
+      val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
       // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
       Context.annotateBlockArgument(arg, tpe)
@@ -574,7 +584,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
-    expected: Option[Type]
+    expected: Option[ValueType]
   )(using Context): Result[ValueType] = {
 
     val scopes = target.definition match {
@@ -670,12 +680,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
     targs: List[ValueType],
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
-    expected: Option[Type]
+    expected: Option[ValueType]
   )(using Context): Result[ValueType] = {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (rigids, bt @ FunctionType(_, vps, bps, ret, retEffs)) = Unification.instantiate(funTpe)
+    val (rigids, crigids, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe)
 
     if (targs.nonEmpty && targs.size != rigids.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -687,51 +697,34 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.error(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${bps.size}.")
 
     // (2) Compute substitutions from provided type arguments (if any)
-    if (targs.nonEmpty) {
-      Context.addToUnifier(((rigids: List[TypeVar]) zip targs).toMap)
-    }
+    val typeSubst = ((rigids: List[TypeVar]) zip targs).toMap
 
     // (3) refine substitutions by matching return type against expected type
-    expected.foreach { expectedReturn =>
-      val refinedReturn = Context.unifier substitute ret
-      Context.unify(expectedReturn, refinedReturn)
-    }
+    expected.foreach { expectedReturn => Context.unify(expectedReturn, typeSubst substitute ret) }
 
     var effs = retEffs
 
     (vps zip vargs) foreach { case (tpe, expr) =>
-      val tpe1 = Context.unifier substitute tpe // apply what we already know.
-      val Result(_, eff) = checkExpr(expr, Some(tpe1))
+      val Result(_, eff) = checkExpr(expr, Some(typeSubst substitute tpe))
       effs = effs ++ eff
     }
 
     (bps zip bargs) foreach { case (tpe, expr) =>
-      val Result(_, eff) = checkBlockArgument(expr, Some(tpe))
+      val Result(_, eff) = checkBlockArgument(expr, Some(typeSubst substitute tpe))
       effs = effs ++ eff
     }
 
-    //    println(
-    //      s"""|Results of checking application of ${sym.name}
-    //                  |    to args ${args}
-    //                  |Substitution before checking arguments: $substBefore
-    //                  |Substitution after checking arguments: $subst
-    //                  |Rigids: $rigids
-    //                  |Return type before substitution: $ret
-    //                  |Return type after substitution: ${subst substitute ret}
-    //                  |""".stripMargin
-    //    )
-
-    Context.checkFullyDefined(rigids)
+    // Context.checkFullyDefined(rigids)
 
     // annotate call node with inferred type arguments
-    val inferredTypeArgs = rigids.map(Context.unifier.substitute)
-    Context.annotateTypeArgs(call, inferredTypeArgs)
+    // val inferredTypeArgs = rigids.map(Context.unifier.substitute)
+    Context.annotateTypeArgs(call, rigids)
 
     // annotate the calltarget tree with the resolved blocktype
-    Context.annotateTarget(call.target, Context.unifier.substitute(bt))
+    Context.annotateTarget(call.target, Context.subst.substitute(bt))
 
-    val substRet = Context.unifier.substitute(ret)
-    val substEff = Context.unifier.substitute(effs)
+    val substRet = Context.subst.substitute(ret)
+    val substEff = Context.subst.substitute(effs)
     Result(substRet, substEff)
   }
 
@@ -765,7 +758,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
-    case FunctionType(tps, vps, bps, ret, effs) =>
+    case FunctionType(tps, cps, vps, bps, ret, effs) =>
       freeTypeVars(vps) ++ freeTypeVars(bps) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tps.toSet
     case e: Effects            => freeTypeVars(e.toList)
     case _: Symbol | _: String => Set.empty // don't follow symbols
@@ -790,7 +783,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * Combinators that also store the computed type for a tree in the TypesDB
    */
-  def checkAgainst[T <: Tree](t: T, expected: Option[Type])(f: T => Result[ValueType])(using Context): Result[ValueType] =
+  def checkAgainst[T <: Tree](t: T, expected: Option[ValueType])(f: T => Result[ValueType])(using Context): Result[ValueType] =
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)
@@ -810,7 +803,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def toType: FunctionType =
       annotatedType.get
     def toType(result: ValueType, effects: Effects): FunctionType =
-      FunctionType(fun.tparams, fun.vparams.map { p => p.tpe.get }, fun.bparams.map { p => p.tpe }, result, effects)
+      FunctionType(fun.tparams, fun.bparams map CaptureOf.apply, fun.vparams.map { p => p.tpe.get }, fun.bparams.map { p => p.tpe }, result, effects)
     def annotatedType: Option[FunctionType] =
       for { result <- fun.annotatedResult; effects <- fun.annotatedEffects } yield toType(result, effects)
 
@@ -825,14 +818,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
 /**
  * Instances of this class represent an immutable backup of the typer state
  */
-private[typer] case class TyperState(effects: Effects, annotations: Annotations, unifier: Unifier)
+private[typer] case class TyperState(effects: Effects, annotations: Annotations)
 
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
+   * The current unification Scope
+   */
+  private var scope: UnificationScope = new UnificationScope
+
+  /**
    * The substitutions learnt so far
    */
-  private var substitutions: Substitutions = Map.empty
+  private var substitutions: Substitutions = Substitutions.empty
 
   /**
    * The current lexical region used for mutable variables.
@@ -913,11 +911,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private var annotations: Annotations = Annotations.empty
 
   /**
-   * Computed _unifier for type variables in this module
-   */
-  private var currentUnifier: Unifier = Unifier.empty
-
-  /**
    * Override the dynamically scoped `in` to also reset typer state
    */
   override def in[T](block: => T): T = {
@@ -937,20 +930,18 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def initTyperstate(effects: Effects): Unit = {
     lexicalEffects = effects
     annotations = Annotations.empty
-    currentUnifier = Unifier.empty
   }
 
   private[typer] def backupTyperstate(): TyperState =
-    TyperState(lexicalEffects, annotations.copy, currentUnifier)
+    TyperState(lexicalEffects, annotations.copy)
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
     lexicalEffects = st.effects
     annotations = st.annotations.copy
-    currentUnifier = st.unifier
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    val subst = unifier.substitutions
+    val subst = substitutions
 
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
@@ -967,15 +958,34 @@ trait TyperOps extends ContextOps { self: Context =>
     //inferredRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt.asInstanceOf[RegionSet]) }
 
     //annotate(Annotations.CaptureForFile, module, substitutedRegions)
-    annotate(Annotations.Unifier, module, currentUnifier)
     annotations.commit()
   }
+
+  // Unification
+  // ===========
+
+  private[typer] def subst: Substitutions = substitutions
+
+  // opens a fresh unification scope
+  private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = block
+
+  // EQUALITY, later move to subtyping!
+  def unify(t1: ValueType, t2: ValueType): Unit = ???
+  def unify(t1: BlockType, t2: BlockType): Unit = ???
+  def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+
+  def sub(c1: CaptureSet, c2: CaptureSet): Unit = ???
+
+  def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
+
+  def freshTypeVar(underlying: TypeVar) = scope.fresh(underlying)
+
 
   // Effects that are in the lexical scope
   // =====================================
   private[typer] def effects: Effects = lexicalEffects
 
-  private[typer] def withEffect(e: ControlEffect): Context = {
+  private[typer] def withEffect(e: Interface): Context = {
     lexicalEffects += e
     this
   }
@@ -983,8 +993,8 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def wellscoped(a: Effects): Unit = {
     // here we only care for the effect itself, not its type arguments
     val forbidden = Effects(a.controlEffects.toList.collect {
-      case e: ControlEffect      => e
-      case EffectApp(e, args) => e
+      case e: Interface      => e
+      case BlockTypeApp(e, args) => e
       case e: EffectAlias     => e
     }) -- effects
     if (forbidden.nonEmpty) {
@@ -1029,20 +1039,4 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   //</editor-fold>
-
-  // Unification
-  // ===========
-  private[typer] def unifier: Unifier = currentUnifier
-
-  private[typer] def addToUnifier(map: Map[TypeVar, ValueType]): Unit =
-    currentUnifier = currentUnifier.addAll(map)
-
-  private[typer] def unify(tpe1: Type, tpe2: Type): Unit =
-    currentUnifier = (currentUnifier union Unification.unify(tpe1, tpe2)).getUnifier
-
-  private[typer] def skolems(rigids: List[RigidVar]): List[RigidVar] =
-    currentUnifier.skolems(rigids)
-
-  private[typer] def checkFullyDefined(rigids: List[RigidVar]): Unit =
-    currentUnifier.checkFullyDefined(rigids).getUnifier
 }

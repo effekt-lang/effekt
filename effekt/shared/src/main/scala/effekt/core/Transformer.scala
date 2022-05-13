@@ -21,7 +21,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val exports = mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym: Fun if !sym.isInstanceOf[EffectOp] && !sym.isInstanceOf[Field] => sym
+        case sym: Fun if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
       }
     }.toList
@@ -199,7 +199,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           PureApp(BlockVar(f), targs, as)
         case r: Record =>
           PureApp(BlockVar(r), targs, as)
-        case f: EffectOp =>
+        case f: Operation =>
           Context.panic("Should have been translated to a method call!")
         case f: Field =>
           val List(arg: Expr) = as
@@ -325,15 +325,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: BlockParam, effect: ControlEffect, get: EffectOp, put: EffectOp)
+  case class StateCapability(param: BlockParam, effect: Interface, get: Operation, put: Operation)
 
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
-    val eff = ControlEffect(binder.name, Nil)
-    val get = EffectOp(binder.name.rename(name => "get"), Nil, Nil, tpe, Pure, eff)
-    val put = EffectOp(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Pure, eff)
+    val eff = Interface(binder.name, Nil)
+    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Pure, eff)
+    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Pure, eff)
 
-    val param = BlockParam(binder.name, CapabilityType(eff))
+    val param = BlockParam(binder.name, eff)
     eff.ops = List(get, put)
     StateCapability(param, eff, get, put)
   }

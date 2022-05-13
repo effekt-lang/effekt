@@ -41,7 +41,7 @@ trait ChezSchemePrinterUtils extends ParenPrettyPrinter {
     val matcher = "match-" <> nameDef(did)
     val recordType = did.name.toString <> "$Type" <> did.id.toString
     // rethrowing an effect causes some unexpected shadowing since the constructor and effect names are called the same.
-    val constructor = if (did.isInstanceOf[effekt.symbols.Effect]) "make-" <> nameDef(did) else nameDef(did)
+    val constructor = if (did.isInstanceOf[effekt.symbols.InterfaceType]) "make-" <> nameDef(did) else nameDef(did)
 
     val definition =
       parens("define-record-type" <+> parens(recordType <+> constructor <+> pred) <>

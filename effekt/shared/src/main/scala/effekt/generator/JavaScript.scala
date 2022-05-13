@@ -162,15 +162,15 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
   def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.CapabilityType] => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp => "op$" + id.name.toString
+    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
+    case _: symbols.Operation => "op$" + id.name.toString
     case _ => jsEscape(id.name.toString)
   }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect => toDoc(id.name)
-    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.CapabilityType] => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp => "op$" + id.name.toString
+    case _: symbols.InterfaceType => toDoc(id.name)
+    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
+    case _: symbols.Operation => "op$" + id.name.toString
     case _: symbols.Field => jsEscape(id.name.name)
     case _ => jsEscape(jsNameRef(id.name))
   }

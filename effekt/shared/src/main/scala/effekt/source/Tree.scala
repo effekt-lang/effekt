@@ -180,10 +180,10 @@ case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
   type symbol = symbols.VarBinder
 }
 case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
-  type symbol = symbols.ControlEffect
+  type symbol = symbols.Interface
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Operation
 }
 case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
   type symbol = symbols.DataType
@@ -277,7 +277,7 @@ case class IdTarget(id: IdRef) extends CallTarget with Reference {
   type symbol = symbols.TermSymbol
 }
 case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Operation
 }
 case class ExprTarget(receiver: Term) extends CallTarget
 
@@ -298,10 +298,10 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
  */
 case class Handler(effect: Effect, capability: Option[BlockParam] = None, clauses: List[OpClause]) extends Reference {
   def id = effect.id
-  type symbol = symbols.ControlEffect
+  type symbol = symbols.Interface
 }
 case class OpClause(id: IdRef, vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
-  type symbol = symbols.EffectOp
+  type symbol = symbols.Operation
 }
 
 case class Hole(stmts: Stmt) extends Term
@@ -390,8 +390,8 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 sealed trait BlockType extends Type
 
 // for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.Effect) extends BlockType {
-  type resolved = symbols.CapabilityType
+case class CapabilityType(eff: symbols.InterfaceType) extends BlockType {
+  type resolved = symbols.InterfaceType
 }
 
 //case class BlockTypeApp(id: IdRef, params: List[ValueType]) extends BlockType with Reference {
@@ -405,10 +405,10 @@ case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Ef
 case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
   // TODO we need to drop Effect <: Symbol and refactor this here
   // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
-  type resolved = symbols.Effect
+  type resolved = symbols.InterfaceType
   def resolve(implicit C: Context) = {
-    val eff = C.symbolOf(id).asInstanceOf[symbols.Effect]
-    if (tparams.isEmpty) eff else symbols.EffectApp(eff, tparams.map(t => C.resolvedType(t)))
+    val eff = C.symbolOf(id).asInstanceOf[symbols.Interface]
+    if (tparams.isEmpty) eff else symbols.BlockTypeApp(eff, tparams.map(t => C.resolvedType(t)))
   }
 }
 
