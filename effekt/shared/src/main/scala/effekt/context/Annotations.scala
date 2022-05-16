@@ -326,12 +326,14 @@ trait AnnotationsDB { self: Context =>
         case b: FunctionType => Some(b)
         case _               => None
       }
-      case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
-        v.dealias match {
-          case symbols.BoxedType(tpe: FunctionType, _) => Some(tpe)
-          case _ => None
-        }
-      }
+      // The callsite should be adjusted, this is NOT the job of annotations...
+      case v: ValueSymbol => ???
+      //        valueTypeOption(v).flatMap { v =>
+      //          v.dealias match {
+      //            case symbols.BoxedType(tpe: FunctionType, _) => Some(tpe)
+      //            case _ => None
+      //          }
+      //        }
     }
 
   def blockTypeOf(s: Symbol): BlockType =

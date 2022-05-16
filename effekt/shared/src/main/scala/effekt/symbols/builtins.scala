@@ -20,7 +20,8 @@ object builtins {
   val TString = BuiltinType(name("String"), Nil)
   val TDouble = BuiltinType(name("Double"), Nil)
 
-  val THole = BuiltinType(name("Unknown"), Nil)
+  val TTop = BuiltinType(name("Any"), Nil)
+  val TBottom = BuiltinType(name("Unknown"), Nil)
 
   val IOEffect = BuiltinEffect(name("IO"), Nil)
   val IOCapability = BuiltinCapability(IOEffect)

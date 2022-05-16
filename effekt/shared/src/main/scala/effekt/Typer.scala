@@ -47,15 +47,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.initTyperstate(toplevelEffects)
 
       Context in {
-        // We split the type-checking of definitions into "pre-check" and "check"
-        // to allow mutually recursive defs
-        tree.defs.foreach { d => precheckDef(d) }
-        tree.defs.foreach { d =>
-          val Result(_, effs) = synthDef(d)
-          if (effs.nonEmpty)
-            Context.at(d) {
-              Context.error("Unhandled effects: " + effs)
-            }
+        Context.withUnificationScope {
+          // We split the type-checking of definitions into "pre-check" and "check"
+          // to allow mutually recursive defs
+          tree.defs.foreach { d => precheckDef(d) }
+          tree.defs.foreach { d =>
+            val Result(_, effs) = synthDef(d)
+            if (effs.nonEmpty)
+              Context.at(d) {
+                Context.error("Unhandled effects: " + effs)
+              }
+          }
+          println(Context.scope.valueConstraints)
+          Result(TUnit, Pure)
         }
       }
 
@@ -82,11 +86,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.StringLit(s)  => Result(TString, Pure)
 
       case source.If(cond, thn, els) =>
-        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
-        val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
-        val Result(elsTpe, elsEffs) = els checkAgainst thnTpe
 
-        Result(thnTpe, cndEffs ++ thnEffs ++ elsEffs)
+        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+
+        val ret = Context.freshTypeVar(UnificationVar.InferredReturn(expr))
+        val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
+        Context.sub(thnTpe, ret)
+
+        val Result(elsTpe, elsEffs) = checkStmt(els, expected)
+        Context.sub(elsTpe, ret)
+
+        Result(ret, cndEffs ++ thnEffs ++ elsEffs)
 
       case source.While(cond, block) =>
         val Result(_, condEffs) = cond checkAgainst TBoolean
@@ -121,7 +131,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
         val Result(funTpe, funEffs) = checkExpr(e, None)
 
-        val tpe: FunctionType = funTpe.dealias match {
+        val tpe: FunctionType = funTpe match {
           case BoxedType(f: FunctionType, _) => f
           case _          => Context.abort(s"Expected function type, but got ${funTpe}")
         }
@@ -200,7 +210,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   case (param, decl) =>
                     val sym = param.symbol
                     val annotType = sym.tpe
-                    annotType.foreach { t => Context.at(param) { Context.unify(decl, t) }}
+                    annotType.foreach { t => Context.at(param) {
+                      // Here we are contravariant: declared types have to be subtypes of the actual types
+                      Context.sub(decl, t)
+                    }}
                     Context.bind(sym, annotType.getOrElse(decl))
                 }
 
@@ -235,7 +248,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
         }
 
-      case source.Match(sc, clauses) =>
+      case tree @ source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
         // for example. tpe = List[Int]
@@ -247,7 +260,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // Clauses could in general be empty if there are no constructors
         // In that case the scrutinee couldn't have been constructed and
         // we can unify with everything.
-        var resTpe: ValueType = THole
+        val resTpe: ValueType = Context.freshTypeVar(UnificationVar.InferredReturn(tree))
         var resEff = effs
 
         clauses.foreach {
@@ -259,15 +272,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // (4) unify clauses and collect effects
             Context.at(body) { Context.unify(resTpe, clTpe) }
             resEff = resEff ++ clEff
-
-            // replace if type is more specific
-            if (resTpe == THole) { resTpe = clTpe }
         }
         Result(resTpe, resEff)
 
       case source.Hole(stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
-        Result(expected.getOrElse(THole), Pure)
+        Result(expected.getOrElse(TBottom), Pure)
     }
 
   //</editor-fold>
@@ -277,36 +287,40 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
    * can be improved a lot.
+   *
+   * TODO Maybe move exhaustivity check to a separate phase AFTER typer?
    */
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context): Unit = {
-    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
-
-    if (catchall)
-      return ;
-
-    sc match {
-      case TypeConstructor(t: DataType) =>
-        t.variants.foreach { variant =>
-          checkExhaustivity(variant, cls)
-        }
-
-      case TypeConstructor(t: Record) =>
-        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
-          case p if p.definition == t => Left(p.patterns)
-          case p => Right(p)
-        }
-
-        if (related.isEmpty) {
-          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
-        }
-
-        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
-          case (t, ps) => checkExhaustivity(t, ps)
-        }
-      case other =>
-        ()
-    }
-  }
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context): Unit = ()
+//
+//  {
+//    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
+//
+//    if (catchall)
+//      return ;
+//
+//    sc match {
+//      case TypeConstructor(t: DataType) =>
+//        t.variants.foreach { variant =>
+//          checkExhaustivity(variant, cls)
+//        }
+//
+//      case TypeConstructor(t: Record) =>
+//        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
+//          case p if p.definition == t => Left(p.patterns)
+//          case p => Right(p)
+//        }
+//
+//        if (related.isEmpty) {
+//          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
+//        }
+//
+//        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
+//          case (t, ps) => checkExhaustivity(t, ps)
+//        }
+//      case other =>
+//        ()
+//    }
+//  }
 
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
@@ -327,7 +341,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      Context.unify(ret, sc)
+      Context.sub(sc, ret)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
@@ -495,7 +509,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case None => Context.abort("Expected type needs to be known for function arguments at the moment.")
         }
         val bps = bparams.map { p => p.symbol.tpe }
-        val ret = Context.freshTypeVar(TypeVar(Name.local("ReturnType")))
+        val ret = Context.freshTypeVar(UnificationVar.InferredReturn(arg))
         val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
         checkFunctionArgument(arg, tpe)
       case _ =>
@@ -532,7 +546,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, exp) =>
           val adjusted = typeSubst substitute exp
           val tpe = param.symbol.tpe.map { got =>
-              Context.at(param) { Context.unify(adjusted, got) }
+              Context.at(param) { Context.sub(adjusted, got) }
               got
           } getOrElse { adjusted }
           // bind types to check body
@@ -543,7 +557,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, exp) =>
           val adjusted = typeSubst substitute exp
           val got = param.symbol.tpe
-          Context.at(param) { Context.unify(adjusted, got) }
+          Context.at(param) { Context.sub(adjusted, got) }
           // bind types to check body
           Context.bind(param.symbol, got)
           got
@@ -700,7 +714,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val typeSubst = ((rigids: List[TypeVar]) zip targs).toMap
 
     // (3) refine substitutions by matching return type against expected type
-    expected.foreach { expectedReturn => Context.unify(expectedReturn, typeSubst substitute ret) }
+    expected.foreach { expectedReturn => Context.sub(typeSubst substitute ret, expectedReturn) }
 
     var effs = retEffs
 
@@ -788,7 +802,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs)
-      expected foreach { Context.unify(_, got) }
+      expected foreach { Context.sub(got, _) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs)
       Result(got, effs)
@@ -818,14 +832,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
 /**
  * Instances of this class represent an immutable backup of the typer state
  */
-private[typer] case class TyperState(effects: Effects, annotations: Annotations)
+private[typer] case class TyperState(effects: Effects, annotations: Annotations, scope: UnificationState)
 
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
    * The current unification Scope
    */
-  private var scope: UnificationScope = new UnificationScope
+  private[typer] var scope: UnificationScope = new UnificationScope
 
   /**
    * The substitutions learnt so far
@@ -933,11 +947,12 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def backupTyperstate(): TyperState =
-    TyperState(lexicalEffects, annotations.copy)
+    TyperState(lexicalEffects, annotations.copy, scope.backup())
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
     lexicalEffects = st.effects
     annotations = st.annotations.copy
+    scope.restore(st.scope)
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
@@ -967,18 +982,22 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def subst: Substitutions = substitutions
 
   // opens a fresh unification scope
-  private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = block
+  private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = {
+    scope = new UnificationScope
+    block
+  }
 
-  // EQUALITY, later move to subtyping!
+
+  // This is ONLY used by match clauses at the moment...
   def unify(t1: ValueType, t2: ValueType): Unit = ???
-  def unify(t1: BlockType, t2: BlockType): Unit = ???
-  def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
-  def sub(c1: CaptureSet, c2: CaptureSet): Unit = ???
+  def sub(t1: ValueType, t2: ValueType): Unit = scope.requireSubtype(t1, t2)
+  def sub(t1: BlockType, t2: BlockType): Unit = scope.requireSubtype(t1, t2)
+  def sub(c1: CaptureSet, c2: CaptureSet): Unit = scope.requireSubregion(c1, c2)
 
   def instantiate(tpe: FunctionType) = scope.instantiate(tpe)
 
-  def freshTypeVar(underlying: TypeVar) = scope.fresh(underlying)
+  def freshTypeVar(role: UnificationVar.Role): UnificationVar = scope.fresh(role)
 
 
   // Effects that are in the lexical scope

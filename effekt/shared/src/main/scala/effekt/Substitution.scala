@@ -1,13 +1,27 @@
 package effekt
 
 import effekt.context.Context
-import effekt.symbols._
-import effekt.symbols.builtins.THole
+import effekt.substitutions.TypeComparer
+import effekt.symbols.*
+import effekt.symbols.builtins.{ TBottom, TTop }
 import effekt.util.messages.ErrorReporter
 
 object substitutions {
 
   private var scopeId: Int = 0
+
+  case class ValueTypeConstraints(lower: Set[ValueType], upper: Set[ValueType])
+  case class CaptureConstraints(lower: Set[Capture], upper: Set[Capture])
+
+  /**
+   * The state of the unification scope, used for backtracking on overload resolution
+   *
+   * See [[UnificationScope.backup]] and [[UnificationScope.restore]]
+   */
+  case class UnificationState(
+    skolems: List[UnificationVar],
+    valueConstraints: Map[UnificationVar, ValueTypeConstraints]
+  )
 
   /**
    * A unification scope -- every fresh unification variable is associated with a scope.
@@ -16,8 +30,20 @@ object substitutions {
 
     val id = { scopeId += 1; scopeId }
 
-    def fresh(underlying: TypeVar): UnificationVar = {
-      val x = UnificationVar(underlying, this)
+    // the state of this unification scope
+
+    private var skolems: List[UnificationVar] = Nil
+    private var capture_skolems: List[CaptureUnificationVar] = Nil
+    var valueConstraints: Map[UnificationVar, ValueTypeConstraints] = Map.empty
+
+
+    def backup(): UnificationState = UnificationState(skolems, valueConstraints)
+    def restore(state: UnificationState): Unit =
+      skolems = state.skolems
+      valueConstraints = state.valueConstraints
+
+    def fresh(role: UnificationVar.Role): UnificationVar = {
+      val x = UnificationVar(role, this)
       skolems = x :: skolems
       x
     }
@@ -28,11 +54,37 @@ object substitutions {
       x
     }
 
+    def requireSubtype(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit = {
+      println(valueConstraints)
+      println(s"requireSubtype ${t1} <: ${t2}")
+      comparer.unifyValueTypes(t1, t2)
+      //sys error s"Requiring that ${t1} <:< ${t2}"
+    }
+
+    def requireSubtype(t1: BlockType, t2: BlockType)(using C: ErrorReporter): Unit =
+      sys error s"Requiring that ${t1} <:< ${t2}"
+
+    def requireSubregion(c1: CaptureSet, c2: CaptureSet)(using C: ErrorReporter): Unit =
+      sys error s"Requiring that ${c1} <:< ${c2}"
+
     /**
-     * These are the unification variables introduced in the current scope
+     * Given the current unification state, can we decide whether one effect is a subtype of another?
+     *
+     * Used to subtract one set of effects from another (when checking handling, or higher-order functions)
      */
-    private var skolems: List[UnificationVar] = Nil
-    private var capture_skolems: List[CaptureUnificationVar] = Nil
+    def isSubtype(e1: Effect, e2: Effect): Boolean = ???
+
+    /**
+     * Removes effects [[effs2]] from effects [[effs1]] by checking for subtypes.
+     *
+     * TODO check whether this is sound! It should be, since it is a conservative approximation.
+     *   If it turns out two effects ARE subtypes after all, and we have not removed them, it does not
+     *   compromise effect safety.
+     *
+     * TODO potentially dealias first...
+     */
+    def subtract(effs1: Effects, effs2: Effects): Effects =
+      effs1.filterNot(eff1 => effs2.exists(eff2 => isSubtype(eff2, eff1)))
 
     /**
      * Instantiate a typescheme with fresh, rigid type variables
@@ -41,7 +93,7 @@ object substitutions {
      */
     def instantiate(tpe: FunctionType)(using C: ErrorReporter): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
       val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = tpe
-      val typeRigids = tparams map fresh
+      val typeRigids = tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
       val captRigids = cparams map freshCaptVar
       val subst = Substitutions(
         tparams zip typeRigids,
@@ -52,6 +104,82 @@ object substitutions {
       val substitutedReturn = subst.substitute(ret)
       val substitutedEffects = subst.substitute(eff)
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
+    }
+
+    def checkConsistency(using C: ErrorReporter): TypeComparer = new TypeComparer {
+      def currentScope = self
+      def defer(t1: ValueType, t2: ValueType): Unit = ???
+      def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+      def abort(msg: String) = C.abort(msg)
+      def learnLowerBound(x: UnificationVar, tpe: ValueType) = ()
+      def learnUpperBound(x: UnificationVar, tpe: ValueType) = ()
+    }
+
+    // TODO the comparer should build up a "deconstruction trace" that can be used for better
+    //   type errors.
+    def comparer(using C: ErrorReporter): TypeComparer = new TypeComparer {
+      def currentScope = self
+
+      def unify(c1: CaptureSet, c2: CaptureSet): Unit = ??? // ccs = EqCapt(c1, c2, C.focus) :: ccs
+
+      def abort(msg: String) = C.abort(msg)
+
+      def learnLowerBound(x: UnificationVar, tpe: ValueType) = constrainLower(x, tpe)
+
+      def learnUpperBound(x: UnificationVar, tpe: ValueType) = constrainUpper(x, tpe)
+
+      def mergeUpperBounds(prev: ValueType, next: ValueType): ValueType = ???
+
+      def constrainLower(x: UnificationVar, tpe: ValueType): Unit =
+        if (x == tpe) return ()
+        println(valueConstraints)
+        val ValueTypeConstraints(lower, upper) = valueConstraints.getOrElse(x, ValueTypeConstraints(Set.empty, Set.empty))
+        if (lower contains tpe) return () // necessary for preventing looping
+        // TODO check for consistency within lower.
+        //   the current comparison does not check bounds of unification variables
+//        lower.foreach { other =>
+//          // catching the exception here is only a hack, for now!
+//          try checkConsistency.unifyValueTypes(other, tpe) catch {
+//            case e =>
+//              x.role match {
+//                case UnificationVar.InferredReturn(tree) => C.at(tree) { C.abort("Inconsistency in return position") }
+//                case UnificationVar.TypeVariableInstantiation(underlying) => C.abort("Inconsistency in type application")
+//              }
+//          }
+//        }
+        valueConstraints = valueConstraints.updated(x, ValueTypeConstraints(lower + tpe, upper))
+        upper.foreach {
+          // propagate into upper bounds...
+          case u: UnificationVar => constrainLower(u, tpe)
+          // check for consistency with concrete upper bounds...
+          case t: ValueType => requireSubtype(tpe, t)
+        }
+
+      def constrainUpper(x: UnificationVar, tpe: ValueType): Unit =
+        // TODO check whether x == tpe and don't do anything,
+        if (x == tpe) return ()
+        println(valueConstraints)
+        val ValueTypeConstraints(lower, upper) = valueConstraints.getOrElse(x, ValueTypeConstraints(Set.empty, Set.empty))
+        if (upper contains tpe) return ()
+        // TODO check for consistency within upper.
+        // upper.foreach { other => checkConsistency.unifyValueTypes(tpe, other) }
+        valueConstraints = valueConstraints.updated(x, ValueTypeConstraints(lower, upper + tpe))
+        upper.foreach {
+          // propagate into upper bounds...
+          case u: UnificationVar => constrainUpper(u, tpe)
+          // check for consistency with concrete upper bounds...
+          case t: ValueType => requireSubtype(t, tpe)
+        }
+
+
+
+//        println(s"We learnt that ${x} <: ${tpe}")
+//
+//       {
+//        // all existing solutions have to be compatible with the new one
+//        equivalences.solutions(x).foreach { s => push(Eq(tpe, s, C.focus)) }
+//        equivalences.add(x, tpe)
+//      }
     }
   }
 
@@ -146,25 +274,25 @@ object substitutions {
   trait TypeComparer {
 
     // "unification effects"
-    def learn(x: UnificationVar, tpe: ValueType): Unit
+    def learnLowerBound(x: UnificationVar, tpe: ValueType): Unit
+    def learnUpperBound(x: UnificationVar, tpe: ValueType): Unit
     def abort(msg: String): Nothing
     def currentScope: UnificationScope
-    def defer(t1: ValueType, t2: ValueType): Unit
+
     def unify(c1: CaptureSet, c2: CaptureSet): Unit
 
     def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
       case (t, s) if t == s => ()
-      case (s: UnificationVar, t: ValueType) if s.scope == currentScope => learn(s, t)
+      case (_, TTop) => ()
+      case (TBottom, _) => ()
+
+      case (s: UnificationVar, t: ValueType) => learnUpperBound(s, t)
 
       // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
       // type `?R` (since `==: [R] (R, R) => Boolean`)
-      case (s: ValueType, t: UnificationVar) if t.scope == currentScope => learn(t, s)
-
-      // we defer unification of variables introduced in other scopes
-      case (s: UnificationVar, t: ValueType) => defer(s, t)
-      case (s: ValueType, t: UnificationVar) => defer(s, t)
+      case (s: ValueType, t: UnificationVar)=> learnLowerBound(t, s)
 
       case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) =>
         if (args1.size != args2.size)
@@ -174,7 +302,6 @@ object substitutions {
 
         (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
 
-      case (THole, _) | (_, THole) => ()
       case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2)) =>
         unifyBlockTypes(tpe1, tpe2)
         unify(capt1, capt2)
@@ -223,5 +350,12 @@ object substitutions {
         unifyValueTypes(ret1, substRet2)
         unifyEffects(eff1, eff2)
     }
+
+    // There are only a few users of dealiasing:
+    //  1) checking for effect inclusion (`contains` in Effects)
+    //  2) checking exhaustivity of pattern matching
+    //  3) type comparer itself
+    def dealias(tpe: ValueType): ValueType = ???
+    def dealias(tpe: Effects): Effects = ???
   }
 }
