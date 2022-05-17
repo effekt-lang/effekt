@@ -27,51 +27,57 @@ class LLVM extends Generator {
    * This is only called on the main entry point, we have to manually traverse the dependencies
    * and write them.
    */
-  def run(src: Source)(implicit C: Context): Option[Document] = for {
+  def run(src: Source)(implicit C: Context): Option[Document] = {
+    val modQ = C.frontend(src)
+    if (modQ.isEmpty)
+      return None
+    val mod = modQ.get
 
-    mod <- C.frontend(src)
-    mainName = C.checkMain(mod)
+    val mainName = C.checkMain(mod)
 
     // TODO why is backend returning Option? What if compilation fails?
-    coreMods = (mod.dependencies :+ mod).flatMap(m => C.backend(m.source))
+    val coreMods = (mod.dependencies :+ mod).flatMap(m => C.backend(m.source))
     // TODO get rid of this object!
-    machiner = new machine.Transformer
+    val machiner = new machine.Transformer
     // TODO get rid of the module! we only need it for fresh name generation
-    llvmDefs = C.using(module = mod) {
+    val llvmDefs = C.using(module = mod) {
       val machineMods = coreMods.map(m => machiner.transform(m)(machiner.TransformerContext(C)))
       machineMods.flatMap(m => LLVMTransformer.transform(m)(LLVMTransformer.LLVMTransformerContext(mod, C)))
     }
-    result = LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext())
+    val result = LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext())
 
-    // result is yielded by `run`
-    // mod <- C.frontend(src)
-    // `C` is an implicit Context passed to `run`
+    // XXX move this code block
+    if (true) {
+      // `result : Option[Document]` is returned by `run`
+      // `C` is an implicit Context passed to `run`
 
-    /* This is used for both: writing the files to and generating the `require` statements. */
-    //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
-    specialPather = (suffix: String) => (m: Module) => path(m) + suffix
-    llvmPath = specialPather(".ll")
-    optPath = specialPather("_opt.ll")
-    objectPath = specialPather(".o")
+      /* This is used for both: writing the files to and generating the `require` statements. */
+      //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
+      val specialPather = (suffix: String) => (m: Module) => path(m) + suffix
+      val llvmPath = specialPather(".ll")
+      val optPath = specialPather("_opt.ll")
+      val objectPath = specialPather(".o")
 
-    llvmFile = llvmPath(mod)
-    _ = C.saveOutput(result.layout, llvmFile)
+      val llvmFile = llvmPath(mod)
+      val _ = C.saveOutput(result.layout, llvmFile)
 
-    optFile = optPath(mod)
-    optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmFile, "-S", "-O2", "-o", optFile))
-    _ = C.config.output().emit(optCommand.!!)
+      val optFile = optPath(mod)
+      val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmFile, "-S", "-O2", "-o", optFile))
+      val _ = C.config.output().emit(optCommand.!!)
 
-    objectFile = objectPath(mod)
-    llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optFile, "-filetype=obj", "-o", objectFile))
-    _ = C.config.output().emit(llcCommand.!!)
+      val objectFile = objectPath(mod)
+      val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optFile, "-filetype=obj", "-o", objectFile))
+      val _ = C.config.output().emit(llcCommand.!!)
 
-    mainFile = (C.config.libPath / "main.c").unixPath
-    executableFile = path(mod)
-    gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objectFile))
+      val mainFile = (C.config.libPath / "main.c").unixPath
+      val executableFile = path(mod)
+      val gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objectFile))
 
-    _ = C.config.output().emit(gccCommand.!!)
+      val _ = C.config.output().emit(gccCommand.!!)
+    }
 
-  } yield result
+    return Some(result)
+  }
 }
 
 object LLVMPrinter extends ParenPrettyPrinter {
