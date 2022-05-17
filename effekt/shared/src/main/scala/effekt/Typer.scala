@@ -695,7 +695,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
     expected: Option[ValueType]
-  )(using Context): Result[ValueType] = {
+  )(using Context): Result[ValueType] = Context withUnificationScope {
+
+    println(s"Checking call to $name")
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
@@ -720,8 +722,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     (vps zip vargs) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr, Some(typeSubst substitute tpe))
-      println(Context.scope.isSubtype(t, tpe))
-      println(Context.scope.isSubtype(t, TInt))
       effs = effs ++ eff
     }
 
@@ -985,9 +985,24 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = {
-    scope = new UnificationScope
+    println("----outer scope----")
+//    val outer = scope
+//    val newScope = new UnificationScope
+//    outer.dumpConstraints()
+
+//    println("transfer all constraints to new scope")
+//    scope = newScope
+    //scope.valueConstraints = outer.valueConstraints
+//    println("run block")
     val res = block
+//    println("solve scope")
+//    newScope.solve()
+//    println("remaining constraints: ")
+//    newScope.dumpConstraints()
+//    println("Save all remaining constraints to outer scope")
+    //outer.valueConstraints = newScope.valueConstraints
     scope.dumpConstraints()
+//    scope = outer
     res
   }
 
@@ -995,7 +1010,10 @@ trait TyperOps extends ContextOps { self: Context =>
   // This is ONLY used by match clauses at the moment...
   def unify(t1: ValueType, t2: ValueType): Unit = ???
 
-  def sub(t1: ValueType, t2: ValueType): Unit = scope.requireSubtype(t1, t2)
+  def sub(t1: ValueType, t2: ValueType): Unit =
+    println(s"Require ${t1} <: ${t2}")
+    scope.requireSubtype(t1, t2)
+
   def sub(t1: BlockType, t2: BlockType): Unit = scope.requireSubtype(t1, t2)
   def sub(c1: CaptureSet, c2: CaptureSet): Unit = scope.requireSubregion(c1, c2)
 
