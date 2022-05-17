@@ -20,21 +20,8 @@ import effekt.util.paths._
 import scala.sys.process.Process
 
 class LLVM extends Generator {
-
-  /**
-   * This is used for both: writing the files to and generating the `require` statements.
-   */
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath
-
-  def llvmPath(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
-
-  def optPath(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + "_opt.ll"
-
-  def objectPath(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".o"
 
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
@@ -56,20 +43,32 @@ class LLVM extends Generator {
     }
     result = LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext())
 
+    // result is yielded by `run`
+    // mod <- C.frontend(src)
+    // `C` is an implicit Context passed to `run`
+
+    /* This is used for both: writing the files to and generating the `require` statements. */
+    //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
+    specialPather = (suffix: String) => (m: Module) => path(m) + suffix
+    llvmPath = specialPather(".ll")
+    optPath = specialPather("_opt.ll")
+    objectPath = specialPather(".o")
+
     llvmFile = llvmPath(mod)
     _ = C.saveOutput(result.layout, llvmFile)
 
     optFile = optPath(mod)
-    optCommand = Process(Seq("opt-" + C.LLVM_VERSION, llvmFile, "-S", "-O2", "-o", optFile))
+    optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmFile, "-S", "-O2", "-o", optFile))
     _ = C.config.output().emit(optCommand.!!)
 
     objectFile = objectPath(mod)
-    llcCommand = Process(Seq("llc-" + C.LLVM_VERSION, "--relocation-model=pic", optFile, "-filetype=obj", "-o", objectFile))
+    llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optFile, "-filetype=obj", "-o", objectFile))
     _ = C.config.output().emit(llcCommand.!!)
 
     mainFile = (C.config.libPath / "main.c").unixPath
     executableFile = path(mod)
     gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objectFile))
+
     _ = C.config.output().emit(gccCommand.!!)
 
   } yield result
