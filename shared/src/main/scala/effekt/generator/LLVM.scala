@@ -56,24 +56,21 @@ class LLVM extends Generator {
       val specialPather = (suffix: String) => (m: Module) => path(m) + suffix
       val llvmPath = specialPather(".ll")
       val optPath = specialPather("_opt.ll")
-      val objectPath = specialPather(".o")
+      val objPath = specialPather(".o")
 
-      val llvmFile = llvmPath(mod)
-      val _ = C.saveOutput(result.layout, llvmFile)
+      C.saveOutput(result.layout, llvmPath(mod))
 
-      val optFile = optPath(mod)
-      val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmFile, "-S", "-O2", "-o", optFile))
-      val _ = C.config.output().emit(optCommand.!!)
+      val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
+      C.config.output().emit(optCommand.!!)
 
-      val objectFile = objectPath(mod)
-      val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optFile, "-filetype=obj", "-o", objectFile))
-      val _ = C.config.output().emit(llcCommand.!!)
+      val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
+      C.config.output().emit(llcCommand.!!)
 
       val mainFile = (C.config.libPath / "main.c").unixPath
       val executableFile = path(mod)
-      val gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objectFile))
+      val gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objPath(mod)))
 
-      val _ = C.config.output().emit(gccCommand.!!)
+      C.config.output().emit(gccCommand.!!)
     }
 
     return Some(result)
