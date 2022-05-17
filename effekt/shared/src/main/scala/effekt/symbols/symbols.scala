@@ -210,12 +210,19 @@ package object symbols {
    * Should neither occur in source programs, nor in inferred types
    */
   case class UnificationVar(role: UnificationVar.Role, scope: UnificationScope) extends TypeVar(Name.local("?")) {
-    override def toString = "?" + id
+    override def toString = role match {
+      case UnificationVar.TypeVariableInstantiation(underlying) => "?" + underlying.toString + id
+      case _ => "?" + id
+    }
   }
+  case class TypeUnion(types: List[UnificationVar]) extends ValueType
+  case class TypeIntersection(types: List[UnificationVar]) extends ValueType
+
   object UnificationVar {
     sealed trait Role
     case class TypeVariableInstantiation(underlying: TypeVar) extends Role
     case class InferredReturn(tree: source.Tree) extends Role
+    case class MergeVariable() extends Role
   }
 
   case class ValueTypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {

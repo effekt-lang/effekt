@@ -58,7 +58,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.error("Unhandled effects: " + effs)
               }
           }
-          println(Context.scope.valueConstraints)
           Result(TUnit, Pure)
         }
       }
@@ -719,6 +718,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     var effs = retEffs
 
     (vps zip vargs) foreach { case (tpe, expr) =>
+      println(s"Checking argument ${expr} against ${typeSubst substitute tpe}")
       val Result(_, eff) = checkExpr(expr, Some(typeSubst substitute tpe))
       effs = effs ++ eff
     }

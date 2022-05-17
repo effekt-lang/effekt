@@ -10,7 +10,7 @@ object substitutions {
 
   private var scopeId: Int = 0
 
-  case class ValueTypeConstraints(lower: Set[ValueType], upper: Set[ValueType])
+  case class ValueTypeConstraints(lower: ValueType, upper: ValueType)
   case class CaptureConstraints(lower: Set[Capture], upper: Set[Capture])
 
   /**
@@ -36,11 +36,32 @@ object substitutions {
     private var capture_skolems: List[CaptureUnificationVar] = Nil
     var valueConstraints: Map[UnificationVar, ValueTypeConstraints] = Map.empty
 
+    var valueSubstitution: Map[UnificationVar, ValueType] = Map.empty
+
+    def dumpConstraints() =
+      println("+-- Constraints --+")
+//      valueConstraints.keys.foreach {
+//        case x => x.role match {
+//          case UnificationVar.TypeVariableInstantiation(a) => println(s"${x.toString}: instantiation of ${a}")
+//          case UnificationVar.InferredReturn(a) => println(s"${x.toString}: return type of ${a}")
+//        }
+//      }
+      valueConstraints.foreach {
+        case (x, ValueTypeConstraints(lower, upper)) => println(s"$lower <: $x <: $upper")
+      }
+      println("+-----------------+")
 
     def backup(): UnificationState = UnificationState(skolems, valueConstraints)
     def restore(state: UnificationState): Unit =
       skolems = state.skolems
       valueConstraints = state.valueConstraints
+
+    def boundsFor(x: UnificationVar): ValueTypeConstraints =
+      valueConstraints.getOrElse(x, ValueTypeConstraints(TBottom, TTop))
+
+    def updateBounds(x: UnificationVar, bounds: ValueTypeConstraints): Unit =
+      valueConstraints = valueConstraints.updated(x, bounds)
+      dumpConstraints()
 
     def fresh(role: UnificationVar.Role): UnificationVar = {
       val x = UnificationVar(role, this)
@@ -54,18 +75,46 @@ object substitutions {
       x
     }
 
-    def requireSubtype(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit = {
-      println(valueConstraints)
-      println(s"requireSubtype ${t1} <: ${t2}")
+    // TODO do we need to compute a bisubstitution here???
+    def solveFor(rigids: List[UnificationVar], polarity: Boolean)(using C: ErrorReporter): Map[UnificationVar, ValueType] = ???
+
+
+    /**
+     * Checks whether t1 <: t2
+     *
+     * Has the side effect of registering constraints.
+     */
+    def requireSubtype(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit =
       comparer.unifyValueTypes(t1, t2)
-      //sys error s"Requiring that ${t1} <:< ${t2}"
-    }
 
     def requireSubtype(t1: BlockType, t2: BlockType)(using C: ErrorReporter): Unit =
       sys error s"Requiring that ${t1} <:< ${t2}"
 
     def requireSubregion(c1: CaptureSet, c2: CaptureSet)(using C: ErrorReporter): Unit =
       sys error s"Requiring that ${c1} <:< ${c2}"
+
+
+    /**
+     * Given the current unification state, can we decide whether one type is a subtype of another?
+     */
+    def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean =
+      object NotASubtype extends Throwable
+      object comparer extends TypeComparer {
+        def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+        def abort(msg: String) = throw NotASubtype
+        // TODO is this correct???
+        // Check tpe <: x
+        def requireLowerBound(x: UnificationVar, tpe: ValueType) =
+          // does this terminate???
+          println(s"Checking whether ${tpe} <:< ${boundsFor(x)} (${x})")
+          if (!isSubtype(tpe, boundsFor(x).lower)) throw NotASubtype
+        def requireUpperBound(x: UnificationVar, tpe: ValueType) =
+          println(s"Checking whether ${tpe} >:> ${boundsFor(x)} (${x})")
+          if (!isSubtype(boundsFor(x).upper, tpe)) throw NotASubtype
+      }
+      try { comparer.unifyValueTypes(tpe1, tpe2); return true } catch {
+        case NotASubtype => false
+      }
 
     /**
      * Given the current unification state, can we decide whether one effect is a subtype of another?
@@ -106,80 +155,90 @@ object substitutions {
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
     }
 
-    def checkConsistency(using C: ErrorReporter): TypeComparer = new TypeComparer {
-      def currentScope = self
-      def defer(t1: ValueType, t2: ValueType): Unit = ???
-      def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
-      def abort(msg: String) = C.abort(msg)
-      def learnLowerBound(x: UnificationVar, tpe: ValueType) = ()
-      def learnUpperBound(x: UnificationVar, tpe: ValueType) = ()
-    }
+    /**
+     * Compute the join of two types
+     */
+    def mergeLower(oldBound: ValueType, newBound: ValueType)(using C: ErrorReporter): ValueType =
+      (oldBound, newBound) match {
+        case (t, s) if t == s => t
+
+        case (tpe1: UnificationVar, tpe2: UnificationVar) =>
+          // TODO ad hoc
+          // check whether bounds are consistent...
+          mergeLower(boundsFor(tpe1).lower, boundsFor(tpe2).lower)
+          TypeUnion(List(tpe1, tpe2))
+
+        case (TypeUnion(tpes), tpe: UnificationVar) => TypeUnion(tpe :: tpes)
+        case (tpe: UnificationVar, TypeUnion(tpes)) => TypeUnion(tpe :: tpes)
+        case (TypeUnion(tpes1), TypeUnion(tpes2)) => TypeUnion(tpes1 ++ tpes2)
+
+        // We can use one of them if it is more specific than the other.
+        case (tpe1, tpe2) if isSubtype(tpe1, tpe2) => tpe2
+        case (tpe1, tpe2) if isSubtype(tpe2, tpe1) => tpe1
+
+        case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2)) =>
+          if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
+          if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
+
+          // TODO Here we assume the constructor is covariant
+          // TODO perform analysis and then mergeUpper, lower, or require equality.
+          val mergedArgs = (args1 zip args2).map { mergeLower }
+          ValueTypeApp(cons1, mergedArgs)
+
+        case _ =>
+          println(s"merge of ${oldBound} and ${newBound} failed")
+          C.abort(s"Cannot merge ${oldBound} with ${newBound} at positive polarity")
+      }
+
+    /**
+     * Compute the meet of two types
+     */
+    def mergeUpper(oldBound: ValueType, newBound: ValueType)(using C: ErrorReporter): ValueType =
+      (oldBound, newBound) match {
+        case (t, s) if t == s => t
+
+        case (tpe1: UnificationVar, tpe2: UnificationVar) =>
+          // check whether bounds are consistent...
+          mergeUpper(boundsFor(tpe1).upper, boundsFor(tpe2).upper)
+          TypeIntersection(List(tpe1, tpe2))
+
+        case (TypeIntersection(tpes), tpe: UnificationVar) => TypeIntersection(tpe :: tpes)
+        case (tpe: UnificationVar, TypeIntersection(tpes)) => TypeIntersection(tpe :: tpes)
+        case (TypeIntersection(tpes1), TypeIntersection(tpes2)) => TypeIntersection(tpes1 ++ tpes2)
+
+        // We can use one of them if it is more specific than the other.
+        case (tpe1, tpe2) if isSubtype(tpe2, tpe1) => tpe2
+        case (tpe1, tpe2) if isSubtype(tpe1, tpe2) => tpe1
+
+        case _ =>
+          println(s"merge of ${oldBound} and ${newBound} failed")
+          C.abort(s"Cannot merge ${oldBound} with ${newBound} at negative polarity")
+      }
 
     // TODO the comparer should build up a "deconstruction trace" that can be used for better
     //   type errors.
-    def comparer(using C: ErrorReporter): TypeComparer = new TypeComparer {
-      def currentScope = self
 
-      def unify(c1: CaptureSet, c2: CaptureSet): Unit = ??? // ccs = EqCapt(c1, c2, C.focus) :: ccs
+    /**
+     * A side effecting type comparer
+     */
+    def comparer(using C: ErrorReporter): TypeComparer = new TypeComparer {
+      def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
       def abort(msg: String) = C.abort(msg)
 
-      def learnLowerBound(x: UnificationVar, tpe: ValueType) = constrainLower(x, tpe)
-
-      def learnUpperBound(x: UnificationVar, tpe: ValueType) = constrainUpper(x, tpe)
-
-      def mergeUpperBounds(prev: ValueType, next: ValueType): ValueType = ???
-
-      def constrainLower(x: UnificationVar, tpe: ValueType): Unit =
+      def requireLowerBound(x: UnificationVar, tpe: ValueType) =
         if (x == tpe) return ()
-        println(valueConstraints)
-        val ValueTypeConstraints(lower, upper) = valueConstraints.getOrElse(x, ValueTypeConstraints(Set.empty, Set.empty))
-        if (lower contains tpe) return () // necessary for preventing looping
-        // TODO check for consistency within lower.
-        //   the current comparison does not check bounds of unification variables
-//        lower.foreach { other =>
-//          // catching the exception here is only a hack, for now!
-//          try checkConsistency.unifyValueTypes(other, tpe) catch {
-//            case e =>
-//              x.role match {
-//                case UnificationVar.InferredReturn(tree) => C.at(tree) { C.abort("Inconsistency in return position") }
-//                case UnificationVar.TypeVariableInstantiation(underlying) => C.abort("Inconsistency in type application")
-//              }
-//          }
-//        }
-        valueConstraints = valueConstraints.updated(x, ValueTypeConstraints(lower + tpe, upper))
-        upper.foreach {
-          // propagate into upper bounds...
-          case u: UnificationVar => constrainLower(u, tpe)
-          // check for consistency with concrete upper bounds...
-          case t: ValueType => requireSubtype(tpe, t)
-        }
+        val ValueTypeConstraints(lower, upper) = boundsFor(x)
+        val newBound = mergeLower(lower, tpe)
+        updateBounds(x, ValueTypeConstraints(newBound, upper))
+        requireSubtype(newBound, upper)
 
-      def constrainUpper(x: UnificationVar, tpe: ValueType): Unit =
-        // TODO check whether x == tpe and don't do anything,
+      def requireUpperBound(x: UnificationVar, tpe: ValueType) =
         if (x == tpe) return ()
-        println(valueConstraints)
-        val ValueTypeConstraints(lower, upper) = valueConstraints.getOrElse(x, ValueTypeConstraints(Set.empty, Set.empty))
-        if (upper contains tpe) return ()
-        // TODO check for consistency within upper.
-        // upper.foreach { other => checkConsistency.unifyValueTypes(tpe, other) }
-        valueConstraints = valueConstraints.updated(x, ValueTypeConstraints(lower, upper + tpe))
-        upper.foreach {
-          // propagate into upper bounds...
-          case u: UnificationVar => constrainUpper(u, tpe)
-          // check for consistency with concrete upper bounds...
-          case t: ValueType => requireSubtype(t, tpe)
-        }
-
-
-
-//        println(s"We learnt that ${x} <: ${tpe}")
-//
-//       {
-//        // all existing solutions have to be compatible with the new one
-//        equivalences.solutions(x).foreach { s => push(Eq(tpe, s, C.focus)) }
-//        equivalences.add(x, tpe)
-//      }
+        val ValueTypeConstraints(lower, upper) = boundsFor(x)
+        val newBound = mergeUpper(upper, tpe)
+        updateBounds(x, ValueTypeConstraints(lower, newBound))
+        requireSubtype(lower, newBound)
     }
   }
 
@@ -274,25 +333,26 @@ object substitutions {
   trait TypeComparer {
 
     // "unification effects"
-    def learnLowerBound(x: UnificationVar, tpe: ValueType): Unit
-    def learnUpperBound(x: UnificationVar, tpe: ValueType): Unit
+    def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
+    def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
     def abort(msg: String): Nothing
-    def currentScope: UnificationScope
 
     def unify(c1: CaptureSet, c2: CaptureSet): Unit
-
     def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
     def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
       case (t, s) if t == s => ()
       case (_, TTop) => ()
-      case (TBottom, _) => ()
+      case (tpe, TypeIntersection(Nil)) => ()
 
-      case (s: UnificationVar, t: ValueType) => learnUpperBound(s, t)
+      case (TBottom, _) => ()
+      case (TypeUnion(Nil), tpe) => ()
+
+      case (s: UnificationVar, t: ValueType) => requireUpperBound(s, t)
 
       // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
       // type `?R` (since `==: [R] (R, R) => Boolean`)
-      case (s: ValueType, t: UnificationVar)=> learnLowerBound(t, s)
+      case (s: ValueType, t: UnificationVar) => requireLowerBound(t, s)
 
       case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) =>
         if (args1.size != args2.size)
@@ -300,6 +360,7 @@ object substitutions {
 
         unifyValueTypes(t1, t2)
 
+        // TODO here we assume that the type constructor is covariant
         (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
 
       case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2)) =>
@@ -307,6 +368,7 @@ object substitutions {
         unify(capt1, capt2)
 
       case (t, s) =>
+        println(s"Type mismatch: ${t} is not ${s}")
         abort(s"Expected ${t}, but got ${s}")
     }
 
