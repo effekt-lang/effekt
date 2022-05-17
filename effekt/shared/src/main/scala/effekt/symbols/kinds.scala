@@ -81,8 +81,6 @@ package object kinds {
     case DataType(_, tparams, _)  => Kind.TypeFun(tparams map { p => Kind.Type })
     case Record(_, tparams, _, _) => Kind.TypeFun(tparams map { p => Kind.Type })
     case BuiltinType(_, tparams)  => Kind.TypeFun(tparams map { p => Kind.Type })
-    case TypeUnion(_)             => Kind.Type
-    case TypeIntersection(_)      => Kind.Type
   }
 
   private def wellformedInterfaceType(e: InterfaceType)(implicit C: Context): Kind = e match {
