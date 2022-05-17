@@ -322,7 +322,7 @@ object substitutions {
         updateUpperBound(x, newBound)
         newBound
 
-      def connectNodes(x: UnificationVar, y: UnificationVar)(using C: ErrorReporter): Unit =
+      def connectNodes(x: UnificationVar, y: UnificationVar): Unit =
         val xBounds = boundsFor(x)
         val yBounds = boundsFor(y)
         if (xBounds.upperVariables contains y) return;
@@ -331,62 +331,56 @@ object substitutions {
         connect(x, y)
 
 
-      /**
-       * Compute the join of two types
-       */
-      def mergeLower(oldBound: ValueType, newBound: ValueType)(using C: ErrorReporter): ValueType =
-        (oldBound, newBound) match {
-          case (t, s) if t == s => t
-          case (TBottom, t) => t
-          case (t, TBottom) => t
+      def merge(oldBound: ValueType, newBound: ValueType, polarity: Boolean): ValueType =
+        (oldBound, newBound, polarity) match {
+          case (t, s, _) if t == s => t
+          case (TBottom, t, true) => t
+          case (t, TBottom, true) => t
+          case (TTop, t, false) => t
+          case (t, TTop, false) => t
 
-          case (tpe1: UnificationVar, tpe2: UnificationVar) =>
-            // two unification variables, we create a fresh merge node with two incoming edges.
+          case (tpe1: UnificationVar, tpe2: UnificationVar, _) =>
+            // two unification variables, we create a fresh merge node with two incoming / outgoing edges.
             val mergeNode = fresh(UnificationVar.MergeVariable)
-            connectNodes(tpe1, mergeNode)
-            connectNodes(tpe2, mergeNode)
+
+            if (polarity) {
+              connectNodes(tpe1, mergeNode)
+              connectNodes(tpe2, mergeNode)
+            } else {
+              connectNodes(mergeNode, tpe1)
+              connectNodes(mergeNode, tpe2)
+            }
             mergeNode
 
           // We can use one of them if it is more specific than the other.
-          case (tpe1, tpe2) if isSubtype(tpe1, tpe2) => tpe2
-          case (tpe1, tpe2) if isSubtype(tpe2, tpe1) => tpe1
+          case (tpe1, tpe2, _) if isSubtype(tpe1, tpe2) => if (polarity) tpe2 else tpe1
+          case (tpe1, tpe2, _) if isSubtype(tpe2, tpe1) => if (polarity) tpe1 else tpe2
 
-          case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2)) =>
+          case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
             if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
             if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
 
             // TODO Here we assume the constructor is covariant
             // TODO perform analysis and then mergeUpper, lower, or require equality.
-            val mergedArgs = (args1 zip args2).map { mergeLower }
+            val mergedArgs = (args1 zip args2).map { merge(_, _, polarity) }
             ValueTypeApp(cons1, mergedArgs)
 
           case _ =>
-            C.abort(s"Cannot merge ${oldBound} with ${newBound} at positive polarity")
+            C.abort(s"Cannot merge ${oldBound} with ${newBound} at ${if (polarity) "positive" else "negative"} polarity")
         }
+
+      /**
+       * Compute the join of two types
+       */
+      def mergeLower(oldBound: ValueType, newBound: ValueType): ValueType =
+        merge(oldBound, newBound, true)
 
       /**
        * Compute the meet of two types
        */
-      def mergeUpper(oldBound: ValueType, newBound: ValueType)(using C: ErrorReporter): ValueType =
-        (oldBound, newBound) match {
-          case (t, s) if t == s => t
-          case (TTop, t) => t
-          case (t, TTop) => t
-
-          case (tpe1: UnificationVar, tpe2: UnificationVar) =>
-            val mergeNode = fresh(UnificationVar.MergeVariable)
-            connectNodes(mergeNode, tpe1)
-            connectNodes(mergeNode, tpe2)
-            mergeNode
-
-          // We can use one of them if it is more specific than the other.
-          case (tpe1, tpe2) if isSubtype(tpe2, tpe1) => tpe2
-          case (tpe1, tpe2) if isSubtype(tpe1, tpe2) => tpe1
-
-          case _ =>
-            C.abort(s"Cannot merge ${oldBound} with ${newBound} at negative polarity")
-        }
-      }
+      def mergeUpper(oldBound: ValueType, newBound: ValueType): ValueType =
+        merge(oldBound, newBound, false)
+    }
   }
 
   case class SubstitutionException(x: CaptureUnificationVar, subst: Map[Capture, CaptureSet]) extends Exception
