@@ -18,7 +18,6 @@ object substitutions {
    *     lower nodes    ┠─────────┬────────┨   upper nodes
    *    --------------> ┃  Lower  │  Upper ┃ -------------->
    *                    ┗━━━━━━━━━┷━━━━━━━━┛
-   *                    ┗━━━━━━━━━┷━━━━━━━━┛
    *
    * The arrows in the picture above indicate the suptyping relationship.
    * They are in fact navigatable in both directions, since new _upper_ bounds
