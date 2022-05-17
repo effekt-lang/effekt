@@ -68,6 +68,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Some(Typechecked(source, tree, mod))
       }
     } finally {
+      Context.scope.dumpConstraints()
       // Store the backtrackable annotations into the global DB
       // This is done regardless of errors, since
       Context.commitTypeAnnotations()
@@ -718,13 +719,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
     var effs = retEffs
 
     (vps zip vargs) foreach { case (tpe, expr) =>
-      println(s"Checking argument ${expr} against ${typeSubst substitute tpe}")
-      val Result(_, eff) = checkExpr(expr, Some(typeSubst substitute tpe))
+      val Result(t, eff) = checkExpr(expr, Some(typeSubst substitute tpe))
+      println(Context.scope.isSubtype(t, tpe))
+      println(Context.scope.isSubtype(t, TInt))
       effs = effs ++ eff
     }
 
     (bps zip bargs) foreach { case (tpe, expr) =>
-      val Result(_, eff) = checkBlockArgument(expr, Some(typeSubst substitute tpe))
+      val Result(t, eff) = checkBlockArgument(expr, Some(typeSubst substitute tpe))
       effs = effs ++ eff
     }
 
@@ -984,7 +986,9 @@ trait TyperOps extends ContextOps { self: Context =>
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = {
     scope = new UnificationScope
-    block
+    val res = block
+    scope.dumpConstraints()
+    res
   }
 
 

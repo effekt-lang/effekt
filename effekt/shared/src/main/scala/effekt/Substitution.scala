@@ -13,15 +13,23 @@ object substitutions {
   /**
    * Represents a node in the constraint propagation graph
    *
-   *                  ┏━━━━━━━━━━━━━━━━━━┓
-   *  --------------> ┃      ?MyVar      ┃ -------------->
-   *   lower nodes    ┠─────────┬────────┨   upper nodes
-   *  --------------> ┃  Lower  │  Upper ┃ -------------->
-   *                  ┗━━━━━━━━━┷━━━━━━━━┛
+   *                    ┏━━━━━━━━━━━━━━━━━━┓
+   *    --------------> ┃      ?MyVar      ┃ -------------->
+   *     lower nodes    ┠─────────┬────────┨   upper nodes
+   *    --------------> ┃  Lower  │  Upper ┃ -------------->
+   *                    ┗━━━━━━━━━┷━━━━━━━━┛
+   *                    ┗━━━━━━━━━┷━━━━━━━━┛
    *
    * The arrows in the picture above indicate the suptyping relationship.
    * They are in fact navigatable in both directions, since new _upper_ bounds
    * need to flow through the node from right-to-left.
+   *
+   * We have the following invariants:
+   * - Direct: all transitive lower nodes are also immediate lower nodes
+   * - Intra-Consistency: Lower is always consistent to Upper
+   * - Inter-Consistency: if two nodes ?S <: ?T, then the lower bound of ?S has been
+   *     propagated as lower bound to ?T and the upper bound of ?T has been propagated
+   *     as upper bound of ?S.
    */
   case class ValueTypeConstraints(
     lowerVariables: Set[UnificationVar],
@@ -50,13 +58,27 @@ object substitutions {
 
     val id = { scopeId += 1; scopeId }
 
-    // the state of this unification scope
+    // Unification Variables
+    // ---------------------
 
     private var skolems: List[UnificationVar] = Nil
     private var capture_skolems: List[CaptureUnificationVar] = Nil
-    var valueConstraints: Map[UnificationVar, ValueTypeConstraints] = Map.empty
 
-    var valueSubstitution: Map[UnificationVar, ValueType] = Map.empty
+    def fresh(role: UnificationVar.Role): UnificationVar = {
+      val x = UnificationVar(role, this)
+      skolems = x :: skolems
+      x
+    }
+
+    def freshCaptVar(underlying: Capture): CaptureUnificationVar = {
+      val x = CaptureUnificationVar(underlying, this)
+      capture_skolems = x :: capture_skolems
+      x
+    }
+
+    // The Constraint Graph
+    // --------------------
+    var valueConstraints: Map[UnificationVar, ValueTypeConstraints] = Map.empty
 
     def dumpConstraints() =
       val colSize = 12
@@ -87,7 +109,6 @@ object substitutions {
 
     def updateBounds(x: UnificationVar, bounds: ValueTypeConstraints): Unit =
       valueConstraints = valueConstraints.updated(x, bounds)
-      dumpConstraints()
 
     def updateLowerBound(x: UnificationVar, bound: ValueType): Unit = bound match {
       case y: UnificationVar => sys error s"Cannot set unification variable ${y} as a lower bound for ${x}"
@@ -109,22 +130,17 @@ object substitutions {
     def connect(x: UnificationVar, y: UnificationVar): Unit =
       val boundsX = boundsFor(x)
       val boundsY = boundsFor(y)
-      updateBounds(x, boundsX.copy(upperVariables = boundsX.upperVariables + y))
-      updateBounds(y, boundsY.copy(lowerVariables = boundsX.lowerVariables + x))
+      updateBounds(x, boundsX.copy(
+        upperVariables = boundsX.upperVariables ++ boundsY.upperVariables + y
+      ))
+      updateBounds(y, boundsY.copy(
+        lowerVariables = boundsY.lowerVariables ++ boundsX.lowerVariables + x
+      ))
 
-    def fresh(role: UnificationVar.Role): UnificationVar = {
-      val x = UnificationVar(role, this)
-      skolems = x :: skolems
-      x
-    }
-
-    def freshCaptVar(underlying: Capture): CaptureUnificationVar = {
-      val x = CaptureUnificationVar(underlying, this)
-      capture_skolems = x :: capture_skolems
-      x
-    }
 
     // TODO do we need to compute a bisubstitution here???
+    var valueSubstitution: Map[UnificationVar, ValueType] = Map.empty
+
     def solveFor(rigids: List[UnificationVar], polarity: Boolean)(using C: ErrorReporter): Map[UnificationVar, ValueType] = ???
 
 
@@ -145,25 +161,34 @@ object substitutions {
 
     /**
      * Given the current unification state, can we decide whether one type is a subtype of another?
+     *
+     * Does not influence the constraint graph.
      */
-    def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean = false
-//      object NotASubtype extends Throwable
-//      object comparer extends TypeComparer {
-//        def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
-//        def abort(msg: String) = throw NotASubtype
-//        // TODO is this correct???
-//        // Check tpe <: x
-//        def requireLowerBound(x: UnificationVar, tpe: ValueType) =
-//          // does this terminate???
-//          println(s"Checking whether ${tpe} <:< ${boundsFor(x)} (${x})")
-//          if (!isSubtype(tpe, boundsFor(x).lowerType)) throw NotASubtype
-//        def requireUpperBound(x: UnificationVar, tpe: ValueType) =
-//          println(s"Checking whether ${tpe} >:> ${boundsFor(x)} (${x})")
-//          if (!isSubtype(boundsFor(x).upperType, tpe)) throw NotASubtype
-//      }
-//      try { comparer.unifyValueTypes(tpe1, tpe2); return true } catch {
-//        case NotASubtype => false
-//      }
+    def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean =
+      object NotASubtype extends Throwable
+      object comparer extends TypeComparer {
+        def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+        def abort(msg: String) = throw NotASubtype
+        def requireLowerBound(x: UnificationVar, tpe: ValueType) =
+          tpe match {
+            case y: UnificationVar =>
+              if (!boundsFor(x).lowerVariables.contains(y)) throw NotASubtype
+            case tpe =>
+              unifyValueTypes(tpe, boundsFor(x).upperType)
+          }
+        def requireUpperBound(x: UnificationVar, tpe: ValueType) =
+          tpe match {
+            case y: UnificationVar =>
+              if (!boundsFor(x).upperVariables.contains(y)) throw NotASubtype
+            case tpe =>
+              unifyValueTypes(boundsFor(x).lowerType, tpe)
+          }
+      }
+      val res = try { comparer.unifyValueTypes(tpe1, tpe2); true } catch {
+        case NotASubtype => false
+      }
+      println(s"Checking ${tpe1} <: ${tpe2}: $res")
+      res
 
     /**
      * Given the current unification state, can we decide whether one effect is a subtype of another?
@@ -204,16 +229,14 @@ object substitutions {
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
     }
 
-
-    // TODO the comparer should build up a "deconstruction trace" that can be used for better
-    //   type errors.
-
     /**
      * A side effecting type comparer
+     *
+     * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
      */
     def comparer(using C: ErrorReporter): TypeComparer = new TypeComparer {
 
-      private var seen: Set[UnificationVar] = Set.empty
+      private var seen: Set[(ValueType, ValueType)] = Set.empty
 
       def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
@@ -232,33 +255,27 @@ object substitutions {
        *
        */
       def requireLowerBound(x: UnificationVar, tpe: ValueType) =
-        println(s"Requiring that $tpe <: $x")
-        if (x == tpe || seen.contains(x)) return () else seen += x
-
-        // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
-        val ValueTypeConstraints(lowerNodes, lower, upper, upperNodes) = boundsFor(x)
+        if (x == tpe) return ()
 
         tpe match {
           // the new lower bound is a unification variable
-          case y: UnificationVar =>
-            if (lowerNodes contains y) return;
-            connect(y, x)
-            // lower bounds flow from y ---> x
-            requireLowerBound(x, boundsFor(y).lowerType)
-            // upper bounds flow from y <--- x
-            requireUpperBound(y, upper)
+          case y: UnificationVar => connectNodes(y, x)
 
           // the new lower bound is a value type
           case _ =>
+            // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
+            val ValueTypeConstraints(lowerNodes, lower, upper, upperNodes) = boundsFor(x)
+
             // (2) we merge the existing lower bound with the incoming type.
-            val newBound = mergeLower(lower, tpe)
-            updateLowerBound(x, newBound)
+            val merged = mergeAndUpdateLowerBound(x, tpe)
 
             // (3) we check the existing upper bound for consistency with the lower bound
-            unifyValueTypes(newBound, upper)
+            //     We do not have to do this for connected nodes, since type variables in
+            //     the upper bounds are connected itself.
+            unifyValueTypes(merged, upper)
 
             // (4) we propagate the incoming type to all upper nodes
-            upperNodes foreach { node => requireLowerBound(node, tpe) }
+            upperNodes foreach { node => mergeAndUpdateLowerBound(node, tpe) }
         }
 
       /**
@@ -266,34 +283,52 @@ object substitutions {
        * Symmetric to [[requireLowerBound]].
        */
       def requireUpperBound(x: UnificationVar, tpe: ValueType) =
-        println(s"Requiring that $x <: $tpe")
-        if (x == tpe || seen.contains(x)) return () else seen += x
-
-        // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
-        val ValueTypeConstraints(lowerNodes, lower, upper, upperNodes) = boundsFor(x)
+        if (x == tpe) return ()
 
         tpe match {
           // the new lower bound is a unification variable
-          case y: UnificationVar =>
-            if (upperNodes contains y) return;
-            connect(x, y)
-            // upper bounds flow from x <---- y
-            requireUpperBound(x, boundsFor(y).upperType)
-            // lower bounds flow from x ----> y
-            requireLowerBound(y, boundsFor(x).lowerType)
+          case y: UnificationVar => connectNodes(x, y)
 
           // the new lower bound is a value type
           case _ =>
+            // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
+            val ValueTypeConstraints(lowerNodes, lower, upper, upperNodes) = boundsFor(x)
+
             // (2) we merge the existing lower bound with the incoming type.
-            val newBound = mergeUpper(upper, tpe)
-            updateUpperBound(x, newBound)
+            val merged = mergeAndUpdateUpperBound(x, tpe)
 
             // (3) we check the existing upper bound for consistency with the lower bound
-            unifyValueTypes(lower, newBound)
+            unifyValueTypes(lower, merged)
 
             // (4) we propagate the incoming type to all lower nodes
-            lowerNodes foreach { node => requireUpperBound(node, tpe) }
+            lowerNodes foreach { node => mergeAndUpdateUpperBound(node, tpe) }
         }
+
+      // only updates one layer of connections, not recursively since we have
+      // the invariant that all transitive connections are established
+      def mergeAndUpdateLowerBound(x: UnificationVar, tpe: ValueType): ValueType =
+        assert (!tpe.isInstanceOf[UnificationVar])
+        val xBounds = boundsFor(x)
+        if (xBounds.lowerType == tpe || tpe == TBottom) return xBounds.lowerType;
+        val newBound = mergeLower(xBounds.lowerType, tpe)
+        updateLowerBound(x, newBound)
+        newBound
+
+      def mergeAndUpdateUpperBound(x: UnificationVar, tpe: ValueType): ValueType =
+        assert (!tpe.isInstanceOf[UnificationVar])
+        val xBounds = boundsFor(x)
+        if (xBounds.upperType == tpe || tpe == TTop) return xBounds.upperType;
+        val newBound = mergeUpper(boundsFor(x).upperType, tpe)
+        updateUpperBound(x, newBound)
+        newBound
+
+      def connectNodes(x: UnificationVar, y: UnificationVar)(using C: ErrorReporter): Unit =
+        val xBounds = boundsFor(x)
+        val yBounds = boundsFor(y)
+        if (xBounds.upperVariables contains y) return;
+        requireLowerBound(y, xBounds.lowerType) // TODO maybe this can be mergeAndUpdateLowerBound
+        requireUpperBound(x, yBounds.upperType)
+        connect(x, y)
 
 
       /**
@@ -303,16 +338,13 @@ object substitutions {
         (oldBound, newBound) match {
           case (t, s) if t == s => t
           case (TBottom, t) => t
+          case (t, TBottom) => t
 
           case (tpe1: UnificationVar, tpe2: UnificationVar) =>
             // two unification variables, we create a fresh merge node with two incoming edges.
             val mergeNode = fresh(UnificationVar.MergeVariable)
-            updateBounds(mergeNode, ValueTypeConstraints(Set(tpe1, tpe2), TBottom, TTop, Set.empty))
-            // propagate existing bounds into new node
-            val bounds1 = boundsFor(tpe1).lowerType
-            val bounds2 = boundsFor(tpe2).lowerType
-            requireLowerBound(mergeNode, bounds1)
-            requireLowerBound(mergeNode, bounds2)
+            connectNodes(tpe1, mergeNode)
+            connectNodes(tpe2, mergeNode)
             mergeNode
 
           // We can use one of them if it is more specific than the other.
@@ -329,7 +361,6 @@ object substitutions {
             ValueTypeApp(cons1, mergedArgs)
 
           case _ =>
-            println(s"merge of ${oldBound} and ${newBound} failed")
             C.abort(s"Cannot merge ${oldBound} with ${newBound} at positive polarity")
         }
 
@@ -340,16 +371,12 @@ object substitutions {
         (oldBound, newBound) match {
           case (t, s) if t == s => t
           case (TTop, t) => t
+          case (t, TTop) => t
 
           case (tpe1: UnificationVar, tpe2: UnificationVar) =>
-            // two unification variables, we create a fresh merge node with two incoming edges.
             val mergeNode = fresh(UnificationVar.MergeVariable)
-            updateBounds(mergeNode, ValueTypeConstraints(Set(tpe1, tpe2), TBottom, TTop, Set.empty))
-            // propagate existing bounds into new node
-            val bounds1 = boundsFor(tpe1).upperType
-            val bounds2 = boundsFor(tpe2).upperType
-            requireUpperBound(mergeNode, bounds1)
-            requireUpperBound(mergeNode, bounds2)
+            connectNodes(mergeNode, tpe1)
+            connectNodes(mergeNode, tpe2)
             mergeNode
 
           // We can use one of them if it is more specific than the other.
@@ -357,7 +384,6 @@ object substitutions {
           case (tpe1, tpe2) if isSubtype(tpe1, tpe2) => tpe1
 
           case _ =>
-            println(s"merge of ${oldBound} and ${newBound} failed")
             C.abort(s"Cannot merge ${oldBound} with ${newBound} at negative polarity")
         }
       }
