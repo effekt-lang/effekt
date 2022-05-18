@@ -52,75 +52,76 @@ object substitutions {
      *     as upper bound of ?S.
      */
     private case class ValueTypeConstraints(
-      lowerVariables: Set[UnificationVar],
+      lowerVariables: Set[Node],
       lowerType: ValueType,
       // equals: Set[UnificationVar],
       upperType: ValueType,
-      upperVariables: Set[UnificationVar]
+      upperVariables: Set[Node]
     )
 
-    private var valueConstraints: Map[UnificationVar, ValueTypeConstraints] = Map.empty
+    private class Node
+
+    private var valueConstraints: Map[Node, ValueTypeConstraints] = Map.empty
 
     // a map from a member in the equivalence class to the class' representative
-    private var equalValues: Map[UnificationVar, UnificationVar] = Map.empty
+    private var equalValues: Map[UnificationVar, Node] = Map.empty
 
-    private def getRepresentative(x: UnificationVar): UnificationVar =
-      equalValues.getOrElse(x, x)
+    private def getRepresentative(x: UnificationVar): Node =
+      equalValues.getOrElse(x, { val rep = new Node; equalValues += (x -> rep); rep })
 
     /**
      * Given a representative gives the list of all unification variables it is known to
      * be in the same equivalence class with.
      */
-    private def equalNodes(representative: UnificationVar) =
+    private def equalNodes(representative: Node): Set[UnificationVar] =
       val transposed = equalValues.groupMap { case (el, repr) => repr } { case (el, repr) => el }
-      representative :: transposed.getOrElse(representative, Nil).toList
+      transposed.getOrElse(representative, Nil).toSet
 
-    private def getBounds(x: UnificationVar): ValueTypeConstraints =
-      val rep = getRepresentative(x)
-      valueConstraints.getOrElse(rep, ValueTypeConstraints(Set.empty, TBottom, TTop, Set.empty))
+    private def getBounds(x: Node): ValueTypeConstraints =
+      valueConstraints.getOrElse(x, ValueTypeConstraints(Set.empty, TBottom, TTop, Set.empty))
 
-    private def setBounds(x: UnificationVar, bounds: ValueTypeConstraints): Unit =
-      val rep = getRepresentative(x)
-      valueConstraints = valueConstraints.updated(rep, bounds)
-
+    private def setBounds(x: Node, bounds: ValueTypeConstraints): Unit =
+      valueConstraints = valueConstraints.updated(x, bounds)
 
     def boundsFor(x: UnificationVar): (ValueType, ValueType) =
-      val bounds = getBounds(x)
+      val bounds = getBounds(getRepresentative(x))
       (bounds.lowerType, bounds.upperType)
 
     def lowerBound(x: UnificationVar): ValueType = boundsFor(x)._1
     def upperBound(x: UnificationVar): ValueType = boundsFor(x)._2
 
     def lowerBounds(x: UnificationVar): Set[UnificationVar] =
-      getBounds(x).lowerVariables map getRepresentative
+      getBounds(getRepresentative(x)).lowerVariables.flatMap { equalNodes }
 
     def upperBounds(x: UnificationVar): Set[UnificationVar] =
-      getBounds(x).upperVariables map getRepresentative
+      getBounds(getRepresentative(x)).upperVariables.flatMap { equalNodes }
 
     def updateLowerBound(x: UnificationVar, bound: ValueType): Unit = bound match {
       case y: UnificationVar => sys error s"Cannot set unification variable ${y} as a lower bound for ${x}"
       case _ =>
-        val bounds = getBounds(x)
-        setBounds(x, bounds.copy(lowerType = bound))
+        val rep = getRepresentative(x)
+        val bounds = getBounds(rep)
+        setBounds(rep, bounds.copy(lowerType = bound))
     }
 
     def updateUpperBound(x: UnificationVar, bound: ValueType): Unit = bound match {
       case y: UnificationVar => sys error s"Cannot set unification variable ${y} as a upper bound for ${x}"
       case _ =>
-        val bounds = getBounds(x)
-        setBounds(x, bounds.copy(upperType = bound))
+        val rep = getRepresentative(x)
+        val bounds = getBounds(rep)
+        setBounds(rep, bounds.copy(upperType = bound))
     }
 
     /**
      * Decides whether [[x]] is a subtype of [[y]] solely by inspecting the bounds
      */
     def isSubtypeOf(x: UnificationVar, y: UnificationVar): Boolean =
-      val bounds = getBounds(x)
+      val bounds = getBounds(getRepresentative(x))
       val yRepr = getRepresentative(y)
       bounds.upperVariables contains yRepr
 
     def isSupertypeOf(x: UnificationVar, y: UnificationVar): Boolean =
-      val bounds = getBounds(x)
+      val bounds = getBounds(getRepresentative(x))
       val yRepr = getRepresentative(y)
       bounds.lowerVariables contains yRepr
 
@@ -132,8 +133,8 @@ object substitutions {
       val repX = getRepresentative(x)
       val repY = getRepresentative(y)
 
-      val boundsX = getBounds(x)
-      val boundsY = getBounds(y)
+      val boundsX = getBounds(repX)
+      val boundsY = getBounds(repY)
 
       // Already connected
       if (boundsY.lowerVariables contains repX) {
@@ -142,7 +143,7 @@ object substitutions {
 
       // They will form a cycle
       else if (boundsY.upperVariables contains repX) {
-        setBounds(y, boundsY.copy(
+        setBounds(repY, boundsY.copy(
           lowerVariables = (boundsY.lowerVariables ++ boundsX.lowerVariables + repX) - repY
         ))
         replaceVariableByVariable(repX, repY)
@@ -158,21 +159,18 @@ object substitutions {
         ))
       }
 
-    private def replaceVariableByVariable(x: UnificationVar, y: UnificationVar): Unit =
-      val repX = getRepresentative(x)
-      val repY = getRepresentative(y)
-
+    private def replaceVariableByVariable(x: Node, y: Node): Unit =
       valueConstraints = valueConstraints.collect {
-        case (z, ValueTypeConstraints(loNodes, low, up, upNodes)) if z != repX =>
+        case (z, ValueTypeConstraints(loNodes, low, up, upNodes)) if z != x =>
           (z, ValueTypeConstraints(
-            if (loNodes.contains(repX)) loNodes - repX + repY - z else loNodes,
+            if (loNodes.contains(x)) loNodes - x + y - z else loNodes,
             low,
             up,
-            if (upNodes.contains(repX)) upNodes - repX + repY - z else upNodes
+            if (upNodes.contains(x)) upNodes - x + y - z else upNodes
           ))
       }
       // create mapping to representative
-      equalValues = equalValues.view.mapValues { v => if (v == repX) repY else v }.toMap + (repX -> repY)
+      equalValues = equalValues.view.mapValues { v => if (v == x) y else v }.toMap
 
 
 
@@ -184,14 +182,17 @@ object substitutions {
 
       println(s"┏$sep┯$sep━━━━━$varSep━━━━━$sep┯$sep┓")
 
+      def showNode(n: Node): String =
+        val equiv = equalNodes(n).toList
+        if (equiv.size == 1) equiv.head.toString else s"{${equiv.mkString(", ")}}"
+
       valueConstraints.foreach {
         case (x, ValueTypeConstraints(lowerVars, lower, upper, upperVars)) =>
-          val lowNodes = lowerVars.mkString(", ").padTo(colSize, ' ')
+          val lowNodes = lowerVars.map(showNode).mkString(", ").padTo(colSize, ' ')
           val lowType  = lower.toString.padTo(colSize, ' ')
-          val equiv = equalNodes(x)
-          val variable = (if (equiv.size == 1) x.toString else s"{${equiv.mkString(", ")}}").padTo(varSize, ' ')
+          val variable = showNode(x).padTo(varSize, ' ')
           val upType = upper.toString.padTo(colSize, ' ')
-          val upNodes = upperVars.mkString(", ")
+          val upNodes = upperVars.map(showNode).mkString(", ")
           println(s"$lowNodes │ $lowType <: $variable <: $upType │ $upNodes")
       }
       println(s"┗$sep┷$sep━━━━━$varSep━━━━━$sep┷$sep┛")
