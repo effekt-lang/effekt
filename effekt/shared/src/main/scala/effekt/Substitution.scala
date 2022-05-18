@@ -23,6 +23,21 @@ object substitutions {
     constraints: ConstraintGraph
   )
 
+  /**
+   * A graph of connected nodes, where each node can have multiple "upper"
+   * and multiple "lower" nodes. Each node carries a payload
+   *
+   *    (ValueType, ValueType)
+   *
+   * corresponding to the lower and upper type bounds of a unification variable.
+   * The graph itself establishes the following invariants:
+   *
+   * - Direct: all transitive (lower/higher) nodes are also immediate (lower/higher) nodes
+   * - Compact: all cycles (by directness) lead to cliques. Those are represented by a single node
+   *
+   * The graph implementation does NOT establish invariants about the payloads (type bounds).
+   * Those have to be established externally.
+   */
   class ConstraintGraph {
 
 
@@ -51,100 +66,93 @@ object substitutions {
      *     propagated as lower bound to ?T and the upper bound of ?T has been propagated
      *     as upper bound of ?S.
      */
-    private case class ValueTypeConstraints(
-      lowerVariables: Set[Node],
-      lowerType: ValueType,
-      // equals: Set[UnificationVar],
-      upperType: ValueType,
-      upperVariables: Set[Node]
-    )
+    private case class NodeData(lower: Set[Node], payload: (ValueType, ValueType), upper: Set[Node])
 
     private class Node
 
-    private var valueConstraints: Map[Node, ValueTypeConstraints] = Map.empty
+    private var valueConstraints: Map[Node, NodeData] = Map.empty
 
     // a map from a member in the equivalence class to the class' representative
-    private var equalValues: Map[UnificationVar, Node] = Map.empty
+    private var nodes: Map[UnificationVar, Node] = Map.empty
 
-    private def getRepresentative(x: UnificationVar): Node =
-      equalValues.getOrElse(x, { val rep = new Node; equalValues += (x -> rep); rep })
+    private def getNode(x: UnificationVar): Node =
+      nodes.getOrElse(x, { val rep = new Node; nodes += (x -> rep); rep })
 
     /**
      * Given a representative gives the list of all unification variables it is known to
      * be in the same equivalence class with.
      */
-    private def equalNodes(representative: Node): Set[UnificationVar] =
-      val transposed = equalValues.groupMap { case (el, repr) => repr } { case (el, repr) => el }
+    private def variablesFor(representative: Node): Set[UnificationVar] =
+      val transposed = nodes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
       transposed.getOrElse(representative, Nil).toSet
 
-    private def getBounds(x: Node): ValueTypeConstraints =
-      valueConstraints.getOrElse(x, ValueTypeConstraints(Set.empty, TBottom, TTop, Set.empty))
+    private def getBounds(x: Node): NodeData =
+      valueConstraints.getOrElse(x, NodeData(Set.empty, (TBottom, TTop), Set.empty))
 
-    private def setBounds(x: Node, bounds: ValueTypeConstraints): Unit =
+    private def setBounds(x: Node, bounds: NodeData): Unit =
       valueConstraints = valueConstraints.updated(x, bounds)
 
-    def boundsFor(x: UnificationVar): (ValueType, ValueType) =
-      val bounds = getBounds(getRepresentative(x))
-      (bounds.lowerType, bounds.upperType)
-
+    def boundsFor(x: UnificationVar): (ValueType, ValueType) = getBounds(getNode(x)).payload
     def lowerBound(x: UnificationVar): ValueType = boundsFor(x)._1
     def upperBound(x: UnificationVar): ValueType = boundsFor(x)._2
 
     def lowerBounds(x: UnificationVar): Set[UnificationVar] =
-      getBounds(getRepresentative(x)).lowerVariables.flatMap { equalNodes }
+      getBounds(getNode(x)).lower.flatMap { variablesFor }
 
     def upperBounds(x: UnificationVar): Set[UnificationVar] =
-      getBounds(getRepresentative(x)).upperVariables.flatMap { equalNodes }
+      getBounds(getNode(x)).upper.flatMap { variablesFor }
 
     def updateLowerBound(x: UnificationVar, bound: ValueType): Unit = bound match {
       case y: UnificationVar => sys error s"Cannot set unification variable ${y} as a lower bound for ${x}"
       case _ =>
-        val rep = getRepresentative(x)
+        val rep = getNode(x)
         val bounds = getBounds(rep)
-        setBounds(rep, bounds.copy(lowerType = bound))
+        val (low, up) = bounds.payload
+        setBounds(rep, bounds.copy(payload = (bound, up)))
     }
 
     def updateUpperBound(x: UnificationVar, bound: ValueType): Unit = bound match {
       case y: UnificationVar => sys error s"Cannot set unification variable ${y} as a upper bound for ${x}"
       case _ =>
-        val rep = getRepresentative(x)
+        val rep = getNode(x)
         val bounds = getBounds(rep)
-        setBounds(rep, bounds.copy(upperType = bound))
+        val (low, up) = bounds.payload
+        setBounds(rep, bounds.copy(payload = (low, bound)))
     }
 
     /**
      * Decides whether [[x]] is a subtype of [[y]] solely by inspecting the bounds
      */
     def isSubtypeOf(x: UnificationVar, y: UnificationVar): Boolean =
-      val bounds = getBounds(getRepresentative(x))
-      val yRepr = getRepresentative(y)
-      bounds.upperVariables contains yRepr
+      val bounds = getBounds(getNode(x))
+      val yRepr = getNode(y)
+      bounds.upper contains yRepr
 
     def isSupertypeOf(x: UnificationVar, y: UnificationVar): Boolean =
-      val bounds = getBounds(getRepresentative(x))
-      val yRepr = getRepresentative(y)
-      bounds.lowerVariables contains yRepr
+      val bounds = getBounds(getNode(x))
+      val yRepr = getNode(y)
+      bounds.lower contains yRepr
 
 
     /**
      * Adds x as a lower bound to y, and y as a lower bound to x.
      */
     def connect(x: UnificationVar, y: UnificationVar): Unit =
-      val repX = getRepresentative(x)
-      val repY = getRepresentative(y)
+      val repX = getNode(x)
+      val repY = getNode(y)
 
       val boundsX = getBounds(repX)
       val boundsY = getBounds(repY)
 
       // Already connected
-      if (boundsY.lowerVariables contains repX) {
+      if (boundsY.lower contains repX) {
         return ()
       }
 
       // They will form a cycle
-      else if (boundsY.upperVariables contains repX) {
+      else if (boundsY.upper contains repX) {
         setBounds(repY, boundsY.copy(
-          lowerVariables = (boundsY.lowerVariables ++ boundsX.lowerVariables + repX) - repY
+          lower = (boundsY.lower ++ boundsX.lower + repX) - repY
         ))
         replaceVariableByVariable(repX, repY)
         return;
@@ -152,25 +160,24 @@ object substitutions {
 
       else {
         setBounds(repX, boundsX.copy(
-          upperVariables = (boundsX.upperVariables ++ boundsY.upperVariables + repY) - repX
+          upper = (boundsX.upper ++ boundsY.upper + repY) - repX
         ))
         setBounds(repY, boundsY.copy(
-          lowerVariables = (boundsY.lowerVariables ++ boundsX.lowerVariables + repX) - repY
+          lower = (boundsY.lower ++ boundsX.lower + repX) - repY
         ))
       }
 
     private def replaceVariableByVariable(x: Node, y: Node): Unit =
       valueConstraints = valueConstraints.collect {
-        case (z, ValueTypeConstraints(loNodes, low, up, upNodes)) if z != x =>
-          (z, ValueTypeConstraints(
+        case (z, NodeData(loNodes, payload, upNodes)) if z != x =>
+          (z, NodeData(
             if (loNodes.contains(x)) loNodes - x + y - z else loNodes,
-            low,
-            up,
+            payload,
             if (upNodes.contains(x)) upNodes - x + y - z else upNodes
           ))
       }
       // create mapping to representative
-      equalValues = equalValues.view.mapValues { v => if (v == x) y else v }.toMap
+      nodes = nodes.view.mapValues { v => if (v == x) y else v }.toMap
 
 
 
@@ -183,11 +190,11 @@ object substitutions {
       println(s"┏$sep┯$sep━━━━━$varSep━━━━━$sep┯$sep┓")
 
       def showNode(n: Node): String =
-        val equiv = equalNodes(n).toList
+        val equiv = variablesFor(n).toList
         if (equiv.size == 1) equiv.head.toString else s"{${equiv.mkString(", ")}}"
 
       valueConstraints.foreach {
-        case (x, ValueTypeConstraints(lowerVars, lower, upper, upperVars)) =>
+        case (x, NodeData(lowerVars, (lower, upper), upperVars)) =>
           val lowNodes = lowerVars.map(showNode).mkString(", ").padTo(colSize, ' ')
           val lowType  = lower.toString.padTo(colSize, ' ')
           val variable = showNode(x).padTo(varSize, ' ')
@@ -196,7 +203,6 @@ object substitutions {
           println(s"$lowNodes │ $lowType <: $variable <: $upType │ $upNodes")
       }
       println(s"┗$sep┷$sep━━━━━$varSep━━━━━$sep┷$sep┛")
-
   }
 
   /**
