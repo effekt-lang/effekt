@@ -23,6 +23,38 @@ object substitutions {
     constraints: ConstraintGraph
   )
 
+
+  /**
+   * Represents a node in the constraint propagation graph
+   *
+   *                    ┏━━━━━━━━━━━━━━━━━━┓
+   *    --------------> ┃ {?MyVar, ?Other} ┃ -------------->
+   *     lower nodes    ┠─────────┬────────┨   upper nodes
+   *    --------------> ┃  Lower  │  Upper ┃ -------------->
+   *                    ┗━━━━━━━━━┷━━━━━━━━┛
+   *
+   * The arrows in the picture above indicate the suptyping relationship.
+   * They are in fact navigatable in both directions, since new _upper_ bounds
+   * need to flow through the node from right-to-left.
+   *
+   * Every node represents potentially a set of unification variables that
+   * are assumed to be equal. Type equality constraints, invariant positions
+   * and mutually recursive unification variables lead to these sets having
+   * more than one member.
+   *
+   * We have the following invariants:
+   * - Direct: all transitive lower nodes are also immediate lower nodes
+   * - Intra-Consistency: Lower is always consistent to Upper
+   * - Inter-Consistency: if two nodes ?S <: ?T, then the lower bound of ?S has been
+   *     propagated as lower bound to ?T and the upper bound of ?T has been propagated
+   *     as upper bound of ?S.
+   */
+  private[substitutions]
+  case class NodeData(lower: Set[Node], payload: (ValueType, ValueType), upper: Set[Node])
+
+  private[substitutions]
+  class Node
+
   /**
    * A graph of connected nodes, where each node can have multiple "upper"
    * and multiple "lower" nodes. Each node carries a payload
@@ -38,42 +70,12 @@ object substitutions {
    * The graph implementation does NOT establish invariants about the payloads (type bounds).
    * Those have to be established externally.
    */
-  class ConstraintGraph {
-
-
-    /**
-     * Represents a node in the constraint propagation graph
-     *
-     *                    ┏━━━━━━━━━━━━━━━━━━┓
-     *    --------------> ┃ {?MyVar, ?Other} ┃ -------------->
-     *     lower nodes    ┠─────────┬────────┨   upper nodes
-     *    --------------> ┃  Lower  │  Upper ┃ -------------->
-     *                    ┗━━━━━━━━━┷━━━━━━━━┛
-     *
-     * The arrows in the picture above indicate the suptyping relationship.
-     * They are in fact navigatable in both directions, since new _upper_ bounds
-     * need to flow through the node from right-to-left.
-     *
-     * Every node represents potentially a set of unification variables that
-     * are assumed to be equal. Type equality constraints, invariant positions
-     * and mutually recursive unification variables lead to these sets having
-     * more than one member.
-     *
-     * We have the following invariants:
-     * - Direct: all transitive lower nodes are also immediate lower nodes
-     * - Intra-Consistency: Lower is always consistent to Upper
-     * - Inter-Consistency: if two nodes ?S <: ?T, then the lower bound of ?S has been
-     *     propagated as lower bound to ?T and the upper bound of ?T has been propagated
-     *     as upper bound of ?S.
-     */
-    private case class NodeData(lower: Set[Node], payload: (ValueType, ValueType), upper: Set[Node])
-
-    private class Node
-
-    private var valueConstraints: Map[Node, NodeData] = Map.empty
-
+  class ConstraintGraph(
     // a map from a member in the equivalence class to the class' representative
-    private var nodes: Map[UnificationVar, Node] = Map.empty
+    private var nodes: Map[UnificationVar, Node] = Map.empty,
+    // bounds and payload for each node
+    private var valueConstraints: Map[Node, NodeData] = Map.empty
+  ) {
 
     private def getNode(x: UnificationVar): Node =
       nodes.getOrElse(x, { val rep = new Node; nodes += (x -> rep); rep })
@@ -133,6 +135,8 @@ object substitutions {
       val yRepr = getNode(y)
       bounds.lower contains yRepr
 
+    def isEqual(x: UnificationVar, y: UnificationVar): Boolean =
+      getNode(x) == getNode(y)
 
     /**
      * Adds x as a lower bound to y, and y as a lower bound to x.
@@ -154,7 +158,7 @@ object substitutions {
         setBounds(repY, boundsY.copy(
           lower = (boundsY.lower ++ boundsX.lower + repX) - repY
         ))
-        replaceVariableByVariable(repX, repY)
+        replaceNode(repX, repY)
         return;
       }
 
@@ -167,19 +171,20 @@ object substitutions {
         ))
       }
 
-    private def replaceVariableByVariable(x: Node, y: Node): Unit =
+    private def replaceNode(old: Node, by: Node): Unit =
       valueConstraints = valueConstraints.collect {
-        case (z, NodeData(loNodes, payload, upNodes)) if z != x =>
-          (z, NodeData(
-            if (loNodes.contains(x)) loNodes - x + y - z else loNodes,
+        case (node, NodeData(low, payload, high)) if node != old =>
+          (node, NodeData(
+            if (low.contains(old)) ((low - old) + by) - node else low,
             payload,
-            if (upNodes.contains(x)) upNodes - x + y - z else upNodes
+            if (high.contains(old)) ((high - old) + by) - node else high
           ))
       }
       // create mapping to representative
-      nodes = nodes.view.mapValues { v => if (v == x) y else v }.toMap
+      nodes = nodes.view.mapValues { node => if (node == old) by else node }.toMap
 
-
+    override def clone(): ConstraintGraph =
+      new ConstraintGraph(nodes, valueConstraints)
 
     def dumpConstraints() =
       val colSize = 12
@@ -236,7 +241,7 @@ object substitutions {
 
     def dumpConstraints() = constraints.dumpConstraints()
 
-    def backup(): UnificationState = UnificationState(skolems, constraints)
+    def backup(): UnificationState = UnificationState(skolems, constraints.clone())
     def restore(state: UnificationState): Unit =
       skolems = state.skolems
       constraints = state.constraints
