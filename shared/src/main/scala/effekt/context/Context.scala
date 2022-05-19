@@ -71,8 +71,7 @@ abstract class Context(val positions: Positions)
     buffer.clear()
     _config = cfg
 
-    val llvm_version = sys.env("EFFEKT_LLVM_VERSION")
-    LLVM_VERSION = if (llvm_version != "") llvm_version else DEFAULT_LLVM_VERSION
+    LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse(DEFAULT_LLVM_VERSION)
   }
 
   def using[T](module: Module = module, focus: Tree = focus)(block: => T): T = this in {
