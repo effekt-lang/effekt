@@ -101,7 +101,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
     case DefScn(functionName, env) =>
       // TODO make loadEnv work on sp directly and don't allocate spp
       "define fastcc %Sp" <+> scanningName(functionName) <> argumentList(List("%Sp noalias %sp")) <+> llvmBlock(
-        "hallo"
+        "ret %Sp null" // TODO do properly (this leaks, segfaults and crashes)
       )
     case Include(content) =>
       string(content)
