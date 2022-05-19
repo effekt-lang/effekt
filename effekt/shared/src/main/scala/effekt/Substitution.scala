@@ -25,7 +25,6 @@ object substitutions {
     constraints: ConstraintGraph
   )
 
-
   /**
    * Represents a node in the constraint propagation graph
    *
@@ -128,14 +127,13 @@ object substitutions {
      * Decides whether [[x]] is a subtype of [[y]] solely by inspecting the bounds
      */
     def isSubtypeOf(x: UnificationVar, y: UnificationVar): Boolean =
-      val bounds = getBounds(getNode(x))
+      val xRepr = getNode(x)
       val yRepr = getNode(y)
-      bounds.upper contains yRepr
+      val bounds = getBounds(xRepr)
+      (bounds.upper contains yRepr) || xRepr == yRepr
 
     def isSupertypeOf(x: UnificationVar, y: UnificationVar): Boolean =
-      val bounds = getBounds(getNode(x))
-      val yRepr = getNode(y)
-      bounds.lower contains yRepr
+      isSubtypeOf(y, x)
 
     def isEqual(x: UnificationVar, y: UnificationVar): Boolean =
       getNode(x) == getNode(y)
