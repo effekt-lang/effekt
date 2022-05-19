@@ -10,8 +10,10 @@ object substitutions {
 
   private var scopeId: Int = 0
 
-
-  case class CaptureConstraints(lower: Set[Capture], upper: Set[Capture])
+  sealed trait Polarity { def flip: Polarity }
+  case object Covariant extends Polarity { def flip = Contravariant}
+  case object Contravariant extends Polarity { def flip = Covariant }
+  case object Invariant extends Polarity { def flip = Invariant }
 
   /**
    * The state of the unification scope, used for backtracking on overload resolution
@@ -252,6 +254,9 @@ object substitutions {
      * TODO generalize substitution to bi-substitution and also generalize this method:
      */
     def replaceVariableByType(x: UnificationVar, tpe: ValueType)(using ErrorReporter): Unit = ()
+
+
+    def coalesceType(tpe: ValueType): ValueType = ???
 //
 //      val ValueTypeConstraints(lowerNodes, lower, upper, upperNodes) = boundsFor(x)
 //      // substitute [[tpe]] for [[x]] in all types and
@@ -478,11 +483,6 @@ object substitutions {
         requireUpperBound(x, constraints.upperBound(y))
         constraints.connect(x, y)
 
-      sealed trait Polarity { def flip: Polarity }
-      case object Covariant extends Polarity { def flip = Contravariant}
-      case object Contravariant extends Polarity { def flip = Covariant }
-      case object Invariant extends Polarity { def flip = Invariant }
-
       def merge(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType =
         (oldBound, newBound, polarity) match {
           case (t, s, _) if t == s => t
@@ -580,7 +580,9 @@ object substitutions {
 
     // amounts to first substituting this, then other
     def updateWith(other: Substitutions): Substitutions =
-      Substitutions(values.view.mapValues { t => other.substitute(t) }.toMap, captures.view.mapValues { t => other.substitute(t) }.toMap) ++ other
+      Substitutions(
+        values.view.mapValues { t => other.substitute(t) }.toMap,
+        captures.view.mapValues { t => other.substitute(t) }.toMap) ++ other
 
     // amounts to parallel substitution
     def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)
@@ -634,6 +636,103 @@ object substitutions {
           cps,
           vps map substWithout.substitute,
           bps map substWithout.substitute,
+          substWithout.substitute(ret),
+          substWithout.substitute(eff))
+    }
+  }
+
+  case class BiSubstitutions(
+    values: Map[TypeVar, (ValueType, ValueType)],
+    captures: Map[Capture, (CaptureSet, CaptureSet)]
+  ) {
+
+    def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
+    def isDefinedAt(c: Capture) = captures.isDefinedAt(c)
+
+    def get(t: TypeVar)(using p: Polarity): Option[ValueType] = (values.get(t), p) match {
+      case (Some((lower, upper)), Covariant) => Some(lower)
+      case (Some((lower, upper)), Contravariant) => Some(upper)
+      // here we assume that both bounds are equal (has to be checked before adding to the substitution)
+      // hence we can use an arbitrary bounds
+      case (Some((lower, upper)), Invariant) => Some(lower)
+      case (None, _) => None
+    }
+    def get(c: Capture)(using p: Polarity): Option[CaptureSet] = (captures.get(c), p) match {
+      case (Some((lower, upper)), Covariant) => Some(lower)
+      case (Some((lower, upper)), Contravariant) => Some(upper)
+      // here we assume that both bounds are equal (has to be checked before adding to the substitution)
+      // hence we can use an arbitrary bounds
+      case (Some((lower, upper)), Invariant) => Some(lower)
+      case (None, _) => None
+    }
+
+    // amounts to first substituting this, then other
+    def updateWith(other: BiSubstitutions): BiSubstitutions =
+      BiSubstitutions(
+        values.view.mapValues { case (lower, upper) =>
+          (other.substitute(lower)(using Covariant), other.substitute(upper)(using Contravariant))
+        }.toMap,
+        captures.view.mapValues { case (lower, upper) =>
+          (other.substitute(lower)(using Covariant), other.substitute(upper)(using Contravariant))
+        }.toMap
+      ) ++ other
+
+    // amounts to parallel substitution
+    def ++(other: BiSubstitutions): BiSubstitutions = BiSubstitutions(values ++ other.values, captures ++ other.captures)
+
+    // shadowing
+    private def without(tps: List[TypeVar], cps: List[Capture]): BiSubstitutions =
+      BiSubstitutions(
+        values.filterNot { case (t, _) => tps.contains(t) },
+        captures.filterNot { case (t, _) => cps.contains(t) }
+      )
+
+    // TODO we DO need to distinguish between substituting unification variables for unification variables
+    // and substituting concrete captures in unification variables... These are two fundamentally different operations.
+    def substitute(c: CaptureSet)(using Polarity): CaptureSet = ???
+    //    c.flatMap {
+    //      // we are probably instantiating a function type
+    //      case x: CaptureUnificationVar if captures.keys.exists(c => c.concrete) =>
+    //        throw SubstitutionException(x, captures)
+    //      case c => captures.getOrElse(c, CaptureSet(c))
+    //    }
+
+    def substitute(t: ValueType)(using Polarity): ValueType = t match {
+      case x: TypeVar =>
+        get(x).getOrElse(x)
+      case ValueTypeApp(t, args) =>
+        // TODO What about aliases and their variance?
+        //   should we dealias first?
+        //   Right now we treat it as covariant, which is not correct.
+        ValueTypeApp(t, args.map { substitute })
+      case BoxedType(tpe, capt) =>
+        BoxedType(substitute(tpe), substitute(capt))
+      case other => other
+    }
+
+    // TODO implement
+    def substitute(t: Effects)(using Polarity): Effects = t
+    def substitute(t: Effect)(using Polarity): Effect = t
+
+    def substitute(t: BlockType)(using Polarity): BlockType = t match {
+      case e: InterfaceType => substitute(e)
+      case b: FunctionType  => substitute(b)
+    }
+
+    def substitute(t: InterfaceType)(using Polarity): InterfaceType = t match {
+      case b: Interface           => b
+      case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
+    }
+
+    def substitute(t: FunctionType)(using p: Polarity): FunctionType = t match {
+      case FunctionType(tps, cps, vps, bps, ret, eff) =>
+        // do not substitute with types parameters bound by this function!
+        val substWithout = without(tps, cps)
+        FunctionType(
+          tps,
+          cps,
+          vps.map { param => substWithout.substitute(param)(using p.flip) },
+          bps.map { param => substWithout.substitute(param)(using p.flip) },
           substWithout.substitute(ret),
           substWithout.substitute(eff))
     }
