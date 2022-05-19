@@ -286,7 +286,7 @@ const $runtime = (function() {
     return c().then(b => b ? body().then(() => _while(c, body)) : pure($effekt.unit))
   }
 
-  function handle(handlers, onUnwind = None, onRewind = None, onReturn = None) {
+  function handle(handlers, onUnwind = null, onRewind = null, onReturn = null) {
     const p = _prompt++;
 
     // modify all implementations in the handlers to capture the continuation at prompt p
