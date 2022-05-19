@@ -50,6 +50,7 @@ class LLVM extends Generator {
     if (true) {
       // `result : Option[Document]` is returned by `run`
       // `C` is an implicit Context passed to `run`
+      // `path` is `LLVM.path` (conceptually static)
 
       /* This is used for both: writing the files to and generating the `require` statements. */
       //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
