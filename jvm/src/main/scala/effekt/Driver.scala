@@ -69,10 +69,8 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     implicit val C = context
     C.setup(config)
 
-    val docQ = C.generate(src)
-    C.UGLY_LLVM_BYPASS_result = docQ
     for {
-      doc <- docQ
+      doc <- C.generate(src)
       if config.interpret()
       mod <- C.frontend(src)
     } eval(mod)
@@ -121,7 +119,7 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   def evalLLVM(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
       C.checkMain(mod)
-      val result: Document = C.UGLY_LLVM_BYPASS_result.get // TODO this is ugly and may fail
+      val result: Document = C.generate(mod.source).get // TODO this might be `None`
 
       val xPath = (suffix: String) => (m: Module) => C.codeGenerator.path(m) + suffix
       val llvmPath = xPath(".ll")

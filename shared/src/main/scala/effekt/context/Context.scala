@@ -52,9 +52,9 @@ abstract class Context(val positions: Positions)
   // bring the context itself in scope
   implicit val context: Context = this
 
+  // TODO move to global config
   val DEFAULT_LLVM_VERSION: String = "12"
   var LLVM_VERSION: String = DEFAULT_LLVM_VERSION
-  var UGLY_LLVM_BYPASS_result: Option[Document] = None
 
   // the currently processed module
   var module: Module = _
