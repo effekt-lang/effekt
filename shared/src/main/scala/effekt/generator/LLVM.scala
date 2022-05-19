@@ -44,16 +44,12 @@ class LLVM extends Generator {
       val machineMods = coreMods.map(m => machiner.transform(m)(machiner.TransformerContext(C)))
       machineMods.flatMap(m => LLVMTransformer.transform(m)(LLVMTransformer.LLVMTransformerContext(mod, C)))
     }
-    val result = LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext())
 
-    return Some(result)
+    return Some(LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext()))
   }
 }
 
 object LLVMPrinter extends ParenPrettyPrinter {
-
-  import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
-
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): Document =
     pretty(
       vsep(defs.map(toDoc), line) <@@@>
