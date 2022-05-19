@@ -120,46 +120,30 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
 
   def evalLLVM(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
     try {
-      val _ = C.checkMain(mod)
+      C.checkMain(mod)
+      val result: Document = C.UGLY_LLVM_BYPASS_result.get // TODO this is ugly and may fail
+
+      val xPath = (suffix: String) => (m: Module) => C.codeGenerator.path(m) + suffix
+      val llvmPath = xPath(".ll")
+      val optPath = xPath("_opt.ll")
+      val objPath = xPath(".o")
+
+      C.saveOutput(result.layout, llvmPath(mod))
+      val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
+      C.config.output().emit(optCommand.!!)
+
+      val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
+      C.config.output().emit(llcCommand.!!)
+
+      val gccMainFile = (C.config.libPath / "main.c").unixPath
       val executableFile = C.codeGenerator.path(mod)
+      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath(mod)))
+      C.config.output().emit(gccCommand.!!)
+
       val command = Process(Seq(executableFile))
-
-      // XXX move this code block
-      if (true) {
-        val result: Document = C.UGLY_LLVM_BYPASS_result.get
-        val path = (m: Module) => C.codeGenerator.path(m)
-        // ??? val result = C.codeGenerator.run
-
-        // `result : Option[Document]` is returned by `run`
-        // `C` is an implicit Context passed to `run`
-        // `path` is `LLVM.path` (conceptually static)
-
-        /* This is used for both: writing the files to and generating the `require` statements. */
-        //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
-        val specialPather = (suffix: String) => (m: Module) => path(m) + suffix
-        val llvmPath = specialPather(".ll")
-        val optPath = specialPather("_opt.ll")
-        val objPath = specialPather(".o")
-
-        C.saveOutput(result.layout, llvmPath(mod))
-
-        val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
-        C.config.output().emit(optCommand.!!)
-
-        val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
-        C.config.output().emit(llcCommand.!!)
-
-        val mainFile = (C.config.libPath / "main.c").unixPath
-        val executableFile = path(mod)
-        val gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objPath(mod)))
-
-        C.config.output().emit(gccCommand.!!)
-      }
-
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.error(e)
+      case FatalPhaseError(e) => C.error(e)
     }
   }
 
