@@ -11,6 +11,8 @@ import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Positions
 
+import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+
 /**
  * Phases like Typer can add operations to the context by extending this trait
  *
@@ -52,6 +54,7 @@ abstract class Context(val positions: Positions)
 
   val DEFAULT_LLVM_VERSION: String = "12"
   var LLVM_VERSION: String = DEFAULT_LLVM_VERSION
+  var UGLY_LLVM_BYPASS_result: Option[Document] = None
 
   // the currently processed module
   var module: Module = _

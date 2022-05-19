@@ -14,6 +14,7 @@ import kiama.util.{ Client, CompilerWithConfig, IO, Services, Source }
 import java.io.{ InputStream, OutputStream }
 
 import effekt.util.messages.FatalPhaseError
+import effekt.util.paths._
 import org.eclipse.lsp4j.jsonrpc.Launcher
 
 import scala.concurrent.ExecutionException
@@ -68,8 +69,10 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
     implicit val C = context
     C.setup(config)
 
+    val docQ = C.generate(src)
+    C.UGLY_LLVM_BYPASS_result = docQ
     for {
-      doc <- C.generate(src)
+      doc <- docQ
       if config.interpret()
       mod <- C.frontend(src)
     } eval(mod)
@@ -120,6 +123,39 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
       val _ = C.checkMain(mod)
       val executableFile = C.codeGenerator.path(mod)
       val command = Process(Seq(executableFile))
+
+      // XXX move this code block
+      if (true) {
+        val result: Document = C.UGLY_LLVM_BYPASS_result.get
+        val path = (m: Module) => C.codeGenerator.path(m)
+        // ??? val result = C.codeGenerator.run
+
+        // `result : Option[Document]` is returned by `run`
+        // `C` is an implicit Context passed to `run`
+        // `path` is `LLVM.path` (conceptually static)
+
+        /* This is used for both: writing the files to and generating the `require` statements. */
+        //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
+        val specialPather = (suffix: String) => (m: Module) => path(m) + suffix
+        val llvmPath = specialPather(".ll")
+        val optPath = specialPather("_opt.ll")
+        val objPath = specialPather(".o")
+
+        C.saveOutput(result.layout, llvmPath(mod))
+
+        val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
+        C.config.output().emit(optCommand.!!)
+
+        val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
+        C.config.output().emit(llcCommand.!!)
+
+        val mainFile = (C.config.libPath / "main.c").unixPath
+        val executableFile = path(mod)
+        val gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objPath(mod)))
+
+        C.config.output().emit(gccCommand.!!)
+      }
+
       C.config.output().emit(command.!!)
     } catch {
       case FatalPhaseError(e) =>

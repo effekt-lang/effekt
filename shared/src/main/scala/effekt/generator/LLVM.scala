@@ -46,34 +46,6 @@ class LLVM extends Generator {
     }
     val result = LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext())
 
-    // XXX move this code block
-    if (true) {
-      // `result : Option[Document]` is returned by `run`
-      // `C` is an implicit Context passed to `run`
-      // `path` is `LLVM.path` (conceptually static)
-
-      /* This is used for both: writing the files to and generating the `require` statements. */
-      //path = ((m: Module) => (C.config.outputPath() / m.path.replace('/', '_')).unixPath): (Module => String)
-      val specialPather = (suffix: String) => (m: Module) => path(m) + suffix
-      val llvmPath = specialPather(".ll")
-      val optPath = specialPather("_opt.ll")
-      val objPath = specialPather(".o")
-
-      C.saveOutput(result.layout, llvmPath(mod))
-
-      val optCommand = Process(Seq(s"opt-${C.LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
-      C.config.output().emit(optCommand.!!)
-
-      val llcCommand = Process(Seq(s"llc-${C.LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
-      C.config.output().emit(llcCommand.!!)
-
-      val mainFile = (C.config.libPath / "main.c").unixPath
-      val executableFile = path(mod)
-      val gccCommand = Process(Seq("gcc", mainFile, "-o", executableFile, objPath(mod)))
-
-      C.config.output().emit(gccCommand.!!)
-    }
-
     return Some(result)
   }
 }
