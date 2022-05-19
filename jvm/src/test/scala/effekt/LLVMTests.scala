@@ -8,12 +8,13 @@ import org.scalatest.funspec.AnyFunSpec
 import scala.language.implicitConversions
 
 class LLVMTests extends AnyFunSpec {
-  val root = new File("examples-llvm")
+  val root = new File("tests-llvm")
   go(root)
 
   def go(dir: File): Unit = describe(dir.getName) {
     dir.listFiles.foreach {
-      case d if d.isDirectory => go(d)
+      case h if h.getName.startsWith(".") => ()
+      case d if d.isDirectory             => go(d)
       case e if e.getName.endsWith(".effekt") =>
         val dirname = e.getParentFile // TODO ugly
         val c = dirname / (e.getName.stripSuffix(".effekt") + ".check")
