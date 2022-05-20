@@ -5,11 +5,10 @@ import effekt.machine
 import effekt.llvm._
 import effekt.symbols.Module
 import effekt.symbols.{ BlockSymbol, Name, Symbol, ValueSymbol }
-import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-import org.bitbucket.inkytonik.kiama.util.Counter
+import kiama.util.Counter
 import effekt.context.assertions._
 import effekt.machine.{ Evidence, PrimBoolean, PrimInt, PrimUnit, Stack, Variant }
 import effekt.util.GenericPrinter

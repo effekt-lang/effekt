@@ -1,6 +1,5 @@
 package effekt.util
 
-import org.bitbucket.inkytonik.kiama
 import kiama.output.ParenPrettyPrinter
 
 object GenericPrinter extends ParenPrettyPrinter {

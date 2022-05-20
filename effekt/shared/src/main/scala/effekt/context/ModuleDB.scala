@@ -2,7 +2,7 @@ package effekt
 package context
 
 import effekt.symbols.Module
-// TODO-LLVM import effekt.symbols.BlockSymbol
+import effekt.symbols.BlockSymbol
 import kiama.util.Source
 
 /**

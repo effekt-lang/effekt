@@ -11,7 +11,7 @@ import effekt.symbols.Module
 import kiama.util.Messaging.Messages
 import kiama.util.Positions
 
-import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+import kiama.output.PrettyPrinterTypes.Document
 
 /**
  * Phases like Typer can add operations to the context by extending this trait
