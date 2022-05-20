@@ -11,6 +11,8 @@ import effekt.symbols.Module
 import org.bitbucket.inkytonik.kiama.util.Messaging.Messages
 import org.bitbucket.inkytonik.kiama.util.Positions
 
+import org.bitbucket.inkytonik.kiama.output.PrettyPrinterTypes.Document
+
 /**
  * Phases like Typer can add operations to the context by extending this trait
  *
@@ -100,5 +102,4 @@ abstract class Context(val positions: Positions)
     _buffer = bufferBefore
     (msgs, res)
   }
-
 }

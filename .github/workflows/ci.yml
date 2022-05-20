@@ -13,7 +13,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Checkout Kiama fork for ScalaJS
+    - name: Checkout Kiama fork for ScalaJS ((no longer necessary on main))
       uses: actions/checkout@v2
       with:
         repository: b-studios/kiama
@@ -25,20 +25,9 @@ jobs:
       with:
         java-version: 1.8
 
-    - name: Install Chez Scheme
-      run: sudo apt-get install chezscheme
-
-    - name: Set up NodeJS
-      uses: actions/setup-node@v1
-      with:
-        node-version: '10.x'
-
     - name: Install Kiama fork
       run: sbt publishLocal
       working-directory: kiama
 
     - name: Run tests
-      run: sbt clean test
-
-    - name: Assemble fully optimized js file
-      run: sbt effektJS/fullOptJS
+      run: sbt 'project effektJVM' clean 'testOnly effekt.LLVMTests'

@@ -53,12 +53,12 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
    */
   def findStdLib: util.paths.File = {
 
-    // 1) in config?
+    // 1) in config
     stdlibPath.foreach { path =>
       return path
     }
 
-    // 2) in PATH
+    // 2) in environment
     if (System.getenv.containsKey("EFFEKT_LIB")) {
       return System.getenv("EFFEKT_LIB")
     }
@@ -75,16 +75,14 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
       file(getClass.getProtectionDomain.getCodeSource.getLocation.toURI).parent
     } catch {
       case e: Throwable =>
-        sys.error("Cannot find path to standard library")
+        sys.error("cannot find path to standard library: jarPath")
     }
-
-    val libFolder = if (generator().equals("llvm")) { "llvm" } else { "lib" }
-
+    val libFolder = if (generator() == "llvm") "llvm" else "lib"
     if ((jarPath / ".." / libFolder / "effekt.effekt").exists) {
       return jarPath / ".." / libFolder
     }
 
-    sys.error("Cannot find path to standard library")
+    sys.error("cannot find path to standard library")
   }
 
   lazy val libPath: File = findStdLib.toFile
@@ -99,6 +97,6 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   validateFilesIsDirectory(includePath)
 
-  // force some other configs manually to intialize them when compiling with native-image
+  // force some other configs manually to initialize them when compiling with native-image
   server; output; filenames
 }

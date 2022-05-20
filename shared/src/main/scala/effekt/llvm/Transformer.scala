@@ -35,15 +35,17 @@ object LLVMTransformer {
         val (localDefs, entry) = blockFloat(linearBody);
 
         val frameDefs = {
-          findFrameDefs(normalBody).map {
+          findFrameDefs(normalBody).flatMap {
             case (blockName, arity) =>
 
               val basicBlocks = reachableBasicBlocks(blockName, localDefs);
               val phiInstructionsMap = findPhiInstructions(basicBlocks);
 
-              val params = localDefs(blockName).params;
+              val liftedParams = localDefs(blockName).params;
+              val params = liftedParams.take(arity);
+              val env = liftedParams.drop(arity);
 
-              DefFrm(blockName, params.take(arity), params.drop(arity), blockName, basicBlocks.toList.map {
+              List(DefFrm(blockName, params, env, blockName, basicBlocks.toList.map {
                 case (blockName, machine.BlockLit(_, blockBody)) =>
                   val (instructions, terminator) = transform(blockBody, localDefs.keySet);
                   BasicBlock(
@@ -51,20 +53,22 @@ object LLVMTransformer {
                     phiInstructionsMap(blockName) ++ instructions,
                     terminator
                   )
-              })
+              }), DefScn(blockName, env))
           }
         };
 
         val closureDefs = {
-          findClosureDefs(normalBody).map {
+          findClosureDefs(normalBody).flatMap {
             case (blockName, arity) =>
 
               val basicBlocks = reachableBasicBlocks(blockName, localDefs);
               val phiInstructionsMap = findPhiInstructions(basicBlocks);
 
-              val params = localDefs(blockName).params;
+              val liftedParams = localDefs(blockName).params;
+              val params = liftedParams.take(arity);
+              val env = liftedParams.drop(arity);
 
-              DefClo(blockName, params.take(arity), params.drop(arity), blockName, basicBlocks.toList.map {
+              List(DefClo(blockName, params, env, blockName, basicBlocks.toList.map {
                 case (blockName, machine.BlockLit(_, blockBody)) =>
                   val (instructions, terminator) = transform(blockBody, localDefs.keySet);
                   BasicBlock(
@@ -72,7 +76,7 @@ object LLVMTransformer {
                     phiInstructionsMap(blockName) ++ instructions,
                     terminator
                   )
-              })
+              }), DefScn(blockName, env))
           }
         };
 

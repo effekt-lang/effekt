@@ -14,6 +14,7 @@ import kiama.util.{ Client, CompilerWithConfig, IO, Services, Source }
 import java.io.{ InputStream, OutputStream }
 
 import effekt.util.messages.FatalPhaseError
+import effekt.util.paths._
 import org.eclipse.lsp4j.jsonrpc.Launcher
 
 import scala.concurrent.ExecutionException
@@ -116,14 +117,33 @@ trait Driver extends CompilerWithConfig[Tree, ModuleDecl, EffektConfig] { outer 
   }
 
   def evalLLVM(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+    val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
+
     try {
-      val _ = C.checkMain(mod)
+      C.checkMain(mod)
+      val result: Document = C.generate(mod.source).get // TODO this might be `None`
+
+      val xPath = (suffix: String) => (m: Module) => C.codeGenerator.path(m) + suffix
+      val llvmPath = xPath(".ll")
+      val optPath = xPath("_opt.ll")
+      val objPath = xPath(".o")
+
+      C.saveOutput(result.layout, llvmPath(mod))
+      val optCommand = Process(Seq(s"opt-${LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
+      C.config.output().emit(optCommand.!!)
+
+      val llcCommand = Process(Seq(s"llc-${LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
+      C.config.output().emit(llcCommand.!!)
+
+      val gccMainFile = (C.config.libPath / "main.c").unixPath
       val executableFile = C.codeGenerator.path(mod)
+      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath(mod)))
+      C.config.output().emit(gccCommand.!!)
+
       val command = Process(Seq(executableFile))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.error(e)
+      case FatalPhaseError(e) => C.error(e)
     }
   }
 
