@@ -68,6 +68,9 @@ class ConstraintGraph(
     val transposed = nodes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
     transposed.getOrElse(representative, Nil).toSet
 
+  private def representativeFor(n: Node): UnificationVar =
+    variablesFor(n).toList.head
+
   private def getBounds(x: Node): NodeData =
     valueConstraints.getOrElse(x, NodeData(Set.empty, (TBottom, TTop), Set.empty))
 
@@ -123,7 +126,7 @@ class ConstraintGraph(
    * If the variable was part of an equivalence class, the remaining variables will be returned as [[Left]].
    * If the variable was the last one in an equivalence class, the node data will be returned as [[Right]].
    */
-  def remove(toDelete: Set[UnificationVar]) = //: Either[Set[UnificationVar], (Set[UnificationVar], ValueType, ValueType, Set[UnificationVar])] =
+  def remove(toDelete: Set[UnificationVar]): List[(Set[UnificationVar], Either[UnificationVar, (Set[UnificationVar], (ValueType, ValueType), Set[UnificationVar])])] =
     val varToNode = toDelete.map(v => v -> getNode(v)).toMap
 
     // the nodes to be removed, potentially
@@ -135,14 +138,14 @@ class ConstraintGraph(
       val affected = elements intersect toDelete
       val shouldBeDeleted = remaining.isEmpty
       if (shouldBeDeleted) {
-        println(s"We need to remove the node for ${elements}")
-        val (vars, bounds @ NodeData(low, data, up)) = deleteNode(node)
+        val (vars, NodeData(low, data, up)) = deleteNode(node)
         assert(vars == affected)
 
-        // TODO what is the information we need to adjust the concrete type bounds?
-        vars -> Right(bounds)
+        // we choose one representative for each equivalence class.
+        val lower = (low -- nodesToDelete).map(representativeFor)
+        val upper = (up -- nodesToDelete).map(representativeFor)
+        vars -> Right((lower, data, upper))
       } else {
-        println(s"There is still ${remaining} left")
         // remove from mapping
         nodes = nodes.removedAll(affected)
         affected -> Left(remaining.toList.head)
