@@ -139,39 +139,60 @@ object substitutions {
       getNode(x) == getNode(y)
 
     /**
+     * Removes a unification variable from the graph.
+     *
+     * If the variable was part of an equivalence class, the remaining variables will be returned as [[Left]].
+     * If the variable was the last one in an equivalence class, the node data will be returned as [[Right]].
+     */
+    def remove(x: UnificationVar): Either[Set[UnificationVar], (Set[UnificationVar], ValueType, ValueType, Set[UnificationVar])] =
+      ???
+
+    /**
      * Adds x as a lower bound to y, and y as a lower bound to x.
      */
     def connect(x: UnificationVar, y: UnificationVar): Unit =
       val repX = getNode(x)
       val repY = getNode(y)
+      connectNodes(repX, repY)
 
-      val boundsX = getBounds(repX)
-      val boundsY = getBounds(repY)
+    private def addUpperBounds(x: Node, upper: Set[Node]): Unit =
+      val bounds = getBounds(x)
+      // we subtract [[x]] to avoid cycles in bounds
+      setBounds(x, bounds.copy(upper = (bounds.upper ++ upper - x)))
+
+    private def addLowerBounds(x: Node, lower: Set[Node]): Unit =
+      val bounds = getBounds(x)
+      // we subtract [[x]] to avoid cycles in bounds
+      setBounds(x, bounds.copy(lower = (bounds.lower ++ lower - x)))
+
+    private def fixupCycles(nodes: Set[Node]): Unit = nodes foreach { node =>
+      val bounds = getBounds(node)
+      val equals = bounds.lower intersect bounds.upper
+      equals.foreach { other =>
+        replaceNode(other, node)
+      }
+    }
+
+    private def connectNodes(x: Node, y: Node): Unit =
+      val boundsX = getBounds(x)
+      val boundsY = getBounds(y)
 
       // Already connected
-      if (boundsY.lower contains repX) {
+      if (boundsY.lower contains x) {
         return ()
       }
 
-      // They will form a cycle
-      else if (boundsY.upper contains repX) {
-        setBounds(repY, boundsY.copy(
-          lower = (boundsY.lower ++ boundsX.lower + repX) - repY
-        ))
-        replaceNode(repX, repY)
-        return;
-      }
+      val upper = boundsY.upper + y
+      val lower = boundsX.lower + x
 
-      else {
-        setBounds(repX, boundsX.copy(
-          upper = (boundsX.upper ++ boundsY.upper + repY) - repX
-        ))
-        setBounds(repY, boundsY.copy(
-          lower = (boundsY.lower ++ boundsX.lower + repX) - repY
-        ))
-      }
+      lower.foreach { b => addUpperBounds(b, upper) }
+      upper.foreach { b => addLowerBounds(b, lower) }
 
+      fixupCycles(upper ++ lower)
+
+    // used internally to add a node to an equivalence class
     private def replaceNode(old: Node, by: Node): Unit =
+
       valueConstraints = valueConstraints.collect {
         case (node, NodeData(low, payload, high)) if node != old =>
           (node, NodeData(
@@ -252,6 +273,12 @@ object substitutions {
      * TODO generalize substitution to bi-substitution and also generalize this method:
      */
     def replaceVariableByType(x: UnificationVar, tpe: ValueType)(using ErrorReporter): Unit = ()
+
+    def leaveScope(): Unit = {
+      val nodesToRemove = skolems
+
+
+    }
 
 
     def coalesceType(tpe: ValueType): ValueType = ???
