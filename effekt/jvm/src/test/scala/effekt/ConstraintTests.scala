@@ -24,8 +24,8 @@ class ConstraintTests extends AnyFunSpec {
 
   def freshGraph() = new ConstraintGraph
 
-  describe("simple constraints") {
-    it("should set two variables in subtype relation") {
+  describe("connecting") {
+    it("two variables in subtype relation") {
       val graph = freshGraph()
 
       // S --> T
@@ -35,7 +35,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(!graph.isSubtypeOf(T, S))
     }
 
-    it("mutually connecting two nodes should put them into one equivalence class") {
+    it("two nodes mutually should put them into one equivalence class") {
       val graph = freshGraph()
 
       // S <--> T
@@ -47,7 +47,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(graph.isEqual(S, T))
     }
 
-    it("transitively connecting nodes should put them into subtype relation (length 3)") {
+    it("nodes transitively should put them into subtype relation (length 3)") {
       val graph = freshGraph()
 
       // S --> T --> U
@@ -58,7 +58,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(!graph.isSubtypeOf(U, S))
     }
 
-    it("transitively connecting nodes should put them into subtype relation (length 6)") {
+    it("nodes transitively should put them into subtype relation (length 6)") {
       val graph = freshGraph()
 
       // S --> T --> U
@@ -77,7 +77,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(graph.isSubtypeOf(S, C))
     }
 
-    it("forming indirect cycles should create equivalence classes") {
+    it("nodes to form indirect cycles should create one equivalence class") {
       val graph = freshGraph()
 
       // S --> T --> U --> A
@@ -94,7 +94,8 @@ class ConstraintTests extends AnyFunSpec {
       assert(graph.isEqual(T, U))
       assert(graph.isEqual(T, A))
     }
-    it("forming indirect cycles should create equivalence classes (2)") {
+
+    it("nodes via an equivalence class should result in subtyping") {
       val graph = freshGraph()
 
       // S --> T --> U
@@ -115,7 +116,8 @@ class ConstraintTests extends AnyFunSpec {
       assert(graph.isSubtypeOf(U, B))
       assert(!graph.isSubtypeOf(B, T))
     }
-    it("connecting two classes forms one class") {
+
+    it("two classes forms one class") {
       val graph = freshGraph()
 
       // S <--> T
