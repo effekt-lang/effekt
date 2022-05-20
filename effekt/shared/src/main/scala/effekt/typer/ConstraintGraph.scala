@@ -123,8 +123,31 @@ class ConstraintGraph(
    * If the variable was part of an equivalence class, the remaining variables will be returned as [[Left]].
    * If the variable was the last one in an equivalence class, the node data will be returned as [[Right]].
    */
-  def remove(x: UnificationVar): Either[Set[UnificationVar], (Set[UnificationVar], ValueType, ValueType, Set[UnificationVar])] =
-    ???
+  def remove(toDelete: Set[UnificationVar]) = //: Either[Set[UnificationVar], (Set[UnificationVar], ValueType, ValueType, Set[UnificationVar])] =
+    val varToNode = toDelete.map(v => v -> getNode(v)).toMap
+
+    // the nodes to be removed, potentially
+    val nodesToDelete = varToNode.values.toSet
+
+    nodesToDelete.toList map { node =>
+      val elements = variablesFor(node)
+      val remaining = elements -- toDelete
+      val affected = elements intersect toDelete
+      val shouldBeDeleted = remaining.isEmpty
+      if (shouldBeDeleted) {
+        println(s"We need to remove the node for ${elements}")
+        val (vars, bounds @ NodeData(low, data, up)) = deleteNode(node)
+        assert(vars == affected)
+
+        // TODO what is the information we need to adjust the concrete type bounds?
+        vars -> Right(bounds)
+      } else {
+        println(s"There is still ${remaining} left")
+        // remove from mapping
+        nodes = nodes.removedAll(affected)
+        affected -> Left(remaining.toList.head)
+      }
+    }
 
   /**
    * Adds x as a lower bound to y, and y as a lower bound to x.
@@ -182,6 +205,25 @@ class ConstraintGraph(
     }
     // create mapping to representative
     nodes = nodes.view.mapValues { node => if (node == old) by else node }.toMap
+
+
+  private def deleteNode(x: Node): (Set[UnificationVar], NodeData) =
+    val bounds = getBounds(x)
+    val vars = variablesFor(x)
+
+    // remove node itself
+    valueConstraints = valueConstraints.removed(x)
+
+    // remove from bounds
+    (bounds.lower ++ bounds.upper) foreach { other =>
+      val NodeData(low, data, up) = getBounds(other)
+      setBounds(other, NodeData(low - x, data, up - x))
+    }
+
+    // remove from mapping
+    nodes = nodes.removedAll(vars)
+
+    (vars, bounds)
 
   override def clone(): ConstraintGraph =
     new ConstraintGraph(nodes, valueConstraints)

@@ -139,4 +139,28 @@ class ConstraintTests extends AnyFunSpec {
       assert(graph.isEqual(A, B))
     }
   }
+  describe("removing") {
+    it("a node in a simple graph") {
+      val graph = freshGraph()
+      graph.connect(S, T)
+      graph.remove(Set(T))
+      assert(!graph.isSubtypeOf(S, T))
+    }
+
+    it("a node from an equivalence class") {
+      val graph = freshGraph()
+
+      // S --> {T, U}
+      graph.connect(S, T)
+      graph.connect(T, U)
+      graph.connect(U, T)
+
+      assert(graph.isSubtypeOf(S, T))
+
+      // S --> U
+      graph.remove(Set(T))
+      assert(graph.isSubtypeOf(S, U))
+      assert(!graph.isSubtypeOf(S, T))
+    }
+  }
 }
