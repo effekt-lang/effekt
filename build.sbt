@@ -43,7 +43,7 @@ lazy val commonSettings = Seq(
 
 enablePlugins(ScalaJSPlugin)
 
-lazy val root = project.in(file("."))
+lazy val root = project.in(file("effekt"))
   .aggregate(effekt.js, effekt.jvm)
   .settings(noPublishSettings)
   .settings(Seq(
@@ -51,7 +51,7 @@ lazy val root = project.in(file("."))
   ))
 
 
-lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("."))
+lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
     version := effektVersion
