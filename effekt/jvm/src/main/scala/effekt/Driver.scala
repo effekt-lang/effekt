@@ -1,7 +1,7 @@
 package effekt
 
 // Adapted from
-//   https://bitbucket.org/inkytonik/kiama/src/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
+//   https://github.com/inkytonik/kiama/blob/master/extras/src/test/scala/org/bitbucket/inkytonik/kiama/example/oberon0/base/Driver.scala
 
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
