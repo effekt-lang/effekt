@@ -4,8 +4,9 @@ extern include "rts.ll"
 
 extern include "primitives.ll"
 
+
 // Console ops
-// ==========
+// ===========
 
 extern effect Console
 
@@ -14,6 +15,7 @@ extern pure def println(n: Int): Unit / Console =
 
 extern pure def println(b: Boolean): Unit / Console =
   "call void @printBoolean_impl(%Boolean %b) ret %Unit 0"
+
 
 // Math ops
 // ========
@@ -33,8 +35,10 @@ extern pure def infixSub(x: Int, y: Int): Int =
 extern pure def mod(x: Int, y: Int): Int =
   "%z = srem %Int %x, %y ret %Int %z"
 
+
 // Comparison ops
 // ==============
+
 extern pure def infixEq(x: Int, y: Int): Boolean =
   "%z = icmp eq %Int %x, %y ret %Boolean %z"
 
@@ -53,8 +57,10 @@ extern pure def infixGt(x: Int, y: Int): Boolean =
 extern pure def infixGte(x: Int, y: Int): Boolean =
   "%z = icmp sge %Int %x, %y ret %Boolean %z"
 
+
 // Boolean ops
 // ===========
+
 extern pure def infixEq(x: Boolean, y: Boolean): Boolean =
   "%z = icmp eq %Boolean %x, %y ret %Boolean %z"
 
@@ -69,5 +75,3 @@ extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
 
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
   "%z = and %Boolean %x, %y ret %Boolean %z"
-
-

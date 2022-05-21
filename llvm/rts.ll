@@ -1,3 +1,6 @@
+; Run-Time System
+
+
 ; Basic types
 
 %Sp = type i8*
@@ -8,11 +11,13 @@
 
 %MStk = type %Stk*
 
+
 ; Global locations
 
 @base = private global %Base null
 @limit = private global %Limit null
 @rest = private global %MStk undef
+
 
 ; Foreign imports
 
@@ -24,6 +29,7 @@ declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare void @print(i64)
 declare void @exit(i64)
+
 
 ; Meta-stack management
 
@@ -254,6 +260,7 @@ define fastcc {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp) noinline {
     ret {%Sp,%Sp} %results.1
 }
 
+
 ; RTS initialization
 
 define fastcc void @topLevel(%Sp noalias %sp, i64 %res) {
@@ -261,6 +268,7 @@ define fastcc void @topLevel(%Sp noalias %sp, i64 %res) {
     call void @free(i8* %base)
     ret void
 }
+
 
 ; Primitive Types
 
@@ -271,4 +279,3 @@ define fastcc void @topLevel(%Sp noalias %sp, i64 %res) {
 %Unit = type i64
 
 %Evi = type i64
-
