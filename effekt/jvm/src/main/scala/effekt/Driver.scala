@@ -115,28 +115,34 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     }
   }
 
-  def evalLLVM(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
-    val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
+  def evalLLVM(mod: Module)(implicit C: Context): Unit = {
+    val path = C.codeGenerator.path(mod)
+    if (true) {
+      // TODO a bit of a hack
+      val result: Document = C.generate(mod.source).get
+      C.saveOutput(result.layout, path + ".ll")
+    }
+    evalLLVMNew(path)
+  }
 
+  def evalLLVMNew(path: String)(implicit C: Context): Unit =
     try {
-      C.checkMain(mod)
-      val result: Document = C.generate(mod.source).get // TODO this might be `None`
+      val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
 
-      val xPath = (suffix: String) => (m: Module) => C.codeGenerator.path(m) + suffix
+      val xPath = (suffix: String) => path + suffix
       val llvmPath = xPath(".ll")
       val optPath = xPath("_opt.ll")
       val objPath = xPath(".o")
 
-      C.saveOutput(result.layout, llvmPath(mod))
-      val optCommand = Process(Seq(s"opt-${LLVM_VERSION}", llvmPath(mod), "-S", "-O2", "-o", optPath(mod)))
+      val optCommand = Process(Seq(s"opt-${LLVM_VERSION}", llvmPath, "-S", "-O2", "-o", optPath))
       C.config.output().emit(optCommand.!!)
 
-      val llcCommand = Process(Seq(s"llc-${LLVM_VERSION}", "--relocation-model=pic", optPath(mod), "-filetype=obj", "-o", objPath(mod)))
+      val llcCommand = Process(Seq(s"llc-${LLVM_VERSION}", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
       C.config.output().emit(llcCommand.!!)
 
       val gccMainFile = (C.config.libPath / "main.c").unixPath
-      val executableFile = C.codeGenerator.path(mod)
-      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath(mod)))
+      val executableFile = path //TODO-LLVM C.codeGenerator.path(mod)
+      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath))
       C.config.output().emit(gccCommand.!!)
 
       val command = Process(Seq(executableFile))
@@ -144,7 +150,6 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     } catch {
       case FatalPhaseError(e) => C.error(e)
     }
-  }
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)
