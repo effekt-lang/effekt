@@ -12,7 +12,7 @@ package kiama
 package util
 
 import org.rogach.scallop.ScallopConf
-import org.rogach.scallop.intConverter // TODO-LLVM What does this do? SBT recommended it for ln 129 ...
+import org.rogach.scallop.intConverter
 
 /**
  * Configurations for Kiama programs. `args` gives the command-line
