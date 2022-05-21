@@ -1,18 +1,18 @@
 package effekt
 
 import java.io.File
+import org.scalatest.funspec.AnyFunSpec
 import sbt.io._
 import sbt.io.syntax._
-//import scala.util.matching._
-import org.scalatest.funspec.AnyFunSpec
 import scala.language.implicitConversions
+import scala.sys.process.Process
 
 class LLVMTests extends AnyFunSpec {
-  val root = new File("tests-llvm")
-  go(root)
+  Process(Seq("rm", "-rf", "out/")).!! // TODO globally configure sbt to clear out before running tests
+  go(new File("tests-llvm"))
 
-  def go(dir: File): Unit = describe(dir.getName) {
-    dir.listFiles.foreach {
+  def go(root: File): Unit = describe(root.getName) {
+    root.listFiles.foreach {
       case h if h.getName.startsWith(".") => ()
       case d if d.isDirectory             => go(d)
       case e if e.getName.endsWith(".effekt") =>
