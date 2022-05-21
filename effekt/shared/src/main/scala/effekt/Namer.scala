@@ -279,9 +279,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    case source.TryHandle(body, handlers) =>
+    case source.TryHandle(body, handlers, suspend, resume, ret) =>
       Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
+      Context scoped { suspend foreach { resolveGeneric } }
+      Context scoped { resume foreach { resolveGeneric } }
+      Context scoped { ret foreach { resolveGeneric } }
 
     case source.Handler(effect, _, clauses) =>
 

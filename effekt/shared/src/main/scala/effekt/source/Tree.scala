@@ -297,7 +297,20 @@ case class ExprTarget(receiver: Expr) extends CallTarget
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Expr
+sealed trait Clause extends Tree
+
+case class OnResume(prog: BlockArg) extends Clause
+
+case class OnSuspend(prog: Stmt) extends Clause
+
+case class OnReturn(prog: BlockArg) extends Clause
+
+case class FinallyClause(prog: Stmt) extends Clause
+
+case class TryHandle(
+  prog: Stmt, handlers: List[Handler], on_suspend: Option[OnSuspend], on_resume: Option[OnResume], on_return: Option[OnReturn]
+// Syntactic sugar: finally { s } <=> ... on suspend { s } on return { _ => s }
+) extends Expr
 
 /**
  * Currently, the source language does not allow us to explicitly bind the capabilities.
@@ -473,8 +486,11 @@ object Tree {
       case Call(fun, targs, args) =>
         Call(fun, targs, args.map(rewrite))
 
-      case TryHandle(prog, handlers) =>
-        TryHandle(rewrite(prog), handlers.map(rewrite))
+      case TryHandle(prog, handlers, suspend, resume, ret) =>
+        val suspend_ = suspend map { _ match { case OnSuspend(s) => OnSuspend(rewrite(s)) } }
+        val resume_ = resume map { _ match { case OnResume(blkArgRes) => OnResume(rewrite(blkArgRes)) } }
+        val ret_ = ret map { _ match { case OnReturn(blkArgRet) => OnReturn(rewrite(blkArgRet)) } }
+        TryHandle(rewrite(prog), handlers.map(rewrite), suspend_, resume_, ret_)
 
       case Hole(stmts) =>
         Hole(rewrite(stmts))

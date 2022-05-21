@@ -459,8 +459,64 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val doExpr: P[Expr] =
     `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call.apply
 
+  private def validateClauses(prog: Stmt, handler: List[Handler], clauses: List[Clause]) =
+    // extract each type of clause from the list of clauses
+    val suspend = clauses collect { case x: OnSuspend => x }
+    val resume = clauses collect { case x: OnResume => x }
+    val ret = clauses collect { case x: OnReturn => x }
+    val fin = clauses collect { case x: FinallyClause => x }
+    // validate
+    if suspend.size > 1 then
+      failure("Expected at most one 'on suspend' clause, but found " + suspend.size)
+    if resume.size > 1 then
+      failure("Expected at most one 'on resume' clause, but found " + resume.size)
+    if ret.size > 1 then
+      failure("Expected at most one 'on return' clause, but found " + ret.size)
+    if fin.size > 1 then
+      failure("Expected at most one 'finally' clause, but found " + fin.size)
+    if (suspend.nonEmpty || ret.nonEmpty) && fin.nonEmpty then
+      failure("Expected only a 'finally' clause, but found an 'on suspend' or an 'on return' clause as well")
+
+    success((prog, handler, suspend.headOption, resume.headOption, ret.headOption, fin.headOption))
+
   lazy val handleExpr: P[Expr] =
-    `try` ~/> stmt ~ some(handler) ^^ TryHandle.apply
+    (`try` ~/> stmt ~ some(handler) ~ many(tryClauses)).flatMap {
+      case s ~ h ~ cs =>
+        validateClauses(s, h, cs)
+    } ^^ {
+      case (s, h, suspend, resume, ret, fin) =>
+        // either desugar the finally block or pass the suspend, resume and return clause along
+        fin match 
+          // desugar if there's a finally clause: 
+          // finally { s } <=> on suspend { s } on return { _ => s }
+          case Some(FinallyClause(s)) =>
+            val param = List(ValueParams(List(ValueParam(IdDef("_"), None))))
+            // { _ => s }
+            val retBlockArg = BlockArg(param, s)
+            TryHandle(s, h, Some(OnSuspend(s)), resume, Some(OnReturn(retBlockArg)))
+          // otherwise 
+          case _ =>
+            TryHandle(s, h, suspend, resume, ret)
+    }
+
+  lazy val tryClauses: P[Clause] =
+    onSuspend | onResume | onReturn | `finally`
+
+  // matches "on suspend { ... }"
+  lazy val onSuspend: P[OnSuspend] =
+    keyword("on suspend") ~/> stmt ^^ OnSuspend.apply
+
+  // matches "on resume { e => ... }"
+  lazy val onResume: P[OnResume] =
+    keyword("on resume") ~/> blockArg ^^ OnResume.apply
+
+  // matches "on return { e => ... }"
+  lazy val onReturn: P[OnReturn] =
+    keyword("on return") ~/> blockArg ^^ OnReturn.apply
+
+  // matches "finally { ... }"
+  lazy val `finally`: P[FinallyClause] =
+    keyword("finally") ~/> stmt ^^ FinallyClause.apply
 
   lazy val handler: P[Handler] =
     ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
