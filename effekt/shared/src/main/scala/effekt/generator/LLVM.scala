@@ -22,6 +22,19 @@ class LLVM extends Generator {
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath
 
+  // TODO-LLVM mimicking `./JavaScript.scala'
+  def compile(mod: Module)(implicit C: Context): Option[Document] = {
+    val path = C.codeGenerator.path(mod)
+    C.generate(mod.source) match {
+      case Some(result) => {
+        C.saveOutput(result.layout, path + ".ll")
+        Some(result)
+      }
+      case _ =>
+        None
+    }
+  }
+
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
    * and write them.

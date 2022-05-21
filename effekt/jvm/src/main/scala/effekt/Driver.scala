@@ -86,7 +86,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
-      case gen if gen.startsWith("llvm") => evalLLVM(mod)
+      case gen if gen.startsWith("llvm") => evalLLVM(C.codeGenerator.path(mod))
     }
   }
 
@@ -115,17 +115,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     }
   }
 
-  def evalLLVM(mod: Module)(implicit C: Context): Unit = {
-    val path = C.codeGenerator.path(mod)
-    if (true) {
-      // TODO a bit of a hack
-      val result: Document = C.generate(mod.source).get
-      C.saveOutput(result.layout, path + ".ll")
-    }
-    evalLLVMNew(path)
-  }
-
-  def evalLLVMNew(path: String)(implicit C: Context): Unit =
+  def evalLLVM(path: String)(implicit C: Context): Unit =
     try {
       val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
 
