@@ -8,10 +8,10 @@ import effekt.core.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, Valu
 import effekt.symbols.{ /, BlockParam, BlockSymbol, BlockType, BuiltinFunction, CapabilityParam, Module, Name, ResumeParam, Symbol, UserEffect, ValueSymbol, builtins }
 
 case class FreshValueSymbol(baseName: String, module: Module) extends ValueSymbol {
-  val name = Name(baseName, module)
+  val name = Name.qualified(baseName, module)
 }
 case class FreshBlockSymbol(baseName: String, module: Module) extends BlockSymbol {
-  val name = Name(baseName, module)
+  val name = Name.qualified(baseName, module)
 }
 
 class Transformer {

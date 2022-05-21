@@ -152,7 +152,7 @@ object Analysis {
     case Def(name, BlockLit(params, body), rest) =>
       val vars = freeVars(BlockLit(params, body)).toList
       val freshVars = vars.map(v =>
-        Var(v.typ, FreshValueSymbol(v.id.name.localName, C.module)));
+        Var(v.typ, FreshValueSymbol(v.id.name.name, C.module)));
       val freshParams = freshVars.map { v => Param(v.typ, v.id) }
       val mapping = vars.map(_.id).zip(freshVars).toMap;
       Def(name, BlockLit(
@@ -641,13 +641,13 @@ object Analysis {
       val args = (thenArgs.toSet ++ elseArgs.toSet).toList;
       val freshThenVars = args.map {
         case v: Var =>
-          Var(v.typ, FreshValueSymbol(v.id.name.localName, C.module))
+          Var(v.typ, FreshValueSymbol(v.id.name.name, C.module))
         case _ =>
           C.abort("Internal error: linearize If non-var argument")
       };
       val freshElseVars = args.map {
         case v: Var =>
-          Var(v.typ, FreshValueSymbol(v.id.name.localName, C.module))
+          Var(v.typ, FreshValueSymbol(v.id.name.name, C.module))
         case _ =>
           C.abort("Internal error: linearize If non-var argument")
       };
@@ -670,7 +670,7 @@ object Analysis {
   def perhapsCopy(vars: Set[Var], arg: Arg)(implicit C: Context): Control[Value] = arg match {
     case Var(Stack(typ), name) if (vars.exists { case Var(_, varName) => name == varName }) =>
       control.use(delimiter) { resume =>
-        val newName = machine.FreshBlockSymbol(name.name.localName, C.module);
+        val newName = machine.FreshBlockSymbol(name.name.name, C.module);
         resume.apply(Var(Stack(typ), newName)).map(rest =>
           CopyStack(newName, Var(Stack(typ), name), rest))
       }
