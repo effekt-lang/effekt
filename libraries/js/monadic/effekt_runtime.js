@@ -53,7 +53,7 @@ const $runtime = (function() {
   // onReturn: T -> Control[R]
   // onUnwind: () -> Control[S]
   // onRewind: S -> Control[Unit]
-  function Clauses(onUnwind = undefined, onRewind = undefined, onReturn = undefined) {
+  function Clauses(onUnwind, onRewind, onReturn) {
     return {
       onUnwind: onUnwind, onRewind: onRewind, onReturn: onReturn
     }
@@ -119,37 +119,19 @@ const $runtime = (function() {
     while (sub !== EmptyStack) {
       // push sub onto s while restoring sub's cells
       s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, s)
-      if (sub.clauses.onRewind !== null) {
+      if (sub.clauses.onRewind != null) {
+        const remainder = sub.tail
         // push sub onto s and execute the on rewind clause on the resulting stack.
         // Then remember to push sub.tail on the resulting stack k.
         return Step(
           sub.clauses.onRewind(sub.onUnwindData)
-            .then(() => Control(k => pushSubcont(sub.tail, k, c))),
+            .then(() => Control(k => pushSubcont(remainder, k, c))),
           s
         )
       }
       sub = sub.tail
     }
     return Step(c, s);
-  }
-
-  function pushSubcont_(subcont, stack, c) {
-    if (subcont === EmptyStack) return Step(c, stack)
-    else {
-      const s = Stack(subcont.frames, restore(subcont.backup), subcont.prompt, subcont.clauses, stack)
-      if (subcont.clauses.onRewind !== null) {
-        return Step(
-          subcont.clauses.onRewind(subcont.onUnwindData)
-            .then(() => Control(k => pushSubcont_(subcont.tail, k, c))),
-          s
-        )
-      }
-      return pushSubcont_(
-        subcont.tail,
-        s,
-        c
-      )
-    }
   }
 
   // Pushes a frame f onto the stack
@@ -163,59 +145,41 @@ const $runtime = (function() {
   }
 
   // Corresponds to a stack unwind. Pops off stacks until the stack with prompt has been found
-  // (stack: Stack, p: Int) -> Tuple[Stack, Stack]
-  function splitAt(stack, p) {
-    var sub = EmptyStack;
+  // (stack: Stack, sub: Stack, p: Int, f: Frame) -> Step
+  function splitAt(stack, sub, p, f) {
+    var sub_ = sub;
     var s = stack;
 
-    while (s !== EmptyStack) {
-      const currentPrompt = s.prompt
-      var onUnwindData = null
-      const onUnwindOp = s.clauses.onUnwind
-      if (onUnwindOp != null) {
-        onUnwindData = onUnwindOp().run()
-      }
-      sub = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, onUnwindData, sub)
-      s = s.tail
-      if (currentPrompt === p) { return Cons(sub, s) }
-    }
-    throw ("Prompt " + p + " not found")
-  }
-
-  // (stack: Stack, sub: Stack, p: Int, f: Frame) -> Step
-  function splitAt_(stack, sub, p, f) {
-    if (stack === EmptyStack) {
-      throw ("Prompt " + p + " not found")
-    }
-    const currentPrompt = stack.prompt
-    const resume = sub_ => {
+    const mkResume = subcont => {
       const localCont = a => Control(k => {
-        return pushSubcont(sub_, k, pure(a))
+        return pushSubcont(subcont, k, pure(a))
       })
       return Step(f(localCont), stack.tail)
     }
-    const onUnwindOp = stack.clauses.onUnwind
-    // if the current stack has a on unwind / on suspend operation, run it and then
-    // either keep on searching for the correct prompt using the given continuation or resume.
-    if (onUnwindOp != null) {
-      return Step(
-        onUnwindOp().then(a => Control(k => {
-          const sub_ = SubStack(stack.frames, backup(stack.fields), currentPrompt, stack.clauses, a, sub)
-          if (currentPrompt === p) {
-            return resume(sub_)
-          }
-          return splitAt_(k, sub_, p, f)
-        })),
-        stack.tail
-      )
-    }
 
-    const sub_ = SubStack(stack.frames, backup(stack.fields), currentPrompt, stack.clauses, null, sub)
-    if (currentPrompt === p) {
-      // return Cons(sub_, stack.tail)
-      return resume(sub_)
+    //? return directly if the current prompt is the one searched for?
+
+    while (s !== EmptyStack) {
+      const currentPrompt = s.prompt
+
+      const onUnwindOp = s.clauses.onUnwind
+      if (onUnwindOp != null) {
+        const c = onUnwindOp().then(a => 
+          Control(k => {
+            sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, a, sub_)
+            if (currentPrompt === p) { return mkResume(sub_) }
+            return splitAt(k, sub_, p, f)
+          })
+        )
+        return Step(c, s.tail)
+      }
+
+      sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, null, sub_)
+      if (currentPrompt === p) { return mkResume(sub_) }
+
+      s = s.tail
     }
-    return splitAt_(stack.tail, sub_, p, f)
+    throw ("Prompt " + p + " not found")
   }
 
   // (init: A, f: Frame) -> Control[B]
@@ -233,7 +197,7 @@ const $runtime = (function() {
       // Control[A] -> Stack -> Step[Control[B], Stack]
       apply: apply,
       // Control[A] -> A
-      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, Clauses(), EmptyStack))),
+      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, Clauses(null, null, null), EmptyStack))),
       // Control[A] -> (A => Control[B]) -> Control[B] 
       // which corresponds to monadic bind
       then: f => Control(k => Step(self, flatMap(k, f))),
@@ -252,12 +216,7 @@ const $runtime = (function() {
 
   const shift = p => f => Control(k => {
     //TODO A name change of splitAt is probably in order
-    return splitAt_(k, null, p, f)
-    // localCont corresponds to resume(a)
-    // const localCont = a => Control(k => {
-    //   return pushSubcont(split.head, k, pure(a))
-    // })
-    // return Step(f(localCont), split.tail)
+    return splitAt(k, null, p, f)
   })
 
   const callcc = f => Control(k => {
@@ -286,7 +245,7 @@ const $runtime = (function() {
     return c().then(b => b ? body().then(() => _while(c, body)) : pure($effekt.unit))
   }
 
-  function handle(handlers, onUnwind = null, onRewind = null, onReturn = null) {
+  function handle(handlers, onUnwind, onRewind, onReturn) {
     const p = _prompt++;
 
     // modify all implementations in the handlers to capture the continuation at prompt p
