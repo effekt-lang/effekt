@@ -19,6 +19,8 @@ import effekt.util.paths._
 
 import scala.sys.process.Process
 
+import effekt.generator
+
 /**
  * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
  */
@@ -86,7 +88,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
-      case gen if gen.startsWith("llvm") => evalLLVM(C.codeGenerator.path(mod))
+      case gen if gen.startsWith("llvm") => { evalLLVM__TEMPORARY_HACK(mod); evalLLVM(C.codeGenerator.path(mod)) }
     }
   }
 
@@ -115,6 +117,10 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     }
   }
 
+  def evalLLVM__TEMPORARY_HACK(mod: Module)(implicit C: Context): Unit = {
+    val path = C.codeGenerator.path(mod)
+    C.saveOutput((C.generate(mod.source).get).layout, path + ".ll")
+  }
   def evalLLVM(path: String)(implicit C: Context): Unit =
     try {
       val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
