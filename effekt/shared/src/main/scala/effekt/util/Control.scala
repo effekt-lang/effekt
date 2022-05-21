@@ -3,7 +3,10 @@ package util
 
 import scala.collection.mutable
 
-// That's literally a copy of Scala-Effekt, a bit more simplified.
+/**
+ * This is literally a copy of Scala-Effekt, a bit more simplified.
+ *  Currently not used! Mostly here in case we want to implement an interpreter again.
+ */
 package object control {
 
   class Capability {

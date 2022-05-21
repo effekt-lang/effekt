@@ -65,7 +65,7 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
         val access = Var(fun.id).inheritPosition(fun)
         // heal the missing type
         // TODO refactor this
-        C.annotate(Annotations.TypeAndEffect, access, Effectful(C.valueTypeOf(fun.definition), Pure))
+        C.annotate(Annotations.InferredType, access, Effectful(C.valueTypeOf(fun.definition), Pure))
         ExprTarget(access)
       }
       rewrite(visit(c) { c => Call(target, targs, args) })
@@ -139,11 +139,11 @@ class CapabilityPassing extends Phase[ModuleDecl, ModuleDecl] with Rewrite {
       (arg, param) match {
         case (ValueArgs(as), _) =>
           ValueArgs(as.map(rewrite))
-        case (b @ BlockArg(ps, body), List(p: BlockType)) =>
+        case (b @ source.BlockArg(ps, body), List(p: BlockType)) =>
           // here we use the blocktype as inferred by typer (after substitution)
           val effs = C.blockTypeOf(b).ret.effects.userEffects
           C.withCapabilities(effs) { caps =>
-            BlockArg(ps ++ caps, rewrite(body))
+            source.BlockArg(ps ++ caps, rewrite(body))
           }
       }
     }
@@ -208,6 +208,6 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
       //Var(id)
       id
     } getOrElse {
-      Context.panic(s"Compiler error: cannot find capability for ${e}")
+      Context.panic(s"Compiler error: cannot find capability for ${e}, got capabilities for ${capabilities}")
     }
 }

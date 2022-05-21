@@ -68,8 +68,8 @@ object Annotations {
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val TypeAndEffect = Annotation[source.Tree, symbols.Effectful](
-    "TypeAndEffect",
+  val InferredType = Annotation[source.Tree, symbols.Effectful](
+    "InferredType",
     "the inferred type and effect of"
   )
 
@@ -252,7 +252,7 @@ trait AnnotationsDB { self: Context =>
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[Effectful] =
-    annotationOption(Annotations.TypeAndEffect, t)
+    annotationOption(Annotations.InferredType, t)
 
   def inferredTypeOf(t: source.Tree): Effectful =
     inferredTypeOption(t).getOrElse {

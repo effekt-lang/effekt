@@ -47,7 +47,7 @@ class JavaScriptLift extends Generator {
  *
  * Requires a different stdlib.
  *
- * Use like: effekt --generator jslift --compile --lib lift/lib test.effekt
+ * Use like: effekt --generator jslift --compile --lib libraries/js/lift test.effekt
  */
 trait JavaScriptLiftPrinter extends JavaScriptBase {
 

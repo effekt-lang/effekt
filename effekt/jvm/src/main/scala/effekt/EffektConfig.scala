@@ -65,9 +65,11 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
     // 3) in PWD
     val pwd = file(".")
-    if ((pwd / "lib" / "effekt.effekt").exists) {
+    val localLib = pwd / "libraries" / "js" / "monadic"
+    // TODO also use language config for a better search
+    if ((localLib / "effekt.effekt").exists) {
       // here we return the absolute path to avoid problems with LSP
-      return file("lib").canonicalPath
+      return ("libraries" / "js" / "monadic").canonicalPath
     }
 
     // 4) next to Jar
@@ -77,9 +79,17 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
       case e: Throwable =>
         sys.error("cannot find path to standard library: jarPath")
     }
-    val libFolder = if (generator() == "llvm") "llvm" else "lib"
-    if ((jarPath / ".." / libFolder / "effekt.effekt").exists) {
-      return jarPath / ".." / libFolder
+
+    // TODO-LLVM verify
+    if (generator() == "llvm") {
+      if ((jarPath / ".." / "llvm" / "effekt.effekt").exists) {
+        return jarPath / ".." / "llvm"
+      }
+    }
+
+    val jarLib = jarPath / ".." / "libraries" / "js" / "monadic"
+    if ((jarLib / "effekt.effekt").exists) {
+      return jarLib
     }
 
     sys.error("cannot find path to standard library")

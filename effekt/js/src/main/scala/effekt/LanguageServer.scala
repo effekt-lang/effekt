@@ -90,7 +90,7 @@ class LanguageServer extends Intelligence {
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.buffer.clear()
     context.frontend(VirtualFileSource(path))
-    context.buffer.get.map(messageToDiagnostic).toJSArray
+    context.buffer.get.distinct.map(messageToDiagnostic).toJSArray
   }
 
   @JSExport

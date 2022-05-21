@@ -77,6 +77,7 @@ lazy val root = project.in(file("effekt"))
   ))
 
 
+
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
     name := "effekt",
@@ -93,7 +94,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // ------------------
     Test / parallelExecution := false,
 
-    Test / watchTriggers += baseDirectory.value.toGlob / "lib" / "**" / "*.effekt",
+    Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
 
     // show duration of the tests
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest, "-oD"),
@@ -122,7 +123,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     assemblyJarName in assembly := "effekt.jar",
 
     // we use the lib folder as resource directory to include it in the JAR
-    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "lib",
+    Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "libraries",
 
     Compile / unmanagedResourceDirectories += (baseDirectory in ThisBuild).value / "licenses",
 
@@ -151,6 +152,11 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     generateLicenses := {
       Process("mvn license:download-licenses license:add-third-party").!!
+
+      val kiamaFolder = (ThisBuild / baseDirectory).value / "kiama"
+      val licenseFolder = (ThisBuild / baseDirectory).value / "licenses"
+      IO.copyFile(kiamaFolder / "LICENSE", licenseFolder / "kiama-license.txt")
+      IO.copyFile(kiamaFolder / "README.md", licenseFolder / "kiama-readme.txt")
     },
 
     updateVersions := {
@@ -188,7 +194,7 @@ lazy val versionGenerator = Def.task {
  */
 lazy val stdLibGenerator = Def.task {
 
-  val baseDir = (baseDirectory in ThisBuild).value / "lib"
+  val baseDir = (baseDirectory in ThisBuild).value / "libraries" / "js" / "monadic"
   val resources = baseDir ** "*.*"
 
   val sourceDir = (sourceManaged in Compile).value

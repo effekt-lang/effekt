@@ -1,6 +1,6 @@
 (define (show_impl obj)
   (cond
-    [(number? obj) (number->string obj)]
+    [(number? obj) (show-number obj)]
     [(string? obj) obj]
     [(boolean? obj) (if obj "true" "false")]
     ; [(record? obj)
@@ -16,6 +16,10 @@
   (define out (open-output-string))
   (write obj out)
   (get-output-string out))
+
+; conform with the JS way of printing numbers
+(define (show-number n)
+  (if (integer? n) (number->string (exact n)) (number->string n)))
 
 (define (show-record rec)
   (let* ([rtd (record-rtd rec)]

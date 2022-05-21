@@ -15,7 +15,7 @@ import kiama.util.{ IO, Source }
 import effekt.util.messages.FatalPhaseError
 
 import effekt.util.paths._
-//TODO-LLVMimport org.eclipse.lsp4j.jsonrpc.Launcher
+//TODO-LLVM import org.eclipse.lsp4j.jsonrpc.Launcher
 
 import scala.sys.process.Process
 

@@ -88,7 +88,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
 
   // we escape names that would conflict with JS early on to simplify the pipeline
   def additionalKeywords: List[String] = List(
-    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield"
+    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield", "Object", "require"
   )
 
   def keyword(s: String): Parser[String] =
@@ -315,6 +315,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
         Return(MatchExpr(Var(IdRef(name)), cs))) withPositionOf cs
     }
     | `{` ~> stmts <~ `}` ^^ { s => BlockArg(List(ValueParams(Nil)), s) }
+    | failure("Expected a block argument")
     )
 
   lazy val lambdaArgs: P[ValueParams] =
@@ -345,6 +346,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt
     | (expr <~ `;`) ^^ Return
     | matchDef
+    | failure("Expected a statement")
     )
 
   lazy val withStmt: P[Stmt] =
@@ -474,7 +476,7 @@ class Parser(positions: Positions) extends Parsers(positions) with Phase[Source,
     idRef ~ (`=` ~> expr) ^^ Assign
 
   lazy val ifExpr: P[Expr] =
-    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt) ^^ If
+    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If
 
   lazy val whileExpr: P[Expr] =
     `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While

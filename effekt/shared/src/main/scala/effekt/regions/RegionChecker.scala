@@ -115,17 +115,24 @@ class RegionChecker extends Phase[ModuleDecl, ModuleDecl] {
       }
       reg
 
-    case BlockArg(params, body) =>
+    case b @ BlockArg(params, body) =>
+      // Here we just make up a symbol on the spot (symbols.BlockArg)
+      // typically, we use the blockparam to look up types etc., this one
+      // is only used to represent the scope / region
+      val selfRegion = Region(symbols.BlockArg(b))
       val boundRegions: RegionSet = bindRegions(params)
-      val bodyRegion = check(body)
+
+      // Refining the dynamic region here is necessary to fix #50 -- the region inferred for the continuation is not precise enough since
+      // a higher-order function can introduce handlers !
+      val bodyRegion = Context.inDynamicRegion(selfRegion) { check(body) }
       bodyRegion -- boundRegions
 
+    // TODO What about capabilities introduced by resume????
     case TryHandle(body, handlers) =>
 
       // regions for all the capabilities
       val caps = handlers.flatMap { h => h.capability }
       val boundRegions = bindRegions(caps)
-
       val bodyRegion = Context.inRegion(boundRegions) { check(body) }
 
       var reg = bodyRegion -- boundRegions

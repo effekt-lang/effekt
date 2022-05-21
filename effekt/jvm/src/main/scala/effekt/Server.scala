@@ -154,6 +154,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
         text <- positions.textOf(exp)
       } yield TreeAction("Close hole", pos.source.name, hole, text)
 
+      // <{ s1 ; s2; ... }>
       case Hole(stmts) => for {
         text <- positions.textOf(stmts)
       } yield TreeAction("Close hole", pos.source.name, hole, s"locally { ${text} }")

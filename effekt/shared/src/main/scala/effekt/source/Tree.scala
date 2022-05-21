@@ -160,8 +160,10 @@ case class ValueParams(params: List[ValueParam]) extends ParamSection
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Definition { type symbol = symbols.ValueParam }
 
 // TODO fuse into one kind of parameter
-case class BlockParam(id: IdDef, tpe: BlockType) extends ParamSection with Definition { type symbol = symbols.BlockParam }
-case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends ParamSection with Definition { type symbol = symbols.CapabilityParam }
+
+sealed trait TrackedParam extends ParamSection with Definition
+case class BlockParam(id: IdDef, tpe: BlockType) extends TrackedParam { type symbol = symbols.BlockParam }
+case class CapabilityParam(id: IdDef, tpe: CapabilityType) extends TrackedParam { type symbol = symbols.CapabilityParam }
 
 sealed trait ArgSection extends Tree
 case class ValueArgs(args: List[Expr]) extends ArgSection

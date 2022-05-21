@@ -222,7 +222,7 @@ class Namer extends Phase[ModuleDecl, ModuleDecl] {
         Context.bind(ps)
         resolveGeneric(stmt)
       }
-      val sym = Lambda(ps)
+      val sym = Lambda(ps, l)
       Context.define(id, sym)
 
     // (2) === Bound Occurrences ===

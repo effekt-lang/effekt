@@ -86,9 +86,9 @@ class ChezSchemeTests extends AnyFunSpec {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--generator", s"chez-$variant",
-      "--includes", "chez/common",
+      "--includes", "libraries/chez/common",
       "--includes", ".",
-      "--lib", s"chez/$variant"
+      "--lib", s"libraries/chez/$variant"
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
