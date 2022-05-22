@@ -88,7 +88,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     C.config.generator() match {
       case gen if gen.startsWith("js")   => evalJS(mod)
       case gen if gen.startsWith("chez") => evalCS(mod)
-      case gen if gen.startsWith("llvm") => { evalLLVM__TEMPORARY_HACK(mod); evalLLVM(C.codeGenerator.path(mod)) }
+      case gen if gen.startsWith("llvm") => { evalLLVM(mod) }
     }
   }
 
@@ -117,12 +117,11 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     }
   }
 
-  def evalLLVM__TEMPORARY_HACK(mod: Module)(implicit C: Context): Unit = {
-    val path = C.codeGenerator.path(mod)
-    C.saveOutput((C.generate(mod.source).get).layout, path + ".ll")
-  }
-  def evalLLVM(path: String)(implicit C: Context): Unit =
-    try {
+  // build the LLVM source file (`<...>.ll`) and coax it into an executable
+  def evalLLVM(mod: Module)(implicit C: Context): Unit = try {
+      val path = C.codeGenerator.path(mod)
+      C.saveOutput((C.generate(mod.source).get).layout, path + ".ll")
+
       val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
 
       val xPath = (suffix: String) => path + suffix
@@ -143,9 +142,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
 
       val command = Process(Seq(executableFile))
       C.config.output().emit(command.!!)
-    } catch {
-      case FatalPhaseError(e) => C.error(e)
-    }
+    } catch case FatalPhaseError(e) => C.error(e)
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)

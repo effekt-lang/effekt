@@ -22,24 +22,11 @@ class LLVM extends Generator {
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath
 
-  /* //TODO-LLVM this is currently done in `/effekt/effekt/jvm/src/main/scala/effekt/Driver.scala`, `evalLLVM__TEMPORARY_HACK`
-  def compile(mod: Module)(implicit C: Context): Option[Document] = {
-    val path = C.codeGenerator.path(mod)
-    C.generate(mod.source) match {
-      case Some(result) => {
-        C.saveOutput(result.layout, path + ".ll")
-        Some(result)
-      }
-      case _ =>
-        None
-    }
-  }
-  */
-
   /**
    * This is only called on the main entry point, we have to manually traverse the dependencies
    * and write them.
    */
+  //TODO-LLVM refactor
   def run(src: Source)(implicit C: Context): Option[Document] = {
     val modQ = C.frontend(src)
     if (modQ.isEmpty)
