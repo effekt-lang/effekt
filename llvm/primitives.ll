@@ -1,4 +1,3 @@
-
 declare void @printf(i8*, ...)
 
 
@@ -12,6 +11,7 @@ define void @printInt_impl(%Int %n) {
 
 
 @printBooleanString = private unnamed_addr constant [4 x i8] c"%s\0A\00"
+
 @booleanTrueString = private unnamed_addr constant [5 x i8] c"true\00"
 @booleanFalseString = private unnamed_addr constant [6 x i8] c"false\00"
 
@@ -23,4 +23,3 @@ define void @printBoolean_impl(%Boolean %b) {
     call void (i8*, ...) @printf(i8* %printBooleanString, i8* %booleanString)
     ret void
 }
-
