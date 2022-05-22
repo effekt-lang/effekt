@@ -266,13 +266,13 @@ object LLVMPrinter extends ParenPrettyPrinter {
           body
       )
 
+  // TODO Why does `jump` not jump but call?
   def jump(name: Doc, sp: Doc, args: List[Doc])(implicit C: LLVMContext): Doc = {
     "tail call fastcc void" <+> name <> argumentList(("%Sp" <+> sp) :: args) <@>
       "ret" <+> "void"
   }
 
   def loadEnv(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
-
     val envType =
       envRecordType(params.map(p => toDoc(p.typ)));
     val envParams =
@@ -281,7 +281,6 @@ object LLVMPrinter extends ParenPrettyPrinter {
   }
 
   def storeFrm(spp: Doc, basep: Doc, limitp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
-
     val envType =
       envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType));
     val envValues =
@@ -357,7 +356,6 @@ object LLVMPrinter extends ParenPrettyPrinter {
   }
 
   def load(spp: Doc, name: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
-
     val ptrType = typ <> "*"
     val oldsp = freshLocalName("oldsp");
     val newsp = freshLocalName("newsp");
@@ -373,7 +371,6 @@ object LLVMPrinter extends ParenPrettyPrinter {
   }
 
   def store(spp: Doc, basep: Doc, limitp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
-
     // TODO remove parameters spp basep and limitp
     val ptrType = typ <> "*";
     val oldsp = freshLocalName("oldsp");
@@ -404,6 +401,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
   def globalName(id: Symbol): Doc =
     "@" <> nameDef(id)
 
+  // XXX Major bug potential: `scanningName` can clash with `globalName`.
   def scanningName(id: Symbol): Doc =
     "@scan_" <> nameDef(id)
 
@@ -451,5 +449,4 @@ object LLVMPrinter extends ParenPrettyPrinter {
   case class LLVMContext() {
     val fresh = new Counter(0)
   }
-
 }
