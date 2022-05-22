@@ -104,9 +104,11 @@ object LLVMTransformer {
         thisDef :: frameDefs.toList ++ closureDefs.toList ++ transformToplevel(rest)
 
       }
+
       case machine.Ret(List()) =>
         // TODO define main function here
         List()
+
       case _ =>
         C.abort("unsupported " + stmt)
     }

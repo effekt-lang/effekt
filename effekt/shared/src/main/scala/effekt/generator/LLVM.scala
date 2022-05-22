@@ -50,9 +50,22 @@ class LLVM extends Generator {
 }
 
 object LLVMPrinter extends ParenPrettyPrinter {
+  // a transitional helper to aid in moving to string interpolation for LLVM code construction
+  def d2s(doc: Doc): String = pretty(doc).layout
+
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): Document =
     pretty(
       vsep(defs.map(toDoc), line) <@@@>
+        s"""define void @effektMain() {
+    %spp = alloca %Sp
+    ; TODO find return type of main
+    store %Sp null, %Sp* %spp
+    ${d2s(storeFrm("%spp", "@base", "@limit", List(), globalBuiltin("topLevel"), List(machine.PrimInt())))}
+    %newsp = load %Sp, %Sp* %spp
+    ; TODO deal with top-level evidence
+    ${d2s(jump(globalName(mainName), "%newsp", List("%Evi 0")))}
+}"""
+    /*
         "define" <+> "void" <+> "@effektMain" <> "()" <+> llvmBlock(
           "%spp = alloca %Sp" <@>
             // TODO find return type of main
@@ -62,6 +75,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
             // TODO deal with top-level evidence
             jump(globalName(mainName), "%newsp", List("%Evi 0"))
         )
+*/
     )
 
   def toDoc(top: Top)(implicit C: LLVMContext): Doc = top match {
