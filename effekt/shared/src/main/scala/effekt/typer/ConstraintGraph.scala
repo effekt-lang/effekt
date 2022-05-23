@@ -120,6 +120,12 @@ class ConstraintGraph(
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean =
     getNode(x) == getNode(y)
 
+  def mapPayload(f: (ValueType, ValueType) => (ValueType, ValueType)): Unit =
+    valueConstraints = valueConstraints.map {
+      case (n, NodeData(lowerNodes, (lower, upper), upperNodes)) =>
+        (n, NodeData(lowerNodes, f(lower, upper), upperNodes))
+    }
+
   /**
    * Removes a unification variable from the graph.
    *
@@ -148,7 +154,7 @@ class ConstraintGraph(
       } else {
         // remove from mapping
         nodes = nodes.removedAll(affected)
-        affected -> Left(remaining.toList.head)
+        affected -> Left(representativeFor(node))
       }
     }
 

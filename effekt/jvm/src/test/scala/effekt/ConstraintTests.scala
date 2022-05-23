@@ -143,8 +143,10 @@ class ConstraintTests extends AnyFunSpec {
     it("a node in a simple graph") {
       val graph = freshGraph()
       graph.connect(S, T)
-      val res = graph.remove(Set(T))
-      println(res)
+      val List((removedNodes, Right((lower, _, upper)))) = graph.remove(Set(T))
+      assert(removedNodes contains T)
+      assert(lower contains S)
+      assert(upper.isEmpty)
       assert(!graph.isSubtypeOf(S, T))
     }
 
@@ -159,8 +161,11 @@ class ConstraintTests extends AnyFunSpec {
       assert(graph.isSubtypeOf(S, T))
 
       // S --> U
-      val res = graph.remove(Set(T))
-      println(res)
+      val List((removedNodes, Left(remaining))) = graph.remove(Set(T))
+
+      assert(removedNodes contains T)
+      assert(remaining == U)
+
       assert(graph.isSubtypeOf(S, U))
       assert(!graph.isSubtypeOf(S, T))
     }

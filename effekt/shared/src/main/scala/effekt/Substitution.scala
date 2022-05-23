@@ -71,11 +71,51 @@ object substitutions {
      */
     def replaceVariableByType(x: UnificationVar, tpe: ValueType)(using ErrorReporter): Unit = ()
 
-    def leaveScope(): Unit = {
+    def leaveScope() = {
       val nodesToRemove = skolems
+      //skolems = Nil
+      constraints.dumpConstraints()
 
+      var subst = Map.empty[TypeVar, (ValueType, ValueType)]
 
+      constraints.remove(nodesToRemove.toSet) foreach {
+        case (nodes, Right((lowerNodes, (lower, upper), upperNodes))) =>
+          // TODO create merge nodes if lowerNodes or upperNodes are present.
+          val low = if (lowerNodes.isEmpty) {
+            lower
+          } else {
+            val mergeNode = fresh(UnificationVar.MergeVariable)
+            constraints.updateLowerBound(mergeNode, lower)
+            lowerNodes foreach { constraints.connect(_, mergeNode) }
+            mergeNode
+          }
+          val up = if (upperNodes.isEmpty) {
+            upper
+          } else {
+            val mergeNode = fresh(UnificationVar.MergeVariable)
+            constraints.updateUpperBound(mergeNode, upper)
+            lowerNodes foreach { constraints.connect(mergeNode, _) }
+            mergeNode
+          }
+          subst = subst ++ nodes.map { x => x -> (low, up) }.toMap
+        case (nodes, Left(repr)) =>
+          subst = subst ++ nodes.map { x => x -> (repr, repr) }.toMap
+      }
+      val subst1 = BiSubstitutions(subst, Map.empty)
+
+      // apply substitution to itself to remove all occurrences of skolems
+      val subst2 = subst1.updateWith(subst1)
+
+      // apply substitution to bounds in remaining constraints
+      constraints.mapPayload { case (lower, upper) =>
+        (subst2.substitute(lower)(using Covariant), subst2.substitute(upper)(using Contravariant))
+      }
+
+      constraints.dumpConstraints()
+      subst2
     }
+
+
 
 
     def coalesceType(tpe: ValueType): ValueType = ???
@@ -334,18 +374,6 @@ object substitutions {
                 tpe1
             }
 
-/*
-┏━━━━━━━━━━━━┯━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┯━━━━━━━━━━━━┓
-             │ ⊥            <: ?A109 <: Int          │ ?R107
-?B100, ?B108 │ Box[?M114]   <: ?T112 <: Box[Int]     │
-?A103        │ ⊥            <: ?R99  <: Int          │ ?M114
-?A103, ?R99, ?A109, ?R107 │ ⊥            <: ?M114 <: Int          │
-?A109        │ ⊥            <: ?R107 <: Int          │ ?M114
-             │ Box[?R99]    <: ?B100 <: Box[Int]     │ ?T112
-             │ ⊥            <: ?A103 <: Int          │ ?R99
-             │ Box[?R107]   <: ?B108 <: Box[Int]     │ ?T112
-┗━━━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━━┛
- */
           // We can use one of them if it is more specific than the other.
           case (tpe1, tpe2, Covariant) if isSubtype(tpe1, tpe2) => tpe2
           case (tpe1, tpe2, Contravariant) if isSubtype(tpe1, tpe2) => tpe1

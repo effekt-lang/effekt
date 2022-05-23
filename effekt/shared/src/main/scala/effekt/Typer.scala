@@ -1001,7 +1001,7 @@ trait TyperOps extends ContextOps { self: Context =>
 //    newScope.dumpConstraints()
 //    println("Save all remaining constraints to outer scope")
     //outer.valueConstraints = newScope.valueConstraints
-    scope.dumpConstraints()
+    scope.leaveScope()
 //    scope = outer
     res
   }
