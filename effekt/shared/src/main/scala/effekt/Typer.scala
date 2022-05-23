@@ -841,7 +841,7 @@ trait TyperOps extends ContextOps { self: Context =>
   /**
    * The current unification Scope
    */
-  private[typer] var scope: UnificationScope = new UnificationScope
+  private[typer] var scope: Unification = new Unification
 
   /**
    * The substitutions learnt so far
@@ -985,7 +985,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = {
-    println("----outer scope----")
+    scope.enterScope()
 //    val outer = scope
 //    val newScope = new UnificationScope
 //    outer.dumpConstraints()

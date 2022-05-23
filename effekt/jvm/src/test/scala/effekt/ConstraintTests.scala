@@ -10,7 +10,7 @@ import scala.language.implicitConversions
 
 class ConstraintTests extends AnyFunSpec {
 
-  lazy val scope = new UnificationScope
+  lazy val scope = new Unification
 
   lazy val S = freshVariable("S")
   lazy val T = freshVariable("T")

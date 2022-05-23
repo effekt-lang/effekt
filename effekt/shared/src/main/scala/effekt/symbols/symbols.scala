@@ -209,7 +209,7 @@ package object symbols {
    *
    * Should neither occur in source programs, nor in inferred types
    */
-  case class UnificationVar(role: UnificationVar.Role, scope: UnificationScope) extends TypeVar(Name.local("?")) {
+  case class UnificationVar(role: UnificationVar.Role) extends TypeVar(Name.local("?")) {
     override def toString = role match {
       case UnificationVar.TypeVariableInstantiation(underlying) => "?" + underlying.toString + id
       case UnificationVar.MergeVariable => "?M" + id
@@ -435,7 +435,7 @@ package object symbols {
   case class CaptureParam(name: Name) extends Capture {
     def concrete = true
   }
-  case class CaptureUnificationVar(underlying: Capture, scope: UnificationScope) extends Capture {
+  case class CaptureUnificationVar(underlying: Capture) extends Capture {
     val name = underlying.name
     def concrete = false
     override def toString = "?" + underlying.name //underlying.name + id

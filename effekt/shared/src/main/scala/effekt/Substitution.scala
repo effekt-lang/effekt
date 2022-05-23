@@ -10,8 +10,6 @@ import effekt.util.messages.ErrorReporter
 
 object substitutions {
 
-  private var scopeId: Int = 0
-
   sealed trait Polarity { def flip: Polarity }
   case object Covariant extends Polarity { def flip = Contravariant}
   case object Contravariant extends Polarity { def flip = Covariant }
@@ -20,37 +18,52 @@ object substitutions {
   /**
    * The state of the unification scope, used for backtracking on overload resolution
    *
-   * See [[UnificationScope.backup]] and [[UnificationScope.restore]]
+   * See [[Unification.backup]] and [[Unification.restore]]
    */
   case class UnificationState(
-    skolems: List[UnificationVar],
-    constraints: ConstraintGraph
+    scope: Scope,
+    constraints: ConstraintGraph,
+    substitution: BiSubstitutions
   )
+
+  sealed trait Scope
+  case object GlobalScope extends Scope
+  case class LocalScope(types: List[UnificationVar], captures: List[CaptureUnificationVar], parent: Scope) extends Scope
 
 
   /**
    * A unification scope -- every fresh unification variable is associated with a scope.
    */
-  class UnificationScope { self =>
+  class Unification { self =>
 
-    val id = { scopeId += 1; scopeId }
+    // Unification variables in the current scope
+    // ------------------------------------------
+    var scope: Scope = GlobalScope
 
-    // Unification Variables
-    // ---------------------
+    var substitution = BiSubstitutions(Map.empty, Map.empty)
 
-    private var skolems: List[UnificationVar] = Nil
-    private var capture_skolems: List[CaptureUnificationVar] = Nil
 
-    def fresh(role: UnificationVar.Role): UnificationVar = {
-      val x = UnificationVar(role, this)
-      skolems = x :: skolems
-      x
+    def isLive(x: UnificationVar): Boolean = isLive(x, scope)
+
+    def isLive(x: UnificationVar, scope: Scope): Boolean = scope match {
+      case GlobalScope => false
+      case LocalScope(types, _, parent) => types.contains(x) || isLive(x, parent)
     }
 
-    def freshCaptVar(underlying: Capture): CaptureUnificationVar = {
-      val x = CaptureUnificationVar(underlying, this)
-      capture_skolems = x :: capture_skolems
-      x
+    def fresh(role: UnificationVar.Role): UnificationVar = scope match {
+      case GlobalScope => sys error "Cannot add unification variables to global scope"
+      case s : LocalScope =>
+        val x = new UnificationVar(role)
+        scope = s.copy(types = x :: s.types)
+        x
+    }
+
+    def freshCaptVar(underlying: Capture): CaptureUnificationVar = scope match {
+      case GlobalScope => sys error "Cannot add unification variables to global scope"
+      case s : LocalScope =>
+        val x = CaptureUnificationVar(underlying)
+        scope = s.copy(captures = x :: s.captures)
+        x
     }
 
     // The Constraint Graph
@@ -59,26 +72,30 @@ object substitutions {
 
     def dumpConstraints() = constraints.dumpConstraints()
 
-    def backup(): UnificationState = UnificationState(skolems, constraints.clone())
+    def backup(): UnificationState = UnificationState(scope, constraints.clone(), substitution)
     def restore(state: UnificationState): Unit =
-      skolems = state.skolems
+      scope = state.scope
       constraints = state.constraints
+      substitution = state.substitution
 
-    /**
-     * Updates the network to replace variable by type [[tpe]]
-     *
-     * TODO generalize substitution to bi-substitution and also generalize this method:
-     */
-    def replaceVariableByType(x: UnificationVar, tpe: ValueType)(using ErrorReporter): Unit = ()
+    def enterScope() = {
+      scope = LocalScope(Nil, Nil, scope)
+    }
 
     def leaveScope() = {
-      val nodesToRemove = skolems
-      //skolems = Nil
+      val LocalScope(types, captures, parent) = scope match {
+        case GlobalScope => sys error "Cannot leave global scope"
+        case l : LocalScope => l
+      }
+      scope = parent
+
+      println(s"Leaving scope, removing ${types}")
+
       constraints.dumpConstraints()
 
       var subst = Map.empty[TypeVar, (ValueType, ValueType)]
 
-      constraints.remove(nodesToRemove.toSet) foreach {
+      constraints.remove(types.toSet) foreach {
         case (nodes, Right((lowerNodes, (lower, upper), upperNodes))) =>
           // TODO create merge nodes if lowerNodes or upperNodes are present.
           val low = if (lowerNodes.isEmpty) {
@@ -103,59 +120,21 @@ object substitutions {
       }
       val subst1 = BiSubstitutions(subst, Map.empty)
 
+      println(subst1)
+
       // apply substitution to itself to remove all occurrences of skolems
-      val subst2 = subst1.updateWith(subst1)
+      val subst2 = subst1.substitute(subst1)
+      println(subst2)
+      substitution = substitution.updateWith(subst2)
 
       // apply substitution to bounds in remaining constraints
       constraints.mapPayload { case (lower, upper) =>
-        (subst2.substitute(lower)(using Covariant), subst2.substitute(upper)(using Contravariant))
+        (substitution.substitute(lower)(using Covariant), substitution.substitute(upper)(using Contravariant))
       }
 
       constraints.dumpConstraints()
-      subst2
-    }
-
-
-
-
-    def coalesceType(tpe: ValueType): ValueType = ???
-//
-//      val ValueTypeConstraints(lowerNodes, lower, upper, upperNodes) = boundsFor(x)
-//      // substitute [[tpe]] for [[x]] in all types and
-//      // remove all references to [[x]] from bounds.
-//      valueConstraints = valueConstraints.collect {
-//        case (y, ValueTypeConstraints(loNodes, low, up, upNodes)) if x != y =>
-//          val subst: Substitutions = Map(x -> tpe)
-//          (y, ValueTypeConstraints(
-//            loNodes - x,
-//            subst.substitute(low),
-//            subst.substitute(up),
-//            upNodes - x
-//          ))
-//      }
-//      // Those nodes that had x as bound now need to have [[tpe]] as bound.
-//      // Push this info through the system... this might be horribly inefficient, right now.
-//      lowerNodes.foreach { y => requireSubtype(y, tpe) }
-//      upperNodes.foreach { y => requireSubtype(tpe, y) }
-
-
-
-    // TODO do we need to compute a bisubstitution here???
-    var valueSubstitution: Map[UnificationVar, ValueType] = Map.empty
-
-    def solve()(using C: ErrorReporter): (Map[UnificationVar, ValueType], Unit) = {
-      // TODO graph without skolem nodes
-
-//      println(s"Solving for ${skolems}:")
-//      dumpConstraints()
-
-      //skolems.foreach { x => replaceVariable(x, TTop) }
-      //skolems = Nil // this will be achieved by replacing the scope.
-
-//      println(s"Done solving for ${skolems}")
-//      dumpConstraints()
-
-      (Map.empty, ())
+      println(substitution)
+      substitution
     }
 
 
@@ -163,9 +142,13 @@ object substitutions {
      * Checks whether t1 <: t2
      *
      * Has the side effect of registering constraints.
+     *
+     * TODO Covariant might not be the right polarity
      */
     def requireSubtype(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit =
-      comparer.unifyValueTypes(t1, t2)
+      comparer.unifyValueTypes(
+        substitution.substitute(t1)(using Covariant),
+        substitution.substitute(t2)(using Covariant))
 
     def requireSubtype(t1: BlockType, t2: BlockType)(using C: ErrorReporter): Unit =
       sys error s"Requiring that ${t1} <:< ${t2}"
@@ -251,8 +234,6 @@ object substitutions {
      */
     def comparer(using C: ErrorReporter): TypeComparer = new TypeComparer {
 
-      private var seen: Set[(ValueType, ValueType)] = Set.empty
-
       def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
       def abort(msg: String) = C.abort(msg)
@@ -270,6 +251,9 @@ object substitutions {
        *
        */
       def requireLowerBound(x: UnificationVar, tpe: ValueType) =
+
+        if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
+
         if (x == tpe) return ()
 
         tpe match {
@@ -299,6 +283,9 @@ object substitutions {
        * Symmetric to [[requireLowerBound]].
        */
       def requireUpperBound(x: UnificationVar, tpe: ValueType) =
+
+        if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
+
         if (x == tpe) return ()
 
         tpe match {
@@ -518,6 +505,10 @@ object substitutions {
 
     // amounts to first substituting this, then other
     def updateWith(other: BiSubstitutions): BiSubstitutions =
+      substitute(other) ++ other
+
+    // applies other to this
+    def substitute(other: BiSubstitutions): BiSubstitutions =
       BiSubstitutions(
         values.view.mapValues { case (lower, upper) =>
           (other.substitute(lower)(using Covariant), other.substitute(upper)(using Contravariant))
@@ -525,7 +516,7 @@ object substitutions {
         captures.view.mapValues { case (lower, upper) =>
           (other.substitute(lower)(using Covariant), other.substitute(upper)(using Contravariant))
         }.toMap
-      ) ++ other
+      )
 
     // amounts to parallel substitution
     def ++(other: BiSubstitutions): BiSubstitutions = BiSubstitutions(values ++ other.values, captures ++ other.captures)
