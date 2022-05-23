@@ -8,9 +8,9 @@ import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
 
-class ConstraintTests extends AnyFunSpec {
+class ConstraintGraphTests extends AnyFunSpec {
 
-  lazy val scope = new Unification
+  lazy val scope = { val s = new Unification; s.enterScope(); s }
 
   lazy val S = freshVariable("S")
   lazy val T = freshVariable("T")
