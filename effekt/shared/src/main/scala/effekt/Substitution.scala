@@ -22,7 +22,7 @@ object substitutions {
    */
   case class UnificationState(
     scope: Scope,
-    constraints: ConstraintGraph,
+    constraints: ConstraintSet,
     substitution: BiSubstitutions
   )
 
@@ -68,7 +68,7 @@ object substitutions {
 
     // The Constraint Graph
     // --------------------
-    var constraints = new ConstraintGraph
+    var constraints = new ConstraintSet
 
     def dumpConstraints() = constraints.dumpConstraints()
 
@@ -96,25 +96,8 @@ object substitutions {
       var subst = Map.empty[TypeVar, (ValueType, ValueType)]
 
       constraints.remove(types.toSet) foreach {
-        case (nodes, Right((lowerNodes, (lower, upper), upperNodes))) =>
-          // TODO create merge nodes if lowerNodes or upperNodes are present.
-          val low = if (lowerNodes.isEmpty) {
-            lower
-          } else {
-            val mergeNode = fresh(UnificationVar.MergeVariable)
-            constraints.updateLowerBound(mergeNode, lower)
-            lowerNodes foreach { constraints.connect(_, mergeNode) }
-            mergeNode
-          }
-          val up = if (upperNodes.isEmpty) {
-            upper
-          } else {
-            val mergeNode = fresh(UnificationVar.MergeVariable)
-            constraints.updateUpperBound(mergeNode, upper)
-            lowerNodes foreach { constraints.connect(mergeNode, _) }
-            mergeNode
-          }
-          subst = subst ++ nodes.map { x => x -> (low, up) }.toMap
+        case (nodes, Right((lower, upper))) =>
+          subst = subst ++ nodes.map { x => x -> concretizeBounds(lower, upper) }.toMap
         case (nodes, Left(repr)) =>
           subst = subst ++ nodes.map { x => x -> (repr, repr) }.toMap
       }
@@ -128,7 +111,7 @@ object substitutions {
       substitution = substitution.updateWith(subst2)
 
       // apply substitution to bounds in remaining constraints
-      constraints.mapPayload { case (lower, upper) =>
+      constraints.mapBounds { case (lower, upper) =>
         (substitution.substitute(lower)(using Covariant), substitution.substitute(upper)(using Contravariant))
       }
 
@@ -175,7 +158,9 @@ object substitutions {
       object comparer extends TypeComparer {
         def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
         def abort(msg: String) = throw NotASubtype
-        def requireEqual(x: UnificationVar, tpe: ValueType): Unit = ???
+        def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
+          requireLowerBound(x, tpe);
+          requireUpperBound(x, tpe)
 
         // tpe <: x
         def requireLowerBound(x: UnificationVar, tpe: ValueType) =
@@ -208,6 +193,13 @@ object substitutions {
      * Used to subtract one set of effects from another (when checking handling, or higher-order functions)
      */
     def isSubtype(e1: Effect, e2: Effect): Boolean = ???
+
+
+    private def concretizeBounds(lower: ValueType, upper: ValueType): (ValueType, ValueType) = (lower, upper) match {
+      case (TBottom, t) => (t, t)
+      case (t, TTop)    => (t, t)
+      case (lower, upper) => (lower, upper)
+    }
 
     /**
      * Removes effects [[effs2]] from effects [[effs1]] by checking for subtypes.
@@ -294,9 +286,6 @@ object substitutions {
               //     the upper bounds are connected itself.
               unifyValueTypes(merged, upper)(using Covariant)
             }
-
-            // (4) we propagate the incoming type to all upper nodes
-            constraints.upperBounds(x) foreach { node => mergeAndUpdateLowerBound(node, tpe) }
         }
 
       /**
@@ -324,9 +313,6 @@ object substitutions {
               // (3) we check the existing upper bound for consistency with the lower bound
               unifyValueTypes(lower, merged)(using Covariant)
             }
-
-            // (4) we propagate the incoming type to all lower nodes
-             constraints.lowerBounds(x) foreach { node => mergeAndUpdateUpperBound(node, tpe) }
         }
 
       // only updates one layer of connections, not recursively since we have
@@ -348,7 +334,7 @@ object substitutions {
         Some(newBound)
 
       def connectNodes(x: UnificationVar, y: UnificationVar): Unit =
-        if (x == y || (constraints.upperBounds(x) contains y)) return;
+        if (x == y || (constraints.isSubtypeOf(x, y))) return;
         requireLowerBound(y, constraints.lowerBound(x)) // TODO maybe this can be mergeAndUpdateLowerBound
         requireUpperBound(x, constraints.upperBound(y))
         constraints.connect(x, y)
@@ -392,11 +378,8 @@ object substitutions {
             if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
             if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
 
-            // TODO Here we assume the constructor is covariant
-            // TODO perform analysis and then mergeUpper, lower, or require equality.
+            // TODO Here we assume the constructor is invariant
             val mergedArgs = (args1 zip args2).map { case (t1, t2) =>
-              // invariant, for testing purposes:
-//              val _ = merge(t1, t2, true);
               merge(t1, t2, Invariant)
             }
             ValueTypeApp(cons1, mergedArgs)
