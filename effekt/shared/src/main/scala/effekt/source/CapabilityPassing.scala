@@ -54,7 +54,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val receiver = C.capabilityReferenceFor(self)
 
       val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
-      C.annotateCalltarget(target, tpe)
+      // C.annotateCalltarget(target, tpe)
       Call(target, targs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
 
     // the target is a mutable variable --> rewrite it to an expression first, then rewrite again

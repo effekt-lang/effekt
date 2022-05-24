@@ -146,9 +146,16 @@ object substitutions {
      * TODO Covariant might not be the right polarity
      */
     def requireSubtype(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit =
+      given Polarity = Covariant;
       comparer.unifyValueTypes(
-        substitution.substitute(t1)(using Covariant),
-        substitution.substitute(t2)(using Covariant))
+        substitution.substitute(t1),
+        substitution.substitute(t2))
+
+    def requireEqual(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit =
+      given Polarity = Invariant;
+      comparer.unifyValueTypes(
+        substitution.substitute(t1),
+        substitution.substitute(t2))
 
     def requireSubtype(t1: BlockType, t2: BlockType)(using C: ErrorReporter): Unit =
       sys error s"Requiring that ${t1} <:< ${t2}"
@@ -156,6 +163,7 @@ object substitutions {
     def requireSubregion(c1: CaptureSet, c2: CaptureSet)(using C: ErrorReporter): Unit =
       sys error s"Requiring that ${c1} <:< ${c2}"
 
+    def join(tpes: List[ValueType]): ValueType = ???
 
     /**
      * Given the current unification state, can we decide whether one type is a subtype of another?
@@ -167,22 +175,28 @@ object substitutions {
       object comparer extends TypeComparer {
         def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
         def abort(msg: String) = throw NotASubtype
+        def requireEqual(x: UnificationVar, tpe: ValueType): Unit = ???
+
+        // tpe <: x
         def requireLowerBound(x: UnificationVar, tpe: ValueType) =
           tpe match {
             case y: UnificationVar =>
               if (!constraints.isSupertypeOf(x, y)) throw NotASubtype
             case tpe =>
-              unifyValueTypes(tpe, constraints.upperBound(x))
+              // it is compatible with the upper bounds on x
+              unifyValueTypes(tpe, constraints.upperBound(x))(using Covariant)
           }
+
+        // x <: tpe
         def requireUpperBound(x: UnificationVar, tpe: ValueType) =
           tpe match {
             case y: UnificationVar =>
               if (!constraints.isSubtypeOf(x, y)) throw NotASubtype
             case tpe =>
-              unifyValueTypes(constraints.lowerBound(x), tpe)
+              unifyValueTypes(constraints.lowerBound(x), tpe)(using Covariant)
           }
       }
-      val res = try { comparer.unifyValueTypes(tpe1, tpe2); true } catch {
+      val res = try { comparer.unifyValueTypes(tpe1, tpe2)(using Covariant); true } catch {
         case NotASubtype => false
       }
       println(s"Checking ${tpe1} <: ${tpe2}: $res")
@@ -212,9 +226,10 @@ object substitutions {
      *
      * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
      */
-    def instantiate(tpe: FunctionType)(using C: ErrorReporter): (List[UnificationVar], List[CaptureUnificationVar], FunctionType) = {
+    def instantiate(tpe: FunctionType, targs: List[ValueType])(using C: ErrorReporter): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
       val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = tpe
-      val typeRigids = tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
+
+      val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
       val captRigids = cparams map freshCaptVar
       val subst = Substitutions(
         tparams zip typeRigids,
@@ -227,6 +242,7 @@ object substitutions {
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
     }
 
+
     /**
      * A side effecting type comparer
      *
@@ -238,6 +254,11 @@ object substitutions {
 
       def abort(msg: String) = C.abort(msg)
 
+
+      def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
+        println(s"Requiring ${x} to be equal to ${tpe}")
+        requireLowerBound(x, tpe)
+        requireUpperBound(x, tpe)
 
       /**
        * Value type [[tpe]] flows into the unification variable [[x]] as a lower bound.
@@ -271,7 +292,7 @@ object substitutions {
               // (3) we check the existing upper bound for consistency with the lower bound
               //     We do not have to do this for connected nodes, since type variables in
               //     the upper bounds are connected itself.
-              unifyValueTypes(merged, upper)
+              unifyValueTypes(merged, upper)(using Covariant)
             }
 
             // (4) we propagate the incoming type to all upper nodes
@@ -301,7 +322,7 @@ object substitutions {
             mergeAndUpdateUpperBound(x, tpe) foreach { merged =>
 
               // (3) we check the existing upper bound for consistency with the lower bound
-              unifyValueTypes(lower, merged)
+              unifyValueTypes(lower, merged)(using Covariant)
             }
 
             // (4) we propagate the incoming type to all lower nodes
@@ -594,57 +615,62 @@ object substitutions {
     // "unification effects"
     def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
     def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
+    def requireEqual(x: UnificationVar, tpe: ValueType): Unit
     def abort(msg: String): Nothing
 
     def unify(c1: CaptureSet, c2: CaptureSet): Unit
     def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
-    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType): Unit = (tpe1, tpe2) match {
-      case (t, s) if t == s => ()
-      case (_, TTop) => ()
-      case (TBottom, _) => ()
+    def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(using p: Polarity): Unit = (tpe1, tpe2, p) match {
+      case (t, s, _) if t == s => ()
+      // for now, we simply flip polarity and only cover covariant and invariant cases
+      case (t, s, Contravariant) => unifyValueTypes(s, t)(using Covariant)
+      case (_, TTop, Covariant) => ()
+      case (TBottom, _, Covariant) => ()
 
-      case (s: UnificationVar, t: ValueType) => requireUpperBound(s, t)
+      case (s: UnificationVar, t: ValueType, Covariant) => requireUpperBound(s, t)
+      case (s: ValueType, t: UnificationVar, Covariant) => requireLowerBound(t, s)
 
-      // occurs for example when checking the first argument of `(1 + 2) == 3` against expected
-      // type `?R` (since `==: [R] (R, R) => Boolean`)
-      case (s: ValueType, t: UnificationVar) => requireLowerBound(t, s)
+      case (s: UnificationVar, t: ValueType, Invariant) => requireEqual(s, t)
+      case (s: ValueType, t: UnificationVar, Invariant) => requireEqual(t, s)
 
-      case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2)) =>
+      // For now, we treat all type constructors as invariant.
+      case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
         if (args1.size != args2.size)
           abort(s"Argument count does not match $t1 vs. $t2")
 
-        unifyValueTypes(t1, t2)
+        unifyValueTypes(t1, t2)(using Invariant)
 
         // TODO here we assume that the type constructor is covariant
-        (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
+        (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
 
-      case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2)) =>
+      case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2), p) =>
         unifyBlockTypes(tpe1, tpe2)
         unify(capt1, capt2)
 
-      case (t, s) =>
-        println(s"Type mismatch: ${t} is not ${s}")
+      case (t, s, p) =>
+        println(s"Type mismatch: ${t} is not ${s} (at polarity $p)")
         abort(s"Expected ${t}, but got ${s}")
     }
 
-    def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType): Unit = (tpe1, tpe2) match {
+    def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(using p: Polarity): Unit = (tpe1, tpe2) match {
       case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s)
       case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s)
       case (t, s) => abort(s"Expected ${t}, but got ${s}")
     }
 
-    def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType): Unit = (tpe1, tpe2) match {
+    def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType)(using p: Polarity): Unit = (tpe1, tpe2) match {
       case (t1: Interface, t2: Interface) => if (t1 != t2) abort(s"Expected ${t1}, but got ${t2}")
+      // for now block type constructors are invariant
       case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
-        unifyInterfaceTypes(c2, c2)
-        (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2) }
+        unifyInterfaceTypes(c2, c2)(using Invariant)
+        (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
       case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
     }
 
-    def unifyEffects(eff1: Effects, eff2: Effects): Unit = ???
+    def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit = ???
 
-    def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType): Unit = (tpe1, tpe2) match {
+    def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(using p: Polarity): Unit = (tpe1, tpe2) match {
       case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
 
         if (tparams1.size != tparams2.size)
@@ -663,8 +689,8 @@ object substitutions {
 
         val (substVparams2, substBparams2, substRet2) = (vparams2 map subst.substitute, bparams2 map subst.substitute, subst.substitute(ret2))
 
-        (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t2, t1) }
-        (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t2, t1) }
+        (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using p.flip) }
+        (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2)(using p.flip) }
         unifyValueTypes(ret1, substRet2)
         unifyEffects(eff1, eff2)
     }

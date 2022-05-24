@@ -169,10 +169,10 @@ object Annotations {
   /**
    * The blocktype of a calltarget as annotated by typer
    */
-  val TargetType = Annotation[source.CallTarget, symbols.FunctionType](
-    "TargetType",
-    "the blocktype for calltarget"
-  )
+  //  val TargetType = Annotation[source.CallTarget, symbols.FunctionType](
+  //    "TargetType",
+  //    "the blocktype for calltarget"
+  //  )
 
   /**
    * The block type of a block argument as annotated by typer
@@ -359,14 +359,14 @@ trait AnnotationsDB { self: Context =>
   // -----------
 
   // annotated by capability passing
-  def annotateCalltarget(t: source.CallTarget, tpe: FunctionType): Unit =
-    annotate(Annotations.TargetType, t, tpe)
+  //  def annotateCalltarget(t: source.CallTarget, tpe: FunctionType): Unit =
+  //    annotate(Annotations.TargetType, t, tpe)
 
-  def functionTypeOf(t: source.CallTarget): FunctionType =
-    annotation(Annotations.TargetType, t)
-
-  def functionTypeOption(t: source.CallTarget): Option[FunctionType] =
-    annotationOption(Annotations.TargetType, t)
+  //  def functionTypeOf(t: source.CallTarget): FunctionType =
+  //    annotation(Annotations.TargetType, t)
+  //
+  //  def functionTypeOption(t: source.CallTarget): Option[FunctionType] =
+  //    annotationOption(Annotations.TargetType, t)
 
   def functionTypeOf(t: source.FunctionArg): FunctionType =
     annotation(Annotations.BlockArgumentType, t)
