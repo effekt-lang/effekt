@@ -138,14 +138,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case source.TryHandle(prog, handlers) =>
 
-        val Result(ret, effs) = checkStmt(prog, expected)
-
         var effects: List[symbols.InterfaceType] = Nil
 
         var handlerEffs = Pure
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
-        Context.withUnificationScope {
+        val Result(ret, effs) = Context.withUnificationScope {
+
+          val Result(ret, effs) = checkStmt(prog, expected)
 
           // the capture variable for the continuation ?Ck
           //val resumeCapture = C.freshCaptVar(CaptureParam(LocalName("$resume")))
@@ -236,13 +236,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
             }
           }
-          val unusedEffects = Effects(effects) -- effs
-
-          if (unusedEffects.nonEmpty)
-            Context.warning("Handling effects that are not used: " + unusedEffects)
-
-          Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
+          Result(ret, effs)
         }
+
+        val unusedEffects = Effects(effects) -- effs
+
+        if (unusedEffects.nonEmpty)
+          Context.warning("Handling effects that are not used: " + unusedEffects)
+
+        Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
 
       case tree @ source.Match(sc, clauses) =>
 
@@ -437,11 +439,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
         sym.bparams foreach Context.bind
         (sym.annotatedType: @unchecked) match {
           case Some(annotated) =>
-            val Result(tpe, effs) = body checkAgainst annotated.result
+            val Result(tpe, effs) = Context.withUnificationScope {
+               body checkAgainst annotated.result
+            }
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
-
             Result((), effs -- annotated.effects) // the declared effects are considered as bound
           case None =>
             val Result(tpe, effs) = checkStmt(body, None)
@@ -497,7 +500,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkFunctionArgument(arg, tpe)
       // if all parameters are annotated, that is good enough...
       // TODO use expected type, if present
-      case (arg@source.FunctionArg(tparams, vparams, bparams, body), _) =>
+      case (arg@source.FunctionArg(tparams, vparams, bparams, body), _) => Context.withUnificationScope {
         val tps = tparams.map { p => p.symbol.asTypeVar }
         val vps = vparams.map { p => p.symbol.tpe }.map {
           case Some(tpe) => tpe
@@ -507,6 +510,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val ret = Context.freshTypeVar(UnificationVar.InferredReturn(arg))
         val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
         checkFunctionArgument(arg, tpe)
+      }
       case _ =>
         Context.abort("Can only type check function arguments, right now. Not capability arguments.")
     }
@@ -695,7 +699,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
     expected: Option[ValueType]
-  )(using Context): Result[ValueType] = Context withUnificationScope {
+  )(using Context): Result[ValueType] = {
 
     println(s"Checking call to $name")
 
@@ -979,7 +983,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def subst: Substitutions = substitutions
 
   // opens a fresh unification scope
-  private[typer] def withUnificationScope[T <: Type](block: => Result[T]): Result[T] = {
+  private[typer] def withUnificationScope[T](block: => T): T = {
     scope.enterScope()
 //    val outer = scope
 //    val newScope = new UnificationScope
