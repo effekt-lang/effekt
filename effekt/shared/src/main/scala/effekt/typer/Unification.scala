@@ -35,20 +35,15 @@ case class LocalScope(types: List[UnificationVar], captures: List[CaptureUnifica
  */
 class Unification(using C: ErrorReporter) { self =>
 
-  // Unification variables in the current scope
-  // ------------------------------------------
-  var scope: Scope = GlobalScope
+  // State of the unification engine
+  // -------------------------------
+  private var scope: Scope = GlobalScope
+  private [typer] var substitution = BiSubstitutions(Map.empty, Map.empty)
+  private var constraints = new ConstraintSet
 
-  var substitution = BiSubstitutions(Map.empty, Map.empty)
 
-
-  private def isLive(x: UnificationVar): Boolean = isLive(x, scope)
-
-  private def isLive(x: UnificationVar, scope: Scope): Boolean = scope match {
-    case GlobalScope => false
-    case LocalScope(types, _, parent) => types.contains(x) || isLive(x, parent)
-  }
-
+  // Creating fresh unification variables
+  // ------------------------------------
   def fresh(role: UnificationVar.Role): UnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
@@ -65,12 +60,9 @@ class Unification(using C: ErrorReporter) { self =>
       x
   }
 
-  // The Constraint Graph
+
+  // Lifecycle management
   // --------------------
-  var constraints = new ConstraintSet
-
-  def dumpConstraints() = constraints.dumpConstraints()
-
   def backup(): UnificationState = UnificationState(scope, constraints.clone(), substitution)
   def restore(state: UnificationState): Unit =
     scope = state.scope
@@ -119,6 +111,11 @@ class Unification(using C: ErrorReporter) { self =>
     substitution
   }
 
+  def dumpConstraints() = constraints.dumpConstraints()
+
+
+  // Registering new constraints
+  // ---------------------------
 
   /**
    * Checks whether t1 <: t2
@@ -147,6 +144,55 @@ class Unification(using C: ErrorReporter) { self =>
 
   def join(tpes: List[ValueType]): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => comparer.merge(t1, t2, Covariant) }
+
+
+  // Using collected information
+  // ---------------------------
+
+  /**
+   * Removes effects [[effs2]] from effects [[effs1]] by checking for subtypes.
+   *
+   * TODO check whether this is sound! It should be, since it is a conservative approximation.
+   *   If it turns out two effects ARE subtypes after all, and we have not removed them, it does not
+   *   compromise effect safety.
+   *
+   * TODO potentially dealias first...
+   */
+  def subtract(effs1: Effects, effs2: Effects): Effects =
+    given Polarity = Covariant
+    val effSubst1 = substitution.substitute(effs1)
+    val effSubst2 = substitution.substitute(effs2)
+    effSubst1.filterNot(eff1 => effSubst2.exists(eff2 => isSubtype(eff2, eff1)))
+
+  /**
+   * Instantiate a typescheme with fresh, rigid type variables
+   *
+   * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+   */
+  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)(using Covariant)
+
+    val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
+
+    val captRigids = cparams map freshCaptVar
+    val subst = Substitutions(
+      tparams zip typeRigids,
+      cparams zip captRigids.map(c => CaptureSet(c)))
+
+    println(s"Type rigids: ${typeRigids}")
+    println(s"Type params: ${tparams}")
+
+    val substitutedVparams = vparams map subst.substitute
+    val substitutedBparams = bparams map subst.substitute
+    val substitutedReturn = subst.substitute(ret)
+    val substitutedEffects = subst.substitute(eff)
+    println(s"Substituted effects ${substitutedEffects}")
+    (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
+  }
+
+
+  // Implementation Details
+  // ----------------------
 
   /**
    * Given the current unification state, can we decide whether one type is a subtype of another?
@@ -199,7 +245,6 @@ class Unification(using C: ErrorReporter) { self =>
       }
   }
 
-
   private def concretizeBounds(lower: ValueType, upper: ValueType): (ValueType, ValueType) = (lower, upper) match {
     case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
     case (TBottom, t) => (t, t)
@@ -207,78 +252,11 @@ class Unification(using C: ErrorReporter) { self =>
     case (lower, upper) => (lower, upper)
   }
 
-  // Maybe move to type comparer??
-  private def coalesceValueBounds(lower: ValueType, upper: ValueType): ValueType = (lower, upper) match {
-    case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
-    case (TBottom, t) => t
-    case (t, TTop)    => t
+  private def isLive(x: UnificationVar): Boolean = isLive(x, scope)
 
-    // a unification variable is more precise than a concrete type
-    case (x: UnificationVar, y) if !y.isInstanceOf[UnificationVar] => x
-    case (x, y: UnificationVar) if !x.isInstanceOf[UnificationVar] => y
-
-    case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2)) =>
-      if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
-      if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
-      val mergedArgs = (args1 zip args2).map { case (t1, t2) => coalesceValueBounds(t1, t2) }
-      ValueTypeApp(cons1, mergedArgs)
-
-    case (BoxedType(b1, c1), BoxedType(b2, c2)) =>
-      BoxedType(coalesceBlockBounds(b1, b2), coalesceCaptureBounds(c1, c2))
-
-    case (lower, upper) => ???
-  }
-
-  private def coalesceBlockBounds(lower: BlockType, upper: BlockType): BlockType = ???
-  private def coalesceCaptureBounds(lower: CaptureSet, upper: CaptureSet): CaptureSet = ???
-
-  /**
-   * Removes effects [[effs2]] from effects [[effs1]] by checking for subtypes.
-   *
-   * TODO check whether this is sound! It should be, since it is a conservative approximation.
-   *   If it turns out two effects ARE subtypes after all, and we have not removed them, it does not
-   *   compromise effect safety.
-   *
-   * TODO potentially dealias first...
-   */
-  def subtract(effs1: Effects, effs2: Effects): Effects =
-    given Polarity = Covariant
-    val effSubst1 = substitution.substitute(effs1)
-    val effSubst2 = substitution.substitute(effs2)
-    effSubst1.filterNot(eff1 => effSubst2.exists(eff2 => isSubtype(eff2, eff1)))
-
-  /**
-   * Instantiate a typescheme with fresh, rigid type variables
-   *
-   * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-   */
-  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)(using Covariant)
-
-    val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
-
-    val captRigids = cparams map freshCaptVar
-    val subst = Substitutions(
-      tparams zip typeRigids,
-      cparams zip captRigids.map(c => CaptureSet(c)))
-
-    println(s"Type rigids: ${typeRigids}")
-    println(s"Type params: ${tparams}")
-
-    val substitutedVparams = vparams map subst.substitute
-    val substitutedBparams = bparams map subst.substitute
-    val substitutedReturn = subst.substitute(ret)
-    val substitutedEffects = subst.substitute(eff)
-    println(s"Substituted effects ${substitutedEffects}")
-    (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
-  }
-
-
-  /**
-   * TODO better name
-   */
-  trait UnificationComparer {
-    def merge(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType
+  private def isLive(x: UnificationVar, scope: Scope): Boolean = scope match {
+    case GlobalScope => false
+    case LocalScope(types, _, parent) => types.contains(x) || isLive(x, parent)
   }
 
   /**
@@ -286,7 +264,7 @@ class Unification(using C: ErrorReporter) { self =>
    *
    * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
    */
-  object comparer extends TypeComparer with UnificationComparer {
+  object comparer extends TypeComparer {
 
     def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
