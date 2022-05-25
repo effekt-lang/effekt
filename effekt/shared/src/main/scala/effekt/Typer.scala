@@ -489,10 +489,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkBlockArgument(arg: source.BlockArg, expected: Option[BlockType])(implicit C: Context): Result[BlockType] =
     (arg, expected) match {
+      // Use expected type, if present
       case (arg: source.FunctionArg, Some(tpe: FunctionType)) =>
         checkFunctionArgument(arg, tpe)
-      // if all parameters are annotated, that is good enough...
-      // TODO use expected type, if present
       case (arg@source.FunctionArg(tparams, vparams, bparams, body), _) => Context.withUnificationScope {
         val tps = tparams.map { p => p.symbol.asTypeVar }
         val vps = vparams.map { p => p.symbol.tpe }.map {
@@ -504,6 +503,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
         checkFunctionArgument(arg, tpe)
       }
+      case (rg@source.InterfaceArg(id), None) =>
+        val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
+        Result(btpe, Pure)
+      case (rg@source.InterfaceArg(id), Some(expected)) =>
+        val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
+        Context.requireSubtype(btpe, expected)
+        Result(btpe, Pure)
       case _ =>
         Context.abort("Can only type check function arguments, right now. Not capability arguments.")
     }
@@ -513,7 +519,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //   BlockArg: foo { n => println("hello" + n) }
   //     or
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
-  def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(implicit C: Context): Result[FunctionType] = Context.focusing(arg) {
+  def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(implicit C: Context): Result[BlockType] = Context.focusing(arg) {
+
+    // We treat
+    //   foo { f }
+    // as a block variable `f` passed to `foo` and NOT as
+    //   foo { () => return box f }
+    case decl @ source.FunctionArg(Nil, Nil, Nil, source.Return(source.Var(id))) =>
+      // TODO, we need to perform elaboration here...
+      checkBlockArgument(source.InterfaceArg(id), Some(expected))
+
     case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
 
       // (1) Apply what we already know.
@@ -535,8 +550,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Check type annotations against declaration
       val valueTypes = (vparams zip vps) map {
-        case (param, exp) =>
-          val adjusted = typeSubst substitute exp
+        case (param, expected) =>
+          val adjusted = typeSubst substitute expected
           val tpe = param.symbol.tpe.map { got =>
               Context.at(param) { Context.requireSubtype(adjusted, got) }
               got
