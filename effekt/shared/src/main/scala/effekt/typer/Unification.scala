@@ -30,10 +30,13 @@ case class LocalScope(types: List[UnificationVar], captures: List[CaptureUnifica
 /**
  * A unification scope -- every fresh unification variable is associated with a scope.
  *
+ * Structural comparison of types are outsourced into [[TypeComparer]], [[TypeUnifier]], and
+ * [[TypeMerger]]. This way, the dependencies are a bit clearer and testability is improved.
+ *
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
+class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, TypeMerger { self =>
 
   // State of the unification engine
   // -------------------------------
@@ -146,7 +149,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
     sys error s"Requiring that ${c1} <:< ${c2}"
 
   def join(tpes: List[ValueType]): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => merge(t1, t2, Covariant) }
+    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, Covariant) }
 
 
   // Using collected information
@@ -222,11 +225,6 @@ class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
     case LocalScope(types, _, parent) => types.contains(x) || isLive(x, parent)
   }
 
-  /**
-   * A side effecting type comparer
-   *
-   * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
-   */
   def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
   def abort(msg: String) = C.abort(msg)
@@ -243,8 +241,8 @@ class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
    *
    *                  ┏━━━━━━━━━━━━━━━━━━━━━━━┓
    *                  ┃           x           ┃
-   *  --------------> ┠───────────┬───────────┨ ---------------->
-   *    (1) tpe       ┃ Lower (2) │ Upper (3) ┃ (4) upper nodes
+   *  --------------> ┠───────────┬───────────┨
+   *    (1) tpe       ┃ Lower (2) │ Upper (3) ┃
    *                  ┗━━━━━━━━━━━┷━━━━━━━━━━━┛
    *
    */
@@ -302,7 +300,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
 
   // only updates one layer of connections, not recursively since we have
   // the invariant that all transitive connections are established
-  def mergeAndUpdateLowerBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
+  private def mergeAndUpdateLowerBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
     assert (!tpe.isInstanceOf[UnificationVar])
     val lower = constraints.lowerBound(x)
     if (x == tpe || lower == tpe || tpe == TBottom) return None;
@@ -310,7 +308,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
     constraints.updateLowerBound(x, newBound)
     Some(newBound)
 
-  def mergeAndUpdateUpperBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
+  private def mergeAndUpdateUpperBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
     assert (!tpe.isInstanceOf[UnificationVar])
     val upper = constraints.upperBound(x)
     if (x == tpe || upper == tpe || tpe == TTop) return None;
@@ -318,71 +316,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
     constraints.updateUpperBound(x, newBound)
     Some(newBound)
 
-  def connectNodes(x: UnificationVar, y: UnificationVar): Unit =
+  private def connectNodes(x: UnificationVar, y: UnificationVar): Unit =
     if (x == y || (constraints.isSubtypeOf(x, y))) return;
     requireLowerBound(y, constraints.lowerBound(x)) // TODO maybe this can be mergeAndUpdateLowerBound
     requireUpperBound(x, constraints.upperBound(y))
     constraints.connect(x, y)
-
-  def merge(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType =
-    (oldBound, newBound, polarity) match {
-      case (t, s, _) if t == s => t
-      case (TBottom, t, Covariant) => t
-      case (t, TBottom, Covariant) => t
-      case (TTop, t, Contravariant) => t
-      case (t, TTop, Contravariant) => t
-
-      case (tpe1: UnificationVar, tpe2: UnificationVar, _) =>
-        // two unification variables, we create a fresh merge node with two incoming / outgoing edges.
-
-        polarity match {
-          case Covariant =>
-            val mergeNode = fresh(UnificationVar.MergeVariable)
-            connectNodes(tpe1, mergeNode)
-            connectNodes(tpe2, mergeNode)
-            mergeNode
-          case Contravariant =>
-            val mergeNode = fresh(UnificationVar.MergeVariable)
-            connectNodes(mergeNode, tpe1)
-            connectNodes(mergeNode, tpe2)
-            mergeNode
-          case Invariant =>
-            // TODO does this make sense?
-            connectNodes(tpe1, tpe2)
-            connectNodes(tpe2, tpe1)
-            tpe1
-        }
-
-      // We can use one of them if it is more specific than the other.
-      case (tpe1, tpe2, Covariant) if subValueType(tpe1, tpe2) => tpe2
-      case (tpe1, tpe2, Contravariant) if subValueType(tpe1, tpe2) => tpe1
-      case (tpe1, tpe2, Covariant) if subValueType(tpe2, tpe1) => tpe1
-      case (tpe1, tpe2, Contravariant) if subValueType(tpe2, tpe1) => tpe2
-
-      case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
-        if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
-        if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
-
-        // TODO Here we assume the constructor is invariant
-        val mergedArgs = (args1 zip args2).map { case (t1, t2) =>
-          merge(t1, t2, Invariant)
-        }
-        ValueTypeApp(cons1, mergedArgs)
-
-      case _ =>
-        C.abort(s"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
-    }
-
-  /**
-   * Compute the join of two types
-   */
-  def mergeLower(oldBound: ValueType, newBound: ValueType): ValueType =
-    merge(oldBound, newBound, Covariant)
-
-  /**
-   * Compute the meet of two types
-   */
-  def mergeUpper(oldBound: ValueType, newBound: ValueType): ValueType =
-    merge(oldBound, newBound, Contravariant)
-
 }

@@ -102,6 +102,11 @@ trait TypeComparer {
     eff1.forall(e1 => eff2.exists(e2 => subEffect(e1, e2)))
 }
 
+/**
+ * A side effecting type comparer
+ *
+ * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
+ */
 trait TypeUnifier extends TypeComparer {
   // "unification effects"
   def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
@@ -204,4 +209,65 @@ trait TypeUnifier extends TypeComparer {
   //  3) type comparer itself
   def dealias(tpe: ValueType): ValueType = ???
   def dealias(tpe: Effects): Effects = ???
+}
+
+
+/**
+ * Merges two types by traversing them structurally.
+ *
+ * Is side effecting in that it influences the constraint graph.
+ */
+trait TypeMerger extends TypeUnifier {
+
+  // computes union or intersection, based on polarity
+  def mergeValueTypes(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType =
+    (oldBound, newBound, polarity) match {
+      case (t, s, _) if t == s => t
+      case (TBottom, t, Covariant) => t
+      case (t, TBottom, Covariant) => t
+      case (TTop, t, Contravariant) => t
+      case (t, TTop, Contravariant) => t
+
+      // reuses the type unifier implementation (will potentially register new constraints)
+      case (x: UnificationVar, tpe: ValueType, p) => unifyValueTypes(x, tpe)(using p); x
+      case (tpe: ValueType, x: UnificationVar, p) => unifyValueTypes(tpe, x)(using p); x
+
+      // We can use one of them if it is more specific than the other.
+      case (tpe1, tpe2, Covariant) if subValueType(tpe1, tpe2) => tpe2
+      case (tpe1, tpe2, Contravariant) if subValueType(tpe1, tpe2) => tpe1
+      case (tpe1, tpe2, Covariant) if subValueType(tpe2, tpe1) => tpe1
+      case (tpe1, tpe2, Contravariant) if subValueType(tpe2, tpe1) => tpe2
+
+      case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
+        if (cons1 != cons2) abort(s"Cannot merge different constructors")
+        if (args1.size != args2.size) abort(s"Different count of argument to type constructor")
+
+        // TODO Here we assume the constructor is invariant
+        val mergedArgs = (args1 zip args2).map { case (t1, t2) =>
+          mergeValueTypes(t1, t2, Invariant)
+        }
+        ValueTypeApp(cons1, mergedArgs)
+
+      case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2), p) =>
+        BoxedType(mergeBlockTypes(tpe1, tpe2, p), mergeCaptures(capt1, capt2, p))
+
+      case _ =>
+        abort(s"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
+    }
+
+  def mergeBlockTypes(oldBound: BlockType, newBound: BlockType, polarity: Polarity): BlockType = ???
+
+  def mergeCaptures(oldBound: CaptureSet, newBound: CaptureSet, polarity: Polarity): CaptureSet = ???
+
+  /**
+   * Compute the join of two types
+   */
+  def mergeLower(oldBound: ValueType, newBound: ValueType): ValueType =
+    mergeValueTypes(oldBound, newBound, Covariant)
+
+  /**
+   * Compute the meet of two types
+   */
+  def mergeUpper(oldBound: ValueType, newBound: ValueType): ValueType =
+    mergeValueTypes(oldBound, newBound, Contravariant)
 }
