@@ -29,8 +29,11 @@ case class LocalScope(types: List[UnificationVar], captures: List[CaptureUnifica
 
 /**
  * A unification scope -- every fresh unification variable is associated with a scope.
+ *
+ * TODO
+ *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification { self =>
+class Unification(using C: ErrorReporter) { self =>
 
   // Unification variables in the current scope
   // ------------------------------------------
@@ -39,9 +42,9 @@ class Unification { self =>
   var substitution = BiSubstitutions(Map.empty, Map.empty)
 
 
-  def isLive(x: UnificationVar): Boolean = isLive(x, scope)
+  private def isLive(x: UnificationVar): Boolean = isLive(x, scope)
 
-  def isLive(x: UnificationVar, scope: Scope): Boolean = scope match {
+  private def isLive(x: UnificationVar, scope: Scope): Boolean = scope match {
     case GlobalScope => false
     case LocalScope(types, _, parent) => types.contains(x) || isLive(x, parent)
   }
@@ -78,7 +81,7 @@ class Unification { self =>
     scope = LocalScope(Nil, Nil, scope)
   }
 
-  def leaveScope()(using ErrorReporter) = {
+  def leaveScope() = {
     val LocalScope(types, captures, parent) = scope match {
       case GlobalScope => sys error "Cannot leave global scope"
       case l : LocalScope => l
@@ -124,25 +127,25 @@ class Unification { self =>
    *
    * TODO Covariant might not be the right polarity
    */
-  def requireSubtype(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit =
+  def requireSubtype(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Covariant;
     comparer.unifyValueTypes(
       substitution.substitute(t1),
       substitution.substitute(t2))
 
-  def requireEqual(t1: ValueType, t2: ValueType)(using C: ErrorReporter): Unit =
+  def requireEqual(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Invariant;
     comparer.unifyValueTypes(
       substitution.substitute(t1),
       substitution.substitute(t2))
 
-  def requireSubtype(t1: BlockType, t2: BlockType)(using C: ErrorReporter): Unit =
+  def requireSubtype(t1: BlockType, t2: BlockType): Unit =
     sys error s"Requiring that ${t1} <:< ${t2}"
 
-  def requireSubregion(c1: CaptureSet, c2: CaptureSet)(using C: ErrorReporter): Unit =
+  def requireSubregion(c1: CaptureSet, c2: CaptureSet): Unit =
     sys error s"Requiring that ${c1} <:< ${c2}"
 
-  def join(tpes: List[ValueType])(using C: ErrorReporter): ValueType =
+  def join(tpes: List[ValueType]): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => comparer.merge(t1, t2, Covariant) }
 
   /**
@@ -197,7 +200,7 @@ class Unification { self =>
   }
 
 
-  private def concretizeBounds(lower: ValueType, upper: ValueType)(using C: ErrorReporter): (ValueType, ValueType) = (lower, upper) match {
+  private def concretizeBounds(lower: ValueType, upper: ValueType): (ValueType, ValueType) = (lower, upper) match {
     case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
     case (TBottom, t) => (t, t)
     case (t, TTop)    => (t, t)
@@ -205,7 +208,7 @@ class Unification { self =>
   }
 
   // Maybe move to type comparer??
-  private def coalesceValueBounds(lower: ValueType, upper: ValueType)(using C: ErrorReporter): ValueType = (lower, upper) match {
+  private def coalesceValueBounds(lower: ValueType, upper: ValueType): ValueType = (lower, upper) match {
     case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
     case (TBottom, t) => t
     case (t, TTop)    => t
@@ -226,8 +229,8 @@ class Unification { self =>
     case (lower, upper) => ???
   }
 
-  private def coalesceBlockBounds(lower: BlockType, upper: BlockType)(using C: ErrorReporter): BlockType = ???
-  private def coalesceCaptureBounds(lower: CaptureSet, upper: CaptureSet)(using C: ErrorReporter): CaptureSet = ???
+  private def coalesceBlockBounds(lower: BlockType, upper: BlockType): BlockType = ???
+  private def coalesceCaptureBounds(lower: CaptureSet, upper: CaptureSet): CaptureSet = ???
 
   /**
    * Removes effects [[effs2]] from effects [[effs1]] by checking for subtypes.
@@ -249,7 +252,7 @@ class Unification { self =>
    *
    * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType])(using C: ErrorReporter): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = tpe
 
     val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
@@ -283,7 +286,7 @@ class Unification { self =>
    *
    * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
    */
-  def comparer(using C: ErrorReporter): TypeComparer with UnificationComparer = new TypeComparer with UnificationComparer {
+  object comparer extends TypeComparer with UnificationComparer {
 
     def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 

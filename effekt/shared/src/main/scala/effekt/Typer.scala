@@ -67,7 +67,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Some(Typechecked(source, tree, mod))
       }
     } finally {
-      Context.scope.dumpConstraints()
+      Context.unification.dumpConstraints()
       // Store the backtrackable annotations into the global DB
       // This is done regardless of errors, since
       Context.commitTypeAnnotations()
@@ -207,7 +207,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     val annotType = sym.tpe
                     annotType.foreach { t => Context.at(param) {
                       // Here we are contravariant: declared types have to be subtypes of the actual types
-                      Context.sub(decl, t)
+                      Context.requireSubtype(decl, t)
                     }}
                     Context.bind(sym, annotType.getOrElse(decl))
                 }
@@ -338,7 +338,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      Context.sub(sc, ret)
+      Context.requireSubtype(sc, ret)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors.
@@ -504,7 +504,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case None => Context.abort("Expected type needs to be known for function arguments at the moment.")
         }
         val bps = bparams.map { p => p.symbol.tpe }
-        val ret = Context.freshTypeVar(UnificationVar.InferredReturn(arg))
+        val ret = Context.fresh(UnificationVar.InferredReturn(arg))
         val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
         checkFunctionArgument(arg, tpe)
       }
@@ -542,7 +542,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, exp) =>
           val adjusted = typeSubst substitute exp
           val tpe = param.symbol.tpe.map { got =>
-              Context.at(param) { Context.sub(adjusted, got) }
+              Context.at(param) { Context.requireSubtype(adjusted, got) }
               got
           } getOrElse { adjusted }
           // bind types to check body
@@ -553,7 +553,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, exp) =>
           val adjusted = typeSubst substitute exp
           val got = param.symbol.tpe
-          Context.at(param) { Context.sub(adjusted, got) }
+          Context.at(param) { Context.requireSubtype(adjusted, got) }
           // bind types to check body
           Context.bind(param.symbol, got)
           got
@@ -714,7 +714,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs)
 
     // (2) check return type
-    expected.foreach { expectedReturn => Context.sub(ret, expectedReturn) }
+    expected.foreach { expectedReturn => Context.requireSubtype(ret, expectedReturn) }
 
     var effs = retEffs
 
@@ -800,7 +800,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs)
-      expected foreach { Context.sub(got, _) }
+      expected foreach { Context.requireSubtype(got, _) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs)
       Result(got, effs)
@@ -835,9 +835,10 @@ private[typer] case class TyperState(effects: Effects, annotations: Annotations,
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
-   * The current unification Scope
+   * The unification engine, keeping track of constraints and the current unification scope
    */
-  private[typer] var scope: Unification = new Unification
+  private[typer] val unification = new Unification(using self)
+  export unification.{ fresh, requireSubtype, requireEqual, requireSubregion, join, instantiate, subtract }
 
   /**
    * The substitutions learnt so far
@@ -945,12 +946,12 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def backupTyperstate(): TyperState =
-    TyperState(lexicalEffects, annotations.copy, scope.backup())
+    TyperState(lexicalEffects, annotations.copy, unification.backup())
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
     lexicalEffects = st.effects
     annotations = st.annotations.copy
-    scope.restore(st.scope)
+    unification.restore(st.scope)
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
@@ -981,7 +982,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](block: => T): T = {
-    scope.enterScope()
+    unification.enterScope()
 //    val outer = scope
 //    val newScope = new UnificationScope
 //    outer.dumpConstraints()
@@ -997,32 +998,10 @@ trait TyperOps extends ContextOps { self: Context =>
 //    newScope.dumpConstraints()
 //    println("Save all remaining constraints to outer scope")
     //outer.valueConstraints = newScope.valueConstraints
-    scope.leaveScope()
+    unification.leaveScope()
 //    scope = outer
     res
   }
-
-
-  // This is ONLY used by match clauses at the moment...
-  def unify(t1: ValueType, t2: ValueType): Unit = ???
-
-  def sub(t1: ValueType, t2: ValueType): Unit =
-    println(s"Require ${t1} <: ${t2}")
-    scope.requireSubtype(t1, t2)
-
-  def sub(t1: BlockType, t2: BlockType): Unit = scope.requireSubtype(t1, t2)
-  def sub(c1: CaptureSet, c2: CaptureSet): Unit = scope.requireSubregion(c1, c2)
-
-  def requireEqual(t1: ValueType, t2: ValueType) = scope.requireEqual(t1, t2)
-
-  def instantiate(tpe: FunctionType, targs: List[ValueType]) = scope.instantiate(tpe, targs)
-
-  def join(tpes: List[ValueType]): ValueType = scope.join(tpes)
-
-  def freshTypeVar(role: UnificationVar.Role): UnificationVar = scope.fresh(role)
-
-  def subtract(effs1: Effects, effs2: Effects): Effects = scope.subtract(effs1, effs2)
-
 
   // Effects that are in the lexical scope
   // =====================================
