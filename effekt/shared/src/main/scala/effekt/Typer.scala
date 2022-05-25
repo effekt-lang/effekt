@@ -239,12 +239,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(ret, effs)
         }
 
-        val unusedEffects = Effects(effects) -- effs
+        val handled = Effects(effects)
+
+        val unusedEffects = Context.subtract(handled, effs)
 
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
-        Result(ret, (effs -- Effects(effects)) ++ handlerEffs)
+        Result(ret, Context.subtract(effs, handled) ++ handlerEffs)
 
       case tree @ source.Match(sc, clauses) =>
 
@@ -346,17 +348,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
       //      }
 
-      // (7) refine parameter types of constructor
-      // i.e. `(Int, List[Int])`
-      val constructorParams = vps map Context.subst.substitute
-
       // (8) check nested patterns
       var bindings = Map.empty[Symbol, ValueType]
 
-      if (patterns.size != constructorParams.size)
-          Context.error(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${constructorParams.size}.")
+      if (patterns.size != vps.size)
+          Context.error(s"Wrong number of pattern arguments, given ${patterns.size}, expected ${vps.size}.")
 
-      (patterns zip constructorParams) foreach {
+      (patterns zip vps) foreach {
         case (pat, par: ValueType) =>
           bindings ++= checkPattern(par, pat)
       }
@@ -445,7 +443,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
-            Result((), effs -- annotated.effects) // the declared effects are considered as bound
+            Result((), Context.subtract(effs, annotated.effects)) // the declared effects are considered as bound
           case None =>
             val Result(tpe, effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
@@ -571,7 +569,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // TODO Here we subtract effects. To be precise, we need to solve as much as possible for
       //   all unification variables that occur in effects. As an approximation, we can solve
       //   the unification scope that corresponds to the body of the block arg.
-      val effs = bodyEffs -- adjustedHandled
+      val effs = Context.subtract(bodyEffs, adjustedHandled)
 
       val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
@@ -1023,6 +1021,8 @@ trait TyperOps extends ContextOps { self: Context =>
   def join(tpes: List[ValueType]): ValueType = scope.join(tpes)
 
   def freshTypeVar(role: UnificationVar.Role): UnificationVar = scope.fresh(role)
+
+  def subtract(effs1: Effects, effs2: Effects): Effects = scope.subtract(effs1, effs2)
 
 
   // Effects that are in the lexical scope

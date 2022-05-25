@@ -82,7 +82,7 @@ object substitutions {
       scope = LocalScope(Nil, Nil, scope)
     }
 
-    def leaveScope() = {
+    def leaveScope()(using ErrorReporter) = {
       val LocalScope(types, captures, parent) = scope match {
         case GlobalScope => sys error "Cannot leave global scope"
         case l : LocalScope => l
@@ -146,7 +146,8 @@ object substitutions {
     def requireSubregion(c1: CaptureSet, c2: CaptureSet)(using C: ErrorReporter): Unit =
       sys error s"Requiring that ${c1} <:< ${c2}"
 
-    def join(tpes: List[ValueType]): ValueType = ???
+    def join(tpes: List[ValueType])(using C: ErrorReporter): ValueType =
+      tpes.foldLeft[ValueType](TBottom) { (t1, t2) => comparer.merge(t1, t2, Covariant) }
 
     /**
      * Given the current unification state, can we decide whether one type is a subtype of another?
@@ -154,34 +155,7 @@ object substitutions {
      * Does not influence the constraint graph.
      */
     def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean =
-      object NotASubtype extends Throwable
-      object comparer extends TypeComparer {
-        def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
-        def abort(msg: String) = throw NotASubtype
-        def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
-          requireLowerBound(x, tpe);
-          requireUpperBound(x, tpe)
-
-        // tpe <: x
-        def requireLowerBound(x: UnificationVar, tpe: ValueType) =
-          tpe match {
-            case y: UnificationVar =>
-              if (!constraints.isSupertypeOf(x, y)) throw NotASubtype
-            case tpe =>
-              // it is compatible with the upper bounds on x
-              unifyValueTypes(tpe, constraints.upperBound(x))(using Covariant)
-          }
-
-        // x <: tpe
-        def requireUpperBound(x: UnificationVar, tpe: ValueType) =
-          tpe match {
-            case y: UnificationVar =>
-              if (!constraints.isSubtypeOf(x, y)) throw NotASubtype
-            case tpe =>
-              unifyValueTypes(constraints.lowerBound(x), tpe)(using Covariant)
-          }
-      }
-      val res = try { comparer.unifyValueTypes(tpe1, tpe2)(using Covariant); true } catch {
+      val res = try { subtypingComparer.unifyValueTypes(tpe1, tpe2)(using Covariant); true } catch {
         case NotASubtype => false
       }
       println(s"Checking ${tpe1} <: ${tpe2}: $res")
@@ -192,14 +166,72 @@ object substitutions {
      *
      * Used to subtract one set of effects from another (when checking handling, or higher-order functions)
      */
-    def isSubtype(e1: Effect, e2: Effect): Boolean = ???
+    def isSubtype(e1: Effect, e2: Effect): Boolean =
+      val res = try { subtypingComparer.unifyEffect(e1, e2)(using Covariant); true } catch {
+        case NotASubtype => false
+      }
+      res
+
+    private object NotASubtype extends Throwable
+    private object subtypingComparer extends TypeComparer {
+      def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+      def abort(msg: String) = throw NotASubtype
+      def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
+        requireLowerBound(x, tpe);
+        requireUpperBound(x, tpe)
+
+      // tpe <: x
+      def requireLowerBound(x: UnificationVar, tpe: ValueType) =
+        tpe match {
+          case y: UnificationVar =>
+            if (!constraints.isSupertypeOf(x, y)) throw NotASubtype
+          case tpe =>
+            // it is compatible with the upper bounds on x
+            unifyValueTypes(tpe, constraints.upperBound(x))(using Covariant)
+        }
+
+      // x <: tpe
+      def requireUpperBound(x: UnificationVar, tpe: ValueType) =
+        tpe match {
+          case y: UnificationVar =>
+            if (!constraints.isSubtypeOf(x, y)) throw NotASubtype
+          case tpe =>
+            unifyValueTypes(constraints.lowerBound(x), tpe)(using Covariant)
+        }
+    }
 
 
-    private def concretizeBounds(lower: ValueType, upper: ValueType): (ValueType, ValueType) = (lower, upper) match {
+    private def concretizeBounds(lower: ValueType, upper: ValueType)(using C: ErrorReporter): (ValueType, ValueType) = (lower, upper) match {
+      case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
       case (TBottom, t) => (t, t)
       case (t, TTop)    => (t, t)
       case (lower, upper) => (lower, upper)
     }
+
+    // Maybe move to type comparer??
+    private def coalesceValueBounds(lower: ValueType, upper: ValueType)(using C: ErrorReporter): ValueType = (lower, upper) match {
+      case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
+      case (TBottom, t) => t
+      case (t, TTop)    => t
+
+      // a unification variable is more precise than a concrete type
+      case (x: UnificationVar, y) if !y.isInstanceOf[UnificationVar] => x
+      case (x, y: UnificationVar) if !x.isInstanceOf[UnificationVar] => y
+
+      case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2)) =>
+        if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
+        if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
+        val mergedArgs = (args1 zip args2).map { case (t1, t2) => coalesceValueBounds(t1, t2) }
+        ValueTypeApp(cons1, mergedArgs)
+
+      case (BoxedType(b1, c1), BoxedType(b2, c2)) =>
+        BoxedType(coalesceBlockBounds(b1, b2), coalesceCaptureBounds(c1, c2))
+
+      case (lower, upper) => ???
+    }
+
+    private def coalesceBlockBounds(lower: BlockType, upper: BlockType)(using C: ErrorReporter): BlockType = ???
+    private def coalesceCaptureBounds(lower: CaptureSet, upper: CaptureSet)(using C: ErrorReporter): CaptureSet = ???
 
     /**
      * Removes effects [[effs2]] from effects [[effs1]] by checking for subtypes.
@@ -211,7 +243,10 @@ object substitutions {
      * TODO potentially dealias first...
      */
     def subtract(effs1: Effects, effs2: Effects): Effects =
-      effs1.filterNot(eff1 => effs2.exists(eff2 => isSubtype(eff2, eff1)))
+      given Polarity = Covariant
+      val effSubst1 = substitution.substitute(effs1)
+      val effSubst2 = substitution.substitute(effs2)
+      effSubst1.filterNot(eff1 => effSubst2.exists(eff2 => isSubtype(eff2, eff1)))
 
     /**
      * Instantiate a typescheme with fresh, rigid type variables
@@ -222,25 +257,37 @@ object substitutions {
       val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = tpe
 
       val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
+
       val captRigids = cparams map freshCaptVar
       val subst = Substitutions(
         tparams zip typeRigids,
         cparams zip captRigids.map(c => CaptureSet(c)))
 
+      println(s"Type rigids: ${typeRigids}")
+      println(s"Type params: ${tparams}")
+
       val substitutedVparams = vparams map subst.substitute
       val substitutedBparams = bparams map subst.substitute
       val substitutedReturn = subst.substitute(ret)
       val substitutedEffects = subst.substitute(eff)
+      println(s"Substituted effects ${substitutedEffects}")
       (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
     }
 
+
+    /**
+     * TODO better name
+     */
+    trait UnificationComparer {
+      def merge(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType
+    }
 
     /**
      * A side effecting type comparer
      *
      * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
      */
-    def comparer(using C: ErrorReporter): TypeComparer = new TypeComparer {
+    def comparer(using C: ErrorReporter): TypeComparer with UnificationComparer = new TypeComparer with UnificationComparer {
 
       def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
@@ -455,8 +502,13 @@ object substitutions {
     }
 
     // TODO implement
-    def substitute(t: Effects): Effects = t
-    def substitute(t: Effect): Effect = t
+    def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
+    def substitute(t: Effect): Effect = t match {
+      case t: Interface => t
+      case t: BuiltinEffect => t
+      case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
+      case alias: EffectAlias => ???
+    }
 
     def substitute(t: BlockType): BlockType = t match {
       case e: InterfaceType => substitute(e)
@@ -556,8 +608,13 @@ object substitutions {
     }
 
     // TODO implement
-    def substitute(t: Effects)(using Polarity): Effects = t
-    def substitute(t: Effect)(using Polarity): Effect = t
+    def substitute(t: Effects)(using Polarity): Effects = Effects(t.toList.map(substitute))
+    def substitute(t: Effect)(using Polarity): Effect = t match {
+      case t: Interface => t
+      case t: BuiltinEffect => t
+      case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
+      case alias: EffectAlias => ???
+    }
 
     def substitute(t: BlockType)(using Polarity): BlockType = t match {
       case e: InterfaceType => substitute(e)
@@ -649,6 +706,13 @@ object substitutions {
         unifyInterfaceTypes(c2, c2)(using Invariant)
         (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
       case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
+    }
+
+    def unifyEffect(eff1: Effect, eff2: Effect)(using p: Polarity): Unit = (eff1, eff2) match {
+      case (e1, e2) if e1 == e2 => ()
+      case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
+        (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
+      case _ => abort(s"Mismatch between ${eff1} and ${eff2}")
     }
 
     def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit = ???

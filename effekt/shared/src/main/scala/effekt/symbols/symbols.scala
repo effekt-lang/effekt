@@ -358,8 +358,8 @@ package object symbols {
     def filterNot(p: Effect => Boolean): Effects =
       Effects(effects.filterNot(p))
 
-    def forall(p: Effect => Boolean): Boolean = ???
-    def exists(p: Effect => Boolean): Boolean = ???
+    def forall(p: Effect => Boolean): Boolean = effects.forall(p)
+    def exists(p: Effect => Boolean): Boolean = effects.exists(p)
 
     def controlEffects: List[InterfaceType] =
       filterNot(_.builtin).toList.map {
