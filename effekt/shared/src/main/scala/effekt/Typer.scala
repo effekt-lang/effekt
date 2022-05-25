@@ -192,16 +192,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, effs)) =
                   Context.instantiate(Context.lookupFunctionType(declaration), targs ++ existentials)
 
-                // (3) substitute what we know so far
-                val substVps = vps map Context.subst.substitute
-                val substTpe = Context.subst substitute tpe
-                val substEffs = Context.subst substitute declaration.otherEffects
+                // (3) check parameters
+                if (vps.size != params.size)
+                  Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${vps.size}.")
 
-                // (4) check parameters
-                if (substVps.size != params.size)
-                  Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${substVps.size}.")
-
-                (params zip substVps).foreach {
+                (params zip vps).foreach {
                   case (param, decl) =>
                     val sym = param.symbol
                     val annotType = sym.tpe
@@ -215,10 +210,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 // (5) synthesize type of continuation
                 val resumeType = if (declaration.isBidirectional) {
                   // resume { e }
-                  FunctionType(Nil, Nil, Nil, List(FunctionType(Nil, Nil, Nil, Nil, substTpe, substEffs)), ret, Pure)
+                  val other = declaration.otherEffects
+                  FunctionType(Nil, Nil, Nil, List(FunctionType(Nil, Nil, Nil, Nil, tpe, other)), ret, Pure)
                 } else {
                   // resume(v)
-                  FunctionType(Nil, Nil, List(substTpe), Nil, ret, Pure)
+                  FunctionType(Nil, Nil, List(tpe), Nil, ret, Pure)
                 }
 
                 Context.bind(Context.symbolOf(resume), resumeType)
@@ -836,14 +832,20 @@ trait TyperOps extends ContextOps { self: Context =>
 
   /**
    * The unification engine, keeping track of constraints and the current unification scope
+   *
+   * Contains mutable variables. The methods [[unification.backup()]] and [[unification.restore()]]
+   * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using self)
   export unification.{ fresh, requireSubtype, requireEqual, requireSubregion, join, instantiate, subtract }
 
-  /**
-   * The substitutions learnt so far
-   */
-  private var substitutions: Substitutions = Substitutions.empty
+  // opens a fresh unification scope
+  private[typer] def withUnificationScope[T](block: => T): T = {
+    unification.enterScope()
+    val res = block
+    unification.leaveScope()
+    res
+  }
 
   /**
    * The current lexical region used for mutable variables.
@@ -955,7 +957,8 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    val subst = substitutions
+    val subst = unification.substitution
+    given Polarity = Covariant
 
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
@@ -973,34 +976,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
     //annotate(Annotations.CaptureForFile, module, substitutedRegions)
     annotations.commit()
-  }
-
-  // Unification
-  // ===========
-
-  private[typer] def subst: Substitutions = substitutions
-
-  // opens a fresh unification scope
-  private[typer] def withUnificationScope[T](block: => T): T = {
-    unification.enterScope()
-//    val outer = scope
-//    val newScope = new UnificationScope
-//    outer.dumpConstraints()
-
-//    println("transfer all constraints to new scope")
-//    scope = newScope
-    //scope.valueConstraints = outer.valueConstraints
-//    println("run block")
-    val res = block
-//    println("solve scope")
-//    newScope.solve()
-//    println("remaining constraints: ")
-//    newScope.dumpConstraints()
-//    println("Save all remaining constraints to outer scope")
-    //outer.valueConstraints = newScope.valueConstraints
-    unification.leaveScope()
-//    scope = outer
-    res
   }
 
   // Effects that are in the lexical scope
