@@ -153,7 +153,7 @@ class Unification(using C: ErrorReporter) { self =>
    *
    * Does not influence the constraint graph.
    */
-  def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean =
+  private def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean =
     val res = try { subtypingComparer.unifyValueTypes(tpe1, tpe2)(using Covariant); true } catch {
       case NotASubtype => false
     }
@@ -165,7 +165,7 @@ class Unification(using C: ErrorReporter) { self =>
    *
    * Used to subtract one set of effects from another (when checking handling, or higher-order functions)
    */
-  def isSubtype(e1: Effect, e2: Effect): Boolean =
+  private def isSubtype(e1: Effect, e2: Effect): Boolean =
     val res = try { subtypingComparer.unifyEffect(e1, e2)(using Covariant); true } catch {
       case NotASubtype => false
     }
@@ -253,7 +253,7 @@ class Unification(using C: ErrorReporter) { self =>
    * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = tpe
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)(using Covariant)
 
     val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
 

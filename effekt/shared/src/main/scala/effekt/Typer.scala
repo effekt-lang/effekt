@@ -57,7 +57,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.error("Unhandled effects: " + effs)
               }
           }
-          Result(TUnit, Pure)
         }
       }
 
@@ -97,7 +96,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(_, blockEffs) = block checkAgainst TUnit
         Result(TUnit, condEffs ++ blockEffs)
 
-      // the variable now can also be a block variable
+      // TODO the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
         case e: ValueSymbol => Result(Context.lookup(e), Pure)
@@ -109,18 +108,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(_, eff) = expr checkAgainst Context.lookup(sym)
         Result(TUnit, eff)
 
-      // TODO share code with FunDef
       case l @ source.Box(block) =>
         val blockType = expected.map {
           case BoxedType(b, _) => b
-          case b => Context.abort(s"Expected ${b} but got a first-class function")
+          case b => Context.abort(s"Expected ${b} but got a boxed value")
         }
         val Result(inferredTpe, inferredEff) = checkBlockArgument(block, blockType)
         Result(BoxedType(inferredTpe, CaptureSet.empty), inferredEff)
 
-      case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) => {
+      case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
         checkOverloadedCall(c, t, targs map { _.resolve }, vargs, bargs, expected)
-      }
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
         val Result(funTpe, funEffs) = checkExpr(e, None)
@@ -447,6 +444,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.assignType(sym, funType)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
+
+
+            println(s"Inferred function type\n  ${id.name}: ${funType}")
 
             Result((), Pure) // all effects are handled by the function itself (since they are inferred)
         }

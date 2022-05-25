@@ -141,7 +141,10 @@ case class BiSubstitutions(
 
   // TODO we DO need to distinguish between substituting unification variables for unification variables
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
-  def substitute(c: CaptureSet)(using Polarity): CaptureSet = ???
+  def substitute(c: CaptureSet)(using Polarity): CaptureSet =
+    // TODO implement
+    c
+
   //    c.flatMap {
   //      // we are probably instantiating a function type
   //      case x: CaptureUnificationVar if captures.keys.exists(c => c.concrete) =>
