@@ -3,7 +3,6 @@ package effekt
 import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef, ExternFlag }
 import effekt.context.Context
 import kiama.util.Source
-import effekt.substitutions._
 
 /**
  * The symbol table contains things that can be pointed to:

@@ -7,7 +7,6 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions._
 import effekt.source.{ AnyPattern, Def, Term, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
-import effekt.substitutions._
 import effekt.symbols._
 import effekt.symbols.builtins._
 import effekt.symbols.kinds._

@@ -2,7 +2,6 @@ package effekt
 
 import effekt.symbols._
 import effekt.typer._
-import effekt.substitutions._
 
 import org.scalatest.funspec.AnyFunSpec
 

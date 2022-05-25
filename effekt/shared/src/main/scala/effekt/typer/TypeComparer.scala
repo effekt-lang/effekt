@@ -1,0 +1,105 @@
+package effekt
+package typer
+
+import effekt.symbols._
+import effekt.symbols.builtins.{ TTop, TBottom }
+
+trait TypeComparer {
+
+  // "unification effects"
+  def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
+  def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
+  def requireEqual(x: UnificationVar, tpe: ValueType): Unit
+  def abort(msg: String): Nothing
+
+  def unify(c1: CaptureSet, c2: CaptureSet): Unit
+  def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
+
+  def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(using p: Polarity): Unit = (tpe1, tpe2, p) match {
+    case (t, s, _) if t == s => ()
+    // for now, we simply flip polarity and only cover covariant and invariant cases
+    case (t, s, Contravariant) => unifyValueTypes(s, t)(using Covariant)
+    case (_, TTop, Covariant) => ()
+    case (TBottom, _, Covariant) => ()
+
+    case (s: UnificationVar, t: ValueType, Covariant) => requireUpperBound(s, t)
+    case (s: ValueType, t: UnificationVar, Covariant) => requireLowerBound(t, s)
+
+    case (s: UnificationVar, t: ValueType, Invariant) => requireEqual(s, t)
+    case (s: ValueType, t: UnificationVar, Invariant) => requireEqual(t, s)
+
+    // For now, we treat all type constructors as invariant.
+    case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
+      if (args1.size != args2.size)
+        abort(s"Argument count does not match $t1 vs. $t2")
+
+      unifyValueTypes(t1, t2)(using Invariant)
+
+      // TODO here we assume that the type constructor is covariant
+      (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
+
+    case (BoxedType(tpe1, capt1), BoxedType(tpe2, capt2), p) =>
+      unifyBlockTypes(tpe1, tpe2)
+      unify(capt1, capt2)
+
+    case (t, s, p) =>
+      println(s"Type mismatch: ${t} is not ${s} (at polarity $p)")
+      abort(s"Expected ${t}, but got ${s}")
+  }
+
+  def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(using p: Polarity): Unit = (tpe1, tpe2) match {
+    case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s)
+    case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s)
+    case (t, s) => abort(s"Expected ${t}, but got ${s}")
+  }
+
+  def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType)(using p: Polarity): Unit = (tpe1, tpe2) match {
+    case (t1: Interface, t2: Interface) => if (t1 != t2) abort(s"Expected ${t1}, but got ${t2}")
+    // for now block type constructors are invariant
+    case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
+      unifyInterfaceTypes(c2, c2)(using Invariant)
+      (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
+    case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
+  }
+
+  def unifyEffect(eff1: Effect, eff2: Effect)(using p: Polarity): Unit = (eff1, eff2) match {
+    case (e1, e2) if e1 == e2 => ()
+    case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
+      (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
+    case _ => abort(s"Mismatch between ${eff1} and ${eff2}")
+  }
+
+  def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit = ???
+
+  def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(using p: Polarity): Unit = (tpe1, tpe2) match {
+    case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
+
+      if (tparams1.size != tparams2.size)
+        abort(s"Type parameter count does not match $f1 vs. $f2")
+
+      if (vparams1.size != vparams2.size)
+        abort(s"Value parameter count does not match $f1 vs. $f2")
+
+      if (bparams1.size != bparams2.size)
+        abort(s"Block parameter count does not match $f1 vs. $f2")
+
+      if (cparams1.size != cparams2.size)
+        abort(s"Capture parameter count does not match $f1 vs. $f2")
+
+      val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+
+      val (substVparams2, substBparams2, substRet2) = (vparams2 map subst.substitute, bparams2 map subst.substitute, subst.substitute(ret2))
+
+      (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using p.flip) }
+      (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2)(using p.flip) }
+      unifyValueTypes(ret1, substRet2)
+      unifyEffects(eff1, eff2)
+  }
+
+  // There are only a few users of dealiasing:
+  //  1) checking for effect inclusion (`contains` in Effects)
+  //  2) checking exhaustivity of pattern matching
+  //  3) type comparer itself
+  def dealias(tpe: ValueType): ValueType = ???
+  def dealias(tpe: Effects): Effects = ???
+}

@@ -5,7 +5,6 @@ import effekt.context.{ Context, ContextOps, Annotations }
 import effekt.symbols._
 import effekt.context.assertions._
 import effekt.source.Tree.Rewrite
-import effekt.substitutions._
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
@@ -44,14 +43,16 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
-      val self = subst.substitute(op.appliedEffect)
-      val others = op.otherEffects.controlEffects map subst.substitute
+      // TODO when moved to typer, make sure we use the correct, substituted, type.
+      val self = op.appliedEffect // subst.substitute(op.appliedEffect)
+      val receiver = C.capabilityReferenceFor(self)
+
+      // TODO same here, substitute
+      val others = op.otherEffects.controlEffects // map subst.substitute
+      val capabilityArgs = others.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
 
       val transformedValueArgs = vargs.map { a => rewrite(a) }
       val transformedBlockArgs = bargs.map { a => rewrite(a) }
-
-      val capabilityArgs = others.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
-      val receiver = C.capabilityReferenceFor(self)
 
       val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
       // C.annotateCalltarget(target, tpe)
@@ -78,7 +79,8 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       // substitution of type params to inferred type arguments
       val subst = (tparams zip C.typeArguments(c)).toMap
-      val effects = effs.controlEffects.toList.map(subst.substitute)
+      // TODO substitute when moved to typer
+      val effects = effs.controlEffects.toList// .map(subst.substitute)
 
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
@@ -92,7 +94,8 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val BoxedType(FunctionType(tparams, cps, vps, bps, ret, effs), _) = C.inferredTypeOf(expr)
 
       val subst = (tparams zip C.typeArguments(c)).toMap
-      val effects = effs.controlEffects.toList.map(subst.substitute)
+      // TODO substitute when moved to typer
+      val effects = effs.controlEffects.toList // .map(subst.substitute)
 
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
