@@ -1,13 +1,16 @@
 package effekt
 
-import effekt.symbols._
-import effekt.typer._
-
+import effekt.source.NoSource
+import effekt.symbols.*
+import effekt.typer.*
+import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
 
 class ConstraintGraphTests extends AnyFunSpec {
+
+  given ErrorReporter with { var focus = NoSource; def buffer = new MessageBuffer }
 
   lazy val scope = { val s = new Unification; s.enterScope(); s }
 
