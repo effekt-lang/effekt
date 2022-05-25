@@ -33,7 +33,7 @@ case class LocalScope(types: List[UnificationVar], captures: List[CaptureUnifica
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification(using C: ErrorReporter) { self =>
+class Unification(using C: ErrorReporter) extends TypeUnifier { self =>
 
   // State of the unification engine
   // -------------------------------
@@ -126,24 +126,27 @@ class Unification(using C: ErrorReporter) { self =>
    */
   def requireSubtype(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Covariant;
-    comparer.unifyValueTypes(
+    unifyValueTypes(
       substitution.substitute(t1),
       substitution.substitute(t2))
 
   def requireEqual(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Invariant;
-    comparer.unifyValueTypes(
+    unifyValueTypes(
       substitution.substitute(t1),
       substitution.substitute(t2))
 
   def requireSubtype(t1: BlockType, t2: BlockType): Unit =
-    sys error s"Requiring that ${t1} <:< ${t2}"
+    given Polarity = Covariant;
+    unifyBlockTypes(
+      substitution.substitute(t1),
+      substitution.substitute(t2))
 
   def requireSubregion(c1: CaptureSet, c2: CaptureSet): Unit =
     sys error s"Requiring that ${c1} <:< ${c2}"
 
   def join(tpes: List[ValueType]): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => comparer.merge(t1, t2, Covariant) }
+    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => merge(t1, t2, Covariant) }
 
 
   // Using collected information
@@ -162,7 +165,7 @@ class Unification(using C: ErrorReporter) { self =>
     given Polarity = Covariant
     val effSubst1 = substitution.substitute(effs1)
     val effSubst2 = substitution.substitute(effs2)
-    effSubst1.filterNot(eff1 => effSubst2.exists(eff2 => isSubtype(eff2, eff1)))
+    effSubst1.filterNot(eff1 => effSubst2.exists(eff2 => subEffect(eff2, eff1)))
 
   /**
    * Instantiate a typescheme with fresh, rigid type variables
@@ -194,56 +197,16 @@ class Unification(using C: ErrorReporter) { self =>
   // Implementation Details
   // ----------------------
 
-  /**
-   * Given the current unification state, can we decide whether one type is a subtype of another?
-   *
-   * Does not influence the constraint graph.
-   */
-  private def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean =
-    val res = try { subtypingComparer.unifyValueTypes(tpe1, tpe2)(using Covariant); true } catch {
-      case NotASubtype => false
-    }
-    println(s"Checking ${tpe1} <: ${tpe2}: $res")
-    res
-
-  /**
-   * Given the current unification state, can we decide whether one effect is a subtype of another?
-   *
-   * Used to subtract one set of effects from another (when checking handling, or higher-order functions)
-   */
-  private def isSubtype(e1: Effect, e2: Effect): Boolean =
-    val res = try { subtypingComparer.unifyEffect(e1, e2)(using Covariant); true } catch {
-      case NotASubtype => false
-    }
-    res
-
-  private object NotASubtype extends Throwable
-  private object subtypingComparer extends TypeComparer {
-    def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
-    def abort(msg: String) = throw NotASubtype
-    def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
-      requireLowerBound(x, tpe);
-      requireUpperBound(x, tpe)
-
-    // tpe <: x
-    def requireLowerBound(x: UnificationVar, tpe: ValueType) =
-      tpe match {
-        case y: UnificationVar =>
-          if (!constraints.isSupertypeOf(x, y)) throw NotASubtype
-        case tpe =>
-          // it is compatible with the upper bounds on x
-          unifyValueTypes(tpe, constraints.upperBound(x))(using Covariant)
-      }
-
-    // x <: tpe
-    def requireUpperBound(x: UnificationVar, tpe: ValueType) =
-      tpe match {
-        case y: UnificationVar =>
-          if (!constraints.isSubtypeOf(x, y)) throw NotASubtype
-        case tpe =>
-          unifyValueTypes(constraints.lowerBound(x), tpe)(using Covariant)
-      }
+  def hasLowerBound(x: UnificationVar, y: ValueType): Boolean = y match {
+    case y: UnificationVar => constraints.isSupertypeOf(x, y)
+    // it is compatible with the upper bounds on x
+    case tpe => subValueType(tpe, constraints.upperBound(x))
   }
+  def hasUpperBound(x: UnificationVar, y: ValueType): Boolean = y match {
+    case y: UnificationVar => constraints.isSubtypeOf(x, y)
+    case tpe => subValueType(tpe, constraints.lowerBound(x))
+  }
+  def isEqual(x: UnificationVar, y: UnificationVar): Boolean = constraints.isEqual(x, y)
 
   private def concretizeBounds(lower: ValueType, upper: ValueType): (ValueType, ValueType) = (lower, upper) match {
     case (TBottom, TTop) => C.abort("Cannot infer type") // TODO move to right point
@@ -264,164 +227,162 @@ class Unification(using C: ErrorReporter) { self =>
    *
    * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
    */
-  object comparer extends TypeComparer {
+  def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
 
-    def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
-
-    def abort(msg: String) = C.abort(msg)
+  def abort(msg: String) = C.abort(msg)
 
 
-    def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
-      println(s"Requiring ${x} to be equal to ${tpe}")
-      requireLowerBound(x, tpe)
-      requireUpperBound(x, tpe)
+  def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
+    println(s"Requiring ${x} to be equal to ${tpe}")
+    requireLowerBound(x, tpe)
+    requireUpperBound(x, tpe)
 
-    /**
-     * Value type [[tpe]] flows into the unification variable [[x]] as a lower bound.
-     *
-     *
-     *                  ┏━━━━━━━━━━━━━━━━━━━━━━━┓
-     *                  ┃           x           ┃
-     *  --------------> ┠───────────┬───────────┨ ---------------->
-     *    (1) tpe       ┃ Lower (2) │ Upper (3) ┃ (4) upper nodes
-     *                  ┗━━━━━━━━━━━┷━━━━━━━━━━━┛
-     *
-     */
-    def requireLowerBound(x: UnificationVar, tpe: ValueType) =
+  /**
+   * Value type [[tpe]] flows into the unification variable [[x]] as a lower bound.
+   *
+   *
+   *                  ┏━━━━━━━━━━━━━━━━━━━━━━━┓
+   *                  ┃           x           ┃
+   *  --------------> ┠───────────┬───────────┨ ---------------->
+   *    (1) tpe       ┃ Lower (2) │ Upper (3) ┃ (4) upper nodes
+   *                  ┗━━━━━━━━━━━┷━━━━━━━━━━━┛
+   *
+   */
+  def requireLowerBound(x: UnificationVar, tpe: ValueType) =
 
-      if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
+    if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
 
-      if (x == tpe) return ()
+    if (x == tpe) return ()
 
-      tpe match {
-        // the new lower bound is a unification variable
-        case y: UnificationVar => connectNodes(y, x)
+    tpe match {
+      // the new lower bound is a unification variable
+      case y: UnificationVar => connectNodes(y, x)
 
-        // the new lower bound is a value type
-        case _ =>
-          // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
-          val (lower, upper) = constraints.boundsFor(x)
+      // the new lower bound is a value type
+      case _ =>
+        // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
+        val (lower, upper) = constraints.boundsFor(x)
 
-          // (2) we merge the existing lower bound with the incoming type.
-          mergeAndUpdateLowerBound(x, tpe) foreach { merged =>
+        // (2) we merge the existing lower bound with the incoming type.
+        mergeAndUpdateLowerBound(x, tpe) foreach { merged =>
 
-            // (3) we check the existing upper bound for consistency with the lower bound
-            //     We do not have to do this for connected nodes, since type variables in
-            //     the upper bounds are connected itself.
-            unifyValueTypes(merged, upper)(using Covariant)
-          }
-      }
+          // (3) we check the existing upper bound for consistency with the lower bound
+          //     We do not have to do this for connected nodes, since type variables in
+          //     the upper bounds are connected itself.
+          unifyValueTypes(merged, upper)(using Covariant)
+        }
+    }
 
-    /**
-     * Value type [[tpe]] flows into the unification variable [[x]] as an upper bound.
-     * Symmetric to [[requireLowerBound]].
-     */
-    def requireUpperBound(x: UnificationVar, tpe: ValueType) =
+  /**
+   * Value type [[tpe]] flows into the unification variable [[x]] as an upper bound.
+   * Symmetric to [[requireLowerBound]].
+   */
+  def requireUpperBound(x: UnificationVar, tpe: ValueType) =
 
-      if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
+    if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
 
-      if (x == tpe) return ()
+    if (x == tpe) return ()
 
-      tpe match {
-        // the new lower bound is a unification variable
-        case y: UnificationVar => connectNodes(x, y)
+    tpe match {
+      // the new lower bound is a unification variable
+      case y: UnificationVar => connectNodes(x, y)
 
-        // the new lower bound is a value type
-        case _ =>
-          // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
-          val (lower, upper) = constraints.boundsFor(x)
+      // the new lower bound is a value type
+      case _ =>
+        // (1) look up the bounds for node `x` -- this can potentially add a fresh node to the network
+        val (lower, upper) = constraints.boundsFor(x)
 
-          // (2) we merge the existing lower bound with the incoming type.
-          mergeAndUpdateUpperBound(x, tpe) foreach { merged =>
+        // (2) we merge the existing lower bound with the incoming type.
+        mergeAndUpdateUpperBound(x, tpe) foreach { merged =>
 
-            // (3) we check the existing upper bound for consistency with the lower bound
-            unifyValueTypes(lower, merged)(using Covariant)
-          }
-      }
+          // (3) we check the existing upper bound for consistency with the lower bound
+          unifyValueTypes(lower, merged)(using Covariant)
+        }
+    }
 
-    // only updates one layer of connections, not recursively since we have
-    // the invariant that all transitive connections are established
-    def mergeAndUpdateLowerBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
-      assert (!tpe.isInstanceOf[UnificationVar])
-      val lower = constraints.lowerBound(x)
-      if (x == tpe || lower == tpe || tpe == TBottom) return None;
-      val newBound = mergeLower(lower, tpe)
-      constraints.updateLowerBound(x, newBound)
-      Some(newBound)
+  // only updates one layer of connections, not recursively since we have
+  // the invariant that all transitive connections are established
+  def mergeAndUpdateLowerBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
+    assert (!tpe.isInstanceOf[UnificationVar])
+    val lower = constraints.lowerBound(x)
+    if (x == tpe || lower == tpe || tpe == TBottom) return None;
+    val newBound = mergeLower(lower, tpe)
+    constraints.updateLowerBound(x, newBound)
+    Some(newBound)
 
-    def mergeAndUpdateUpperBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
-      assert (!tpe.isInstanceOf[UnificationVar])
-      val upper = constraints.upperBound(x)
-      if (x == tpe || upper == tpe || tpe == TTop) return None;
-      val newBound = mergeUpper(upper, tpe)
-      constraints.updateUpperBound(x, newBound)
-      Some(newBound)
+  def mergeAndUpdateUpperBound(x: UnificationVar, tpe: ValueType): Option[ValueType] =
+    assert (!tpe.isInstanceOf[UnificationVar])
+    val upper = constraints.upperBound(x)
+    if (x == tpe || upper == tpe || tpe == TTop) return None;
+    val newBound = mergeUpper(upper, tpe)
+    constraints.updateUpperBound(x, newBound)
+    Some(newBound)
 
-    def connectNodes(x: UnificationVar, y: UnificationVar): Unit =
-      if (x == y || (constraints.isSubtypeOf(x, y))) return;
-      requireLowerBound(y, constraints.lowerBound(x)) // TODO maybe this can be mergeAndUpdateLowerBound
-      requireUpperBound(x, constraints.upperBound(y))
-      constraints.connect(x, y)
+  def connectNodes(x: UnificationVar, y: UnificationVar): Unit =
+    if (x == y || (constraints.isSubtypeOf(x, y))) return;
+    requireLowerBound(y, constraints.lowerBound(x)) // TODO maybe this can be mergeAndUpdateLowerBound
+    requireUpperBound(x, constraints.upperBound(y))
+    constraints.connect(x, y)
 
-    def merge(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType =
-      (oldBound, newBound, polarity) match {
-        case (t, s, _) if t == s => t
-        case (TBottom, t, Covariant) => t
-        case (t, TBottom, Covariant) => t
-        case (TTop, t, Contravariant) => t
-        case (t, TTop, Contravariant) => t
+  def merge(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType =
+    (oldBound, newBound, polarity) match {
+      case (t, s, _) if t == s => t
+      case (TBottom, t, Covariant) => t
+      case (t, TBottom, Covariant) => t
+      case (TTop, t, Contravariant) => t
+      case (t, TTop, Contravariant) => t
 
-        case (tpe1: UnificationVar, tpe2: UnificationVar, _) =>
-          // two unification variables, we create a fresh merge node with two incoming / outgoing edges.
+      case (tpe1: UnificationVar, tpe2: UnificationVar, _) =>
+        // two unification variables, we create a fresh merge node with two incoming / outgoing edges.
 
-          polarity match {
-            case Covariant =>
-              val mergeNode = fresh(UnificationVar.MergeVariable)
-              connectNodes(tpe1, mergeNode)
-              connectNodes(tpe2, mergeNode)
-              mergeNode
-            case Contravariant =>
-              val mergeNode = fresh(UnificationVar.MergeVariable)
-              connectNodes(mergeNode, tpe1)
-              connectNodes(mergeNode, tpe2)
-              mergeNode
-            case Invariant =>
-              // TODO does this make sense?
-              connectNodes(tpe1, tpe2)
-              connectNodes(tpe2, tpe1)
-              tpe1
-          }
+        polarity match {
+          case Covariant =>
+            val mergeNode = fresh(UnificationVar.MergeVariable)
+            connectNodes(tpe1, mergeNode)
+            connectNodes(tpe2, mergeNode)
+            mergeNode
+          case Contravariant =>
+            val mergeNode = fresh(UnificationVar.MergeVariable)
+            connectNodes(mergeNode, tpe1)
+            connectNodes(mergeNode, tpe2)
+            mergeNode
+          case Invariant =>
+            // TODO does this make sense?
+            connectNodes(tpe1, tpe2)
+            connectNodes(tpe2, tpe1)
+            tpe1
+        }
 
-        // We can use one of them if it is more specific than the other.
-        case (tpe1, tpe2, Covariant) if isSubtype(tpe1, tpe2) => tpe2
-        case (tpe1, tpe2, Contravariant) if isSubtype(tpe1, tpe2) => tpe1
-        case (tpe1, tpe2, Covariant) if isSubtype(tpe2, tpe1) => tpe1
-        case (tpe1, tpe2, Contravariant) if isSubtype(tpe2, tpe1) => tpe2
+      // We can use one of them if it is more specific than the other.
+      case (tpe1, tpe2, Covariant) if subValueType(tpe1, tpe2) => tpe2
+      case (tpe1, tpe2, Contravariant) if subValueType(tpe1, tpe2) => tpe1
+      case (tpe1, tpe2, Covariant) if subValueType(tpe2, tpe1) => tpe1
+      case (tpe1, tpe2, Contravariant) if subValueType(tpe2, tpe1) => tpe2
 
-        case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
-          if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
-          if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
+      case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
+        if (cons1 != cons2) C.abort(s"Cannot merge different constructors")
+        if (args1.size != args2.size) C.abort(s"Different count of argument to type constructor")
 
-          // TODO Here we assume the constructor is invariant
-          val mergedArgs = (args1 zip args2).map { case (t1, t2) =>
-            merge(t1, t2, Invariant)
-          }
-          ValueTypeApp(cons1, mergedArgs)
+        // TODO Here we assume the constructor is invariant
+        val mergedArgs = (args1 zip args2).map { case (t1, t2) =>
+          merge(t1, t2, Invariant)
+        }
+        ValueTypeApp(cons1, mergedArgs)
 
-        case _ =>
-          C.abort(s"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
-      }
+      case _ =>
+        C.abort(s"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
+    }
 
-    /**
-     * Compute the join of two types
-     */
-    def mergeLower(oldBound: ValueType, newBound: ValueType): ValueType =
-      merge(oldBound, newBound, Covariant)
+  /**
+   * Compute the join of two types
+   */
+  def mergeLower(oldBound: ValueType, newBound: ValueType): ValueType =
+    merge(oldBound, newBound, Covariant)
 
-    /**
-     * Compute the meet of two types
-     */
-    def mergeUpper(oldBound: ValueType, newBound: ValueType): ValueType =
-      merge(oldBound, newBound, Contravariant)
-  }
+  /**
+   * Compute the meet of two types
+   */
+  def mergeUpper(oldBound: ValueType, newBound: ValueType): ValueType =
+    merge(oldBound, newBound, Contravariant)
+
 }
