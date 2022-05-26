@@ -66,7 +66,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Some(Typechecked(source, tree, mod))
       }
     } finally {
-      Context.unification.dumpConstraints()
       // Store the backtrackable annotations into the global DB
       // This is done regardless of errors, since
       Context.commitTypeAnnotations()
@@ -445,9 +444,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
 
-
-            println(s"Inferred function type\n  ${id.name}: ${funType}")
-
             Result((), Pure) // all effects are handled by the function itself (since they are inferred)
         }
 
@@ -708,8 +704,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     bargs: List[source.BlockArg],
     expected: Option[ValueType]
   )(using Context): Result[ValueType] = {
-
-    println(s"Checking call to $name")
 
     if (targs.nonEmpty && targs.size != funTpe.tparams.size)
       Context.abort(s"Wrong number of type arguments ${targs.size}")
@@ -986,6 +980,12 @@ trait TyperOps extends ContextOps { self: Context =>
     inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
     inferredEffects foreach { case (t, eff) => annotate(Annotations.InferredEffect, t, subst.substitute(eff)) }
 
+    inferredFunctionTypes foreach { case (t, tpe) => annotate(Annotations.BlockArgumentType, t, subst.substitute(tpe)) }
+
+    inferredTypeArgs foreach { case (call, targs) =>
+      annotations.annotate(Annotations.TypeArguments, call, targs map subst.substitute)
+    }
+
 //    val substitutedRegions = inferredRegions map { case (t, capt) => (t, capt.asRegionSet) }//(t, subst.substitute(capt)) }
     //inferredRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt.asInstanceOf[RegionSet]) }
 
@@ -1025,6 +1025,9 @@ trait TyperOps extends ContextOps { self: Context =>
   private var inferredEffects: List[(Tree, Effects)] = Nil
   private var inferredRegions: List[(Tree, Capture)] = Nil
 
+  private var inferredFunctionTypes: List[(source.FunctionArg, FunctionType)] = Nil
+  private var inferredTypeArgs: List[(source.Call, List[symbols.ValueType])] = Nil
+
 
   private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
   private[typer] def annotateInferredType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
@@ -1037,12 +1040,12 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // this also needs to be backtrackable to interact correctly with overload resolution
   private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Context = {
-    annotations.annotate(Annotations.BlockArgumentType, t, tpe)
+    inferredFunctionTypes = (t -> tpe) :: inferredFunctionTypes
     this
   }
 
   private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
-    annotations.annotate(Annotations.TypeArguments, call, targs)
+    inferredTypeArgs = (call -> targs) :: inferredTypeArgs
     this
   }
 

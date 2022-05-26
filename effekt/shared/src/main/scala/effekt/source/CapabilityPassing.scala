@@ -6,6 +6,8 @@ import effekt.symbols._
 import effekt.context.assertions._
 import effekt.source.Tree.Rewrite
 
+import effekt.typer.typeMapToSubstitution
+
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
  *
@@ -43,8 +45,12 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
       // Do not provide capabilities for builtin effects and also
       // omit the capability for the effect itself (if it is an effect operation)
+
       // TODO when moved to typer, make sure we use the correct, substituted, type.
-      val self = op.appliedEffect // subst.substitute(op.appliedEffect)
+      //   here we instantiate the function with the inferred type arguments.
+      //   i.e. [E]() -> Exception[E]  and RuntimeException becomes () -> Exception[RuntimeException]
+      val self = subst.substitute(op.appliedEffect)
+
       val receiver = C.capabilityReferenceFor(self)
 
       // TODO same here, substitute

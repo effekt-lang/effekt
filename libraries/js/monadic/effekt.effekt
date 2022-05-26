@@ -11,6 +11,7 @@ extern include "effekt_builtins.js"
 // Pattern Matching
 extern include "effekt_matching.js"
 
+def locally[R] { f: R }: R = f()
 
 // Side effecting ops
 // ==================
@@ -95,6 +96,8 @@ extern pure def exp(x: Double): Double =
 extern pure def _pi(): Double =
   "Math.PI"
 
+val PI: Double = _pi()
+
 extern pure def toInt(d: Double): Int =
   "Math.round(d)"
 
@@ -163,3 +166,95 @@ extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
 
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
   "x && y"
+
+// Undefined and Null
+// ==================
+// Should only be used for interop with JS, since values in Effekt should not be undefined
+
+// Is something an undefined JavaScript value?
+extern pure def isUndefined[A](value: A): Boolean =
+  "value === undefined"
+
+// Is something a JavaScript null value?
+extern pure def isNull[A](value: A): Boolean =
+  "value === null"
+
+// Pairs
+// =====
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+
+
+// Exceptions
+// ==========
+// a fatal runtime error that cannot be caught
+extern io def panic[R](msg: String): R =
+  "(function() { throw msg })()"
+
+effect Exception[E] {
+  def raise[A](exception: E, msg: String): A
+}
+record RuntimeError()
+
+def raise[A](msg: String): A / Exception[RuntimeError] = raise(RuntimeError(), msg)
+
+// converts exceptions of (static) type E to an uncatchable panic that aborts the program
+def panicOn[E] { prog: Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception, msg) = panic(msg) }
+
+// reports exceptions of (static) type E to the console
+def report[E] { prog: Unit / Exception[E] }: Unit / Console =
+  try { prog() } with Exception[E] { def raise(exception, msg) = println(msg) }
+
+// ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+def ignoring[E] { prog: Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise(exception, msg) = () }
+
+// Control Flow
+// ============
+def each(start: Int, end: Int) { action: (Int) => Unit } = {
+  var i = start;
+  while (i < end) {
+      action(i)
+      i = i + 1
+  }
+}
+
+def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
+
+
+
+// Benchmarking
+// ============
+
+// Current time in nanoseconds
+// TODO use a better timer
+extern control def currentTimeNanos(): Int =
+  "$effekt.delayed(() => new Date().getTime() * 1000)"
+
+extern io def setTimeout(callback: () => Unit, timeout: Int): Unit =
+  "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
+
+// runs the block and returns the time in nanoseconds
+def timed { block: Unit }: Int = {
+  val before = currentTimeNanos()
+  block()
+  val after = currentTimeNanos()
+  after - before
+}
+
+def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
+  def run(n: Int, report: Boolean): Unit = {
+    if (n <= 0) { () } else {
+      val time = timed { block() };
+      if (report) { println(time) } else { () };
+      run(n - 1, report)
+    }
+  }
+  run(warmup, false)
+  run(iterations, true)
+}

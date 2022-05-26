@@ -83,10 +83,6 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     }
     scope = parent
 
-    println(s"Leaving scope, removing ${types}")
-
-    constraints.dumpConstraints()
-
     var subst = Map.empty[TypeVar, (ValueType, ValueType)]
 
     constraints.remove(types.toSet) foreach {
@@ -97,11 +93,8 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     }
     val subst1 = BiSubstitutions(subst, Map.empty)
 
-    println(subst1)
-
     // apply substitution to itself to remove all occurrences of skolems
     val subst2 = subst1.substitute(subst1)
-    println(subst2)
     substitution = substitution.updateWith(subst2)
 
     // apply substitution to bounds in remaining constraints
@@ -109,9 +102,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       (substitution.substitute(lower)(using Covariant), substitution.substitute(upper)(using Contravariant))
     }
 
-    constraints.dumpConstraints()
-    println(substitution)
-    substitution
+    // constraints.dumpConstraints()
   }
 
   def dumpConstraints() = constraints.dumpConstraints()
@@ -185,14 +176,11 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       tparams zip typeRigids,
       cparams zip captRigids.map(c => CaptureSet(c)))
 
-    println(s"Type rigids: ${typeRigids}")
-    println(s"Type params: ${tparams}")
-
     val substitutedVparams = vparams map subst.substitute
     val substitutedBparams = bparams map subst.substitute
     val substitutedReturn = subst.substitute(ret)
     val substitutedEffects = subst.substitute(eff)
-    println(s"Substituted effects ${substitutedEffects}")
+
     (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
   }
 
@@ -231,7 +219,6 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
 
   def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
-    println(s"Requiring ${x} to be equal to ${tpe}")
     requireLowerBound(x, tpe)
     requireUpperBound(x, tpe)
 

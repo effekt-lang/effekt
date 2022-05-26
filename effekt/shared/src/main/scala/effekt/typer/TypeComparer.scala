@@ -145,7 +145,6 @@ trait TypeUnifier extends TypeComparer {
       unify(capt1, capt2)
 
     case (t, s, p) =>
-      println(s"Type mismatch: ${t} is not ${s} (at polarity $p)")
       abort(s"Expected ${t}, but got ${s}")
   }
 
