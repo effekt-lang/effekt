@@ -5,12 +5,12 @@ package typer
  * In this file we fully qualify source types, but use symbols directly
  */
 import effekt.context.{ Annotations, Context, ContextOps }
-import effekt.context.assertions._
-import effekt.source.{ AnyPattern, Def, Term, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Tree }
-import effekt.symbols._
-import effekt.symbols.builtins._
-import effekt.symbols.kinds._
-import effekt.util.messages.FatalPhaseError
+import effekt.context.assertions.*
+import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree }
+import effekt.symbols.*
+import effekt.symbols.builtins.*
+import effekt.symbols.kinds.*
+import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
 import kiama.util.Messaging.Messages
 
 import scala.language.implicitConversions
@@ -32,6 +32,7 @@ import scala.language.implicitConversions
  * Also, after type checking, all definitions of the file will be annotated with their type.
  */
 case class Result[+T](tpe: T, effects: Effects)
+
 
 object Typer extends Phase[NameResolved, Typechecked] {
 
@@ -772,6 +773,55 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Helpers and Extension Methods">
 
+  /**
+   * Asserts that all effects in the list are _concrete_, that is,
+   * no unification variables (neither type, nor region) are allowed.
+   *
+   * If all effects are concrete (and we assume effect type constructors are INVARIANT):
+   *   - we can use structural equality to compare them
+   *   - we can use sets and hash maps
+   *
+   * Consequences:
+   *   - If we try to add an effect that is not concrete, we should raise an "Could not infer..." error.
+   *   - We need to substitute early in order to have more concrete effects.
+   *   - Requiring effects to be concrete also simplifies effect-set comparison in [[TypeComparer]].
+   *
+   * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
+   */
+  private def assertConcrete(effs: Effects)(using C: ErrorReporter): Unit =
+    if (!isConcreteEffects(effs)) C.abort(s"Effects need to be fully known: ${effs}")
+
+  private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
+    case x: UnificationVar => false
+    case x: TypeVar => true
+    case t: TypeConstructor => true
+    case t : BuiltinType => true
+    case ValueTypeApp(tpe, args) => isConcreteValueType(tpe) && args.forall(isConcreteValueType)
+    case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
+    case TypeAlias(name, tparams, tpe) => ???
+  }
+
+  private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
+    case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+      vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
+    case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
+    case t: Interface => true
+  }
+  private def isConcreteCaptureSet(capt: CaptureSet): Boolean = capt.captures.forall(isConcreteCapture)
+  private def isConcreteCapture(capt: Capture): Boolean = capt match {
+    case CaptureOf(sym) => true
+    case CaptureParam(name) => true
+    case CaptureUnificationVar(underlying) => false
+  }
+
+  private def isConcreteEffect(eff: Effect): Boolean = eff match {
+    case t: Interface => true
+    case t: BuiltinEffect => true
+    case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
+    case t: EffectAlias => ???
+  }
+  private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteEffect)
+
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
     case FunctionType(tps, cps, vps, bps, ret, effs) =>
@@ -842,6 +892,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     def --(other: Effects): Effects = Context.subtract(eff, other)
   }
   //</editor-fold>
+
 }
 
 /**
