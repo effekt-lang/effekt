@@ -243,7 +243,7 @@ package object symbols {
     lazy val vparams = fields.map { f => f.param }
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
-    def annotatedEffects = Some(Pure)
+    def annotatedEffects = Some(Effects.Pure)
   }
 
   /**
@@ -257,7 +257,7 @@ package object symbols {
     val vparams = List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else ValueTypeApp(rec, rec.tparams))))
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
-    def annotatedEffects = Some(Pure)
+    def annotatedEffects = Some(Effects.Pure)
   }
 
   /**
@@ -365,10 +365,10 @@ package object symbols {
 
     def apply(effs: Iterable[Effect]): Effects =
       new Effects(effs.toList)
+
+    def empty: Effects = new Effects(Nil)
+    val Pure = empty
   }
-
-  lazy val Pure = new Effects(Nil)
-
   /**
    * Capture Sets
    */

@@ -330,8 +330,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
     val tpe = C.valueTypeOf(binder)
     val eff = Interface(binder.name, Nil)
-    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Pure, eff)
-    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Pure, eff)
+    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Effects.Pure, eff)
+    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Effects.Pure, eff)
 
     val param = BlockParam(binder.name, eff)
     eff.ops = List(get, put)

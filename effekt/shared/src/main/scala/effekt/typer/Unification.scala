@@ -25,7 +25,10 @@ case class UnificationState(
 
 sealed trait Scope
 case object GlobalScope extends Scope
-case class LocalScope(types: List[UnificationVar], captures: List[CaptureUnificationVar], parent: Scope) extends Scope
+case class LocalScope(
+  types: List[UnificationVar],
+  captures: List[CaptureUnificationVar],
+  parent: Scope) extends Scope
 
 /**
  * A unification scope -- every fresh unification variable is associated with a scope.
@@ -63,6 +66,11 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       x
   }
 
+  // Substitution
+  // ------------
+  // TODO implement: should apply everything we know up to this point.
+  def apply(e: Effects): Effects =
+    substitution.substitute(e)(using Covariant)
 
   // Lifecycle management
   // --------------------
@@ -106,6 +114,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   }
 
   def dumpConstraints() = constraints.dumpConstraints()
+
 
 
   // Registering new constraints
@@ -213,7 +222,8 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     case LocalScope(types, _, parent) => types.contains(x) || isLive(x, parent)
   }
 
-  def unify(c1: CaptureSet, c2: CaptureSet): Unit = ???
+  def unify(c1: CaptureSet, c2: CaptureSet): Unit =
+    println(s"Unifiying ${c1} and ${c2}")
 
   def abort(msg: String) = C.abort(msg)
 
@@ -238,6 +248,8 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     if (!isLive(x)) sys error s"Recording constraint on variable ${x}, which is not live!"
 
     if (x == tpe) return ()
+
+    // TODO if [[tpe]] is a concrete type, then add to substitution after merging.
 
     tpe match {
       // the new lower bound is a unification variable

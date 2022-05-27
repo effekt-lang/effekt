@@ -31,8 +31,48 @@ import scala.language.implicitConversions
  * IDE support.
  * Also, after type checking, all definitions of the file will be annotated with their type.
  */
-case class Result[+T](tpe: T, effects: Effects)
+case class Result[+T](tpe: T, effects: ConcreteEffects)
 
+/**
+ * All effects inferred by Typer are required to be concrete.
+ *
+ * This way, we can easily compare them for equality.
+ */
+class ConcreteEffects private[typer] (protected val effects: List[Effect]) {
+
+  def toList: List[Effect] = effects
+  def toEffects: Effects = Effects(effects)
+
+  // both are known to be concrete, no need to go through validation again
+  def ++(other: ConcreteEffects): ConcreteEffects = ConcreteEffects.fromList(this.effects ++ other.effects)
+
+  // we can use set difference since type constructors are assumed to be invariant and all unification variables
+  // are substituted away.
+  def --(other: ConcreteEffects): ConcreteEffects = ConcreteEffects.fromList(
+    (this.effects.toSet -- other.effects.toSet).toList
+  )
+
+  def isEmpty: Boolean = effects.isEmpty
+  def nonEmpty: Boolean = effects.nonEmpty
+
+  def filterNot(p: Effect => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
+
+  def forall(p: Effect => Boolean): Boolean = effects.forall(p)
+  def exists(p: Effect => Boolean): Boolean = effects.exists(p)
+}
+object ConcreteEffects {
+  // unsafe, doesn't perform check
+  private def fromList(eff: List[Effect]): ConcreteEffects = new ConcreteEffects(eff.distinct)
+  def apply(eff: List[Effect])(using Context): ConcreteEffects =
+    eff foreach Typer.assertConcrete
+    fromList(eff)
+
+  def apply(effs: Effects)(using Context): ConcreteEffects = apply(effs.toList)
+
+  def empty: ConcreteEffects = fromList(Nil)
+}
+
+val Pure = ConcreteEffects.empty
 
 object Typer extends Phase[NameResolved, Typechecked] {
 
@@ -135,7 +175,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         var effects: List[symbols.InterfaceType] = Nil
 
-        var handlerEffs = Pure
+        var handlerEffs: ConcreteEffects = Pure
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
         val Result(ret, effs) = Context.withUnificationScope {
@@ -207,10 +247,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val resumeType = if (declaration.isBidirectional) {
                   // resume { e }
                   val other = declaration.otherEffects
-                  FunctionType(Nil, Nil, Nil, List(FunctionType(Nil, Nil, Nil, Nil, tpe, other)), ret, Pure)
+                  FunctionType(Nil, Nil, Nil, List(FunctionType(Nil, Nil, Nil, Nil, tpe, other)), ret, Effects.Pure)
                 } else {
                   // resume(v)
-                  FunctionType(Nil, Nil, List(tpe), Nil, ret, Pure)
+                  FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
                 }
 
                 Context.bind(Context.symbolOf(resume), resumeType)
@@ -230,7 +270,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(ret, effs)
         }
 
-        val handled = Effects(effects)
+        val handled = ConcreteEffects(effects)
 
         val unusedEffects = handled -- effs
 
@@ -433,16 +473,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
             }
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
-            Context.annotateInferredEffects(d, effs)
+            Context.annotateInferredEffects(d, effs.toEffects)
             Result((), effs -- annotated.effects) // the declared effects are considered as bound
           case None =>
-            val Result(tpe, effs) = checkStmt(body, None)
+            val Result(tpe, effs) = Context.withUnificationScope {
+              checkStmt(body, None)
+            }
             Context.wellscoped(effs) // check they are in scope
 
-            val funType = sym.toType(tpe, effs)
+            val funType = sym.toType(tpe, effs.toEffects)
             Context.assignType(sym, funType)
             Context.annotateInferredType(d, tpe)
-            Context.annotateInferredEffects(d, effs)
+            Context.annotateInferredEffects(d, effs.toEffects)
 
             Result((), Pure) // all effects are handled by the function itself (since they are inferred)
         }
@@ -488,17 +530,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // Use expected type, if present
       case (arg: source.FunctionArg, Some(tpe: FunctionType)) =>
         checkFunctionArgument(arg, tpe)
-      case (arg@source.FunctionArg(tparams, vparams, bparams, body), _) => Context.withUnificationScope {
-        val tps = tparams.map { p => p.symbol.asTypeVar }
-        val vps = vparams.map { p => p.symbol.tpe }.map {
-          case Some(tpe) => tpe
-          case None => Context.abort("Expected type needs to be known for function arguments at the moment.")
-        }
-        val bps = bparams.map { p => p.symbol.tpe }
-        val ret = Context.fresh(UnificationVar.InferredReturn(arg))
-        val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
-        checkFunctionArgument(arg, tpe)
-      }
+      case (arg@source.FunctionArg(tparams, vparams, bparams, body), None) =>
+        // the code below is wrong, so better crash for now
+        ???
+//        Context.withUnificationScope {
+//          val tps = tparams.map { p => p.symbol.asTypeVar }
+//          val vps = vparams.map { p => p.symbol.tpe }.map {
+//            case Some(tpe) => tpe
+//            case None => Context.abort("Expected type needs to be known for function arguments at the moment.")
+//          }
+//          val bps = bparams.map { p => p.symbol.tpe }
+//          val ret = Context.fresh(UnificationVar.InferredReturn(arg))
+//          // TODO Pure is not correct here, it will handle ALL effects.
+//          println("in this case!!!")
+//          val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
+//          // As a quick fix, we swap out the effects here...
+//          val Result(FunctionType(tps1, cps1, vps1, bps1, ret1, _), effs1) = checkFunctionArgument(arg, tpe)
+//          Result(FunctionType(tps1, cps1, vps1, bps1, ret1, effs1), Pure)
+//        } { r => r.effects }
       case (rg@source.InterfaceArg(id), None) =>
         val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
         Result(btpe, Pure)
@@ -567,10 +616,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
       val captureParams = bparams.map { p => CaptureOf(p.symbol) }
       val adjustedReturn = typeSubst substitute tpe1
-
-      val Result(bodyType, bodyEffs) = body checkAgainst adjustedReturn
-
       val adjustedHandled = typeSubst substitute handled
+
+      val Result(bodyType, bodyEffs) = Context.withUnificationScope {
+        body checkAgainst adjustedReturn
+      }
 
       // TODO Here we subtract effects. To be precise, we need to solve as much as possible for
       //   all unification variables that occur in effects. As an approximation, we can solve
@@ -721,7 +771,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // (2) check return type
     expected.foreach { expectedReturn => Context.requireSubtype(ret, expectedReturn) }
 
-    var effs = retEffs
+    var effs: ConcreteEffects = Pure
 
     (vps zip vargs) foreach { case (tpe, expr) =>
       val Result(t, eff) = checkExpr(expr, Some(tpe))
@@ -733,7 +783,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       effs = effs ++ eff
     }
 
-    // Context.checkFullyDefined(rigids)
+    // We add return effects last to have more information at this point to
+    // concretize the effect.
+    effs = effs ++ retEffs
 
     // annotate call node with inferred type arguments
     // val inferredTypeArgs = rigids.map(Context.unifier.substitute)
@@ -773,6 +825,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Helpers and Extension Methods">
 
+  // TODO first substitute, then check concrete, then convert.
+  implicit def asConcrete(effs: Effects)(using Context): ConcreteEffects =
+    ConcreteEffects(Context.unification(effs))
+
   /**
    * Asserts that all effects in the list are _concrete_, that is,
    * no unification variables (neither type, nor region) are allowed.
@@ -788,8 +844,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
    *
    * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
    */
-  private def assertConcrete(effs: Effects)(using C: ErrorReporter): Unit =
+  private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
     if (!isConcreteEffects(effs)) C.abort(s"Effects need to be fully known: ${effs}")
+
+  private[typer] def assertConcrete(eff: Effect)(using C: Context): Unit =
+    if (!isConcreteEffect(eff)) {
+      C.unification.dumpConstraints()
+      C.abort(s"Effects need to be fully known: ${eff}")
+    }
 
   private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
     case x: UnificationVar => false
@@ -853,10 +915,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)
-      wellformed(effs)
+      wellformed(effs.toEffects)
       expected foreach { Context.requireSubtype(got, _) }
       Context.annotateInferredType(t, got)
-      Context.annotateInferredEffects(t, effs)
+      Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)
     }
 
@@ -898,7 +960,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 /**
  * Instances of this class represent an immutable backup of the typer state
  */
-private[typer] case class TyperState(effects: Effects, annotations: Annotations, scope: UnificationState)
+private[typer] case class TyperState(lexicalEffects: List[Interface], annotations: Annotations, scope: UnificationState)
 
 trait TyperOps extends ContextOps { self: Context =>
 
@@ -929,7 +991,7 @@ trait TyperOps extends ContextOps { self: Context =>
   /**
    * The effects, whose declarations are _lexically_ in scope
    */
-  private var lexicalEffects: Effects = Pure
+  private var lexicalEffects: List[Interface] = Nil
 
 
   // The "Typing Context"
@@ -987,6 +1049,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def bind(p: BlockParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(CaptureOf(s)))
   }
+
   //</editor-fold>
 
 
@@ -1015,7 +1078,10 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def initTyperstate(effects: Effects): Unit = {
-    lexicalEffects = effects
+    lexicalEffects = effects.toList.collect {
+      case i: Interface => i
+      case BlockTypeApp(i, _) => i
+    }
     annotations = Annotations.empty
   }
 
@@ -1023,7 +1089,7 @@ trait TyperOps extends ContextOps { self: Context =>
     TyperState(lexicalEffects, annotations.copy, unification.backup())
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
-    lexicalEffects = st.effects
+    lexicalEffects = st.lexicalEffects
     annotations = st.annotations.copy
     unification.restore(st.scope)
   }
@@ -1058,25 +1124,26 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Effects that are in the lexical scope
   // =====================================
-  private[typer] def effects: Effects = lexicalEffects
+  private[typer] def effectsInScope: List[Interface] = lexicalEffects
 
   private[typer] def withEffect(e: Interface): Context = {
-    // lexicalEffects += e
+    lexicalEffects = e :: lexicalEffects
     this
   }
 
-  private[typer] def wellscoped(a: Effects): Unit = ()
-  //  {
-  //    // here we only care for the effect itself, not its type arguments
-  //    val forbidden = Effects(a.controlEffects.toList.collect {
-  //      case e: Interface      => e
-  //      case BlockTypeApp(e, args) => e
-  //      case e: EffectAlias     => e
-  //    }) -- effects
-  //    if (forbidden.nonEmpty) {
-  //      error(s"Effects ${forbidden} leave their defining scope.")
-  //    }
-  //  }
+  // TODO extend check to also check in value types
+  //   (now that we have first class functions, they could mention effects).
+  private[typer] def wellscoped(effects: ConcreteEffects): Unit = {
+    def check(eff: Interface): Unit =
+      if (!(lexicalEffects contains eff)) error(s"Effect ${eff} leaves its defining scope.")
+
+    effects.toList foreach {
+      case e: Interface => check(e)
+      case BlockTypeApp(e, args) => check(e)
+      case e: EffectAlias => ???
+      case b: BuiltinEffect => ()
+    }
+  }
 
   // Inferred types
   // ==============
