@@ -309,7 +309,7 @@ package object symbols {
   case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Fun {
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(resultType)
-    def annotatedEffects = Some(otherEffects + appliedEffect)
+    def annotatedEffects = Some(Effects(appliedEffect :: otherEffects.toList))
 
     def appliedEffect = if (effect.tparams.isEmpty) effect else BlockTypeApp(effect, effect.tparams)
 
@@ -332,13 +332,6 @@ package object symbols {
 
     lazy val toList: List[Effect] = effects.distinct
 
-    // This is only used by typer
-    def +(eff: InterfaceType): Effects = this ++ Effects(eff)
-
-    def ++(other: Effects): Effects = Effects((other.toList ++ this.toList).distinct)
-
-    def --(other: Effects): Effects = Effects(this.toList.filterNot(other.contains))
-
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
 
@@ -346,13 +339,6 @@ package object symbols {
     //      case other: Effects => this.contains(other.toList) && other.contains(this.toList)
     //      case _              => false
     //    }
-
-    // TODO contains check should ONLY be performed by Substitution, move implementation!
-    //  it performed dealiasing, which is the job of Substitution, not this data class!
-    def contains(e: Effect): Boolean = contains(List(e))
-    def contains(other: List[Effect]): Boolean = other.forall {
-      e => this.toList.contains(e)
-    }
 
     def filterNot(p: Effect => Boolean): Effects =
       Effects(effects.filterNot(p))
@@ -434,6 +420,7 @@ package object symbols {
   case class CaptureParam(name: Name) extends Capture {
     def concrete = true
   }
+
   case class CaptureUnificationVar(underlying: Capture) extends Capture {
     val name = underlying.name
     def concrete = false

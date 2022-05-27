@@ -108,9 +108,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result(TUnit, eff)
 
       case l @ source.Box(block) =>
-        val blockType = expected.map {
+        val blockType = expected.collect {
           case BoxedType(b, _) => b
-          case b => Context.abort(s"Expected ${b} but got a boxed value")
         }
         val Result(inferredTpe, inferredEff) = checkBlockArgument(block, blockType)
         Result(BoxedType(inferredTpe, CaptureSet.empty), inferredEff)
@@ -232,12 +231,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         val handled = Effects(effects)
 
-        val unusedEffects = Context.subtract(handled, effs)
+        val unusedEffects = handled -- effs
 
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
-        Result(ret, Context.subtract(effs, handled) ++ handlerEffs)
+        Result(ret, (effs -- handled) ++ handlerEffs)
 
       case tree @ source.Match(sc, clauses) =>
 
@@ -434,7 +433,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs)
-            Result((), Context.subtract(effs, annotated.effects)) // the declared effects are considered as bound
+            Result((), effs -- annotated.effects) // the declared effects are considered as bound
           case None =>
             val Result(tpe, effs) = checkStmt(body, None)
             Context.wellscoped(effs) // check they are in scope
@@ -575,7 +574,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // TODO Here we subtract effects. To be precise, we need to solve as much as possible for
       //   all unification variables that occur in effects. As an approximation, we can solve
       //   the unification scope that corresponds to the body of the block arg.
-      val effs = Context.subtract(bodyEffs, adjustedHandled)
+      val effs = bodyEffs -- adjustedHandled
 
       val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
@@ -829,6 +828,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
         .map { tpe => tpe.effects }
         .getOrElse { Context.lookupFunctionType(fun).effects }
   }
+
+  /**
+   * We cannot simply use concatenation or set subtraction for effects, if
+   * we want to keep them in a normal form unifying for example
+   *   State[?S] and State[?T] if we know ?S = ?T
+   *
+   * We thus have to delegate to Context.unification
+   */
+  extension (eff: Effects)(using Context) {
+    // TODO this would be the position to enforce a normal form:
+    def ++(other: Effects): Effects = Effects(eff.toList ++ other.toList)
+    def --(other: Effects): Effects = Context.subtract(eff, other)
+  }
   //</editor-fold>
 }
 
@@ -998,21 +1010,22 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def effects: Effects = lexicalEffects
 
   private[typer] def withEffect(e: Interface): Context = {
-    lexicalEffects += e
+    // lexicalEffects += e
     this
   }
 
-  private[typer] def wellscoped(a: Effects): Unit = {
-    // here we only care for the effect itself, not its type arguments
-    val forbidden = Effects(a.controlEffects.toList.collect {
-      case e: Interface      => e
-      case BlockTypeApp(e, args) => e
-      case e: EffectAlias     => e
-    }) -- effects
-    if (forbidden.nonEmpty) {
-      error(s"Effects ${forbidden} leave their defining scope.")
-    }
-  }
+  private[typer] def wellscoped(a: Effects): Unit = ()
+  //  {
+  //    // here we only care for the effect itself, not its type arguments
+  //    val forbidden = Effects(a.controlEffects.toList.collect {
+  //      case e: Interface      => e
+  //      case BlockTypeApp(e, args) => e
+  //      case e: EffectAlias     => e
+  //    }) -- effects
+  //    if (forbidden.nonEmpty) {
+  //      error(s"Effects ${forbidden} leave their defining scope.")
+  //    }
+  //  }
 
   // Inferred types
   // ==============
