@@ -83,7 +83,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val NameResolved(source, tree, mod) = input
 
       // Effects that are lexically in scope at the top level
-      val toplevelEffects = mod.imports.foldLeft(mod.effects) { _ ++ _.effects }
+      val toplevelEffects = mod.imports.foldLeft(asConcrete(mod.effects)) { case (effs, mod) =>
+        effs ++ asConcrete(mod.effects)
+      }
       Context.initTyperstate(toplevelEffects)
 
       Context in {
@@ -941,18 +943,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         .getOrElse { Context.lookupFunctionType(fun).effects }
   }
 
-  /**
-   * We cannot simply use concatenation or set subtraction for effects, if
-   * we want to keep them in a normal form unifying for example
-   *   State[?S] and State[?T] if we know ?S = ?T
-   *
-   * We thus have to delegate to Context.unification
-   */
-  extension (eff: Effects)(using Context) {
-    // TODO this would be the position to enforce a normal form:
-    def ++(other: Effects): Effects = Effects(eff.toList ++ other.toList)
-    def --(other: Effects): Effects = Context.subtract(eff, other)
-  }
   //</editor-fold>
 
 }
@@ -971,7 +961,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using self)
-  export unification.{ fresh, requireSubtype, requireEqual, requireSubregion, join, instantiate, subtract }
+  export unification.{ fresh, requireSubtype, requireEqual, requireSubregion, join, instantiate }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](block: => T): T = {
@@ -1077,12 +1067,13 @@ trait TyperOps extends ContextOps { self: Context =>
     result
   }
 
-  private[typer] def initTyperstate(effects: Effects): Unit = {
+  private[typer] def initTyperstate(effects: ConcreteEffects): Unit = {
     lexicalEffects = effects.toList.collect {
       case i: Interface => i
       case BlockTypeApp(i, _) => i
     }
     annotations = Annotations.empty
+    unification.init()
   }
 
   private[typer] def backupTyperstate(): TyperState =
@@ -1096,7 +1087,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = unification.substitution
-    given Polarity = Covariant
 
     // now also store the typing context in the global database:
     valueTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
