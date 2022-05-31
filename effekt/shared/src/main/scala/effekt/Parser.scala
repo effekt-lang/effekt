@@ -19,12 +19,12 @@ object Parser extends Phase[Source, Parsed] {
    */
   def parser(implicit C: Context) = new EffektParsers(C.positions)
 
-  def run(source: Source)(implicit C: Context) = source match {
+  def run(source: Source)(implicit C: Context) = source.match{
     case VirtualSource(decl, _) => Some(decl)
     case source =>
       //println(s"parsing ${source.name}")
       parser.parse(source)
-  } map { tree => Parsed(source, tree) }
+  }.map{ tree => Parsed(source, tree) }
 }
 
 /**
@@ -99,6 +99,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `control` = keyword("control")
   lazy val `io` = keyword("io")
   lazy val `record` = keyword("record")
+  lazy val `onSuspend` = keyword("on suspend")
+  lazy val `onResume` = keyword("on resume")
+  lazy val `onReturn` = keyword("on return")
+  lazy val `finally` = keyword("finally")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
@@ -459,12 +463,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val doExpr: P[Expr] =
     `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call.apply
 
-  private def validateClauses(prog: Stmt, handler: List[Handler], clauses: List[Clause]) =
+  private def validateTryClauses(prog: Stmt, handler: List[Handler], clauses: List[TryClause]) =
     // extract each type of clause from the list of clauses
     val suspend = clauses collect { case x: OnSuspend => x }
     val resume = clauses collect { case x: OnResume => x }
     val ret = clauses collect { case x: OnReturn => x }
-    val fin = clauses collect { case x: FinallyClause => x }
+    val fin = clauses collect { case x: Finally => x }
     // validate
     if suspend.size > 1 then
       failure("Expected at most one 'on suspend' clause, but found " + suspend.size)
@@ -482,14 +486,14 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val handleExpr: P[Expr] =
     (`try` ~/> stmt ~ some(handler) ~ many(tryClauses)).flatMap {
       case s ~ h ~ cs =>
-        validateClauses(s, h, cs)
+        validateTryClauses(s, h, cs)
     } ^^ {
       case (s, h, suspend, resume, ret, fin) =>
         // either desugar the finally block or pass the suspend, resume and return clause along
         fin match 
           // desugar if there's a finally clause: 
           // finally { s } <=> on suspend { s } on return { _ => s }
-          case Some(FinallyClause(s)) =>
+          case Some(Finally(s)) =>
             val param = List(ValueParams(List(ValueParam(IdDef("_"), None))))
             // { _ => s }
             val retBlockArg = BlockArg(param, s)
@@ -499,24 +503,24 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
             TryHandle(s, h, suspend, resume, ret)
     }
 
-  lazy val tryClauses: P[Clause] =
-    onSuspend | onResume | onReturn | `finally`
+  lazy val tryClauses: P[TryClause] =
+    onSuspendClause | onResumeClause | onReturnClause | finallyClause
 
   // matches "on suspend { ... }"
-  lazy val onSuspend: P[OnSuspend] =
-    keyword("on suspend") ~/> stmt ^^ OnSuspend.apply
+  lazy val onSuspendClause: P[OnSuspend] =
+    `onSuspend` ~/> stmt ^^ OnSuspend.apply
 
   // matches "on resume { e => ... }"
-  lazy val onResume: P[OnResume] =
-    keyword("on resume") ~/> blockArg ^^ OnResume.apply
+  lazy val onResumeClause: P[OnResume] =
+    `onResume` ~/> blockArg ^^ OnResume.apply
 
   // matches "on return { e => ... }"
-  lazy val onReturn: P[OnReturn] =
-    keyword("on return") ~/> blockArg ^^ OnReturn.apply
+  lazy val onReturnClause: P[OnReturn] =
+    `onReturn` ~/> blockArg ^^ OnReturn.apply
 
   // matches "finally { ... }"
-  lazy val `finally`: P[FinallyClause] =
-    keyword("finally") ~/> stmt ^^ FinallyClause.apply
+  lazy val finallyClause: P[Finally] =
+    `finally` ~/> stmt ^^ Finally.apply
 
   lazy val handler: P[Handler] =
     ( `with` ~> effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
