@@ -86,7 +86,7 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 case object Hole extends Stmt
 
 case class State(id: ControlEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
-case class Handle(body: Block, handler: List[Handler]) extends Stmt
+case class Handle(body: Block, handler: List[Handler], onSuspend: Option[Stmt], onResume: Option[Block], onReturn: Option[Block]) extends Stmt
 // TODO change to Map
 case class Handler(id: ControlEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
 
@@ -152,8 +152,11 @@ object Tree {
           Include(contents, rewrite(rest))
         case State(id, tpe, get, put, init, body) =>
           State(id, tpe, get, put, rewrite(init), rewrite(body))
-        case Handle(body, handler) =>
-          Handle(rewrite(body), handler map rewrite)
+        case Handle(body, handler, suspend, resume, ret) =>
+          val onSusp = suspend map rewrite
+          val onRes = resume map rewrite
+          val onRet = ret map rewrite
+          Handle(rewrite(body), handler map rewrite, onSusp, onRes, onRet)
         case Match(scrutinee, clauses) =>
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])

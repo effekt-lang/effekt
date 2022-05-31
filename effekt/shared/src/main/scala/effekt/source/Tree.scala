@@ -297,19 +297,18 @@ case class ExprTarget(receiver: Expr) extends CallTarget
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Expr
 case class While(cond: Expr, block: Stmt) extends Expr
 
-sealed trait Clause extends Tree
+sealed trait TryClause extends Tree
 
-case class OnResume(prog: BlockArg) extends Clause
+case class OnResume(prog: BlockArg) extends TryClause
 
-case class OnSuspend(prog: Stmt) extends Clause
+case class OnSuspend(prog: Stmt) extends TryClause
 
-case class OnReturn(prog: BlockArg) extends Clause
+case class OnReturn(prog: BlockArg) extends TryClause
 
-case class FinallyClause(prog: Stmt) extends Clause
+case class Finally(prog: Stmt) extends TryClause
 
 case class TryHandle(
-  prog: Stmt, handlers: List[Handler], on_suspend: Option[OnSuspend], on_resume: Option[OnResume], on_return: Option[OnReturn]
-// Syntactic sugar: finally { s } <=> ... on suspend { s } on return { _ => s }
+  prog: Stmt, handlers: List[Handler], onSuspend: Option[OnSuspend], onResume: Option[OnResume], onReturn: Option[OnReturn]
 ) extends Expr
 
 /**
@@ -487,9 +486,9 @@ object Tree {
         Call(fun, targs, args.map(rewrite))
 
       case TryHandle(prog, handlers, suspend, resume, ret) =>
-        val suspend_ = suspend map { _ match { case OnSuspend(s) => OnSuspend(rewrite(s)) } }
-        val resume_ = resume map { _ match { case OnResume(blkArgRes) => OnResume(rewrite(blkArgRes)) } }
-        val ret_ = ret map { _ match { case OnReturn(blkArgRet) => OnReturn(rewrite(blkArgRet)) } }
+        val suspend_ = suspend map { case OnSuspend(s) => OnSuspend(rewrite(s)) }
+        val resume_ = resume map { case OnResume(blkArgRes) => OnResume(rewrite(blkArgRes)) }
+        val ret_ = ret map { case OnReturn(blkArgRet) => OnReturn(rewrite(blkArgRet)) }
         TryHandle(rewrite(prog), handlers.map(rewrite), suspend_, resume_, ret_)
 
       case Hole(stmts) =>
