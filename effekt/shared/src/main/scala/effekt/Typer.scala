@@ -187,7 +187,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Call(source.MemberTarget(receiver, id), targs, vargs, bargs) =>
         Context.panic("Method call syntax not allowed in source programs.")
 
-      case source.TryHandle(prog, handlers) =>
+      case tree @ source.TryHandle(prog, handlers) =>
 
         var effects: List[symbols.InterfaceType] = Nil
 
@@ -292,6 +292,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
+
+        // bind capabilities for handled effects
+        Context.bindCapabilities(effects, tree)
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
@@ -490,7 +493,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs.toEffects)
-            Result((), effs -- annotated.effects) // the declared effects are considered as bound
+
+            // the declared effects are considered as bound
+            val bound: ConcreteEffects = annotated.effects
+            Context.bindCapabilities(bound.controlEffects, d)
+
+            Result((), effs -- bound)
           case None =>
             val Result(tpe, effs) = {
               checkStmt(body, None)
@@ -502,7 +510,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs.toEffects)
 
-            Result((), Pure) // all effects are handled by the function itself (since they are inferred)
+            // all effects are handled by the function itself (since they are inferred)
+            Context.bindCapabilities(effs.controlEffects, d)
+
+            Result((), Pure)
         }
 
       case d @ source.EffDef(id, tparams, ops) =>
@@ -624,16 +635,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
       val captureParams = bparams.map { p => CaptureOf(p.symbol) }
       val adjustedReturn = typeSubst substitute tpe1
-      val adjustedHandled = typeSubst substitute handled
 
       val Result(bodyType, bodyEffs) = {
         body checkAgainst adjustedReturn
       }
 
-      // TODO Here we subtract effects. To be precise, we need to solve as much as possible for
-      //   all unification variables that occur in effects. As an approximation, we can solve
-      //   the unification scope that corresponds to the body of the block arg.
-      val effs = bodyEffs -- adjustedHandled
+      val adjustedHandled = typeSubst substitute handled
+
+      // Bind additional capabilities for all control effects "handled" by the function argument.
+      val bound: ConcreteEffects = adjustedHandled
+      Context.bindCapabilities(bound.controlEffects, decl)
+
+      val effs = bodyEffs -- bound
 
       val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
@@ -799,8 +812,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     Context.annotateTypeArgs(call, typeArgs)
 
-    // annotate the calltarget tree with the resolved blocktype
-//    Context.annotateTarget(call.target, bt)
+    // annotate the calltarget tree with the additional capabilities
+    Context.provideCapabilities(call, effs.controlEffects)
 
     Result(ret, effs)
   }
@@ -833,9 +846,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Helpers and Extension Methods">
 
-  // TODO first substitute, dealias, then check concrete, then convert.
+  // TODO first substitute and dealias, then check concrete, then convert.
   implicit def asConcrete(effs: Effects)(using Context): ConcreteEffects =
-    println(effs.toString + " -> " + Context.unification(effs).toString)
     ConcreteEffects(Context.unification(effs))
 
   /**
@@ -1050,6 +1062,52 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   //</editor-fold>
+
+
+  /**
+   * Capabilities that are currently "unbound", they still need to be associated with a
+   * handler, or a function definition.
+   *
+   * The InterfaceType needs to be fully concrete and dealiased.
+   *
+   * TODO needs to be backtrackable
+   */
+  private[typer] var unboundCapabilities: Map[InterfaceType, symbols.BlockParam] = Map.empty
+
+  /**
+   * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]], [[source.VarDef]], or [[source.FunctionArg]]
+   */
+  private var boundCapabilities: Map[source.Tree, List[symbols.BlockParam]] = Map.empty
+
+  /**
+   * Capabilities inferred as additional arguments to a call.
+   */
+  private var capabilityArguments: Map[source.Call, List[symbols.BlockParam]] = Map.empty
+
+
+  def lookupCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
+    Typer.assertConcrete(tpe)
+    unboundCapabilities.getOrElse(tpe, {
+      val freshCapability = BlockParam(tpe.name, tpe: InterfaceType)
+      unboundCapabilities = unboundCapabilities.updated(tpe, freshCapability)
+      freshCapability
+    })
+
+  def bindCapabilities(tpes: List[InterfaceType], binder: source.Tree): Unit =
+    val caps = tpes map { tpe =>
+      val cap = lookupCapabilityFor(tpe)
+      unboundCapabilities = unboundCapabilities.removed(tpe)
+      positions.dupPos(binder, cap)
+      cap
+    }
+    println(s"Bound capabilities ${caps}")
+    boundCapabilities = boundCapabilities.updated(binder, caps)
+
+  def provideCapabilities(call: source.Call, effs: List[InterfaceType]): Unit =
+    val caps = effs.map(lookupCapabilityFor)
+    capabilityArguments = capabilityArguments.updated(call, caps)
+    println(s"Annotated $call with $caps")
+
 
 
   /**
