@@ -31,17 +31,20 @@ class Annotations private(
   private def annotationsAt[K, V](ann: Annotation[K, V]): Map[Key[K], V] =
     annotations.getOrElse(ann, Map.empty).asInstanceOf
 
-  def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
+  def update[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
     val anns = annotationsAt(ann)
     val updatedAnns = anns.updated(new Key(key), value)
     annotations = annotations.updated(ann, updatedAnns.asInstanceOf)
   }
 
-  def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
+  def get[K, V](ann: Annotation[K, V], key: K): Option[V] =
     annotationsAt(ann).get(new Key(key))
 
-  def annotation[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
-    annotationOption(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
+  def getOrElse[K, V](ann: Annotation[K, V], key: K, default: => V): V =
+    annotationsAt(ann).getOrElse(new Key(key), default)
+
+  def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
+    get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
 
   def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB): Unit =
     val anns = annotationsAt(ann)
@@ -200,6 +203,7 @@ object Annotations {
   )
 
 }
+
 
 /**
  * A global annotations database

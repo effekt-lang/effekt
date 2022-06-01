@@ -1005,25 +1005,33 @@ trait TyperOps extends ContextOps { self: Context =>
   private var lexicalEffects: List[Interface] = Nil
 
 
-  // The "Typing Context"
-  // ====================
-  // since symbols are unique, we can use mutable state instead of reader
+  /**
+   * The "Typing Context"
+   *
+   * Since symbols are unique, we can use mutable state instead of reader.
+   * Typer uses local annotations that are immutable and can be backtracked.
+   *
+   * Specifically:
+   * - typing context for value types: [[Annotations.ValueType]]
+   * - typing context for block types: [[Annotations.BlockType]]
+   * - ...
+   */
+  private var annotations: Annotations = Annotations.empty
 
   //<editor-fold desc="Typing Context">
 
-  private var valueTypingContext: Map[ValueSymbol, ValueType] = Map.empty
-  private var blockTypingContext: Map[BlockSymbol, BlockType] = Map.empty
+  // TODO Also add to local annotations DB above
   private var captureContext: Map[Symbol, CaptureSet] = Map.empty
 
   // first tries to find the type in the local typing context
   // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
   private[typer] def lookup(s: ValueSymbol) =
-    valueTypingContext.getOrElse(s, valueTypeOf(s))
+    annotations.getOrElse(Annotations.ValueType, s, valueTypeOf(s))
 
   private[typer] def lookup(s: BlockSymbol) = (lookupBlockType(s), lookupRegion(s))
 
   private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType =
-    blockTypingContext.get(s)
+    annotations.get(Annotations.BlockType, s)
      .map {
        case f: FunctionType => f
        case tpe => abort(s"Expected function type, but got ${tpe}.")
@@ -1032,16 +1040,18 @@ trait TyperOps extends ContextOps { self: Context =>
      .getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
-    blockTypingContext.get(s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
+    annotations.get(Annotations.BlockType, s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
 
   private[typer] def lookupRegion(s: BlockSymbol) =
     captureContext.getOrElse(s, captureOf(s))
 
-  private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
+  private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
+    annotations.update(Annotations.ValueType, s, tpe)
 
   private[typer] def bind(s: BlockSymbol, tpe: BlockType, capt: CaptureSet): Unit = { bind(s, tpe); bind(s, capt) }
 
-  private[typer] def bind(s: BlockSymbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
+  private[typer] def bind(s: BlockSymbol, tpe: BlockType): Unit =
+    annotations.update(Annotations.BlockType, s, tpe)
 
   private[typer] def bind(s: Symbol, capt: CaptureSet): Unit = captureContext += (s -> capt)
 
@@ -1109,14 +1119,6 @@ trait TyperOps extends ContextOps { self: Context =>
     println(s"Annotated $call with $caps")
 
 
-
-  /**
-   * Annotations added by typer
-   *
-   * The annotations are immutable and can be backtracked.
-   */
-  private var annotations: Annotations = Annotations.empty
-
   /**
    * Override the dynamically scoped `in` to also reset typer state
    */
@@ -1155,23 +1157,6 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = unification.substitution
-
-    // now also store the typing context in the global database:
-    valueTypingContext foreach { case (s, tpe) => annotate(Annotations.ValueType, s, subst.substitute(tpe)) }
-    blockTypingContext foreach { case (s, tpe) => annotate(Annotations.BlockType, s, subst.substitute(tpe)) }
-    //captureContext foreach { case (s, c) => assignCaptureSet(s, c) }
-
-    // Update and write out all inferred types and captures for LSP support
-    // This info is currently also used by Transformer!
-    inferredValueTypes foreach { case (t, tpe) => annotate(Annotations.InferredValueType, t, subst.substitute(tpe)) }
-    inferredBlockTypes foreach { case (t, tpe) => annotate(Annotations.InferredBlockType, t, subst.substitute(tpe)) }
-    inferredEffects foreach { case (t, eff) => annotate(Annotations.InferredEffect, t, subst.substitute(eff)) }
-
-    inferredFunctionTypes foreach { case (t, tpe) => annotate(Annotations.BlockArgumentType, t, subst.substitute(tpe)) }
-
-    inferredTypeArgs foreach { case (call, targs) =>
-      annotate(Annotations.TypeArguments, call, targs map subst.substitute)
-    }
 
     // TODO since (in comparison to System C) we now have type directed overload resultion again,
     //   we need to make sure the typing context and all the annotations are backtrackable.
@@ -1222,18 +1207,16 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //<editor-fold desc="Inferred Types">
 
-  private var inferredValueTypes: List[(Tree, ValueType)] = Nil
-  private var inferredBlockTypes: List[(Tree, BlockType)] = Nil
-  private var inferredEffects: List[(Tree, Effects)] = Nil
-  private var inferredRegions: List[(Tree, Capture)] = Nil
+  private[typer] def annotateInferredType(t: Tree, e: ValueType) =
+    annotations.update(Annotations.InferredValueType, t, e)
 
-  private var inferredFunctionTypes: List[(source.FunctionArg, FunctionType)] = Nil
-  private var inferredTypeArgs: List[(source.Call, List[symbols.ValueType])] = Nil
+  private[typer] def annotateInferredType(t: Tree, e: BlockType) =
+    annotations.update(Annotations.InferredBlockType, t, e)
 
+  private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
+    annotations.update(Annotations.InferredEffect, t, e)
 
-  private[typer] def annotateInferredType(t: Tree, e: ValueType) = inferredValueTypes = (t -> e) :: inferredValueTypes
-  private[typer] def annotateInferredType(t: Tree, e: BlockType) = inferredBlockTypes = (t -> e) :: inferredBlockTypes
-  private[typer] def annotateInferredEffects(t: Tree, e: Effects) = inferredEffects = (t -> e) :: inferredEffects
+  // TODO also add InferredRegion
   //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
 
@@ -1241,14 +1224,11 @@ trait TyperOps extends ContextOps { self: Context =>
   //  annotations DB.
 
   // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Context = {
-    inferredFunctionTypes = (t -> tpe) :: inferredFunctionTypes
-    this
-  }
+  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Unit =
+    annotations.update(Annotations.BlockArgumentType, t, tpe)
 
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Context = {
-    inferredTypeArgs = (call -> targs) :: inferredTypeArgs
-    this
+  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Unit = {
+    annotations.update(Annotations.TypeArguments, call, targs)
   }
 
 //  private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
