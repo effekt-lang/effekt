@@ -96,8 +96,14 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
     // TODO check that the substitution is defined for them.
     types foreach { x =>
-      if (!constraints.subst.isDefinedAt(x))
-        abort(s"The type of ${x} could not be inferred.")
+      if (!constraints.subst.isDefinedAt(x)) {
+        x.role match {
+          case UnificationVar.TypeVariableInstantiation(underlying, callTree) =>
+            C.at(callTree) {
+              C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
+            }
+        }
+      }
     }
   }
 
@@ -149,9 +155,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
    * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
+    val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t)) }
+    val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
     val captRigids = cparams map freshCaptVar
     val subst = Substitutions(
@@ -195,6 +202,8 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     println(s"Unifiying ${c1} and ${c2}")
 
   def abort(msg: String) = C.abort(msg)
+
+  def error(msg: String) = C.error(msg)
 
 
   def requireEqual(x: UnificationVar, tpe: ValueType): Unit =

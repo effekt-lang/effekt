@@ -210,16 +210,13 @@ package object symbols {
    */
   case class UnificationVar(role: UnificationVar.Role) extends TypeVar(Name.local("?")) {
     override def toString = role match {
-      case UnificationVar.TypeVariableInstantiation(underlying) => "?" + underlying.toString + id
-      case UnificationVar.MergeVariable => "?M" + id
+      case UnificationVar.TypeVariableInstantiation(underlying, _) => "?" + underlying.toString + id
       case _ => "?" + id
     }
   }
   object UnificationVar {
     sealed trait Role
-    case class TypeVariableInstantiation(underlying: TypeVar) extends Role
-    case class InferredReturn(tree: source.Tree) extends Role
-    case object MergeVariable extends Role
+    case class TypeVariableInstantiation(underlying: TypeVar, call: source.Tree) extends Role
   }
 
   case class ValueTypeApp(tpe: ValueType, args: List[ValueType]) extends ValueType {

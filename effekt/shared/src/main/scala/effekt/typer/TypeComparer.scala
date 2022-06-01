@@ -114,7 +114,9 @@ trait TypeUnifier extends TypeComparer {
   def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
   def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
   def requireEqual(x: UnificationVar, tpe: ValueType): Unit
+
   def abort(msg: String): Nothing
+  def error(msg: String): Unit
 
   def unify(c1: CaptureSet, c2: CaptureSet): Unit
   def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
@@ -147,35 +149,35 @@ trait TypeUnifier extends TypeComparer {
       unify(capt1, capt2)
 
     case (t, s, p) =>
-      abort(s"Expected ${t}, but got ${s}")
+      error(s"Expected ${t}, but got ${s}")
   }
 
   def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(using p: Polarity): Unit = (tpe1, tpe2) match {
     case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s)
     case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s)
-    case (t, s) => abort(s"Expected ${t}, but got ${s}")
+    case (t, s) => error(s"Expected ${t}, but got ${s}")
   }
 
   def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType)(using p: Polarity): Unit = (tpe1, tpe2) match {
-    case (t1: Interface, t2: Interface) => if (t1 != t2) abort(s"Expected ${t1}, but got ${t2}")
+    case (t1: Interface, t2: Interface) => if (t1 != t2) error(s"Expected ${t1}, but got ${t2}")
     // for now block type constructors are invariant
     case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
       unifyInterfaceTypes(c1, c2)(using Invariant)
       (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
-    case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
+    case _ => error(s"Kind mismatch between ${tpe1} and ${tpe2}")
   }
 
   def unifyEffect(eff1: Effect, eff2: Effect)(using p: Polarity): Unit = (eff1, eff2) match {
     case (e1, e2) if e1 == e2 => ()
     case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
-    case _ => abort(s"Mismatch between ${eff1} and ${eff2}")
+    case _ => error(s"Mismatch between ${eff1} and ${eff2}")
   }
 
   def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit = p match {
-    case Covariant => if (!subEffects(eff1, eff2)) abort(s"${eff1} does not subsume ${eff2}")
-    case Contravariant => if (!subEffects(eff2, eff1)) abort(s"${eff2} does not subsume ${eff1}")
-    case Invariant => if (!(subEffects(eff1, eff2) && subEffects(eff2, eff1))) abort(s"${eff2} is not equal to ${eff1}")
+    case Covariant => if (!subEffects(eff1, eff2)) error(s"${eff1} does not subsume ${eff2}")
+    case Contravariant => if (!subEffects(eff2, eff1)) error(s"${eff2} does not subsume ${eff1}")
+    case Invariant => if (!(subEffects(eff1, eff2) && subEffects(eff2, eff1))) error(s"${eff2} is not equal to ${eff1}")
   }
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(using p: Polarity): Unit = (tpe1, tpe2) match {
