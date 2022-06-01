@@ -1006,19 +1006,41 @@ trait TyperOps extends ContextOps { self: Context =>
 
 
   /**
-   * The "Typing Context"
+   * Local annotations database, only used by Typer
    *
+   * It is used to (1) model the typing context, (2) collect information
+   * used for elaboration (i.e., capabilities), and (3) gather inferred
+   * types for LSP support.
+   *
+   * (1) "Typing Context"
+   * --------------------
    * Since symbols are unique, we can use mutable state instead of reader.
    * Typer uses local annotations that are immutable and can be backtracked.
    *
-   * Specifically:
-   * - typing context for value types: [[Annotations.ValueType]]
-   * - typing context for block types: [[Annotations.BlockType]]
+   * The "Typing Context" consists of:
+   * - typing context for value types [[Annotations.ValueType]]
+   * - typing context for block types [[Annotations.BlockType]]
    * - ...
+   *
+   * (2) Elaboration Info
+   * --------------------
+   * - used capabilities, which are not yet bound [[Annotations.UnboundCapabilities]]
+   * - [[Annotations.BoundCapabilities]]
+   * - [[Annotations.CapabilityArguments]]
+   *
+   * (3) Inferred Information for LSP
+   * --------------------------------
+   * We first store the inferred types here, before substituting and committing to the
+   * global DB, later.
+   * - [[Annotations.InferredValueType]]
+   * - [[Annotations.InferredBlockType]]
+   * - [[Annotations.InferredEffect]]
+   * - [[Annotations.BlockArgumentType]]
+   * - [[Annotations.TypeArguments]]
    */
   private var annotations: Annotations = Annotations.empty
 
-  //<editor-fold desc="Typing Context">
+  //<editor-fold desc="(1) Typing Context">
 
   // TODO Also add to local annotations DB above
   private var captureContext: Map[Symbol, CaptureSet] = Map.empty
@@ -1073,51 +1095,66 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //</editor-fold>
 
+  //<editor-fold desc="(2) Elaboration Info">
 
-  /**
-   * Capabilities that are currently "unbound", they still need to be associated with a
-   * handler, or a function definition.
-   *
-   * The InterfaceType needs to be fully concrete and dealiased.
-   *
-   * TODO needs to be backtrackable
-   */
-  private[typer] var unboundCapabilities: Map[InterfaceType, symbols.BlockParam] = Map.empty
-
-  /**
-   * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]], [[source.VarDef]], or [[source.FunctionArg]]
-   */
-  private var boundCapabilities: Map[source.Tree, List[symbols.BlockParam]] = Map.empty
-
-  /**
-   * Capabilities inferred as additional arguments to a call.
-   */
-  private var capabilityArguments: Map[source.Call, List[symbols.BlockParam]] = Map.empty
-
+  def unboundCapabilities = annotations(Annotations.UnboundCapabilities)
 
   def lookupCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     Typer.assertConcrete(tpe)
-    unboundCapabilities.getOrElse(tpe, {
+    annotations.getOrElse(Annotations.UnboundCapabilities, tpe, {
       val freshCapability = BlockParam(tpe.name, tpe: InterfaceType)
-      unboundCapabilities = unboundCapabilities.updated(tpe, freshCapability)
+      annotations.update(Annotations.UnboundCapabilities, tpe, freshCapability)
       freshCapability
     })
 
   def bindCapabilities(tpes: List[InterfaceType], binder: source.Tree): Unit =
     val caps = tpes map { tpe =>
       val cap = lookupCapabilityFor(tpe)
-      unboundCapabilities = unboundCapabilities.removed(tpe)
+      annotations.removed(Annotations.UnboundCapabilities, tpe)
       positions.dupPos(binder, cap)
       cap
     }
     println(s"Bound capabilities ${caps}")
-    boundCapabilities = boundCapabilities.updated(binder, caps)
+    annotations.update(Annotations.BoundCapabilities, binder, caps)
 
   def provideCapabilities(call: source.Call, effs: List[InterfaceType]): Unit =
     val caps = effs.map(lookupCapabilityFor)
-    capabilityArguments = capabilityArguments.updated(call, caps)
+    annotations.update(Annotations.CapabilityArguments, call, caps)
     println(s"Annotated $call with $caps")
 
+  //</editor-fold>
+
+  //<editor-fold desc="(3) Inferred Information for LSP">
+
+  private[typer] def annotateInferredType(t: Tree, e: ValueType) =
+    annotations.update(Annotations.InferredValueType, t, e)
+
+  private[typer] def annotateInferredType(t: Tree, e: BlockType) =
+    annotations.update(Annotations.InferredBlockType, t, e)
+
+  private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
+    annotations.update(Annotations.InferredEffect, t, e)
+
+  // TODO also add InferredRegion
+  //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
+
+
+  // TODO also first store those annotations locally in typer, before substituting and committing to
+  //  annotations DB.
+
+  // this also needs to be backtrackable to interact correctly with overload resolution
+  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Unit =
+    annotations.update(Annotations.BlockArgumentType, t, tpe)
+
+  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Unit = {
+    annotations.update(Annotations.TypeArguments, call, targs)
+  }
+
+//  private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
+//    annotations.annotate(Annotations.TargetType, t, tpe)
+//  }
+
+  //</editor-fold>
 
   /**
    * Override the dynamically scoped `in` to also reset typer state
@@ -1200,40 +1237,4 @@ trait TyperOps extends ContextOps { self: Context =>
 
     effects.toList foreach checkEffect
   }
-
-  // Inferred types
-  // ==============
-  // We first store the inferred types here, before substituting and committing to DB, later.
-
-  //<editor-fold desc="Inferred Types">
-
-  private[typer] def annotateInferredType(t: Tree, e: ValueType) =
-    annotations.update(Annotations.InferredValueType, t, e)
-
-  private[typer] def annotateInferredType(t: Tree, e: BlockType) =
-    annotations.update(Annotations.InferredBlockType, t, e)
-
-  private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
-    annotations.update(Annotations.InferredEffect, t, e)
-
-  // TODO also add InferredRegion
-  //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
-
-
-  // TODO also first store those annotations locally in typer, before substituting and committing to
-  //  annotations DB.
-
-  // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Unit =
-    annotations.update(Annotations.BlockArgumentType, t, tpe)
-
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Unit = {
-    annotations.update(Annotations.TypeArguments, call, targs)
-  }
-
-//  private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
-//    annotations.annotate(Annotations.TargetType, t, tpe)
-//  }
-
-  //</editor-fold>
 }

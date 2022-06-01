@@ -43,8 +43,14 @@ class Annotations private(
   def getOrElse[K, V](ann: Annotation[K, V], key: K, default: => V): V =
     annotationsAt(ann).getOrElse(new Key(key), default)
 
+  def apply[K, V](ann: Annotation[K, V]): List[(K, V)] =
+    annotationsAt(ann).map { case (k, v) => (k.key, v) }.toList
+
   def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
     get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
+
+  def removed[K, V](ann: Annotation[K, V], key: K): Unit =
+    annotations = annotations.updated(ann, annotationsAt(ann).removed(new Key(key)).asInstanceOf)
 
   def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB): Unit =
     val anns = annotationsAt(ann)
@@ -200,6 +206,40 @@ object Annotations {
   val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
     "InferredCapture",
     "the inferred capture for source tree"
+  )
+
+  /**
+   * Capabilities that are currently "unbound", they still need to be associated with a
+   * handler, or a function definition.
+   *
+   * The InterfaceType needs to be fully concrete and dealiased.
+   *
+   * Only used by typer.
+   */
+  val UnboundCapabilities = Annotation[symbols.InterfaceType, symbols.BlockParam](
+    "UnboundCapabilities",
+    "used, but not yet bound capabilities"
+  )
+
+  /**
+   * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]],
+   *   [[source.VarDef]], or [[source.FunctionArg]].
+   *
+   * Inferred by typer, used by elaboration.
+   */
+  val BoundCapabilities = Annotation[source.Tree, List[symbols.BlockParam]](
+    "BoundCapabilities",
+    "capabilities bound by this tree"
+  )
+
+  /**
+   * Capabilities inferred as additional arguments to a call.
+   *
+   * Inferred by typer, used by elaboration.
+   */
+  val CapabilityArguments = Annotation[source.Call, List[symbols.BlockParam]](
+    "CapabilityArguments",
+    "capabilities inferred as additional arguments for this call"
   )
 
 }
