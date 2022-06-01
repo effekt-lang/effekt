@@ -343,10 +343,13 @@ package object symbols {
     def forall(p: Effect => Boolean): Boolean = effects.forall(p)
     def exists(p: Effect => Boolean): Boolean = effects.exists(p)
 
+    // TODO delete after merging CapabilityPassing into Typer
     def controlEffects: List[InterfaceType] =
       filterNot(_.builtin).toList.map {
         case eff: InterfaceType => eff
-        case _                  => ???
+        case eff =>
+          println(s"Missing case: ${eff}")
+          ???
       }
 
     override def toString: String = toList match {

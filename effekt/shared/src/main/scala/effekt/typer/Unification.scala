@@ -69,7 +69,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // ------------
   // TODO implement: should apply everything we know up to this point.
   def apply(e: Effects): Effects =
-    substitution.substitute(e)
+    substitution.substitute(dealias(e))
 
   // Lifecycle management
   // --------------------
@@ -124,20 +124,20 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def requireSubtype(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Covariant;
     unifyValueTypes(
-      substitution.substitute(t1),
-      substitution.substitute(t2))
+      dealias(substitution.substitute(t1)),
+      dealias(substitution.substitute(t2)))
 
   def requireEqual(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Invariant;
     unifyValueTypes(
-      substitution.substitute(t1),
-      substitution.substitute(t2))
+      dealias(substitution.substitute(t1)),
+      dealias(substitution.substitute(t2)))
 
   def requireSubtype(t1: BlockType, t2: BlockType): Unit =
     given Polarity = Covariant;
     unifyBlockTypes(
-      substitution.substitute(t1),
-      substitution.substitute(t2))
+      dealias(substitution.substitute(t1)),
+      dealias(substitution.substitute(t2)))
 
   def requireSubregion(c1: CaptureSet, c2: CaptureSet): Unit =
     sys error s"Requiring that ${c1} <:< ${c2}"

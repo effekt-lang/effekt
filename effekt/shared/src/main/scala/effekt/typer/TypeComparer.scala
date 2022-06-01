@@ -148,6 +148,10 @@ trait TypeUnifier extends TypeComparer {
       unifyBlockTypes(tpe1, tpe2)
       unify(capt1, capt2)
 
+    case (t: TypeAlias, _, p) => ???
+
+    case (_, t: TypeAlias, p) => ???
+
     case (t, s, p) =>
       error(s"Expected ${t}, but got ${s}")
   }
@@ -210,8 +214,27 @@ trait TypeUnifier extends TypeComparer {
   //  1) checking for effect inclusion (`contains` in Effects)
   //  2) checking exhaustivity of pattern matching
   //  3) type comparer itself
-  def dealias(tpe: ValueType): ValueType = ???
-  def dealias(tpe: Effects): Effects = ???
+  def dealias(tpe: ValueType): ValueType = tpe match {
+    case BoxedType(tpe, capture) => BoxedType(dealias(tpe), capture)
+    case ValueTypeApp(TypeAlias(name, tparams, tpe), args) =>
+      val subst = (tparams zip args).toMap
+      dealias(subst.substitute(tpe))
+    case ValueTypeApp(cons, args) => ValueTypeApp(cons, args map dealias)
+    case TypeAlias(name, tparams, tpe) => dealias(tpe)
+    case tpe => tpe
+  }
+  // TODO implement
+  def dealias(tpe: BlockType): BlockType = tpe
+
+  // TODO implement fully
+  def dealias(effs: Effects): Effects = Effects(effs.toList.flatMap(dealias))
+  def dealias(eff: Effect): List[Effect] = eff match {
+    case EffectAlias(name, Nil, effs) => effs.toList.flatMap(dealias)
+//    case  BlockTypeApp(EffectAlias(name, tparams, effs), args) =>
+//      val subst = (tparams zip args).toMap
+//      dealias(subst.substitute(effs)).toList
+    case e => List(e)
+  }
 }
 
 

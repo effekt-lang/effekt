@@ -62,7 +62,9 @@ case class Substitutions(
     case t: Interface => t
     case t: BuiltinEffect => t
     case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
-    case alias: EffectAlias => ???
+    case EffectAlias(name, tparams, effs) =>
+      val substWithout = without(tparams, Nil)
+      EffectAlias(name, tparams, substWithout.substitute(effs))
   }
 
   def substitute(t: BlockType): BlockType = t match {

@@ -34,7 +34,7 @@ import scala.language.implicitConversions
 case class Result[+T](tpe: T, effects: ConcreteEffects)
 
 /**
- * All effects inferred by Typer are required to be concrete.
+ * All effects inferred by Typer are required to be concrete and dealiased.
  *
  * This way, we can easily compare them for equality.
  */
@@ -57,12 +57,25 @@ class ConcreteEffects private[typer] (protected val effects: List[Effect]) {
 
   def filterNot(p: Effect => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
+  def controlEffects: List[InterfaceType] =
+    filterNot(_.builtin).toList.map {
+      case eff: InterfaceType => eff
+      case eff =>
+        println(s"Missing case: ${eff}")
+        ???
+    }
+
   def forall(p: Effect => Boolean): Boolean = effects.forall(p)
   def exists(p: Effect => Boolean): Boolean = effects.exists(p)
 }
 object ConcreteEffects {
   // unsafe, doesn't perform check
   private def fromList(eff: List[Effect]): ConcreteEffects = new ConcreteEffects(eff.distinct)
+
+  /**
+   * These smart constructors should not be used directly.
+   * [[Typer.asConcrete]] should be used instead, since it performs substitution and dealiasing.
+   */
   def apply(eff: List[Effect])(using Context): ConcreteEffects =
     eff foreach Typer.assertConcrete
     fromList(eff)
@@ -95,9 +108,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           tree.defs.foreach { d => precheckDef(d) }
           tree.defs.foreach { d =>
             val Result(_, effs) = synthDef(d)
-            if (effs.nonEmpty)
+            val controlEffects = effs.toEffects.controlEffects
+            if (controlEffects.nonEmpty)
               Context.at(d) {
-                Context.error("Unhandled effects: " + effs)
+                Context.error("Unhandled effects: " + Effects(controlEffects))
               }
           }
         }
@@ -272,7 +286,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(ret, effs)
         }
 
-        val handled = ConcreteEffects(effects)
+        val handled = asConcrete(Effects(effects))
 
         val unusedEffects = handled -- effs
 
@@ -819,8 +833,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Helpers and Extension Methods">
 
-  // TODO first substitute, then check concrete, then convert.
+  // TODO first substitute, dealias, then check concrete, then convert.
   implicit def asConcrete(effs: Effects)(using Context): ConcreteEffects =
+    println(effs.toString + " -> " + Context.unification(effs).toString)
     ConcreteEffects(Context.unification(effs))
 
   /**
@@ -854,7 +869,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case t : BuiltinType => true
     case ValueTypeApp(tpe, args) => isConcreteValueType(tpe) && args.forall(isConcreteValueType)
     case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
-    case TypeAlias(name, tparams, tpe) => ???
+    // aliases should have been resolved by now
+    case TypeAlias(name, tparams, tpe) => false
   }
 
   private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
@@ -874,7 +890,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case t: Interface => true
     case t: BuiltinEffect => true
     case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
-    case t: EffectAlias => ???
+    // aliases should have been resolved by now
+    case EffectAlias(name, tparams, effs) => false // isConcreteEffects(effs)
   }
   private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteEffect)
 
@@ -1116,15 +1133,17 @@ trait TyperOps extends ContextOps { self: Context =>
   // TODO extend check to also check in value types
   //   (now that we have first class functions, they could mention effects).
   private[typer] def wellscoped(effects: ConcreteEffects): Unit = {
-    def check(eff: Interface): Unit =
+    def checkInterface(eff: Interface): Unit =
       if (!(lexicalEffects contains eff)) error(s"Effect ${eff} leaves its defining scope.")
 
-    effects.toList foreach {
-      case e: Interface => check(e)
-      case BlockTypeApp(e, args) => check(e)
-      case e: EffectAlias => ???
+    def checkEffect(eff: Effect): Unit = eff match {
+      case e: Interface => checkInterface(e)
+      case BlockTypeApp(e, args) => checkInterface(e)
+      case EffectAlias(n, params, effs) => effs.toList foreach checkEffect
       case b: BuiltinEffect => ()
     }
+
+    effects.toList foreach checkEffect
   }
 
   // Inferred types
