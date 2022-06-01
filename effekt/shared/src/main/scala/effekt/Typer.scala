@@ -4,7 +4,7 @@ package typer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{ Annotation, Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree }
 import effekt.symbols.*
@@ -269,7 +269,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
                 }
 
-                Context.bind(Context.symbolOf(resume), resumeType)
+                Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType)
                 Context in {
                   val Result(_, heffs) = body checkAgainst ret
                   handlerEffs = handlerEffs ++ heffs
@@ -1011,8 +1011,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //<editor-fold desc="Typing Context">
 
-  private var valueTypingContext: Map[Symbol, ValueType] = Map.empty
-  private var blockTypingContext: Map[Symbol, BlockType] = Map.empty
+  private var valueTypingContext: Map[ValueSymbol, ValueType] = Map.empty
+  private var blockTypingContext: Map[BlockSymbol, BlockType] = Map.empty
   private var captureContext: Map[Symbol, CaptureSet] = Map.empty
 
   // first tries to find the type in the local typing context
@@ -1037,11 +1037,11 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def lookupRegion(s: BlockSymbol) =
     captureContext.getOrElse(s, captureOf(s))
 
-  private[typer] def bind(s: Symbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
+  private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit = valueTypingContext += (s -> tpe)
 
-  private[typer] def bind(s: Symbol, tpe: BlockType, capt: CaptureSet): Unit = { bind(s, tpe); bind(s, capt) }
+  private[typer] def bind(s: BlockSymbol, tpe: BlockType, capt: CaptureSet): Unit = { bind(s, tpe); bind(s, capt) }
 
-  private[typer] def bind(s: Symbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
+  private[typer] def bind(s: BlockSymbol, tpe: BlockType): Unit = blockTypingContext += (s -> tpe)
 
   private[typer] def bind(s: Symbol, capt: CaptureSet): Unit = captureContext += (s -> capt)
 
@@ -1124,6 +1124,7 @@ trait TyperOps extends ContextOps { self: Context =>
     val effectsBefore = lexicalEffects
     val result = super.in(block)
 
+
     // TyperState has two kinds of components:
     // - reader-like (like lexicalEffects that are in scope)
     // - state-like (like annotations and unification constraints)
@@ -1156,8 +1157,8 @@ trait TyperOps extends ContextOps { self: Context =>
     val subst = unification.substitution
 
     // now also store the typing context in the global database:
-    valueTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
-    blockTypingContext foreach { case (s, tpe) => assignType(s, subst.substitute(tpe)) }
+    valueTypingContext foreach { case (s, tpe) => annotate(Annotations.ValueType, s, subst.substitute(tpe)) }
+    blockTypingContext foreach { case (s, tpe) => annotate(Annotations.BlockType, s, subst.substitute(tpe)) }
     //captureContext foreach { case (s, c) => assignCaptureSet(s, c) }
 
     // Update and write out all inferred types and captures for LSP support
@@ -1169,15 +1170,26 @@ trait TyperOps extends ContextOps { self: Context =>
     inferredFunctionTypes foreach { case (t, tpe) => annotate(Annotations.BlockArgumentType, t, subst.substitute(tpe)) }
 
     inferredTypeArgs foreach { case (call, targs) =>
-      annotations.annotate(Annotations.TypeArguments, call, targs map subst.substitute)
+      annotate(Annotations.TypeArguments, call, targs map subst.substitute)
     }
 
-//    val substitutedRegions = inferredRegions map { case (t, capt) => (t, capt.asRegionSet) }//(t, subst.substitute(capt)) }
-    //inferredRegions foreach { case (t, capt) => annotate(Annotations.InferredRegion, t, capt.asInstanceOf[RegionSet]) }
+    // TODO since (in comparison to System C) we now have type directed overload resultion again,
+    //   we need to make sure the typing context and all the annotations are backtrackable.
+    //   This can be achieved by going back to local `annotations` which are easily backtrackable.
+    //   In the end, we need to postprocess the annotations; see draft below...
+    annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
+    annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) => subst.substitute(tpe) }
 
-    //annotate(Annotations.CaptureForFile, module, substitutedRegions)
-    annotations.commit()
+    // Update and write out all inferred types and captures for LSP support
+    // This info is currently also used by Transformer!
+    annotations.updateAndCommit(Annotations.InferredValueType) { case (t, tpe) => subst.substitute(tpe) }
+    annotations.updateAndCommit(Annotations.InferredBlockType) { case (t, tpe) => subst.substitute(tpe) }
+    annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
+
+    annotations.updateAndCommit(Annotations.BlockArgumentType) { case (t, tpe) => subst.substitute(tpe) }
+    annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
   }
+
 
   // Effects that are in the lexical scope
   // =====================================

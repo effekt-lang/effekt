@@ -18,33 +18,34 @@ case class Annotation[K, V](name: String, description: String) {
  * Local annotations can be "comitted" to become global ones in the DB,
  * that are assumed to not change anymore.
  */
-class Annotations private (private var annotations: Annotations.DB) {
+class Annotations private(
+  /**
+   * Local Annotations are organized differently to allow simple access.
+   */
+  private var annotations: Map[Annotation[_, _], Map[Annotations.Key[Any], Any]]
+) {
   import Annotations._
 
   def copy: Annotations = new Annotations(annotations)
 
-  private def annotationsAt(key: Any): Map[Annotation[_, _], Any] =
-    annotations.getOrElse(new Key(key), Map.empty)
-
-  private def updateAnnotations(key: Any, annos: Map[Annotation[_, _], Any]): Unit =
-    annotations = annotations.updated(new Key(key), annos)
+  private def annotationsAt[K, V](ann: Annotation[K, V]): Map[Key[K], V] =
+    annotations.getOrElse(ann, Map.empty).asInstanceOf
 
   def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
-    val anns = annotationsAt(key)
-    updateAnnotations(key, anns + (ann -> value))
+    val anns = annotationsAt(ann)
+    val updatedAnns = anns.updated(new Key(key), value)
+    annotations = annotations.updated(ann, updatedAnns.asInstanceOf)
   }
 
   def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
-    annotationsAt(key).get(ann).asInstanceOf[Option[V]]
+    annotationsAt(ann).get(new Key(key))
 
   def annotation[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
     annotationOption(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
 
-  def commit()(implicit global: AnnotationsDB): Unit =
-    annotations.foreach {
-      case (k, annos) =>
-        global.annotate(k.key, annos)
-    }
+  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB): Unit =
+    val anns = annotationsAt(ann)
+    anns.foreach { case (kk, v) => global.annotate(ann, kk.key, f(kk.key, v)) }
 
   override def toString = s"Annotations(${annotations})"
 }
