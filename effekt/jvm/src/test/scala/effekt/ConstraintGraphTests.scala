@@ -22,7 +22,7 @@ class ConstraintGraphTests extends AnyFunSpec {
   lazy val C = freshVariable("C")
 
   def freshVariable(name: String) =
-    scope.fresh(UnificationVar.TypeVariableInstantiation(TypeVar(Name.local(name))))
+    scope.fresh(UnificationVar.TypeVariableInstantiation(TypeVar(Name.local(name)), NoSource))
 
   def freshGraph() = new ConstraintGraph
 

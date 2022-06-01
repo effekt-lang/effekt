@@ -50,7 +50,7 @@ trait TestUtils {
   )
 
   // The sources of all testfiles are stored here:
-  lazy val examplesDir = new File("examples")
+  lazy val examplesDir = new File("examples") / "pos" / "infer"
 
   //  val compiler = new effekt.Driver {}
   //  val configs = compiler.createConfig(Seq("--lib", "libraries/js/monadic"))
