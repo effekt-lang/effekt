@@ -1,7 +1,7 @@
 package effekt
 package typer
 
-import effekt.symbols.{ UnificationVar, ValueType }
+import effekt.symbols.{ UnificationVar, ValueType, TypeVar }
 
 class Equivalences(
   /**
@@ -13,7 +13,7 @@ class Equivalences(
    * Once one member of the equivalence class becomes concrete, all members are assigned the same type
    * in the substitution.
    */
-  private var substitution: Map[UnificationVar, ValueType] = Map.empty,
+  private var substitution: Map[Node, ValueType] = Map.empty,
 
   /**
    * A map from a member in the equivalence class to the class' representative
@@ -22,61 +22,76 @@ class Equivalences(
 ) {
 
   // The current substitutions
-  def subst: Substitutions = new Substitutions(substitution.asInstanceOf, Map.empty)
+  def subst: Substitutions =
+    val currentSubstitution = classes.flatMap[TypeVar, ValueType] { case (k, v) => substitution.get(v).map { k -> _ } }.toMap
+    new Substitutions(currentSubstitution.asInstanceOf, Map.empty)
 
-  // should only be called on unification variables where we do not know any types, yet
+  /**
+   * Should only be called on unification variables where we do not know any types, yet
+   *
+   * It will *not* compare the types, but only equality imposed by constraints.
+   */
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean =
     getNode(x) == getNode(y)
 
-  def typeOf(x: UnificationVar): Option[ValueType] = substitution.get(x)
+  def typeOf(x: UnificationVar): Option[ValueType] =
+    typeOf(getNode(x))
 
-  def learn(x: UnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit =
-   y match {
+  def learn(x: UnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit = {
 
-    case y: UnificationVar => (substitution.get(x), substitution.get(y)) match {
-      // we already know a type for both; they better match
-      case (Some(typeOfX), Some(typeOfY)) => merge(typeOfX, typeOfY)
-      // We already know a type for x -- use the same for y
-      case (Some(typeOfX), None) => learnType(y, typeOfX)
-      // we already know a type for y -- use the same for x
-      case (None, Some(typeOfY)) => learnType(x, typeOfY)
+    def learnType(x: Node, tpe: ValueType): Unit = {
+      assert(!tpe.isInstanceOf[UnificationVar])
+      typeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
+      substitution = substitution.updated(x, tpe)
 
-      // we do not know anything yet; put them into one equivalence class
-      case (None, None) => connectNodes(getNode(x), getNode(y))
+      // Now update substitution by applying it to itself.
+      // This way we replace {?B} -> Box[?R] with {?B} -> Box[Int] when learning ?B =:= Int
+      val updatedSubst = subst
+      substitution = substitution.view.mapValues(tpe => updatedSubst.substitute(tpe)).toMap
     }
 
-    case tpe => substitution.get(x) match {
-      // we already know a type -- they better match
-      case Some(typeOfX) => merge(typeOfX, tpe)
-      case None =>
-        val typeOfX = subst.substitute(tpe)
-        learnType(x, typeOfX)
+    def connectNodes(x: Node, y: Node): Unit = {
+      // Already connected
+      if (x == y) return ()
+
+      (typeOf(x), typeOf(y)) match {
+        case (Some(typeOfX), Some(typeOfY)) => merge(typeOfX, typeOfY)
+        case (Some(typeOfX), None) => learnType(y, typeOfX)
+        case (None, Some(typeOfY)) => learnType(x, typeOfY)
+        case (None, None) => ()
+      }
+
+      // create mapping to representative
+      classes = classes.view.mapValues { node => if (node == x) y else node }.toMap
+    }
+
+    y match {
+      case y: UnificationVar => connectNodes(getNode(x), getNode(y))
+      case tpe => learnType(getNode(x), tpe)
     }
   }
 
   def dumpConstraints() =
-    substitution foreach { case (x, tpe) => println(s"$x   !->   $tpe") }
+    println("\n--- Constraints ---")
     val cl = classes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
     cl foreach {
-      case (n, vars) => println(s"{${vars.mkString(", ")}}")
+      case (n, vars) => substitution.get(n) match {
+        case None => println(s"{${vars.mkString(", ")}}")
+        case Some(tpe) => println(s"{${vars.mkString(", ")}} --> ${tpe}")
+      }
     }
+    println("------------------\n")
 
+  def allDefined(): Boolean =
+    classes.values.forall { cl => substitution.isDefinedAt(cl) }
 
   override def clone(): Equivalences = new Equivalences(substitution, classes)
 
   private def getNode(x: UnificationVar): Node =
-    assert(!subst.isDefinedAt(x))
     classes.getOrElse(x, { val rep = new Node; classes += (x -> rep); rep })
 
-  private def learnType(x: UnificationVar, tpe: ValueType): Unit =
-    assert(!tpe.isInstanceOf[UnificationVar])
-    val varsInClass = variablesFor(getNode(x))
-    varsInClass foreach { y =>
-      assert(!substitution.isDefinedAt(y))
-      substitution = substitution.updated(x, tpe)
-    }
-    classes = classes.removedAll(varsInClass)
-
+  private def typeOf(n: Node): Option[ValueType] =
+    substitution.get(n)
 
   /**
    * Given a representative gives the list of all unification variables it is known to
@@ -85,12 +100,4 @@ class Equivalences(
   private def variablesFor(representative: Node): Set[UnificationVar] =
     val transposed = classes.groupMap { case (el, repr) => repr } { case (el, repr) => el }
     transposed.getOrElse(representative, Nil).toSet
-
-  private def connectNodes(x: Node, y: Node): Unit =
-    // Already connected
-    if (x == y) return ()
-
-    // create mapping to representative
-    classes = classes.view.mapValues { node => if (node == x) y else node }.toMap
-
 }

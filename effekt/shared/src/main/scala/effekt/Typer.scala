@@ -180,7 +180,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var handlerEffs: ConcreteEffects = Pure
 
         // Create a new unification scope and introduce a fresh capture variable for the continuations ?Ck
-        val Result(ret, effs) = Context.withUnificationScope {
+        val Result(ret, effs) = {
 
           val Result(ret, effs) = checkStmt(prog, expected)
 
@@ -470,7 +470,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         sym.bparams foreach Context.bind
         (sym.annotatedType: @unchecked) match {
           case Some(annotated) =>
-            val Result(tpe, effs) = Context.withUnificationScope {
+            val Result(tpe, effs) = {
                body checkAgainst annotated.result
             }
             Context.wellscoped(effs)
@@ -478,7 +478,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.annotateInferredEffects(d, effs.toEffects)
             Result((), effs -- annotated.effects) // the declared effects are considered as bound
           case None =>
-            val Result(tpe, effs) = Context.withUnificationScope {
+            val Result(tpe, effs) = {
               checkStmt(body, None)
             }
             Context.wellscoped(effs) // check they are in scope
@@ -620,7 +620,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val adjustedReturn = typeSubst substitute tpe1
       val adjustedHandled = typeSubst substitute handled
 
-      val Result(bodyType, bodyEffs) = Context.withUnificationScope {
+      val Result(bodyType, bodyEffs) = {
         body checkAgainst adjustedReturn
       }
 
