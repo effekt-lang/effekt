@@ -341,7 +341,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val blockArgs: P[List[BlockArg]] =
     some(blockArg)
 
-  lazy val blockArg: P[FunctionArg] =
+  lazy val blockArg: P[BlockArg] =
+    ( `{` ~> idRef <~ `}` ^^ { case id => source.InterfaceArg(id) }
+    | functionArg
+    )
+
+  lazy val functionArg: P[FunctionArg] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(Nil, ps, Nil, body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
@@ -494,7 +499,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case effect ~ clauses =>
         Handler(effect, None, clauses)
       }
-    | `with` ~> effectType ~ implicitResume ~ blockArg ^^ {
+    | `with` ~> effectType ~ implicitResume ~ functionArg ^^ {
       case effect ~ resume ~ FunctionArg(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
         Handler(effect, None, List(OpClause(synthesizedId, vparams, body, resume) withPositionOf effect))

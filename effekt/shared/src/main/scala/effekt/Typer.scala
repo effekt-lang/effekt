@@ -568,14 +568,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
   def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(implicit C: Context): Result[BlockType] = Context.focusing(arg) {
 
-    // We treat
-    //   foo { f }
-    // as a block variable `f` passed to `foo` and NOT as
-    //   foo { () => return box f }
-    case decl @ source.FunctionArg(Nil, Nil, Nil, source.Return(source.Var(id))) =>
-      // TODO, we need to perform elaboration here...
-      checkBlockArgument(source.InterfaceArg(id), Some(expected))
-
     case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
 
       // (1) Apply what we already know.
