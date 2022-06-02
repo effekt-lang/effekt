@@ -415,21 +415,6 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
 
-  // Calltargets
-  // -----------
-
-  // annotated by capability passing
-  //  def annotateCalltarget(t: source.CallTarget, tpe: FunctionType): Unit =
-  //    annotate(Annotations.TargetType, t, tpe)
-
-  //  def functionTypeOf(t: source.CallTarget): FunctionType =
-  //    annotation(Annotations.TargetType, t)
-  //
-  //  def functionTypeOption(t: source.CallTarget): Option[FunctionType] =
-  //    annotationOption(Annotations.TargetType, t)
-
-  def functionTypeOf(t: source.FunctionArg): FunctionType =
-    annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
   // -------

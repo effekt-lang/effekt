@@ -650,9 +650,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
-      // Annotate the block argument with the substituted type, so we can use it later to introduce capabilities
-      Context.annotateBlockArgument(arg, tpe)
-
       Result(tpe, effs)
   }
 
@@ -1137,14 +1134,6 @@ trait TyperOps extends ContextOps { self: Context =>
   // TODO also add InferredRegion
   //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
-
-  // TODO also first store those annotations locally in typer, before substituting and committing to
-  //  annotations DB.
-
-  // this also needs to be backtrackable to interact correctly with overload resolution
-  private[typer] def annotateBlockArgument(t: source.FunctionArg, tpe: FunctionType): Unit =
-    annotations.update(Annotations.BlockArgumentType, t, tpe)
-
   private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Unit = {
     annotations.update(Annotations.TypeArguments, call, targs)
   }
@@ -1207,7 +1196,6 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.InferredBlockType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
 
-    annotations.updateAndCommit(Annotations.BlockArgumentType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
 
     annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
