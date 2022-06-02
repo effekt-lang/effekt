@@ -2,9 +2,9 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Context, ContextOps }
-import effekt.symbols._
-import effekt.context.assertions._
+import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.symbols.*
+import effekt.context.assertions.*
 import effekt.source.ExternFlag
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
@@ -60,7 +60,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, binding) =>
       val sym = v.symbol
-      val state = Context.state(sym)
+      val state = Context.annotation(Annotations.StateCapability, sym)
       val b = transform(binding)
       val params = List(core.BlockParam(state.param, state.param.tpe))
       State(state.effect, Context.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, rest()))
@@ -134,7 +134,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformAsExpr(tree: source.Term)(using Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
-        val state = Context.state(sym)
+        val state = Context.annotation(Annotations.StateCapability, sym)
         val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
         Context.bind(Context.valueTypeOf(sym), get)
       case sym: ValueSymbol => ValueVar(sym)
@@ -143,7 +143,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case a @ source.Assign(id, expr) =>
       val e = transformAsExpr(expr)
-      val state = Context.state(a.definition)
+      val state = Context.annotation(Annotations.StateCapability, a.definition)
       val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
       Context.bind(builtins.TUnit, put)
 
@@ -325,52 +325,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
-  case class StateCapability(param: BlockParam, effect: Interface, get: Operation, put: Operation)
-
-  private def StateCapability(binder: VarBinder)(implicit C: Context): StateCapability = {
-    val tpe = C.valueTypeOf(binder)
-    val eff = Interface(binder.name, Nil)
-    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Effects.Pure, eff)
-    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Effects.Pure, eff)
-
-    val param = BlockParam(binder.name, eff)
-    eff.ops = List(get, put)
-    StateCapability(param, eff, get, put)
-  }
-
-  /**
-   * Synthesized state effects for var-definitions
-   */
-  private var stateEffects: Map[VarBinder, StateCapability] = Map.empty
-
   /**
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */
   private var bindings: ListBuffer[(Tmp, symbols.ValueType, Stmt)] = ListBuffer()
 
   private[core] def initTransformerState() = {
-    stateEffects = Map.empty
     bindings = ListBuffer()
-  }
-
-  /**
-   * Override the dynamically scoped `in` to also reset transformer state
-   */
-  override def in[T](block: => T): T = {
-    val before = stateEffects
-    val result = super.in(block)
-    stateEffects = before
-    result
-  }
-
-  private[core] def state(binder: VarBinder): StateCapability = {
-    stateEffects.get(binder) match {
-      case Some(v) => v
-      case None =>
-        val cap = StateCapability(binder)
-        stateEffects = stateEffects + (binder -> cap)
-        cap
-    }
   }
 
   /**

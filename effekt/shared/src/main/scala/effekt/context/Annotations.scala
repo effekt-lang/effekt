@@ -43,6 +43,13 @@ class Annotations private(
   def getOrElse[K, V](ann: Annotation[K, V], key: K, default: => V): V =
     annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), default)
 
+  def getOrElseUpdate[K, V](ann: Annotation[K, V], key: K, default: => V): V =
+    annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), {
+      val value = default
+      update(ann, key, value)
+      value
+    })
+
   def removed[K, V](ann: Annotation[K, V], key: K): Unit =
     annotations = annotations.updated(ann, annotationsAt(ann).removed(Annotations.makeKey(ann, key)).asInstanceOf)
 
@@ -255,6 +262,16 @@ object Annotations {
   val CapabilityArguments = Annotation[source.Call, List[symbols.BlockParam]](
     "CapabilityArguments",
     "capabilities inferred as additional arguments for this call"
+  )
+
+  /**
+   * The state capability introduced by typer
+   *
+   * Used by [[core.Transformer]] when translating to special state constructs in core.
+   */
+  val StateCapability = Annotation[symbols.VarBinder, typer.StateCapability](
+    "StateCapability",
+    "state capabilities representing mutable variables"
   )
 
 }

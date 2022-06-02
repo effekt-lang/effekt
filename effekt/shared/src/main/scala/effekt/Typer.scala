@@ -87,6 +87,8 @@ object ConcreteEffects {
 
 val Pure = ConcreteEffects.empty
 
+case class StateCapability(param: BlockParam, effect: Interface, get: Operation, put: Operation)
+
 object Typer extends Phase[NameResolved, Typechecked] {
 
   val phaseName = "typer"
@@ -534,7 +536,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding, None)
         }
-        Context.bind(d.symbol, t)
+        val sym = d.symbol
+        Context.bind(sym, t)
+        Context.stateFor(sym)
         Result((), effBinding)
 
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
@@ -683,8 +687,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // already resolved by a previous attempt to typecheck
       case sym                    => List(Set(sym))
     }
-
-    // TODO improve: stop typechecking if one scope was successful
 
     val stateBefore = Context.backupTyperstate()
 
@@ -1002,6 +1004,25 @@ trait TyperOps extends ContextOps { self: Context =>
   private var lexicalEffects: List[Interface] = Nil
 
 
+  //<editor-fold desc="State Capabilities">
+
+  private def makeStateFor(binder: VarBinder)(implicit C: Context): StateCapability = {
+    val tpe = lookup(binder)
+    val eff = Interface(binder.name, Nil)
+    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Effects.Pure, eff)
+    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Effects.Pure, eff)
+
+    val param = BlockParam(binder.name, eff)
+    eff.ops = List(get, put)
+    StateCapability(param, eff, get, put)
+  }
+
+  private [typer] def stateFor(binder: VarBinder): StateCapability =
+    annotations.getOrElseUpdate(Annotations.StateCapability, binder, makeStateFor(binder))
+
+  //</editor-fold>
+
+
   /**
    * Local annotations database, only used by Typer
    *
@@ -1200,6 +1221,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
     annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
+
+    // TODO the state capability might still contain unification variables in its effect operations get and set
+    annotations.updateAndCommit(Annotations.StateCapability) { case (t, state) => state }
   }
 
 
