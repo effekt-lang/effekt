@@ -230,20 +230,6 @@ object Annotations {
   )
 
   /**
-   * Capabilities that are currently "unbound", they still need to be associated with a
-   * handler, or a function definition.
-   *
-   * The InterfaceType needs to be fully concrete and dealiased.
-   *
-   * Only used by typer.
-   */
-  val UnboundCapabilities = Annotation[symbols.InterfaceType, symbols.BlockParam](
-    "UnboundCapabilities",
-    "used, but not yet bound capabilities",
-    bindToObjectIdentity = false
-  )
-
-  /**
    * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]],
    *   [[source.VarDef]], or [[source.FunctionArg]].
    *
