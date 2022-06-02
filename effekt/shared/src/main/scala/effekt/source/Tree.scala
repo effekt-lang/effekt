@@ -390,8 +390,8 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
 sealed trait BlockType extends Type
 
 // for now those are not user definable and thus refer to symbols.Effect
-case class CapabilityType(eff: symbols.InterfaceType) extends BlockType {
-  type resolved = symbols.InterfaceType
+case class BlockTypeTree(eff: symbols.BlockType) extends BlockType {
+  type resolved = symbols.BlockType
 }
 
 //case class BlockTypeApp(id: IdRef, params: List[ValueType]) extends BlockType with Reference {

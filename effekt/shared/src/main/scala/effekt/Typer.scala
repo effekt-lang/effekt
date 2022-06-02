@@ -1102,7 +1102,8 @@ trait TyperOps extends ContextOps { self: Context =>
   def lookupCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     Typer.assertConcrete(tpe)
     annotations.getOrElse(Annotations.UnboundCapabilities, tpe, {
-      val freshCapability = BlockParam(tpe.name, tpe: InterfaceType)
+      val freshCapability = BlockParam(tpe.name.rename(_ + "$capability"), tpe: InterfaceType)
+      annotations.update(Annotations.BlockType, freshCapability, tpe)
       annotations.update(Annotations.UnboundCapabilities, tpe, freshCapability)
       freshCapability
     })
@@ -1114,13 +1115,11 @@ trait TyperOps extends ContextOps { self: Context =>
       positions.dupPos(binder, cap)
       cap
     }
-    println(s"Bound capabilities ${caps}")
     annotations.update(Annotations.BoundCapabilities, binder, caps)
 
   def provideCapabilities(call: source.Call, effs: List[InterfaceType]): Unit =
     val caps = effs.map(lookupCapabilityFor)
     annotations.update(Annotations.CapabilityArguments, call, caps)
-    println(s"Annotated $call with $caps")
 
   //</editor-fold>
 
@@ -1210,6 +1209,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
     annotations.updateAndCommit(Annotations.BlockArgumentType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
+
+    annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
+    annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
   }
 
 

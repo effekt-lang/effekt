@@ -4,7 +4,7 @@ package context
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
 
-case class Annotation[K, V](name: String, description: String) {
+case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
   override def toString = name
 }
@@ -33,24 +33,24 @@ class Annotations private(
 
   def update[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
     val anns = annotationsAt(ann)
-    val updatedAnns = anns.updated(new Key(key), value)
+    val updatedAnns = anns.updated(Annotations.makeKey(ann, key), value)
     annotations = annotations.updated(ann, updatedAnns.asInstanceOf)
   }
 
   def get[K, V](ann: Annotation[K, V], key: K): Option[V] =
-    annotationsAt(ann).get(new Key(key))
+    annotationsAt(ann).get(Annotations.makeKey(ann, key))
 
   def getOrElse[K, V](ann: Annotation[K, V], key: K, default: => V): V =
-    annotationsAt(ann).getOrElse(new Key(key), default)
+    annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), default)
+
+  def removed[K, V](ann: Annotation[K, V], key: K): Unit =
+    annotations = annotations.updated(ann, annotationsAt(ann).removed(Annotations.makeKey(ann, key)).asInstanceOf)
 
   def apply[K, V](ann: Annotation[K, V]): List[(K, V)] =
     annotationsAt(ann).map { case (k, v) => (k.key, v) }.toList
 
   def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
     get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
-
-  def removed[K, V](ann: Annotation[K, V], key: K): Unit =
-    annotations = annotations.updated(ann, annotationsAt(ann).removed(new Key(key)).asInstanceOf)
 
   def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB): Unit =
     val anns = annotationsAt(ann)
@@ -62,15 +62,29 @@ object Annotations {
 
   def empty: Annotations = new Annotations(Map.empty)
 
-  private type DB = Map[Annotations.Key[Any], Map[Annotation[_, _], Any]]
+  private type DB = Map[Annotations.HashKey[Any], Map[Annotation[_, _], Any]]
 
-  private class Key[T](val key: T) {
+  sealed trait Key[T] { def key: T }
+
+  private class HashKey[T](val key: T) extends Key[T] {
     override val hashCode = System.identityHashCode(key)
     override def equals(o: Any) = o match {
-      case k: Key[_] => hashCode == k.hashCode
+      case k: HashKey[_] => hashCode == k.hashCode
       case _         => false
     }
   }
+
+  private class IdKey[T](val key: T) extends Key[T] {
+    override val hashCode = key.hashCode()
+    override def equals(o: Any) = o match {
+      case k: Key[_] => key == k.key
+      case _         => false
+    }
+  }
+
+  private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] =
+    if (ann.bindToObjectIdentity) new HashKey(k)
+    else new IdKey(k)
 
   /**
    * The as inferred by typer at a given position in the tree
@@ -218,7 +232,8 @@ object Annotations {
    */
   val UnboundCapabilities = Annotation[symbols.InterfaceType, symbols.BlockParam](
     "UnboundCapabilities",
-    "used, but not yet bound capabilities"
+    "used, but not yet bound capabilities",
+    bindToObjectIdentity = false
   )
 
   /**

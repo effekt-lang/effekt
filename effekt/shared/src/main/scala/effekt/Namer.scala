@@ -489,8 +489,8 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
-    case t: source.FunctionType   => resolve(t)
-    case t: source.CapabilityType => t.eff
+    case t: source.FunctionType  => resolve(t)
+    case t: source.BlockTypeTree => t.eff
   }
 
   def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = funTpe match {

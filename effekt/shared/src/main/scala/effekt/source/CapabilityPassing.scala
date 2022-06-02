@@ -24,44 +24,29 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
   override def defn(implicit C: Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
-      val sym = f.symbol
-      val effs = Context.functionTypeOf(sym).effects.controlEffects
-
-      C.withCapabilities(effs) { caps =>
-        f.copy(bparams = bps ++ caps, body = rewrite(body))
-      }
+      val capabilities = C.annotation(Annotations.BoundCapabilities, f)
+      val capParams = capabilities.map(Context.definitionFor)
+      f.copy(bparams = bps ++ capParams, body = rewrite(body))
   }
 
   override def expr(implicit C: Context) = {
 
-    // an effect call -- translate to method call
+    // an effect call -- translate to method call on the inferred capability
     case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[Operation] =>
-      val op = fun.definition.asEffectOp
-
-      val tpe @ FunctionType(tparams, _, _, _, _, _) = C.functionTypeOf(op)
-
-      // substitution of type params to inferred type arguments
-      val subst = (tparams zip C.typeArguments(c)).toMap
-
-      // Do not provide capabilities for builtin effects and also
-      // omit the capability for the effect itself (if it is an effect operation)
-
-      // TODO when moved to typer, make sure we use the correct, substituted, type.
-      //   here we instantiate the function with the inferred type arguments.
-      //   i.e. [E]() -> Exception[E]  and RuntimeException becomes () -> Exception[RuntimeException]
-      val self = subst.substitute(op.appliedEffect)
-
-      val receiver = C.capabilityReferenceFor(self)
-
-      // TODO same here, substitute
-      val others = op.otherEffects.controlEffects // map subst.substitute
-      val capabilityArgs = others.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
-
       val transformedValueArgs = vargs.map { a => rewrite(a) }
       val transformedBlockArgs = bargs.map { a => rewrite(a) }
 
-      val target = MemberTarget(receiver, fun.id).inheritPosition(fun)
-      // C.annotateCalltarget(target, tpe)
+      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
+
+      // here we use the invariant that the receiver of an effect call is the first supplied capability:
+      val (List(receiver), others) = capabilities.splitAt(1)
+
+      // the remaining capabilities are provided as arguments
+      val capabilityArgs = others.map { e => InterfaceArg(C.freshReferenceTo(e)) }
+
+      // construct the member selection on the capability as receiver
+      val target = MemberTarget(C.freshReferenceTo(receiver), fun.id).inheritPosition(fun)
+
       Call(target, targs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
 
     // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
@@ -79,45 +64,35 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     // a "regular" function call
     // assumption: typer removed all ambiguous references, so there is exactly one
     case c @ Call(fun: IdTarget, targs, vargs, bargs) =>
-
-      val sym: Symbol = fun.definition
-      val FunctionType(tparams, _, _, _, _, effs) = C.functionTypeOf(sym)
-
-      // substitution of type params to inferred type arguments
-      val subst = (tparams zip C.typeArguments(c)).toMap
-      // TODO substitute when moved to typer
-      val effects = effs.controlEffects.toList// .map(subst.substitute)
-
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
-      val capabilityArgs = effects.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
+
+      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
+      val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
 
       Call(fun, targs, valueArgs, blockArgs ++ capabilityArgs)
 
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, vargs, bargs) =>
       val transformedExpr = rewrite(expr)
-      val BoxedType(FunctionType(tparams, cps, vps, bps, ret, effs), _) = C.inferredTypeOf(expr)
-
-      val subst = (tparams zip C.typeArguments(c)).toMap
-      // TODO substitute when moved to typer
-      val effects = effs.controlEffects.toList // .map(subst.substitute)
-
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
-      val capabilityArgs = effects.map { e => InterfaceArg(C.capabilityReferenceFor(e)) }
+
+      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
+      val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
 
       Call(ExprTarget(transformedExpr), targs, valueArgs, blockArgs ++ capabilityArgs)
 
-    case TryHandle(prog, handlers) =>
+    case h @ TryHandle(prog, handlers) =>
+      val body = rewrite(prog)
 
-      // here we need to use the effects on the handlers!
-      val effects = handlers.map(_.effect.resolve)
+      val capabilities = C.annotation(Annotations.BoundCapabilities, h)
 
-      val (caps, body) = C.withCapabilities(effects) { caps =>
-        (caps, rewrite(prog))
-      }
-      val hs = (handlers zip caps).map {
+      assert(capabilities.size == handlers.size)
+
+      // here we use the invariant that the order of capabilities is the same as the order of handlers
+
+      val hs = (handlers zip capabilities).map {
         case (h, cap) => visit(h) {
           case h @ Handler(eff, _, clauses) =>
             val cls = clauses.map { cl =>
@@ -130,19 +105,18 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
             }
 
             // here we annotate the synthesized capability
-            Handler(eff, Some(cap), cls)
+            Handler(eff, Some(Context.definitionFor(cap)), cls)
         }
       }
+
       TryHandle(body, hs)
   }
 
   override def rewrite(b: source.FunctionArg)(implicit C: Context): source.FunctionArg = visit(b) {
     case b @ source.FunctionArg(tps, vps, bps, body) =>
-      // here we use the blocktype as inferred by typer (after substitution)
-      val effs = C.functionTypeOf(b).effects.controlEffects
-      C.withCapabilities(effs) { caps =>
-        source.FunctionArg(tps, vps, bps ++ caps, rewrite(body))
-      }
+      val capabilities = C.annotation(Annotations.BoundCapabilities, b)
+      val capParams = capabilities.map(Context.definitionFor)
+      source.FunctionArg(tps, vps, bps ++ capParams, rewrite(body))
   }
 
   /**
@@ -157,55 +131,15 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 }
 trait CapabilityPassingOps extends ContextOps { Context: Context =>
 
-  /**
-   * Used to map each lexically scoped capability to its termsymbol
-   */
-  private var capabilities: Map[InterfaceType, symbols.BlockParam] = Map.empty
+  private[source] def freshReferenceTo(s: symbols.BlockParam): IdRef =
+    val id = IdRef(s.name.name)
+    assignSymbol(id, s)
+    id
 
-  /**
-   * Override the dynamically scoped `in` to also reset transformer state
-   */
-  override def in[T](block: => T): T = {
-    val capsBefore = capabilities
-    val result = super.in(block)
-    capabilities = capsBefore
-    result
-  }
+  private[source] def definitionFor(s: symbols.BlockParam): source.BlockParam =
+    val id = IdDef(s.name.name)
+    assignSymbol(id, s)
+    val tree = source.BlockParam(id, source.BlockTypeTree(s.tpe))
+    tree
 
-  /**
-   * runs the given block, binding the provided capabilities, so that
-   * "resolveCapability" will find them.
-   */
-  private[source] def withCapabilities[R](effs: List[InterfaceType])(block: List[source.BlockParam] => R): R = Context in {
-
-
-    // create a fresh cabability-symbol for each bound effect
-    val caps = effs.map { eff =>
-      val sym = BlockParam(eff.name.rename(_ + "$capability"), eff)
-      assignType(sym, eff)
-      (sym, eff)
-    }
-    // additional block parameters for capabilities
-    val params = caps.map { case (sym, eff) =>
-      val id = IdDef(sym.name.name)
-      assignSymbol(id, sym)
-      source.BlockParam(id, source.CapabilityType(eff))
-    }
-    // update state with capabilities
-    val newCapabilities = caps.map { case (sym, eff) => (eff -> sym) }.toMap
-    capabilities = capabilities ++ newCapabilities
-
-    // run block
-    block(params)
-  }
-
-  private[source] def capabilityReferenceFor(e: InterfaceType): IdRef =
-    capabilities.get(e).map { c =>
-      val id = IdRef(c.name.name)
-      assignSymbol(id, c)
-      //Var(id)
-      id
-    } getOrElse {
-      Context.panic(s"Compiler error: cannot find capability for ${e}, got capabilities for ${capabilities}")
-    }
 }
