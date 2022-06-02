@@ -47,7 +47,10 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       // construct the member selection on the capability as receiver
       val target = MemberTarget(C.freshReferenceTo(receiver), fun.id).inheritPosition(fun)
 
-      Call(target, targs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
+      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
+
+      Call(target, typeArgs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
 
     // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
     case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[VarBinder] =>
@@ -70,7 +73,10 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val capabilities = C.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
 
-      Call(fun, targs, valueArgs, blockArgs ++ capabilityArgs)
+      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
+
+      Call(fun, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
 
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, vargs, bargs) =>
@@ -81,7 +87,10 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val capabilities = C.annotation(Annotations.CapabilityArguments, c)
       val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
 
-      Call(ExprTarget(transformedExpr), targs, valueArgs, blockArgs ++ capabilityArgs)
+      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
+
+      Call(ExprTarget(transformedExpr), typeArgs, valueArgs, blockArgs ++ capabilityArgs)
 
     case h @ TryHandle(prog, handlers) =>
       val body = rewrite(prog)
