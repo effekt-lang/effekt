@@ -87,7 +87,17 @@ object ConcreteEffects {
 
 val Pure = ConcreteEffects.empty
 
-case class StateCapability(param: BlockParam, effect: Interface, get: Operation, put: Operation)
+case class StateCapability(binder: VarBinder, tpe: ValueType) {
+  lazy val (effect, get, put) = {
+    val eff = Interface(binder.name, Nil)
+    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Effects.Pure, eff)
+    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Effects.Pure, eff)
+    eff.ops = List(get, put)
+    (eff, get, put)
+  }
+  lazy val param = BlockParam(binder.name, effect)
+}
+
 
 object Typer extends Phase[NameResolved, Typechecked] {
 
@@ -508,7 +518,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.wellscoped(effs) // check they are in scope
 
             val funType = sym.toType(tpe, effs.toEffects)
-            Context.assignType(sym, funType)
+
+            // TODO this needs to go via local annotations
+            Context.bind(sym, funType)
             Context.annotateInferredType(d, tpe)
             Context.annotateInferredEffects(d, effs.toEffects)
 
@@ -873,7 +885,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       C.abort(s"Effects need to be fully known: ${eff}")
     }
 
-  private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
+  private[typer] def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
     case x: UnificationVar => false
     case x: TypeVar => true
     case t: TypeConstructor => true
@@ -1006,19 +1018,12 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //<editor-fold desc="State Capabilities">
 
-  private def makeStateFor(binder: VarBinder)(implicit C: Context): StateCapability = {
-    val tpe = lookup(binder)
-    val eff = Interface(binder.name, Nil)
-    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Effects.Pure, eff)
-    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Effects.Pure, eff)
-
-    val param = BlockParam(binder.name, eff)
-    eff.ops = List(get, put)
-    StateCapability(param, eff, get, put)
+  private [typer] def stateFor(binder: VarBinder): StateCapability = {
+    val tpe = unification.substitution.substitute(lookup(binder))
+    // TODO We might be able to lift this restriction later on.
+    if (!Typer.isConcreteValueType(tpe)) error(s"Type of variable binder must be known.")
+    annotations.getOrElseUpdate(Annotations.StateCapability, binder, StateCapability(binder, tpe))
   }
-
-  private [typer] def stateFor(binder: VarBinder): StateCapability =
-    annotations.getOrElseUpdate(Annotations.StateCapability, binder, makeStateFor(binder))
 
   //</editor-fold>
 
@@ -1204,7 +1209,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = unification.substitution
 
-    // TODO since (in comparison to System C) we now have type directed overload resultion again,
+    // TODO since (in comparison to System C) we now have type directed overload resolution again,
     //   we need to make sure the typing context and all the annotations are backtrackable.
     //   This can be achieved by going back to local `annotations` which are easily backtrackable.
     //   In the end, we need to postprocess the annotations; see draft below...
@@ -1223,6 +1228,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
 
     // TODO the state capability might still contain unification variables in its effect operations get and set
+    //  however, creating a new state capability would also create a fresh block symbol, which might prove problematic
     annotations.updateAndCommit(Annotations.StateCapability) { case (t, state) => state }
   }
 
