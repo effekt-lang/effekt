@@ -21,8 +21,9 @@ import scala.sys.process.Process
 
 
 // XXX `val` to make it publicly accessible
-class LLVMSource(val raw: String) {
-}
+class LLVMSource(val raw: String) {}
+
+class LLVMFragment(val raw: String) {}
 
 class Referencable() {
 }
@@ -88,6 +89,7 @@ class LLVM extends Generator {
 object LLVMPrinter extends ParenPrettyPrinter {
   // a transitional helper to aid in moving to string interpolation for LLVM code construction
   def d2s(doc: Doc): String = pretty(doc).layout
+  def f2d(frg: LLVMFragment): Doc = Doc(frg.raw)
   def transitionalDocLift(src: LLVMSource): Doc = Doc(src.raw)
 
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): String =
@@ -97,7 +99,7 @@ define void @effektMain() {
     %spp = alloca %Sp
     ; TODO find return type of main
     store %Sp null, %Sp* %spp
-    ${d2s(storeFrm("%spp", "@base", "@limit", List(), globalBuiltin("topLevel"), List(machine.PrimInt())))}
+    ${d2s(storeFrm("%spp", "@base", "@limit", List(), f2d(globalBuiltin("topLevel")), List(machine.PrimInt())))}
     %newsp = load %Sp, %Sp* %spp
     ; TODO deal with top-level evidence
     ${d2s(jump(globalName(mainName), "%newsp", List("%Evi 0")))}
@@ -129,9 +131,9 @@ define void @effektMain() {
       define(globalName(functionName), params.map(toDoc),
         loadEnv("%spp", env) <@>
           emptyStk <+> "=" <+>
-          "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
+          "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
           argumentList(List("%Sp* %spp")) <@>
-          "call fastcc void" <+> globalBuiltin("eraseStack") <>
+          "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
           argumentList(List("%Stk*" <+> emptyStk)) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
@@ -159,7 +161,7 @@ define void @effektMain() {
 
   def toDoc(basicBlock: BasicBlock)(implicit C: LLVMContext): Doc = basicBlock match {
     case BasicBlock(blockName, instructions, terminator) =>
-      nameDef(blockName) <> colon <@>
+      f2d(nameDef(blockName)) <> colon <@>
         onLines(instructions.map(toDoc)) <@>
         toDoc(terminator)
   }
@@ -193,27 +195,27 @@ define void @effektMain() {
       storeFrm("%spp", "@base", "@limit", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
       val tmpstkp = freshLocalName("tempstkp");
-      tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> globalBuiltin("newStack") <>
+      tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> f2d(globalBuiltin("newStack")) <>
         argumentList(List()) <@>
-        "call fastcc void" <+> globalBuiltin("pushStack") <>
+        "call fastcc void" <+> f2d(globalBuiltin("pushStack")) <>
         argumentList(List("%Sp* %spp", "%Stk*" <+> tmpstkp)) <@>
         storeFrm("%spp", "@base", "@limit", args, globalName(blockName), cntType) <@>
         localName(stackName) <+> "=" <+>
-        "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
+        "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
         argumentList(List("%Sp* %spp"))
     case PushStack(stack) =>
-      "call fastcc void" <+> globalBuiltin("pushStack") <>
+      "call fastcc void" <+> f2d(globalBuiltin("pushStack")) <>
         argumentList(List("%Sp* %spp", toDocWithType(stack)))
     case PopStack(stackName) =>
       localName(stackName) <+> "=" <+>
-        "call fastcc %Stk*" <+> globalBuiltin("popStack") <>
+        "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
         argumentList(List("%Sp* %spp"))
     case CopyStack(stackName, stack) =>
       localName(stackName) <+> "=" <+>
-        "call fastcc %Stk*" <+> globalBuiltin("copyStack") <>
+        "call fastcc %Stk*" <+> f2d(globalBuiltin("copyStack")) <>
         argumentList(List(toDocWithType(stack)))
     case EraseStack(stack) =>
-      "call fastcc void" <+> globalBuiltin("eraseStack") <>
+      "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
         argumentList(List(toDocWithType(stack)))
     case EviPlus(eviName, evi1, evi2) =>
       localName(eviName) <+> "=" <+>
@@ -422,7 +424,7 @@ store %Sp $newsp, %Sp* ${d2s(spp)}
       incedtypedsp <+> "=" <+> "getelementptr" <+> typ <> comma <+> ptrType <+>
       oldtypedsp <> comma <+> "i64 1" <@>
       incedsp <+> "=" <+> "bitcast" <+> ptrType <+> incedtypedsp <+> "to" <+> "%Sp" <@>
-      newsp <+> "=" <+> "call fastcc %Sp" <+> globalBuiltin("checkOverflow") <>
+      newsp <+> "=" <+> "call fastcc %Sp" <+> f2d(globalBuiltin("checkOverflow")) <>
       argumentList(List("%Sp" <+> incedsp, "%Sp*" <+> spp)) <@>
       newtypedsp <+> "=" <+> "bitcast" <+> "%Sp" <+> newsp <+> "to" <+> ptrType <@>
       "store" <+> typ <+> value <> comma <+> ptrType <+> newtypedsp
@@ -434,20 +436,23 @@ store %Sp $newsp, %Sp* ${d2s(spp)}
   }
 
   def localName(id: Symbol): Doc =
-    "%" <> nameDef(id)
+    "%" <> f2d(nameDef(id))
 
   def globalName(id: Symbol): Doc =
-    "@" <> nameDef(id)
+    "@" <> f2d(nameDef(id))
 
   // XXX Major bug potential: `scanningName` can clash with `globalName`.
   def scanningName(id: Symbol): Doc =
-    "@scan_" <> nameDef(id)
+    "@scan_" <> f2d(nameDef(id))
 
-  def nameDef(id: Symbol): Doc =
-    id.name.toString + "_" + id.id
+  def nameDef(id: Symbol): LLVMFragment =
+    val name = s"${id.name}_${id.id}"
+    assertSaneName(name)
+    LLVMFragment(name)
 
-  def globalBuiltin(name: String): Doc =
-    "@" <> name
+  def globalBuiltin(name: String): LLVMFragment =
+    assertSaneName(name)
+    LLVMFragment(s"@$name")
 
   def isBoxType(typ: machine.Type) = typ match {
     case machine.Stack(_) => true
@@ -458,7 +463,15 @@ store %Sp $newsp, %Sp* ${d2s(spp)}
     "void" <+> parens(hsep("%Sp" :: cntType.map(toDoc(_)), comma)) <> "*"
 
   def freshLocalName(name: String)(implicit C: LLVMContext): String =
-    "%" + name + "_" + C.fresh.next().toString()
+    assertSaneName(name)
+    s"%${name}_${C.fresh.next()}"
+
+  def assertSaneName(name: String): Boolean =
+    // TODO Why can this not be a raw string literal:`raw"..."`?
+    // TODO Unelegant: RegExp has to be recompiled often.
+    if (!name.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))
+        throw new Error(s"assertSaneName: $name")
+    return true
 
   def llvmBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
 
