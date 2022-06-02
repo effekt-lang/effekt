@@ -18,6 +18,37 @@ import effekt.util.paths._
 
 import scala.sys.process.Process
 
+
+class Referencable() {
+}
+
+// a frame atom occupies exactly 64 bits
+enum FrameAtom:
+
+    // a naked integer of 64 bits
+    // (interpretable as any singed/unsigned integer of width <= 64 bits:
+    // boolean, uint32, int64, ...)
+    case Int()
+
+    // a statically known function pointer
+    // (i.e., `malloc` or a user-supplied function's frame copier)
+    case StaticFunctionPointer()
+
+    // a dynamic pointer to another stack
+    case BoxedStack()
+
+    /*** THE FOLLOWING HAS NOT EVEN BEEN ATTEMPTED TO BE IMPLEMENTED ***/
+
+    // a dynamic pointer to a boxed, more complex value object
+    case BoxedVal(ref: Referencable)
+
+    // a dynamic pointer to a boxed, more complex mutable object
+    case BoxedVar(ref: Referencable)
+
+class FrameLayout(val atoms: List[FrameAtom]) {
+}
+
+
 class LLVM extends Generator {
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath
@@ -55,8 +86,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
 
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): Document =
     pretty(
-      vsep(defs.map(toDoc), line) <@@@>
-        s"""define void @effektMain() {
+      vsep(defs.map(toDoc), line) <@@@> s"""
+define void @effektMain() {
     %spp = alloca %Sp
     ; TODO find return type of main
     store %Sp null, %Sp* %spp
@@ -65,20 +96,11 @@ object LLVMPrinter extends ParenPrettyPrinter {
     ; TODO deal with top-level evidence
     ${d2s(jump(globalName(mainName), "%newsp", List("%Evi 0")))}
 }"""
-    /*
-        "define" <+> "void" <+> "@effektMain" <> "()" <+> llvmBlock(
-          "%spp = alloca %Sp" <@>
-            // TODO find return type of main
-            "store %Sp null, %Sp* %spp" <@>
-            storeFrm("%spp", "@base", "@limit", List(), globalBuiltin("topLevel"), List(machine.PrimInt())) <@>
-            "%newsp = load %Sp, %Sp* %spp" <@>
-            // TODO deal with top-level evidence
-            jump(globalName(mainName), "%newsp", List("%Evi 0"))
-        )
-*/
     )
 
   def toDoc(top: Top)(implicit C: LLVMContext): Doc = top match {
+
+    // "DEFine C???NT"
     case DefCnt(functionName, params, entry, body) =>
       // This magical 5 ensures that we pass at most 6 64bit parameters
       val unspilledParams = params.take(5);
@@ -87,11 +109,15 @@ object LLVMPrinter extends ParenPrettyPrinter {
         loadSpilled("%spp", spilledParams) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
+
+    // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
       define(globalName(functionName), params.map(toDoc),
         loadEnv("%spp", env) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
+
+    // "DEFine CLO???"
     case DefClo(functionName, params, env, entry, body) =>
       val emptyStk = freshLocalName("emptyStk");
       define(globalName(functionName), params.map(toDoc),
@@ -103,6 +129,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
           argumentList(List("%Stk*" <+> emptyStk)) <@>
           "br" <+> "label" <+> localName(entry) <@@@>
           onSeparateLines(body.map(toDoc)))
+
+    // "DEFine Function"
     case DefFun(returnType, functionName, parameters, body) =>
       "define fastcc" <+> toDoc(returnType) <+> globalName(functionName) <>
         // we can't use unique id here, since we do not know it in the extern string.
@@ -112,6 +140,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
         "alwaysinline" <+> llvmBlock(
           string(body)
         )
+
+    // "DEFine stack SCaNner"
     case DefScn(functionName, env) =>
       // TODO make loadEnv work on sp directly and don't allocate spp
       "define fastcc %Sp" <+> scanningName(functionName) <> argumentList(List("%Sp noalias %sp")) <+> llvmBlock(
@@ -272,6 +302,7 @@ object LLVMPrinter extends ParenPrettyPrinter {
       "ret" <+> "void"
   }
 
+  // TODO I think, and "env" or "params" is a Frame layout
   def loadEnv(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
     val envType =
       envRecordType(params.map(p => toDoc(p.typ)));
