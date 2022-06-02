@@ -20,6 +20,10 @@ import effekt.util.paths._
 import scala.sys.process.Process
 
 
+// XXX `val` to make it publicly accessible
+class LLVMSource(val raw: String) {
+}
+
 class Referencable() {
 }
 
@@ -84,6 +88,7 @@ class LLVM extends Generator {
 object LLVMPrinter extends ParenPrettyPrinter {
   // a transitional helper to aid in moving to string interpolation for LLVM code construction
   def d2s(doc: Doc): String = pretty(doc).layout
+  def transitionalDocLift(src: LLVMSource): Doc = Doc(src.raw)
 
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): String =
     d2s(
@@ -226,7 +231,7 @@ define void @effektMain() {
       // TODO spill arguments to stack (like with jump)
       val newsp = freshLocalName("newsp");
       val cntName = freshLocalName("next");
-      load("%spp", cntName, cntTypeDoc(values.map(valueType(_)))) <@>
+      transitionalDocLift(load("%spp", cntName, cntTypeDoc(values.map(valueType(_))))) <@>
         newsp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
         jump(cntName, newsp, values.map(toDocWithType(_)))
 
@@ -309,7 +314,7 @@ define void @effektMain() {
       envRecordType(params.map(p => toDoc(p.typ)));
     val envParams =
       params.map(p => localName(p.id));
-    loadParams(spp, envType, envParams)
+    loadParams(d2s(spp), envType, envParams)
   }
 
   def storeFrm(spp: Doc, basep: Doc, limitp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
@@ -328,7 +333,7 @@ define void @effektMain() {
           envRecordType(params.map(p => toDoc(p.typ)));
         val envParams =
           params.map(p => localName(p.id));
-        loadParams(spp, envType, envParams)
+        loadParams(d2s(spp), envType, envParams)
     }
   }
 
@@ -344,9 +349,9 @@ define void @effektMain() {
     }
   }
 
-  def loadParams(spp: Doc, envType: Doc, envParams: List[Doc])(implicit C: LLVMContext): Doc = {
+  def loadParams(spp: String, envType: Doc, envParams: List[Doc])(implicit C: LLVMContext): Doc = {
     val envName = freshLocalName("env");
-    load(spp, envName, envType) <@>
+    transitionalDocLift(load(spp, envName, envType)) <@>
       extractParams(envName, envType, envParams)
   }
 
@@ -387,19 +392,20 @@ define void @effektMain() {
     loop(envValues.zipWithIndex)
   }
 
-  def load(spp: Doc, name: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
-    val ptrType = typ <> "*"
+  def load(spp: String, name: String, typ: Doc)(implicit C: LLVMContext): LLVMSource = {
+    val ptrType = d2s(typ) + "*"
     val oldsp = freshLocalName("oldsp");
     val newsp = freshLocalName("newsp");
     val oldtypedsp = freshLocalName("oldtypedsp");
     val newtypedsp = freshLocalName("newtypedsp");
-    oldsp <+> "=" <+> "load %Sp, %Sp*" <+> spp <@>
-      oldtypedsp <+> "=" <+> "bitcast" <+> "%Sp" <+> oldsp <+> "to" <+> ptrType <@>
-      newtypedsp <+> "=" <+> "getelementptr" <+> typ <> comma <+> ptrType <+>
-      oldtypedsp <> comma <+> "i64 -1" <@>
-      newsp <+> "=" <+> "bitcast" <+> ptrType <+> newtypedsp <+> "to" <+> "%Sp" <@>
-      name <+> "=" <+> "load" <+> typ <> comma <+> ptrType <+> newtypedsp <@>
-      "store %Sp" <+> newsp <> ", %Sp*" <+> spp
+    LLVMSource(s"""
+$oldsp = load %Sp, %Sp* ${d2s(spp)}
+$oldtypedsp = bitcast %Sp $oldsp to $ptrType
+$newtypedsp = getelementptr ${d2s(typ)}, $ptrType $oldtypedsp, i64 -1
+$newsp = bitcast $ptrType $newtypedsp to %Sp
+${d2s(name)} = load ${d2s(typ)}, $ptrType $newtypedsp
+store %Sp $newsp, %Sp* ${d2s(spp)}
+""")
   }
 
   def store(spp: Doc, basep: Doc, limitp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
