@@ -7,6 +7,7 @@ import effekt.symbols.Module
 import effekt.symbols.{ BlockSymbol, Name, Symbol, ValueSymbol }
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
+import kiama.output.PrettyPrinterTypes.emptyLinks
 import kiama.util.Source
 import kiama.util.Counter
 import effekt.context.assertions._
@@ -76,7 +77,7 @@ class LLVM extends Generator {
       machineMods.flatMap(m => LLVMTransformer.transform(m)(LLVMTransformer.LLVMTransformerContext(mod, C)))
     }
 
-    return Some(LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext()))
+    return Some(Document(LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext()), emptyLinks))
   }
 }
 
@@ -84,8 +85,8 @@ object LLVMPrinter extends ParenPrettyPrinter {
   // a transitional helper to aid in moving to string interpolation for LLVM code construction
   def d2s(doc: Doc): String = pretty(doc).layout
 
-  def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): Document =
-    pretty(
+  def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): String =
+    d2s(
       vsep(defs.map(toDoc), line) <@@@> s"""
 define void @effektMain() {
     %spp = alloca %Sp
@@ -95,8 +96,8 @@ define void @effektMain() {
     %newsp = load %Sp, %Sp* %spp
     ; TODO deal with top-level evidence
     ${d2s(jump(globalName(mainName), "%newsp", List("%Evi 0")))}
-}"""
-    )
+}
+""")
 
   def toDoc(top: Top)(implicit C: LLVMContext): Doc = top match {
 
