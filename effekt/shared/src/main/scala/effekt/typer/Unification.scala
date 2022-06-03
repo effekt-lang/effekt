@@ -76,7 +76,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def backup(): UnificationState = UnificationState(scope, constraints.clone())
   def restore(state: UnificationState): Unit =
     scope = state.scope
-    constraints = state.constraints
+    constraints = state.constraints.clone()
 
   def init() =
     scope = GlobalScope
