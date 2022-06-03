@@ -109,12 +109,16 @@ sealed trait CapabilityScope {
 case object GlobalCapabilityScope extends CapabilityScope {
   def copy: CapabilityScope = this
   def parent: CapabilityScope = sys error "No parent"
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam = sys error "Global scope cannot bind capabilities"
+  // If we try to find a capability for an effect that is known to be unhandled (that is no outer scope could
+  // potentially handle it, then we raise an error.
+  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
+    C.abort(s"Unhandled effect ${tpe}")
 }
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
     capabilities.getOrElse(tpe, parent.capabilityFor(tpe))
+  override def toString: String = s"BindSome(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
 class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindAll(binder, capabilities, parent.copy)
@@ -124,6 +128,7 @@ class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, 
       capabilities = capabilities.updated(tpe, freshCapability)
       freshCapability
     })
+  override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
 }
 
 
@@ -852,7 +857,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     Context.annotateTypeArgs(call, typeArgs)
 
     // annotate the calltarget tree with the additional capabilities
-    Context.provideCapabilities(call, effs.controlEffects)
+    Context.provideCapabilities(call, asConcrete(retEffs).controlEffects)
 
     Result(ret, effs)
   }
@@ -1043,7 +1048,7 @@ trait TyperOps extends ContextOps { self: Context =>
    */
   private var lexicalEffects: List[Interface] = Nil
 
-  private var capabilityScope: CapabilityScope = GlobalCapabilityScope
+  private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
 
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[(InterfaceType, symbols.BlockParam)])(f: => R): R = {
@@ -1078,7 +1083,8 @@ trait TyperOps extends ContextOps { self: Context =>
     capabilityScope.capabilityFor(tpe)
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    val param = BlockParam(tpe.name.rename(_ + "$capability"), tpe)
+    val capName = tpe.name.rename(_ + "$capability")
+    val param = BlockParam(capName, tpe)
     bind(param, tpe)
     param
 
@@ -1247,7 +1253,7 @@ trait TyperOps extends ContextOps { self: Context =>
     lexicalEffects = st.lexicalEffects
     annotations = st.annotations.copy
     unification.restore(st.unification)
-    capabilityScope = st.capabilityScope
+    capabilityScope = st.capabilityScope.copy
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
