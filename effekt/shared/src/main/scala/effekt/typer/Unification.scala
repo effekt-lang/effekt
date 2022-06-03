@@ -146,7 +146,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     sys error s"Requiring that ${c1} <:< ${c2}"
 
   def join(tpes: List[ValueType]): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, Covariant) }
+    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
 
 
   // Using collected information
