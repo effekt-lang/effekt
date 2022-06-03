@@ -1,0 +1,13 @@
+effect Exc { def foo(): Unit }
+effect Get {
+  def get(): Int
+}
+
+def id[A](a: A): A = a
+
+def main() = {
+  val x = try {
+    id(get())
+  } with Get { def get() = resume(42) }
+  println(x + 1)
+}

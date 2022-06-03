@@ -1,0 +1,10 @@
+effect Get {
+  def get(): Int
+}
+
+def myFun() = get()
+
+def main() = {
+  val x = try { myFun() } with Get { def get() = resume(42) }
+  println(x + 1)
+}

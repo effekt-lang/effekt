@@ -1,0 +1,16 @@
+type Box[R] { MakeBox(s: R) }
+
+def id[A, B] { f : A => B } : B = <>
+
+def requireSame[T](a: T, b: T): T = a
+
+def foo() = {
+
+  val b1 = id { a => MakeBox(a) };
+  val b2 = id { a => MakeBox(a) };
+
+  val x: Box[Int] = requireSame(b1, b2);
+  ()
+}
+
+def main() = ()

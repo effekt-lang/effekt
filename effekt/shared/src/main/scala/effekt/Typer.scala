@@ -606,29 +606,39 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Function calls, arguments, and parameters">
 
-  def checkBlockArgument(arg: source.BlockArg, expected: Option[BlockType])(implicit C: Context): Result[BlockType] =
+  def checkBlockArgument(arg: source.BlockArg, expected: Option[BlockType])(using C: Context): Result[BlockType] =
     (arg, expected) match {
       // Use expected type, if present
       case (arg: source.FunctionArg, Some(tpe: FunctionType)) =>
         checkFunctionArgument(arg, tpe)
-      case (arg@source.FunctionArg(tparams, vparams, bparams, body), None) =>
-        // the code below is wrong, so better crash for now
-        ???
-//        Context.withUnificationScope {
-//          val tps = tparams.map { p => p.symbol.asTypeVar }
-//          val vps = vparams.map { p => p.symbol.tpe }.map {
-//            case Some(tpe) => tpe
-//            case None => Context.abort("Expected type needs to be known for function arguments at the moment.")
-//          }
-//          val bps = bparams.map { p => p.symbol.tpe }
-//          val ret = Context.fresh(UnificationVar.InferredReturn(arg))
-//          // TODO Pure is not correct here, it will handle ALL effects.
-//          println("in this case!!!")
-//          val tpe = FunctionType(tps, Nil, vps, bps, ret, Pure)
-//          // As a quick fix, we swap out the effects here...
-//          val Result(FunctionType(tps1, cps1, vps1, bps1, ret1, _), effs1) = checkFunctionArgument(arg, tpe)
-//          Result(FunctionType(tps1, cps1, vps1, bps1, ret1, effs1), Pure)
-//        } { r => r.effects }
+      case (arg@source.FunctionArg(tparams, vparams, bparams, body), None) => Context in {
+        val tps = tparams.map { p => p.symbol.asTypeVar }
+        val vps = vparams.map { p =>
+          val param = p.symbol
+          val tpe = p.symbol.tpe.getOrElse {
+            Context.abort("Expected type needs to be known for function arguments at the moment.")
+          }
+          Context.bind(param, tpe)
+          tpe
+        }
+        val bps = bparams.map { p =>
+          val param = p.symbol
+          val tpe = param.tpe
+          Context.bind(param, tpe)
+          tpe
+        }
+        val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(arg) {
+          Context in { checkStmt(body, None) }
+        }
+        Context.wellscoped(effs) // check effects are in scope
+
+        val funType = FunctionType(tps, Nil, vps, bps, tpe, effs.toEffects)
+
+        // The order of effects annotated to the function is the canonical ordering for capabilities
+        Context.bindCapabilities(arg, effs.controlEffects.map { caps.apply })
+
+        Result(funType, Pure)
+      }
       case (rg@source.InterfaceArg(id), None) =>
         val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
         Result(btpe, Pure)

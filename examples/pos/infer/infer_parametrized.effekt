@@ -1,0 +1,21 @@
+effect Get[A] {
+  def get(): A
+}
+
+def id[A](a: A): A = a
+
+def simple() = {
+  val x = try {
+    get[Int]() + 1
+  } with Get[Int] { def get() = resume(42) }
+  println(x + 1)
+}
+
+def inferred() = {
+  val x = try {
+    get() + 1
+  } with Get[Int] { def get() = resume(42) }
+  println(x + 1)
+}
+
+def main() = ()
