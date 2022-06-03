@@ -379,39 +379,38 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
    * can be improved a lot.
    *
-   * TODO Maybe move exhaustivity check to a separate phase AFTER typer?
+   * TODO Maybe move exhaustivity check to a separate phase AFTER typer? This way all types are inferred.
    */
   def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context): Unit = ()
-//
-//  {
-//    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
-//
-//    if (catchall)
-//      return ;
-//
-//    sc match {
-//      case TypeConstructor(t: DataType) =>
-//        t.variants.foreach { variant =>
-//          checkExhaustivity(variant, cls)
-//        }
-//
-//      case TypeConstructor(t: Record) =>
-//        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
-//          case p if p.definition == t => Left(p.patterns)
-//          case p => Right(p)
-//        }
-//
-//        if (related.isEmpty) {
-//          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
-//        }
-//
-//        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
-//          case (t, ps) => checkExhaustivity(t, ps)
-//        }
-//      case other =>
-//        ()
-//    }
-//  }
+  //  {
+  //    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
+  //
+  //    if (catchall)
+  //      return ;
+  //
+  //    sc match {
+  //      case TypeConstructor(t: DataType) =>
+  //        t.variants.foreach { variant =>
+  //          checkExhaustivity(variant, cls)
+  //        }
+  //
+  //      case TypeConstructor(t: Record) =>
+  //        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
+  //          case p if p.definition == t => Left(p.patterns)
+  //          case p => Right(p)
+  //        }
+  //
+  //        if (related.isEmpty) {
+  //          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
+  //        }
+  //
+  //        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
+  //          case (t, ps) => checkExhaustivity(t, ps)
+  //        }
+  //      case other =>
+  //        ()
+  //    }
+  //  }
 
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty

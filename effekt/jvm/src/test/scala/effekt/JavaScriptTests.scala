@@ -46,11 +46,14 @@ trait TestUtils {
 
   lazy val ignored: List[File] = List(
     examplesDir / "neg" / "lambdas",
-    examplesDir / "neg" / "issue50.effekt"
+    examplesDir / "pos" / "lambdas",
+    examplesDir / "neg" / "issue50.effekt",
+    examplesDir / "neg" / "coverage.effekt",
+    examplesDir / "neg" / "matchdef.effekt"
   )
 
   // The sources of all testfiles are stored here:
-  lazy val examplesDir = new File("examples") / "pos" / "infer"
+  lazy val examplesDir = new File("examples")
 
   //  val compiler = new effekt.Driver {}
   //  val configs = compiler.createConfig(Seq("--lib", "libraries/js/monadic"))
