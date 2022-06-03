@@ -32,6 +32,9 @@ class ChezSchemeTests extends AnyFunSpec {
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",
 
+    examplesDir / "pos" / "infer",
+
+    examplesDir / "pos" / "lambdas",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt" // doesn't work with lift inference, yet
   )
 

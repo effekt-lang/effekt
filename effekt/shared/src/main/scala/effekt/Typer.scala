@@ -956,7 +956,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   private[typer] def assertConcrete(eff: Effect)(using C: Context): Unit =
     if (!isConcreteEffect(eff)) {
-      C.unification.dumpConstraints()
       C.abort(s"Effects need to be fully known: ${eff}")
     }
 
