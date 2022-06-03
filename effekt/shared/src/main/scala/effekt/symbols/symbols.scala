@@ -343,15 +343,6 @@ package object symbols {
     def forall(p: Effect => Boolean): Boolean = effects.forall(p)
     def exists(p: Effect => Boolean): Boolean = effects.exists(p)
 
-    // TODO delete after merging CapabilityPassing into Typer
-    def controlEffects: List[InterfaceType] =
-      filterNot(_.builtin).toList.map {
-        case eff: InterfaceType => eff
-        case eff =>
-          println(s"Missing case: ${eff}")
-          ???
-      }
-
     override def toString: String = toList match {
       case Nil        => "{}"
       case eff :: Nil => eff.toString
@@ -369,6 +360,13 @@ package object symbols {
     def empty: Effects = new Effects(Nil)
     val Pure = empty
   }
+
+  extension(effs: List[Effect]) {
+    def controlEffects: List[InterfaceType] = effs.collect {
+      case i: InterfaceType if !i.builtin => i
+    }
+  }
+
   /**
    * Capture Sets
    */

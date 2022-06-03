@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.symbols.Module
+import effekt.symbols._
 import kiama.util.Source
 
 /**
@@ -76,7 +76,7 @@ trait ModuleDB { self: Context =>
     }
 
     val tpe = C.functionTypeOf(main)
-    val controlEffects = tpe.effects.controlEffects
+    val controlEffects = tpe.effects.toList.controlEffects
     if (controlEffects.nonEmpty) {
       C.abort(s"Main cannot have user defined effects, but includes effects: ${controlEffects.mkString(", ")}")
     }

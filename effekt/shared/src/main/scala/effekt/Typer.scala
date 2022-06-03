@@ -57,13 +57,7 @@ class ConcreteEffects private[typer] (protected val effects: List[Effect]) {
 
   def filterNot(p: Effect => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
-  def controlEffects: List[InterfaceType] =
-    filterNot(_.builtin).toList.map {
-      case eff: InterfaceType => eff
-      case eff =>
-        println(s"Missing case: ${eff}")
-        ???
-    }
+  def controlEffects: List[InterfaceType] = effects.controlEffects
 
   def forall(p: Effect => Boolean): Boolean = effects.forall(p)
   def exists(p: Effect => Boolean): Boolean = effects.exists(p)
@@ -858,11 +852,26 @@ object Typer extends Phase[NameResolved, Typechecked] {
     effs = effs ++ retEffs
 
     // annotate call node with inferred type arguments
-    // val inferredTypeArgs = rigids.map(Context.unifier.substitute)
     Context.annotateTypeArgs(call, typeArgs)
 
-    // annotate the calltarget tree with the additional capabilities
-    Context.provideCapabilities(call, asConcrete(retEffs).controlEffects)
+    // Annotate the call target tree with the additional capabilities
+    // We need to establish the canonical ordering of capabilities.
+    // 1) we have to use the capabilities, which are annotated on the original function type
+    // 2) we need to dealias
+    // 3) we need to compute distinct effects on the dealiased list
+    // 3) and only then substitute
+    //
+    // This is important since
+    //   [A, B](): Unit / { State[A], State[B] }
+    // with A := Int and B := Int requires us to pass two capabilities.
+    val typeArgumentSubstitution = Substitutions(funTpe.tparams zip typeArgs, funTpe.cparams zip (captArgs.map(c => CaptureSet(List(c)))))
+    val capabilities = funTpe.effects.toList
+      .flatMap(Context.dealias)
+      .distinct
+      .map(typeArgumentSubstitution.substitute)
+      .map(Context.unification.apply)
+      .controlEffects
+    Context.provideCapabilities(call, capabilities)
 
     Result(ret, effs)
   }
@@ -1031,7 +1040,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using self)
-  export unification.{ requireSubtype, requireEqual, requireSubregion, join, instantiate }
+  export unification.{ requireSubtype, requireEqual, requireSubregion, join, instantiate, dealias }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](block: => T): T = {
