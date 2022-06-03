@@ -235,7 +235,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case tree @ source.TryHandle(prog, handlers) =>
 
         // (1) extract all handled effects and capabilities
-        var handledEffects: List[(symbols.InterfaceType, symbols.BlockParam)] = Nil
+        var handledEffects: List[symbols.BlockParam] = Nil
         handlers foreach Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
           val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
@@ -243,7 +243,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           if (handledEffects contains effect) {
             Context.error(s"Effect ${effect} is handled twice.")
           } else {
-            handledEffects = handledEffects :+ (effect, capability)
+            handledEffects = handledEffects :+ capability
           }
         }
 
@@ -336,7 +336,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(ret, effs)
         }
 
-        val handled = asConcrete(Effects(handledEffects.map { _._1 }))
+        val handled = asConcrete(Effects(handledEffects.map { cap => cap.tpe.asEffect }))
 
         val unusedEffects = handled -- effs
 
@@ -536,7 +536,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(annotated) =>
             // the declared effects are considered as bound
             val bound: ConcreteEffects = annotated.effects
-            val capabilities = bound.controlEffects.map { tpe => (tpe, Context.freshCapabilityFor(tpe)) }
+            val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
 
             val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
                body checkAgainst annotated.result
@@ -548,12 +548,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Result((), effs -- bound)
           case None =>
             // all effects are handled by the function itself (since they are inferred)
-            val (Result(tpe, effs), caps) = Context.bindingCapabilities(d) {
+            val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
               checkStmt(body, None)
             }
             Context.wellscoped(effs) // check they are in scope
 
             val funType = sym.toType(tpe, effs.toEffects)
+
+            // The order of effects annotated to the function is the canonical ordering for capabilities
+            Context.bindCapabilities(d, effs.controlEffects.map { caps.apply })
 
             // TODO this needs to go via local annotations
             Context.bind(sym, funType)
@@ -689,7 +692,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val adjustedHandled = typeSubst substitute handled
       val bound: ConcreteEffects = adjustedHandled
       // TODO share code with FunDef and BindAll
-      val capabilities = bound.controlEffects.map { tpe => (tpe, Context.freshCapabilityFor(tpe)) }
+      val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
 
       val Result(bodyType, bodyEffs) = Context.bindingCapabilities(decl, capabilities) {
          body checkAgainst adjustedReturn
@@ -1051,28 +1054,28 @@ trait TyperOps extends ContextOps { self: Context =>
   private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
 
 
-  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[(InterfaceType, symbols.BlockParam)])(f: => R): R = {
-    // assert that all types are concrete
-    val capabilities = caps map { case (tpe, cap) =>
-      Typer.assertConcrete(tpe)
-      positions.dupPos(binder, cap)
-      cap
-    }
-    annotations.update(Annotations.BoundCapabilities, binder, capabilities)
-    capabilityScope = BindSome(binder, caps.toMap, capabilityScope)
+  private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
+    bindCapabilities(binder, caps)
+    capabilityScope = BindSome(binder, caps.map { c => c.tpe.asEffect -> c }.toMap, capabilityScope)
     val result = f
     capabilityScope = capabilityScope.parent
     result
   }
 
-  private [typer] def bindingCapabilities[R](binder: source.Tree)(f: => R): (R, List[symbols.BlockParam]) = {
+  private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
+    val capabilities = caps map { cap =>
+      Typer.assertConcrete(cap.tpe.asEffect)
+      positions.dupPos(binder, cap)
+      cap
+    }
+    annotations.update(Annotations.BoundCapabilities, binder, capabilities)
+
+  private [typer] def bindingAllCapabilities[R](binder: source.Tree)(f: => R): (R, Map[InterfaceType, symbols.BlockParam]) = {
     capabilityScope = BindAll(binder, Map.empty, capabilityScope)
     val result = f
     val caps = capabilityScope.asInstanceOf[BindAll].capabilities
-    val capabilities = caps.values.toList
-    annotations.update(Annotations.BoundCapabilities, binder, capabilities)
     capabilityScope = capabilityScope.parent
-    (result, capabilities)
+    (result, caps)
   }
 
   /**
@@ -1137,7 +1140,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * - [[Annotations.BlockArgumentType]]
    * - [[Annotations.TypeArguments]]
    */
-  private var annotations: Annotations = Annotations.empty
+  private [typer] var annotations: Annotations = Annotations.empty
 
   //<editor-fold desc="(1) Typing Context">
 
