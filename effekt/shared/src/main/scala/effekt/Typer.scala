@@ -67,6 +67,8 @@ class ConcreteEffects private[typer] (protected val effects: List[Effect]) {
 
   def forall(p: Effect => Boolean): Boolean = effects.forall(p)
   def exists(p: Effect => Boolean): Boolean = effects.exists(p)
+
+  override def toString = toEffects.toString
 }
 object ConcreteEffects {
   // unsafe, doesn't perform check
@@ -478,7 +480,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case source.Return(e)        => checkExpr(e, expected)
 
-      case source.BlockStmt(stmts) => checkStmt(stmts, expected)
+      case source.BlockStmt(stmts) => Context in { checkStmt(stmts, expected) }
     }
 
   // not really checking, only if defs are fully annotated, we add them to the typeDB
@@ -539,7 +541,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
 
             val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
-               body checkAgainst annotated.result
+               Context in { body checkAgainst annotated.result }
             }
             Context.wellscoped(effs)
             Context.annotateInferredType(d, tpe)
@@ -549,7 +551,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case None =>
             // all effects are handled by the function itself (since they are inferred)
             val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
-              checkStmt(body, None)
+              Context in { checkStmt(body, None) }
             }
             Context.wellscoped(effs) // check they are in scope
 
@@ -1291,7 +1293,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def effectsInScope: List[Interface] = lexicalEffects
 
   private[typer] def withEffect(e: Interface): Context = {
-    lexicalEffects = e :: lexicalEffects
+    lexicalEffects = (e :: lexicalEffects).distinct
     this
   }
 

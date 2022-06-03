@@ -37,12 +37,12 @@ trait ContextOps
  * - error reporting (mutable focus)
  */
 abstract class Context(val positions: Positions)
-    extends Compiler
-    with NamerOps
-    with ModuleDB
+    extends NamerOps
     with TyperOps
+    with ModuleDB
     with CapabilityPassingOps
-    with TransformerOps {
+    with TransformerOps
+    with Compiler {
 
   // bring the context itself in scope
   implicit val context: Context = this
