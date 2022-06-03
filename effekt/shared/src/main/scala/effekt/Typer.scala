@@ -287,7 +287,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val existentials: List[TypeVar] = declaredType.tparams.drop(targs.size).map { r => TypeVar(r.name) }
 
                 // (1) Instantiate block type of effect operation
-                val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, effs)) =
+                val (rigids, crigids, canonical, FunctionType(tps, cps, vps, Nil, tpe, effs)) =
                   Context.instantiate(Context.lookupFunctionType(declaration), targs ++ existentials)
 
                 // (3) check parameters
@@ -429,7 +429,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil)
+      val (rigids, crigids, canonical, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.requireSubtype(sc, ret)
@@ -830,7 +830,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs)
+    val (typeArgs, captArgs, canonicalEffs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs)
 
     // (2) check return type
     expected.foreach { expectedReturn => Context.requireSubtype(ret, expectedReturn) }
@@ -864,14 +864,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // This is important since
     //   [A, B](): Unit / { State[A], State[B] }
     // with A := Int and B := Int requires us to pass two capabilities.
-    val typeArgumentSubstitution = Substitutions(funTpe.tparams zip typeArgs, funTpe.cparams zip (captArgs.map(c => CaptureSet(List(c)))))
-    val capabilities = funTpe.effects.toList
-      .flatMap(Context.dealias)
-      .distinct
-      .map(typeArgumentSubstitution.substitute)
-      .map(Context.unification.apply)
-      .controlEffects
-    Context.provideCapabilities(call, capabilities)
+    Context.provideCapabilities(call, canonicalEffs.map(Context.unification.apply).controlEffects)
 
     Result(ret, effs)
   }

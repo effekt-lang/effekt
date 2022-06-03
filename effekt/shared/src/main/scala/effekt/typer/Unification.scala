@@ -156,8 +156,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
    * Instantiate a typescheme with fresh, rigid type variables
    *
    * i.e. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
+   *
+   * Also returns the list of effects in canonical ordering, after dealiasing.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], List[Effect], FunctionType) = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
@@ -171,9 +173,11 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     val substitutedVparams = vparams map subst.substitute
     val substitutedBparams = bparams map subst.substitute
     val substitutedReturn = subst.substitute(ret)
-    val substitutedEffects = subst.substitute(eff)
+    val dealiasedEffs = eff.toList.flatMap(dealias).distinct
 
-    (typeRigids, captRigids, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects))
+    val substitutedEffects = dealiasedEffs map subst.substitute
+
+    (typeRigids, captRigids, substitutedEffects, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, Effects(substitutedEffects)))
   }
 
 
