@@ -752,7 +752,24 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val stateBefore = Context.backupTyperstate()
 
-    // TODO try to avoid duplicate error messages
+    // TODO right now unhandled effects (via capability search) influences overload resolution.
+    //  examples/neg/see existential_effect_leaks.effekt
+    //
+    //  We should establish proper shadowing here!
+    //
+    // Potential Design
+    // ----------------
+    // We can get rid of the complexity of backtracking by
+    // 1) filter out overloads that do not match arity / kind wise
+    // 2) check whether there are multiple functions that overlap on their value arguments (raise ambiguity if that is the case)
+    // 3) infer the value arguments *once* without expected type.
+    //
+    // For each (non-empty) scope,
+    //   For each candidate in that scope (might require backtracking on the unifier!):
+    //   + see whether the value arguments *could* unify with the expected value parameter types
+    // - If there are multiple possible candidates -> Ambiguity Error
+    // - If there is none: proceed to outer scope
+    // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope =>
       scope.toList.map { sym =>
         sym -> Try {
