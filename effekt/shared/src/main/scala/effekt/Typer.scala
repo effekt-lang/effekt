@@ -563,7 +563,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
 
       case d @ source.EffDef(id, tparams, ops) =>
-        Context.withEffect(d.symbol)
+        val effectDecl = d.symbol
+        effectDecl.ops foreach { op =>
+          if (op.otherEffects.toList contains op.appliedEffect) {
+            Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
+          }
+        }
+        Context.withEffect(effectDecl)
         Result((), Pure)
 
       case d @ source.ValDef(id, annot, binding) =>
@@ -627,6 +633,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
         Result(btpe, Pure)
       case (rg@source.InterfaceArg(id), Some(expected)) =>
+        if (!id.symbol.isInstanceOf[BlockSymbol]) Context.at(rg) {
+          Context.abort(s"Expected a block variable, but ${id.name} is a value. Maybe use explicit syntax: { () => ${id.name} }")
+        }
         val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
         Context.requireSubtype(btpe, expected)
         Result(btpe, Pure)
