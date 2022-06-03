@@ -240,8 +240,8 @@ class ConstraintGraph(
   def dumpConstraints() =
     val colSize = 12
     val varSize = 5
-    val sep = "━".repeat(colSize)
-    val varSep = "━".repeat(varSize)
+    val sep = "━" * colSize
+    val varSep = "━" * varSize
 
     println(s"┏$sep┯$sep━━━━━$varSep━━━━━$sep┯$sep┓")
 
