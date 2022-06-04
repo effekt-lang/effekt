@@ -45,6 +45,7 @@ const $runtime = (function() {
   }
 
   const EmptyStack = null;
+  const EmptyClauses = Clauses(null, null, null)
 
   // |       |
   // | - T - |
@@ -151,17 +152,12 @@ const $runtime = (function() {
     var s = stack;
 
     const mkResume = subcont => {
-      const localCont = a => Control(k => {
-        return pushSubcont(subcont, k, pure(a))
-      })
-      return Step(f(localCont), stack.tail)
+      const localCont = a => Control(k => pushSubcont(subcont, k, pure(a)))
+      return Step(f(localCont), s.tail)
     }
-
-    //? return directly if the current prompt is the one searched for?
 
     while (s !== EmptyStack) {
       const currentPrompt = s.prompt
-
       const onUnwindOp = s.clauses.onUnwind
       if (onUnwindOp != null) {
         const c = onUnwindOp().then(a => 
@@ -173,10 +169,8 @@ const $runtime = (function() {
         )
         return Step(c, s.tail)
       }
-
       sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, null, sub_)
       if (currentPrompt === p) { return mkResume(sub_) }
-
       s = s.tail
     }
     throw ("Prompt " + p + " not found")
@@ -197,7 +191,7 @@ const $runtime = (function() {
       // Control[A] -> Stack -> Step[Control[B], Stack]
       apply: apply,
       // Control[A] -> A
-      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, Clauses(null, null, null), EmptyStack))),
+      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, EmptyClauses, EmptyStack))),
       // Control[A] -> (A => Control[B]) -> Control[B] 
       // which corresponds to monadic bind
       then: f => Control(k => Step(self, flatMap(k, f))),
