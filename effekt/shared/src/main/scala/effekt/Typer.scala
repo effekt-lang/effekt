@@ -181,13 +181,45 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.Call(source.MemberTarget(receiver, id), targs, args) =>
         Context.panic("Method call syntax not allowed in source programs.")
 
-      case source.TryHandle(prog, handlers) =>
+      case source.TryHandle(prog, handlers, suspend, resume, retrn) =>
+        // effect EffOp(x: B): C
+        // try { s1: T }
+        // with EffOp { (x: B, resume: C => R) => s2: R }
+        // on suspend { s3: A }
+        // on resume { x: A => _ }
+        // on return { x: T => s4: R }
 
-        val (ret / effs) = checkStmt(prog, expected)
+        val (result / effs) = checkStmt(prog, expected)
 
         var effects: List[symbols.Effect] = Nil
 
         var handlerEffs = Pure
+
+        // Check suspend, resume and return clause
+        val (suspendTpe / suspendEffs) = suspend map {
+          case source.OnSuspend(s) => checkStmt(s, None) 
+        } getOrElse (TUnit / Pure)
+        val (_ / resumeEffs) = resume map { 
+          case source.OnResume(source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
+            param.symbol.tpe foreach { Context.unify(_, suspendTpe) }
+            Context.define(param.symbol, suspendTpe)
+            checkStmt(body, Some(TUnit))
+          case _ => 
+            Context.panic(
+              "Cannot occur. The parser should have already verified that there is only one parameter for 'on resume'."
+            )
+        } getOrElse (TUnit / Pure)
+        val (ret / retEffs) = retrn map {
+          case source.OnReturn(source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
+            param.symbol.tpe foreach { Context.unify(_, result) }
+            Context.define(param.symbol, result)
+            checkStmt(body, None)
+          case _ => 
+            Context.panic(
+              "Cannot occur. The parser should have already verified that there is only one parameter for 'on return'."
+            )
+        } getOrElse (result / Pure)
+        handlerEffs = handlerEffs ++ suspendEffs ++ resumeEffs ++ retEffs
 
         handlers foreach Context.withFocus { h =>
           val effect: Effect = h.effect.resolve
@@ -264,6 +296,27 @@ object Typer extends Phase[NameResolved, Typechecked] {
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
+        /*
+        
+
+        resulting type is either T or R if an on return clause is given
+        
+        pseudocode:
+
+        (tryType, tryEffs) <- check(try.body)
+        (_, handlerEffs) <- for each handler in handlers do check(handler)
+        (suspendType, suspendEffs) <- check(suspend.body)
+        annotate(resume.param, suspendType)
+        (_, resumeEffs) <- check(resume.body)
+        annotate(return.param, tryType)
+        (returnType, returnEffs) <- check(return.body)
+        tpe <-
+          if exists on return then
+            returnType
+          else
+            tryType
+        (tpe, tryEffs ++ handlerEffs ++ suspendEffs ++ resumeEffs ++ returnEffs)
+        */ 
         ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
       case source.MatchExpr(sc, clauses) =>
