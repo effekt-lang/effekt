@@ -463,24 +463,37 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val doExpr: P[Expr] =
     `do` ~/> callTarget ~ maybeTypeArgs ~ some(valueArgs) ^^ Call.apply
 
-  private def validateTryClauses(prog: Stmt, handler: List[Handler], clauses: List[TryClause]) =
-    // extract each type of clause from the list of clauses
-    val suspend = clauses collect { case x: OnSuspend => x }
-    val resume = clauses collect { case x: OnResume => x }
-    val ret = clauses collect { case x: OnReturn => x }
-    val fin = clauses collect { case x: Finally => x }
-    // validate
-    if suspend.size > 1 then
-      failure("Expected at most one 'on suspend' clause, but found " + suspend.size)
-    if resume.size > 1 then
-      failure("Expected at most one 'on resume' clause, but found " + resume.size)
-    if ret.size > 1 then
-      failure("Expected at most one 'on return' clause, but found " + ret.size)
-    if fin.size > 1 then
-      failure("Expected at most one 'finally' clause, but found " + fin.size)
-    if (suspend.nonEmpty || ret.nonEmpty) && fin.nonEmpty then
-      failure("Expected only a 'finally' clause, but found an 'on suspend' or an 'on return' clause as well")
-
+  /**
+   * Validates the number of clauses and also introduces the postcondition that the block arguments of
+   * the 'on resume' and 'on return' have exactly one parameter.
+   */
+  private def validateTryClauses(
+    prog: Stmt,
+    handler: List[Handler],
+    clauses: List[TryClause]
+  ): P[(Stmt, List[Handler], Option[OnSuspend], Option[OnResume], Option[OnReturn], Option[Finally])] =
+    val suspend = clauses collect { case x: OnSuspend => x } match
+      case xs if xs.size > 1 =>
+        return failure(s"Expected at most one 'on suspend' clause, but found ${xs.size}")
+      case x => x
+    val resume = clauses collect { case x: OnResume => x } match
+      case List(OnResume(BlockArg(List(ValueParams(params)), _))) if params.size != 1 =>
+        return failure(s"The 'on resume' block expected exactly one parameter, but found ${params.size}")
+      case xs if xs.size > 1 =>
+        return failure(s"Expected at most one 'on resume' clause, but found ${xs.size}")
+      case x => x
+    val ret = clauses collect { case x: OnReturn => x } match
+      case List(OnReturn(BlockArg(List(ValueParams(params)), _))) if params.size != 1 =>
+        return failure(s"The 'on resume' block expected exactly one parameter, but found ${params.size}")
+      case xs if xs.size > 1 =>
+        return failure(s"Expected at most one 'on resume' clause, but found ${xs.size}")
+      case x => x
+    val fin = clauses collect { case x: Finally => x } match 
+      case xs if xs.size > 1 =>
+        return failure(s"Expected at most one 'finally' clause, but found ${xs.size}")
+      case x if (suspend.nonEmpty || ret.nonEmpty) && x.nonEmpty =>
+        return failure("Expected only a 'finally' clause, but found an 'on suspend' or an 'on return' clause as well")
+      case x => x
     success((prog, handler, suspend.headOption, resume.headOption, ret.headOption, fin.headOption))
 
   lazy val handleExpr: P[Expr] =

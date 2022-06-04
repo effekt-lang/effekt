@@ -282,9 +282,9 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.TryHandle(body, handlers, suspend, resume, ret) =>
       Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
-      Context scoped { suspend foreach { resolveGeneric } }
-      Context scoped { resume foreach { resolveGeneric } }
-      Context scoped { ret foreach { resolveGeneric } }
+      Context scoped { suspend foreach { case source.OnSuspend(s) => resolveGeneric(s) } }
+      Context scoped { resume foreach { case source.OnResume(s) => resolveGeneric(s) } }
+      Context scoped { ret foreach { case source.OnReturn(s) => resolveGeneric(s) } }
 
     case source.Handler(effect, _, clauses) =>
 

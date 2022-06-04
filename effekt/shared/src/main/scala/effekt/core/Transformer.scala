@@ -198,7 +198,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           C.bind(C.inferredTypeOf(tree), App(Unbox(ValueVar(f)), targs, as))
       }
 
-    case source.TryHandle(prog, handlers) =>
+    case source.TryHandle(prog, handlers, suspend, resume, ret) =>
 
       val effects = handlers.map(_.definition)
       val caps = handlers.map { h =>
@@ -224,7 +224,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           })
       }
 
-      C.bind(C.inferredTypeOf(tree), Handle(body, hs))
+      val onSusp = suspend map { case source.OnSuspend(s) => transform(s) }
+      val onRes = resume map { case source.OnResume(s) => transform(s) }
+      val onRet = ret map { case source.OnReturn(s) => transform(s) }     
+
+      C.bind(C.inferredTypeOf(tree), Handle(body, hs, onSusp, onRes, onRet))
 
     case source.Hole(stmts) =>
       C.bind(C.inferredTypeOf(tree), Hole)

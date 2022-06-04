@@ -100,10 +100,15 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case State(id, tpe, get, put, init, body) =>
       toDocDelayed(init) <> ".state" <> parens(toDoc(body))
 
-    case Handle(body, hs) =>
+    case Handle(body, hs, suspend, resume, ret) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
-      val cs = parens(jsArray(handlers))
-      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
+      val hs_ = jsArray(handlers)
+      val susp = suspend map { body => jsLambda(List(), toDocExpr(body)) } getOrElse string("null")
+      val resp = resume map { toDoc } getOrElse string("null")
+      val retp = ret map { toDoc } getOrElse string("null")
+      val cs = List(hs_, susp, resp, retp)
+      val css = parens(nest(line <> vsep(cs, comma)))
+      "$effekt.handle" <> css <> parens(nest(line <> toDoc(body)))
 
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {

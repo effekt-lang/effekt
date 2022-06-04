@@ -141,7 +141,7 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
       bodyRegion -- boundRegions
 
     // TODO What about capabilities introduced by resume????
-    case TryHandle(body, handlers) =>
+    case TryHandle(body, handlers, suspend, resume, ret) =>
 
       // regions for all the capabilities
       val caps = handlers.flatMap { h => h.capability }
@@ -170,6 +170,14 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
             reg ++= check(body)
         }
       }
+
+      Seq(suspend, resume, ret).flatten foreach {
+        case OnSuspend(body) => reg ++= check(body)
+        case OnResume(BlockArg(_, body)) => reg ++= check(body)
+        case OnReturn(BlockArg(_, body)) => reg ++= check(body)
+        case _: Finally => Context.panic("Should not occur")
+      } 
+
       reg
 
     // capability call

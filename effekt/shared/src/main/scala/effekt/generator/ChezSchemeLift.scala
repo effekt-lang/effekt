@@ -219,7 +219,10 @@ trait ChezSchemeLiftedBase extends ChezSchemePrinterUtils {
 
     case Ret(e)             => toDoc(e)
 
-    case Handle(body, handler: List[Handler]) =>
+    case Handle(body, handler: List[Handler], suspend, resume, ret) =>
+      if suspend.isDefined || resume.isDefined || ret.isDefined then
+              sys error "'on suspend', 'on resume' and 'on return' try-clauses are not yet supported by this backend."
+      
       val handlers: List[Doc] = handler.map { h =>
 
         brackets("make-" <> nameRef(h.id) <+> vsep(h.clauses.map {

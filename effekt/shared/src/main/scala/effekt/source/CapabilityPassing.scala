@@ -105,14 +105,14 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
         f.copy(params = params ++ caps, body = rewrite(body))
       }
 
-    case TryHandle(prog, handlers) =>
-
+    case TryHandle(prog, handlers, suspend, resume, ret) =>
       // here we need to use the effects on the handlers!
       val effects = Effects(handlers.map(_.effect.resolve))
 
       val (caps, body) = C.withCapabilities(effects) { caps =>
         (caps, rewrite(prog))
       }
+      
       val hs = (handlers zip caps).map {
         case (h, cap) => visit(h) {
           case h @ Handler(eff, _, clauses) =>
@@ -129,7 +129,9 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
             Handler(eff, Some(cap), cls)
         }
       }
-      TryHandle(body, hs)
+      val transformedSuspend = suspend map { visit(_) { case OnSuspend(s) => OnSuspend(rewrite(s)) }}
+      // TODO transform resume and return
+      TryHandle(body, hs, suspend, resume, ret)
   }
 
   override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {
