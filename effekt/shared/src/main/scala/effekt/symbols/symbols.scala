@@ -393,12 +393,14 @@ package object symbols {
 
   // TODO we could fuse CaptureOf and CaptureParam into one constructor
 
+  sealed trait ConcreteCapture extends Capture
+
   /**
    * Represents the capture of a term symbol as written in a user program.
    *
    * For example in `def hof { f: () => Unit }: () => Unit at {>>>f<<<}`
    */
-  case class CaptureOf(sym: TermSymbol) extends Capture {
+  case class CaptureOf(sym: TermSymbol) extends ConcreteCapture {
     val name = sym.name
     // we compare captures of term symbols by comparing the term symbols
     override def equals(other: Any): Boolean = other match {
@@ -415,14 +417,23 @@ package object symbols {
    * For instance for the capture set of the continuation.
    * Can later be used to explicitly quantify over regions.
    */
-  case class CaptureParam(name: Name) extends Capture {
+  case class CaptureParam(name: Name) extends ConcreteCapture {
     def concrete = true
   }
 
-  case class CaptureUnificationVar(underlying: Capture) extends Capture {
-    val name = underlying.name
+  case class CaptureUnificationVar(role: CaptureUnificationVar.Role) extends Capture {
+    val name = Name.local("?C")
     def concrete = false
-    override def toString = "?" + underlying.name //underlying.name + id
+    override def toString = role match {
+      case CaptureUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
+      case _ => "?" + id
+    }
+  }
+  object CaptureUnificationVar {
+    sealed trait Role
+    case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
+    case class HandlerRegion(handler: source.TryHandle) extends Role
+    case class FunctionRegion(fun: source.FunDef) extends Role
   }
 
   /**

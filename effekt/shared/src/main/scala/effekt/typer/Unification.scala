@@ -57,10 +57,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       x
   }
 
-  def freshCaptVar(underlying: Capture): CaptureUnificationVar = scope match {
+  def freshCaptVar(role: CaptureUnificationVar.Role): CaptureUnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
-      val x = CaptureUnificationVar(underlying)
+      val x = CaptureUnificationVar(role)
       scope = s.copy(captures = x :: s.captures)
       x
   }
@@ -143,10 +143,24 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       dealias(substitution.substitute(t2)))
 
   def requireSubregion(c1: CaptureSet, c2: CaptureSet): Unit =
-    sys error s"Requiring that ${c1} <:< ${c2}"
+    println(s"Requiring that ${c1} <:< ${c2}")
+
+  def requireSubregion(c1: CaptureSet, c2: CaptureUnificationVar): Unit =
+    println(s"Requiring that ${c1} <:< ${c2}")
+
+  def requireSubregion(c1: CaptureUnificationVar, c2: CaptureSet): Unit =
+    println(s"Requiring that ${c1} <:< ${c2}")
+
+  def requireEqual(x: CaptureUnificationVar, c: CaptureSet): Unit =
+    println(s"Requiring that ${x} =:= ${c}")
 
   def join(tpes: List[ValueType]): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
+
+  def without(caps: CaptureSet, others: List[ConcreteCapture]): CaptureSet =
+    // TODO implement
+    println(s"Need to subtract ${others} from ${caps}")
+    caps
 
 
   // Using collected information
@@ -165,7 +179,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
     val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
-    val captRigids = cparams map freshCaptVar
+    val captRigids = cparams map { param => freshCaptVar(CaptureUnificationVar.VariableInstantiation(param, position)) }
     val subst = Substitutions(
       tparams zip typeRigids,
       cparams zip captRigids.map(c => CaptureSet(c)))

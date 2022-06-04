@@ -351,7 +351,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveAll(vargs)
       resolveAll(bargs)
 
-    case source.Var(id)           => Context.resolveVar(id)
+    case source.Var(id) => Context.resolveVar(id)
+
+    case source.Assign(id, expr) => Context.resolveVar(id) match {
+      case x: VarBinder => resolveGeneric(expr)
+      case _: ValBinder | _: ValueParam => Context.abort(s"Can only assign to mutable variables, but ${id.name} is a constant.")
+      case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
+      case _ => Context.abort(s"Can only assign to mutable variables.")
+    }
 
     case tpe: source.ValueType    => resolve(tpe)
     case tpe: source.FunctionType => resolve(tpe)

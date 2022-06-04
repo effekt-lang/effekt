@@ -147,6 +147,14 @@ object Annotations {
   )
 
   /**
+   * Capability set used by a function definition, block parameter, ...
+   */
+  val CaptureSet = Annotation[symbols.BlockSymbol, symbols.CaptureSet](
+    "CaptureSet",
+    "the set of used capabilities of a block symbol"
+  )
+
+  /**
    * The module a given symbol is defined in
    */
   val SourceModule = Annotation[symbols.Symbol, symbols.Module](
@@ -502,4 +510,7 @@ trait AnnotationsDB { self: Context =>
 
   def captureOf(sym: Symbol): symbols.CaptureSet =
     annotation(Annotations.Captures, sym)
+
+  def captureOfOption(sym: Symbol): Option[symbols.CaptureSet] =
+    annotationOption(Annotations.Captures, sym)
 }
