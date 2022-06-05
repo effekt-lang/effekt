@@ -189,36 +189,55 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // on resume { x: A => _ }
         // on return { x: T => s4: R }
 
-        val (result / effs) = checkStmt(prog, expected)
+        // We cannot check the try-body against the expected type yet,
+        // since it is yet unkown if there's a 'on return' block that
+        // alters the return type of the whole try expression.
+        val (result / effs) = checkStmt(prog, None)
 
         var effects: List[symbols.Effect] = Nil
 
         var handlerEffs = Pure
 
         // Check suspend, resume and return clause
-        val (suspendTpe / suspendEffs) = suspend map {
+        val (suspendType / suspendEffs) = suspend map {
           case source.OnSuspend(s) => checkStmt(s, None) 
         } getOrElse (TUnit / Pure)
         val (_ / resumeEffs) = resume map { 
-          case source.OnResume(source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
-            param.symbol.tpe foreach { Context.unify(_, suspendTpe) }
-            Context.define(param.symbol, suspendTpe)
-            checkStmt(body, Some(TUnit))
+          case source.OnResume(blk @ source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
+            // Check if given type corresponds with inferred type
+            param.symbol.tpe foreach { Context.unify(_, suspendType) }
+            // Assign the resume param type of suspend return type
+            Context.define(param.symbol, suspendType)
+            val (resumeType / resumeEffs) = checkStmt(body, Some(TUnit))
+            val blkTpe = BlockType(Nil, List(List(suspendType)), resumeType, resumeEffs)
+            Context.annotateBlockArgument(blk, blkTpe)
+            resumeType / resumeEffs
           case _ => 
             Context.panic(
               "Cannot occur. The parser should have already verified that there is only one parameter for 'on resume'."
             )
         } getOrElse (TUnit / Pure)
         val (ret / retEffs) = retrn map {
-          case source.OnReturn(source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
+          case source.OnReturn(blk @ source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
             param.symbol.tpe foreach { Context.unify(_, result) }
             Context.define(param.symbol, result)
-            checkStmt(body, None)
+            // The type of the 'on return' block has to match the expected type of
+            // the whole try-expression.
+            val (ret / retEffs) = checkStmt(body, expected)
+            val blkTpe = BlockType(Nil, List(List(result)), ret, effs)
+            Context.annotateBlockArgument(blk, blkTpe)
+            ret / retEffs
           case _ => 
             Context.panic(
               "Cannot occur. The parser should have already verified that there is only one parameter for 'on return'."
             )
-        } getOrElse (result / Pure)
+        } getOrElse {
+          // Since there is no 'on return' clause, the type of the try body has to
+          // match the expected type.
+          // TODO check again or unify?
+          checkStmt(prog, expected)
+          (result / Pure)
+        }
         handlerEffs = handlerEffs ++ suspendEffs ++ resumeEffs ++ retEffs
 
         handlers foreach Context.withFocus { h =>
@@ -296,27 +315,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
-        /*
-        
-
-        resulting type is either T or R if an on return clause is given
-        
-        pseudocode:
-
-        (tryType, tryEffs) <- check(try.body)
-        (_, handlerEffs) <- for each handler in handlers do check(handler)
-        (suspendType, suspendEffs) <- check(suspend.body)
-        annotate(resume.param, suspendType)
-        (_, resumeEffs) <- check(resume.body)
-        annotate(return.param, tryType)
-        (returnType, returnEffs) <- check(return.body)
-        tpe <-
-          if exists on return then
-            returnType
-          else
-            tryType
-        (tpe, tryEffs ++ handlerEffs ++ suspendEffs ++ resumeEffs ++ returnEffs)
-        */ 
         ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
       case source.MatchExpr(sc, clauses) =>
