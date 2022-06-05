@@ -506,11 +506,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         fin match 
           // desugar if there's a finally clause: 
           // finally { s } <=> on suspend { s } on return { _ => s }
-          case Some(Finally(s)) =>
+          case Some(Finally(body)) =>
             val param = List(ValueParams(List(ValueParam(IdDef("_"), None))))
             // { _ => s }
-            val retBlockArg = BlockArg(param, s)
-            TryHandle(s, h, Some(OnSuspend(s)), resume, Some(OnReturn(retBlockArg)))
+            val retBlockArg = BlockArg(param, body)
+            TryHandle(s, h, Some(OnSuspend(body)), resume, Some(OnReturn(retBlockArg)))
           // otherwise 
           case _ =>
             TryHandle(s, h, suspend, resume, ret)
