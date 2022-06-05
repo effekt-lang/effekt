@@ -192,7 +192,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // We cannot check the try-body against the expected type yet,
         // since it is yet unkown if there's a 'on return' block that
         // alters the return type of the whole try expression.
-        val (result / effs) = checkStmt(prog, None)
+        val (result / effs) = checkStmt(prog, expected)
 
         var effects: List[symbols.Effect] = Nil
 
@@ -223,7 +223,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.define(param.symbol, result)
             // The type of the 'on return' block has to match the expected type of
             // the whole try-expression.
-            val (ret / retEffs) = checkStmt(body, expected)
+            val (ret / retEffs) = checkStmt(body, None)
             val blkTpe = BlockType(Nil, List(List(result)), ret, effs)
             Context.annotateBlockArgument(blk, blkTpe)
             ret / retEffs
@@ -234,8 +234,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         } getOrElse {
           // Since there is no 'on return' clause, the type of the try body has to
           // match the expected type.
-          // TODO check again or unify?
-          checkStmt(prog, expected)
+          // TODO checkStmt(prog, expected) or unify?
+          expected foreach { Context.unify(_, result) }
           (result / Pure)
         }
         handlerEffs = handlerEffs ++ suspendEffs ++ resumeEffs ++ retEffs
