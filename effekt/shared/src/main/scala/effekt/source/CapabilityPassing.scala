@@ -129,8 +129,11 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
             Handler(eff, Some(cap), cls)
         }
       }
+
       val transformedSuspend = suspend map { visit(_) { case OnSuspend(s) => OnSuspend(rewrite(s)) }}
-      // TODO transform resume and return
+      val transformedResume = resume map { visit(_) { case OnResume(s) => OnResume(rewrite(s)) }}
+      val transformedReturn = ret map { visit(_) { case OnReturn(s) => OnReturn(rewrite(s)) }}
+      
       TryHandle(body, hs, suspend, resume, ret)
   }
 
