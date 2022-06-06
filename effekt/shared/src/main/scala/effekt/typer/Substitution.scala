@@ -8,10 +8,15 @@ case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Capt
 
 /**
  * Substitutions not only have unification variables as keys, since we also use the same mechanics to
- * instantiate type schemes
+ * compare two types with each other (see [[TypeComparer.subFunctionType]]).
+ *
+ * We should **not** use these Substitutions for instantiation anymore, since this introduces fresh Unification variables.
  */
 case class Substitutions(
   values: Map[TypeVar, ValueType],
+  // invariant: we alway only map
+  //   - a single CaptureParam -> CaptureParam
+  //   - a CaptUnificationVar -> Captures
   captures: Map[CaptVar, Captures]
 ) {
 
@@ -19,7 +24,15 @@ case class Substitutions(
   def isDefinedAt(c: CaptVar) = captures.isDefinedAt(c)
 
   def get(t: TypeVar) = values.get(t)
-  def get(c: CaptVar) = captures.get(c)
+
+  def get(c: CaptureParam): Option[CaptureParam] = captures.get(c) map {
+    case CaptureSet(cs) if cs.size == 1 => cs.head match {
+      case other: CaptureParam => other
+      case other => sys error s"Substitutions should map single CaptureParams to single CaptureParams, got ${other}"
+    }
+    case other => sys error "Substitutions should map single CaptureParams to single CaptureParams, got ${other}"
+  }
+  def get(x: CaptUnificationVar): Option[Captures] = captures.get(x)
 
   // amounts to first substituting this, then other
   def updateWith(other: Substitutions): Substitutions =
@@ -39,15 +52,14 @@ case class Substitutions(
 
   // TODO we DO need to distinguish between substituting unification variables for unification variables
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
-  def substitute(c: Captures): Captures =
-    // TODO implement
-    c
-//
-//  c match {
-//    case x: CaptureUnificationVar if captures.keys.exists(c => c.concrete) =>
-//      throw SubstitutionException(x, captures)
-//    case c => captures.getOrElse(c, c)
-//  }
+  def substitute(c: Captures): Captures = c match {
+    case x: CaptUnificationVar => captures.getOrElse(x, x)
+    case CaptureSet(cs) => CaptureSet(cs.map {
+      case x: CaptureParam => get(x).getOrElse(x)
+      // This is conservative. Looking up the capture of `x` could be (for example) the empty set.
+      case x: CaptureOf => x
+    })
+  }
 
   def substitute(t: ValueType): ValueType = t match {
     case x: TypeVar =>
@@ -72,7 +84,7 @@ case class Substitutions(
 
   def substitute(t: BlockType): BlockType = t match {
     case e: InterfaceType => substitute(e)
-    case b: FunctionType        => substitute(b)
+    case b: FunctionType  => substitute(b)
   }
 
   def substitute(t: InterfaceType): InterfaceType = t match {

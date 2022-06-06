@@ -266,7 +266,7 @@ package object symbols {
 
   sealed trait BlockType extends Type
 
-  case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {
+  case class FunctionType(tparams: List[TypeVar], cparams: List[CaptureParam], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {
     // TODO move rendering
     //    override def toString: String = {
     //      val ps = params.map {
@@ -396,7 +396,7 @@ package object symbols {
    */
   sealed trait CaptVar
 
-  sealed trait Capture extends CaptVar, TypeSymbol {
+  sealed trait Capture extends TypeSymbol {
     val name: Name
     def concrete: Boolean
   }
@@ -428,7 +428,7 @@ package object symbols {
    * "Tracked" capture parameters. Like [[TypeVar]] used to abstract
    * over capture. Also see [[BlockParam.capture]].
    */
-  case class CaptureParam(name: Name) extends Capture {
+  case class CaptureParam(name: Name) extends CaptVar, Capture {
     def concrete = true
   }
 
@@ -452,7 +452,7 @@ package object symbols {
     case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role
     case class InferredBox(box: source.Box) extends Role
     // underlying should be a UnificationVar
-    case class Subtraction(handled: List[Capture], underlying: Captures) extends Role
+    case class Subtraction(handled: List[CaptureParam], underlying: CaptUnificationVar) extends Role
   }
 
   /**
