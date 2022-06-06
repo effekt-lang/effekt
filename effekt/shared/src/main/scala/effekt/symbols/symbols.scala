@@ -83,7 +83,10 @@ package object symbols {
 
   // TODO everywhere else the two universes are called "value" and "block"
 
-  sealed trait TrackedParam extends Param
+  sealed trait TrackedParam extends Param {
+    // every block parameter gives rise to a capture parameter
+    lazy val capture: CaptureParam = CaptureParam(name)
+  }
   case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
   //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
   //    def effect = tpe.eff
@@ -171,7 +174,7 @@ package object symbols {
   /**
    * Types of first-class functions
    */
-  case class BoxedType(tpe: BlockType, capture: CaptureSet) extends ValueType {
+  case class BoxedType(tpe: BlockType, capture: Captures) extends ValueType {
     // TODO move rendering to different component
 
     //    override def toString: String = {
@@ -371,7 +374,9 @@ package object symbols {
    * Capture Sets
    */
 
-  case class CaptureSet(captures: Set[Capture]) {
+  sealed trait Captures
+
+  case class CaptureSet(captures: Set[Capture]) extends Captures {
     override def toString = s"{${captures.mkString(", ")}}"
 
     // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
@@ -386,21 +391,29 @@ package object symbols {
     def empty = CaptureSet()
   }
 
-  sealed trait Capture extends TypeSymbol {
+  /**
+   * Something that can be substituted by a capture set
+   */
+  sealed trait CaptVar
+
+  sealed trait Capture extends CaptVar, TypeSymbol {
     val name: Name
     def concrete: Boolean
   }
 
   // TODO we could fuse CaptureOf and CaptureParam into one constructor
 
-  sealed trait ConcreteCapture extends Capture
-
   /**
-   * Represents the capture of a term symbol as written in a user program.
+   * Represents the capture of a term symbol as written in a **user program**.
    *
-   * For example in `def hof { f: () => Unit }: () => Unit at {>>>f<<<}`
+   * For example in
+   *   `def hof { f: () => Unit }: () => Unit at {>>>f<<<}`
+   * or
+   *   `def foo(): ...; def bar(): () => Unit at {foo} = ...`
+   *
+   * Has to be resolved by Typer to be compared
    */
-  case class CaptureOf(sym: TermSymbol) extends ConcreteCapture {
+  case class CaptureOf(sym: BlockSymbol) extends Capture {
     val name = sym.name
     // we compare captures of term symbols by comparing the term symbols
     override def equals(other: Any): Boolean = other match {
@@ -412,28 +425,34 @@ package object symbols {
   }
 
   /**
-   * Capture parameters are currently used for synthesized parametrization over capture sets
-   *
-   * For instance for the capture set of the continuation.
-   * Can later be used to explicitly quantify over regions.
+   * "Tracked" capture parameters. Like [[TypeVar]] used to abstract
+   * over capture. Also see [[BlockParam.capture]].
    */
-  case class CaptureParam(name: Name) extends ConcreteCapture {
+  case class CaptureParam(name: Name) extends Capture {
     def concrete = true
   }
 
-  case class CaptureUnificationVar(role: CaptureUnificationVar.Role) extends Capture {
+  case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar, TypeSymbol {
     val name = Name.local("?C")
     def concrete = false
     override def toString = role match {
-      case CaptureUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
+      case CaptUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
+      case CaptUnificationVar.Subtraction(handled, underlying) => s"?(${underlying} - {${handled.mkString(", ")}})"
+      case CaptUnificationVar.FunctionRegion(fun) => s"?${fun.id.name}" + id
+      case CaptUnificationVar.AnonymousFunctionRegion(fun) => s"?anonFun" + id
+      case CaptUnificationVar.HandlerRegion(handler) => s"?Ck" + id
       case _ => "?" + id
     }
   }
-  object CaptureUnificationVar {
+  object CaptUnificationVar {
     sealed trait Role
     case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
     case class HandlerRegion(handler: source.TryHandle) extends Role
     case class FunctionRegion(fun: source.FunDef) extends Role
+    case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role
+    case class InferredBox(box: source.Box) extends Role
+    // underlying should be a UnificationVar
+    case class Subtraction(handled: List[Capture], underlying: Captures) extends Role
   }
 
   /**

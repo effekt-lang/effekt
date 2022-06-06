@@ -26,7 +26,7 @@ sealed trait Scope
 case object GlobalScope extends Scope
 case class LocalScope(
   types: List[UnificationVar],
-  captures: List[CaptureUnificationVar],
+  captures: List[CaptUnificationVar],
   parent: Scope) extends Scope
 
 /**
@@ -57,10 +57,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       x
   }
 
-  def freshCaptVar(role: CaptureUnificationVar.Role): CaptureUnificationVar = scope match {
+  def freshCaptVar(role: CaptUnificationVar.Role): CaptUnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
-      val x = CaptureUnificationVar(role)
+      val x = CaptUnificationVar(role)
       scope = s.copy(captures = x :: s.captures)
       x
   }
@@ -142,26 +142,28 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       dealias(substitution.substitute(t1)),
       dealias(substitution.substitute(t2)))
 
-  def requireSubregion(c1: CaptureSet, c2: CaptureSet): Unit =
+  def requireSubregion(c1: Captures, c2: Captures): Unit =
+    if (c1 == CaptureSet()) return;
+    if (c1 == c2) return;
     println(s"Requiring that ${c1} <:< ${c2}")
 
-  def requireSubregion(c1: CaptureSet, c2: CaptureUnificationVar): Unit =
-    println(s"Requiring that ${c1} <:< ${c2}")
-
-  def requireSubregion(c1: CaptureUnificationVar, c2: CaptureSet): Unit =
-    println(s"Requiring that ${c1} <:< ${c2}")
-
-  def requireEqual(x: CaptureUnificationVar, c: CaptureSet): Unit =
+  def requireEqual(x: CaptUnificationVar, c: CaptureSet): Unit =
     println(s"Requiring that ${x} =:= ${c}")
 
-  def join(tpes: List[ValueType]): ValueType =
+  def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
 
-  def without(caps: CaptureSet, others: List[ConcreteCapture]): CaptureSet =
-    // TODO implement
-    println(s"Need to subtract ${others} from ${caps}")
-    caps
+  def join(caps: Captures*): Captures = ???
 
+  def without(caps: Captures, others: List[Capture]): Captures =
+    if (others.isEmpty) return caps
+    // TODO implement
+    freshCaptVar(CaptUnificationVar.Subtraction(others, caps))
+
+
+  // Learning new subtyping / regioning information
+  // ----------------------------------------------
+  //def learnSub()
 
   // Using collected information
   // ---------------------------
@@ -173,16 +175,16 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
    *
    * Also returns the list of effects in canonical ordering, after dealiasing.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptureUnificationVar], List[Effect], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptUnificationVar], List[Effect], FunctionType) = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
     val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
-    val captRigids = cparams map { param => freshCaptVar(CaptureUnificationVar.VariableInstantiation(param, position)) }
+    val captRigids = cparams map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
     val subst = Substitutions(
       tparams zip typeRigids,
-      cparams zip captRigids.map(c => CaptureSet(c)))
+      cparams zip captRigids)
 
     val substitutedVparams = vparams map subst.substitute
     val substitutedBparams = bparams map subst.substitute
@@ -219,7 +221,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   }
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean = constraints.isEqual(x, y)
 
-  def unify(c1: CaptureSet, c2: CaptureSet): Unit =
+  def unify(c1: Captures, c2: Captures): Unit =
     println(s"Unifiying ${c1} and ${c2}")
 
   def abort(msg: String) = C.abort(msg)

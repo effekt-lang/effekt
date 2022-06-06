@@ -16,8 +16,8 @@ trait TypeComparer {
   def hasUpperBound(x: UnificationVar, y: ValueType): Boolean
   def hasLowerBound(x: UnificationVar, y: ValueType): Boolean
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean
-  def isEqual(c1: CaptureSet, c2: CaptureSet): Boolean = ???
-  def isSubset(c1: CaptureSet, c2: CaptureSet): Boolean =
+  def isEqual(c1: Captures, c2: Captures): Boolean = ???
+  def isSubset(c1: Captures, c2: Captures): Boolean =
     println(s"Checking whether ${c1} is a subset of ${c2}")
     true
 
@@ -118,7 +118,7 @@ trait TypeUnifier extends TypeComparer {
   def abort(msg: String): Nothing
   def error(msg: String): Unit
 
-  def unify(c1: CaptureSet, c2: CaptureSet): Unit
+  def unify(c1: Captures, c2: Captures): Unit
   def unify(c1: Capture, c2: Capture): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(using p: Polarity): Unit = (tpe1, tpe2, p) match {
@@ -283,7 +283,7 @@ trait TypeMerger extends TypeUnifier {
 
   def mergeBlockTypes(oldBound: BlockType, newBound: BlockType, polarity: Polarity): BlockType = ???
 
-  def mergeCaptures(oldBound: CaptureSet, newBound: CaptureSet, polarity: Polarity): CaptureSet = ???
+  def mergeCaptures(oldBound: Captures, newBound: Captures, polarity: Polarity): Captures = ???
 
   /**
    * Compute the join of two types

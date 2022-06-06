@@ -4,7 +4,7 @@ package typer
 import effekt.symbols._
 
 
-case class SubstitutionException(x: CaptureUnificationVar, subst: Map[Capture, CaptureSet]) extends Exception
+case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception
 
 /**
  * Substitutions not only have unification variables as keys, since we also use the same mechanics to
@@ -12,14 +12,14 @@ case class SubstitutionException(x: CaptureUnificationVar, subst: Map[Capture, C
  */
 case class Substitutions(
   values: Map[TypeVar, ValueType],
-  captures: Map[Capture, CaptureSet]
+  captures: Map[CaptVar, Captures]
 ) {
 
   def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
-  def isDefinedAt(c: Capture) = captures.isDefinedAt(c)
+  def isDefinedAt(c: CaptVar) = captures.isDefinedAt(c)
 
   def get(t: TypeVar) = values.get(t)
-  def get(c: Capture) = captures.get(c)
+  def get(c: CaptVar) = captures.get(c)
 
   // amounts to first substituting this, then other
   def updateWith(other: Substitutions): Substitutions =
@@ -39,12 +39,15 @@ case class Substitutions(
 
   // TODO we DO need to distinguish between substituting unification variables for unification variables
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
-  def substitute(c: CaptureSet): CaptureSet = c.flatMap {
-    // we are probably instantiating a function type
-    case x: CaptureUnificationVar if captures.keys.exists(c => c.concrete) =>
-      throw SubstitutionException(x, captures)
-    case c => captures.getOrElse(c, CaptureSet(c))
-  }
+  def substitute(c: Captures): Captures =
+    // TODO implement
+    c
+//
+//  c match {
+//    case x: CaptureUnificationVar if captures.keys.exists(c => c.concrete) =>
+//      throw SubstitutionException(x, captures)
+//    case c => captures.getOrElse(c, c)
+//  }
 
   def substitute(t: ValueType): ValueType = t match {
     case x: TypeVar =>
@@ -93,11 +96,12 @@ case class Substitutions(
 
 case class BiSubstitutions(
   values: Map[TypeVar, (ValueType, ValueType)],
-  captures: Map[Capture, (CaptureSet, CaptureSet)]
+  // TODO make bounds concrete (CaptureSet instead of Captures)
+  captures: Map[CaptVar, (Captures, Captures)]
 ) {
 
   def isDefinedAt(t: TypeVar) = values.isDefinedAt(t)
-  def isDefinedAt(c: Capture) = captures.isDefinedAt(c)
+  def isDefinedAt(c: CaptVar) = captures.isDefinedAt(c)
 
   def get(t: TypeVar)(using p: Polarity): Option[ValueType] = (values.get(t), p) match {
     case (Some((lower, upper)), Covariant) => Some(lower)
@@ -107,7 +111,7 @@ case class BiSubstitutions(
     case (Some((lower, upper)), Invariant) => Some(lower)
     case (None, _) => None
   }
-  def get(c: Capture)(using p: Polarity): Option[CaptureSet] = (captures.get(c), p) match {
+  def get(c: CaptVar)(using p: Polarity): Option[Captures] = (captures.get(c), p) match {
     case (Some((lower, upper)), Covariant) => Some(lower)
     case (Some((lower, upper)), Contravariant) => Some(upper)
     // here we assume that both bounds are equal (has to be checked before adding to the substitution)
@@ -143,7 +147,7 @@ case class BiSubstitutions(
 
   // TODO we DO need to distinguish between substituting unification variables for unification variables
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
-  def substitute(c: CaptureSet)(using Polarity): CaptureSet =
+  def substitute(c: Captures)(using Polarity): Captures =
     // TODO implement
     c
 
@@ -201,11 +205,11 @@ case class BiSubstitutions(
 }
 
 object Substitutions {
-  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[Capture, CaptureSet])
-  def apply(values: List[(TypeVar, ValueType)], captures: List[(Capture, CaptureSet)]): Substitutions = Substitutions(values.toMap, captures.toMap)
+  val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[CaptVar, Captures])
+  def apply(values: List[(TypeVar, ValueType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, captures.toMap)
 }
 
 // TODO Mostly for backwards compat
-implicit def typeMapToSubstitution(values: Map[TypeVar, ValueType]): Substitutions = Substitutions(values, Map.empty[Capture, CaptureSet])
-implicit def captMapToSubstitution(captures: Map[Capture, CaptureSet]): Substitutions = Substitutions(Map.empty[TypeVar, ValueType], captures)
+implicit def typeMapToSubstitution(values: Map[TypeVar, ValueType]): Substitutions = Substitutions(values, Map.empty[CaptVar, Captures])
+implicit def captMapToSubstitution(captures: Map[CaptVar, Captures]): Substitutions = Substitutions(Map.empty[TypeVar, ValueType], captures)
 

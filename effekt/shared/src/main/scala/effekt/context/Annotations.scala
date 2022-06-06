@@ -149,8 +149,8 @@ object Annotations {
   /**
    * Capability set used by a function definition, block parameter, ...
    */
-  val CaptureSet = Annotation[symbols.BlockSymbol, symbols.CaptureSet](
-    "CaptureSet",
+  val Captures = Annotation[symbols.BlockSymbol, symbols.Captures](
+    "Captures",
     "the set of used capabilities of a block symbol"
   )
 
@@ -219,14 +219,6 @@ object Annotations {
   val BlockArgumentType = Annotation[source.FunctionArg, symbols.FunctionType](
     "BlockArgumentType",
     "the inferred type for block argument"
-  )
-
-  /*
-   * The region a given symbol can be used in
-   */
-  val Captures = Annotation[symbols.Symbol, symbols.CaptureSet](
-    "Captures",
-    "the capture set associated with symbol"
   )
 
   /**
@@ -505,12 +497,9 @@ trait AnnotationsDB { self: Context =>
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
 
-  def annotateCapture(sym: Symbol, r: symbols.CaptureSet): Unit =
-    annotate(Annotations.Captures, sym, r)
-
-  def captureOf(sym: Symbol): symbols.CaptureSet =
+  def captureOf(sym: BlockSymbol): symbols.Captures =
     annotation(Annotations.Captures, sym)
 
-  def captureOfOption(sym: Symbol): Option[symbols.CaptureSet] =
+  def captureOfOption(sym: BlockSymbol): Option[symbols.Captures] =
     annotationOption(Annotations.Captures, sym)
 }
