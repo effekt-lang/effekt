@@ -19,7 +19,8 @@ case object Invariant extends Polarity { def flip = Invariant }
  */
 case class UnificationState(
   scope: Scope,
-  constraints: Equivalences
+  constraints: Equivalences,
+  captureConstraints: CaptureConstraintGraph
 )
 
 sealed trait Scope
@@ -45,7 +46,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   private var scope: Scope = GlobalScope
   private [typer] def substitution = constraints.subst
   private var constraints = new Equivalences
-  private var captureConstraints = new CaptureConstraintGraph(Map.empty)
+  private var captureConstraints = CaptureConstraintGraph.empty
 
 
   // Creating fresh unification variables
@@ -77,15 +78,16 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone())
+  def backup(): UnificationState = UnificationState(scope, constraints.clone(), captureConstraints.clone())
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
+    captureConstraints = state.captureConstraints.clone()
 
   def init() =
     scope = GlobalScope
     constraints = new Equivalences
-    captureConstraints = new CaptureConstraintGraph(Map.empty)
+    captureConstraints = CaptureConstraintGraph.empty
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)

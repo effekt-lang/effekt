@@ -1,29 +1,44 @@
 package effekt
 package typer
 
-import effekt.symbols.{ CaptureParam, CaptUnificationVar, ValueType }
+import effekt.symbols.{ CaptUnificationVar, CaptureParam, ValueType }
 import effekt.symbols.builtins.{ TBottom, TTop }
+import effekt.util.messages.ErrorReporter
 
-// For now, we do not compute equivalence classes -- we also do not establish transitive connections.
-// If we wanted to, we would need to somehow push unification variables through negations / subtractions.
 type CNode = CaptUnificationVar
 
-case object Universal
-
 case class CaptureNodeData(
+  // non present bounds represent bottom (the empty set)
   lower: Option[Set[CaptureParam]],
+  // non present bounds represent top (the universal set)
   upper: Option[Set[CaptureParam]],
   lowerNodes: Set[CNode],
   upperNodes: Set[CNode]
 )
 
-class CaptureConstraintGraph(
+/**
+ * Invariants:
+ * - The bounds are always fully propagated to all nodes.
+ *
+ *
+ * However, for now, we do not compute equivalence classes -- we also do not establish transitive connections.
+ * If we wanted to, we would need to somehow push unification variables through negations / subtractions.
+ */
+class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
+
+  type CaptureConstraints = Map[CNode, CaptureNodeData]
+
   // concrete bounds for each node
-  private var data: Map[CNode, CaptureNodeData]
-) { outer =>
+  private [this] var constraintData: CaptureConstraints = Map.empty
+
+  override def clone(): CaptureConstraintGraph =
+    val copy = CaptureConstraintGraph.empty
+    copy.constraintData = constraintData
+    copy
 
   def checkConsistency(lower: Set[CaptureParam], upper: Set[CaptureParam]): Unit =
-    println(s"Need to check whether ${lower} <: ${upper}")
+    val diff = lower -- upper
+    if (diff.nonEmpty) { C.abort(s"Not allowed ${diff}") }
 
   // we do not necessarily need mergeLower, since we can take the free union
   def mergeLower(xs: Set[CaptureParam], ys: Set[CaptureParam]): Set[CaptureParam] =
@@ -36,7 +51,7 @@ class CaptureConstraintGraph(
   private val emptyData = CaptureNodeData(None, None, Set.empty, Set.empty)
 
   private def getData(x: CNode): CaptureNodeData =
-    data.getOrElse(x, emptyData)
+    constraintData.getOrElse(x, emptyData)
 
   extension (x: CNode) {
     private def lower: Option[Set[CaptureParam]] = getData(x).lower
@@ -44,15 +59,15 @@ class CaptureConstraintGraph(
     private def lowerNodes: Set[CNode] = getData(x).lowerNodes
     private def upperNodes: Set[CNode] = getData(x).upperNodes
     private def lower_=(bounds: Set[CaptureParam]): Unit =
-      data = data.updated(x, getData(x).copy(lower = Some(bounds)))
+      constraintData = constraintData.updated(x, getData(x).copy(lower = Some(bounds)))
     private def upper_=(bounds: Set[CaptureParam]): Unit =
-      data = data.updated(x, getData(x).copy(upper = Some(bounds)))
+      constraintData = constraintData.updated(x, getData(x).copy(upper = Some(bounds)))
     private def addLower(other: CNode): Unit =
       val oldData = getData(x)
-      data = data.updated(x, oldData.copy(lowerNodes = oldData.lowerNodes + other))
+      constraintData = constraintData.updated(x, oldData.copy(lowerNodes = oldData.lowerNodes + other))
     private def addUpper(other: CNode): Unit =
       val oldData = getData(x)
-      data = data.updated(x, oldData.copy(upperNodes = oldData.upperNodes + other))
+      constraintData = constraintData.updated(x, oldData.copy(upperNodes = oldData.upperNodes + other))
   }
 
   /**
@@ -105,10 +120,14 @@ class CaptureConstraintGraph(
     }
 
   def dumpConstraints() =
-    data foreach {
+    constraintData foreach {
       case (x, CaptureNodeData(lower, upper, lowerNodes, upperNodes)) =>
         val prettyLower = lower.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("{}")
         val prettyUpper = upper.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("*")
         println(s"${prettyLower} <: $x <: ${prettyUpper}")
     }
+}
+
+object CaptureConstraintGraph {
+  def empty(using ErrorReporter) = new CaptureConstraintGraph()
 }
