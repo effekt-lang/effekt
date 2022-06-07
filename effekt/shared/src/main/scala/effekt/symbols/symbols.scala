@@ -451,6 +451,7 @@ package object symbols {
     case class FunctionRegion(fun: source.FunDef) extends Role
     case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role
     case class InferredBox(box: source.Box) extends Role
+    case class InferredUnbox(unbox: source.Unbox) extends Role
     // underlying should be a UnificationVar
     case class Subtraction(handled: List[CaptureParam], underlying: CaptUnificationVar) extends Role
   }

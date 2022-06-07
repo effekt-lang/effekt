@@ -45,7 +45,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val capabilityArgs = others.map { e => InterfaceArg(C.freshReferenceTo(e)) }
 
       // construct the member selection on the capability as receiver
-      val target = MemberTarget(C.freshReferenceTo(receiver), fun.id).inheritPosition(fun)
+      val target = ExprTarget(Select(Var(C.freshReferenceTo(receiver)), fun.id).inheritPosition(fun))
 
       val typeArguments = C.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }

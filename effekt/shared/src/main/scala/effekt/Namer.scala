@@ -90,7 +90,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.EffDef(id, tparams, ops) =>
+    case source.InterfaceDef(id, tparams, ops, isEffect) =>
       val effectName = C.nameFor(id)
       // we use the localName for effects, since they will be bound as capabilities
       val effectSym = Context scoped {
@@ -219,7 +219,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case source.EffDef(id, tparams, ops) =>
+    case source.InterfaceDef(id, tparams, ops, isEffect) =>
       val effectSym = Context.resolveType(id).asControlEffect
       effectSym.ops = ops.map {
         case source.Operation(id, tparams, params, ret) =>
@@ -241,7 +241,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             op
           }
       }
-      effectSym.ops.foreach { op => Context.bind(op) }
+      if (isEffect) effectSym.ops.foreach { op => Context.bind(op) }
 
     case source.TypeDef(id, tparams, tpe) => ()
     case source.EffectDef(id, effs)       => ()
@@ -340,7 +340,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(stmt)
       }
 
-    case source.Box(block) =>
+    case source.Box(capt, block) =>
+      capt foreach resolve
       resolveGeneric(block)
 
     // (2) === Bound Occurrences ===
@@ -424,10 +425,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(target: source.CallTarget)(implicit C: Context): Unit = Context.focusing(target) {
-    case source.IdTarget(id) => Context.resolveCalltarget(id)
-    case source.MemberTarget(recv, id) =>
-      Context.resolveTerm(recv)
-      Context.resolveCalltarget(id)
+    case source.IdTarget(id)     => Context.resolveCalltarget(id)
     case source.ExprTarget(expr) => resolveGeneric(expr)
   }
 
@@ -498,6 +496,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
+    case t: source.Effect        => resolve(t)
   }
 
   def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = funTpe match {
@@ -540,6 +539,12 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(e: source.Effectful)(implicit C: Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))
+
+  def resolve(capt: source.CaptureSet)(implicit C: Context): CaptureSet = {
+    val captResolved = CaptureSet(capt.captures.map { C.resolveCapture }.toSet)
+    // C.annotateResolvedCapture(capt)(captResolved)
+    captResolved
+  }
 
   /**
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
@@ -659,6 +664,12 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def resolveType(id: Id): TypeSymbol = at(id) {
     val sym = scope.lookupType(id.name)
+    assignSymbol(id, sym)
+    sym
+  }
+
+  private[namer] def resolveCapture(id: Id): Capture = at(id) {
+    val sym = scope.lookupCapture(id.name)
     assignSymbol(id, sym)
     sym
   }

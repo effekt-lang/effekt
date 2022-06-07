@@ -15,6 +15,7 @@ object scopes {
 
     val terms: mutable.HashMap[String, Set[TermSymbol]] = mutable.HashMap.empty
     val types: mutable.HashMap[String, TypeSymbol] = mutable.HashMap.empty
+    val captures: mutable.HashMap[String, Capture] = mutable.HashMap.empty
 
     /**
      * Searches the nested scopes to find the first term.
@@ -25,6 +26,8 @@ object scopes {
     def lookupFirstTerm(key: String)(implicit C: Context): TermSymbol
 
     def lookupType(key: String)(implicit C: Context): TypeSymbol
+
+    def lookupCapture(key: String)(implicit C: Context): Capture
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
 
@@ -42,6 +45,9 @@ object scopes {
 
     def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
       types.update(key, sym)
+
+    def define(key: String, capt: Capture)(implicit C: Context): Unit =
+      captures.update(key, capt)
 
     def enterLocal: Scope = LocalScope(this)
     // TODO rename global to "static" scope
@@ -72,6 +78,9 @@ object scopes {
 
     def lookupFirst(key: String)(implicit C: Context): Symbol =
       C.abort(s"Could not resolve ${key}")
+
+    def lookupCapture(key: String)(implicit C: Context): Capture =
+      C.abort(s"Could not resolve capture ${key}")
 
     // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
     // the ambiguity. If it is nested, the first one that type checks should be chosen.
@@ -108,6 +117,9 @@ object scopes {
 
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       types.getOrElse(key, parent.lookupType(key))
+
+    def lookupCapture(key: String)(implicit C: Context): Capture =
+      captures.getOrElse(key, parent.lookupCapture(key))
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
       terms.get(key).map { _ :: parent.lookupOverloaded(key) }.getOrElse {

@@ -187,6 +187,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def usingCapture(c: Captures)(using C: Context, capts: Captures): Unit =
     C.requireSubregion(c, capts)
 
+  def insertBoxing(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
+    expr match {
+      case source.Var(id) => checkExpr(source.Box(None, source.InterfaceArg(id).inheritPosition(id)).inheritPosition(expr), expected)
+      case _              => Context.abort("Currently automatic boxing is only supported for variables, please bind the block first.")
+    }
+
+  def insertUnboxing(expr: Term, expected: Option[BlockType])(using Context, Captures): Result[BlockType] =
+    checkExprAsBlock(source.Unbox(expr).inheritPosition(expr), expected)
+
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(expr, expected) {
       case source.IntLit(n)     => Result(TInt, Pure)
@@ -227,32 +236,35 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(TUnit, eff)
       }
 
-      case l @ source.Box(block) =>
+      case l @ source.Box(annotatedCapture, block) =>
         val expectedTpe = expected.collect { case BoxedType(tpe, cap) => tpe }
-        val expectedCap: Captures = expected.collect { case BoxedType(tpe, cap) => cap }.getOrElse {
+        val inferredCap: Captures = annotatedCapture.map { _.resolve }.getOrElse {
           Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
         }
 
-        given Captures = expectedCap
+        expected.foreach {
+          case BoxedType(tpe, expected) => Context.requireSubregion(inferredCap, expected)
+          case _ => ???
+        }
+
+        given Captures = inferredCap
         val Result(inferredTpe, inferredEff) = checkBlockArgument(block, expectedTpe)
 
-        Result(BoxedType(inferredTpe, expectedCap), inferredEff)
+        Result(BoxedType(inferredTpe, inferredCap), inferredEff)
+
+      case source.Unbox(_) => insertBoxing(expr, expected)
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
         checkOverloadedCall(c, t, targs map { _.resolve }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
-        val Result(funTpe, funEffs) = checkExpr(e, None)
-
-        val tpe: FunctionType = funTpe match {
-          case BoxedType(f: FunctionType, _) => f
-          case _          => Context.abort(s"Expected function type, but got ${funTpe}")
+        val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
+          case Result(b: FunctionType, capt) => Result(b, capt)
+          case _ => Context.abort("Callee is required to have function type")
         }
+
         val Result(t, eff) = checkCallTo(c, None, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
-
-      case c @ source.Call(source.MemberTarget(receiver, id), targs, vargs, bargs) =>
-        Context.panic("Method call syntax not allowed in source programs.")
 
       case tree @ source.TryHandle(prog, handlers) =>
 
@@ -403,9 +415,66 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // we can unify with everything.
         Result(Context.join(tpes: _*), resEff)
 
+      case source.Select(_, _) =>
+        insertBoxing(expr, expected)
+
       case source.Hole(stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
         Result(expected.getOrElse(TBottom), Pure)
+    }
+
+  /**
+   * We defer checking whether something is first-class or second-class to Typer now.
+   */
+  def checkExprAsBlock(expr: Term, expected: Option[BlockType])(using Context, Captures): Result[BlockType] =
+    checkBlockAgainst(expr, expected) {
+      case u @ source.Unbox(expr) =>
+        val expectedTpe = expected map {
+          tpe =>
+            val captVar = Context.freshCaptVar(CaptUnificationVar.InferredUnbox(u))
+            BoxedType(tpe, captVar)
+        }
+        val Result(vtpe, eff1) = checkExpr(expr, expectedTpe)
+        // TODO here we also need unification variables for block types!
+        // C.unify(tpe, BoxedType())
+        vtpe match {
+          case BoxedType(btpe, capt2) =>
+            usingCapture(capt2)
+            Result(btpe, eff1)
+          case _ => Context.abort(s"Unbox requires a boxed type, but got $vtpe")
+        }
+
+      case source.Var(id) => ???
+//      id.symbol match {
+//        case b: BlockSymbol =>
+//          val (tpe, capt) = Context.lookup(b)
+//          tpe / capt
+//        case e: ValueSymbol => insertUnboxing(expr)
+//      }
+
+      case s @ source.Select(expr, selector) => ???
+//        checkExprAsBlock(expr) match {
+//          case ((i @ InterfaceType(interface, targs)) / capt) =>
+//            // (1) find the operation
+//            // try to find an operation with name "selector"
+//            val op = interface.ops.collect {
+//              case op if op.name.name == selector.name => op
+//            } match {
+//              case Nil      => Context.at(s) { Context.abort(s"Cannot select ${selector.name} in type ${i}") }
+//              case List(op) => op
+//              case _        => Context.at(s) { Context.abort(s"Multiple operations match ${selector.name} in type ${i}") }
+//            }
+//            // assign the resolved operation to the identifier
+//            Context.assignSymbol(selector, op)
+//
+//            // (2) substitute type arguments
+//            val tsubst = (interface.tparams zip targs).toMap
+//            tsubst.substitute(op.toType) / capt
+//
+//          case _ => Context.abort(s"Selection requires an interface type.")
+//        }
+//
+      case _ => Context.abort(s"Expected something of a block type.")
     }
 
   //</editor-fold>
@@ -530,7 +599,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }
 
-    case d @ source.EffDef(id, tparams, ops) =>
+    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       d.symbol.ops.foreach { op =>
         val tpe = op.toType
         wellformed(tpe)
@@ -620,7 +689,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
             Result((), Pure)
         }
-      case d @ source.EffDef(id, tparams, ops) =>
+      case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
         val effectDecl = d.symbol
         effectDecl.ops foreach { op =>
           if (op.otherEffects.toList contains op.appliedEffect) {
@@ -1102,6 +1171,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * Combinators that also store the computed type for a tree in the TypesDB
    */
   def checkAgainst[T <: Tree](t: T, expected: Option[ValueType])(f: T => Result[ValueType])(using Context, Captures): Result[ValueType] =
+    Context.at(t) {
+      val Result(got, effs) = f(t)
+      wellformed(got)
+      wellformed(effs.toEffects)
+      expected foreach { Context.requireSubtype(got, _) }
+      Context.annotateInferredType(t, got)
+      Context.annotateInferredEffects(t, effs.toEffects)
+      Result(got, effs)
+    }
+
+  def checkBlockAgainst[T <: Tree](t: T, expected: Option[BlockType])(f: T => Result[BlockType])(using Context, Captures): Result[BlockType] =
     Context.at(t) {
       val Result(got, effs) = f(t)
       wellformed(got)

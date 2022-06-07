@@ -179,7 +179,7 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
-case class EffDef(id: IdDef, tparams: List[Id], ops: List[Operation]) extends Def {
+case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {
   type symbol = symbols.Interface
 }
 case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition {
@@ -265,20 +265,30 @@ case class StringLit(value: String) extends Literal[String]
 /**
  * Represents a first-class function
  */
-case class Box(block: BlockArg) extends Term
+case class Box(capt: Option[CaptureSet], block: BlockArg) extends Term
+
+case class Unbox(term: Term) extends Term
+
+/**
+ * Selecting a capability or a method out of a capability
+ */
+case class Select(receiver: Term, id: IdRef) extends Term with Reference {
+  // can refer to either a block OR a term symbol
+  type symbol = symbols.TermSymbol
+}
 
 // maybe replace `fun: Id` here with BlockVar
 // TODO should we have one Call-node and a selector tree, or multiple different call nodes?
 case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
 
 sealed trait CallTarget extends Tree
+
+// potentially overloaded
 case class IdTarget(id: IdRef) extends CallTarget with Reference {
   // can refer to either a block OR a term symbol
   type symbol = symbols.TermSymbol
 }
-case class MemberTarget(receiver: IdRef, id: IdRef) extends CallTarget with Reference {
-  type symbol = symbols.Operation
-}
+// not overloaded
 case class ExprTarget(receiver: Term) extends CallTarget
 
 case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
@@ -402,11 +412,11 @@ case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Ef
   type resolved = symbols.FunctionType
 }
 
-case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends Tree with Resolvable {
+case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends BlockType with Resolvable {
   // TODO we need to drop Effect <: Symbol and refactor this here
   // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
   type resolved = symbols.InterfaceType
-  def resolve(implicit C: Context) = {
+  override def resolve(using C: Context): resolved = {
     val eff = C.symbolOf(id).asInstanceOf[symbols.Interface]
     if (tparams.isEmpty) eff else symbols.BlockTypeApp(eff, tparams.map(t => C.resolvedType(t)))
   }
@@ -420,6 +430,11 @@ object Effects {
   val Pure: Effects = Effects()
   def apply(effs: Effect*): Effects = Effects(effs.toSet)
   def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
+}
+
+case class CaptureSet(captures: List[IdRef]) extends Resolvable {
+  type resolved = symbols.CaptureSet
+  def resolve(using C: Context): resolved = ??? // C.resolvedCapture(this)
 }
 
 object Tree {
@@ -480,8 +495,14 @@ object Tree {
       case Hole(stmts) =>
         Hole(rewrite(stmts))
 
-      case Box(b) =>
-        Box(rewrite(b))
+      case Box(c, b) =>
+        Box(c, rewrite(b))
+
+      case Unbox(b) =>
+        Unbox(rewrite(b))
+
+      case Select(recv, name) =>
+        Select(rewrite(recv), name)
     }
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
@@ -496,7 +517,7 @@ object Tree {
       case VarDef(id, annot, binding) =>
         VarDef(id, annot, rewrite(binding))
 
-      case d: EffDef        => d
+      case d: InterfaceDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d
       case d: TypeDef       => d

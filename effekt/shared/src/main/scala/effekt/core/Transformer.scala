@@ -84,7 +84,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e: source.ExternEffect =>
       rest()
 
-    case d @ source.EffDef(id, tparams, ops) =>
+    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       core.Record(d.symbol, ops.map { e => e.symbol }, rest())
   }
 
@@ -125,10 +125,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transformAsBlock(tree: source.Term)(using Context): Block = withPosition(tree) {
     case v: source.Var => v.definition match {
-      case sym: ValueSymbol => ??? // transformUnbox(tree)
+      case sym: ValueSymbol => transformUnbox(tree)
       case sym: BlockSymbol => BlockVar(sym)
     }
-    case _ => ??? // https://github.com/effekt-lang/effekt/blob/31b05ba42df031a325245c30220aa5d9bb33a7ff/effekt/shared/src/main/scala/effekt/core/Transformer.scala#L110-L124
+    case s @ source.Select(receiver, selector) =>
+      Member(transformAsBlock(receiver), s.definition)
+
+    case source.Unbox(b) =>
+      Unbox(transformAsExpr(b))
+
+    case _ =>
+      transformUnbox(tree)
   }
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = withPosition(tree) {
@@ -138,7 +145,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
         Context.bind(Context.valueTypeOf(sym), get)
       case sym: ValueSymbol => ValueVar(sym)
-      case sym: BlockSymbol => ??? // transformBox(tree)
+      case sym: BlockSymbol => transformBox(tree)
     }
 
     case a @ source.Assign(id, expr) =>
@@ -149,8 +156,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case l: source.Literal[t] => transformLit(l)
 
-    case l @ source.Box(block) =>
+    case l @ source.Box(capt, block) =>
       Box(transform(block))
+
+    case source.Unbox(b) => transformBox(tree)
+
+    case source.Select(receiver, selector) => transformBox(tree)
 
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)
@@ -177,13 +188,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transform)
       Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), Nil, valueArgs ++ blockArgs))
 
-    case c @ source.Call(source.MemberTarget(block, op), _, vargs, bargs) =>
-      // the type arguments, inferred by typer
-      // val targs = C.typeArguments(c)
-      val valueArgs = vargs.map(transformAsExpr)
-      val blockArgs = bargs.map(transform)
-      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, valueArgs ++ blockArgs)
-      Context.bind(Context.inferredTypeOf(tree), app)
+    //    case c @ source.Call(source.MemberTarget(block, op), _, vargs, bargs) =>
+    //      // the type arguments, inferred by typer
+    //      // val targs = C.typeArguments(c)
+    //      val valueArgs = vargs.map(transformAsExpr)
+    //      val blockArgs = bargs.map(transform)
+    //      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, valueArgs ++ blockArgs)
+    //      Context.bind(Context.inferredTypeOf(tree), app)
 
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
       // assumption: typer removed all ambiguous references, so there is exactly one

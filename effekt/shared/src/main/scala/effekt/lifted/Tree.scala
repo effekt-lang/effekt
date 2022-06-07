@@ -58,7 +58,7 @@ case class Lifted(s: Scope, b: Block) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: Operation) extends Block
+case class Member(b: Block, field: TermSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 
