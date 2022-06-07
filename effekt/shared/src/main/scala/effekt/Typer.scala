@@ -618,8 +618,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // we subtract all capabilities introduced by this function to compute its capture
             Context.requireSubregion(Context.without(inferredCapture, (sym.bparams ++ capabilities).map(_.capture)), functionCapture)
 
-            println(s"${id.name}: $funType")
-
             Result((), Pure)
         }
       case d @ source.EffDef(id, tparams, ops) =>
@@ -1222,7 +1220,7 @@ trait TyperOps extends ContextOps { self: Context =>
   //<editor-fold desc="State Capabilities">
 
   private [typer] def stateFor(binder: VarBinder): StateCapability = {
-    val tpe = unification.substitution.substitute(lookup(binder))
+    val tpe = unification.localSubstitution.substitute(lookup(binder))
     // TODO We might be able to lift this restriction later on.
     if (!Typer.isConcreteValueType(tpe)) error(s"Type of variable binder must be known.")
     annotations.getOrElseUpdate(Annotations.StateCapability, binder, StateCapability(binder, tpe))
@@ -1386,14 +1384,18 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    val subst = unification.substitution
+    val subst = unification.globalSubstitution
 
     // TODO since (in comparison to System C) we now have type directed overload resolution again,
     //   we need to make sure the typing context and all the annotations are backtrackable.
     //   This can be achieved by going back to local `annotations` which are easily backtrackable.
     //   In the end, we need to postprocess the annotations; see draft below...
     annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
-    annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) => subst.substitute(tpe) }
+    annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) =>
+      val substituted = subst.substitute(tpe)
+      println(s"${t.name.name}: $substituted")
+      substituted
+    }
     annotations.updateAndCommit(Annotations.Captures) { case (t, capt) => capt }
 
     // Update and write out all inferred types and captures for LSP support

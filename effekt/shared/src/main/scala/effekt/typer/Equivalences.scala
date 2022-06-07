@@ -22,9 +22,8 @@ class Equivalences(
 ) {
 
   // The current substitutions
-  def subst: Substitutions =
-    val currentSubstitution = classes.flatMap[TypeVar, ValueType] { case (k, v) => substitution.get(v).map { k -> _ } }.toMap
-    new Substitutions(currentSubstitution.asInstanceOf, Map.empty)
+  def subst: Map[TypeVar, ValueType] =
+    classes.flatMap[TypeVar, ValueType] { case (k, v) => substitution.get(v).map { k -> _ } }.toMap
 
   /**
    * Should only be called on unification variables where we do not know any types, yet

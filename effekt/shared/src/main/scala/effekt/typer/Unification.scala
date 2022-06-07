@@ -44,7 +44,9 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // State of the unification engine
   // -------------------------------
   private var scope: Scope = GlobalScope
-  private [typer] def substitution = constraints.subst
+  private [typer] def localSubstitution = Substitutions(constraints.subst, Map.empty)
+  // only available after processing the whole file (for now)
+  private [typer] def globalSubstitution = Substitutions(constraints.subst, captureConstraints.subst.asInstanceOf)
   private var constraints = new Equivalences
   private var captureConstraints = CaptureConstraintGraph.empty
 
@@ -71,10 +73,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // ------------
   // TODO implement: should apply everything we know up to this point.
   def apply(e: Effects): Effects =
-    substitution.substitute(dealias(e))
+    localSubstitution.substitute(dealias(e))
 
   def apply(e: Effect): Effect =
-    substitution.substitute(e)
+    localSubstitution.substitute(e)
 
   // Lifecycle management
   // --------------------
@@ -134,20 +136,20 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def requireSubtype(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Covariant;
     unifyValueTypes(
-      dealias(substitution.substitute(t1)),
-      dealias(substitution.substitute(t2)))
+      dealias(localSubstitution.substitute(t1)),
+      dealias(localSubstitution.substitute(t2)))
 
   def requireEqual(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Invariant;
     unifyValueTypes(
-      dealias(substitution.substitute(t1)),
-      dealias(substitution.substitute(t2)))
+      dealias(localSubstitution.substitute(t1)),
+      dealias(localSubstitution.substitute(t2)))
 
   def requireSubtype(t1: BlockType, t2: BlockType): Unit =
     given Polarity = Covariant;
     unifyBlockTypes(
-      dealias(substitution.substitute(t1)),
-      dealias(substitution.substitute(t2)))
+      dealias(localSubstitution.substitute(t1)),
+      dealias(localSubstitution.substitute(t2)))
 
   def requireSubregion(c1: Captures, c2: Captures): Unit =
     if (c1 == CaptureSet()) return;
@@ -203,7 +205,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptUnificationVar], List[Effect], FunctionType) = {
     val position = C.focus
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = localSubstitution.substitute(tpe)
 
     val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
