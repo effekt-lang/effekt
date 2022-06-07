@@ -7,13 +7,16 @@ import effekt.util.messages.ErrorReporter
 
 type CNode = CaptUnificationVar
 
+// non present filter stands for "everything is passed through"
+type Filter = Set[CaptureParam]
+
 case class CaptureNodeData(
   // non present bounds represent bottom (the empty set)
   lower: Option[Set[CaptureParam]],
   // non present bounds represent top (the universal set)
   upper: Option[Set[CaptureParam]],
-  lowerNodes: Set[CNode],
-  upperNodes: Set[CNode]
+  lowerNodes: Map[CNode, Filter],
+  upperNodes: Map[CNode, Filter]
 )
 
 /**
@@ -31,7 +34,7 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   // concrete bounds for each node
   private [this] var constraintData: CaptureConstraints = Map.empty
 
-  private val emptyData = CaptureNodeData(None, None, Set.empty, Set.empty)
+  private val emptyData = CaptureNodeData(None, None, Map.empty, Map.empty)
 
   private def getData(x: CNode): CaptureNodeData =
     constraintData.getOrElse(x, emptyData)
@@ -39,18 +42,27 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   extension (x: CNode) {
     private def lower: Option[Set[CaptureParam]] = getData(x).lower
     private def upper: Option[Set[CaptureParam]] = getData(x).upper
-    private def lowerNodes: Set[CNode] = getData(x).lowerNodes
-    private def upperNodes: Set[CNode] = getData(x).upperNodes
+    private def lowerNodes: Map[CNode, Filter] = getData(x).lowerNodes
+    private def upperNodes: Map[CNode, Filter] = getData(x).upperNodes
     private def lower_=(bounds: Set[CaptureParam]): Unit =
       constraintData = constraintData.updated(x, getData(x).copy(lower = Some(bounds)))
     private def upper_=(bounds: Set[CaptureParam]): Unit =
       constraintData = constraintData.updated(x, getData(x).copy(upper = Some(bounds)))
-    private def addLower(other: CNode): Unit =
+    private def addLower(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
-      constraintData = constraintData.updated(x, oldData.copy(lowerNodes = oldData.lowerNodes + other))
-    private def addUpper(other: CNode): Unit =
+
+      // compute the intersection of filters
+      val oldFilter = oldData.lowerNodes.getOrElse(other, Set.empty)
+      val newFilter = oldFilter intersect exclude
+
+      constraintData = constraintData.updated(x, oldData.copy(lowerNodes = oldData.lowerNodes + (other -> newFilter)))
+    private def addUpper(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
-      constraintData = constraintData.updated(x, oldData.copy(upperNodes = oldData.upperNodes + other))
+
+      // compute the intersection of filters
+      val oldFilter = oldData.lowerNodes.getOrElse(other, Set.empty)
+      val newFilter = oldFilter intersect exclude
+      constraintData = constraintData.updated(x, oldData.copy(upperNodes = oldData.upperNodes + (other -> newFilter)))
   }
 
   override def clone(): CaptureConstraintGraph =
@@ -80,13 +92,19 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   /**
    * Adds x as a lower bound to y, and y as a lower bound to x.
    */
-  def connect(x: CNode, y: CNode): Unit =
-    if (x == y || (y.lowerNodes contains x)) { return () }
+  def connect(x: CNode, y: CNode, exclude: Set[CaptureParam] = Set.empty): Unit =
+    if (x == y /* || (y.lowerNodes contains x) */) { return () }
 
-    x.lower foreach { bounds => requireLower(bounds, y) }
-    y.upper foreach { bounds => requireUpper(bounds, x) }
-    x.addUpper(y)
-    y.addLower(x)
+    println(s"Connect ${x} (${x.lower}) --> ${y}")
+
+    x.addUpper(y, exclude)
+    y.addLower(x, exclude) // do we need this here?
+
+    val upperFilter = x.upperNodes(y)
+    val lowerFilter = y.lowerNodes(x)
+
+    x.lower foreach { bounds => requireLower(bounds -- upperFilter, y) }
+    y.upper foreach { bounds => requireUpper(bounds -- lowerFilter, x) }
 
   def requireLower(bounds: Set[CaptureParam], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
   def requireUpper(bounds: Set[CaptureParam], x: CNode): Unit = propagateUpper(bounds, x)(using Set.empty)
@@ -95,13 +113,15 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
     if (seen contains x) return()
     given Set[CNode] = seen + x
 
+    println(s"Pushing $bounds into $x")
+
     x.upper foreach { upperBounds => checkConsistency(bounds, upperBounds) }
 
     x.lower = x.lower map { existing =>
       mergeLower(existing, bounds)
     } getOrElse bounds
 
-    x.upperNodes.foreach { y => propagateLower(bounds, y) }
+    x.upperNodes.foreach { case (y, filter) => propagateLower(bounds -- filter, y) }
 
     x.role match {
       case CaptUnificationVar.Subtraction(handled, underlying) =>
@@ -119,7 +139,7 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
       mergeUpper(existing, bounds)
     } getOrElse bounds
 
-    x.lowerNodes.foreach { y => propagateUpper(bounds, y) }
+    x.lowerNodes.foreach { case (y, filter) => propagateUpper(bounds -- filter, y) }
 
     x.role match {
       // Does this make sense in an upper bound???

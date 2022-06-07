@@ -1393,10 +1393,14 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) =>
       val substituted = subst.substitute(tpe)
-      println(s"${t.name.name}: $substituted")
+      println(s"${t.name.name}: $tpe ----> $substituted")
       substituted
     }
-    annotations.updateAndCommit(Annotations.Captures) { case (t, capt) => capt }
+    annotations.updateAndCommit(Annotations.Captures) { case (t, capt) =>
+      val substituted = subst.substitute(capt)
+      println(s"${t.name.name} @ $substituted")
+      substituted
+    }
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!

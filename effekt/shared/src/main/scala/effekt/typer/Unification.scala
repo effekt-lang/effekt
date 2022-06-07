@@ -186,7 +186,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def without(caps: Captures, others: List[CaptureParam]): Captures =
     caps match {
       case CaptureSet(cs) => CaptureSet(cs -- others.toSet)
-      case x: CaptUnificationVar => freshCaptVar(CaptUnificationVar.Subtraction(others, x))
+      case x: CaptUnificationVar =>
+        val y = freshCaptVar(CaptUnificationVar.Subtraction(others, x))
+        captureConstraints.connect(x, y, others.toSet)
+        y
     }
 
   // Learning new subtyping / regioning information
