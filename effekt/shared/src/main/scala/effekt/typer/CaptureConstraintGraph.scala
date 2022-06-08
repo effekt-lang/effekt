@@ -85,7 +85,7 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   def subst: Map[CaptUnificationVar, CaptureSet] = constraintData.view.mapValues {
     // bounds are consistent, we simply choose the lower bound as it is always concrete.
     case CaptureNodeData(lower, _, _, _) =>
-      val bounds = lower.map(_.toSet[Capture]).getOrElse(Set.empty)
+      val bounds = lower.getOrElse(Set.empty)
       CaptureSet(bounds)
   }.toMap
 

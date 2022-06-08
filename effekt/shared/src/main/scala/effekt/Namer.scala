@@ -611,9 +611,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.define(id.name, s)
   }
 
-  private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
+  private[namer] def bind(s: CaptureParam): Unit = bind(s.name.name, s)
 
-  private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
+  private[namer] def bind(name: String, s: CaptureParam): Unit = scope.define(name, s)
 
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
 
@@ -674,7 +674,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
-  private[namer] def resolveCapture(id: Id): Capture = at(id) {
+  private[namer] def resolveCapture(id: Id): CaptureParam = at(id) {
     val sym = scope.lookupCapture(id.name)
     assignSymbol(id, sym)
     sym

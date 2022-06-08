@@ -1244,7 +1244,7 @@ trait TyperOps extends ContextOps { self: Context =>
    *
    * None on the toplevel
    */
-  private var lexicalRegion: Option[Capture] = None
+  private var lexicalRegion: Option[CaptureParam] = None
 
   /**
    * The effects, whose declarations are _lexically_ in scope

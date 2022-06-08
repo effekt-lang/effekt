@@ -4,7 +4,7 @@ package typer
 import effekt.symbols._
 
 
-case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception
+case class SubstitutionException(x: CaptUnificationVar, subst: Map[CaptureParam, Captures]) extends Exception
 
 /**
  * Substitutions not only have unification variables as keys, since we also use the same mechanics to
@@ -26,10 +26,7 @@ case class Substitutions(
   def get(t: TypeVar) = values.get(t)
 
   def get(c: CaptureParam): Option[CaptureParam] = captures.get(c) map {
-    case CaptureSet(cs) if cs.size == 1 => cs.head match {
-      case other: CaptureParam => other
-      case other => sys error s"Substitutions should map single CaptureParams to single CaptureParams, got ${other}"
-    }
+    case CaptureSet(cs) if cs.size == 1 => cs.head
     case other => sys error "Substitutions should map single CaptureParams to single CaptureParams, got ${other}"
   }
   def get(x: CaptUnificationVar): Option[Captures] = captures.get(x)
@@ -44,7 +41,7 @@ case class Substitutions(
   def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[Capture]): Substitutions =
+  private def without(tps: List[TypeVar], cps: List[CaptureParam]): Substitutions =
     Substitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       captures.filterNot { case (t, _) => cps.contains(t) }
@@ -56,8 +53,6 @@ case class Substitutions(
     case x: CaptUnificationVar => captures.getOrElse(x, x)
     case CaptureSet(cs) => CaptureSet(cs.map {
       case x: CaptureParam => get(x).getOrElse(x)
-      // This is conservative. Looking up the capture of `x` could be (for example) the empty set.
-      case x: CaptureOf => x
     })
   }
 
@@ -151,7 +146,7 @@ case class BiSubstitutions(
   def ++(other: BiSubstitutions): BiSubstitutions = BiSubstitutions(values ++ other.values, captures ++ other.captures)
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[Capture]): BiSubstitutions =
+  private def without(tps: List[TypeVar], cps: List[CaptureParam]): BiSubstitutions =
     BiSubstitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       captures.filterNot { case (t, _) => cps.contains(t) }

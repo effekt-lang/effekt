@@ -376,18 +376,18 @@ package object symbols {
 
   sealed trait Captures
 
-  case class CaptureSet(captures: Set[Capture]) extends Captures {
+  case class CaptureSet(captures: Set[CaptureParam]) extends Captures {
     override def toString = s"{${captures.mkString(", ")}}"
 
     // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
     def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
     def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
-    def +(c: Capture): CaptureSet = CaptureSet(captures + c)
-    def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
+    def +(c: CaptureParam): CaptureSet = CaptureSet(captures + c)
+    def flatMap(f: CaptureParam => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
   }
   object CaptureSet {
-    def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
-    def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
+    def apply(captures: CaptureParam*): CaptureSet = CaptureSet(captures.toSet)
+    def apply(captures: List[CaptureParam]): CaptureSet = CaptureSet(captures.toSet)
     def empty = CaptureSet()
   }
 
@@ -396,45 +396,14 @@ package object symbols {
    */
   sealed trait CaptVar
 
-  sealed trait Capture extends TypeSymbol {
-    val name: Name
-    def concrete: Boolean
-  }
-
-  // TODO we could fuse CaptureOf and CaptureParam into one constructor
-
-  /**
-   * Represents the capture of a term symbol as written in a **user program**.
-   *
-   * For example in
-   *   `def hof { f: () => Unit }: () => Unit at {>>>f<<<}`
-   * or
-   *   `def foo(): ...; def bar(): () => Unit at {foo} = ...`
-   *
-   * Has to be resolved by Typer to be compared
-   */
-  case class CaptureOf(sym: BlockSymbol) extends Capture {
-    val name = sym.name
-    // we compare captures of term symbols by comparing the term symbols
-    override def equals(other: Any): Boolean = other match {
-      case CaptureOf(otherSym) => sym == otherSym
-      case _                   => false
-    }
-    def concrete = true
-    override def hashCode: Int = sym.hashCode + 13
-  }
-
   /**
    * "Tracked" capture parameters. Like [[TypeVar]] used to abstract
    * over capture. Also see [[BlockParam.capture]].
    */
-  case class CaptureParam(name: Name) extends CaptVar, Capture {
-    def concrete = true
-  }
+  case class CaptureParam(name: Name) extends TypeSymbol, CaptVar
 
   case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar, TypeSymbol {
     val name = Name.local("?C")
-    def concrete = false
     override def toString = role match {
       case CaptUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
       case CaptUnificationVar.Subtraction(handled, underlying) => s"?(${underlying} - {${handled.mkString(", ")}})"
@@ -446,7 +415,7 @@ package object symbols {
   }
   object CaptUnificationVar {
     sealed trait Role
-    case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
+    case class VariableInstantiation(underlying: CaptureParam, call: source.Tree) extends Role
     case class HandlerRegion(handler: source.TryHandle) extends Role
     case class FunctionRegion(fun: source.FunDef) extends Role
     case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role

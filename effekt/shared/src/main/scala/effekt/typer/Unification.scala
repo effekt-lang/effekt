@@ -304,13 +304,10 @@ trait TypeInstantiator { self: Unification =>
   // and substituting concrete captures in unification variables... These are two fundamentally different operations.
   def instantiate(c: Captures)(using Instantiation): Captures = c match {
     case CaptureSet(cs) =>
-      val contained = captureParams intersect cs.asInstanceOf[Set[CaptureParam]] // Should not contain CaptureOf
+      val contained = captureParams intersect cs // Should not contain CaptureOf
       if (contained.isEmpty) return c;
 
-      val others = (cs -- captureParams).toList.map {
-        case c: CaptureParam => c
-        case c: CaptureOf => ???
-      }
+      val others = (cs -- captureParams).toList
 
       // TODO do we need to respect the polarity here?
       mergeCaptures(others, contained.toList.map { p => captureInstantiations(p) })

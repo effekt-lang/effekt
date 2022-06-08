@@ -15,7 +15,7 @@ object scopes {
 
     val terms: mutable.HashMap[String, Set[TermSymbol]] = mutable.HashMap.empty
     val types: mutable.HashMap[String, TypeSymbol] = mutable.HashMap.empty
-    val captures: mutable.HashMap[String, Capture] = mutable.HashMap.empty
+    val captures: mutable.HashMap[String, CaptureParam] = mutable.HashMap.empty
 
     /**
      * Searches the nested scopes to find the first term.
@@ -27,7 +27,7 @@ object scopes {
 
     def lookupType(key: String)(implicit C: Context): TypeSymbol
 
-    def lookupCapture(key: String)(implicit C: Context): Capture
+    def lookupCapture(key: String)(implicit C: Context): CaptureParam
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
 
@@ -46,7 +46,7 @@ object scopes {
     def define(key: String, sym: TypeSymbol)(implicit C: Context): Unit =
       types.update(key, sym)
 
-    def define(key: String, capt: Capture)(implicit C: Context): Unit =
+    def define(key: String, capt: CaptureParam)(implicit C: Context): Unit =
       captures.update(key, capt)
 
     def enterLocal: Scope = LocalScope(this)
@@ -79,7 +79,7 @@ object scopes {
     def lookupFirst(key: String)(implicit C: Context): Symbol =
       C.abort(s"Could not resolve ${key}")
 
-    def lookupCapture(key: String)(implicit C: Context): Capture =
+    def lookupCapture(key: String)(implicit C: Context): CaptureParam =
       C.abort(s"Could not resolve capture ${key}")
 
     // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
@@ -118,7 +118,7 @@ object scopes {
     def lookupType(key: String)(implicit C: Context): TypeSymbol =
       types.getOrElse(key, parent.lookupType(key))
 
-    def lookupCapture(key: String)(implicit C: Context): Capture =
+    def lookupCapture(key: String)(implicit C: Context): CaptureParam =
       captures.getOrElse(key, parent.lookupCapture(key))
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
