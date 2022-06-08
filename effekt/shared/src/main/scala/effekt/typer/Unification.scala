@@ -48,7 +48,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // only available after processing the whole file (for now)
   private [typer] def globalSubstitution = Substitutions(constraints.subst, captureConstraints.subst.asInstanceOf)
   private var constraints = new Equivalences
-  private var captureConstraints = CaptureConstraintGraph.empty
+  protected var captureConstraints = CaptureConstraintGraph.empty
 
 
   // Creating fresh unification variables
@@ -184,7 +184,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def join(caps: Captures*): Captures = ???
 
   def without(caps: Captures, others: List[CaptureParam]): Captures =
-    caps match {
+    if (others.isEmpty) caps else caps match {
       case CaptureSet(cs) => CaptureSet(cs -- others.toSet)
       case x: CaptUnificationVar =>
         val y = freshCaptVar(CaptUnificationVar.Subtraction(others, x))
@@ -276,9 +276,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
 case class Instantiation(values: Map[TypeVar, ValueType], captures: Map[CaptureParam, CaptUnificationVar])
 
-trait TypeInstantiator {
-
-  def abort(msg: String): Nothing
+trait TypeInstantiator { self: Unification =>
 
   private def valueInstantiations(using i: Instantiation): Map[TypeVar, ValueType] = i.values
   private def captureInstantiations(using i: Instantiation): Map[CaptureParam, CaptUnificationVar] = i.captures
@@ -290,7 +288,10 @@ trait TypeInstantiator {
    */
   def mergeCaptures(concreteBounds: List[CaptureParam], variableBounds: List[CaptUnificationVar]): CaptUnificationVar =
     println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
-    ???
+    val newVar = freshCaptVar(CaptUnificationVar.Substitution())
+    captureConstraints.requireLower(concreteBounds.toSet, newVar)
+    variableBounds.foreach { b => captureConstraints.connect(b, newVar) }
+    newVar
 
   // shadowing
   private def without(tps: List[TypeVar], cps: List[CaptureParam])(using Instantiation): Instantiation =
@@ -314,7 +315,10 @@ trait TypeInstantiator {
       // TODO do we need to respect the polarity here?
       mergeCaptures(others, contained.toList.map { p => captureInstantiations(p) })
 
-    case _ => abort("Effect polymorphic first-class functions need to be annotated, at the moment.")
+    case _ =>
+      // TODO we can improve this by solving and substituting unification variables as early as possible.
+      //   For instance, a unification variable can be solved if itself and all its bounds are out of scope.
+      abort("Effect polymorphic first-class functions need to be annotated, at the moment.")
   }
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {

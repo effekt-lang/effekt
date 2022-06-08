@@ -191,7 +191,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, ValueParam(Name.local(id), tpe.map(resolve)))
 
     case source.BlockParam(id, tpe) =>
-      Context.define(id, BlockParam(Name.local(id), resolve(tpe)))
+      val p = BlockParam(Name.local(id), resolve(tpe))
+      Context.define(id, p)
+      Context.bind(p.capture)
 
     case d @ source.ValDef(id, annot, binding) =>
       val tpe = annot.map(resolve)
@@ -462,8 +464,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       case source.ValueTypeTree(tpe) =>
         tpe
       // TODO reconsider reusing the same set for terms and types...
-      case source.BoxedType(tpe) =>
-        BoxedType(resolve(tpe), CaptureSet.empty)
+      case source.BoxedType(tpe, capt) =>
+        BoxedType(resolve(tpe), resolve(capt))
     }
     C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
     // check that we resolved to a well-kinded type
@@ -609,6 +611,10 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.define(id.name, s)
   }
 
+  private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
+
+  private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
+
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
 
   private[namer] def bind(s: TypeSymbol): Unit = scope.define(s.name.name, s)
@@ -621,7 +627,7 @@ trait NamerOps extends ContextOps { Context: Context =>
 
   private[namer] def bindBlock(params: List[BlockParam]) =
     // bind the block parameter as a term
-    params.foreach { p => bind(p) }
+    params.foreach { p => bind(p); bind(p.capture) }
 
   /**
    * Tries to find a _unique_ term symbol in the current scope under name id.

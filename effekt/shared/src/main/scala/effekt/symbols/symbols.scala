@@ -454,6 +454,7 @@ package object symbols {
     case class InferredUnbox(unbox: source.Unbox) extends Role
     // underlying should be a UnificationVar
     case class Subtraction(handled: List[CaptureParam], underlying: CaptUnificationVar) extends Role
+    case class Substitution() extends Role
   }
 
   /**

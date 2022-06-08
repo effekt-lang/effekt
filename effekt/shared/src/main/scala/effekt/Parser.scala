@@ -588,24 +588,25 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
    */
 
   lazy val valueType: P[ValueType] =
-    ( funType
+    ( nocut(blockType) ~ (`at` ~/> captureSet) ^^ BoxedType.apply
+    | primValueType
+    )
+
+  lazy val primValueType: P[ValueType] =
+    ( idRef ~ typeArgs ^^ TypeApp.apply
+    | idRef ^^ TypeVar.apply
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
-    | idRef ~ typeArgs ^^ TypeApp.apply
-    | idRef ^^ TypeVar.apply
     | failure("Expected a type")
     )
 
-  // for now function types need to be parenthesized
-  lazy val funType: P[BoxedType] =
-    (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ {
-      case params ~ ret ~ eff => BoxedType(FunctionType(params, ret, eff))
-    }
+  lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
   lazy val blockType: P[FunctionType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> valueType) ~ maybeEffects ^^ FunctionType.apply
-    | valueType ~ (`=>` ~/> valueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), ret, eff) }
-    | valueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
+    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), ret, eff) }
+    // TODO only allow this on parameters, not elsewhere...
+    | primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
     )
 
   lazy val maybeEffects: P[Effects] =

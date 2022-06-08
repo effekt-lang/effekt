@@ -384,7 +384,7 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 /**
  * Types of first-class functions
  */
-case class BoxedType(tpe: BlockType) extends ValueType
+case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
 
 // Used for both binding and bound vars
 case class TypeVar(id: IdRef) extends ValueType with Reference {
