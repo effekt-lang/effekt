@@ -16,10 +16,7 @@ trait TypeComparer {
   def hasUpperBound(x: UnificationVar, y: ValueType): Boolean
   def hasLowerBound(x: UnificationVar, y: ValueType): Boolean
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean
-  def isEqual(c1: Captures, c2: Captures): Boolean = ???
-  def isSubset(c1: Captures, c2: Captures): Boolean =
-    println(s"Checking whether ${c1} is a subset of ${c2}")
-    true
+  def isSubset(c1: Captures, c2: Captures): Boolean
 
   // TODO instead of a boolean, we could also return the explanation of the difference.
   def isEqual(tpe1: ValueType, tpe2: ValueType): Boolean = subValueType(tpe1, tpe2) && subValueType(tpe2, tpe1)

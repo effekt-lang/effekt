@@ -46,9 +46,6 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   protected var constraints = new Constraints
 
 
-  private [typer] def substitution = constraints.subst
-
-
   // Creating fresh unification variables
   // ------------------------------------
   def fresh(role: UnificationVar.Role): UnificationVar = scope match {
@@ -69,7 +66,8 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
   // Substitution
   // ------------
-  // TODO implement: should apply everything we know up to this point.
+  def substitution = constraints.subst
+
   def apply(e: Effects): Effects =
     substitution.substitute(dealias(e))
 
@@ -139,33 +137,19 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     if (c1 == CaptureSet()) return;
     if (c1 == c2) return;
     (c1, c2) match {
-      // TODO implement properly
       case (CaptureSet(cs1), CaptureSet(cs2)) =>
         val notAllowed = cs2 -- cs1
         if (notAllowed.nonEmpty) abort(s"The following captures are not allowed: ${notAllowed}")
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
         constraints.connect(x, y)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>
-        val concrete = cs.collect {
-          case c: CaptureParam => c
-          case _ => ???
-        }
-        constraints.requireUpper(concrete, x)
+        constraints.requireUpper(cs, x)
       case (CaptureSet(cs), x: CaptUnificationVar) =>
-        val concrete = cs.collect {
-          case c: CaptureParam => c
-          case _ => ???
-        }
-        constraints.requireLower(concrete, x)
+        constraints.requireLower(cs, x)
     }
-
-  def requireEqual(x: CaptUnificationVar, c: CaptureSet): Unit =
-    println(s"Requiring that ${x} =:= ${c}")
 
   def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
-
-  def join(caps: Captures*): Captures = ???
 
   def without(caps: Captures, others: List[CaptureParam]): Captures =
     if (others.isEmpty) caps else caps match {
@@ -175,10 +159,6 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
         constraints.connect(x, y, others.toSet)
         y
     }
-
-  // Learning new subtyping / regioning information
-  // ----------------------------------------------
-  //def learnSub()
 
   // Using collected information
   // ---------------------------
@@ -234,6 +214,8 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       subValueType(tpe, knownType)
   }
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean = constraints.isEqual(x, y)
+
+  def isSubset(xs: Captures, ys: Captures): Boolean = ???
 
   def unify(c1: Captures, c2: Captures): Unit =
     println(s"Unifiying ${c1} and ${c2}")

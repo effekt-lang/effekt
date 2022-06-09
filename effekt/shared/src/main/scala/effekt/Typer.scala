@@ -1238,7 +1238,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using self)
-  export unification.{ requireSubtype, requireEqual, requireSubregion, join, instantiate, dealias, freshCaptVar, without }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, dealias, freshCaptVar, without }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {
