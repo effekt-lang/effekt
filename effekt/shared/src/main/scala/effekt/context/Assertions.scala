@@ -81,10 +81,6 @@ object assertions {
       case t: Interface => t
       case t => reporter.abort("Expected an interface")
     }
-    def asInterfaceType: InterfaceType = s match {
-      case t: InterfaceType => t
-      case t => reporter.abort("Expected an interface type")
-    }
     def asFun: Fun = s match {
       case t: Fun => t
       case _ => reporter.abort("Expected a function")
@@ -107,6 +103,13 @@ object assertions {
     def asEffect: InterfaceType = t match {
       case t: InterfaceType => t
       case _ => reporter.abort("Expected a capability type")
+    }
+  }
+
+  extension(eff: symbols.Effect)(using reporter: ErrorReporter) {
+    def asInterfaceType: InterfaceType = eff match {
+      case t: InterfaceType => t
+      case t => reporter.abort("Expected an interface type")
     }
   }
 

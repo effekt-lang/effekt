@@ -536,9 +536,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolve(eff: source.InterfaceType)(implicit C: Context): InterfaceType = Context.at(eff) {
+  def resolve(eff: source.InterfaceType)(implicit C: Context): InterfaceType =
+    resolveAsEffect(eff).asInterfaceType
+
+  def resolveAsEffect(eff: source.InterfaceType)(implicit C: Context): Effect = Context.at(eff) {
     val res = eff match {
-      case source.InterfaceType(e, Nil)  => Context.resolveType(e).asInterfaceType
+      case source.InterfaceType(e, Nil)  => Context.resolveType(e).asEffect
       case source.InterfaceType(e, args) => BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve))
     }
     kinds.wellformedEffect(res)
@@ -546,7 +549,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
-    Effects(tpe.effs.map(resolve).toSeq: _*) // TODO this otherwise is calling the wrong apply
+    Effects(tpe.effs.map(resolveAsEffect).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(implicit C: Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))

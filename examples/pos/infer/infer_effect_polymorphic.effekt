@@ -1,0 +1,14 @@
+module examples/pos/lambdas/higherorder
+
+effect Yield(): Unit
+
+def effectPolymorphic() = { //: () => Unit at {effectPolymorphic} / Yield = {
+  def local(): Unit = Yield()
+  fun() { local() }
+}
+
+def main() =
+  try {
+    val unboxed = effectPolymorphic();
+    unboxed()
+  } with Yield { println("yielded"); resume(()) }
