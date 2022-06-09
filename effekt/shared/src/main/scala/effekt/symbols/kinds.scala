@@ -96,6 +96,7 @@ package object kinds {
       res
     case Interface(_, tparams, _) =>
       Kind.EffectFun(tparams map { p => Kind.Type })
+    case BuiltinEffect(_, tparams) => Kind.TypeFun(tparams map { p => Kind.Type })
   }
 
   private implicit class ValueTypeWellformedOps[T <: ValueType](tpe: T) {

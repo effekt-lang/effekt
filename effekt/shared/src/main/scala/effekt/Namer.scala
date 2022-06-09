@@ -82,8 +82,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         val vps = vparams map resolve
         val bps = bparams map resolve
         val ret = Context scoped {
-          C.bindValue(vps)
-          C.bindBlock(bps)
+          C.bindValues(vps)
+          C.bindBlocks(bps)
           annot map resolve
         }
         UserFunction(uniqueId, tps, vps, bps, ret.map { _._1 }, ret.map { _._2 }, f)
@@ -210,8 +210,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       val sym = Context.symbolOf(f)
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
-        Context.bindValue(sym.vparams)
-        Context.bindBlock(sym.bparams)
+        Context.bindValues(sym.vparams)
+        Context.bindBlocks(sym.bparams)
 
         //        // Bind self region, both under "this" and under "id"
         //        val self = CaptureOf(sym)
@@ -289,10 +289,18 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context scoped { resolveGeneric(block) }
 
     case source.TryHandle(body, handlers) =>
-      Context scoped { resolveGeneric(body) }
       resolveAll(handlers)
+      Context scoped {
+        // bind all annotated capabilities
+        handlers.foreach { handler =>
+          handler.capability.foreach { p =>
+            Context.bindBlock(resolve(p))
+          }
+        }
+        resolveGeneric(body)
+      }
 
-    case source.Handler(effect, _, clauses) =>
+    case source.Handler(effect, param, clauses) =>
 
       def extractControlEffect(e: Effect): Interface = e match {
         case BlockTypeApp(e, args) => extractControlEffect(e)
@@ -336,8 +344,8 @@ object Namer extends Phase[Parsed, NameResolved] {
         val vps = vparams map resolve
         val bps = bparams map resolve
 
-        Context.bindValue(vps)
-        Context.bindBlock(bps)
+        Context.bindValues(vps)
+        Context.bindBlocks(bps)
 
         resolveGeneric(stmt)
       }
@@ -421,6 +429,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(implicit C: Context): BlockParam = {
+    val tpe = resolve(p.tpe)
     val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym
@@ -474,7 +483,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
-  def resolveTermsOrTypes(effs: List[source.Effect])(implicit C: Context): (List[TermSymbol], List[InterfaceType]) = {
+  def resolveTermsOrTypes(effs: List[source.InterfaceType])(implicit C: Context): (List[TermSymbol], List[InterfaceType]) = {
     var terms: List[TermSymbol] = Nil
     var effects: List[InterfaceType] = Nil
 
@@ -487,18 +496,18 @@ object Namer extends Phase[Parsed, NameResolved] {
     (terms, effects)
   }
 
-  def resolveTermOrType(eff: source.Effect)(implicit C: Context): Either[TermSymbol, InterfaceType] = eff match {
-    case source.Effect(e, Nil) => Context.resolveAny(e) match {
+  def resolveTermOrType(eff: source.InterfaceType)(implicit C: Context): Either[TermSymbol, InterfaceType] = eff match {
+    case source.InterfaceType(e, Nil) => Context.resolveAny(e) match {
       case t: TermSymbol    => Left(t)
       case e: InterfaceType => Right(e)
     }
-    case source.Effect(e, args) => Right(BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve)))
+    case source.InterfaceType(e, args) => Right(BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve)))
   }
 
   def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
-    case t: source.Effect        => resolve(t)
+    case t: source.InterfaceType => resolve(t)
   }
 
   def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = funTpe match {
@@ -527,10 +536,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolve(eff: source.Effect)(implicit C: Context): Effect = Context.at(eff) {
+  def resolve(eff: source.InterfaceType)(implicit C: Context): InterfaceType = Context.at(eff) {
     val res = eff match {
-      case source.Effect(e, Nil)  => Context.resolveType(e).asEffect
-      case source.Effect(e, args) => BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve))
+      case source.InterfaceType(e, Nil)  => Context.resolveType(e).asInterfaceType
+      case source.InterfaceType(e, args) => BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve))
     }
     kinds.wellformedEffect(res)
     res
@@ -622,12 +631,18 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def bindParams(params: List[Param]) =
     params.foreach { p => bind(p) }
 
-  private[namer] def bindValue(params: List[ValueParam]) =
+  private[namer] def bindValues(params: List[ValueParam]) =
     params.foreach { p => bind(p) }
 
-  private[namer] def bindBlock(params: List[BlockParam]) =
+  private[namer] def bindBlocks(params: List[BlockParam]) =
     // bind the block parameter as a term
-    params.foreach { p => bind(p); bind(p.capture) }
+    params.foreach { bindBlock }
+
+  private[namer] def bindBlock(p: BlockParam) = {
+    // bind the block parameter as a term
+    bind(p)
+    bind(p.capture)
+  }
 
   /**
    * Tries to find a _unique_ term symbol in the current scope under name id.

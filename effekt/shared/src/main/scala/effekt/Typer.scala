@@ -474,7 +474,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 //          case _ => Context.abort(s"Selection requires an interface type.")
 //        }
 //
-      case _ => Context.abort(s"Expected something of a block type.")
+      case other => insertUnboxing(other, expected)
     }
 
   //</editor-fold>
@@ -921,13 +921,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // - If there is none: proceed to outer scope
     // - If there is exactly one match, fully typecheck the call with this.
     val results = scopes map { scope =>
-      scope.toList.map { receiver =>
-        receiver -> Try {
-          Context.restoreTyperstate(stateBefore)
-          val funTpe = findFunctionTypeFor(receiver)
-          val Result(tpe, effs) = checkCallTo(call, Some(receiver.asBlockSymbol), receiver.name.name, funTpe, targs, vargs, bargs, expected)
-          (Result(tpe, effs), Context.backupTyperstate())
-        }
+      scope.toList.map {
+        case receiver =>
+          receiver -> Try {
+            Context.restoreTyperstate(stateBefore)
+            val funTpe = findFunctionTypeFor(receiver)
+
+            val receiverAsBlockSymbol = receiver match {
+              case b: BlockSymbol => Some(b)
+              case other => None
+            }
+
+            val Result(tpe, effs) = checkCallTo(call, receiverAsBlockSymbol, receiver.name.name, funTpe, targs, vargs, bargs, expected)
+            (Result(tpe, effs), Context.backupTyperstate())
+          }
       }
     }
 
@@ -1140,6 +1147,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
     case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
     case t: Interface => true
+    case b: BuiltinEffect => true
   }
   private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 

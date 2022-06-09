@@ -296,6 +296,7 @@ package object symbols {
     def unapply(i: InterfaceType): Option[(Interface, List[ValueType])] = i match {
       case i: Interface          => Some((i, Nil))
       case BlockTypeApp(i, args) => Some((i, args))
+      case b: BuiltinEffect => None
     }
   }
 
@@ -448,7 +449,9 @@ package object symbols {
   }
 
   case class BuiltinType(name: Name, tparams: List[TypeVar]) extends ValueType with TypeSymbol with Builtin
-  case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends Effect with TypeSymbol with Builtin
+
+  // Builtin effects take the role of built in block types, while BuiltinType plays the role of a builtin value type
+  case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends InterfaceType with TypeSymbol with Builtin
 
   def isBuiltin(e: Symbol): Boolean = e.builtin
 }

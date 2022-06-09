@@ -2,13 +2,17 @@ module examples/pos/lambdas/higherorder
 
 effect Yield(): Unit
 
-def repeater { f: Unit }: (Int) => Int / {f} = {
+def repeater { f: Unit }: Int => Int at {f} = {
   def rec(n: Int): Int = if (n == 0) { f(); n } else rec(n - 1)
   fun(n: Int) { rec(n) }
 }
 
+
 def main() =
   try {
-    val g = repeater { do Yield(); println("hello") };
-    g(1)
+    val repeat = repeater { do Yield(); println("hello") };
+    def closure(): Int = (unbox repeat)(3);
+    val g = fun(n: Int) { closure(); n + 1 }
+     def unboxed() = (unbox g)(1);
+    unboxed()
   } with Yield { println("yielded"); resume(()) }

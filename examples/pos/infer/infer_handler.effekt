@@ -6,8 +6,11 @@ effect Get {
 def id[A](a: A): A = a
 
 def main() = {
-  val x = try {
-    id(get())
+  try {
+    val x = try {
+      id(get())
+    } with Get { def get() = resume(get()) }
+    println(x + 1)
   } with Get { def get() = resume(42) }
-  println(x + 1)
+
 }

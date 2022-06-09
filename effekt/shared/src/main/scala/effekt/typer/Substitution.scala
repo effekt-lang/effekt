@@ -85,6 +85,7 @@ case class Substitutions(
   def substitute(t: InterfaceType): InterfaceType = t match {
     case b: Interface           => b
     case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
+    case b: BuiltinEffect => b
   }
 
   def substitute(t: FunctionType): FunctionType = t match {
@@ -195,6 +196,7 @@ case class BiSubstitutions(
   def substitute(t: InterfaceType)(using Polarity): InterfaceType = t match {
     case b: Interface           => b
     case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
+    case b: BuiltinEffect => b
   }
 
   def substitute(t: FunctionType)(using p: Polarity): FunctionType = t match {

@@ -306,7 +306,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
  *
  * Here eff is the capability parameter, as introduced by the transformation.
  */
-case class Handler(effect: Effect, capability: Option[BlockParam] = None, clauses: List[OpClause]) extends Reference {
+case class Handler(effect: InterfaceType, capability: Option[BlockParam] = None, clauses: List[OpClause]) extends Reference {
   def id = effect.id
   type symbol = symbols.Interface
 }
@@ -412,7 +412,7 @@ case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Ef
   type resolved = symbols.FunctionType
 }
 
-case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends BlockType with Resolvable {
+case class InterfaceType(id: IdRef, tparams: List[ValueType] = Nil) extends BlockType with Resolvable {
   // TODO we need to drop Effect <: Symbol and refactor this here
   // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
   type resolved = symbols.InterfaceType
@@ -425,11 +425,11 @@ case class Effect(id: IdRef, tparams: List[ValueType] = Nil) extends BlockType w
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
-case class Effects(effs: List[Effect]) extends Tree
+case class Effects(effs: List[InterfaceType]) extends Tree
 object Effects {
   val Pure: Effects = Effects()
-  def apply(effs: Effect*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[Effect]): Effects = Effects(effs.toList)
+  def apply(effs: InterfaceType*): Effects = Effects(effs.toSet)
+  def apply(effs: Set[InterfaceType]): Effects = Effects(effs.toList)
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Resolvable {

@@ -111,7 +111,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
-    "at", "in", "box", "unbox", "return", "region", "new"
+    "at", "box", "unbox", "return", "region", "new"
   )
 
   // we escape names that would conflict with JS early on to simplify the pipeline
@@ -624,8 +624,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | failure("Expected an effect set")
     )
 
-  lazy val effectType: P[Effect] =
-    (idRef ~ maybeTypeArgs) ^^ Effect.apply | failure("Expected a single effect")
+  lazy val effectType: P[InterfaceType] =
+    (idRef ~ maybeTypeArgs) ^^ InterfaceType.apply | failure("Expected a single effect")
 
 
   // === AST Helpers ===
