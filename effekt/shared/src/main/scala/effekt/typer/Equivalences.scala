@@ -1,7 +1,7 @@
 package effekt
 package typer
 
-import effekt.symbols.{ UnificationVar, ValueType, TypeVar }
+import effekt.symbols.{ UnificationVar, ValueType, TypeVar, CaptUnificationVar, CaptureSet }
 
 class Equivalences(
   /**
@@ -24,6 +24,10 @@ class Equivalences(
   // The current substitutions
   def subst: Map[TypeVar, ValueType] =
     classes.flatMap[TypeVar, ValueType] { case (k, v) => substitution.get(v).map { k -> _ } }.toMap
+
+  def updateWith(captureSubstitution: Map[CaptUnificationVar, CaptureSet]): Unit =
+    val subst = Substitutions(Map.empty, captureSubstitution.asInstanceOf)
+    substitution = substitution.map { case (n, tpe) => n -> subst.substitute(tpe) }
 
   /**
    * Should only be called on unification variables where we do not know any types, yet

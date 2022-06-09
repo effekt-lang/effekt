@@ -639,55 +639,64 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
 
-        sym.vparams foreach Context.bind
-        sym.bparams foreach Context.bind
+        // We can also try to solve for the function capture, after checking the function.
+        // Hence we provide it to `withUnificationScope`.
+        val captVars = functionCapture match {
+          case x: CaptUnificationVar => List(x)
+          case _ => Nil
+        }
+        Context.withUnificationScope(captVars) {
 
-        (sym.annotatedType: @unchecked) match {
-          case Some(annotated) =>
-            // the declared effects are considered as bound
-            val bound: ConcreteEffects = annotated.effects
-            val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
-            val captures = capabilities.map { _.capture }
+          sym.vparams foreach Context.bind
+          sym.bparams foreach Context.bind
 
-            // block parameters and capabilities for effects are assumed bound
-            given Captures = Context.without(functionCapture, annotated.cparams ++ captures)
+          (sym.annotatedType: @unchecked) match {
+            case Some(annotated) =>
+              // the declared effects are considered as bound
+              val bound: ConcreteEffects = annotated.effects
+              val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+              val captures = capabilities.map { _.capture }
 
-            val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
-               Context in { body checkAgainst annotated.result }
-            }
-            Context.wellscoped(effs)
-            Context.annotateInferredType(d, tpe)
-            Context.annotateInferredEffects(d, effs.toEffects)
+              // block parameters and capabilities for effects are assumed bound
+              given Captures = Context.without(functionCapture, annotated.cparams ++ captures)
 
-            Result((), effs -- bound)
-          case None =>
+              val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
+                 Context in { body checkAgainst annotated.result }
+              }
+              Context.wellscoped(effs)
+              Context.annotateInferredType(d, tpe)
+              Context.annotateInferredEffects(d, effs.toEffects)
 
-            // to subtract the capabilties, which are only inferred bottom up, we need a **second** unification variable
-            val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
-            given Captures = inferredCapture
+              Result((), effs -- bound)
+            case None =>
 
-            // all effects are handled by the function itself (since they are inferred)
-            val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
-              Context in { checkStmt(body, None) }
-            }
-            Context.wellscoped(effs) // check they are in scope
+              // to subtract the capabilties, which are only inferred bottom up, we need a **second** unification variable
+              val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+              given Captures = inferredCapture
 
-            // TODO also add capture parameters for inferred capabilities
-            val funType = sym.toType(tpe, effs.toEffects)
+              // all effects are handled by the function itself (since they are inferred)
+              val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
+                Context in { checkStmt(body, None) }
+              }
+              Context.wellscoped(effs) // check they are in scope
 
-            // The order of effects annotated to the function is the canonical ordering for capabilities
-            val capabilities = effs.controlEffects.map { caps.apply }
+              // TODO also add capture parameters for inferred capabilities
+              val funType = sym.toType(tpe, effs.toEffects)
 
-            Context.bindCapabilities(d, capabilities)
+              // The order of effects annotated to the function is the canonical ordering for capabilities
+              val capabilities = effs.controlEffects.map { caps.apply }
 
-            Context.bind(sym, funType)
-            Context.annotateInferredType(d, tpe)
-            Context.annotateInferredEffects(d, effs.toEffects)
+              Context.bindCapabilities(d, capabilities)
 
-            // we subtract all capabilities introduced by this function to compute its capture
-            Context.requireSubregion(Context.without(inferredCapture, (sym.bparams ++ capabilities).map(_.capture)), functionCapture)
+              Context.bind(sym, funType)
+              Context.annotateInferredType(d, tpe)
+              Context.annotateInferredEffects(d, effs.toEffects)
 
-            Result((), Pure)
+              // we subtract all capabilities introduced by this function to compute its capture
+              Context.requireSubregion(Context.without(inferredCapture, (sym.bparams ++ capabilities).map(_.capture)), functionCapture)
+
+              Result((), Pure)
+          }
         }
       case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
         val effectDecl = d.symbol
@@ -1232,12 +1241,14 @@ trait TyperOps extends ContextOps { self: Context =>
   export unification.{ requireSubtype, requireEqual, requireSubregion, join, instantiate, dealias, freshCaptVar, without }
 
   // opens a fresh unification scope
-  private[typer] def withUnificationScope[T](block: => T): T = {
+  private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {
     unification.enterScope()
     val res = block
-    unification.leaveScope()
+    unification.leaveScope(additional)
     res
   }
+  private[typer] def withUnificationScope[T](block: => T): T = withUnificationScope(Nil)(block)
+
 
   /**
    * The current lexical region used for mutable variables.
@@ -1300,7 +1311,7 @@ trait TyperOps extends ContextOps { self: Context =>
   //<editor-fold desc="State Capabilities">
 
   private [typer] def stateFor(binder: VarBinder): StateCapability = {
-    val tpe = unification.localSubstitution.substitute(lookup(binder))
+    val tpe = unification.substitution.substitute(lookup(binder))
     // TODO We might be able to lift this restriction later on.
     if (!Typer.isConcreteValueType(tpe)) error(s"Type of variable binder must be known.")
     annotations.getOrElseUpdate(Annotations.StateCapability, binder, StateCapability(binder, tpe))
@@ -1464,7 +1475,7 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def commitTypeAnnotations(): Unit = {
-    val subst = unification.globalSubstitution
+    val subst = unification.substitution
 
     // TODO since (in comparison to System C) we now have type directed overload resolution again,
     //   we need to make sure the typing context and all the annotations are backtrackable.

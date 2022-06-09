@@ -44,9 +44,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // State of the unification engine
   // -------------------------------
   private var scope: Scope = GlobalScope
-  private [typer] def localSubstitution = Substitutions(constraints.subst, Map.empty)
-  // only available after processing the whole file (for now)
-  private [typer] def globalSubstitution = Substitutions(constraints.subst, captureConstraints.subst.asInstanceOf)
+  private [typer] def substitution = Substitutions(constraints.subst, captureConstraints.subst.asInstanceOf)
   private var constraints = new Equivalences
   protected var captureConstraints = CaptureConstraintGraph.empty
 
@@ -73,10 +71,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // ------------
   // TODO implement: should apply everything we know up to this point.
   def apply(e: Effects): Effects =
-    localSubstitution.substitute(dealias(e))
+    substitution.substitute(dealias(e))
 
   def apply(e: Effect): Effect =
-    localSubstitution.substitute(e)
+    substitution.substitute(e)
 
   // Lifecycle management
   // --------------------
@@ -95,12 +93,17 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     scope = LocalScope(Nil, Nil, scope)
   }
 
-  def leaveScope() = {
+  def leaveScope(additional: List[CaptUnificationVar]) = {
     val LocalScope(types, captures, parent) = scope match {
       case GlobalScope => sys error "Cannot leave global scope"
       case l : LocalScope => l
     }
     scope = parent
+
+    captureConstraints.leave(captures ++ additional)
+
+    // apply solved capture substitutions to type constraints
+    constraints.updateWith(captureConstraints.subst)
 
 
     // TODO check that the substitution is defined for them.
@@ -136,20 +139,20 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def requireSubtype(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Covariant;
     unifyValueTypes(
-      dealias(localSubstitution.substitute(t1)),
-      dealias(localSubstitution.substitute(t2)))
+      dealias(substitution.substitute(t1)),
+      dealias(substitution.substitute(t2)))
 
   def requireEqual(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Invariant;
     unifyValueTypes(
-      dealias(localSubstitution.substitute(t1)),
-      dealias(localSubstitution.substitute(t2)))
+      dealias(substitution.substitute(t1)),
+      dealias(substitution.substitute(t2)))
 
   def requireSubtype(t1: BlockType, t2: BlockType): Unit =
     given Polarity = Covariant;
     unifyBlockTypes(
-      dealias(localSubstitution.substitute(t1)),
-      dealias(localSubstitution.substitute(t2)))
+      dealias(substitution.substitute(t1)),
+      dealias(substitution.substitute(t2)))
 
   def requireSubregion(c1: Captures, c2: Captures): Unit =
     if (c1 == CaptureSet()) return;
@@ -208,7 +211,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
    */
   def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptUnificationVar], List[Effect], FunctionType) = {
     val position = C.focus
-    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = localSubstitution.substitute(tpe)
+    val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
     val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
@@ -309,7 +312,7 @@ trait TypeInstantiator { self: Unification =>
 
       val others = (cs -- captureParams).toList
 
-      // TODO do we need to respect the polarity here?
+      // TODO do we need to respect the polarity here? Maybe wellformedness should exclude captures in negative position?
       mergeCaptures(others, contained.toList.map { p => captureInstantiations(p) })
 
     case _ =>

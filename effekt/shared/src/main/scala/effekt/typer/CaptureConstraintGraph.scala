@@ -19,6 +19,8 @@ case class CaptureNodeData(
   upperNodes: Map[CNode, Filter]
 )
 
+type CaptureConstraints = Map[CNode, CaptureNodeData]
+
 /**
  * Invariants:
  * - The bounds are always fully propagated to all nodes.
@@ -27,12 +29,16 @@ case class CaptureNodeData(
  * However, for now, we do not compute equivalence classes -- we also do not establish transitive connections.
  * If we wanted to, we would need to somehow push unification variables through negations / subtractions.
  */
-class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
-
-  type CaptureConstraints = Map[CNode, CaptureNodeData]
-
+class CaptureConstraintGraph(
   // concrete bounds for each node
-  private [this] var constraintData: CaptureConstraints = Map.empty
+  private [this] var constraintData: CaptureConstraints = Map.empty,
+  // unification variables which are not in scope anymore, but also haven't been solved, yet.
+  private [this] var pendingInactive: Set[CNode] = Set.empty,
+   // Everything we know so far -- right hand sides of substitutions are *always* concrete capture sets.
+   // Once solved and part of the substitution, we cannot learn something about a unification variable anymore;
+   // only check consistency.
+  private var substitution: Map[CNode, CaptureSet] = Map.empty,
+)(using C: ErrorReporter) { outer =>
 
   private val emptyData = CaptureNodeData(None, None, Map.empty, Map.empty)
 
@@ -66,9 +72,52 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   }
 
   override def clone(): CaptureConstraintGraph =
-    val copy = CaptureConstraintGraph.empty
-    copy.constraintData = constraintData
-    copy
+    new CaptureConstraintGraph(constraintData, pendingInactive, substitution)
+
+  /**
+   * Marks [[xs]] as pending inactive and solves them, if they do not have active bounds.
+   */
+  def leave(xs: List[CaptUnificationVar]): Unit =
+    pendingInactive = pendingInactive ++ xs.toSet
+
+    var toRemove: Set[CNode] = Set.empty
+
+    // (1) collect all nodes that can be solved
+    pendingInactive foreach { n =>
+      if (isInactive(n)) toRemove = toRemove + n
+    }
+
+    // (2) Remove them from pending
+    pendingInactive = pendingInactive -- toRemove
+
+    // (3) Solve them
+    val solved = toRemove.toList.map { n =>
+      // bounds are consistent, we simply choose the lower bound as it is always concrete.
+      val bounds = n.lower.getOrElse(Set.empty)
+      n -> CaptureSet(bounds)
+    }
+    substitution = substitution ++ solved.toMap
+
+    // (4) remove them from the constraint set
+    constraintData = constraintData.collect {
+      case (n, CaptureNodeData(lower, upper, lowerNodes, upperNodes)) if !(toRemove.contains(n)) =>
+        n -> CaptureNodeData(lower, upper, lowerNodes -- toRemove, upperNodes -- toRemove)
+    }
+
+
+  /**
+   * Computes whether a node and all of its transitive bounds are inactive.
+   */
+  def isInactive(x: CNode, seen: Set[CNode] = Set.empty): Boolean =
+    if ((seen contains x) || (substitution isDefinedAt x)) return true;
+
+    val selfSeen = seen + x
+
+    val isInactiveItself = pendingInactive contains x
+    val areBoundsInactive = (x.lowerNodes.keys ++ x.upperNodes.keys).forall { n => isInactive(n, selfSeen) }
+
+    return isInactiveItself && areBoundsInactive
+
 
   private def checkConsistency(lower: Set[CaptureParam], upper: Set[CaptureParam]): Unit =
     val diff = lower -- upper
@@ -78,16 +127,14 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   private def mergeLower(xs: Set[CaptureParam], ys: Set[CaptureParam]): Set[CaptureParam] =
     xs ++ ys
 
-  // TODO implement properly
+  /**
+   * Since we do not implement subregioning at the moment, it is safe to simply compute the
+   * intersection.
+   */
   private def mergeUpper(xs: Set[CaptureParam], ys: Set[CaptureParam]): Set[CaptureParam] =
     xs intersect ys
 
-  def subst: Map[CaptUnificationVar, CaptureSet] = constraintData.view.mapValues {
-    // bounds are consistent, we simply choose the lower bound as it is always concrete.
-    case CaptureNodeData(lower, _, _, _) =>
-      val bounds = lower.getOrElse(Set.empty)
-      CaptureSet(bounds)
-  }.toMap
+  def subst: Map[CaptUnificationVar, CaptureSet] = substitution
 
   /**
    * Adds x as a lower bound to y, and y as a lower bound to x.
@@ -95,25 +142,29 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   def connect(x: CNode, y: CNode, exclude: Set[CaptureParam] = Set.empty): Unit =
     if (x == y /* || (y.lowerNodes contains x) */) { return () }
 
-    println(s"Connect ${x} (${x.lower}) --> ${y}")
+    // we already solved one of them? Or both?
+    (subst.get(x), subst.get(y)) match {
+      case (Some(CaptureSet(xs)), Some(CaptureSet(ys))) => checkConsistency(xs, ys)
+      case (Some(CaptureSet(xs)), None) => requireLower(xs, y)
+      case (None, Some(CaptureSet(ys))) => requireUpper(ys, x)
+      case (None, None) =>
+        x.addUpper(y, exclude)
+        y.addLower(x, exclude) // do we need this here?
 
-    x.addUpper(y, exclude)
-    y.addLower(x, exclude) // do we need this here?
+        val upperFilter = x.upperNodes(y)
+        val lowerFilter = y.lowerNodes(x)
 
-    val upperFilter = x.upperNodes(y)
-    val lowerFilter = y.lowerNodes(x)
-
-    x.lower foreach { bounds => requireLower(bounds -- upperFilter, y) }
-    y.upper foreach { bounds => requireUpper(bounds -- lowerFilter, x) }
+        x.lower foreach { bounds => requireLower(bounds -- upperFilter, y) }
+        y.upper foreach { bounds => requireUpper(bounds -- lowerFilter, x) }
+    }
 
   def requireLower(bounds: Set[CaptureParam], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
   def requireUpper(bounds: Set[CaptureParam], x: CNode): Unit = propagateUpper(bounds, x)(using Set.empty)
 
   private def propagateLower(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
+    assert (!substitution.isDefinedAt(x))
     given Set[CNode] = seen + x
-
-    println(s"Pushing $bounds into $x")
 
     x.upper foreach { upperBounds => checkConsistency(bounds, upperBounds) }
 
@@ -131,6 +182,7 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
 
   private def propagateUpper(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
+    assert (!substitution.isDefinedAt(x))
     given Set[CNode] = seen + x
 
     x.lower foreach { lowerBounds => checkConsistency(lowerBounds, bounds) }
@@ -151,10 +203,11 @@ class CaptureConstraintGraph(using C: ErrorReporter) { outer =>
   def dumpConstraints() =
     constraintData foreach {
       case (x, CaptureNodeData(lower, upper, lowerNodes, upperNodes)) =>
-        val prettyLower = lower.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("{}")
-        val prettyUpper = upper.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("*")
-        val prettyLowerNodes = lowerNodes.mkString(", ")
-        val prettyUpperNodes = upperNodes.mkString(", ")
+        val prettyLower = lower.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("{}").padTo(10, ' ')
+        val prettyUpper = upper.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("*").padTo(10, ' ')
+        val prettyLowerNodes = lowerNodes.mkString(", ").padTo(10, ' ')
+        val prettyUpperNodes = upperNodes.mkString(", ").padTo(10, ' ')
+        val varName = x.toString.padTo(12, ' ')
         println(s"${prettyLowerNodes} | ${prettyLower} <: $x <: ${prettyUpper} | ${prettyUpperNodes}")
     }
 }
