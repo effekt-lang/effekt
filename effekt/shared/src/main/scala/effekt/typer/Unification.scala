@@ -19,8 +19,7 @@ case object Invariant extends Polarity { def flip = Invariant }
  */
 case class UnificationState(
   scope: Scope,
-  constraints: Equivalences,
-  captureConstraints: CaptureConstraintGraph
+  constraints: Constraints
 )
 
 sealed trait Scope
@@ -44,9 +43,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   // State of the unification engine
   // -------------------------------
   private var scope: Scope = GlobalScope
-  private [typer] def substitution = Substitutions(constraints.subst, captureConstraints.subst.asInstanceOf)
-  private var constraints = new Equivalences
-  protected var captureConstraints = CaptureConstraintGraph.empty
+  protected var constraints = new Constraints
+
+
+  private [typer] def substitution = constraints.subst
 
 
   // Creating fresh unification variables
@@ -78,16 +78,14 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
   // Lifecycle management
   // --------------------
-  def backup(): UnificationState = UnificationState(scope, constraints.clone(), captureConstraints.clone())
+  def backup(): UnificationState = UnificationState(scope, constraints.clone())
   def restore(state: UnificationState): Unit =
     scope = state.scope
     constraints = state.constraints.clone()
-    captureConstraints = state.captureConstraints.clone()
 
   def init() =
     scope = GlobalScope
-    constraints = new Equivalences
-    captureConstraints = CaptureConstraintGraph.empty
+    constraints = new Constraints
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
@@ -100,28 +98,11 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
     }
     scope = parent
 
-    captureConstraints.leave(captures ++ additional)
-
-    // apply solved capture substitutions to type constraints
-    constraints.updateWith(captureConstraints.subst)
-
-
-    // TODO check that the substitution is defined for them.
-    types foreach { x =>
-      if (!constraints.subst.isDefinedAt(x)) {
-        x.role match {
-          case UnificationVar.TypeVariableInstantiation(underlying, callTree) =>
-            C.at(callTree) {
-              C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
-            }
-        }
-      }
-    }
+    constraints.leave(types, captures ++ additional)
   }
 
   def dumpConstraints() =
     constraints.dumpConstraints()
-    captureConstraints.dumpConstraints()
 
 
 
@@ -163,19 +144,19 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
         val notAllowed = cs2 -- cs1
         if (notAllowed.nonEmpty) abort(s"The following captures are not allowed: ${notAllowed}")
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
-        captureConstraints.connect(x, y)
+        constraints.connect(x, y)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>
         val concrete = cs.collect {
           case c: CaptureParam => c
           case _ => ???
         }
-        captureConstraints.requireUpper(concrete, x)
+        constraints.requireUpper(concrete, x)
       case (CaptureSet(cs), x: CaptUnificationVar) =>
         val concrete = cs.collect {
           case c: CaptureParam => c
           case _ => ???
         }
-        captureConstraints.requireLower(concrete, x)
+        constraints.requireLower(concrete, x)
     }
 
   def requireEqual(x: CaptUnificationVar, c: CaptureSet): Unit =
@@ -191,7 +172,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       case CaptureSet(cs) => CaptureSet(cs -- others.toSet)
       case x: CaptUnificationVar =>
         val y = freshCaptVar(CaptUnificationVar.Subtraction(others, x))
-        captureConstraints.connect(x, y, others.toSet)
+        constraints.connect(x, y, others.toSet)
         y
     }
 
@@ -292,8 +273,8 @@ trait TypeInstantiator { self: Unification =>
   def mergeCaptures(concreteBounds: List[CaptureParam], variableBounds: List[CaptUnificationVar]): CaptUnificationVar =
     println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
-    captureConstraints.requireLower(concreteBounds.toSet, newVar)
-    variableBounds.foreach { b => captureConstraints.connect(b, newVar) }
+    constraints.requireLower(concreteBounds.toSet, newVar)
+    variableBounds.foreach { b => constraints.connect(b, newVar) }
     newVar
 
   // shadowing
