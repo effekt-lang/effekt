@@ -176,7 +176,7 @@ case class FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bpara
 case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
   type symbol = symbols.ValBinder
 }
-case class VarDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
+case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {
@@ -434,7 +434,7 @@ object Effects {
 
 case class CaptureSet(captures: List[IdRef]) extends Resolvable {
   type resolved = symbols.CaptureSet
-  def resolve(using C: Context): resolved = ??? // C.resolvedCapture(this)
+  def resolve(using C: Context): resolved = C.resolvedCapture(this)
 }
 
 object Tree {
@@ -514,8 +514,8 @@ object Tree {
       case ValDef(id, annot, binding) =>
         ValDef(id, annot, rewrite(binding))
 
-      case VarDef(id, annot, binding) =>
-        VarDef(id, annot, rewrite(binding))
+      case VarDef(id, annot, region, binding) =>
+        VarDef(id, annot, region, rewrite(binding))
 
       case d: InterfaceDef        => d
       case d: DataDef       => d

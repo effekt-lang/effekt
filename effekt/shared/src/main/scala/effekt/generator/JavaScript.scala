@@ -97,7 +97,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(id, tpe, get, put, init, body) =>
+    case State(init, region, body) =>
       toDocDelayed(init) <> ".state" <> parens(toDoc(body))
 
     case Handle(body, hs) =>

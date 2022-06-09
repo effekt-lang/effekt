@@ -77,10 +77,10 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
-    case State(eff, tpe, get, put, init, block) =>
-      defineValue(nameDef(get), "getter") <> line <>
-        defineValue(nameDef(put), "setter") <> line <>
-        schemeCall("state", toDoc(init, false), toDoc(block))
+    case State(init, reg, block) => ???
+    //      defineValue(nameDef(get), "getter") <> line <>
+    //        defineValue(nameDef(put), "setter") <> line <>
+    //        schemeCall("state", toDoc(init, false), toDoc(block))
 
     // funnily enough, in callcc, we actually need to wrap toplevel definitions into run
     // pure function calls (that internally use control effects, handled away) still need to

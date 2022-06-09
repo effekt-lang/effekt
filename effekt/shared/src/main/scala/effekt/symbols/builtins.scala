@@ -29,6 +29,16 @@ object builtins {
   val ControlEffect = BuiltinEffect(name("Control"), Nil)
   val ControlCapablity = BuiltinCapability(ControlEffect)
 
+  object TState {
+    val S = TypeVar(Name.local("S"))
+    val interface = Interface(Name.local("$State"), List(S), Nil)
+    val get = Operation(name("get"), Nil, Nil, S, Effects.Pure, interface)
+    val put = Operation(name("put"), Nil, List(ValueParam(Name.local("s"), Some(S))), TUnit, Effects.Pure, interface)
+    interface.ops = List(get, put)
+  }
+
+  val TRegion = Interface(Name.local("Region"), Nil, Nil)
+
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
     "Boolean" -> TBoolean,

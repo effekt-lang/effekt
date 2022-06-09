@@ -4,6 +4,7 @@ package core
 import scala.collection.mutable.ListBuffer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
+import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.source.ExternFlag
 
@@ -58,12 +59,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Val(v.symbol, transform(binding), rest())
 
     // This phase introduces capabilities for state effects
-    case v @ source.VarDef(id, _, binding) =>
+    case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
-      val state = Context.annotation(Annotations.StateCapability, sym)
       val b = transform(binding)
-      val params = List(core.BlockParam(state.param, state.param.tpe))
-      State(state.effect, Context.valueTypeOf(sym), state.get, state.put, b, BlockLit(params, rest()))
+      State(b, reg.map { r => r.symbol }, BlockLit(List(BlockParam(sym)), rest()))
 
     case source.ExternType(id, tparams) =>
       rest()
@@ -137,21 +136,31 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ =>
       transformUnbox(tree)
   }
+  def getStateType(v: VarBinder)(implicit C: Context): ValueType = C.blockTypeOf(v) match {
+    case BlockTypeApp(TState.interface, List(tpe)) => tpe
+    case _ => C.panic("Not a mutable variable")
+  }
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
-        val state = Context.annotation(Annotations.StateCapability, sym)
-        val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
-        Context.bind(Context.valueTypeOf(sym), get)
+        val tpe = getStateType(sym)
+
+        val get = App(Member(BlockVar(sym), TState.get), Nil, Nil)
+        Context.bind(tpe, get)
+        // val state = Context.annotation(Annotations.StateCapability, sym)
+        // val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
+        // Context.bind(Context.valueTypeOf(sym), get)
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
 
     case a @ source.Assign(id, expr) =>
       val e = transformAsExpr(expr)
-      val state = Context.annotation(Annotations.StateCapability, a.definition)
-      val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
+      val sym = a.definition
+      // val state = Context.annotation(Annotations.StateCapability, a.definition)
+      val put = App(Member(BlockVar(sym), TState.put), Nil, List(e))
+      //val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
       Context.bind(builtins.TUnit, put)
 
     case l: source.Literal[t] => transformLit(l)

@@ -305,6 +305,9 @@ class Constraints(
     val diff = lower -- upper
     if (diff.nonEmpty) { C.abort(s"Not allowed ${diff}") }
 
+  private def checkEquality(xs: Set[CaptureParam], ys: Set[CaptureParam]): Unit =
+    if (xs != ys) { C.abort(s"Capture set ${xs} is not equal to ${ys}") }
+
   // we do not necessarily need mergeLower, since we can take the free union
   private def mergeLower(xs: Set[CaptureParam], ys: Set[CaptureParam]): Set[CaptureParam] =
     xs ++ ys
@@ -344,7 +347,14 @@ class Constraints(
 
   private def propagateLower(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
-    assert (!captSubstitution.isDefinedAt(x))
+
+    captSubstitution.get(x) foreach {
+      // we already have fixed the capture set, check equality
+      case CaptureSet(capt) =>
+        checkEquality(capt, bounds)
+        return;
+    }
+
     given Set[CNode] = seen + x
 
     x.upper foreach { upperBounds => checkConsistency(bounds, upperBounds) }
@@ -363,7 +373,13 @@ class Constraints(
 
   private def propagateUpper(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
-    assert (!captSubstitution.isDefinedAt(x))
+
+    captSubstitution.get(x) foreach {
+      // we already have fixed the capture set, check equality
+      case CaptureSet(capt) =>
+        checkEquality(capt, bounds)
+        return;
+    }
     given Set[CNode] = seen + x
 
     x.lower foreach { lowerBounds => checkConsistency(lowerBounds, bounds) }

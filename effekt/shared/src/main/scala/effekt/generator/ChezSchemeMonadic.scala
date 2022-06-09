@@ -93,13 +93,13 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
       parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <> group(nest(line <> toDoc(body, toplevel))))
 
     // do not return on the toplevel
-    case Ret(e) if toplevel => ""
+    case Ret(e) if toplevel      => ""
 
-    case Ret(e)             => schemeCall("pure", List(toDoc(e)))
+    case Ret(e)                  => schemeCall("pure", List(toDoc(e)))
 
-    case State(eff, tpe, get, put, init, block) =>
-      schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
+    case State(init, reg, block) => ???
+    // schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
 
-    case other => super.toDoc(s, toplevel)
+    case other                   => super.toDoc(s, toplevel)
   }
 }

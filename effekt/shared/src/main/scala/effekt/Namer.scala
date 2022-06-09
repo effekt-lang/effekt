@@ -4,11 +4,11 @@ package namer
 /**
  * In this file we fully qualify source types, but use symbols directly
  */
-import effekt.context.{ Context, ContextOps }
-import effekt.context.assertions._
+import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.assertions.*
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
-import effekt.symbols._
-import scopes._
+import effekt.symbols.*
+import scopes.*
 
 /**
  * The output of this phase: a mapping from source identifier to symbol
@@ -69,11 +69,12 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.ValDef(id, annot, binding) =>
       ()
 
-    case d @ source.VarDef(id, annot, binding) =>
+    case d @ source.VarDef(id, annot, region, binding) =>
       ()
 
     case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
       val uniqueId = Context.freshNameFor(id)
+
       // we create a new scope, since resolving type params introduces them in this scope
       val sym = Context scoped {
         val tps = tparams map resolve
@@ -200,10 +201,12 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveGeneric(binding)
       Context.define(id, ValBinder(C.nameFor(id), tpe, d))
 
-    case d @ source.VarDef(id, annot, binding) =>
+    case d @ source.VarDef(id, annot, region, binding) =>
       val tpe = annot.map(resolve)
+      val reg = region.map(C.resolveTerm)
       resolveGeneric(binding)
-      Context.define(id, VarBinder(C.nameFor(id), tpe, d))
+      val sym = VarBinder(C.nameFor(id), tpe, d)
+      Context.define(id, sym)
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
@@ -213,10 +216,11 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
 
-        //        // Bind self region, both under "this" and under "id"
-        //        val self = CaptureOf(sym)
-        //        Context.bind(self)
-        //        Context.bind("this", self)
+        val selfRegion = CaptureParam(Name.local("this"))
+        // bind it to both the function name and "this"
+        Context.bind(id.name, selfRegion)
+        Context.bind("this", selfRegion)
+        Context.annotate(Annotations.SelfRegion, f, selfRegion)
 
         resolveGeneric(body)
       }
@@ -556,7 +560,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolve(capt: source.CaptureSet)(implicit C: Context): CaptureSet = {
     val captResolved = CaptureSet(capt.captures.map { C.resolveCapture }.toSet)
-    // C.annotateResolvedCapture(capt)(captResolved)
+    C.annotateResolvedCapture(capt)(captResolved)
     captResolved
   }
 

@@ -218,21 +218,26 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // TODO the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
-        case b: BlockSymbol => Context.abort(s"Blocks cannot be used as expressions.")
-        // TODO we might want to use the state capability here, not the binder itself.
-        //   same with Assign
-        case x: VarBinder =>
-          val capability = Context.stateFor(x).param
-          usingCapture(Context.lookupCapture(capability))
-          Result(Context.lookup(x), Pure)
+        case x: VarBinder => Context.lookup(x) match {
+          case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
+            usingCapture(capt)
+            Result(tpe, Pure)
+          case _ => Context.panic(s"Builtin state cannot be typed.")
+        }
+
+        case b: BlockSymbol => insertBoxing(expr, expected)
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
       }
 
       case e @ source.Assign(id, expr) => e.definition match {
         case x: VarBinder =>
-          val Result(_, eff) = expr checkAgainst Context.lookup(x)
-          val capability = Context.stateFor(x).param
-          usingCapture(Context.lookupCapture(capability))
+          val stTpe = Context.lookup(x) match {
+            case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
+              usingCapture(capt)
+              tpe
+            case _ => Context.panic(s"Builtin state cannot be typed.")
+          }
+          val Result(_, eff) = expr checkAgainst stTpe
           Result(TUnit, eff)
       }
 
@@ -244,7 +249,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         expected.foreach {
           case BoxedType(tpe, expected) => Context.requireSubregion(inferredCap, expected)
-          case _ => ???
+          case tpe => Context.abort(s"Required a value of type ${tpe}, but got a block.")
         }
 
         given Captures = inferredCap
@@ -638,6 +643,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val sym = d.symbol
         // was assigned by precheck
         val functionCapture = Context.lookupCapture(sym)
+        val selfRegion = Context.getSelfRegion(d)
 
         // We can also try to solve for the function capture, after checking the function.
         // Hence we provide it to `withUnificationScope`.
@@ -650,52 +656,54 @@ object Typer extends Phase[NameResolved, Typechecked] {
           sym.vparams foreach Context.bind
           sym.bparams foreach Context.bind
 
-          (sym.annotatedType: @unchecked) match {
-            case Some(annotated) =>
-              // the declared effects are considered as bound
-              val bound: ConcreteEffects = annotated.effects
-              val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
-              val captures = capabilities.map { _.capture }
+          Context.withRegion(selfRegion) {
+            (sym.annotatedType: @unchecked) match {
+              case Some(annotated) =>
+                // the declared effects are considered as bound
+                val bound: ConcreteEffects = annotated.effects
+                val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+                val captures = capabilities.map { _.capture }
 
-              // block parameters and capabilities for effects are assumed bound
-              given Captures = Context.without(functionCapture, annotated.cparams ++ captures)
+                // block parameters and capabilities for effects are assumed bound
+                given Captures = Context.without(functionCapture, annotated.cparams ++ captures ++ List(selfRegion))
 
-              val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
-                 Context in { body checkAgainst annotated.result }
-              }
-              Context.wellscoped(effs)
-              Context.annotateInferredType(d, tpe)
-              Context.annotateInferredEffects(d, effs.toEffects)
+                val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
+                   Context in { body checkAgainst annotated.result }
+                }
+                Context.wellscoped(effs)
+                Context.annotateInferredType(d, tpe)
+                Context.annotateInferredEffects(d, effs.toEffects)
 
-              Result((), effs -- bound)
-            case None =>
+                Result((), effs -- bound)
+              case None =>
 
-              // to subtract the capabilties, which are only inferred bottom up, we need a **second** unification variable
-              val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
-              given Captures = inferredCapture
+                // to subtract the capabilties, which are only inferred bottom up, we need a **second** unification variable
+                val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+                given Captures = inferredCapture
 
-              // all effects are handled by the function itself (since they are inferred)
-              val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
-                Context in { checkStmt(body, None) }
-              }
-              Context.wellscoped(effs) // check they are in scope
+                // all effects are handled by the function itself (since they are inferred)
+                val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
+                  Context in { checkStmt(body, None) }
+                }
+                Context.wellscoped(effs) // check they are in scope
 
-              // TODO also add capture parameters for inferred capabilities
-              val funType = sym.toType(tpe, effs.toEffects)
+                // TODO also add capture parameters for inferred capabilities
+                val funType = sym.toType(tpe, effs.toEffects)
 
-              // The order of effects annotated to the function is the canonical ordering for capabilities
-              val capabilities = effs.controlEffects.map { caps.apply }
+                // The order of effects annotated to the function is the canonical ordering for capabilities
+                val capabilities = effs.controlEffects.map { caps.apply }
 
-              Context.bindCapabilities(d, capabilities)
+                Context.bindCapabilities(d, capabilities)
 
-              Context.bind(sym, funType)
-              Context.annotateInferredType(d, tpe)
-              Context.annotateInferredEffects(d, effs.toEffects)
+                Context.bind(sym, funType)
+                Context.annotateInferredType(d, tpe)
+                Context.annotateInferredEffects(d, effs.toEffects)
 
-              // we subtract all capabilities introduced by this function to compute its capture
-              Context.requireSubregion(Context.without(inferredCapture, (sym.bparams ++ capabilities).map(_.capture)), functionCapture)
+                // we subtract all capabilities introduced by this function to compute its capture
+                Context.requireSubregion(Context.without(inferredCapture, (sym.bparams ++ capabilities).map(_.capture)), functionCapture)
 
-              Result((), Pure)
+                Result((), Pure)
+            }
           }
         }
       case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
@@ -717,16 +725,30 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(d.symbol, t)
         Result((), effBinding)
 
-      case d @ source.VarDef(id, annot, binding) =>
-        val Result(t, effBinding) = d.symbol.tpe match {
+      case d @ source.VarDef(id, annot, reg, binding) =>
+        val sym = d.symbol
+
+        // we use the current region as an approximation for the state
+        val stCapt = reg map Context.symbolOf map {
+          case b: BlockSymbol =>
+            Context.lookup(b) match {
+              case (TRegion, capt) => capt
+              case _               => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+            }
+          case _ => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+        } getOrElse { CaptureSet(Context.region) }
+
+        val Result(tpeBind, effBind) = d.symbol.tpe match {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding, None)
         }
-        val sym = d.symbol
-        Context.bind(sym, t)
-        Context.stateFor(sym)
+        val stTpe = BlockTypeApp(TState.interface, List(tpeBind))
 
-        Result((), effBinding)
+        Context.bind(sym, stTpe, stCapt)
+        // TODO continue. Do we need to still make up a blockparam for state now that VarDef is a block symbol?
+        //Context.stateFor(sym)
+
+        Result((), effBind)
 
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
@@ -1316,18 +1338,6 @@ trait TyperOps extends ContextOps { self: Context =>
     caps
 
 
-  //<editor-fold desc="State Capabilities">
-
-  private [typer] def stateFor(binder: VarBinder): StateCapability = {
-    val tpe = unification.substitution.substitute(lookup(binder))
-    // TODO We might be able to lift this restriction later on.
-    if (!Typer.isConcreteValueType(tpe)) error(s"Type of variable binder must be known.")
-    annotations.getOrElseUpdate(Annotations.StateCapability, binder, StateCapability(binder, tpe))
-  }
-
-  //</editor-fold>
-
-
   /**
    * Local annotations database, only used by Typer
    *
@@ -1390,6 +1400,9 @@ trait TyperOps extends ContextOps { self: Context =>
         case _ => panic(s"Shouldn't happen: we do not have a capture for ${s}, yet.")
       }
     }
+
+  private[typer] def getSelfRegion(tree: source.Tree): CaptureParam =
+    annotation(Annotations.SelfRegion, tree)
 
   private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
     annotations.update(Annotations.ValueType, s, tpe)
@@ -1517,6 +1530,17 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.StateCapability) { case (t, state) => state }
   }
 
+
+  // Lexical Regions
+  // ===============
+  def region: CaptureParam = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
+  def withRegion[T](c: CaptureParam)(prog: => T): T = {
+    val before = lexicalRegion
+    lexicalRegion = Some(c)
+    val res = prog
+    lexicalRegion = before
+    res
+  }
 
   // Effects that are in the lexical scope
   // =====================================

@@ -427,7 +427,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
      `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
 
   lazy val varDef: P[VarDef] =
-     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ VarDef.apply
+     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ {
+       case id ~ tpe ~ expr => VarDef(id, tpe, None, expr)
+     }
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
