@@ -1097,6 +1097,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // with A := Int and B := Int requires us to pass two capabilities.
     val capabilities = Context.provideCapabilities(call, canonicalEffs.map(Context.unification.apply).controlEffects)
 
+    // TODO also use capabilities when instantiating the type scheme
+    usingCapture(CaptureSet(capabilities.map(_.capture)))
+
     // TODO it probably would be better to go back to explicitly represent effect calls, for instance,
     //   with `do raise()`.
     receiver foreach {
