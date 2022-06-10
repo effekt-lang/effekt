@@ -206,5 +206,24 @@ class ConstraintTests extends AnyFunSpec {
       // should not affect upper bounds
       assert(B.upper == None)
     }
+    it ("if bounded from both sides it should still filter, appropriately") {
+      val graph = freshGraph()
+      import graph.*
+
+      // before:
+      //                         ({} B {*}) <: ({x, y} A {*})
+      requireLower(Set(x, y), A)
+      connect(B, A)
+
+      // after:
+      //   ({x, y} A {*}) [x] <: ({y} B {*}) <: ({x, y} A {*})
+      connect(A, B, Set(x))
+
+      // should propagate
+      assert(B.lower == Some(Set(y)))
+
+      // should not affect upper bounds
+      assert(B.upper == None)
+    }
   }
 }

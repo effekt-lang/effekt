@@ -345,8 +345,8 @@ class Constraints(
         val upperFilter = x.upperNodes(y)
         val lowerFilter = y.lowerNodes(x)
 
-        x.lower foreach { bounds => requireLower(bounds -- upperFilter, y) }
-        y.upper foreach { bounds => requireUpper(bounds -- lowerFilter, x) }
+        x.lower foreach { bounds => requireLower(bounds -- lowerFilter, y) }
+        y.upper foreach { bounds => requireUpper(bounds -- upperFilter, x) }
     }
 
   def requireLower(bounds: Set[CaptureParam], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
