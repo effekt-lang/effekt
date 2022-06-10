@@ -9,7 +9,7 @@ def main() = {
     // obtain a capability but close over it lexically.
     def block(msg: String): Unit / {} = { do Raise(msg) }
 
-    val f = try {
+    val f: () => Unit at {raise} = try {
       // here we create first class functions that close over block.
       // since `block` closes over `Raise` we have to make sure that
       // it cannot leave the outer `try`.
@@ -21,14 +21,14 @@ def main() = {
     } with Flip {
       // the continuation itself transitively closes over `block` and `Raise`.
       // it also must not leave the scope of Raise.
-      val h = fun() { (resume(true))(); (resume(false))() }
+      val h: () => Unit at {raise} = fun() { (resume(true))(); (resume(false))() }
       h
     }
 
     f();
     // try dropping the parens here to see the type error:
     f()
-  } with Raise { msg =>
+  } with raise: Raise { msg =>
     println("exception " ++ msg); resume(())
   }
 }

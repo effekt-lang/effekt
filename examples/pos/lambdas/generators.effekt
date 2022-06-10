@@ -13,7 +13,7 @@ def numbers() = {
 
 def main() = {
 
-  var generator: () => Result / {main} = fun() { Done() }
+  var generator: () => Result at {main} = fun() { Done() }
 
   try {
     numbers()
@@ -22,9 +22,9 @@ def main() = {
     generator = fun() { resume(()); Next(n) }
   }
 
-  println(generator())
-  println(generator())
-  println(generator())
-  println(generator())
-  println(generator())
+  println((unbox generator)())
+  println((unbox generator)())
+  println((unbox generator)())
+  println((unbox generator)())
+  println((unbox generator)())
 }
