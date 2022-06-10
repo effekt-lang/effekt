@@ -6,11 +6,10 @@ import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.source.{ CapabilityPassing, ModuleDecl }
 import effekt.symbols.Module
-import effekt.typer.Typer
+import effekt.typer.{ PostTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.Backend
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -126,6 +125,11 @@ trait Compiler {
        *   [[NameResolved]] --> [[Typechecked]]
        */
       Typer andThen
+      /**
+       * Wellformedness checks (exhaustivity, non-escape)
+       *   [[Typechecked]] --> [[Typechecked]]
+       */
+      PostTyper andThen
       /**
        * Uses annotated effects to translate to explicit capability passing
        *   [[Typechecked]] --> [[Typechecked]]

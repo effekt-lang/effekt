@@ -212,7 +212,8 @@ class Constraints(
       case _ => ()
     }
 
-    pendingInactive = pendingInactive ++ capts.toSet
+    // (0) only add those to pending that haven't been solved already
+    pendingInactive = pendingInactive ++ (capts.toSet -- captSubstitution.keySet)
 
     var toRemove: Set[CNode] = Set.empty
 
@@ -283,6 +284,10 @@ class Constraints(
         val prettyUpperNodes = upperNodes.map(printFilterNode).mkString(", ").padTo(colWidth, ' ')
         val varName = x.toString.padTo(15, ' ')
         println(s"${prettyLowerNodes} | ${prettyLower} <: $varName <: ${prettyUpper} | ${prettyUpperNodes}")
+    }
+    println("------------------\n")
+    captSubstitution.foreach {
+      case (node, set) => println(node.toString.padTo(25, ' ') + " -> " + set.captures.mkString(", "))
     }
     println("------------------\n")
 
