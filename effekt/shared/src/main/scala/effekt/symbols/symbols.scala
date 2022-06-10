@@ -407,9 +407,9 @@ package object symbols {
     val name = Name.local("?C")
     override def toString = role match {
       case CaptUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
-      case CaptUnificationVar.Subtraction(handled, underlying) => s"?(${underlying} - {${handled.mkString(", ")}})"
+      case CaptUnificationVar.Subtraction(handled, underlying) => s"?filter" + id
       case CaptUnificationVar.FunctionRegion(fun) => s"?${fun.id.name}" + id
-      case CaptUnificationVar.AnonymousFunctionRegion(fun) => s"?anonFun" + id
+      case CaptUnificationVar.AnonymousFunctionRegion(fun) => s"?anon" + id
       case CaptUnificationVar.HandlerRegion(handler) => s"?Ck" + id
       case _ => "?" + id
     }

@@ -247,8 +247,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
         }
 
-        expected.foreach {
+        expected.map(Context.unification.apply) foreach {
           case BoxedType(tpe, expected) => Context.requireSubregion(inferredCap, expected)
+          case x: UnificationVar => Context.abort(s"Cannot infer type.")
           case tpe => Context.abort(s"Required a value of type ${tpe}, but got a block.")
         }
 
@@ -292,17 +293,18 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // Create a fresh capture variable for the continuations ?Ck
         val continuationCapt = Context.freshCaptVar(CaptUnificationVar.HandlerRegion(tree))
+        val continuationCaptHandled = Context.without(continuationCapt, providedCapabilities.map(_.capture))
 
         val Result(ret, effs) = {
 
           val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
             // All used captures flow into the continuation capture, except the ones handled by this handler.
-            given Captures = Context.without(continuationCapt, providedCapabilities.map(_.capture))
+            given Captures = continuationCaptHandled
             checkStmt(prog, expected)
           }
 
           // Also all capabilities used by the handler flow into the capture of the continuation
-          given Captures = continuationCapt
+          given Captures = continuationCaptHandled
 
           handlers foreach Context.withFocus { h =>
             val effectSymbol: Interface = h.definition
@@ -656,6 +658,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
           sym.vparams foreach Context.bind
           sym.bparams foreach Context.bind
 
+          val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+
           Context.withRegion(selfRegion) {
             (sym.annotatedType: @unchecked) match {
               case Some(annotated) =>
@@ -665,7 +669,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val captures = capabilities.map { _.capture }
 
                 // block parameters and capabilities for effects are assumed bound
-                given Captures = Context.without(functionCapture, annotated.cparams ++ captures ++ List(selfRegion))
+                given Captures = inferredCapture
 
                 val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
                    Context in { body checkAgainst annotated.result }
@@ -674,11 +678,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
 
+                println(s">>>> ${d.id.name}: Inferred ${inferredCapture}, functionCapture ${functionCapture}. Captures ${captures}")
+                Context.unification.dumpConstraints()
+
+                Context.requireSubregionWithout(inferredCapture, functionCapture, annotated.cparams ++ captures ++ List(selfRegion))
+
+                Context.unification.dumpConstraints()
+
                 Result((), effs -- bound)
               case None =>
 
-                // to subtract the capabilties, which are only inferred bottom up, we need a **second** unification variable
-                val inferredCapture = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
+                // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
                 given Captures = inferredCapture
 
                 // all effects are handled by the function itself (since they are inferred)
@@ -700,7 +710,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.annotateInferredEffects(d, effs.toEffects)
 
                 // we subtract all capabilities introduced by this function to compute its capture
-                Context.requireSubregion(Context.without(inferredCapture, (sym.bparams ++ capabilities).map(_.capture)), functionCapture)
+                Context.requireSubregionWithout(inferredCapture, functionCapture, (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion))
 
                 Result((), Pure)
             }
@@ -803,7 +813,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bindCapabilities(arg, capabilities)
 
         // Like with functions, bound parameters and capabilities are not closed over
-        usingCapture(Context.without(inferredCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture)))
+        Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture))
 
         Result(funType, Pure)
       }
@@ -879,12 +889,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // TODO share code with FunDef and BindAll
       val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
 
-      val functionCapture = currentCapture
+      val bodyRegion = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
 
       val Result(bodyType, bodyEffs) = Context.bindingCapabilities(decl, capabilities) {
-         given Captures = Context.without(functionCapture, captureParams ++ capabilities.map(_.capture))
+         given Captures = bodyRegion
          body checkAgainst adjustedReturn
       }
+      Context.requireSubregionWithout(bodyRegion, currentCapture, captureParams ++ capabilities.map(_.capture))
 
       val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
@@ -893,7 +904,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def findFunctionTypeFor(sym: TermSymbol)(using Context): FunctionType = sym match {
     case b: BlockSymbol => Context.lookupFunctionType(b)
-    case v: ValueSymbol => Context.lookup(v) match {
+    case v: ValueSymbol =>
+      Context.unification(Context.lookup(v)) match {
       case BoxedType(b: FunctionType, _) => b
       case b => Context.abort(s"Required function type, but got ${b}")
     }
@@ -1268,7 +1280,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using self)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, dealias, freshCaptVar, without }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, dealias, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {

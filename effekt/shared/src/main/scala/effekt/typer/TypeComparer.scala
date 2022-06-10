@@ -112,11 +112,17 @@ trait TypeUnifier extends TypeComparer {
   def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
   def requireEqual(x: UnificationVar, tpe: ValueType): Unit
 
+  def requireSubregion(lower: Captures, upper: Captures): Unit
+
   def abort(msg: String): Nothing
   def error(msg: String): Unit
 
-  def unify(c1: Captures, c2: Captures): Unit
-  def unify(c1: CaptureParam, c2: CaptureParam): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
+  def unify(c1: Captures, c2: Captures)(using p: Polarity): Unit = p match {
+    case Covariant => requireSubregion(c1, c2)
+    case Contravariant => requireSubregion(c2, c1)
+    case Invariant => requireSubregion(c1, c2); requireSubregion(c2, c1)
+  }
+  def unify(c1: CaptureParam, c2: CaptureParam)(using Polarity): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(using p: Polarity): Unit = (tpe1, tpe2, p) match {
     case (t, s, _) if t == s => ()

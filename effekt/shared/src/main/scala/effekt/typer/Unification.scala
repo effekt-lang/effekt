@@ -139,30 +139,34 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
       dealias(substitution.substitute(t1)),
       dealias(substitution.substitute(t2)))
 
-  def requireSubregion(c1: Captures, c2: Captures): Unit =
-    if (c1 == CaptureSet()) return;
-    if (c1 == c2) return;
-    (c1, c2) match {
-      case (CaptureSet(cs1), CaptureSet(cs2)) =>
-        val notAllowed = cs2 -- cs1
-        if (notAllowed.nonEmpty) abort(s"The following captures are not allowed: ${notAllowed}")
-      case (x: CaptUnificationVar, y: CaptUnificationVar) =>
-        constraints.connect(x, y)
-      case (x: CaptUnificationVar, CaptureSet(cs)) =>
-        constraints.requireUpper(cs, x)
-      case (CaptureSet(cs), x: CaptUnificationVar) =>
-        constraints.requireLower(cs, x)
-    }
+  def requireSubregion(c1: Captures, c2: Captures): Unit = requireSubregionWithout(c1, c2, Set.empty)
 
   def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
 
-  def without(caps: Captures, others: List[CaptureParam]): Captures =
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[CaptureParam]): Unit =
+    requireSubregionWithout(lower, upper, filter.toSet)
+
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: Set[CaptureParam]): Unit =
+    if (lower == CaptureSet()) return;
+    if (lower == upper) return;
+    (lower, upper) match {
+      case (CaptureSet(lows), CaptureSet(ups)) =>
+        val notAllowed = (ups ++ filter) -- lows
+        if (notAllowed.nonEmpty) abort(s"The following captures are not allowed: ${notAllowed}")
+      case (x: CaptUnificationVar, y: CaptUnificationVar) =>
+        constraints.connect(x, y, filter)
+      case (x: CaptUnificationVar, CaptureSet(cs)) =>
+        constraints.requireUpper(cs ++ filter, x)
+      case (CaptureSet(cs), x: CaptUnificationVar) =>
+        constraints.requireLower(cs -- filter, x)
+    }
+
+  def without(caps: CaptUnificationVar, others: List[CaptureParam]): Captures =
     if (others.isEmpty) caps else caps match {
-      case CaptureSet(cs) => CaptureSet(cs -- others.toSet)
       case x: CaptUnificationVar =>
         val y = freshCaptVar(CaptUnificationVar.Subtraction(others, x))
-        constraints.connect(x, y, others.toSet)
+        constraints.connect(y, x, others.toSet)
         y
     }
 
@@ -221,10 +225,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   }
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean = constraints.isEqual(x, y)
 
-  def isSubset(xs: Captures, ys: Captures): Boolean = ???
-
-  def unify(c1: Captures, c2: Captures): Unit =
-    println(s"Unifiying ${c1} and ${c2}")
+  def isSubset(xs: Captures, ys: Captures): Boolean = constraints.isSubset(xs, ys)
 
   def abort(msg: String) = C.abort(msg)
 
@@ -262,7 +263,7 @@ trait TypeInstantiator { self: Unification =>
     println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
     constraints.requireLower(concreteBounds.toSet, newVar)
-    variableBounds.foreach { b => constraints.connect(b, newVar) }
+    variableBounds.foreach { b => constraints.connect(b, newVar, Set.empty) }
     newVar
 
   // shadowing

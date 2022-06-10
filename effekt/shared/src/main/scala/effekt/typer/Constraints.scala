@@ -139,6 +139,26 @@ class Constraints(
   def isEqual(x: UnificationVar, y: UnificationVar): Boolean =
     getNode(x) == getNode(y)
 
+  def isSubset(lower: Captures, upper: Captures): Boolean =
+    def knownUpper(node: CNode) = captSubstitution.get(node).map(_.captures).orElse { node.upper }
+    def knownLower(node: CNode) = captSubstitution.get(node).map(_.captures).orElse { node.lower }
+
+    (lower, upper) match {
+      // (1) they are concrete, we can compare them
+      case (CaptureSet(xs), CaptureSet(ys)) => xs.subsetOf(ys)
+      // (2) lhs is a unification variable, we need to check whether its upper bound is smaller than ys
+      case (x: CaptUnificationVar, CaptureSet(ys)) => knownUpper(x).exists(_ subsetOf ys)
+      // (2) rhs is a unification variable, we need to check whether xs is smaller than its lower bound
+      case (CaptureSet(xs), y: CaptUnificationVar) => knownLower(y).exists(xs subsetOf _)
+      // (3) both are unification variables
+      case (x: CaptUnificationVar, y: CaptUnificationVar) =>
+        // either the bounds imply subcapturing ...
+        val boundsImply = knownUpper(x).flatMap(xs => knownLower(y).map(ys => xs subsetOf ys)).getOrElse(false)
+        // or the two are known to be related
+        val areBounded = x.upperNodes.get(y).exists(f => f.isEmpty)
+        return boundsImply || areBounded
+    }
+
   /**
    * Retreive the potentially known type of [[x]]
    */
