@@ -225,5 +225,56 @@ class ConstraintTests extends AnyFunSpec {
       // should not affect upper bounds
       assert(B.upper == None)
     }
+    it ("filtering from above should admit *more* capabilities, not less") {
+      val graph = freshGraph()
+      import graph.*
+
+      // before:
+      //   {y} A {*}
+      //   {} B {x}
+      requireUpper(Set(x), B)
+      requireLower(Set(y), A)
+
+      // connecting:
+      //   ({y} A {*}) <[y]< ({} B {x})
+      connect(A, B, Set(y))
+
+      // should result in:
+      //   ({y} A {x, y}) <[y]< ({} B {x})
+
+      // Bounds are unchanged
+      assert(A.lower == Some(Set(y)))
+      assert(A.upper == Some(Set(x, y)))
+      assert(B.lower == Some(Set()))
+      assert(B.upper == Some(Set(x)))
+    }
+    it ("filtering from above transitively should admit *more* capabilities, not less") {
+      val graph = freshGraph()
+      import graph.*
+
+      // before:
+      //   {y,z} A {*}
+      //   {}    B {*}
+      //   {}    C {x}
+      requireUpper(Set(x), C)
+      requireLower(Set(y, z), A)
+
+      connect(A, B, Set(y))
+      connect(B, C, Set(z))
+
+      // lower bound of A stays unchanged
+      assert(A.lower == Some(Set(y, z)))
+      // z flows from A to B (but y is filtered)
+      assert(B.lower == Some(Set(z)))
+      // everything is filtered before arriving at C
+      assert(C.lower == Some(Set()))
+
+      // upper bound of C is unchanged
+      assert(C.upper == Some(Set(x)))
+      // upper bound x on C flows to B, but also adds z
+      assert(B.upper == Some(Set(x, z)))
+      // all three flow as upper bound to A
+      assert(A.upper == Some(Set(x, y, z)))
+    }
   }
 }

@@ -318,9 +318,9 @@ class Constraints(
     private def addUpper(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
 
-      // compute the intersection of filters
+      // compute the union of filters
       val oldFilter = oldData.lowerNodes.get(other)
-      val newFilter = oldFilter.map { _ intersect exclude }.getOrElse { exclude }
+      val newFilter = oldFilter.map { _ union exclude }.getOrElse { exclude }
       captureConstraints = captureConstraints.updated(x, oldData.copy(upperNodes = oldData.upperNodes + (other -> newFilter)))
   }
 
@@ -375,9 +375,11 @@ class Constraints(
 
         val upperFilter = x.upperNodes(y)
         val lowerFilter = y.lowerNodes(x)
+        println(upperFilter)
+        println(lowerFilter)
 
         x.lower foreach { bounds => requireLower(bounds -- lowerFilter, y) }
-        y.upper foreach { bounds => requireUpper(bounds -- upperFilter, x) }
+        y.upper foreach { bounds => requireUpper(bounds ++ upperFilter, x) }
     }
 
   def requireLower(bounds: Set[CaptureParam], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
@@ -403,11 +405,6 @@ class Constraints(
 
     x.upperNodes.foreach { case (y, filter) => propagateLower(bounds -- filter, y) }
 
-    x.role match {
-      case CaptUnificationVar.Subtraction(handled, underlying) =>
-        propagateLower(bounds -- handled.toSet, underlying)
-      case _ => ()
-    }
 
   private def propagateUpper(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
@@ -426,14 +423,7 @@ class Constraints(
       mergeUpper(existing, bounds)
     } getOrElse bounds
 
-    x.lowerNodes.foreach { case (y, filter) => propagateUpper(bounds -- filter, y) }
-
-    x.role match {
-      // Does this make sense in an upper bound???
-      case CaptUnificationVar.Subtraction(handled, underlying) =>
-        propagateUpper(bounds -- handled.toSet, underlying)
-      case _ => ()
-    }
+    x.lowerNodes.foreach { case (y, filter) => propagateUpper(bounds ++ filter, y) }
 
   //</editor-fold>
 
