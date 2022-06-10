@@ -245,8 +245,15 @@ trait TypeUnifier extends TypeComparer {
  * Merges two types by traversing them structurally.
  *
  * Is side effecting in that it influences the constraint graph.
+ *
+ * effect types need to be concrete to be mergable.
  */
 trait TypeMerger extends TypeUnifier {
+
+  /**
+   * Merging captures requires introducing new unification variables and is thus deferred to [[Unification.mergeCaptures]]
+   */
+  def mergeCaptures(oldBound: Captures, newBound: Captures, polarity: Polarity): Captures
 
   // computes union or intersection, based on polarity
   def mergeValueTypes(oldBound: ValueType, newBound: ValueType, polarity: Polarity): ValueType =
@@ -284,9 +291,51 @@ trait TypeMerger extends TypeUnifier {
         abort(s"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
     }
 
-  def mergeBlockTypes(oldBound: BlockType, newBound: BlockType, polarity: Polarity): BlockType = ???
+  def mergeBlockTypes(oldBound: BlockType, newBound: BlockType, polarity: Polarity): BlockType = (oldBound, newBound) match {
+    case (t: FunctionType, s: FunctionType) => mergeFunctionTypes(t, s, polarity)
+    case (t: InterfaceType, s: InterfaceType) => mergeInterfaceTypes(t, s, polarity)
+    case (t, s) => abort(s"The two types ${t} and ${s} are not compatible")
+  }
 
-  def mergeCaptures(oldBound: Captures, newBound: Captures, polarity: Polarity): Captures = ???
+  def mergeInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType, polarity: Polarity): InterfaceType = (tpe1, tpe2) match {
+    case (t1: Interface, t2: Interface) =>
+      if (t1 != t2) abort(s"The two types ${t1} and ${t2} are not compatible")
+      else t1
+    // for now block type constructors are invariant
+    case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
+      unifyInterfaceTypes(c1, c2)(using Invariant)
+      val mergedArgs = (targs1 zip targs2) map { case (t1, t2) => mergeValueTypes(t1, t2, Invariant) }
+      BlockTypeApp(c1, mergedArgs)
+    case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
+  }
+
+  def mergeFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, polarity: Polarity): FunctionType = (tpe1, tpe2) match {
+    case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
+
+      if (tparams1.size != tparams2.size)
+        abort(s"Type parameter count does not match $f1 vs. $f2")
+
+      if (vparams1.size != vparams2.size)
+        abort(s"Value parameter count does not match $f1 vs. $f2")
+
+      if (bparams1.size != bparams2.size)
+        abort(s"Block parameter count does not match $f1 vs. $f2")
+
+      if (cparams1.size != cparams2.size)
+        abort(s"Capture parameter count does not match $f1 vs. $f2")
+
+      val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+
+      val (substVparams2, substBparams2, substRet2) = (vparams2 map subst.substitute, bparams2 map subst.substitute, subst.substitute(ret2))
+
+      val mergedVps = (vparams1 zip substVparams2) map { case (t1, t2) => mergeValueTypes(t1, t2, polarity.flip) }
+      val mergedBps = (bparams1 zip substBparams2) map { case (t1, t2) => mergeBlockTypes(t1, t2, polarity.flip) }
+      val mergedRet = mergeValueTypes(ret1, substRet2, polarity)
+
+      // We compare effects to be equal, since we do not have subtyping on effects
+      unifyEffects(eff1, eff2)(using Invariant)
+      FunctionType(tparams1, cparams1, mergedVps, mergedBps, mergedRet, eff1)
+  }
 
   /**
    * Compute the join of two types

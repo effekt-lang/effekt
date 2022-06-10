@@ -243,6 +243,37 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def requireUpperBound(x: UnificationVar, tpe: ValueType) =
     given Polarity = Invariant
     constraints.learn(x, tpe)(unifyValueTypes)
+
+  def mergeCaptures(oldBound: Captures, newBound: Captures, polarity: Polarity): Captures = (oldBound, newBound, polarity) match {
+    case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
+    case (CaptureSet(xs), CaptureSet(ys), Contravariant) => CaptureSet(xs union ys)
+    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(s"Capture set ${xs} is not equal to ${ys}")
+    case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), p)
+    case (CaptureSet(xs), y: CaptUnificationVar, p) => mergeCaptures(xs.toList, List(y), p)
+    case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), p)
+  }
+
+   /**
+   * Should create a fresh unification variable bounded by the given captures
+   */
+  def mergeCaptures(concreteBounds: List[CaptureParam], variableBounds: List[CaptUnificationVar], polarity: Polarity): CaptUnificationVar =
+    println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
+    val newVar = freshCaptVar(CaptUnificationVar.Substitution())
+    polarity match {
+      case Covariant =>
+        constraints.requireLower(concreteBounds.toSet, newVar)
+        variableBounds.foreach { b => constraints.connect(b, newVar, Set.empty) }
+      case Contravariant =>
+        constraints.requireUpper(concreteBounds.toSet, newVar)
+        variableBounds.foreach { b => constraints.connect(newVar, b, Set.empty) }
+      case Invariant =>
+        constraints.requireLower(concreteBounds.toSet, newVar)
+        constraints.requireUpper(concreteBounds.toSet, newVar)
+        variableBounds.foreach { b => constraints.connect(newVar, b, Set.empty) }
+        variableBounds.foreach { b => constraints.connect(b, newVar, Set.empty) }
+    }
+
+    newVar
 }
 
 
@@ -256,16 +287,6 @@ trait TypeInstantiator { self: Unification =>
 
   private def captureParams(using Instantiation) = captureInstantiations.keys.toSet
 
-  /**
-   * Should create a fresh unification variable bounded by the given captures
-   */
-  def mergeCaptures(concreteBounds: List[CaptureParam], variableBounds: List[CaptUnificationVar]): CaptUnificationVar =
-    println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
-    val newVar = freshCaptVar(CaptUnificationVar.Substitution())
-    constraints.requireLower(concreteBounds.toSet, newVar)
-    variableBounds.foreach { b => constraints.connect(b, newVar, Set.empty) }
-    newVar
-
   // shadowing
   private def without(tps: List[TypeVar], cps: List[CaptureParam])(using Instantiation): Instantiation =
     Instantiation(
@@ -273,23 +294,31 @@ trait TypeInstantiator { self: Unification =>
       captureInstantiations.filterNot { case (t, _) => cps.contains(t) }
     )
 
-  // TODO we DO need to distinguish between substituting unification variables for unification variables
-  // and substituting concrete captures in unification variables... These are two fundamentally different operations.
-  def instantiate(c: Captures)(using Instantiation): Captures = c match {
-    case CaptureSet(cs) =>
-      val contained = captureParams intersect cs // Should not contain CaptureOf
-      if (contained.isEmpty) return c;
+  def instantiate(c: Captures)(using Instantiation): Captures =
+    val concreteCapture =
+      c match {
+        case CaptureSet(cs) => cs
 
-      val others = (cs -- captureParams).toList
+        // Right now, we can only substitute into concrete capture sets, not unification variables
+        // since we only have negation nodes, but no substitution nodes.
+        //
+        // we *could* use the fact that some variables cannot occur lexically in the variable (depending on the scope
+        // it was introduced in).
+        //
+        // right now, we force solving to continue, instead of giving up.
+        case x: CaptUnificationVar =>
+          val capt = constraints.forceSolving(x)
+          println(s"Force solving ${x} resulted in ${capt}")
+          capt.captures
+    }
+    val contained = captureParams intersect concreteCapture // Should not contain CaptureOf
+    if (contained.isEmpty) return c;
 
-      // TODO do we need to respect the polarity here? Maybe wellformedness should exclude captures in negative position?
-      mergeCaptures(others, contained.toList.map { p => captureInstantiations(p) })
+    val remaining = (concreteCapture -- captureParams).toList
 
-    case _ =>
-      // TODO we can improve this by solving and substituting unification variables as early as possible.
-      //   For instance, a unification variable can be solved if itself and all its bounds are out of scope.
-      abort("Effect polymorphic first-class functions need to be annotated, at the moment.")
-  }
+    // TODO do we need to respect the polarity here? Maybe wellformedness should exclude captures in negative position?
+    mergeCaptures(remaining, contained.toList.map { p => captureInstantiations(p) }, Covariant)
+
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {
     case x: TypeVar =>

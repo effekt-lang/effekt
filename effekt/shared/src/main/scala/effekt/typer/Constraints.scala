@@ -220,13 +220,20 @@ class Constraints(
     pendingInactive foreach { n =>
       if (isInactive(n)) toRemove = toRemove + n
     }
+    // nothing to do
+    if (toRemove.isEmpty) return;
 
-    if (toRemove.isEmpty) return; // nothing to do
+    // (2) solve variables that can be removed
+    solve(toRemove)
 
-    // (2) Remove them from pending
+    // (3) update the substitution
+    updateSubstitution()
+
+  def solve(toRemove: Set[CNode]): Unit =
+    // (1) Remove them from pending
     pendingInactive = pendingInactive -- toRemove
 
-    // (3) Solve them
+    // (2) Solve them
     val solved = toRemove.toList.map { n =>
       // bounds are consistent, we simply choose the lower bound as it is always concrete.
       val bounds = n.lower.getOrElse(Set.empty)
@@ -234,14 +241,18 @@ class Constraints(
     }.toMap
     captSubstitution = captSubstitution ++ solved
 
-    // (4) remove them from the constraint set
+    // (3) remove them from the constraint set
     captureConstraints = captureConstraints.collect {
       case (n, CaptureNodeData(lower, upper, lowerNodes, upperNodes)) if !(toRemove.contains(n)) =>
         n -> CaptureNodeData(lower, upper, lowerNodes -- toRemove, upperNodes -- toRemove)
     }
 
-    // (5) update the substitution
-    updateSubstitution()
+  def forceSolving(node: CNode): CaptureSet =
+    captSubstitution.getOrElse(node, {
+      solve(Set(node))
+      captSubstitution(node)
+    })
+
 
   override def clone(): Constraints = new Constraints(typeSubstitution, classes, captureConstraints, captSubstitution, pendingInactive)
 
