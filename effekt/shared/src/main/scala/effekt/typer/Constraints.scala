@@ -240,12 +240,18 @@ class Constraints(
     println("\n--- Capture Constraints ---")
     captureConstraints foreach {
       case (x, CaptureNodeData(lower, upper, lowerNodes, upperNodes)) =>
-        val prettyLower = lower.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("{}").padTo(10, ' ')
-        val prettyUpper = upper.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("*").padTo(10, ' ')
-        val prettyLowerNodes = lowerNodes.mkString(", ").padTo(10, ' ')
-        val prettyUpperNodes = upperNodes.mkString(", ").padTo(10, ' ')
-        val varName = x.toString.padTo(12, ' ')
-        println(s"${prettyLowerNodes} | ${prettyLower} <: $x <: ${prettyUpper} | ${prettyUpperNodes}")
+        def printFilterNode(filtered: (CNode, Filter)): String = filtered match {
+          case (n, filter) if filter.isEmpty => n.toString
+          case (n, filter) => s"${n.toString}[${filter.mkString(", ")}]"
+        }
+
+        val colWidth = 25
+        val prettyLower = lower.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("{}").padTo(colWidth, ' ')
+        val prettyUpper = upper.map { cs => "{" + cs.mkString(",") + "}" }.getOrElse("*").padTo(colWidth, ' ')
+        val prettyLowerNodes = lowerNodes.map(printFilterNode).mkString(", ").padTo(colWidth, ' ')
+        val prettyUpperNodes = upperNodes.map(printFilterNode).mkString(", ").padTo(colWidth, ' ')
+        val varName = x.toString.padTo(15, ' ')
+        println(s"${prettyLowerNodes} | ${prettyLower} <: $varName <: ${prettyUpper} | ${prettyUpperNodes}")
     }
     println("------------------\n")
 
@@ -262,10 +268,10 @@ class Constraints(
    * Accessing data on a node in the constraint graph.
    */
   extension (x: CNode) {
-    private def lower: Option[Set[CaptureParam]] = getData(x).lower
-    private def upper: Option[Set[CaptureParam]] = getData(x).upper
-    private def lowerNodes: Map[CNode, Filter] = getData(x).lowerNodes
-    private def upperNodes: Map[CNode, Filter] = getData(x).upperNodes
+    private [typer] def lower: Option[Set[CaptureParam]] = getData(x).lower
+    private [typer] def upper: Option[Set[CaptureParam]] = getData(x).upper
+    private [typer] def lowerNodes: Map[CNode, Filter] = getData(x).lowerNodes
+    private [typer] def upperNodes: Map[CNode, Filter] = getData(x).upperNodes
     private def lower_=(bounds: Set[CaptureParam]): Unit =
       captureConstraints = captureConstraints.updated(x, getData(x).copy(lower = Some(bounds)))
     private def upper_=(bounds: Set[CaptureParam]): Unit =
@@ -274,16 +280,16 @@ class Constraints(
       val oldData = getData(x)
 
       // compute the intersection of filters
-      val oldFilter = oldData.lowerNodes.getOrElse(other, Set.empty)
-      val newFilter = oldFilter intersect exclude
+      val oldFilter = oldData.lowerNodes.get(other)
+      val newFilter = oldFilter.map { _ intersect exclude }.getOrElse { exclude }
 
       captureConstraints = captureConstraints.updated(x, oldData.copy(lowerNodes = oldData.lowerNodes + (other -> newFilter)))
     private def addUpper(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
 
       // compute the intersection of filters
-      val oldFilter = oldData.lowerNodes.getOrElse(other, Set.empty)
-      val newFilter = oldFilter intersect exclude
+      val oldFilter = oldData.lowerNodes.get(other)
+      val newFilter = oldFilter.map { _ intersect exclude }.getOrElse { exclude }
       captureConstraints = captureConstraints.updated(x, oldData.copy(upperNodes = oldData.upperNodes + (other -> newFilter)))
   }
 
@@ -328,12 +334,13 @@ class Constraints(
 
     // we already solved one of them? Or both?
     (captSubstitution.get(x), captSubstitution.get(y)) match {
-      case (Some(CaptureSet(xs)), Some(CaptureSet(ys))) => checkConsistency(xs, ys)
-      case (Some(CaptureSet(xs)), None) => requireLower(xs, y)
-      case (None, Some(CaptureSet(ys))) => requireUpper(ys, x)
+      case (Some(CaptureSet(xs)), Some(CaptureSet(ys))) => checkConsistency(xs, ys ++ exclude)
+      case (Some(CaptureSet(xs)), None) => requireLower(xs -- exclude, y)
+      case (None, Some(CaptureSet(ys))) => requireUpper(ys ++ exclude, x)
       case (None, None) =>
+        // compose the filters
         x.addUpper(y, exclude)
-        y.addLower(x, exclude) // do we need this here?
+        y.addLower(x, exclude)
 
         val upperFilter = x.upperNodes(y)
         val lowerFilter = y.lowerNodes(x)

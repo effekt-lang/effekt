@@ -74,6 +74,12 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def apply(e: Effect): Effect =
     substitution.substitute(e)
 
+  def apply(tpe: BlockType): BlockType =
+    substitution.substitute(dealias(tpe))
+
+  def apply(tpe: ValueType): ValueType =
+    substitution.substitute(dealias(tpe))
+
   // Lifecycle management
   // --------------------
   def backup(): UnificationState = UnificationState(scope, constraints.clone())
