@@ -4,7 +4,7 @@ package typer
 import effekt.symbols._
 
 
-case class SubstitutionException(x: CaptUnificationVar, subst: Map[CaptureParam, Captures]) extends Exception
+case class SubstitutionException(x: CaptUnificationVar, subst: Map[Capture, Captures]) extends Exception
 
 /**
  * Substitutions not only have unification variables as keys, since we also use the same mechanics to
@@ -25,7 +25,7 @@ case class Substitutions(
 
   def get(t: TypeVar) = values.get(t)
 
-  def get(c: CaptureParam): Option[CaptureParam] = captures.get(c) map {
+  def get(c: Capture): Option[Capture] = captures.get(c) map {
     case CaptureSet(cs) if cs.size == 1 => cs.head
     case other => sys error "Substitutions should map single CaptureParams to single CaptureParams, got ${other}"
   }
@@ -41,7 +41,7 @@ case class Substitutions(
   def ++(other: Substitutions): Substitutions = Substitutions(values ++ other.values, captures ++ other.captures)
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[CaptureParam]): Substitutions =
+  private def without(tps: List[TypeVar], cps: List[Capture]): Substitutions =
     Substitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       captures.filterNot { case (t, _) => cps.contains(t) }
@@ -52,7 +52,8 @@ case class Substitutions(
   def substitute(c: Captures): Captures = c match {
     case x: CaptUnificationVar => captures.getOrElse(x, x)
     case CaptureSet(cs) => CaptureSet(cs.map {
-      case x: CaptureParam => get(x).getOrElse(x)
+      case x: Capture =>
+        get(x).getOrElse(x)
     })
   }
 
@@ -147,7 +148,7 @@ case class BiSubstitutions(
   def ++(other: BiSubstitutions): BiSubstitutions = BiSubstitutions(values ++ other.values, captures ++ other.captures)
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[CaptureParam]): BiSubstitutions =
+  private def without(tps: List[TypeVar], cps: List[Capture]): BiSubstitutions =
     BiSubstitutions(
       values.filterNot { case (t, _) => tps.contains(t) },
       captures.filterNot { case (t, _) => cps.contains(t) }

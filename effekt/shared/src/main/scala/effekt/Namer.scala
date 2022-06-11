@@ -216,7 +216,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
 
-        val selfRegion = CaptureParam(Name.local("this"))
+        val selfRegion = LexicalRegion(Name.local("this"), f)
         // bind it to both the function name and "this"
         Context.bind(id.name, selfRegion)
         Context.bind("this", selfRegion)
@@ -292,8 +292,14 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.BlockStmt(block) =>
       Context scoped { resolveGeneric(block) }
 
-    case source.TryHandle(body, handlers) =>
+    case tree @ source.TryHandle(body, handlers) =>
       resolveAll(handlers)
+
+      val selfRegion = LexicalRegion(Name.local("this"), tree)
+      // bind it to both the function name and "this"
+      Context.bind("this", selfRegion)
+      Context.annotate(Annotations.SelfRegion, tree, selfRegion)
+
       Context scoped {
         // bind all annotated capabilities
         handlers.foreach { handler =>
@@ -342,7 +348,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case source.FunctionArg(tparams, vparams, bparams, stmt) =>
+    case f @ source.FunctionArg(tparams, vparams, bparams, stmt) =>
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -350,6 +356,10 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         Context.bindValues(vps)
         Context.bindBlocks(bps)
+
+        val selfRegion = LexicalRegion(Name.local("this"), f)
+        Context.bind("this", selfRegion)
+        Context.annotate(Annotations.SelfRegion, f, selfRegion)
 
         resolveGeneric(stmt)
       }
@@ -526,7 +536,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val (cps, blockTypes) = bparams.map {
         case (id, tpe) =>
           val name = id.map(Name.local).getOrElse(NoName)
-          (CaptureParam(name), tpe)
+          (CaptureParameter(name), tpe)
       }.unzip
       val bps = blockTypes.map(resolve)
 
@@ -627,9 +637,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     scope.define(id.name, s)
   }
 
-  private[namer] def bind(s: CaptureParam): Unit = bind(s.name.name, s)
+  private[namer] def bind(s: Capture): Unit = bind(s.name.name, s)
 
-  private[namer] def bind(name: String, s: CaptureParam): Unit = scope.define(name, s)
+  private[namer] def bind(name: String, s: Capture): Unit = scope.define(name, s)
 
   private[namer] def bind(s: TermSymbol): Unit = scope.define(s.name.name, s)
 
@@ -696,7 +706,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     sym
   }
 
-  private[namer] def resolveCapture(id: Id): CaptureParam = at(id) {
+  private[namer] def resolveCapture(id: Id): Capture = at(id) {
     val sym = scope.lookupCapture(id.name)
     assignSymbol(id, sym)
     sym

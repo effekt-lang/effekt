@@ -122,7 +122,7 @@ trait TypeUnifier extends TypeComparer {
     case Contravariant => requireSubregion(c2, c1)
     case Invariant => requireSubregion(c1, c2); requireSubregion(c2, c1)
   }
-  def unify(c1: CaptureParam, c2: CaptureParam)(using Polarity): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
+  def unify(c1: Capture, c2: Capture)(using Polarity): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)))
 
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType)(using p: Polarity): Unit = (tpe1, tpe2, p) match {
     case (t, s, _) if t == s => ()

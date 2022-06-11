@@ -360,7 +360,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val resumeType = if (declaration.isBidirectional) {
                   // resume { e }
                   val other = declaration.otherEffects
-                  val captureParam = CaptureParam(Name.local("resumeBlock"))
+                  val captureParam = CaptureParameter(Name.local("resumeBlock"))
                   FunctionType(Nil, List(captureParam), Nil, List(FunctionType(Nil, Nil, Nil, Nil, tpe, other)), ret, Effects.Pure)
                 } else {
                   // resume(v)
@@ -757,12 +757,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
           tpe
         }
 
+        val selfRegion = Context.getSelfRegion(arg)
+
         // like with non-annotated function definitions, we need to use a separate unification variable to
         // subtract bound (but inferred) capabilities later.
         val inferredCapture = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
         val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(arg) {
           given Captures = inferredCapture
-          Context in { checkStmt(body, None) }
+          Context.withRegion(selfRegion) { Context in { checkStmt(body, None) } }
         }
         Context.wellscoped(effs) // check effects are in scope
 
@@ -773,7 +775,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bindCapabilities(arg, capabilities)
 
         // Like with functions, bound parameters and capabilities are not closed over
-        Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture))
+        Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion))
 
         Result(funType, Pure)
       }
@@ -848,14 +850,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val bound: ConcreteEffects = adjustedHandled
       // TODO share code with FunDef and BindAll
       val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+      val selfRegion = Context.getSelfRegion(arg)
 
       val bodyRegion = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
 
       val Result(bodyType, bodyEffs) = Context.bindingCapabilities(decl, capabilities) {
          given Captures = bodyRegion
-         body checkAgainst adjustedReturn
+         Context.withRegion(selfRegion) { body checkAgainst adjustedReturn }
       }
-      Context.requireSubregionWithout(bodyRegion, currentCapture, captureParams ++ capabilities.map(_.capture))
+      Context.requireSubregionWithout(bodyRegion, currentCapture, captureParams ++ capabilities.map(_.capture) ++ List(selfRegion))
+
+      println(s"Current region is ${currentCapture}")
 
       val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
 
@@ -1260,7 +1265,7 @@ trait TyperOps extends ContextOps { self: Context =>
    *
    * None on the toplevel
    */
-  private var lexicalRegion: Option[CaptureParam] = None
+  private var lexicalRegion: Option[Capture] = None
 
   /**
    * The effects, whose declarations are _lexically_ in scope
@@ -1376,7 +1381,7 @@ trait TyperOps extends ContextOps { self: Context =>
       }
     }
 
-  private[typer] def getSelfRegion(tree: source.Tree): CaptureParam =
+  private[typer] def getSelfRegion(tree: source.Tree): Capture =
     annotation(Annotations.SelfRegion, tree)
 
   private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
@@ -1508,8 +1513,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
   // Lexical Regions
   // ===============
-  def region: CaptureParam = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
-  def withRegion[T](c: CaptureParam)(prog: => T): T = {
+  def region: Capture = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
+  def withRegion[T](c: Capture)(prog: => T): T = {
     val before = lexicalRegion
     lexicalRegion = Some(c)
     val res = prog

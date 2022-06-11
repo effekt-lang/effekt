@@ -25,16 +25,16 @@ class ConstraintTests extends AnyFunSpec {
   lazy val C = freshCaptVar("C")
   lazy val D = freshCaptVar("D")
 
-  lazy val x = CaptureParam(Name.local("x"))
-  lazy val y = CaptureParam(Name.local("y"))
-  lazy val z = CaptureParam(Name.local("z"))
+  lazy val x = CaptureParameter(Name.local("x"))
+  lazy val y = CaptureParameter(Name.local("y"))
+  lazy val z = CaptureParameter(Name.local("z"))
 
 
   def freshTypeVar(name: String) =
     scope.fresh(UnificationVar.TypeVariableInstantiation(TypeVar(Name.local(name)), NoSource))
 
   def freshCaptVar(name: String) =
-    scope.freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(Name.local(name)), NoSource))
+    scope.freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParameter(Name.local(name)), NoSource))
 
   def freshGraph() = {
     messages = new MessageBuffer

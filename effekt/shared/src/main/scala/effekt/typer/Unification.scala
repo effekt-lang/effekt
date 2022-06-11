@@ -144,10 +144,10 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
   def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
 
-  def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[CaptureParam]): Unit =
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture]): Unit =
     requireSubregionWithout(lower, upper, filter.toSet)
 
-  def requireSubregionWithout(lower: Captures, upper: Captures, filter: Set[CaptureParam]): Unit =
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: Set[Capture]): Unit =
     if (lower == CaptureSet()) return;
     if (lower == upper) return;
     (lower, upper) match {
@@ -162,7 +162,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
         constraints.requireLower(cs -- filter, x)
     }
 
-  def without(caps: CaptUnificationVar, others: List[CaptureParam]): Captures =
+  def without(caps: CaptUnificationVar, others: List[Capture]): Captures =
     if (others.isEmpty) caps else caps match {
       case x: CaptUnificationVar =>
         val y = freshCaptVar(CaptUnificationVar.Subtraction(others, x))
@@ -258,7 +258,7 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
    /**
    * Should create a fresh unification variable bounded by the given captures
    */
-  def mergeCaptures(concreteBounds: List[CaptureParam], variableBounds: List[CaptUnificationVar], polarity: Polarity): CaptUnificationVar =
+  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], polarity: Polarity): CaptUnificationVar =
     println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
     polarity match {
@@ -280,17 +280,17 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
 
 
-case class Instantiation(values: Map[TypeVar, ValueType], captures: Map[CaptureParam, CaptUnificationVar])
+case class Instantiation(values: Map[TypeVar, ValueType], captures: Map[Capture, CaptUnificationVar])
 
 trait TypeInstantiator { self: Unification =>
 
   private def valueInstantiations(using i: Instantiation): Map[TypeVar, ValueType] = i.values
-  private def captureInstantiations(using i: Instantiation): Map[CaptureParam, CaptUnificationVar] = i.captures
+  private def captureInstantiations(using i: Instantiation): Map[Capture, CaptUnificationVar] = i.captures
 
   private def captureParams(using Instantiation) = captureInstantiations.keys.toSet
 
   // shadowing
-  private def without(tps: List[TypeVar], cps: List[CaptureParam])(using Instantiation): Instantiation =
+  private def without(tps: List[TypeVar], cps: List[Capture])(using Instantiation): Instantiation =
     Instantiation(
       valueInstantiations.filterNot { case (t, _) => tps.contains(t) },
       captureInstantiations.filterNot { case (t, _) => cps.contains(t) }

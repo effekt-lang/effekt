@@ -85,7 +85,7 @@ package object symbols {
 
   sealed trait TrackedParam extends Param {
     // every block parameter gives rise to a capture parameter
-    lazy val capture: CaptureParam = CaptureParam(name)
+    lazy val capture: Capture = CaptureParameter(name)
   }
   case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
   //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
@@ -266,7 +266,7 @@ package object symbols {
 
   sealed trait BlockType extends Type
 
-  case class FunctionType(tparams: List[TypeVar], cparams: List[CaptureParam], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {
+  case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {
     // TODO move rendering
     //    override def toString: String = {
     //      val ps = params.map {
@@ -377,18 +377,18 @@ package object symbols {
 
   sealed trait Captures
 
-  case class CaptureSet(captures: Set[CaptureParam]) extends Captures {
+  case class CaptureSet(captures: Set[Capture]) extends Captures {
     override def toString = s"{${captures.mkString(", ")}}"
 
     // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
     def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
     def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
-    def +(c: CaptureParam): CaptureSet = CaptureSet(captures + c)
-    def flatMap(f: CaptureParam => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
+    def +(c: Capture): CaptureSet = CaptureSet(captures + c)
+    def flatMap(f: Capture => CaptureSet): CaptureSet = CaptureSet(captures.flatMap(x => f(x).captures))
   }
   object CaptureSet {
-    def apply(captures: CaptureParam*): CaptureSet = CaptureSet(captures.toSet)
-    def apply(captures: List[CaptureParam]): CaptureSet = CaptureSet(captures.toSet)
+    def apply(captures: Capture*): CaptureSet = CaptureSet(captures.toSet)
+    def apply(captures: List[Capture]): CaptureSet = CaptureSet(captures.toSet)
     def empty = CaptureSet()
   }
 
@@ -400,8 +400,14 @@ package object symbols {
   /**
    * "Tracked" capture parameters. Like [[TypeVar]] used to abstract
    * over capture. Also see [[BlockParam.capture]].
+   *
+   * Can be either
+   * - [[LexicalRegion]] to model self regions of functions
    */
-  case class CaptureParam(name: Name) extends TypeSymbol, CaptVar
+  trait Capture extends TypeSymbol, CaptVar
+  case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+  case class CaptureParameter(name: Name) extends Capture
+
 
   case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar, TypeSymbol {
     val name = Name.local("?C")
@@ -416,14 +422,14 @@ package object symbols {
   }
   object CaptUnificationVar {
     sealed trait Role
-    case class VariableInstantiation(underlying: CaptureParam, call: source.Tree) extends Role
+    case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
     case class HandlerRegion(handler: source.TryHandle) extends Role
     case class FunctionRegion(fun: source.FunDef) extends Role
     case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role
     case class InferredBox(box: source.Box) extends Role
     case class InferredUnbox(unbox: source.Unbox) extends Role
     // underlying should be a UnificationVar
-    case class Subtraction(handled: List[CaptureParam], underlying: CaptUnificationVar) extends Role
+    case class Subtraction(handled: List[Capture], underlying: CaptUnificationVar) extends Role
     case class Substitution() extends Role
   }
 

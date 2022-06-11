@@ -15,14 +15,14 @@ type CNode = CaptUnificationVar
 
 // non present filter stands for "everything is passed through"
 private[typer]
-type Filter = Set[CaptureParam]
+type Filter = Set[Capture]
 
 private[typer]
 case class CaptureNodeData(
   // non present bounds represent bottom (the empty set)
-  lower: Option[Set[CaptureParam]],
+  lower: Option[Set[Capture]],
   // non present bounds represent top (the universal set)
-  upper: Option[Set[CaptureParam]],
+  upper: Option[Set[Capture]],
   lowerNodes: Map[CNode, Filter],
   upperNodes: Map[CNode, Filter]
 )
@@ -66,7 +66,7 @@ type CaptureConstraints = Map[CNode, CaptureNodeData]
  *
  * Such nodes in the graph are represented by instances of [[CaptureNodeData]].
  * Lower and upper bounds ([[CaptureNodeData.lower]], and [[CaptureNodeData.upper]]) on a
- * node are always fully known sets of type [[CaptureParam]].
+ * node are always fully known sets of type [[Capture]].
  *
  * The arrows in the picture above indicate the subcapturing relationship.
  * They are in fact navigatable in both directions, since new _upper_ bounds
@@ -304,13 +304,13 @@ class Constraints(
    * Accessing data on a node in the constraint graph.
    */
   extension (x: CNode) {
-    private [typer] def lower: Option[Set[CaptureParam]] = getData(x).lower
-    private [typer] def upper: Option[Set[CaptureParam]] = getData(x).upper
+    private [typer] def lower: Option[Set[Capture]] = getData(x).lower
+    private [typer] def upper: Option[Set[Capture]] = getData(x).upper
     private [typer] def lowerNodes: Map[CNode, Filter] = getData(x).lowerNodes
     private [typer] def upperNodes: Map[CNode, Filter] = getData(x).upperNodes
-    private def lower_=(bounds: Set[CaptureParam]): Unit =
+    private def lower_=(bounds: Set[Capture]): Unit =
       captureConstraints = captureConstraints.updated(x, getData(x).copy(lower = Some(bounds)))
-    private def upper_=(bounds: Set[CaptureParam]): Unit =
+    private def upper_=(bounds: Set[Capture]): Unit =
       captureConstraints = captureConstraints.updated(x, getData(x).copy(upper = Some(bounds)))
     private def addLower(other: CNode, exclude: Filter): Unit =
       val oldData = getData(x)
@@ -343,29 +343,32 @@ class Constraints(
     return isInactiveItself && areBoundsInactive
 
 
-  private def checkConsistency(lower: Set[CaptureParam], upper: Set[CaptureParam]): Unit =
+  private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =
     val diff = lower -- upper
+    println(s"Checking consistency ${lower} <: ${upper}")
     if (diff.nonEmpty) { C.abort(s"Not allowed ${diff}") }
 
-  private def checkEquality(xs: Set[CaptureParam], ys: Set[CaptureParam]): Unit =
+  private def checkEquality(xs: Set[Capture], ys: Set[Capture]): Unit =
     if (xs != ys) { C.abort(s"Capture set ${xs} is not equal to ${ys}") }
 
   // we do not necessarily need mergeLower, since we can take the free union
-  private def mergeLower(xs: Set[CaptureParam], ys: Set[CaptureParam]): Set[CaptureParam] =
+  private def mergeLower(xs: Set[Capture], ys: Set[Capture]): Set[Capture] =
     xs ++ ys
 
   /**
    * Since we do not implement subregioning at the moment, it is safe to simply compute the
    * intersection.
    */
-  private def mergeUpper(xs: Set[CaptureParam], ys: Set[CaptureParam]): Set[CaptureParam] =
+  private def mergeUpper(xs: Set[Capture], ys: Set[Capture]): Set[Capture] =
     xs intersect ys
 
 
   /**
    * Adds x as a lower bound to y, and y as a lower bound to x.
    */
-  def connect(x: CNode, y: CNode, exclude: Set[CaptureParam] = Set.empty): Unit =
+  def connect(x: CNode, y: CNode, exclude: Set[Capture] = Set.empty): Unit =
+    println(s"Connecting ${x} <[${exclude.mkString(", ")}]< ${y}")
+    dumpCaptureConstraints()
     if (x == y /* || (y.lowerNodes contains x) */) { return () }
 
     // we already solved one of them? Or both?
@@ -387,10 +390,10 @@ class Constraints(
         y.upper foreach { bounds => requireUpper(bounds ++ upperFilter, x) }
     }
 
-  def requireLower(bounds: Set[CaptureParam], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
-  def requireUpper(bounds: Set[CaptureParam], x: CNode): Unit = propagateUpper(bounds, x)(using Set.empty)
+  def requireLower(bounds: Set[Capture], x: CNode): Unit = propagateLower(bounds, x)(using Set.empty)
+  def requireUpper(bounds: Set[Capture], x: CNode): Unit = propagateUpper(bounds, x)(using Set.empty)
 
-  private def propagateLower(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
+  private def propagateLower(bounds: Set[Capture], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
 
     captSubstitution.get(x) foreach {
@@ -411,7 +414,7 @@ class Constraints(
     x.upperNodes.foreach { case (y, filter) => propagateLower(bounds -- filter, y) }
 
 
-  private def propagateUpper(bounds: Set[CaptureParam], x: CNode)(using seen: Set[CNode]): Unit =
+  private def propagateUpper(bounds: Set[Capture], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
 
     captSubstitution.get(x) foreach {
