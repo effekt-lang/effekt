@@ -38,7 +38,7 @@ case class LocalScope(
  * TODO
  *   - [ ] All incoming types need to be "normalized": substituted and dealiased.
  */
-class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, TypeMerger, TypeInstantiator { self =>
+class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeInstantiator { self =>
 
   // State of the unification engine
   // -------------------------------
@@ -205,29 +205,6 @@ class Unification(using C: ErrorReporter) extends TypeComparer, TypeUnifier, Typ
 
   // Implementation Details
   // ----------------------
-
-  // We should ALWAYS apply the substitutions, before calling any of the methods below.
-
-  def hasLowerBound(x: UnificationVar, y: ValueType): Boolean = y match {
-    case y: UnificationVar => constraints.isEqual(x, y)
-    // it is compatible with the upper bounds on x
-    case tpe =>
-      val knownType = constraints.typeOf(x).getOrElse {
-        abort(s"Cannot compare ${x} with ${y}, since type of ${x} is not known, yet.")
-      }
-      subValueType(tpe, knownType)
-  }
-  def hasUpperBound(x: UnificationVar, y: ValueType): Boolean = y match {
-    case y: UnificationVar => constraints.isEqual(x, y)
-    case tpe =>
-      val knownType = constraints.typeOf(x).getOrElse {
-        abort(s"Cannot compare ${x} with ${y}, since type of ${x} is not known, yet.")
-      }
-      subValueType(tpe, knownType)
-  }
-  def isEqual(x: UnificationVar, y: UnificationVar): Boolean = constraints.isEqual(x, y)
-
-  def isSubset(xs: Captures, ys: Captures): Boolean = constraints.isSubset(xs, ys)
 
   def abort(msg: String) = C.abort(msg)
 

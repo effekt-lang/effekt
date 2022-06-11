@@ -106,7 +106,7 @@ trait TypeComparer {
  *
  * TODO the comparer should build up a "deconstruction trace" that can be used for better type errors.
  */
-trait TypeUnifier extends TypeComparer {
+trait TypeUnifier {
   // "unification effects"
   def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
   def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
@@ -181,11 +181,10 @@ trait TypeUnifier extends TypeComparer {
     case _ => error(s"Mismatch between ${eff1} and ${eff2}")
   }
 
-  def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit = p match {
-    case Covariant => if (!subEffects(eff1, eff2)) error(s"${eff1} does not subsume ${eff2}")
-    case Contravariant => if (!subEffects(eff2, eff1)) error(s"${eff2} does not subsume ${eff1}")
-    case Invariant => if (!(subEffects(eff1, eff2) && subEffects(eff2, eff1))) error(s"${eff2} is not equal to ${eff1}")
-  }
+  // TODO we should check that eff1 and eff2 are concrete!
+  def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit =
+     def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit =
+       if (eff1.toList.toSet != eff2.toList.toSet) error(s"${eff2} is not equal to ${eff1}")
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(using p: Polarity): Unit = (tpe1, tpe2) match {
     case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
@@ -265,14 +264,9 @@ trait TypeMerger extends TypeUnifier {
       case (t, TTop, Contravariant) => t
 
       // reuses the type unifier implementation (will potentially register new constraints)
+      // TODO we need to create a fresh unification variable here!
       case (x: UnificationVar, tpe: ValueType, p) => unifyValueTypes(x, tpe)(using p); x
       case (tpe: ValueType, x: UnificationVar, p) => unifyValueTypes(tpe, x)(using p); x
-
-      // We can use one of them if it is more specific than the other.
-      case (tpe1, tpe2, Covariant) if subValueType(tpe1, tpe2) => tpe2
-      case (tpe1, tpe2, Contravariant) if subValueType(tpe1, tpe2) => tpe1
-      case (tpe1, tpe2, Covariant) if subValueType(tpe2, tpe1) => tpe1
-      case (tpe1, tpe2, Contravariant) if subValueType(tpe2, tpe1) => tpe2
 
       case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
         if (cons1 != cons2) abort(s"Cannot merge different constructors")
