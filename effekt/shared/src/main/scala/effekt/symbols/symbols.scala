@@ -285,14 +285,6 @@ package object symbols {
 
   case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType
 
-  object FunctionType {
-    def apply(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockParam], capabilities: List[BlockParam], result: ValueType, builtins: List[InterfaceType])(using Context): FunctionType =
-      val cparams = (bparams ++ capabilities).map { b => b.capture }
-      val bparamTypes = bparams.map { b => b.tpe }
-      val effects = capabilities.map { b => b.tpe.asEffect } ++ builtins
-      FunctionType(tparams, cparams, vparams, bparamTypes, result, Effects(effects))
-  }
-
   /** Effects */
 
   sealed trait InterfaceType extends BlockType {

@@ -663,11 +663,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
                 Context.wellscoped(effs) // check they are in scope
 
-                // TODO also add capture parameters for inferred capabilities
-                val funType = sym.toType(tpe, effs.toEffects)
-
                 // The order of effects annotated to the function is the canonical ordering for capabilities
                 val capabilities = effs.controlEffects.map { caps.apply }
+
+                // TODO also add capture parameters for inferred capabilities
+                val funType = makeFunctionType(sym.tparams, sym.vparams.map { p => p.tpe.get }, sym.bparams, capabilities, tpe, effs.builtinEffects)
 
                 Context.bindCapabilities(d, capabilities)
 
@@ -778,7 +778,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val capabilities = effs.controlEffects.map { caps.apply }
         Context.bindCapabilities(arg, capabilities)
 
-        val funType = FunctionType(tps, vps, bparams.map(_.symbol), capabilities, tpe, effs.builtinEffects)
+        val funType = makeFunctionType(tps, vps, bparams.map(_.symbol), capabilities, tpe, effs.builtinEffects)
 
         // Like with functions, bound parameters and capabilities are not closed over
         Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion))
@@ -866,9 +866,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
       Context.requireSubregionWithout(bodyRegion, currentCapture, captureParams ++ capabilities.map(_.capture) ++ List(selfRegion))
 
-      println(s"Current region is ${currentCapture}")
-
-      val tpe = FunctionType(typeParams, captureParams, valueTypes, blockTypes, bodyType, adjustedHandled)
+      val tpe = makeFunctionType(typeParams, valueTypes, bparams.map { _.symbol }, capabilities, bodyType, bound.builtinEffects)
 
       Result(tpe, bodyEffs -- bound)
   }
@@ -1221,17 +1219,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // invariant: only works if ret is defined!
     def toType: FunctionType =
       annotatedType.get
-    def toType(result: ValueType, effects: Effects): FunctionType =
-      FunctionType(fun.tparams, fun.bparams.map { _.capture }, fun.vparams.map { p => p.tpe.get }, fun.bparams.map { p => p.tpe }, result, effects)
     def annotatedType: Option[FunctionType] =
-      for { result <- fun.annotatedResult; effects <- fun.annotatedEffects } yield toType(result, effects)
-
-    def effects: Effects =
-      annotatedType
-        .map { tpe => tpe.effects }
-        .getOrElse { Context.lookupFunctionType(fun).effects }
+      for {
+        ret <- fun.annotatedResult;
+        effs <- fun.annotatedEffects
+        // currently the return type cannot refer to the annotated effects, so we can make up capabilities
+        caps = effs.controlEffects.distinct.map { eff => BlockParam(eff.name, eff) }
+      } yield makeFunctionType(fun.tparams, fun.vparams.map { p => p.tpe.get }, fun.bparams, caps, ret, effs.builtinEffects)
   }
 
+  def makeFunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockParam], capabilities: List[BlockParam], result: ValueType, builtins: List[InterfaceType])(using Context): FunctionType = {
+    val cparams = (bparams ++ capabilities).map { b => b.capture }
+    val bparamTypes = bparams.map { b => b.tpe }
+    val effects = capabilities.map { b => b.tpe.asEffect } ++ builtins
+    FunctionType(tparams, cparams, vparams, bparamTypes, result, Effects(effects))
+  }
   //</editor-fold>
 
 }

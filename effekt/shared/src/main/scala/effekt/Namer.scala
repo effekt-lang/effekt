@@ -513,13 +513,20 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(funTpe: source.FunctionType)(using Context): FunctionType = resolvingType(funTpe) {
+    /**
+     * TODO share code with [[typer.Typer.makeFunctionType]]
+     */
     case source.FunctionType(vparams, ret, effects) => Context scoped {
       // as soon as we have those kinds of params in source we need this
       val tparams = List.empty[source.Id]
       val bparams = List.empty[(Option[IdDef], source.BlockType)]
 
-      val vps = vparams.map(resolve)
       val tps = tparams.map(resolve)
+      val vps = vparams.map(resolve)
+
+      val effs = resolve(effects).toList.distinct
+      val caps = effs.controlEffects.map { eff => CaptureParameter(eff.name) }
+
       // TODO associate IdDef with capture param
       val (cps, blockTypes) = bparams.map {
         case (id, tpe) =>
@@ -528,11 +535,12 @@ object Namer extends Phase[Parsed, NameResolved] {
       }.unzip
       val bps = blockTypes.map(resolve)
 
-      cps foreach Context.bind
-      val tpe = resolve(ret)
-      val eff = resolve(effects)
+      (cps ++ caps) foreach Context.bind
 
-      FunctionType(tps, cps, vps, bps, tpe, eff)
+      val tpe = resolve(ret)
+
+
+      FunctionType(tps, cps ++ caps, vps, bps, tpe, Effects(effs.controlEffects ++ effs.builtinEffects))
     }
   }
 
