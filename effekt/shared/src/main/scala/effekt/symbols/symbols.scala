@@ -4,6 +4,8 @@ import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef, ExternFlag }
 import effekt.context.Context
 import kiama.util.Source
 
+import effekt.context.assertions.*
+
 /**
  * The symbol table contains things that can be pointed to:
  * - function definitions
@@ -283,6 +285,14 @@ package object symbols {
 
   case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType
 
+  object FunctionType {
+    def apply(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockParam], capabilities: List[BlockParam], result: ValueType, builtins: List[InterfaceType])(using Context): FunctionType =
+      val cparams = (bparams ++ capabilities).map { b => b.capture }
+      val bparamTypes = bparams.map { b => b.tpe }
+      val effects = capabilities.map { b => b.tpe.asEffect } ++ builtins
+      FunctionType(tparams, cparams, vparams, bparamTypes, result, Effects(effects))
+  }
+
   /** Effects */
 
   sealed trait InterfaceType extends BlockType {
@@ -358,6 +368,9 @@ package object symbols {
   extension(effs: List[InterfaceType]) {
     def controlEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if !i.builtin => i
+    }
+    def builtinEffects: List[InterfaceType] = effs.collect {
+      case i: InterfaceType if i.builtin => i
     }
   }
 

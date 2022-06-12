@@ -63,6 +63,7 @@ class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]
   def filterNot(p: InterfaceType => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
   def controlEffects: List[InterfaceType] = effects.controlEffects
+  def builtinEffects: List[InterfaceType] = effects.builtinEffects
 
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
@@ -773,11 +774,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
         Context.wellscoped(effs) // check effects are in scope
 
-        val funType = FunctionType(tps, Nil, vps, bps, tpe, effs.toEffects)
-
         // The order of effects annotated to the function is the canonical ordering for capabilities
         val capabilities = effs.controlEffects.map { caps.apply }
         Context.bindCapabilities(arg, capabilities)
+
+        val funType = FunctionType(tps, vps, bparams.map(_.symbol), capabilities, tpe, effs.builtinEffects)
 
         // Like with functions, bound parameters and capabilities are not closed over
         Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion))
