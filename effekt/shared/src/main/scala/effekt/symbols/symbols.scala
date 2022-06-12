@@ -319,7 +319,7 @@ package object symbols {
    *
    * `effects` is dealiased by the smart constructors
    */
-  class Effects private[symbols] (effects: List[InterfaceType]) {
+  case class Effects(effects: List[InterfaceType]) {
 
     lazy val toList: List[InterfaceType] = effects.distinct
 
