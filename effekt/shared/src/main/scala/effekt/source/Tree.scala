@@ -390,8 +390,9 @@ case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
 case class TypeVar(id: IdRef) extends ValueType with Reference {
   type symbol = symbols.Symbol with symbols.ValueType
 }
-case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Reference {
-  type symbol = symbols.DataType
+case class ValueTypeApp(id: IdRef, args: List[ValueType]) extends ValueType with Reference {
+  // can be applied to type aliases or data types
+  type symbol = symbols.TypeSymbol
 }
 
 /**
@@ -399,27 +400,29 @@ case class TypeApp(id: IdRef, params: List[ValueType]) extends ValueType with Re
  */
 sealed trait BlockType extends Type
 
-// for now those are not user definable and thus refer to symbols.Effect
+// not userdefinable, only for inferred type arguments
 case class BlockTypeTree(eff: symbols.BlockType) extends BlockType {
   type resolved = symbols.BlockType
 }
-
-//case class BlockTypeApp(id: IdRef, params: List[ValueType]) extends BlockType with Reference {
-//  type symbol = symbols.Symbol with symbols.InterfaceType
-//}
 
 case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Effects) extends BlockType {
   type resolved = symbols.FunctionType
 }
 
-case class InterfaceType(id: IdRef, tparams: List[ValueType] = Nil) extends BlockType with Resolvable {
-  // TODO we need to drop Effect <: Symbol and refactor this here
-  // TODO maybe we should use Type or something like this instead of Symbol as an upper bound
-  type resolved = symbols.InterfaceType
-  override def resolve(using C: Context): resolved = {
-    val eff = C.symbolOf(id).asInstanceOf[symbols.Interface]
-    if (tparams.isEmpty) eff else symbols.BlockTypeApp(eff, tparams.map(t => C.resolvedType(t)))
-  }
+sealed trait InterfaceType extends BlockType {
+  def id: IdRef
+  type resolved <: symbols.InterfaceType
+}
+
+case class BlockTypeApp(id: IdRef, args: List[ValueType]) extends InterfaceType with Reference {
+  type symbol = symbols.TypeSymbol
+}
+
+/**
+ * **Reference** to an interface type (like an effect)
+ */
+case class InterfaceVar(id: IdRef) extends InterfaceType with Resolvable {
+  type resolved = symbols.Interface
 }
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)

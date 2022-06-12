@@ -43,9 +43,9 @@ case class Result[+T](tpe: T, effects: ConcreteEffects)
  *
  * This way, we can easily compare them for equality.
  */
-class ConcreteEffects private[typer] (protected val effects: List[Effect]) {
+class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]) {
 
-  def toList: List[Effect] = effects
+  def toList: List[InterfaceType] = effects
   def toEffects: Effects = Effects(effects)
 
   // both are known to be concrete, no need to go through validation again
@@ -60,24 +60,24 @@ class ConcreteEffects private[typer] (protected val effects: List[Effect]) {
   def isEmpty: Boolean = effects.isEmpty
   def nonEmpty: Boolean = effects.nonEmpty
 
-  def filterNot(p: Effect => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
+  def filterNot(p: InterfaceType => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
   def controlEffects: List[InterfaceType] = effects.controlEffects
 
-  def forall(p: Effect => Boolean): Boolean = effects.forall(p)
-  def exists(p: Effect => Boolean): Boolean = effects.exists(p)
+  def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
+  def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
   override def toString = toEffects.toString
 }
 object ConcreteEffects {
   // unsafe, doesn't perform check
-  private def fromList(eff: List[Effect]): ConcreteEffects = new ConcreteEffects(eff.distinct)
+  private def fromList(eff: List[InterfaceType]): ConcreteEffects = new ConcreteEffects(eff.distinct)
 
   /**
    * These smart constructors should not be used directly.
    * [[Typer.asConcrete]] should be used instead, since it performs substitution and dealiasing.
    */
-  def apply(eff: List[Effect])(using Context): ConcreteEffects =
+  def apply(eff: List[InterfaceType])(using Context): ConcreteEffects =
     eff foreach Typer.assertConcrete
     fromList(eff)
 
@@ -307,10 +307,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
           given Captures = continuationCaptHandled
 
           handlers foreach Context.withFocus { h =>
-            val effectSymbol: Interface = h.definition
+
+            val (effectSymbol, targs) = h.effect.resolve match {
+              case BlockTypeApp(eff: Interface, args) => (eff, args)
+              case eff: Interface => (eff, Nil)
+              case BlockTypeApp(b: BuiltinEffect, args) => Context.abort("Cannot handle builtin effect")
+              case b: BuiltinEffect => Context.abort("Cannot handle builtin effect")
+            }
 
             val tparams = effectSymbol.tparams
-            val targs = h.effect.tparams.map(_.resolve)
             val tsubst = (tparams zip targs).toMap
 
             // (3) check all operations are covered
@@ -1128,7 +1133,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
     if (!isConcreteEffects(effs)) C.abort(s"Effects need to be fully known: ${effs}")
 
-  private[typer] def assertConcrete(eff: Effect)(using C: Context): Unit =
+  private[typer] def assertConcrete(eff: InterfaceType)(using C: Context): Unit =
     if (!isConcreteEffect(eff)) {
       C.abort(s"Effects need to be fully known: ${eff}")
     }
@@ -1140,8 +1145,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case t : BuiltinType => true
     case ValueTypeApp(tpe, args) => isConcreteValueType(tpe) && args.forall(isConcreteValueType)
     case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
-    // aliases should have been resolved by now
-    case TypeAlias(name, tparams, tpe) => false
   }
 
   private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
@@ -1153,12 +1156,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
   }
   private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 
-  private def isConcreteEffect(eff: Effect): Boolean = eff match {
+  private def isConcreteEffect(eff: InterfaceType): Boolean = eff match {
     case t: Interface => true
     case t: BuiltinEffect => true
     case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
-    // aliases should have been resolved by now
-    case EffectAlias(name, tparams, effs) => false // isConcreteEffects(effs)
   }
   private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteEffect)
 
@@ -1248,7 +1249,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * allow to save a copy of the current state.
    */
   private[typer] val unification = new Unification(using self)
-  export unification.{ requireSubtype, requireSubregion, join, instantiate, dealias, freshCaptVar, without, requireSubregionWithout }
+  export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
   private[typer] def withUnificationScope[T](additional: List[CaptUnificationVar])(block: => T): T = {
@@ -1458,7 +1459,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def initTyperstate(effects: ConcreteEffects): Unit = {
     lexicalEffects = effects.toList.collect {
       case i: Interface => i
-      case BlockTypeApp(i, _) => i
+      case BlockTypeApp(i: Interface, _) => i
     }
     annotations = Annotations.empty
     capabilityScope = GlobalCapabilityScope
@@ -1485,7 +1486,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) =>
       val substituted = subst.substitute(tpe)
-      println(s"${t.name.name}: $tpe ----> $substituted")
+      println(s"${t.name.name}: $tpe \n----> $substituted")
       substituted
     }
     annotations.updateAndCommit(Annotations.Captures) { case (t, capt) =>
@@ -1537,11 +1538,11 @@ trait TyperOps extends ContextOps { self: Context =>
     def checkInterface(eff: Interface): Unit =
       if (!(lexicalEffects contains eff)) error(s"Effect ${eff} leaves its defining scope.")
 
-    def checkEffect(eff: Effect): Unit = eff match {
+    def checkEffect(eff: InterfaceType): Unit = eff match {
       case e: Interface => checkInterface(e)
-      case BlockTypeApp(e, args) => checkInterface(e)
-      case EffectAlias(n, params, effs) => effs.toList foreach checkEffect
+      case BlockTypeApp(e: Interface, args) => checkInterface(e)
       case b: BuiltinEffect => ()
+      case BlockTypeApp(b: BuiltinEffect, args) => ()
     }
 
     effects.toList foreach checkEffect

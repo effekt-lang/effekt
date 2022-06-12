@@ -13,32 +13,25 @@ package object kinds {
   def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { wellformedEffect }
 
   def wellformed(tpe: ValueType)(implicit C: Context): Unit = wellformedType(tpe) match {
-    case Kind.Type => ()
-    case Kind.Fun(args, Kind.Type) => C.abort(s"${tpe} needs to be applied to ${args.size} type arguments")
-    case _ => C.abort(s"Expected a type but got ${tpe}")
-  }
-
-  def wellformedEffect(eff: Effect)(implicit C: Context): Unit = eff match {
-    case EffectAlias(_, tparams, effs) =>
-      wellformed(effs)
-      Kind.EffectFun(tparams map { p => Kind.Type })
-
-    case BuiltinEffect(_, tparams) =>
-      Kind.EffectFun(tparams map { p => Kind.Type })
-
-    case i: InterfaceType => wellformed(i)
-  }
-
-  def wellformed(eff: InterfaceType)(implicit C: Context): Unit = wellformedInterfaceType(eff) match {
-    case Kind.Effect => ()
-    case Kind.Fun(args, Kind.Effect) => C.abort(s"${eff} needs to be applied to ${args.size} type arguments")
-    case _ => C.abort(s"Expected an effect but got a type ${eff}")
+    case Kind.VType => ()
+    case Kind.Fun(args, Kind.VType) => C.abort(s"${tpe} needs to be applied to ${args.size} type arguments")
+    case _ => C.abort(s"Expected a value type but got ${tpe}")
   }
 
   def wellformed(tpe: BlockType)(implicit C: Context): Unit = tpe match {
-    case b: FunctionType => wellformed(b)
-    //case c: CapabilityType => ()
-    case _               => ???
+    case b: FunctionType  => wellformed(b)
+    case c: InterfaceType => wellformed(c)
+  }
+
+  def wellformedEffect(eff: InterfaceType)(implicit C: Context): Unit = eff match {
+    case BuiltinEffect(_, tparams) => Kind.BFun(tparams map { p => Kind.VType })
+    case i: InterfaceType          => wellformed(i)
+  }
+
+  def wellformed(eff: InterfaceType)(implicit C: Context): Unit = wellformedInterfaceType(eff) match {
+    case Kind.BType => ()
+    case Kind.Fun(args, Kind.BType) => C.abort(s"${eff} needs to be applied to ${args.size} type arguments")
+    case o => C.abort(s"Expected a block type but got a type ${eff} of kind ${o}")
   }
 
   def wellformed(b: FunctionType)(implicit C: Context): Unit = b match {
@@ -51,19 +44,19 @@ package object kinds {
 
   private sealed trait Kind
   private object Kind {
-    case object Type extends Kind
-    case object Effect extends Kind
+    case object VType extends Kind
+    case object BType extends Kind
     case class Fun(params: List[Kind], res: Kind) extends Kind
-    def TypeFun(params: List[Kind]): Kind =
-      if (params.isEmpty) Kind.Type else Kind.Fun(params, Kind.Type)
-    def EffectFun(params: List[Kind]): Kind =
-      if (params.isEmpty) Kind.Effect else Kind.Fun(params, Kind.Effect)
+    def VFun(params: List[Kind]): Kind =
+      if (params.isEmpty) Kind.VType else Kind.Fun(params, Kind.VType)
+    def BFun(params: List[Kind]): Kind =
+      if (params.isEmpty) Kind.BType else Kind.Fun(params, Kind.BType)
   }
 
   private def wellformedType(tpe: ValueType)(implicit C: Context): Kind = tpe match {
     case BoxedType(tpe, region) =>
-      wellformed(tpe); Kind.Type
-    case _: TypeVar => Kind.Type
+      wellformed(tpe); Kind.VType
+    case _: TypeVar => Kind.VType
     case ValueTypeApp(tpe, args) =>
       val Kind.Fun(params, res) = wellformedType(tpe) match {
         case t: Kind.Fun => t
@@ -75,12 +68,9 @@ package object kinds {
       args foreach { a => wellformedType(a) }
       res
 
-    case TypeAlias(_, tparams, tpe) =>
-      wellformed(tpe)
-      Kind.TypeFun(tparams map { p => Kind.Type })
-    case DataType(_, tparams, _)  => Kind.TypeFun(tparams map { p => Kind.Type })
-    case Record(_, tparams, _, _) => Kind.TypeFun(tparams map { p => Kind.Type })
-    case BuiltinType(_, tparams)  => Kind.TypeFun(tparams map { p => Kind.Type })
+    case DataType(_, tparams, _)  => Kind.VFun(tparams map { p => Kind.VType })
+    case Record(_, tparams, _, _) => Kind.VFun(tparams map { p => Kind.VType })
+    case BuiltinType(_, tparams)  => Kind.VFun(tparams map { p => Kind.VType })
   }
 
   private def wellformedInterfaceType(e: InterfaceType)(implicit C: Context): Kind = e match {
@@ -95,8 +85,9 @@ package object kinds {
       args foreach { a => wellformed(a) }
       res
     case Interface(_, tparams, _) =>
-      Kind.EffectFun(tparams map { p => Kind.Type })
-    case BuiltinEffect(_, tparams) => Kind.TypeFun(tparams map { p => Kind.Type })
+      Kind.BFun(tparams map { p => Kind.VType })
+    case BuiltinEffect(_, tparams) =>
+      Kind.BFun(tparams map { p => Kind.VType })
   }
 
   private implicit class ValueTypeWellformedOps[T <: ValueType](tpe: T) {

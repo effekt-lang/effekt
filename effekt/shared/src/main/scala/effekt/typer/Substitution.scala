@@ -69,24 +69,15 @@ case class Substitutions(
 
   // TODO implement
   def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
-  def substitute(t: Effect): Effect = t match {
+  def substitute(t: InterfaceType): InterfaceType = t match {
     case t: Interface => t
     case t: BuiltinEffect => t
     case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
-    case EffectAlias(name, tparams, effs) =>
-      val substWithout = without(tparams, Nil)
-      EffectAlias(name, tparams, substWithout.substitute(effs))
   }
 
   def substitute(t: BlockType): BlockType = t match {
     case e: InterfaceType => substitute(e)
     case b: FunctionType  => substitute(b)
-  }
-
-  def substitute(t: InterfaceType): InterfaceType = t match {
-    case b: Interface           => b
-    case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
-    case b: BuiltinEffect => b
   }
 
   def substitute(t: FunctionType): FunctionType = t match {
@@ -182,22 +173,15 @@ case class BiSubstitutions(
 
   // TODO implement
   def substitute(t: Effects)(using Polarity): Effects = Effects(t.toList.map(substitute))
-  def substitute(t: Effect)(using Polarity): Effect = t match {
+  def substitute(t: InterfaceType)(using Polarity): InterfaceType = t match {
     case t: Interface => t
     case t: BuiltinEffect => t
     case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
-    case alias: EffectAlias => ???
   }
 
   def substitute(t: BlockType)(using Polarity): BlockType = t match {
     case e: InterfaceType => substitute(e)
     case b: FunctionType  => substitute(b)
-  }
-
-  def substitute(t: InterfaceType)(using Polarity): InterfaceType = t match {
-    case b: Interface           => b
-    case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map substitute)
-    case b: BuiltinEffect => b
   }
 
   def substitute(t: FunctionType)(using p: Polarity): FunctionType = t match {

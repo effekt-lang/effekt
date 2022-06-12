@@ -155,7 +155,7 @@ package object symbols {
   case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }
   case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
-  case class BuiltinCapability(effect: Effect) extends BlockSymbol {
+  case class BuiltinCapability(effect: InterfaceType) extends BlockSymbol {
     override val name = effect.name
   }
 
@@ -226,7 +226,7 @@ package object symbols {
     override def toString = s"${tpe}[${args.map { _.toString }.mkString(", ")}]"
   }
 
-  case class TypeAlias(name: Name, tparams: List[TypeVar], tpe: ValueType) extends ValueType with TypeSymbol
+  case class TypeAlias(name: Name, tparams: List[TypeVar], tpe: ValueType) extends TypeSymbol
 
   /**
    * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
@@ -261,52 +261,42 @@ package object symbols {
   }
 
   /**
-   * Block Types
+   * [[BlockType]]
+   *   |
+   *   |- [[FunctionType]]
+   *   |
+   *   |- [[InterfaceType]]
+   *      |
+   *      |- [[BlockTypeApp]]
+   *      |- [[Interface]]
+   *      |- [[BuiltinEffect]]
+   *
+   * Effects are a
+   *   list of [[InterfaceType]]
+   *
+   * Outside of the hierarchy are
+   *   [[EffectAlias]]
+   * which are resolved by [[Namer]] to a list of [[InterfaceType]]s
    */
 
   sealed trait BlockType extends Type
 
-  case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType {
-    // TODO move rendering
-    //    override def toString: String = {
-    //      val ps = params.map {
-    //        case List(b: FunctionType) => s"{${b.toString}}"
-    //        case ps: List[ValueType @unchecked] => s"(${ps.map { _.toString }.mkString(", ")})"
-    //        case _ => sys error "Parameter lists are either singleton block params or a list of value params."
-    //      }.mkString("")
-    //
-    //      tparams match {
-    //        case Nil => s"$ps ⟹ $result / $effects"
-    //        case tps => s"[${tps.map { _.toString }.mkString(", ")}] $ps ⟹ $result / $effects"
-    //      }
-    //    }
-  }
+  case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType
 
   /** Effects */
 
-  sealed trait Effect {
-    def name: Name
+  sealed trait InterfaceType extends BlockType {
     def builtin: Boolean
+    def name: Name
   }
 
-  // Interfaces can be used as effects, hence Interface <: Effect
-  sealed trait InterfaceType extends BlockType with Effect
-
-  object InterfaceType {
-    def unapply(i: InterfaceType): Option[(Interface, List[ValueType])] = i match {
-      case i: Interface          => Some((i, Nil))
-      case BlockTypeApp(i, args) => Some((i, args))
-      case b: BuiltinEffect => None
-    }
-  }
-
-  case class BlockTypeApp(typeConstructor: Interface, args: List[ValueType]) extends InterfaceType {
+  case class BlockTypeApp(typeConstructor: Interface | BuiltinEffect, args: List[ValueType]) extends InterfaceType {
     override def toString = s"${typeConstructor}[${args.map { _.toString }.mkString(", ")}]"
     def builtin = typeConstructor.builtin
     def name = typeConstructor.name
   }
 
-  case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType with TypeSymbol
+  case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends InterfaceType, TypeSymbol
   case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Fun {
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(resultType)
@@ -320,7 +310,7 @@ package object symbols {
   /**
    * Effect aliases are *not* block types; they cannot be used for example in `def foo { f : Alias }`.
    */
-  case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends Effect with TypeSymbol
+  case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends TypeSymbol
 
   /**
    * symbols.Effects is like source.Effects, but with resolved effects
@@ -329,9 +319,9 @@ package object symbols {
    *
    * `effects` is dealiased by the smart constructors
    */
-  class Effects private[symbols] (effects: List[Effect]) {
+  class Effects private[symbols] (effects: List[InterfaceType]) {
 
-    lazy val toList: List[Effect] = effects.distinct
+    lazy val toList: List[InterfaceType] = effects.distinct
 
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
@@ -341,11 +331,11 @@ package object symbols {
     //      case _              => false
     //    }
 
-    def filterNot(p: Effect => Boolean): Effects =
+    def filterNot(p: InterfaceType => Boolean): Effects =
       Effects(effects.filterNot(p))
 
-    def forall(p: Effect => Boolean): Boolean = effects.forall(p)
-    def exists(p: Effect => Boolean): Boolean = effects.exists(p)
+    def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
+    def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
     override def toString: String = toList match {
       case Nil        => "{}"
@@ -355,17 +345,17 @@ package object symbols {
   }
   object Effects {
 
-    def apply(effs: Effect*): Effects =
+    def apply(effs: InterfaceType*): Effects =
       new Effects(effs.toList)
 
-    def apply(effs: Iterable[Effect]): Effects =
+    def apply(effs: Iterable[InterfaceType]): Effects =
       new Effects(effs.toList)
 
     def empty: Effects = new Effects(Nil)
     val Pure = empty
   }
 
-  extension(effs: List[Effect]) {
+  extension(effs: List[InterfaceType]) {
     def controlEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if !i.builtin => i
     }
@@ -454,10 +444,10 @@ package object symbols {
     def annotatedEffects = Some(effects)
   }
 
-  case class BuiltinType(name: Name, tparams: List[TypeVar]) extends ValueType with TypeSymbol with Builtin
+  case class BuiltinType(name: Name, tparams: List[TypeVar]) extends ValueType, TypeSymbol, Builtin
 
   // Builtin effects take the role of built in block types, while BuiltinType plays the role of a builtin value type
-  case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends InterfaceType with TypeSymbol with Builtin
+  case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends InterfaceType, TypeSymbol, Builtin
 
   def isBuiltin(e: Symbol): Boolean = e.builtin
 }

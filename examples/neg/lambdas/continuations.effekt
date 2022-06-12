@@ -4,7 +4,7 @@ effect Yield(): Unit
 def main() = {
 
   // here we use the region of the main function
-  var cont: () => Unit / {main} = fun() { () }
+  var cont: () => Unit at {main} = fun() { () }
 
   try {
     try {

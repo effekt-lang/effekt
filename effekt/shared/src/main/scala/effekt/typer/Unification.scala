@@ -69,16 +69,16 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def substitution = constraints.subst
 
   def apply(e: Effects): Effects =
-    substitution.substitute(dealias(e))
+    substitution.substitute(e)
 
-  def apply(e: Effect): Effect =
+  def apply(e: InterfaceType): InterfaceType =
     substitution.substitute(e)
 
   def apply(tpe: BlockType): BlockType =
-    substitution.substitute(dealias(tpe))
+    substitution.substitute(tpe)
 
   def apply(tpe: ValueType): ValueType =
-    substitution.substitute(dealias(tpe))
+    substitution.substitute(tpe)
 
   // Lifecycle management
   // --------------------
@@ -124,25 +124,25 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def requireSubtype(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Covariant;
     unifyValueTypes(
-      dealias(substitution.substitute(t1)),
-      dealias(substitution.substitute(t2)))
+      substitution.substitute(t1),
+      substitution.substitute(t2))
 
   def requireEqual(t1: ValueType, t2: ValueType): Unit =
     given Polarity = Invariant;
     unifyValueTypes(
-      dealias(substitution.substitute(t1)),
-      dealias(substitution.substitute(t2)))
+      substitution.substitute(t1),
+      substitution.substitute(t2))
 
   def requireSubtype(t1: BlockType, t2: BlockType): Unit =
     given Polarity = Covariant;
     unifyBlockTypes(
-      dealias(substitution.substitute(t1)),
-      dealias(substitution.substitute(t2)))
+      substitution.substitute(t1),
+      substitution.substitute(t2))
 
   def requireSubregion(c1: Captures, c2: Captures): Unit = requireSubregionWithout(c1, c2, Set.empty)
 
   def join(tpes: ValueType*): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, dealias(t2), Covariant) }
+    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, Covariant) }
 
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture]): Unit =
     requireSubregionWithout(lower, upper, filter.toSet)
@@ -182,7 +182,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    *
    * TODO also create capture unification variables for (inferred) capability arguments.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptUnificationVar], List[Effect], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptUnificationVar], List[InterfaceType], FunctionType) = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
@@ -195,7 +195,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     val substitutedVparams = vparams map instantiate
     val substitutedBparams = bparams map instantiate
     val substitutedReturn = instantiate(ret)
-    val dealiasedEffs = eff.toList.flatMap(dealias).distinct
+    val dealiasedEffs = eff.toList.distinct
 
     val substitutedEffects = dealiasedEffs map instantiate
 
@@ -310,14 +310,6 @@ trait TypeInstantiator { self: Unification =>
   }
 
   def instantiate(t: Effects)(using Instantiation): Effects = Effects(t.toList.map(instantiate))
-  def instantiate(t: Effect)(using i: Instantiation): Effect = t match {
-    case t: Interface => t
-    case t: BuiltinEffect => t
-    case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(instantiate))
-    case EffectAlias(name, tparams, effs) =>
-      given Instantiation = without(tparams, Nil)(using i)
-      EffectAlias(name, tparams, instantiate(effs))
-  }
 
   def instantiate(t: BlockType)(using Instantiation): BlockType = t match {
     case e: InterfaceType => instantiate(e)

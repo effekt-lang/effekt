@@ -2,14 +2,14 @@ module examples/neg/lambdas/inference
 
 def main() = {
 
-  def hof1(f: (Int) => String): Unit = ()
-  def hof2(f: ((Int) => Boolean) => String): Unit = ()
+  def hof1(f: (Int) => String at {}): Unit = ()
+  def hof2(f: ((Int) => Boolean at {}) => String at {}): Unit = ()
 
-  hof2(fun (f: (Int) => Boolean) {
+  hof2(fun (f: (Int) => Boolean at {}) {
     f(3);
     ""
   })
 
-  hof2(fun(f: (Int) => Unit) { "" })
+  hof2(fun(f: (Int) => Unit at {}) { "" })
   hof1(fun(b: Boolean) { () })
 }

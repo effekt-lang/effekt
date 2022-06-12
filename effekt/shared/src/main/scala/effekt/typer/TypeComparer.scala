@@ -78,7 +78,7 @@ trait TypeUnifier {
     case _ => error(s"Kind mismatch between ${tpe1} and ${tpe2}")
   }
 
-  def unifyEffect(eff1: Effect, eff2: Effect)(using p: Polarity): Unit = (eff1, eff2) match {
+  def unifyEffect(eff1: InterfaceType, eff2: InterfaceType)(using p: Polarity): Unit = (eff1, eff2) match {
     case (e1, e2) if e1 == e2 => ()
     case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
@@ -114,32 +114,6 @@ trait TypeUnifier {
       unifyValueTypes(ret1, substRet2)
       // We compare effects to be equal, since we do not have subtyping on effects
       unifyEffects(eff1, eff2)(using Invariant)
-  }
-
-  // There are only a few users of dealiasing:
-  //  1) checking for effect inclusion (`contains` in Effects)
-  //  2) checking exhaustivity of pattern matching
-  //  3) type comparer itself
-  def dealias(tpe: ValueType): ValueType = tpe match {
-    case BoxedType(tpe, capture) => BoxedType(dealias(tpe), capture)
-    case ValueTypeApp(TypeAlias(name, tparams, tpe), args) =>
-      val subst = (tparams zip args).toMap
-      dealias(subst.substitute(tpe))
-    case ValueTypeApp(cons, args) => ValueTypeApp(cons, args map dealias)
-    case TypeAlias(name, tparams, tpe) => dealias(tpe)
-    case tpe => tpe
-  }
-  // TODO implement
-  def dealias(tpe: BlockType): BlockType = tpe
-
-  // TODO implement fully
-  def dealias(effs: Effects): Effects = Effects(effs.toList.flatMap(dealias))
-  def dealias(eff: Effect): List[Effect] = eff match {
-    case EffectAlias(name, Nil, effs) => effs.toList.flatMap(dealias)
-//    case  BlockTypeApp(EffectAlias(name, tparams, effs), args) =>
-//      val subst = (tparams zip args).toMap
-//      dealias(subst.substitute(effs)).toList
-    case e => List(e)
   }
 }
 

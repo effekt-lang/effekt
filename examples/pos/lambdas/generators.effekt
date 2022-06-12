@@ -22,9 +22,12 @@ def main() = {
     generator = fun() { resume(()); Next(n) }
   }
 
-  println((unbox generator)())
-  println((unbox generator)())
-  println((unbox generator)())
-  println((unbox generator)())
-  println((unbox generator)())
+  // right now we do not infer unbox for a mutable variable since it
+  // already is of block type.
+  def gen() = (unbox generator)()
+  println(gen())
+  println(gen())
+  println(gen())
+  println(gen())
+  println(gen())
 }

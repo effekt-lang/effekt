@@ -510,12 +510,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `try` ~/> stmt ~ some(handler) ^^ TryHandle.apply
 
   lazy val handler: P[Handler] =
-    ( `with` ~> (idDef <~ `:`).? ~ effectType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+    ( `with` ~> (idDef <~ `:`).? ~ interfaceType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
       case capabilityName ~ effect ~ clauses =>
         val capability = capabilityName map { name => BlockParam(name, effect) }
         Handler(effect, capability, clauses)
       }
-    | `with` ~> (idDef <~ `:`).? ~ effectType ~ implicitResume ~ functionArg ^^ {
+    | `with` ~> (idDef <~ `:`).? ~ interfaceType ~ implicitResume ~ functionArg ^^ {
       case capabilityName ~ effect ~ resume ~ FunctionArg(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
         val capability = capabilityName map { name => BlockParam(name, effect) }
@@ -595,7 +595,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val primValueType: P[ValueType] =
-    ( idRef ~ typeArgs ^^ TypeApp.apply
+    ( idRef ~ typeArgs ^^ ValueTypeApp.apply
     | idRef ^^ TypeVar.apply
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
@@ -611,6 +611,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
     )
 
+  lazy val interfaceType: P[InterfaceType] =
+    ( idRef ~ typeArgs ^^ BlockTypeApp.apply
+    | idRef ^^ InterfaceVar.apply
+    | failure("Expected an interface / effect")
+    )
+
   lazy val maybeEffects: P[Effects] =
     (`/` ~/> effects).? ^^ {
       case Some(es) => es
@@ -621,13 +627,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     valueType ~ maybeEffects ^^ Effectful.apply
 
   lazy val effects: P[Effects] =
-    ( effectType ^^ { e => Effects(e) }
-    | `{` ~/> manySep(effectType, `,`) <~  `}` ^^ Effects.apply
+    ( interfaceType ^^ { e => Effects(e) }
+    | `{` ~/> manySep(interfaceType, `,`) <~  `}` ^^ Effects.apply
     | failure("Expected an effect set")
     )
-
-  lazy val effectType: P[InterfaceType] =
-    (idRef ~ maybeTypeArgs) ^^ InterfaceType.apply | failure("Expected a single effect")
 
 
   // === AST Helpers ===
@@ -652,7 +655,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    TypeApp(IdRef(s"Tuple${tps.size}"), tps)
+    ValueTypeApp(IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

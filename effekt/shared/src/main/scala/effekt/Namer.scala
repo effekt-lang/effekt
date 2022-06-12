@@ -6,6 +6,7 @@ package namer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
+import effekt.typer.{ Substitutions, typeMapToSubstitution }
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols.*
 import scopes.*
@@ -312,13 +313,13 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Handler(effect, param, clauses) =>
 
-      def extractControlEffect(e: Effect): Interface = e match {
-        case BlockTypeApp(e, args) => extractControlEffect(e)
+      def extractControlEffect(e: InterfaceType): Interface = e match {
+        case BlockTypeApp(e: Interface, args) => extractControlEffect(e)
         case e: Interface          => e
         case b: BuiltinEffect =>
           Context.abort(s"Cannot handle built in effects like ${b}")
-        case b: EffectAlias =>
-          Context.abort(s"Cannot only handle concrete effects, but $b is an effect alias")
+        case BlockTypeApp(b: BuiltinEffect, args) =>
+          Context.abort(s"Cannot handle built in effects like ${b}")
       }
 
       val eff: Interface = Context.at(effect) { extractControlEffect(resolve(effect)) }
@@ -476,55 +477,42 @@ object Namer extends Phase[Parsed, NameResolved] {
    *
    * resolving a type means reconstructing the composite type (e.g. Effectful, ...) from
    * symbols, instead of trees.
+   *
+   * We de-alias on-the-fly in Namer so that aliases can never show up again in the remaining compiler.
+   * This way error messages might suffer; however it simplifies the compiler a lot.
    */
-  def resolve(tpe: source.ValueType)(implicit C: Context): ValueType = Context.at(tpe) {
-    val res = tpe match {
-      case source.TypeApp(id, args) =>
-        val data = Context.resolveType(id).asValueType
-        ValueTypeApp(data, args.map(resolve))
-      case source.TypeVar(id) =>
-        Context.resolveType(id).asValueType
-      case source.ValueTypeTree(tpe) =>
-        tpe
-      // TODO reconsider reusing the same set for terms and types...
-      case source.BoxedType(tpe, capt) =>
-        BoxedType(resolve(tpe), resolve(capt))
+  def resolve(tpe: source.ValueType)(using C: Context): ValueType = resolvingType(tpe) {
+    case source.ValueTypeApp(id, args) => Context.resolveType(id) match {
+      case x: ValueType => ValueTypeApp(x, args.map(resolve))
+      case TypeAlias(name, tparams, tpe) =>
+        val targs = args.map(resolve)
+        if (tparams.size != targs.size) {
+          C.abort(s"Type alias ${name.name} expects ${tparams.size} type arguments, but got ${targs.size}.")
+        }
+        val subst = (tparams zip targs).toMap
+        subst.substitute(tpe)
+      case other => C.abort(s"Expected a value type, but got ${other}")
     }
-    C.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
-    // check that we resolved to a well-kinded type
-    kinds.wellformed(res)
-    res
+    case source.TypeVar(id) => Context.resolveType(id) match {
+      case x: ValueType => x
+      case TypeAlias(name, tparams, tpe) =>
+        if (tparams.nonEmpty) C.abort(s"Type alias ${name.name} expects ${tparams.size} type arguments, but got none.") else tpe
+      case other => C.abort(s"Expected a value type, but got ${other}")
+    }
+    case source.ValueTypeTree(tpe) =>
+      tpe
+    // TODO reconsider reusing the same set for terms and types...
+    case source.BoxedType(tpe, capt) =>
+      BoxedType(resolve(tpe), resolve(capt))
   }
 
-  // here we find out which entry in effs is a _term variable_ and which is a _type variable_ (effect)
-  def resolveTermsOrTypes(effs: List[source.InterfaceType])(implicit C: Context): (List[TermSymbol], List[InterfaceType]) = {
-    var terms: List[TermSymbol] = Nil
-    var effects: List[InterfaceType] = Nil
-
-    effs.foreach { eff =>
-      resolveTermOrType(eff) match {
-        case Left(term) => terms = terms :+ term
-        case Right(tpe) => effects = effects :+ tpe
-      }
-    }
-    (terms, effects)
-  }
-
-  def resolveTermOrType(eff: source.InterfaceType)(implicit C: Context): Either[TermSymbol, InterfaceType] = eff match {
-    case source.InterfaceType(e, Nil) => Context.resolveAny(e) match {
-      case t: TermSymbol    => Left(t)
-      case e: InterfaceType => Right(e)
-    }
-    case source.InterfaceType(e, args) => Right(BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve)))
-  }
-
-  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = tpe match {
+  def resolve(tpe: source.BlockType)(implicit C: Context): BlockType = resolvingType(tpe) {
     case t: source.FunctionType  => resolve(t)
     case t: source.BlockTypeTree => t.eff
     case t: source.InterfaceType => resolve(t)
   }
 
-  def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = funTpe match {
+  def resolve(funTpe: source.FunctionType)(implicit C: Context): FunctionType = resolvingType(funTpe) {
     case source.FunctionType(vparams, ret, effects) => Context scoped {
       // as soon as we have those kinds of params in source we need this
       val tparams = List.empty[source.Id]
@@ -544,26 +532,56 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tpe = resolve(ret)
       val eff = resolve(effects)
 
-      val res = FunctionType(tps, cps, vps, bps, tpe, eff)
-      C.annotateResolvedType(funTpe)(res)
-      res
+      FunctionType(tps, cps, vps, bps, tpe, eff)
     }
   }
 
-  def resolve(eff: source.InterfaceType)(implicit C: Context): InterfaceType =
-    resolveAsEffect(eff).asInterfaceType
+  def resolve(tpe: source.InterfaceType)(using Context): InterfaceType = resolvingType(tpe) {
+    case source.BlockTypeApp(id, args) =>
+      BlockTypeApp(resolveIdAsInterface(id), args.map(resolve))
+    case source.InterfaceVar(id) => resolveIdAsInterface(id)
+  }
 
-  def resolveAsEffect(eff: source.InterfaceType)(implicit C: Context): Effect = Context.at(eff) {
-    val res = eff match {
-      case source.InterfaceType(e, Nil)  => Context.resolveType(e).asEffect
-      case source.InterfaceType(e, args) => BlockTypeApp(Context.resolveType(e).asInterface, args.map(resolve))
+  // no effect aliases are allowed
+  def resolveIdAsInterface(id: IdRef)(using Context): Interface = Context.at(id) {
+    Context.resolveType(id) match {
+      case i: Interface => i
+      case i: EffectAlias => Context.abort(s"Expected a single interface type; no effect aliases are allowed.")
+      case o =>  Context.abort(s"Expected a single interface type. Got ${o}")
     }
-    kinds.wellformedEffect(res)
-    res
+  }
+
+  /**
+   * Resolves an interface type, potentially with effect aliases on the top level
+   */
+  def resolveAsEffect(tpe: source.InterfaceType)(using Context): List[InterfaceType] = Context.at(tpe) {
+    tpe match {
+      case source.BlockTypeApp(id, args) => Context.resolveType(id) match {
+        case EffectAlias(name, tparams, effs) =>
+          if (tparams.size != args.size) {
+            Context.abort(s"Effect alias ${name.name} expects ${tparams.size} type arguments, but got ${args.size}.")
+          }
+          val targs = args.map(resolve)
+          val subst = (tparams zip targs).toMap
+          effs.toList.map(subst.substitute)
+        case b @ BuiltinEffect(name, tparams) =>
+          List(BlockTypeApp(b, args.map(resolve)))
+        case _ => List(resolve(tpe))
+      }
+      case source.InterfaceVar(id) => Context.resolveType(id) match {
+        case EffectAlias(name, tparams, effs) =>
+          if (tparams.nonEmpty) {
+            Context.abort(s"Effect alias ${name.name} expects ${tparams.size} type arguments, but got none.")
+          }
+          effs.toList
+        case b: BuiltinEffect => List(b)
+        case _ => List(resolve(tpe))
+      }
+    }
   }
 
   def resolve(tpe: source.Effects)(implicit C: Context): Effects =
-    Effects(tpe.effs.map(resolveAsEffect).toSeq: _*) // TODO this otherwise is calling the wrong apply
+    Effects(tpe.effs.flatMap(resolveAsEffect).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(implicit C: Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))
@@ -581,6 +599,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     val sym = TypeVar(Name.local(id))
     Context.define(id, sym)
     sym
+  }
+
+  def resolvingType[T <: source.Type, R <: symbols.Type](tpe: T)(f: T => R)(using Context): R = Context.at(tpe) {
+    val res = f(tpe)
+    Context.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
+    kinds.wellformed(res)
+    res
   }
 }
 
