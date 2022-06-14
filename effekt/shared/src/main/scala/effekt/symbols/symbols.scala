@@ -351,11 +351,19 @@ package object symbols {
     case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends TypeSymbol
 
   /**
-   * symbols.Effects is like source.Effects, but with resolved effects
+   * Represents effect sets on function types.
    *
-   * Effect sets and effectful computations are themselves *not* symbols, they are just aggregates
+   * All effects are dealiased by namer. Effects are inferred via [[typer.ConcreteEffects]] so
+   * by construction all entries in the set of effects here should be concrete (no unification variables).
    *
-   * `effects` is dealiased by namer
+   * Effect sets are themselves *not* symbols, they are just aggregates.
+   *
+   * We do not enforce entries to be distinct. This way we can substitute types and keep duplicate entries.
+   * For instances { State[S], State[T] }[S -> Int, T -> Int] then becomes { State[Int], State[Int] }.
+   * This is important since we need to pass two capabilities in this case.
+   *
+   * Method [[controlEffects]] computes the canonical ordering of capabilities for this set of effects.
+   * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
    */
   case class Effects(effects: List[InterfaceType]) {
 
@@ -363,11 +371,6 @@ package object symbols {
 
     def isEmpty: Boolean = effects.isEmpty
     def nonEmpty: Boolean = effects.nonEmpty
-
-    //    override def equals(other: Any): Boolean = other match {
-    //      case other: Effects => this.contains(other.toList) && other.contains(this.toList)
-    //      case _              => false
-    //    }
 
     def filterNot(p: InterfaceType => Boolean): Effects =
       Effects(effects.filterNot(p))
