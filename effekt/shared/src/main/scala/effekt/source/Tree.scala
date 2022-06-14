@@ -269,17 +269,44 @@ case class Box(capt: Option[CaptureSet], block: BlockArg) extends Term
 
 case class Unbox(term: Term) extends Term
 
+type CallLike = Call | Do | Select | MethodCall
+
 /**
- * Selecting a capability or a method out of a capability
+ * Models:
+ * - field selection, i.e., `record.field` (receiver is an expression, result is an expression)
+ * - future: nested capability / module selection, i.e., `mymod.nested.foo` (receiver is a block, result is a block)
+ *
+ * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
  */
-case class Select(receiver: Term, id: IdRef) extends Term with Reference {
-  // can refer to either a block OR a term symbol
-  type symbol = symbols.TermSymbol
+case class Select(receiver: Term, id: IdRef) extends Term, Reference {
+  type symbol = symbols.Field
 }
 
-// maybe replace `fun: Id` here with BlockVar
-// TODO should we have one Call-node and a selector tree, or multiple different call nodes?
+/**
+ * A call to an effect operation, i.e., `do raise()`.
+ *
+ * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
+ * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
+ */
+case class Do(effect: Option[InterfaceType], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference {
+  type symbol = symbols.Operation
+}
+
+/**
+ * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
+ */
 case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
+
+/**
+ * Models:
+ * - uniform function call, i.e., `list.map { ... }` (receiver is an expression, result is an expression)
+ * - capability call, i.e., `exc.raise()` (receiver is a block, result is an expression)
+ *
+ * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
+ */
+case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term, Reference {
+  type symbol = symbols.TermSymbol
+}
 
 sealed trait CallTarget extends Tree
 
@@ -489,8 +516,17 @@ object Tree {
       case Match(sc, clauses) =>
         Match(rewrite(sc), clauses.map(rewrite))
 
+      case Select(recv, name) =>
+        Select(rewrite(recv), name)
+
+      case Do(effect, id, targs, vargs) =>
+        Do(effect, id, targs, vargs.map(rewrite))
+
       case Call(fun, targs, vargs, bargs) =>
         Call(fun, targs, vargs.map(rewrite), bargs.map(rewrite))
+
+      case MethodCall(receiver, id, targs, vargs, bargs) =>
+        MethodCall(rewrite(receiver), id, targs, vargs.map(rewrite), bargs.map(rewrite))
 
       case TryHandle(prog, handlers) =>
         TryHandle(rewrite(prog), handlers.map(rewrite))
@@ -503,9 +539,6 @@ object Tree {
 
       case Unbox(b) =>
         Unbox(rewrite(b))
-
-      case Select(recv, name) =>
-        Select(rewrite(recv), name)
     }
 
     def rewrite(t: Def)(implicit C: Context): Def = visit(t) {

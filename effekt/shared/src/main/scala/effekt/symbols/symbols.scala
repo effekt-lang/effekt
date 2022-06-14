@@ -1,10 +1,10 @@
 package effekt
 
-import effekt.source.{ Def, FunDef, ModuleDecl, ValDef, VarDef, ExternFlag }
+import effekt.source.{ Def, ExternFlag, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import kiama.util.Source
-
 import effekt.context.assertions.*
+import effekt.util.messages.ErrorReporter
 
 /**
  * The symbol table contains things that can be pointed to:
@@ -283,7 +283,36 @@ package object symbols {
 
   sealed trait BlockType extends Type
 
-  case class FunctionType(tparams: List[TypeVar], cparams: List[Capture], vparams: List[ValueType], bparams: List[BlockType], result: ValueType, effects: Effects) extends BlockType
+  // TODO new function type draft:
+  //   example
+  //     FunctionType(Nil, List(Cf), Nil, Nil, List((Exc -> Cf)), BoxedType(Exc, Cf), List(Console))
+  //   instantiated:
+  //     FunctionType(Nil, Nil, Nil, Nil, List((Exc -> ?C1)), BoxedType(Exc, ?C1), List(Console))
+  //  case class FunctionType(
+  //    tparams: List[TypeVar],
+  //    cparams: List[Capture],
+  //    vparams: List[ValueType],
+  //    // (S -> C) corresponds to { f :^C S }, that is a block parameter with capture C
+  //    bparams: List[(BlockType, Captures)],
+  //    capabilities: List[(InterfaceType, Captures)],
+  //    result: ValueType,
+  //    builtins: List[InterfaceType]
+  //  ) extends BlockType {
+  //    def controlEffects = capabilities.map { _._1 }
+  //    def builtinEffects = builtins
+  //    def effects: Effects = Effects(controlEffects ++ builtinEffects)
+  //  }
+
+
+  case class FunctionType(
+    tparams: List[TypeVar],
+    cparams: List[Capture],
+    vparams: List[ValueType],
+    bparams: List[BlockType],
+    result: ValueType,
+    effects: Effects
+  ) extends BlockType
+
 
   /** Effects */
 
@@ -309,17 +338,24 @@ package object symbols {
     def isBidirectional: Boolean = otherEffects.nonEmpty
   }
 
-  /**
-   * Effect aliases are *not* block types; they cannot be used for example in `def foo { f : Alias }`.
-   */
-  case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends TypeSymbol
+  def interfaceOf(tpe: InterfaceType)(using C: ErrorReporter): Interface = tpe match {
+    case BlockTypeApp(i: Interface, args) => i
+    case i: Interface => i
+    case BlockTypeApp(b: BuiltinEffect, args) => C.abort(s"Required a concrete interface but got a builtin effect: ${b}")
+    case b: BuiltinEffect => C.abort(s"Required a concrete interface but got a builtin effect: ${b}")
+  }
+
+    /**
+     * Effect aliases are *not* block types; they cannot be used for example in `def foo { f : Alias }`.
+     */
+    case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends TypeSymbol
 
   /**
    * symbols.Effects is like source.Effects, but with resolved effects
    *
    * Effect sets and effectful computations are themselves *not* symbols, they are just aggregates
    *
-   * `effects` is dealiased by the smart constructors
+   * `effects` is dealiased by namer
    */
   case class Effects(effects: List[InterfaceType]) {
 
@@ -338,6 +374,12 @@ package object symbols {
 
     def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
     def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
+
+    // this constitutes the canonical ordering:
+    lazy val controlEffects: List[InterfaceType] = effects.controlEffects.sortBy(f => f.hashCode())
+    lazy val builtinEffects: List[InterfaceType] = effects.builtinEffects
+
+    def distinct: Effects = Effects(effects.distinct)
 
     override def toString: String = toList match {
       case Nil        => "{}"

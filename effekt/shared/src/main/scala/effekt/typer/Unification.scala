@@ -182,24 +182,30 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    *
    * TODO also create capture unification variables for (inferred) capability arguments.
    */
-  def instantiate(tpe: FunctionType, targs: List[ValueType]): (List[ValueType], List[CaptUnificationVar], List[InterfaceType], FunctionType) = {
+  def instantiate(tpe: FunctionType, targs: List[ValueType], cargs: List[Captures]): (List[ValueType], List[Captures], FunctionType) = {
     val position = C.focus
     val FunctionType(tparams, cparams, vparams, bparams, ret, eff) = substitution.substitute(tpe)
 
-    val typeRigids = if (targs.size == tparams.size) targs else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
+    val typeRigids =
+      if (targs.size == tparams.size) targs
+      else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
-    val captRigids = cparams map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
+    assert(cparams.size == (bparams.size + eff.controlEffects.size))
+
+    val captRigids =
+      if (cargs.size == cparams.size) cargs
+      else cparams.map { param => freshCaptVar(CaptUnificationVar.VariableInstantiation(param, position)) }
 
     given Instantiation = Instantiation((tparams zip typeRigids).toMap, (cparams zip captRigids).toMap)
 
     val substitutedVparams = vparams map instantiate
     val substitutedBparams = bparams map instantiate
     val substitutedReturn = instantiate(ret)
-    val dealiasedEffs = eff.toList.distinct
 
-    val substitutedEffects = dealiasedEffs map instantiate
+    val substitutedEffects = instantiate(eff)
 
-    (typeRigids, captRigids, substitutedEffects, FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, Effects(substitutedEffects)))
+    val fun = FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
+    (typeRigids, captRigids, fun)
   }
 
 
@@ -227,10 +233,19 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
     case (CaptureSet(xs), CaptureSet(ys), Contravariant) => CaptureSet(xs union ys)
     case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(s"Capture set ${xs} is not equal to ${ys}")
+    case (x: CaptUnificationVar, CaptureSet(ys), p) if ys.isEmpty => x
+    case (CaptureSet(xs), y: CaptUnificationVar, p) if xs.isEmpty => y
     case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), p)
     case (CaptureSet(xs), y: CaptUnificationVar, p) => mergeCaptures(xs.toList, List(y), p)
     case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), p)
   }
+
+  def mergeCaptures(cs: List[Captures], polarity: Polarity): CaptUnificationVar =
+    val (concrete, variables) = cs.partitionMap {
+      case CaptureSet(xs) => Left(xs)
+      case x: CaptUnificationVar => Right(x)
+    }
+    mergeCaptures(concrete.flatten, variables, polarity)
 
    /**
    * Should create a fresh unification variable bounded by the given captures
@@ -257,12 +272,12 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
 
 
-case class Instantiation(values: Map[TypeVar, ValueType], captures: Map[Capture, CaptUnificationVar])
+case class Instantiation(values: Map[TypeVar, ValueType], captures: Map[Capture, Captures])
 
 trait TypeInstantiator { self: Unification =>
 
   private def valueInstantiations(using i: Instantiation): Map[TypeVar, ValueType] = i.values
-  private def captureInstantiations(using i: Instantiation): Map[Capture, CaptUnificationVar] = i.captures
+  private def captureInstantiations(using i: Instantiation): Map[Capture, Captures] = i.captures
 
   private def captureParams(using Instantiation) = captureInstantiations.keys.toSet
 
@@ -296,7 +311,7 @@ trait TypeInstantiator { self: Unification =>
     val remaining = (concreteCapture -- captureParams).toList
 
     // TODO do we need to respect the polarity here? Maybe wellformedness should exclude captures in negative position?
-    mergeCaptures(remaining, contained.toList.map { p => captureInstantiations(p) }, Covariant)
+    mergeCaptures(CaptureSet(remaining) :: contained.toList.map { p => captureInstantiations(p) }, Covariant)
 
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {

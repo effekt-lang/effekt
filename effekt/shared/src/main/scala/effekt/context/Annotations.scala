@@ -125,7 +125,7 @@ object Annotations {
   /**
    * Type arguments of a _function call_ as inferred by typer
    */
-  val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
+  val TypeArguments = Annotation[source.CallLike, List[symbols.ValueType]](
     "TypeArguments",
     "the inferred or annotated type arguments of"
   )
@@ -250,7 +250,7 @@ object Annotations {
    *
    * Inferred by typer, used by elaboration.
    */
-  val CapabilityArguments = Annotation[source.Call, List[symbols.BlockParam]](
+  val CapabilityArguments = Annotation[source.CallLike, List[symbols.BlockParam]](
     "CapabilityArguments",
     "capabilities inferred as additional arguments for this call"
   )

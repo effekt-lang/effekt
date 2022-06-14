@@ -10,7 +10,12 @@ package object kinds {
     case t: BlockType => wellformed(t)
   }
 
-  def wellformed(effs: Effects)(implicit C: Context): Unit = effs.toList foreach { wellformedEffect }
+  def wellformed(effs: Effects)(implicit C: Context): Unit =
+    val effects = effs.toList
+    if (effects.size != effects.distinct.size) {
+      C.panic("Compiler invariant violated: duplicate effects.")
+    }
+    effs.toList foreach { wellformedEffect }
 
   def wellformed(tpe: ValueType)(implicit C: Context): Unit = wellformedType(tpe) match {
     case Kind.VType => ()
@@ -35,10 +40,14 @@ package object kinds {
   }
 
   def wellformed(b: FunctionType)(implicit C: Context): Unit = b match {
-    case FunctionType(tps, cps, vps, bps, ret, effs) =>
+    case FunctionType(tps, cps, vps, bps, res, effs) =>
+      // TODO we could also check whether the same type variable shows up twice
+      if (cps.size != (bps.size + effs.controlEffects.size)) {
+        C.panic(s"Compiler invariant violated: different size of capture parameters and block parameters: ${b}")
+      }
       vps.foreach { tpe => wellformed(tpe) }
       bps.foreach { tpe => wellformed(tpe) }
-      wellformed(ret)
+      wellformed(res)
       wellformed(effs)
   }
 

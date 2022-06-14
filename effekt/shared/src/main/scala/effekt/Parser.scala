@@ -465,11 +465,16 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val mulExpr: P[Term] = mulExpr ~ oneof("*", "/") ~/ accessExpr ^^ binaryOp | accessExpr
 
   lazy val accessExpr: P[Term] =
-    callExpr ~ many(`.` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ maybeBlockArgs) ^^ {
+    callExpr ~ many(`.` ~>
+      ( idRef ~ maybeTypeArgs ~ maybeValueArgs ~ maybeBlockArgs ^^ Left.apply
+      | idRef ^^ Right.apply
+      )
+    ) ^^ {
       case firstTarget ~ accesses => accesses.foldLeft(firstTarget) {
-        case (firstArg, id ~ targs ~ vargs ~ bargs) =>
-          val tgt = IdTarget(id) withPositionOf id
-          Call(tgt, targs, firstArg :: vargs, bargs)
+        case (receiver, Left(id ~ targs ~ vargs ~ bargs)) =>
+          MethodCall(receiver, id, targs, vargs, bargs)
+        case (receiver, Right(id)) =>
+          Select(receiver, id)
       }
     }
 
@@ -485,9 +490,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val callTarget: P[CallTarget] =
-    ( idRef ^^ IdTarget.apply
+    ( idTarget
     | `(` ~> expr <~ `)` ^^ ExprTarget.apply
     )
+
+  lazy val idTarget: P[IdTarget] =
+    idRef ^^ IdTarget.apply
 
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
 
@@ -500,10 +508,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val matchExpr: P[Term] =
     (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ Match.apply
 
-  // TODO deprecate doExpr
   lazy val doExpr: P[Term] =
-    `do` ~/> callTarget ~ maybeTypeArgs ~ valueArgs ^^ {
-      case op ~ targs ~ vargs => Call(op, targs, vargs, Nil)
+    `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {
+      case op ~ targs ~ vargs => Do(None, op, targs, vargs)
     }
 
   lazy val handleExpr: P[Term] =

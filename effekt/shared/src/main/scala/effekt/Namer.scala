@@ -371,6 +371,22 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // (2) === Bound Occurrences ===
 
+    case source.Select(receiver, target) =>
+      resolveGeneric(receiver)
+      Context.resolveSelect(target)
+
+    case source.MethodCall(receiver, target, targs, vargs, bargs) =>
+      resolveGeneric(receiver)
+      resolve(target)
+      targs foreach resolve
+      resolveAll(vargs)
+      resolveAll(bargs)
+
+    case source.Do(effect, target, targs, vargs) =>
+      Context.resolveEffectCall(effect map resolve, target)
+      targs foreach resolve
+      resolveAll(vargs)
+
     case source.Call(target, targs, vargs, bargs) =>
       resolve(target)
       targs foreach resolve
@@ -524,23 +540,26 @@ object Namer extends Phase[Parsed, NameResolved] {
       val tps = tparams.map(resolve)
       val vps = vparams.map(resolve)
 
-      val effs = resolve(effects).toList.distinct
-      val caps = effs.controlEffects.map { eff => CaptureParameter(eff.name) }
-
-      // TODO associate IdDef with capture param
-      val (cps, blockTypes) = bparams.map {
+      var cps: List[Capture] = Nil
+      val bps = bparams.map {
         case (id, tpe) =>
           val name = id.map(Name.local).getOrElse(NoName)
-          (CaptureParameter(name), tpe)
-      }.unzip
-      val bps = blockTypes.map(resolve)
+          val cap = CaptureParameter(name)
+          cps = cps :+ cap
+          resolve(tpe)
+      }
 
-      (cps ++ caps) foreach Context.bind
+      val effs = resolve(effects).distinct
+      effs.controlEffects.foreach { eff =>
+        val cap = CaptureParameter(eff.name)
+        cps = cps :+ cap
+      }
 
-      val tpe = resolve(ret)
+      cps foreach Context.bind
 
+      val res = resolve(ret)
 
-      FunctionType(tps, cps ++ caps, vps, bps, tpe, Effects(effs.controlEffects ++ effs.builtinEffects))
+      FunctionType(tps, cps, vps, bps, res, effs)
     }
   }
 
@@ -723,6 +742,40 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     // TODO does local name make sense here?
     assignSymbol(id, new CallTarget(Name.local(id), syms))
+  }
+
+  /**
+   * Resolves a potentially overloaded field access
+   */
+  private[namer] def resolveSelect(id: Id): Unit = at(id) {
+    val syms = scope.lookupOverloaded(id.name).flatMap {
+      case scope => scope.collect { case f: Field => f }
+    }
+    if (syms.isEmpty) {
+      abort(s"Cannot resolve field access ${id.name}")
+    }
+
+    assignSymbol(id, new CallTarget(Name.local(id), List(syms.toSet)))
+  }
+
+  /**
+   * Resolves a potentially overloaded call to an effect
+   */
+  private[namer] def resolveEffectCall(eff: Option[InterfaceType], id: Id): Unit = at(id) {
+
+    val syms = eff match {
+      case Some(tpe) =>
+        val interface = interfaceOf(tpe)
+        val operations = interface.ops.filter { op => op.name.name == id.name }
+        if (operations.isEmpty) Nil else List(operations.toSet)
+      case None => scope.lookupEffectOp(id.name)
+    }
+
+    if (syms.isEmpty) {
+      abort(s"Cannot resolve effect operation ${id.name}")
+    }
+
+    assignSymbol(id, new CallTarget(Name.local(id), syms.asInstanceOf))
   }
 
   /**

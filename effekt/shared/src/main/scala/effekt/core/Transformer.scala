@@ -170,8 +170,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.Unbox(b) => transformBox(tree)
 
-    case source.Select(receiver, selector) => transformBox(tree)
-
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)
       val exprTpe = Context.inferredTypeOf(tree)
@@ -190,6 +188,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           (p, BlockLit(ps, transform(body)))
       }
       Context.bind(Context.inferredTypeOf(tree), Match(scrutinee, cs))
+
+
+    case source.Do(effect, id, targs, vargs) =>
+      ???
+
+    case source.Select(receiver, selector) => Select(transformAsExpr(receiver), selector.symbol)
+
+    case source.MethodCall(receiver, id, targs, vargs, bargs) =>
+      ???
 
     case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
       val e = transformAsExpr(expr)

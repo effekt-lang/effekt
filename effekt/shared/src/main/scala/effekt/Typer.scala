@@ -261,27 +261,38 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case source.Unbox(_) => insertBoxing(expr, expected)
 
+      case c @ source.Select(receiver, field) =>
+        checkOverloadedCall(c, field, Nil, List(receiver), Nil, expected)
+
+      case c @ source.Do(effect, op, targs, vargs) =>
+        checkOverloadedCall(c, op, targs map { _.resolve }, vargs, Nil, expected)
+
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
-        checkOverloadedCall(c, t, targs map { _.resolve }, vargs, bargs, expected)
+        checkOverloadedCall(c, t.id, targs map { _.resolve }, vargs, bargs, expected)
 
       case c @ source.Call(source.ExprTarget(e), targs, vargs, bargs) =>
         val Result(tpe, funEffs) = checkExprAsBlock(e, None) match {
           case Result(b: FunctionType, capt) => Result(b, capt)
-          case _ => Context.abort("Callee is required to have function type")
+          case _ => Context.abort("Cannot infer function type for callee.")
         }
 
         val Result(t, eff) = checkCallTo(c, None, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
+      case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
+        ???
+
       case tree @ source.TryHandle(prog, handlers) =>
 
         // (1) extract all handled effects and capabilities
         var providedCapabilities: List[symbols.BlockParam] = Nil
+        var handledEffects: List[InterfaceType] = Nil
         handlers foreach Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
+          handledEffects = handledEffects :+ effect
           val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
 
-          if (providedCapabilities contains effect) {
+          if (handledEffects contains effect) {
             Context.error(s"Effect ${effect} is handled twice.")
           } else {
             // TODO also relate it to the lexical region
@@ -294,12 +305,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // Create a fresh capture variable for the continuations ?Ck
         val continuationCapt = Context.freshCaptVar(CaptUnificationVar.HandlerRegion(tree))
+
+        // All used captures flow into the continuation capture, except the ones handled by this handler.
         val continuationCaptHandled = Context.without(continuationCapt, providedCapabilities.map(_.capture))
 
         val Result(ret, effs) = {
 
+          // Check the handled program
           val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
-            // All used captures flow into the continuation capture, except the ones handled by this handler.
             given Captures = continuationCaptHandled
             checkStmt(prog, expected)
           }
@@ -309,15 +322,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           handlers foreach Context.withFocus { h =>
 
+            // Extract interface and type arguments from annotated effect
             val (effectSymbol, targs) = h.effect.resolve match {
               case BlockTypeApp(eff: Interface, args) => (eff, args)
               case eff: Interface => (eff, Nil)
               case BlockTypeApp(b: BuiltinEffect, args) => Context.abort("Cannot handle builtin effect")
               case b: BuiltinEffect => Context.abort("Cannot handle builtin effect")
             }
-
-            val tparams = effectSymbol.tparams
-            val tsubst = (tparams zip targs).toMap
 
             // (3) check all operations are covered
             val covered = h.clauses.map { _.definition }
@@ -343,9 +354,21 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 // The parameters C, D, ... are existentials
                 val existentials: List[TypeVar] = declaredType.tparams.drop(targs.size).map { r => TypeVar(r.name) }
 
+                // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
+                // of bidirectional effects and capture polymorphism (still has to be tested).
+                val cparams = declaredType.effects.controlEffects.map { tpe => CaptureParameter(tpe.name) }
+
                 // (1) Instantiate block type of effect operation
-                val (rigids, crigids, canonical, FunctionType(tps, cps, vps, Nil, tpe, effs)) =
-                  Context.instantiate(Context.lookupFunctionType(declaration), targs ++ existentials)
+                // Bidirectional example:
+                //   effect Bidirectional { def op(): Int / {Exc} }
+                // where op has
+                //   FunctionType(Nil, List(@exc), Nil, Nil, TInt, List((TExc, @exc)), Nil)
+                // in general @exc could occur in TInt.
+                //
+                // TODO we need to do something with bidirectional effects and region checking here.
+                //  probably change instantiation to also take capture args.
+                val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
+                  Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap)))
 
                 // (3) check parameters
                 if (vps.size != params.size)
@@ -362,12 +385,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     Context.bind(sym, annotType.getOrElse(decl))
                 }
 
-                // (5) synthesize type of continuation
-                val resumeType = if (declaration.isBidirectional) {
+                // (4) synthesize type of continuation
+                val resumeType = if (otherEffs.nonEmpty) {
                   // resume { e }
-                  val other = declaration.otherEffects
-                  val captureParam = CaptureParameter(Name.local("resumeBlock"))
-                  FunctionType(Nil, List(captureParam), Nil, List(FunctionType(Nil, Nil, Nil, Nil, tpe, other)), ret, Effects.Pure)
+                  val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
+                  val resumeCapt = CaptureParameter(Name.local("resumeBlock"))
+                  FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
                 } else {
                   // resume(v)
                   FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
@@ -425,9 +448,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // we can unify with everything.
         Result(Context.join(tpes: _*), resEff)
 
-      case source.Select(_, _) =>
-        insertBoxing(expr, expected)
-
       case source.Hole(stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
         Result(expected.getOrElse(TBottom), Pure)
@@ -462,7 +482,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 //        case e: ValueSymbol => insertUnboxing(expr)
 //      }
 
-      case s @ source.Select(expr, selector) => ???
+      case s : source.MethodCall => sys error "Nested capability selection not yet supported"
+
 //        checkExprAsBlock(expr) match {
 //          case ((i @ InterfaceType(interface, targs)) / capt) =>
 //            // (1) find the operation
@@ -507,7 +528,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
-      val (rigids, crigids, canonical, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil)
+      val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil, Nil)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
       Context.requireSubtype(sc, ret)
@@ -643,6 +664,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.wellscoped(effs)
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
+                // TODO also annotate the capabilities
 
                 println(s">>>> ${d.id.name}: Inferred ${inferredCapture}, functionCapture ${functionCapture}. Captures ${captures}")
                 Context.unification.dumpConstraints()
@@ -667,7 +689,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val capabilities = effs.controlEffects.map { caps.apply }
 
                 // TODO also add capture parameters for inferred capabilities
-                val funType = makeFunctionType(sym.tparams, sym.vparams.map { p => p.tpe.get }, sym.bparams, capabilities, tpe, effs.builtinEffects)
+                val funType = d.symbol.toType(tpe, effs.toEffects, capabilities.map(_.capture))
 
                 Context.bindCapabilities(d, capabilities)
 
@@ -778,7 +800,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val capabilities = effs.controlEffects.map { caps.apply }
         Context.bindCapabilities(arg, capabilities)
 
-        val funType = makeFunctionType(tps, vps, bparams.map(_.symbol), capabilities, tpe, effs.builtinEffects)
+        val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
+
+        val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
 
         // Like with functions, bound parameters and capabilities are not closed over
         Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion))
@@ -806,12 +830,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //   BlockArg: foo { n => println("hello" + n) }
   //     or
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
+  //
+  // TODO For now we assume that handled effects can not show up in the return type of the block argument.
   def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(using Context, Captures): Result[BlockType] = Context.focusing(arg) {
 
     case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
 
       // (1) Apply what we already know.
-      val bt @ FunctionType(tps, cps, vps, bps, tpe1, handled) = expected
+      val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
 
       // (2) Check wellformedness
       if (tps.size != tparams.size)
@@ -839,36 +865,45 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Context.bind(param.symbol, tpe)
           tpe
       }
+
       val blockTypes = (bparams zip bps) map {
-        case (param, exp) =>
-          val adjusted = typeSubst substitute exp
-          val got = param.symbol.tpe
+        case (param, expTpe) =>
+          val adjusted = typeSubst substitute expTpe
+          val sym = param.symbol
+          val got = sym.tpe
           Context.at(param) { Context.requireSubtype(adjusted, got) }
           // bind types to check body
           Context.bind(param.symbol, got)
           got
       }
-      val captureParams = bparams.map { p => p.symbol.capture }
-      val adjustedReturn = typeSubst substitute tpe1
 
-      // Bind additional capabilities for all control effects "handled" by the function argument.
-      val adjustedHandled = typeSubst substitute handled
-      val bound: ConcreteEffects = adjustedHandled
-      // TODO share code with FunDef and BindAll
-      val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+      // (4) Bind capabilities for all effects "handled" by this function
+      val effects = typeSubst substitute effs
+      val capabilities = effects.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+
+      // (5) Substitute capture params
+      val captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
+      val captSubst = (cps zip (captParams.map { p => CaptureSet(p) })).toMap[CaptVar, Captures]
+
+      // (6) Substitute both types and captures into expected return type
+      val subst = Substitutions(typeSubst, captSubst)
+
+      val expectedReturn = subst substitute tpe1
+
+      // (7) Check function body
       val selfRegion = Context.getSelfRegion(arg)
-
       val bodyRegion = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
 
       val Result(bodyType, bodyEffs) = Context.bindingCapabilities(decl, capabilities) {
          given Captures = bodyRegion
-         Context.withRegion(selfRegion) { body checkAgainst adjustedReturn }
+         Context.withRegion(selfRegion) { body checkAgainst expectedReturn }
       }
-      Context.requireSubregionWithout(bodyRegion, currentCapture, captureParams ++ capabilities.map(_.capture) ++ List(selfRegion))
 
-      val tpe = makeFunctionType(typeParams, valueTypes, bparams.map { _.symbol }, capabilities, bodyType, bound.builtinEffects)
+      Context.requireSubregionWithout(bodyRegion, currentCapture, captParams ++ List(selfRegion))
 
-      Result(tpe, bodyEffs -- bound)
+      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects)
+
+      Result(tpe, bodyEffs -- effects)
   }
 
   def findFunctionTypeFor(sym: TermSymbol)(using Context): FunctionType = sym match {
@@ -888,19 +923,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
    *   - if there is no without errors: report all possible solutions with corresponding errors
    */
   def checkOverloadedCall(
-    call: source.Call,
-    target: source.IdTarget,
+    call: source.CallLike,
+    id: source.IdRef,
     targs: List[ValueType],
     vargs: List[source.Term],
     bargs: List[source.BlockArg],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
 
-    val scopes = target.definition match {
+    val scopes = id.symbol match {
       // an overloaded call target
       case CallTarget(name, syms) => syms
       // already resolved by a previous attempt to typecheck
-      case sym                    => List(Set(sym))
+      case sym: TermSymbol => List(Set(sym))
+      case _ => ???
     }
 
     val stateBefore = Context.backupTyperstate()
@@ -953,7 +989,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // use the typer state after this checking pass
         Context.restoreTyperstate(st)
         // reassign symbol of fun to resolved calltarget symbol
-        Context.assignSymbol(target.id, sym)
+        Context.assignSymbol(id, sym)
 
         return tpe
 
@@ -965,7 +1001,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }.mkString("\n")
 
         val explanation =
-          s"""| Ambiguous reference to ${target.id}. The following blocks would typecheck:
+          s"""| Ambiguous reference to ${id}. The following blocks would typecheck:
               |
               |${sucMsgs}
               |""".stripMargin
@@ -1005,7 +1041,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
   }
 
   def checkCallTo(
-    call: source.Call,
+    call: source.CallLike,
     receiver: Option[BlockSymbol],
     name: String,
     funTpe: FunctionType,
@@ -1028,7 +1064,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
-    val (typeArgs, captArgs, canonicalEffs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs)
+    val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs, Nil)
 
     // (2) check return type
     expected.foreach { expectedReturn => Context.requireSubtype(ret, expectedReturn) }
@@ -1064,10 +1100,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // This is important since
     //   [A, B](): Unit / { State[A], State[B] }
     // with A := Int and B := Int requires us to pass two capabilities.
-    val capabilities = Context.provideCapabilities(call, canonicalEffs.map(Context.unification.apply).controlEffects)
+    val capabilities = Context.provideCapabilities(call, retEffs.controlEffects.map(Context.unification.apply).controlEffects)
 
     // TODO also use capabilities when instantiating the type scheme
+    println(s"Function ${name} uses ${capabilities.map(_.capture)}")
     usingCapture(CaptureSet(capabilities.map(_.capture)))
+
+    println(s"Call to ${name} is in region ${currentCapture}. Results in return type: ${ret}")
 
     // TODO it probably would be better to go back to explicitly represent effect calls, for instance,
     //   with `do raise()`.
@@ -1219,20 +1258,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // invariant: only works if ret is defined!
     def toType: FunctionType =
       annotatedType.get
+    def toType(ret: ValueType, effects: Effects, capabilityParams: List[Capture]): FunctionType =
+      val bcapt = fun.bparams.map { p => p.capture }
+      val tps = fun.tparams
+      val vps = fun.vparams.map { p => p.tpe.get }
+      val bps = fun.bparams.map { p => p.tpe }
+      FunctionType(tps, bcapt ++ capabilityParams, vps, bps, ret, effects)
+
     def annotatedType: Option[FunctionType] =
       for {
         ret <- fun.annotatedResult;
         effs <- fun.annotatedEffects
-        // currently the return type cannot refer to the annotated effects, so we can make up capabilities
-        caps = effs.controlEffects.distinct.map { eff => BlockParam(eff.name, eff) }
-      } yield makeFunctionType(fun.tparams, fun.vparams.map { p => p.tpe.get }, fun.bparams, caps, ret, effs.builtinEffects)
-  }
-
-  def makeFunctionType(tparams: List[TypeVar], vparams: List[ValueType], bparams: List[BlockParam], capabilities: List[BlockParam], result: ValueType, builtins: List[InterfaceType])(using Context): FunctionType = {
-    val cparams = (bparams ++ capabilities).map { b => b.capture }
-    val bparamTypes = bparams.map { b => b.tpe }
-    val effects = capabilities.map { b => b.tpe.asEffect } ++ builtins
-    FunctionType(tparams, cparams, vparams, bparamTypes, result, Effects(effects))
+        effects = effs.distinct
+        // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
+        //   in the future namer needs to annotate the function with the capture parameters it introduced.
+        capt = effects.controlEffects.map { tpe => CaptureParameter(tpe.name) }
+      } yield toType(ret, effects, capt)
   }
   //</editor-fold>
 
@@ -1316,7 +1357,7 @@ trait TyperOps extends ContextOps { self: Context =>
     bind(param, tpe)
     param
 
-  private [typer] def provideCapabilities(call: source.Call, effs: List[InterfaceType]): List[BlockParam] =
+  private [typer] def provideCapabilities(call: source.CallLike, effs: List[InterfaceType]): List[BlockParam] =
     val caps = effs.map(capabilityFor)
     annotations.update(Annotations.CapabilityArguments, call, caps)
     caps
@@ -1431,7 +1472,7 @@ trait TyperOps extends ContextOps { self: Context =>
   // TODO also add InferredRegion
   //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
-  private[typer] def annotateTypeArgs(call: source.Call, targs: List[symbols.ValueType]): Unit = {
+  private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = {
     annotations.update(Annotations.TypeArguments, call, targs)
   }
 

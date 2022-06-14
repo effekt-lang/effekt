@@ -16,6 +16,7 @@ object scopes {
     val terms: mutable.HashMap[String, Set[TermSymbol]] = mutable.HashMap.empty
     val types: mutable.HashMap[String, TypeSymbol] = mutable.HashMap.empty
     val captures: mutable.HashMap[String, Capture] = mutable.HashMap.empty
+    val effects: mutable.HashMap[String, Interface] = mutable.HashMap.empty
 
     /**
      * Searches the nested scopes to find the first term.
@@ -30,6 +31,8 @@ object scopes {
     def lookupCapture(key: String)(implicit C: Context): Capture
 
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
+
+    def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]]
 
     // can be a term OR a type symbol
     def lookupFirst(key: String)(implicit C: Context): Symbol
@@ -87,6 +90,9 @@ object scopes {
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
       Nil
 
+    def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]] =
+      Nil
+
     def leave(implicit C: Context): Scope =
       C.abort("Internal Compiler Error: Leaving top level scope")
   }
@@ -124,6 +130,13 @@ object scopes {
     def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
       terms.get(key).map { _ :: parent.lookupOverloaded(key) }.getOrElse {
         parent.lookupOverloaded(key)
+      }
+
+    def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]] =
+      terms.get(key).map {
+        funs => funs.collect { case o: Operation => o } :: parent.lookupEffectOp(key)
+      }.getOrElse {
+        parent.lookupEffectOp(key)
       }
 
     def leave(implicit C: Context): Scope =

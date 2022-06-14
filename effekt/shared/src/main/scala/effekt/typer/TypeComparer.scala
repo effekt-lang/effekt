@@ -55,10 +55,6 @@ trait TypeUnifier {
       unifyBlockTypes(tpe1, tpe2)
       unify(capt1, capt2)
 
-    case (t: TypeAlias, _, p) => ???
-
-    case (_, t: TypeAlias, p) => ???
-
     case (t, s, p) =>
       error(s"Expected ${t}, but got ${s}")
   }
@@ -85,13 +81,13 @@ trait TypeUnifier {
     case _ => error(s"Mismatch between ${eff1} and ${eff2}")
   }
 
-  // TODO we should check that eff1 and eff2 are concrete!
   def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit =
-     def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit =
-       if (eff1.toList.toSet != eff2.toList.toSet) error(s"${eff2} is not equal to ${eff1}")
+     if (eff1.toList.toSet != eff2.toList.toSet) error(s"${eff2} is not equal to ${eff1}")
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(using p: Polarity): Unit = (tpe1, tpe2) match {
-    case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
+    case (
+      f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1),
+      f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
 
       if (tparams1.size != tparams2.size)
         abort(s"Type parameter count does not match $f1 vs. $f2")
@@ -106,14 +102,21 @@ trait TypeUnifier {
         abort(s"Capture parameter count does not match $f1 vs. $f2")
 
       val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val substVParams2 = vparams2 map subst.substitute
+      val substBParams2 = bparams2 map subst.substitute
+      val substRet2 = subst.substitute(ret2)
+      val substEffs2 = subst.substitute(eff2)
 
-      val (substVparams2, substBparams2, substRet2) = (vparams2 map subst.substitute, bparams2 map subst.substitute, subst.substitute(ret2))
+      (vparams1 zip substVParams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using p.flip) }
+      (bparams1 zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2)(using p.flip) }
 
-      (vparams1 zip substVparams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using p.flip) }
-      (bparams1 zip substBparams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2)(using p.flip) }
       unifyValueTypes(ret1, substRet2)
+
       // We compare effects to be equal, since we do not have subtyping on effects
-      unifyEffects(eff1, eff2)(using Invariant)
+      // TODO verify that a different ordering doesn't interact badly with capture polymorphism
+      //     i.e. () => (T at {@Exc}) / {Exc, Amb} vs () => (T at {@Exc}) / {Amb, Exc}
+      //   this should be ruled out by canonical ordering.
+      unifyEffects(eff1, substEffs2)(using Invariant)
   }
 }
 
@@ -182,7 +185,10 @@ trait TypeMerger extends TypeUnifier {
   }
 
   def mergeFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, polarity: Polarity): FunctionType = (tpe1, tpe2) match {
-    case (f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1), f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
+    case (
+      f1 @ FunctionType(tparams1, cparams1, vparams1, bparams1, ret1, eff1),
+      f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)
+    ) =>
 
       if (tparams1.size != tparams2.size)
         abort(s"Type parameter count does not match $f1 vs. $f2")
@@ -196,16 +202,21 @@ trait TypeMerger extends TypeUnifier {
       if (cparams1.size != cparams2.size)
         abort(s"Capture parameter count does not match $f1 vs. $f2")
 
+
+      // TODO potentially share code with unifyFunctionTypes and instantiate
       val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val substVParams2 = vparams2 map subst.substitute
+      val substBParams2 = bparams2 map subst.substitute
+      val substRet2 = subst.substitute(ret2)
+      val substEffs2 = subst.substitute(eff2)
 
-      val (substVparams2, substBparams2, substRet2) = (vparams2 map subst.substitute, bparams2 map subst.substitute, subst.substitute(ret2))
-
-      val mergedVps = (vparams1 zip substVparams2) map { case (t1, t2) => mergeValueTypes(t1, t2, polarity.flip) }
-      val mergedBps = (bparams1 zip substBparams2) map { case (t1, t2) => mergeBlockTypes(t1, t2, polarity.flip) }
+      val mergedVps = (vparams1 zip substVParams2) map { case (t1, t2) => mergeValueTypes(t1, t2, polarity.flip) }
+      val mergedBps = (bparams1 zip substBParams2) map { case (t1, t2) => mergeBlockTypes(t1, t2, polarity.flip) }
       val mergedRet = mergeValueTypes(ret1, substRet2, polarity)
 
       // We compare effects to be equal, since we do not have subtyping on effects
-      unifyEffects(eff1, eff2)(using Invariant)
+      unifyEffects(eff1, substEffs2)(using Invariant)
+
       FunctionType(tparams1, cparams1, mergedVps, mergedBps, mergedRet, eff1)
   }
 
