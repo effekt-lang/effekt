@@ -200,7 +200,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // Check suspend, resume and return clause
         val (suspendType / suspendEffs) = suspend map {
-          case source.OnSuspend(s) => checkStmt(s, None) 
+          case source.OnSuspend(blk @ source.BlockArg(List(), body)) =>
+            val suspTpeEff @ (suspendType / suspendEffs) = checkStmt(body, None) 
+            val blkType = BlockType(Nil, Nil, suspendType, suspendEffs)
+            Context.annotateBlockArgument(blk, blkType)
+            suspTpeEff
+          case _ =>
+            Context.panic(
+              "Cannot occur. The parser should have transformed the `on suspend` body into a block arg. with no parameters."
+            )
         } getOrElse (TUnit / Pure)
         val (_ / resumeEffs) = resume map { 
           case source.OnResume(blk @ source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>

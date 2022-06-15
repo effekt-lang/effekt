@@ -301,7 +301,9 @@ sealed trait TryClause extends Tree
 
 case class OnResume(prog: BlockArg) extends TryClause
 
-case class OnSuspend(prog: Stmt) extends TryClause
+// on suspend { s } is represented as on suspend { () => s } so that it can be
+// transformed into a lambda function more easily during code generation
+case class OnSuspend(prog: BlockArg) extends TryClause
 
 case class OnReturn(prog: BlockArg) extends TryClause
 

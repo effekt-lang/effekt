@@ -19,12 +19,12 @@ object Parser extends Phase[Source, Parsed] {
    */
   def parser(implicit C: Context) = new EffektParsers(C.positions)
 
-  def run(source: Source)(implicit C: Context) = source.match{
+  def run(source: Source)(implicit C: Context) = source match {
     case VirtualSource(decl, _) => Some(decl)
     case source =>
       //println(s"parsing ${source.name}")
       parser.parse(source)
-  }.map{ tree => Parsed(source, tree) }
+  } map{ tree => Parsed(source, tree) }
 }
 
 /**
@@ -99,9 +99,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `control` = keyword("control")
   lazy val `io` = keyword("io")
   lazy val `record` = keyword("record")
-  lazy val `onSuspend` = keyword("on suspend")
-  lazy val `onResume` = keyword("on resume")
-  lazy val `onReturn` = keyword("on return")
+  lazy val `on` = keyword("on")
+  lazy val `suspend` = keyword("suspend")
+  lazy val `return` = keyword("return")
   lazy val `finally` = keyword("finally")
 
   def keywordStrings: List[String] = List(
@@ -484,9 +484,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case x => x
     val ret = clauses collect { case x: OnReturn => x } match
       case List(OnReturn(BlockArg(List(ValueParams(params)), _))) if params.size != 1 =>
-        return failure(s"The 'on resume' block expected exactly one parameter, but found ${params.size}")
+        return failure(s"The 'on return' block expected exactly one parameter, but found ${params.size}")
       case xs if xs.size > 1 =>
-        return failure(s"Expected at most one 'on resume' clause, but found ${xs.size}")
+        return failure(s"Expected at most one 'on return' clause, but found ${xs.size}")
       case x => x
     val fin = clauses collect { case x: Finally => x } match 
       case xs if xs.size > 1 =>
@@ -508,9 +508,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
           // finally { s } <=> on suspend { s } on return { _ => s }
           case Some(Finally(body)) =>
             val param = List(ValueParams(List(ValueParam(IdDef("_"), None))))
-            // { _ => s }
+            val emptyParams = Nil
+            // on return { _ => s }
             val retBlockArg = BlockArg(param, body)
-            TryHandle(s, h, Some(OnSuspend(body)), resume, Some(OnReturn(retBlockArg)))
+            // on suspend { () => s }
+            val suspBlockArg = BlockArg(emptyParams, body)
+            TryHandle(s, h, Some(OnSuspend(suspBlockArg)), resume, Some(OnReturn(retBlockArg)))
           // otherwise 
           case _ =>
             TryHandle(s, h, suspend, resume, ret)
@@ -521,15 +524,22 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   // matches "on suspend { ... }"
   lazy val onSuspendClause: P[OnSuspend] =
-    `onSuspend` ~/> stmt ^^ OnSuspend.apply
+    `on` ~ `suspend` ~/> stmt ^^ {
+      case s =>
+        // transform the body to a block arg. so that it can be converted into a
+        // lambda function more easily later on
+        val noParams = Nil
+        val blkArg = BlockArg(noParams, s)
+        OnSuspend(blkArg)
+    }
 
   // matches "on resume { e => ... }"
   lazy val onResumeClause: P[OnResume] =
-    `onResume` ~/> blockArg ^^ OnResume.apply
+    `on` ~ `resume` ~/> blockArg ^^ OnResume.apply
 
   // matches "on return { e => ... }"
   lazy val onReturnClause: P[OnReturn] =
-    `onReturn` ~/> blockArg ^^ OnReturn.apply
+    `on` ~ `return` ~/> blockArg ^^ OnReturn.apply
 
   // matches "finally { ... }"
   lazy val finallyClause: P[Finally] =

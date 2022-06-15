@@ -86,7 +86,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
       def ppClause[A](clause: Option[A], f: A => Doc): Doc =
         clause.fold(emptyDoc) { body => braces(nest(f(body))) }
-      val ppSuspend = "on suspend" <+> ppClause(suspend, toDocExpr)
+      val ppSuspend = "on suspend" <+> ppClause(suspend, toDoc)
       val ppResume = "on resume" <+> ppClause(resume, toDoc)
       val ppReturn = "on return" <+> ppClause(ret, toDoc)
       "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs <+> ppSuspend <+> ppResume <+> ppReturn

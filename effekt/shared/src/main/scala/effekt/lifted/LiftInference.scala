@@ -65,8 +65,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Handle(body, handler, suspend, resume, ret) =>
       val transformedBody = transform(body) // lift is provided by the handler runtime
-      val transformedHandler = handler.map { transform }
-      val transformedSuspend = suspend map { transform }
+      val transformedHandler = handler map { transform }
+      val transformedSuspend = suspend map { transform(_, None) }
       val transformedResume = resume map { transform(_, None) }
       val transformedReturn = ret map { transform(_, None) }
       Handle(transformedBody, transformedHandler, transformedSuspend, transformedResume, transformedReturn)

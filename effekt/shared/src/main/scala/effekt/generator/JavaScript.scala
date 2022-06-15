@@ -103,7 +103,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Handle(body, hs, suspend, resume, ret) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
       val hs_ = jsArray(handlers)
-      val susp = suspend map { body => jsLambda(List(), toDocExpr(body)) } getOrElse string("null")
+      val susp = suspend map { toDoc } getOrElse string("null")
       val resp = resume map { toDoc } getOrElse string("null")
       val retp = ret map { toDoc } getOrElse string("null")
       val cs = List(hs_, susp, resp, retp)
