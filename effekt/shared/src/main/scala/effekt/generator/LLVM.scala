@@ -25,34 +25,6 @@ class LLVMSource(val raw: String) {}
 
 class LLVMFragment(val raw: String) {}
 
-class Referencable() {
-}
-
-// a frame atom occupies exactly 64 bits
-enum FrameAtom:
-
-    // a naked integer of 64 bits
-    // (interpretable as any singed/unsigned integer of width <= 64 bits:
-    // boolean, uint32, int64, ...)
-    case Int()
-
-    // a statically known function pointer
-    // (i.e., `malloc` or a user-supplied function's frame copier)
-    case StaticFunctionPointer()
-
-    // a dynamic pointer to another stack
-    case BoxedStack()
-
-    /*** THE FOLLOWING HAS NOT EVEN BEEN ATTEMPTED TO BE IMPLEMENTED ***/
-
-    // a dynamic pointer to a boxed, more complex value object
-    case BoxedVal(ref: Referencable)
-
-    // a dynamic pointer to a boxed, more complex mutable object
-    case BoxedVar(ref: Referencable)
-
-class FrameLayout(val atoms: List[FrameAtom]) {
-}
 
 
 class LLVM extends Generator {
@@ -281,6 +253,7 @@ define void @effektMain() {
     case machine.EviLit(_)     => machine.Evidence()
   }
 
+  // TODO essential
   def toDoc(typ: machine.Type): Doc =
     typ match {
       case machine.PrimInt()             => "%Int"

@@ -25,6 +25,8 @@ case class Include(content: String) extends Top
 
 case class BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminator: Terminator) extends Tree
 
+// TODO this is neither super- nor subset of LLVM
+// TODO `machine.Type` SHOULD be `LLVM.Type`
 sealed trait Instruction extends Tree
 case class Call(id: ValueSymbol, typ: machine.Type, func: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class Phi(param: machine.Param, args: List[(BlockSymbol, machine.Value)]) extends Instruction
@@ -43,8 +45,8 @@ case class EviIsZero(id: ValueSymbol, l: machine.Value) extends Instruction
 
 sealed trait Terminator extends Tree
 case class Ret(values: List[machine.Value]) extends Terminator
-case class Jump(id: BlockSymbol, args: List[machine.Value]) extends Terminator
-case class JumpLocal(id: BlockSymbol, args: List[machine.Value]) extends Terminator
+case class Jump(id: BlockSymbol, args: List[machine.Value]) extends Terminator // LLVM `tail call`
+case class JumpLocal(id: BlockSymbol, args: List[machine.Value]) extends Terminator // LLVM unconditional `br`
 case class If(cond: machine.Value, thenBlock: BlockSymbol, thenArgs: List[machine.Value], elseBlock: BlockSymbol, elseArgs: List[machine.Value]) extends Terminator
 case class Switch(arg: machine.Value, default: BlockSymbol, labels: List[(Int, BlockSymbol)]) extends Terminator
 case class Panic() extends Terminator

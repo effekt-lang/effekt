@@ -70,7 +70,7 @@ case class Reject(typ: Type, arg: Arg, variant: Int) extends Expr
  */
 sealed trait Value extends Arg
 
-// Refers to values and stack are values
+// Refers to values and stacks are values
 // TODO Change this symbol back to value symbol.... but what about block parameters?
 // TODO swap typ and id
 case class Var(typ: Type, id: Symbol) extends Value
@@ -87,10 +87,42 @@ sealed trait Block extends Tree
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class BlockVar(id: BlockSymbol) extends Block
 
+
+
+/* TODO change `Type` to be something akin to `FrameAtom` (that is a LLVM-compatible value type)
+// a frame atom occupies exactly 64 bits
+enum FrameAtom:
+
+    // a naked integer of 64 bits
+    // (interpretable as any singed/unsigned integer of width <= 64 bits:
+    // boolean, uint32, int64, ...)
+    case Int()
+    case Float()
+
+    // a statically known function pointer
+    // (i.e., `malloc` or a user-supplied function's frame copier)
+    case StaticFunctionPointer()
+
+    // a dynamic pointer to another stack
+    case BoxedStack()
+
+    // a dynamic pointer to a boxed, more complex value object
+    // XXX do not scaffold // case BoxedVal(ref: Referencable)
+
+    // a dynamic pointer to a boxed, more complex mutable object
+    // XXX do not scaffold // case BoxedVar(ref: Referencable)
+
+// TODO will `FrameLayout` ever be more than just `List[Type]`?
+class FrameLayout(val atoms: List[FrameAtom]) {
+}
+*/
+
+
 /**
  * Parameters
  */
 // TODO swap id and typ
+// TODO rename `Param` => ???
 case class Param(typ: Type, id: Symbol) extends Tree
 
 /**
@@ -101,8 +133,15 @@ sealed trait Type extends Tree
 case class PrimUnit() extends Type
 case class PrimInt() extends Type
 case class PrimBoolean() extends Type
-case class Record(fieldTypes: List[Type]) extends Type
-case class Variant(variantTypes: List[Type]) extends Type
-case class Stack(cntType: List[Type]) extends Type
-case class Evidence() extends Type
 
+// not yet supported
+case class Record(fieldTypes: List[Type]) extends Type
+// not yet supported
+case class Variant(variantTypes: List[Type]) extends Type
+
+// BoxedStack
+case class Stack(cntType: List[Type]) extends Type
+
+// evidence terms for effectful regions (currently a positive integer offset
+// into the stack chain)
+case class Evidence() extends Type
