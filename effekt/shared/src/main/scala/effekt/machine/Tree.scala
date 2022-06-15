@@ -87,8 +87,6 @@ sealed trait Block extends Tree
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class BlockVar(id: BlockSymbol) extends Block
 
-
-
 /* TODO change `Type` to be something akin to `FrameAtom` (that is a LLVM-compatible value type)
 // a frame atom occupies exactly 64 bits
 enum FrameAtom:
@@ -116,7 +114,6 @@ enum FrameAtom:
 class FrameLayout(val atoms: List[FrameAtom]) {
 }
 */
-
 
 /**
  * Parameters

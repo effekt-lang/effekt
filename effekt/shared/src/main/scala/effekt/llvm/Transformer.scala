@@ -206,11 +206,10 @@ object LLVMTransformer {
     }
   }
 
-
   // TODO TrueLLVMType is `int64`, `pointer`, ... (truely something LLVM knows of)
   // `effektStack` defined by our run-time system (`%stk`)
   // DO NOT scaffold any `boxed` types!
-  def transform(tpe: Machine.Type): LLVM.TrueLLVMType = ???
+  def transform(tpe: machine.Type): TrueLLVMType = ???
 
   def transform(arg: machine.Arg)(implicit C: LLVMTransformerContext): machine.Value = arg match {
     case expr: machine.Expr =>

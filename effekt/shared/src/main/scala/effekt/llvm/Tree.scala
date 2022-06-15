@@ -15,6 +15,9 @@ sealed trait Tree extends Product {
  * Toplevel definitions
  */
 
+// TODO implement
+class TrueLLVMType();
+
 sealed trait Top extends Tree
 case class DefCnt(id: BlockSymbol, params: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
 case class DefFrm(id: BlockSymbol, params: List[machine.Param], env: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
