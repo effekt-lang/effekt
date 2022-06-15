@@ -182,9 +182,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.panic("Method call syntax not allowed in source programs.")
 
       case source.TryHandle(prog, handlers, suspend, resume, retrn) =>
-        // effect EffOp(x: B): C
+        // effect Eff(x: B): C
         // try { s1: T }
-        // with EffOp { (x: B, resume: C => R) => s2: R }
+        // with Eff { (x: B, resume: C => R) => _ }
         // on suspend { s3: A }
         // on resume { x: A => _ }
         // on return { x: T => s4: R }
@@ -192,7 +192,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // We cannot check the try-body against the expected type yet,
         // since it is yet unkown if there's a 'on return' block that
         // alters the return type of the whole try expression.
-        val (result / effs) = checkStmt(prog, expected)
+        val (result / effs) = checkStmt(prog, None)
 
         var effects: List[symbols.Effect] = Nil
 
@@ -209,8 +209,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // Assign the resume param type of suspend return type
             Context.define(param.symbol, suspendType)
             val (resumeType / resumeEffs) = checkStmt(body, Some(TUnit))
-            val blkTpe = BlockType(Nil, List(List(suspendType)), resumeType, resumeEffs)
-            Context.annotateBlockArgument(blk, blkTpe)
+            val blkType = BlockType(Nil, List(List(suspendType)), resumeType, resumeEffs)
+            Context.annotateBlockArgument(blk, blkType)
             resumeType / resumeEffs
           case _ => 
             Context.panic(
@@ -223,9 +223,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.define(param.symbol, result)
             // The type of the 'on return' block has to match the expected type of
             // the whole try-expression.
-            val (ret / retEffs) = checkStmt(body, None)
-            val blkTpe = BlockType(Nil, List(List(result)), ret, effs)
-            Context.annotateBlockArgument(blk, blkTpe)
+            val (ret / retEffs) = checkStmt(body, expected)
+            val blkType = BlockType(Nil, List(List(result)), ret, effs)
+            Context.annotateBlockArgument(blk, blkType)
             ret / retEffs
           case _ => 
             Context.panic(
