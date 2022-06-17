@@ -323,7 +323,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
-        ret / ((effs -- Effects(effects)) ++ (handlerEffs -- Effects(effects)))
+        ret / ((effs -- Effects(effects)) ++ handlerEffs)
 
       case source.MatchExpr(sc, clauses) =>
 
