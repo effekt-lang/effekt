@@ -134,7 +134,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val transformedResume = resume map { visit(_) { case OnResume(s) => OnResume(rewrite(s)) }}
       val transformedReturn = ret map { visit(_) { case OnReturn(s) => OnReturn(rewrite(s)) }}
       
-      TryHandle(body, hs, suspend, resume, ret)
+      TryHandle(body, hs, transformedSuspend, transformedResume, transformedReturn)
   }
 
   override def rewrite(b: source.BlockArg)(implicit C: Context): source.BlockArg = visit(b) {

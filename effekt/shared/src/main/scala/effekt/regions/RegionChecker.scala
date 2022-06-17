@@ -172,9 +172,9 @@ object RegionChecker extends Phase[Typechecked, Typechecked] {
       }
 
       Seq(suspend, resume, ret).flatten foreach {
-        case OnSuspend(body) => reg ++= check(body)
-        case OnResume(BlockArg(_, body)) => reg ++= check(body)
-        case OnReturn(BlockArg(_, body)) => reg ++= check(body)
+        case OnSuspend(blkarg) => reg ++= check(blkarg)
+        case OnResume(blkarg) => reg ++= check(blkarg)
+        case OnReturn(blkarg) => reg ++= check(blkarg)
         case _: Finally => Context.panic("Should not occur")
       } 
 

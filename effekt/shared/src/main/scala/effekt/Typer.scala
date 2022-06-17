@@ -202,7 +202,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val (suspendType / suspendEffs) = suspend map {
           case source.OnSuspend(blk @ source.BlockArg(List(), body)) =>
             val suspTpeEff @ (suspendType / suspendEffs) = checkStmt(body, None) 
-            val blkType = BlockType(Nil, Nil, suspendType, suspendEffs)
+            val blkType = BlockType(Nil, Nil, suspendType, Pure)
             Context.annotateBlockArgument(blk, blkType)
             suspTpeEff
           case _ =>
@@ -217,7 +217,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // Assign the resume param type of suspend return type
             Context.define(param.symbol, suspendType)
             val (resumeType / resumeEffs) = checkStmt(body, Some(TUnit))
-            val blkType = BlockType(Nil, List(List(suspendType)), resumeType, resumeEffs)
+            val blkType = BlockType(Nil, List(List(suspendType)), resumeType, Pure)
             Context.annotateBlockArgument(blk, blkType)
             resumeType / resumeEffs
           case _ => 
@@ -232,7 +232,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             // The type of the 'on return' block has to match the expected type of
             // the whole try-expression.
             val (ret / retEffs) = checkStmt(body, expected)
-            val blkType = BlockType(Nil, List(List(result)), ret, effs)
+            val blkType = BlockType(Nil, List(List(result)), ret, Pure)
             Context.annotateBlockArgument(blk, blkType)
             ret / retEffs
           case _ => 
@@ -323,7 +323,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
-        ret / ((effs -- Effects(effects)) ++ handlerEffs)
+        ret / ((effs -- Effects(effects)) ++ (handlerEffs -- Effects(effects)))
 
       case source.MatchExpr(sc, clauses) =>
 
