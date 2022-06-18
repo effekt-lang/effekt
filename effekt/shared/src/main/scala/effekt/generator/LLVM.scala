@@ -21,9 +21,8 @@ import scala.sys.process.Process
 
 
 // XXX `val` to make it publicly accessible
-class LLVMSource(val raw: String) {}
-
-class LLVMFragment(val raw: String) {}
+type LLVMSource = String
+type LLVMFragment = String
 
 
 
@@ -61,8 +60,9 @@ class LLVM extends Generator {
 object LLVMPrinter extends ParenPrettyPrinter {
   // a transitional helper to aid in moving to string interpolation for LLVM code construction
   def d2s(doc: Doc): String = pretty(doc).layout
-  def f2d(frg: LLVMFragment): Doc = Doc(frg.raw)
-  def transitionalDocLift(src: LLVMSource): Doc = Doc(src.raw)
+  def s2d(str: String): Doc = Doc(str)
+  val f2d = s2d
+  def transitionalDocLift(src: LLVMSource): Doc = Doc(src)
 
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): String =
     // NOTE: `vsep(listOfDocs, line) === listOfDocs.map(d2s).mkString("\n\n")` with `listOfDocs: [Doc]`
@@ -119,15 +119,13 @@ define void @effektMain() {
         argumentList(parameters.map {
           case machine.Param(typ, id) => toDoc(typ) <+> "%" <> id.name.toString()
         }) <+>
-        "alwaysinline" <+> llvmBlock(
-          string(body)
-        )
+        "alwaysinline" <+> llvmBlock(d2s(string(body)))
 
     // "DEFine stack SCaNner"
     case DefScn(functionName, env) =>
       // TODO make loadEnv work on sp directly and don't allocate spp
       "define fastcc %Sp" <+> scanningName(functionName) <> argumentList(List("%Sp noalias %sp")) <+> llvmBlock(
-        "ret %Sp null" // TODO do properly (this leaks, segfaults and crashes)
+        "ret %Sp null ; THIS IS INCORRECT" // TODO do properly (this leaks, segfaults and crashes)
       )
     case Include(content) =>
       string(content)
@@ -273,11 +271,12 @@ define void @effektMain() {
 
   def define(name: Doc, args: List[Doc], body: Doc): Doc =
     "define fastcc void" <+> name <> argumentList("%Sp noalias %sp" :: args) <+>
-      llvmBlock(
-        "%spp = alloca %Sp" <@>
-          "store %Sp %sp, %Sp* %spp" <@@@>
-          body
-      )
+      llvmBlock(s"""
+%spp = alloca %Sp
+store %Sp %sp, %Sp* %spp
+
+${d2s(body)}
+""")
 
   // TODO Why does `jump` not jump but call?
   def jump(name: Doc, sp: Doc, args: List[Doc])(implicit C: LLVMContext): Doc = {
@@ -375,14 +374,14 @@ define void @effektMain() {
     val newsp = freshLocalName("newsp");
     val oldtypedsp = freshLocalName("oldtypedsp");
     val newtypedsp = freshLocalName("newtypedsp");
-    LLVMSource(s"""
+    s"""
 $oldsp = load %Sp, %Sp* ${d2s(spp)}
 $oldtypedsp = bitcast %Sp $oldsp to $ptrType
 $newtypedsp = getelementptr ${d2s(typ)}, $ptrType $oldtypedsp, i64 -1
 $newsp = bitcast $ptrType $newtypedsp to %Sp
 ${d2s(name)} = load ${d2s(typ)}, $ptrType $newtypedsp
 store %Sp $newsp, %Sp* ${d2s(spp)}
-""")
+"""
   }
 
   def store(spp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
@@ -422,11 +421,11 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
   def nameDef(id: Symbol): LLVMFragment =
     val name = s"${id.name}_${id.id}"
     assertSaneName(name)
-    LLVMFragment(name)
+    s"$name"
 
   def globalBuiltin(name: String): LLVMFragment =
     assertSaneName(name)
-    LLVMFragment(s"@$name")
+    s"@$name"
 
   def isBoxType(typ: machine.Type) = typ match {
     case machine.Stack(_) => true
@@ -447,8 +446,8 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
         throw new Error(s"assertSaneName: $name")
     return true
 
-  def llvmBlock(content: Doc): Doc =
-    "{\n" + d2s(content).split("\n").map("    " + _).mkString("\n") + "\n}"
+  def llvmBlock(body: LLVMFragment): LLVMSource =
+    "{\n" + body.split("\n").map("    " + _).mkString("\n") + "\n}"
 
   implicit class MyDocOps(self: Doc) {
     def <@@@>(other: Doc): Doc = self <> emptyline <> other
