@@ -385,23 +385,23 @@ store %Sp $newsp, %Sp* ${d2s(spp)}
 
   def store(spp: Doc, basep: Doc, limitp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
     // TODO remove parameters spp basep and limitp
-    val ptrType = typ <> "*";
-    val oldsp = freshLocalName("oldsp");
-    val oldtypedsp = freshLocalName("oldtypedsp");
-    val incedtypedsp = freshLocalName("incedtypedsp");
-    val incedsp = freshLocalName("incedsp");
-    val newsp = freshLocalName("newsp");
-    val newtypedsp = freshLocalName("newtypedsp");
-    oldsp <+> "=" <+> "load %Sp, %Sp*" <+> spp <@>
-      oldtypedsp <+> "=" <+> "bitcast" <+> "%Sp" <+> oldsp <+> "to" <+> ptrType <@>
-      incedtypedsp <+> "=" <+> "getelementptr" <+> typ <> comma <+> ptrType <+>
-      oldtypedsp <> comma <+> "i64 1" <@>
-      incedsp <+> "=" <+> "bitcast" <+> ptrType <+> incedtypedsp <+> "to" <+> "%Sp" <@>
-      newsp <+> "=" <+> "call fastcc %Sp" <+> f2d(globalBuiltin("checkOverflow")) <>
-      argumentList(List("%Sp" <+> incedsp, "%Sp*" <+> spp)) <@>
-      newtypedsp <+> "=" <+> "bitcast" <+> "%Sp" <+> newsp <+> "to" <+> ptrType <@>
-      "store" <+> typ <+> value <> comma <+> ptrType <+> newtypedsp
-    // TODO do the store to spp here and not in growStack
+    val ptrType = s"${d2s(typ)}*"
+    val oldsp = freshLocalName("oldsp")
+    val oldtypedsp = freshLocalName("oldtypedsp")
+    val incedtypedsp = freshLocalName("incedtypedsp")
+    val incedsp = freshLocalName("incedsp")
+    val newsp = freshLocalName("newsp")
+    val newtypedsp = freshLocalName("newtypedsp")
+    d2s(s"""
+$oldsp = load %Sp, %Sp* ${d2s(spp)}
+$oldtypedsp = bitcast %Sp $oldsp to $ptrType
+$incedtypedsp = getelementptr ${d2s(typ)}, $ptrType $oldtypedsp, i64 1
+$incedsp = bitcast $ptrType $incedtypedsp to %Sp
+$newsp =  call fastcc %Sp ${d2s(f2d(globalBuiltin("checkOverflow")))}${d2s(argumentList(List(s"%Sp $incedsp", s"%Sp* ${d2s(spp)}")))}
+$newtypedsp = bitcast %Sp $newsp to $ptrType
+store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
+; TODO do the store to spp here and not in growStack
+""")
   }
 
   def envRecordType(types: List[Doc]): Doc = {
