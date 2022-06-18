@@ -71,7 +71,7 @@ define void @effektMain() {
     %spp = alloca %Sp
     ; TODO find return type of main
     store %Sp null, %Sp* %spp
-    ${d2s(storeFrm("%spp", "@base", "@limit", List(), f2d(globalBuiltin("topLevel")), List(machine.PrimInt())))}
+    ${d2s(storeFrm("%spp", List(), f2d(globalBuiltin("topLevel")), List(machine.PrimInt())))}
     %newsp = load %Sp, %Sp* %spp
     ; TODO deal with top-level evidence
     ${d2s(jump(globalName(mainName), "%newsp", List("%Evi 0")))}
@@ -164,14 +164,14 @@ define void @effektMain() {
       tmpCons <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
         localName(name) <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> tmpCons <> ", i64" <+> variant.toString <> ", 0"
     case PushFrame(cntType, blockName, freeVars) =>
-      storeFrm("%spp", "@base", "@limit", freeVars, globalName(blockName), cntType)
+      storeFrm("%spp", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
       val tmpstkp = freshLocalName("tempstkp");
       tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> f2d(globalBuiltin("newStack")) <>
         argumentList(List()) <@>
         "call fastcc void" <+> f2d(globalBuiltin("pushStack")) <>
         argumentList(List("%Sp* %spp", "%Stk*" <+> tmpstkp)) <@>
-        storeFrm("%spp", "@base", "@limit", args, globalName(blockName), cntType) <@>
+        storeFrm("%spp", args, globalName(blockName), cntType) <@>
         localName(stackName) <+> "=" <+>
         "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
         argumentList(List("%Sp* %spp"))
@@ -214,7 +214,7 @@ define void @effektMain() {
       val unspilledArgs = args.take(5);
       val spilledArgs = args.drop(5);
       val sp = freshLocalName("sp");
-      storeSpilled("%spp", "@base", "@limit", spilledArgs) <@>
+      storeSpilled("%spp", spilledArgs) <@>
         sp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
         jump(globalName(name), sp, unspilledArgs.map(toDocWithType))
     case JumpLocal(name, args) =>
@@ -292,12 +292,12 @@ define void @effektMain() {
     loadParams(d2s(spp), envType, envParams)
   }
 
-  def storeFrm(spp: Doc, basep: Doc, limitp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
+  def storeFrm(spp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
     val envType =
       envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType));
     val envValues =
       values.map(v => toDocWithType(v)) :+ (cntTypeDoc(cntType) <+> cntName);
-    storeValues(spp, basep, limitp, envType, envValues)
+    storeValues(spp, envType, envValues)
   }
 
   def loadSpilled(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
@@ -312,7 +312,7 @@ define void @effektMain() {
     }
   }
 
-  def storeSpilled(spp: Doc, basep: Doc, limitp: Doc, values: List[machine.Value])(implicit C: LLVMContext): Doc = {
+  def storeSpilled(spp: Doc, values: List[machine.Value])(implicit C: LLVMContext): Doc = {
     values match {
       case Nil => emptyDoc
       case _ =>
@@ -320,7 +320,7 @@ define void @effektMain() {
           envRecordType(values.map(v => toDoc(valueType(v))));
         val envValues =
           values.map(v => toDocWithType(v));
-        storeValues(spp, basep, limitp, envType, envValues)
+        storeValues(spp, envType, envValues)
     }
   }
 
@@ -330,10 +330,10 @@ define void @effektMain() {
       extractParams(envName, envType, envParams)
   }
 
-  def storeValues(spp: Doc, basep: Doc, limitp: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
+  def storeValues(spp: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
     val envName = freshLocalName("env");
     insertValues(envName, envType, envValues) <@>
-      store(spp, basep, limitp, envName, envType)
+      store(spp, envName, envType)
   }
 
   def extractParams(envName: Doc, envType: Doc, envParams: List[Doc]): Doc = {
@@ -383,8 +383,7 @@ store %Sp $newsp, %Sp* ${d2s(spp)}
 """)
   }
 
-  def store(spp: Doc, basep: Doc, limitp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
-    // TODO remove parameters spp basep and limitp
+  def store(spp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
     val ptrType = s"${d2s(typ)}*"
     val oldsp = freshLocalName("oldsp")
     val oldtypedsp = freshLocalName("oldtypedsp")
