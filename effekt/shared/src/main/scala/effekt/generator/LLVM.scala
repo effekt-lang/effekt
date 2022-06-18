@@ -65,8 +65,10 @@ object LLVMPrinter extends ParenPrettyPrinter {
   def transitionalDocLift(src: LLVMSource): Doc = Doc(src.raw)
 
   def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): String =
-    d2s(
-      vsep(defs.map(toDoc), line) <@@@> s"""
+    // NOTE: `vsep(listOfDocs, line) === listOfDocs.map(d2s).mkString("\n\n")` with `listOfDocs: [Doc]`
+    s"""
+${defs.map(toDoc).map(d2s).mkString("\n\n")}
+
 define void @effektMain() {
     %spp = alloca %Sp
     ; TODO find return type of main
@@ -76,7 +78,7 @@ define void @effektMain() {
     ; TODO deal with top-level evidence
     ${d2s(jump(globalName(mainName), "%newsp", List("%Evi 0")))}
 }
-""")
+"""
 
   def toDoc(top: Top)(implicit C: LLVMContext): Doc = top match {
 
