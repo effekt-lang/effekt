@@ -447,7 +447,8 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
         throw new Error(s"assertSaneName: $name")
     return true
 
-  def llvmBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
+  def llvmBlock(content: Doc): Doc =
+    "{\n" + d2s(content).split("\n").map("    " + _).mkString("\n") + "\n}"
 
   implicit class MyDocOps(self: Doc) {
     def <@@@>(other: Doc): Doc = self <> emptyline <> other
