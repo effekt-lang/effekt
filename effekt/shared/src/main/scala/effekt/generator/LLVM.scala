@@ -175,13 +175,11 @@ define void @effektMain() {
         localName(stackName) <+> "=" <+>
         "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
         argumentList(List("%Sp* %spp"))
-    case PushStack(stack) =>
-      "call fastcc void" <+> f2d(globalBuiltin("pushStack")) <>
-        argumentList(List("%Sp* %spp", toDocWithType(stack)))
-    case PopStack(stackName) =>
-      localName(stackName) <+> "=" <+>
-        "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
-        argumentList(List("%Sp* %spp"))
+
+    // TODO Why is this so assymmetric (`PushStack(stack)` vs. `PopStack(stackName)`)?
+    case PushStack(stack) => s"""call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(toDocWithType(stack))})"""
+    case PopStack(stackName) => s"""${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)"""
+
     case CopyStack(stackName, stack) =>
       localName(stackName) <+> "=" <+>
         "call fastcc %Stk*" <+> f2d(globalBuiltin("copyStack")) <>
@@ -325,7 +323,7 @@ ${d2s(body)}
     }
   }
 
-  def loadParams(spp: String, envType: Doc, envParams: List[Doc])(implicit C: LLVMContext): Doc = {
+  def loadParams(spp: String, envType: Doc, envParams: List[LLVMFragment])(implicit C: LLVMContext): Doc = {
     val envName = freshLocalName("env");
     transitionalDocLift(load(spp, envName, envType)) <@>
       extractParams(envName, envType, envParams)
@@ -337,7 +335,7 @@ ${d2s(body)}
       store(spp, envName, envType)
   }
 
-  def extractParams(envName: Doc, envType: Doc, envParams: List[Doc]): Doc = {
+  def extractParams(envName: Doc, envType: Doc, envParams: List[LLVMFragment]): Doc = {
       (envParams.zipWithIndex.map {
         case (p, i) =>
           p <+> "=" <+> "extractvalue" <+> envType <+> envName <> comma <+> i.toString
@@ -402,17 +400,17 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
 """)
   }
 
-  def envRecordType(types: List[Doc]): Doc =
+  def envRecordType(types: List[Doc]): LLVMFragment =
     "{" + types.map(d2s).mkString(", ") + "}"
 
-  def localName(id: Symbol): Doc =
+  def localName(id: Symbol): LLVMFragment =
     "%" + nameDef(id)
 
-  def globalName(id: Symbol): Doc =
+  def globalName(id: Symbol): LLVMFragment =
     "@" + nameDef(id)
 
   // XXX Major bug potential: `scanningName` can clash with `globalName`.
-  def scanningName(id: Symbol): Doc =
+  def scanningName(id: Symbol): LLVMFragment =
     "@scan_" + nameDef(id)
 
   def nameDef(id: Symbol): LLVMFragment =
