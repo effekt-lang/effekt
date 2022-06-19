@@ -402,19 +402,18 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
 """)
   }
 
-  def envRecordType(types: List[Doc]): Doc = {
-    braces(hsep(types, comma))
-  }
+  def envRecordType(types: List[Doc]): Doc =
+    "{" + types.map(d2s).mkString(", ") + "}"
 
   def localName(id: Symbol): Doc =
-    "%" <> f2d(nameDef(id))
+    "%" + nameDef(id)
 
   def globalName(id: Symbol): Doc =
-    "@" <> f2d(nameDef(id))
+    "@" + nameDef(id)
 
   // XXX Major bug potential: `scanningName` can clash with `globalName`.
   def scanningName(id: Symbol): Doc =
-    "@scan_" <> f2d(nameDef(id))
+    "@scan_" + nameDef(id)
 
   def nameDef(id: Symbol): LLVMFragment =
     val name = s"${id.name}_${id.id}"
@@ -431,7 +430,7 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
   };
 
   def cntTypeDoc(cntType: List[machine.Type])(implicit C: LLVMContext): Doc =
-    "void" <+> parens(hsep("%Sp" :: cntType.map(toDoc(_)), comma)) <> "*"
+    s"""void (${("%Sp" :: cntType.map(toDoc).map(d2s)).mkString(", ")})*"""
 
   def freshLocalName(name: String)(implicit C: LLVMContext): String =
     assertSaneName(name)
@@ -447,7 +446,8 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
   def llvmBlock(body: LLVMFragment): LLVMSource =
     "{\n" + body.split("\n").map("    " + _).mkString("\n") + "\n}"
 
-  def argumentList(args: List[Doc]) = parens(hsep(args, comma))
+  def argumentList(args: List[Doc]): Doc =
+    "(" + args.map(d2s).mkString(", ") + ")"
 
   /**
    * Extra info in context
