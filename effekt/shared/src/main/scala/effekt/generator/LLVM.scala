@@ -89,15 +89,15 @@ define void @effektMain() {
       val spilledParams = params.drop(5);
       define(globalName(functionName), unspilledParams.map(toDoc),
         loadSpilled("%spp", spilledParams) <@>
-          "br" <+> "label" <+> localName(entry) <@@@>
-          onSeparateLines(body.map(toDoc)))
+          "br" <+> "label" <+> localName(entry) <>line<>line<>
+          body.map(toDoc).map(d2s).mkString("\n\n"))
 
     // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
       define(globalName(functionName), params.map(toDoc),
         loadEnv("%spp", env) <@>
-          "br" <+> "label" <+> localName(entry) <@@@>
-          onSeparateLines(body.map(toDoc)))
+          "br" <+> "label" <+> localName(entry) <>line<>line<>
+          body.map(toDoc).map(d2s).mkString("\n\n"))
 
     // "DEFine CLO???"
     case DefClo(functionName, params, env, entry, body) =>
@@ -109,8 +109,8 @@ define void @effektMain() {
           argumentList(List("%Sp* %spp")) <@>
           "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
           argumentList(List("%Stk*" <+> emptyStk)) <@>
-          "br" <+> "label" <+> localName(entry) <@@@>
-          onSeparateLines(body.map(toDoc)))
+          "br" <+> "label" <+> localName(entry) <>line<>line<>
+          body.map(toDoc).map(d2s).mkString("\n\n"))
 
     // "DEFine Function"
     case DefFun(returnType, functionName, parameters, body) =>
@@ -134,7 +134,7 @@ define void @effektMain() {
   def toDoc(basicBlock: BasicBlock)(implicit C: LLVMContext): Doc = basicBlock match {
     case BasicBlock(blockName, instructions, terminator) =>
       f2d(nameDef(blockName)) <> colon <@>
-        onLines(instructions.map(toDoc)) <@>
+        instructions.map(toDoc).map(d2s).mkString("\n") <@>
         toDoc(terminator)
   }
 
@@ -338,12 +338,10 @@ ${d2s(body)}
   }
 
   def extractParams(envName: Doc, envType: Doc, envParams: List[Doc]): Doc = {
-    onLines {
-      envParams.zipWithIndex.map {
+      (envParams.zipWithIndex.map {
         case (p, i) =>
           p <+> "=" <+> "extractvalue" <+> envType <+> envName <> comma <+> i.toString
-      }
-    }
+      }).map(d2s).mkString("\n")
   }
 
   def insertValues(envName: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
@@ -449,23 +447,7 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
   def llvmBlock(body: LLVMFragment): LLVMSource =
     "{\n" + body.split("\n").map("    " + _).mkString("\n") + "\n}"
 
-  implicit class MyDocOps(self: Doc) {
-    def <@@@>(other: Doc): Doc = self <> emptyline <> other
-  }
-
   def argumentList(args: List[Doc]) = parens(hsep(args, comma))
-
-  def onLines(docs: Iterable[Doc]): Doc = docs match {
-    case List()  => emptyDoc
-    case d :: ds => ds.foldLeft(d)(_ <@> _)
-  }
-
-  def onSeparateLines(docs: Iterable[Doc]): Doc = docs match {
-    case List()  => emptyDoc
-    case d :: ds => ds.foldLeft(d)(_ <@@@> _)
-  }
-
-  val emptyline: Doc = line <> line
 
   /**
    * Extra info in context
