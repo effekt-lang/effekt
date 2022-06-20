@@ -19,6 +19,8 @@ import effekt.util.paths._
 
 import scala.sys.process.Process
 
+// This magical 5 ensures that we pass at most 6 64bit parameters
+val MAGICAL_FIVE = 5
 
 // XXX `val` to make it publicly accessible
 type LLVMSource = String
@@ -84,49 +86,50 @@ define void @effektMain() {
 
     // "DEFine C???NT"
     case DefCnt(functionName, params, entry, body) =>
-      // This magical 5 ensures that we pass at most 6 64bit parameters
-      val unspilledParams = params.take(5);
-      val spilledParams = params.drop(5);
-      define(globalName(functionName), unspilledParams.map(toDoc),
-        loadSpilled("%spp", spilledParams) <@>
-          "br" <+> "label" <+> localName(entry) <>line<>line<>
+      val (unspilled,spilled) = params.splitAt(MAGICAL_FIVE)
+      define(globalName(functionName), unspilled.map(toDoc),
+        d2s(loadSpilled("%spp", spilled)) + "\n" +
+          s"br label ${localName(entry)}\n\n" + "\n" +
           body.map(toDoc).map(d2s).mkString("\n\n"))
 
     // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
       define(globalName(functionName), params.map(toDoc),
-        loadEnv("%spp", env) <@>
-          "br" <+> "label" <+> localName(entry) <>line<>line<>
+        d2s(loadEnv("%spp", env)) + "\n" +
+          s"br label ${localName(entry)}\n\n" +
           body.map(toDoc).map(d2s).mkString("\n\n"))
 
     // "DEFine CLO???"
     case DefClo(functionName, params, env, entry, body) =>
       val emptyStk = freshLocalName("emptyStk");
       define(globalName(functionName), params.map(toDoc),
-        loadEnv("%spp", env) <@>
-          emptyStk <+> "=" <+>
-          "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
-          argumentList(List("%Sp* %spp")) <@>
-          "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
-          argumentList(List("%Stk*" <+> emptyStk)) <@>
-          "br" <+> "label" <+> localName(entry) <>line<>line<>
-          body.map(toDoc).map(d2s).mkString("\n\n"))
+        s"""
+${d2s(loadEnv("%spp", env))}
+$emptyStk = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)
+call fastcc void ${globalBuiltin("eraseStack")}(%Stk* $emptyStk)
+br label ${localName(entry)}
+
+${body.map(toDoc).map(d2s).mkString("\n\n")}
+""")
 
     // "DEFine Function"
     case DefFun(returnType, functionName, parameters, body) =>
-      "define fastcc" <+> toDoc(returnType) <+> globalName(functionName) <>
+      s"define fastcc ${d2s(toDoc(returnType))} ${globalName(functionName)}" +
         // we can't use unique id here, since we do not know it in the extern string.
-        argumentList(parameters.map {
-          case machine.Param(typ, id) => toDoc(typ) <+> "%" <> id.name.toString()
-        }) <+>
-        "alwaysinline" <+> llvmBlock(d2s(string(body)))
+        d2s(argumentList(parameters.map {
+          case machine.Param(typ, id) => { /* TODO why is the raw symbol name used here? `assertSaneName(id.name);`*/ s"${d2s(toDoc(typ))} %${id.name}" }
+        })) + " " + s"alwaysinline ${llvmBlock(d2s(string(body)))}"
 
     // "DEFine stack SCaNner"
     case DefScn(functionName, env) =>
       // TODO make loadEnv work on sp directly and don't allocate spp
-      "define fastcc %Sp" <+> scanningName(functionName) <> argumentList(List("%Sp noalias %sp")) <+> llvmBlock(
-        "ret %Sp null ; THIS IS INCORRECT" // TODO do properly (this leaks, segfaults and crashes)
-      )
+      // TODO do properly (`ret %Sp null` leaks, segfaults and crashes)
+      s"""
+define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
+    ret %Sp null ; THIS IS INCORRECT
+}
+"""
+
     case Include(content) =>
       string(content)
   }
