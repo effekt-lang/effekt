@@ -236,7 +236,7 @@ ${d2s(string(content))}
       val cntName = freshLocalName("next")
       transitionalDocLift(load("%spp", cntName, cntTypeDoc(values.map(valueType(_))))) <@>
         newsp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
-        jump(cntName, newsp, values.map(fromMachineValueWithAnnotatedType(_)))
+        jump(cntName, newsp, values.map(fromMachineValueWithAnnotatedType))
 
     case Jump(name, args) =>
       // This magical 5 ensures that we pass at most 6 64bit parameters
@@ -302,10 +302,10 @@ ${d2s(string(content))}
   //  */
 
   // TODO Why does `jump` not jump but call?
-  def jump(name: Doc, sp: Doc, args: List[Doc])(implicit C: LLVMContext): Doc = {
-    "tail call fastcc void" <+> name <> argumentList(("%Sp" <+> sp) :: args) <@>
-      "ret" <+> "void"
-  }
+  def jump(name: LLVMFragment, sp: LLVMFragment, args: List[LLVMFragment])(implicit C: LLVMContext): LLVMFragment =
+    s"""tail call fastcc void $name(%Sp $sp, ${commaSeparated(args)})
+ret void
+"""
 
   // TODO I think, and "env" or "params" is a Frame layout
   def loadEnv(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
