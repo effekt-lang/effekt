@@ -96,7 +96,7 @@ define void @effektMain() {
     case DefCnt(functionName, params, entry, body) =>
       val (unspilled,spilled) = params.splitAt(MAGICAL_FIVE)
       s"""
-define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(unspilled.map(transitionalFromMachineParam))}) {
+define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(unspilled.map(asFragment))}) {
     %spp = alloca %Sp
     store %Sp %sp, %Sp* %spp
     ${d2s(loadSpilled("%spp", spilled))}
@@ -109,7 +109,7 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
     // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
       s"""
-define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(params.map(d2s compose toDoc))}) {
+define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(params.map(asFragment))}) {
     %spp = alloca %Sp
     store %Sp %sp, %Sp* %spp
     ${d2s(loadEnv("%spp", env))}
@@ -123,7 +123,7 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
     case DefClo(functionName, params, env, entry, body) =>
       val emptyStk = freshLocalName("emptyStk")
       s"""
-define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(params.map(d2s compose toDoc))}) {
+define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(params.map(asFragment))}) {
     %spp = alloca %Sp
     store %Sp %sp, %Sp* %spp
     ${d2s(loadEnv("%spp", env))}
@@ -139,10 +139,10 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
     case DefFun(returnType, functionName, parameters, body) =>
       // we can't use unique id here, since we do not know it in the extern string.
       val params = parameters.map {
-        case machine.Param(typ, id) => { /* TODO why is the raw symbol name used here? `assertSaneName(id.name);`*/ s"${d2s(toDoc(typ))} %${id.name}" }
+        case machine.Param(typ, id) => { /* TODO why is the raw symbol name used here? `assertSaneName(id.name);`*/ s"${asFragment(typ)} %${id.name}" }
       }
       s"""
-define fastcc ${d2s(toDoc(returnType))} ${globalName(functionName)}(${commaSeparated(params)}) alwaysinline {
+define fastcc ${asFragment(returnType)} ${globalName(functionName)}(${commaSeparated(params)}) alwaysinline {
     ${indentFollowingLines(d2s(string(body)))}
 }
 """
@@ -172,28 +172,36 @@ ${d2s(string(content))}
   }
 
   def toDoc(instruction: Instruction)(implicit C: LLVMContext): Doc = instruction match {
-    case Call(name, returnType, blockName, args) => s"${localName(name)} = call fastcc ${d2s(toDoc(returnType))} ${globalName(blockName)}(${commaSeparated(args.map(fromMachineValueWithAnnotatedType))})"
+    case Call(name, returnType, blockName, args) =>
+        s"${localName(name)} = call fastcc ${asFragment(returnType)} ${globalName(blockName)}(${commaSeparated(args.map(fromMachineValueWithAnnotatedType))})"
 
     case Phi(machine.Param(typ, name), args) => {
-      localName(name) <+> "=" <+> "phi" <+> toDoc(typ) <+>
+        /* TODO
+      val args2 = args.map(
+          case (label, value: machine.Value) =>
+            brackets(asFragment(value) <> comma <+> localName(label))
+      }
+      s"${localName(name)} = phi ${asFragment(typ)} ${commaSeparated(args2)}"
+        */
+      localName(name) <+> "=" <+> "phi" <+> asFragment(typ) <+>
         hsep(args.toList.map {
-          case (label, value) =>
-            brackets(toDoc(value) <> comma <+> localName(label))
+          case (label, value: machine.Value) =>
+            brackets(asFragment(value) <> comma <+> localName(label))
         }, comma)
     }
     case InsertValues(name, typ, args) =>
-      insertValues(localName(name), toDoc(typ), args.map(fromMachineValueWithAnnotatedType))
+      insertValues(localName(name), asFragment(typ), args.map(fromMachineValueWithAnnotatedType))
     case ExtractValue(name, target, field) =>
       localName(name) <+> "=" <+>
         "extractvalue" <+> fromMachineValueWithAnnotatedType(target) <> comma <+> field.toString
     case Inject(name, typ, arg, variant) =>
       val tmpCons = freshLocalName("tmpcons")
-      val argDocWithType = valueType(arg) match {
+      val argDocWithType = correspondingType(arg) match {
         case PrimUnit() => fromMachineValueWithAnnotatedType(new machine.UnitLit)
         case _          => fromMachineValueWithAnnotatedType(arg)
       }
-      tmpCons <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
-        localName(name) <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> tmpCons <> ", i64" <+> variant.toString <> ", 0"
+      tmpCons <+> "=" <+> "insertvalue" <+> asFragment(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
+        s"${localName(name)} =  insertvalue ${asFragment(typ)} $tmpCons, i64 ${variant.toString}, 0"
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
@@ -218,9 +226,9 @@ ${d2s(string(content))}
     case EraseStack(stack) =>
       "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
         argumentList(List(fromMachineValueWithAnnotatedType(stack)))
-    case EviPlus(eviName, evi1, evi2) =>
+    case EviPlus(eviName, evi1, evi2: machine.Value) =>
       localName(eviName) <+> "=" <+>
-        "add" <+> fromMachineValueWithAnnotatedType(evi1) <> comma <+> toDoc(evi2)
+        "add" <+> fromMachineValueWithAnnotatedType(evi1) <> comma <+> asFragment(evi2)
     case EviDecr(eviName, evi) =>
       localName(eviName) <+> "=" <+>
         "sub" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "1"
@@ -236,7 +244,7 @@ ${d2s(string(content))}
       val newsp = freshLocalName("newsp")
       val cntName = freshLocalName("next")
       s"""
-${load("%spp", cntName, cntTypeDoc(values.map(valueType)))}
+${load("%spp", cntName, cntTypeDoc(values.map(correspondingType)))}
 $newsp = load %Sp, %Sp* %spp
 ${jump(cntName, newsp, values.map(fromMachineValueWithAnnotatedType))}
 """
@@ -258,8 +266,8 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
     case If(cond, thenBlock, _, elseBlock, _) =>
       s"br ${fromMachineValueWithAnnotatedType(cond)}, label ${localName(thenBlock)}, label ${localName(elseBlock)}"
 
-    case Switch(arg, default, labels) =>
-      "switch" <+> "i64" <+> toDoc(arg) <> comma <+> "label" <+> localName(default) <+> brackets(hsep(labels.map {
+    case Switch(arg: machine.Value, default, labels) =>
+      "switch" <+> "i64" <+> asFragment(arg) <> comma <+> "label" <+> localName(default) <+> brackets(hsep(labels.map {
         case (i, l) => "i64" <+> i.toString <> comma <+> "label" <+> localName(l)
       }, " "))
 
@@ -268,42 +276,41 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
   }
 
   def fromMachineValueWithAnnotatedType(value: machine.Value)(implicit C: LLVMContext): LLVMFragment =
-    s"${d2s(toDoc(valueType(value)))} ${d2s(toDoc(value))}"
+    s"${asFragment(correspondingType(value))} ${asFragment(value)}"
 
-  def toDoc(value: machine.Value)(implicit C: LLVMContext): Doc = value match {
-    case machine.Var(typ, name) => localName(name)
-    case machine.IntLit(n)      => n.toString()
-    case machine.BooleanLit(b)  => b.toString()
-    case machine.UnitLit()      => 0.toString()
-    case machine.EviLit(n)      => n.toString()
+
+  def asFragment(value: machine.Value)(implicit C: LLVMContext): LLVMFragment = value match {
+    case machine.Var(typ, name) => s"${localName(name)}"
+    case machine.IntLit(n)      => s"$n"
+    case machine.BooleanLit(b)  => s"$b"
+    case machine.UnitLit()      => "0"
+    case machine.EviLit(n)      => s"$n"
   }
 
-
-  def transitionalFromMachineParam(p: machine.Param): LLVMFragment
-    = d2s(toDoc(p))
-  def toDoc(param: machine.Param): Doc = param match {
-    case machine.Param(typ, name) => toDoc(typ) <+> localName(name)
-  }
-
-  def valueType(value: machine.Value): machine.Type = value match {
+  def correspondingType(value: machine.Value): machine.Type = value match {
     case machine.Var(typ, _)   => typ
     case machine.IntLit(_)     => machine.PrimInt()
     case machine.BooleanLit(_) => machine.PrimBoolean()
     case machine.UnitLit()     => machine.PrimUnit()
     case machine.EviLit(_)     => machine.Evidence()
   }
-
+  // TODO [2022-06-21, jfrech] what does this comment mean?
   // TODO essential
-  def toDoc(typ: machine.Type): Doc =
-    typ match {
-      case machine.PrimInt()             => "%Int"
-      case machine.PrimBoolean()         => "%Boolean"
-      case machine.PrimUnit()            => "%Unit"
-      case machine.Record(fieldTypes)    => braces(hsep(fieldTypes.map(t => toDoc(t)), comma))
-      case machine.Stack(_)              => "%Stk*"
-      case machine.Evidence()            => "%Evi"
-      case machine.Variant(variantTypes) => braces("i64," <+> hsep(variantTypes.map(t => toDoc(t)), comma))
-    }
+  def asFragment(typ: machine.Type): LLVMFragment = typ match {
+    case machine.PrimInt()             => "%Int"
+    case machine.PrimBoolean()         => "%Boolean"
+    case machine.PrimUnit()            => "%Unit"
+    case machine.Record(fieldTypes)    => s"{${commaSeparated(fieldTypes.map(asFragment))}}"
+    case machine.Stack(_)              => "%Stk*"
+    case machine.Evidence()            => "%Evi"
+    case machine.Variant(variantTypes) => s"{i64, ${commaSeparated(variantTypes.map(asFragment))}}"
+  }
+
+  def asFragment(param: machine.Param): LLVMFragment = param match {
+    case machine.Param(typ, name) => s"${asFragment(typ)} ${localName(name)}"
+  }
+
+
 
   // /**
   //  * Auxiliary macros
@@ -318,7 +325,7 @@ ret void
   // TODO I think, and "env" or "params" is a Frame layout
   def loadEnv(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
     val envType =
-      envRecordType(params.map(p => toDoc(p.typ)))
+      envRecordType(params.map(p => asFragment(p.typ)))
     val envParams =
       params.map(p => localName(p.id))
     loadParams(d2s(spp), envType, envParams)
@@ -326,7 +333,7 @@ ret void
 
   def storeFrm(spp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
     val envType =
-      envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType))
+      envRecordType(values.map(transitionalDocLift compose (asFragment compose correspondingType)) :+ cntTypeDoc(cntType))
     val envValues =
       values.map(v => transitionalDocLift(fromMachineValueWithAnnotatedType(v))) :+ (cntTypeDoc(cntType) <+> cntName)
     storeValues(spp, envType, envValues)
@@ -337,7 +344,7 @@ ret void
       case Nil => emptyDoc
       case _ =>
         val envType =
-          envRecordType(params.map(p => toDoc(p.typ)))
+          envRecordType(params.map(p => asFragment(p.typ)))
         val envParams =
           params.map(p => localName(p.id))
         loadParams(d2s(spp), envType, envParams)
@@ -349,9 +356,9 @@ ret void
       case Nil => emptyDoc
       case _ =>
         val envType =
-          envRecordType(values.map(v => toDoc(valueType(v))))
+          envRecordType(values.map(transitionalDocLift compose (asFragment compose correspondingType)))
         val envValues =
-          values.map(v => transitionalDocLift(fromMachineValueWithAnnotatedType(v)))
+          values.map(transitionalDocLift compose fromMachineValueWithAnnotatedType)
         storeValues(spp, envType, envValues)
     })
   }
@@ -461,8 +468,8 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
     case _                => false
   }
 
-  def cntTypeDoc(cntType: List[machine.Type])(implicit C: LLVMContext): Doc =
-    s"void (%Sp, ${commaSeparated(cntType.map(d2s compose toDoc))})*"
+  def cntTypeDoc(cntType: List[machine.Type])(implicit C: LLVMContext): LLVMFragment =
+    s"void (%Sp, ${commaSeparated(cntType.map(asFragment))})*"
 
   def freshLocalName(name: String)(implicit C: LLVMContext): String =
     assertSaneName(name)
