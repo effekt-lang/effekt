@@ -230,33 +230,41 @@ ${d2s(string(content))}
   }
 
   def toDoc(terminator: Terminator)(implicit C: LLVMContext): Doc = terminator match {
+
     case Ret(values) =>
       // TODO spill arguments to stack (like with jump)
       val newsp = freshLocalName("newsp")
       val cntName = freshLocalName("next")
-      transitionalDocLift(load("%spp", cntName, cntTypeDoc(values.map(valueType(_))))) <@>
-        newsp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
-        jump(cntName, newsp, values.map(fromMachineValueWithAnnotatedType))
+      s"""
+${load("%spp", cntName, cntTypeDoc(values.map(valueType)))}
+$newsp = load %Sp, %Sp* %spp
+${jump(cntName, newsp, values.map(fromMachineValueWithAnnotatedType))}
+"""
 
     case Jump(name, args) =>
       // This magical 5 ensures that we pass at most 6 64bit parameters
       val unspilledArgs = args.take(5)
       val spilledArgs = args.drop(5)
       val sp = freshLocalName("sp")
-      storeSpilled("%spp", spilledArgs) <@>
-        sp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
-        jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType))
+      s"""
+${storeSpilled("%spp", spilledArgs)}
+$sp = load %Sp, %Sp* %spp
+${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType))}
+"""
+
     case JumpLocal(name, args) =>
-      "br" <+> "label" <+> localName(name)
+      s"br label ${localName(name)}"
+
     case If(cond, thenBlock, _, elseBlock, _) =>
-      "br" <+> fromMachineValueWithAnnotatedType(cond) <> comma <+>
-        "label" <+> localName(thenBlock) <+> comma <+> "label" <+> localName(elseBlock)
+      s"br ${fromMachineValueWithAnnotatedType(cond)}, label ${localName(thenBlock)}, label ${localName(elseBlock)}"
+
     case Switch(arg, default, labels) =>
       "switch" <+> "i64" <+> toDoc(arg) <> comma <+> "label" <+> localName(default) <+> brackets(hsep(labels.map {
         case (i, l) => "i64" <+> i.toString <> comma <+> "label" <+> localName(l)
       }, " "))
+
     case Panic() =>
-      "call void @exit(i64 1)" <@> "unreachable"
+      s"call void @exit(i64 1) unreachable"
   }
 
   def fromMachineValueWithAnnotatedType(value: machine.Value)(implicit C: LLVMContext): LLVMFragment =
@@ -336,8 +344,8 @@ ret void
     }
   }
 
-  def storeSpilled(spp: Doc, values: List[machine.Value])(implicit C: LLVMContext): Doc = {
-    values match {
+  def storeSpilled(spp: Doc, values: List[machine.Value])(implicit C: LLVMContext): LLVMFragment = {
+    d2s(values match {
       case Nil => emptyDoc
       case _ =>
         val envType =
@@ -345,20 +353,22 @@ ret void
         val envValues =
           values.map(v => transitionalDocLift(fromMachineValueWithAnnotatedType(v)))
         storeValues(spp, envType, envValues)
-    }
+    })
   }
 
-  def loadParams(spp: String, envType: Doc, envParams: List[LLVMFragment])(implicit C: LLVMContext): Doc = {
+  def loadParams(spp: String, envType: Doc, envParams: List[LLVMFragment])(implicit C: LLVMContext): LLVMFragment =
     val envName = freshLocalName("env")
-    transitionalDocLift(load(spp, envName, envType)) <@>
-      extractParams(envName, envType, envParams)
-  }
+    s"""
+${load(spp, envName, envType)}
+${d2s(extractParams(envName, envType, envParams))}
+"""
 
-  def storeValues(spp: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
+  def storeValues(spp: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): LLVMFragment =
     val envName = freshLocalName("env")
-    insertValues(envName, envType, envValues) <@>
-      store(spp, envName, envType)
-  }
+    s"""
+${d2s(insertValues(envName, envType, envValues))}
+${d2s(store(spp, envName, envType))}
+"""
 
   def extractParams(envName: Doc, envType: Doc, envParams: List[LLVMFragment]): Doc = {
       (envParams.zipWithIndex.map {
