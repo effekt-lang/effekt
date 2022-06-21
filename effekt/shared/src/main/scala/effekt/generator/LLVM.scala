@@ -172,10 +172,8 @@ ${d2s(string(content))}
   }
 
   def toDoc(instruction: Instruction)(implicit C: LLVMContext): Doc = instruction match {
-    case Call(name, returnType, blockName, args) => {
-      localName(name) <+> "=" <+>
-        "call fastcc" <+> toDoc(returnType) <+> globalName(blockName) <> argumentList(args.map(toDocWithType))
-    }
+    case Call(name, returnType, blockName, args) => s"${localName(name)} = call fastcc ${d2s(toDoc(returnType))} ${globalName(blockName)}(${commaSeparated(args.map(fromMachineValueWithAnnotatedType))})"
+
     case Phi(machine.Param(typ, name), args) => {
       localName(name) <+> "=" <+> "phi" <+> toDoc(typ) <+>
         hsep(args.toList.map {
@@ -184,15 +182,15 @@ ${d2s(string(content))}
         }, comma)
     }
     case InsertValues(name, typ, args) =>
-      insertValues(localName(name), toDoc(typ), args.map(toDocWithType))
+      insertValues(localName(name), toDoc(typ), args.map(fromMachineValueWithAnnotatedType))
     case ExtractValue(name, target, field) =>
       localName(name) <+> "=" <+>
-        "extractvalue" <+> toDocWithType(target) <> comma <+> field.toString
+        "extractvalue" <+> fromMachineValueWithAnnotatedType(target) <> comma <+> field.toString
     case Inject(name, typ, arg, variant) =>
       val tmpCons = freshLocalName("tmpcons")
       val argDocWithType = valueType(arg) match {
-        case PrimUnit() => toDocWithType(new machine.UnitLit)
-        case _          => toDocWithType(arg)
+        case PrimUnit() => fromMachineValueWithAnnotatedType(new machine.UnitLit)
+        case _          => fromMachineValueWithAnnotatedType(arg)
       }
       tmpCons <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
         localName(name) <+> "=" <+> "insertvalue" <+> toDoc(typ) <+> tmpCons <> ", i64" <+> variant.toString <> ", 0"
@@ -210,25 +208,25 @@ ${d2s(string(content))}
         argumentList(List("%Sp* %spp"))
 
     // TODO Why is this so assymmetric (`PushStack(stack)` vs. `PopStack(stackName)`)?
-    case PushStack(stack) => s"""call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(toDocWithType(stack))})"""
+    case PushStack(stack) => s"""call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(fromMachineValueWithAnnotatedType(stack))})"""
     case PopStack(stackName) => s"""${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)"""
 
     case CopyStack(stackName, stack) =>
       localName(stackName) <+> "=" <+>
         "call fastcc %Stk*" <+> f2d(globalBuiltin("copyStack")) <>
-        argumentList(List(toDocWithType(stack)))
+        argumentList(List(fromMachineValueWithAnnotatedType(stack)))
     case EraseStack(stack) =>
       "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
-        argumentList(List(toDocWithType(stack)))
+        argumentList(List(fromMachineValueWithAnnotatedType(stack)))
     case EviPlus(eviName, evi1, evi2) =>
       localName(eviName) <+> "=" <+>
-        "add" <+> toDocWithType(evi1) <> comma <+> toDoc(evi2)
+        "add" <+> fromMachineValueWithAnnotatedType(evi1) <> comma <+> toDoc(evi2)
     case EviDecr(eviName, evi) =>
       localName(eviName) <+> "=" <+>
-        "sub" <+> toDocWithType(evi) <> comma <+> "1"
+        "sub" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "1"
     case EviIsZero(condName, evi) =>
       localName(condName) <+> "=" <+>
-        "icmp eq" <+> toDocWithType(evi) <> comma <+> "0"
+        "icmp eq" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "0"
   }
 
   def toDoc(terminator: Terminator)(implicit C: LLVMContext): Doc = terminator match {
@@ -238,7 +236,7 @@ ${d2s(string(content))}
       val cntName = freshLocalName("next")
       transitionalDocLift(load("%spp", cntName, cntTypeDoc(values.map(valueType(_))))) <@>
         newsp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
-        jump(cntName, newsp, values.map(toDocWithType(_)))
+        jump(cntName, newsp, values.map(fromMachineValueWithAnnotatedType(_)))
 
     case Jump(name, args) =>
       // This magical 5 ensures that we pass at most 6 64bit parameters
@@ -247,11 +245,11 @@ ${d2s(string(content))}
       val sp = freshLocalName("sp")
       storeSpilled("%spp", spilledArgs) <@>
         sp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
-        jump(globalName(name), sp, unspilledArgs.map(toDocWithType))
+        jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType))
     case JumpLocal(name, args) =>
       "br" <+> "label" <+> localName(name)
     case If(cond, thenBlock, _, elseBlock, _) =>
-      "br" <+> toDocWithType(cond) <> comma <+>
+      "br" <+> fromMachineValueWithAnnotatedType(cond) <> comma <+>
         "label" <+> localName(thenBlock) <+> comma <+> "label" <+> localName(elseBlock)
     case Switch(arg, default, labels) =>
       "switch" <+> "i64" <+> toDoc(arg) <> comma <+> "label" <+> localName(default) <+> brackets(hsep(labels.map {
@@ -261,8 +259,8 @@ ${d2s(string(content))}
       "call void @exit(i64 1)" <@> "unreachable"
   }
 
-  def toDocWithType(value: machine.Value)(implicit C: LLVMContext): Doc =
-    toDoc(valueType(value)) <+> toDoc(value)
+  def fromMachineValueWithAnnotatedType(value: machine.Value)(implicit C: LLVMContext): LLVMFragment =
+    s"${d2s(toDoc(valueType(value)))} ${d2s(toDoc(value))}"
 
   def toDoc(value: machine.Value)(implicit C: LLVMContext): Doc = value match {
     case machine.Var(typ, name) => localName(name)
@@ -322,7 +320,7 @@ ${d2s(string(content))}
     val envType =
       envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType))
     val envValues =
-      values.map(v => toDocWithType(v)) :+ (cntTypeDoc(cntType) <+> cntName)
+      values.map(v => transitionalDocLift(fromMachineValueWithAnnotatedType(v))) :+ (cntTypeDoc(cntType) <+> cntName)
     storeValues(spp, envType, envValues)
   }
 
@@ -345,7 +343,7 @@ ${d2s(string(content))}
         val envType =
           envRecordType(values.map(v => toDoc(valueType(v))))
         val envValues =
-          values.map(v => toDocWithType(v))
+          values.map(v => transitionalDocLift(fromMachineValueWithAnnotatedType(v)))
         storeValues(spp, envType, envValues)
     }
   }
@@ -466,9 +464,6 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
     if (!name.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))
         throw new Error(s"assertSaneName: $name")
     return true
-
-  def llvmBlock(body: LLVMFragment): LLVMFragment =
-    "{\n" + body.split("\n").map("    " + _).mkString("\n") + "\n}"
 
   def argumentList(args: List[Doc]): Doc =
     "(" + args.map(d2s).mkString(", ") + ")"
