@@ -26,7 +26,13 @@ val MAGICAL_FIVE = 5
 type LLVMSource = String
 type LLVMFragment = String
 
+// TODO What exactly *is* a block (`{ ... }` or e.g. `define ... { ... }`?)
+type LLVMBlock = String
 
+
+// indent all but the first line with four spaces
+def indentFollowingLines(text: String): String =
+    text.split("\n").map("    " + _).mkString("\n").drop(4)
 
 class LLVM extends Generator {
   def path(m: Module)(implicit C: Context): String =
@@ -87,14 +93,14 @@ define void @effektMain() {
     // "DEFine C???NT"
     case DefCnt(functionName, params, entry, body) =>
       val (unspilled,spilled) = params.splitAt(MAGICAL_FIVE)
-      define(globalName(functionName), unspilled.map(toDoc),
+      define(globalName(functionName), unspilled.map(d2s compose toDoc),
         d2s(loadSpilled("%spp", spilled)) + "\n" +
           s"br label ${localName(entry)}\n\n" + "\n" +
           body.map(toDoc).map(d2s).mkString("\n\n"))
 
     // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
-      define(globalName(functionName), params.map(toDoc),
+      define(globalName(functionName), params.map(d2s compose toDoc),
         d2s(loadEnv("%spp", env)) + "\n" +
           s"br label ${localName(entry)}\n\n" +
           body.map(toDoc).map(d2s).mkString("\n\n"))
@@ -102,7 +108,7 @@ define void @effektMain() {
     // "DEFine CLO???"
     case DefClo(functionName, params, env, entry, body) =>
       val emptyStk = freshLocalName("emptyStk");
-      define(globalName(functionName), params.map(toDoc),
+      define(globalName(functionName), params.map(d2s compose toDoc),
         s"""
 ${d2s(loadEnv("%spp", env))}
 $emptyStk = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)
@@ -270,14 +276,14 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
   //  * Auxiliary macros
   //  */
 
-  def define(name: Doc, args: List[Doc], body: Doc): Doc =
-    "define fastcc void" <+> name <> argumentList("%Sp noalias %sp" :: args) <+>
-      llvmBlock(s"""
-%spp = alloca %Sp
-store %Sp %sp, %Sp* %spp
-
-${d2s(body)}
-""")
+  def define(name: LLVMFragment, args: List[LLVMFragment], body: LLVMFragment): LLVMBlock =
+    s"""
+define fastcc void $name(%Sp noalias %sp, ${args.mkString(", ")}) {
+    %spp = alloca %Sp
+    store %Sp %sp, %Sp* %spp
+    ${indentFollowingLines(body)}
+}
+"""
 
   // TODO Why does `jump` not jump but call?
   def jump(name: Doc, sp: Doc, args: List[Doc])(implicit C: LLVMContext): Doc = {
