@@ -22,10 +22,8 @@ import scala.sys.process.Process
 // This magical 5 ensures that we pass at most 6 64bit parameters
 val MAGICAL_FIVE = 5
 
-// XXX `val` to make it publicly accessible
-type LLVMSource = String
+type LLVMProgram = String
 type LLVMFragment = String
-
 // TODO What exactly *is* a block (`{ ... }` or e.g. `define ... { ... }`?)
 type LLVMBlock = String
 
@@ -68,13 +66,15 @@ class LLVM extends Generator {
 }
 
 object LLVMPrinter extends ParenPrettyPrinter {
+  def toDoc(top: Top)(implicit C: LLVMContext): Doc = fromTop(top)
+
   // a transitional helper to aid in moving to string interpolation for LLVM code construction
   def d2s(doc: Doc): String = pretty(doc).layout
   def s2d(str: String): Doc = Doc(str)
   val f2d = s2d
-  def transitionalDocLift(src: LLVMSource): Doc = Doc(src)
+  def transitionalDocLift(src: LLVMFragment): Doc = Doc(src)
 
-  def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): String =
+  def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): LLVMProgram =
     // NOTE: `vsep(listOfDocs, line) === listOfDocs.map(d2s).mkString("\n\n")` with `listOfDocs: [Doc]`
     s"""
 ${defs.map(toDoc).map(d2s).mkString("\n\n")}
@@ -90,7 +90,7 @@ define void @effektMain() {
 }
 """
 
-  def toDoc(top: Top)(implicit C: LLVMContext): Doc = top match {
+  def fromTop(top: Top)(implicit C: LLVMContext): LLVMBlock = top match {
 
     // "DEFine C???NT"
     case DefCnt(functionName, params, entry, body) =>
@@ -199,7 +199,7 @@ ${d2s(string(content))}
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
-      val tmpstkp = freshLocalName("tempstkp");
+      val tmpstkp = freshLocalName("tempstkp")
       tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> f2d(globalBuiltin("newStack")) <>
         argumentList(List()) <@>
         "call fastcc void" <+> f2d(globalBuiltin("pushStack")) <>
@@ -234,17 +234,17 @@ ${d2s(string(content))}
   def toDoc(terminator: Terminator)(implicit C: LLVMContext): Doc = terminator match {
     case Ret(values) =>
       // TODO spill arguments to stack (like with jump)
-      val newsp = freshLocalName("newsp");
-      val cntName = freshLocalName("next");
+      val newsp = freshLocalName("newsp")
+      val cntName = freshLocalName("next")
       transitionalDocLift(load("%spp", cntName, cntTypeDoc(values.map(valueType(_))))) <@>
         newsp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
         jump(cntName, newsp, values.map(toDocWithType(_)))
 
     case Jump(name, args) =>
       // This magical 5 ensures that we pass at most 6 64bit parameters
-      val unspilledArgs = args.take(5);
-      val spilledArgs = args.drop(5);
-      val sp = freshLocalName("sp");
+      val unspilledArgs = args.take(5)
+      val spilledArgs = args.drop(5)
+      val sp = freshLocalName("sp")
       storeSpilled("%spp", spilledArgs) <@>
         sp <+> "=" <+> "load %Sp, %Sp* %spp" <@>
         jump(globalName(name), sp, unspilledArgs.map(toDocWithType))
@@ -312,17 +312,17 @@ ${d2s(string(content))}
   // TODO I think, and "env" or "params" is a Frame layout
   def loadEnv(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
     val envType =
-      envRecordType(params.map(p => toDoc(p.typ)));
+      envRecordType(params.map(p => toDoc(p.typ)))
     val envParams =
-      params.map(p => localName(p.id));
+      params.map(p => localName(p.id))
     loadParams(d2s(spp), envType, envParams)
   }
 
   def storeFrm(spp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
     val envType =
-      envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType));
+      envRecordType(values.map(v => toDoc(valueType(v))) :+ cntTypeDoc(cntType))
     val envValues =
-      values.map(v => toDocWithType(v)) :+ (cntTypeDoc(cntType) <+> cntName);
+      values.map(v => toDocWithType(v)) :+ (cntTypeDoc(cntType) <+> cntName)
     storeValues(spp, envType, envValues)
   }
 
@@ -331,9 +331,9 @@ ${d2s(string(content))}
       case Nil => emptyDoc
       case _ =>
         val envType =
-          envRecordType(params.map(p => toDoc(p.typ)));
+          envRecordType(params.map(p => toDoc(p.typ)))
         val envParams =
-          params.map(p => localName(p.id));
+          params.map(p => localName(p.id))
         loadParams(d2s(spp), envType, envParams)
     }
   }
@@ -343,21 +343,21 @@ ${d2s(string(content))}
       case Nil => emptyDoc
       case _ =>
         val envType =
-          envRecordType(values.map(v => toDoc(valueType(v))));
+          envRecordType(values.map(v => toDoc(valueType(v))))
         val envValues =
-          values.map(v => toDocWithType(v));
+          values.map(v => toDocWithType(v))
         storeValues(spp, envType, envValues)
     }
   }
 
   def loadParams(spp: String, envType: Doc, envParams: List[LLVMFragment])(implicit C: LLVMContext): Doc = {
-    val envName = freshLocalName("env");
+    val envName = freshLocalName("env")
     transitionalDocLift(load(spp, envName, envType)) <@>
       extractParams(envName, envType, envParams)
   }
 
   def storeValues(spp: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
-    val envName = freshLocalName("env");
+    val envName = freshLocalName("env")
     insertValues(envName, envType, envValues) <@>
       store(spp, envName, envType)
   }
@@ -372,31 +372,31 @@ ${d2s(string(content))}
   def insertValues(envName: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
 
     // TODO this only works when envValues is nonEmpty
-    var env = "undef";
+    var env = "undef"
 
     def loop(elements: List[(Doc, Int)]): Doc = elements match {
       case List() => emptyDoc
       case (element, index) :: List() =>
-        val oldenv = env;
+        val oldenv = env
         envName <+> "=" <+> "insertvalue" <+> envType <+> oldenv <> comma <+>
           element <> comma <+> index.toString
       case (element, index) :: rest =>
-        val oldenv = env;
-        val newenv = freshLocalName("tmpenv");
-        env = newenv;
+        val oldenv = env
+        val newenv = freshLocalName("tmpenv")
+        env = newenv
         newenv <+> "=" <+> "insertvalue" <+> envType <+> oldenv <> comma <+>
           element <> comma <+> index.toString <@>
           loop(rest)
-    };
+    }
     loop(envValues.zipWithIndex)
   }
 
-  def load(spp: String, name: String, typ: Doc)(implicit C: LLVMContext): LLVMSource = {
+  def load(spp: String, name: String, typ: Doc)(implicit C: LLVMContext): LLVMFragment =
     val ptrType = d2s(typ) + "*"
-    val oldsp = freshLocalName("oldsp");
-    val newsp = freshLocalName("newsp");
-    val oldtypedsp = freshLocalName("oldtypedsp");
-    val newtypedsp = freshLocalName("newtypedsp");
+    val oldsp = freshLocalName("oldsp")
+    val newsp = freshLocalName("newsp")
+    val oldtypedsp = freshLocalName("oldtypedsp")
+    val newtypedsp = freshLocalName("newtypedsp")
     s"""
 $oldsp = load %Sp, %Sp* ${d2s(spp)}
 $oldtypedsp = bitcast %Sp $oldsp to $ptrType
@@ -405,9 +405,8 @@ $newsp = bitcast $ptrType $newtypedsp to %Sp
 ${d2s(name)} = load ${d2s(typ)}, $ptrType $newtypedsp
 store %Sp $newsp, %Sp* ${d2s(spp)}
 """
-  }
 
-  def store(spp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc = {
+  def store(spp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc =
     val ptrType = s"${d2s(typ)}*"
     val oldsp = freshLocalName("oldsp")
     val oldtypedsp = freshLocalName("oldtypedsp")
@@ -415,18 +414,18 @@ store %Sp $newsp, %Sp* ${d2s(spp)}
     val incedsp = freshLocalName("incedsp")
     val newsp = freshLocalName("newsp")
     val newtypedsp = freshLocalName("newtypedsp")
-    d2s(s"""
+    s"""
 $oldsp = load %Sp, %Sp* ${d2s(spp)}
 $oldtypedsp = bitcast %Sp $oldsp to $ptrType
 $incedtypedsp = getelementptr ${d2s(typ)}, $ptrType $oldtypedsp, i64 1
 $incedsp = bitcast $ptrType $incedtypedsp to %Sp
-$newsp =  call fastcc %Sp ${d2s(f2d(globalBuiltin("checkOverflow")))}${d2s(argumentList(List(s"%Sp $incedsp", s"%Sp* ${d2s(spp)}")))}
+$newsp =  call fastcc %Sp ${globalBuiltin("checkOverflow")}(%Sp $incedsp, %Sp* ${d2s(spp)})
 $newtypedsp = bitcast %Sp $newsp to $ptrType
 store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
 ; TODO do the store to spp here and not in growStack
-""")
-  }
+"""
 
+  // NOTE: this most likely is reffering to an *LLVM* record type (Effekt ADTs have not yet been implemented)
   def envRecordType(types: List[Doc]): LLVMFragment =
     "{" + types.map(d2s).mkString(", ") + "}"
 
@@ -452,10 +451,10 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
   def isBoxType(typ: machine.Type) = typ match {
     case machine.Stack(_) => true
     case _                => false
-  };
+  }
 
   def cntTypeDoc(cntType: List[machine.Type])(implicit C: LLVMContext): Doc =
-    s"""void (${("%Sp" :: cntType.map(toDoc).map(d2s)).mkString(", ")})*"""
+    s"void (%Sp, ${commaSeparated(cntType.map(d2s compose toDoc))})*"
 
   def freshLocalName(name: String)(implicit C: LLVMContext): String =
     assertSaneName(name)
@@ -468,7 +467,7 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
         throw new Error(s"assertSaneName: $name")
     return true
 
-  def llvmBlock(body: LLVMFragment): LLVMSource =
+  def llvmBlock(body: LLVMFragment): LLVMFragment =
     "{\n" + body.split("\n").map("    " + _).mkString("\n") + "\n}"
 
   def argumentList(args: List[Doc]): Doc =
