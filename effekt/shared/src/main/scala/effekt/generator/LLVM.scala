@@ -33,6 +33,8 @@ type LLVMBlock = String
 // indent all but the first line with four spaces
 def indentFollowingLines(text: String): String =
     text.split("\n").map("    " + _).mkString("\n").drop(4)
+def commaSeparated(args: List[String]): String =
+    args.mkString(", ")
 
 class LLVM extends Generator {
   def path(m: Module)(implicit C: Context): String =
@@ -93,10 +95,16 @@ define void @effektMain() {
     // "DEFine C???NT"
     case DefCnt(functionName, params, entry, body) =>
       val (unspilled,spilled) = params.splitAt(MAGICAL_FIVE)
-      define(globalName(functionName), unspilled.map(d2s compose toDoc),
-        d2s(loadSpilled("%spp", spilled)) + "\n" +
-          s"br label ${localName(entry)}\n\n" + "\n" +
-          body.map(toDoc).map(d2s).mkString("\n\n"))
+      s"""
+define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(unspilled.map(transitionalFromMachineParam))}) {
+    %spp = alloca %Sp
+    store %Sp %sp, %Sp* %spp
+    ${d2s(loadSpilled("%spp", spilled))}
+    br label ${localName(entry)}
+
+    ${indentFollowingLines(body.map(transitionalFromBasicBlock).mkString("\n\n"))}
+}
+"""
 
     // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
@@ -140,6 +148,8 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
       string(content)
   }
 
+  def transitionalFromBasicBlock(bb: BasicBlock)(implicit C: LLVMContext): LLVMBlock
+    = d2s(toDoc(bb))
   def toDoc(basicBlock: BasicBlock)(implicit C: LLVMContext): Doc = basicBlock match {
     case BasicBlock(blockName, instructions, terminator) =>
       f2d(nameDef(blockName)) <> colon <@>
@@ -248,6 +258,9 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
     case machine.EviLit(n)      => n.toString()
   }
 
+
+  def transitionalFromMachineParam(p: machine.Param): LLVMFragment
+    = d2s(toDoc(p))
   def toDoc(param: machine.Param): Doc = param match {
     case machine.Param(typ, name) => toDoc(typ) <+> localName(name)
   }
