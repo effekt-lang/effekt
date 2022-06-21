@@ -108,31 +108,44 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
 
     // "DEFine FRaMe"
     case DefFrm(functionName, params, env, entry, body) =>
-      define(globalName(functionName), params.map(d2s compose toDoc),
-        d2s(loadEnv("%spp", env)) + "\n" +
-          s"br label ${localName(entry)}\n\n" +
-          body.map(toDoc).map(d2s).mkString("\n\n"))
+      s"""
+define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(params.map(d2s compose toDoc))}) {
+    %spp = alloca %Sp
+    store %Sp %sp, %Sp* %spp
+    ${d2s(loadEnv("%spp", env))}
+    br label ${localName(entry)}
+
+    ${indentFollowingLines(body.map(d2s compose toDoc).mkString("\n\n"))}
+}
+"""
 
     // "DEFine CLO???"
     case DefClo(functionName, params, env, entry, body) =>
-      val emptyStk = freshLocalName("emptyStk");
-      define(globalName(functionName), params.map(d2s compose toDoc),
-        s"""
-${d2s(loadEnv("%spp", env))}
-$emptyStk = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)
-call fastcc void ${globalBuiltin("eraseStack")}(%Stk* $emptyStk)
-br label ${localName(entry)}
+      val emptyStk = freshLocalName("emptyStk")
+      s"""
+define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated(params.map(d2s compose toDoc))}) {
+    %spp = alloca %Sp
+    store %Sp %sp, %Sp* %spp
+    ${d2s(loadEnv("%spp", env))}
+    $emptyStk = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)
+    call fastcc void ${globalBuiltin("eraseStack")}(%Stk* $emptyStk)
+    br label ${localName(entry)}
 
-${body.map(toDoc).map(d2s).mkString("\n\n")}
-""")
+    ${indentFollowingLines(body.map(toDoc).map(d2s).mkString("\n\n"))}
+}
+"""
 
     // "DEFine Function"
     case DefFun(returnType, functionName, parameters, body) =>
-      s"define fastcc ${d2s(toDoc(returnType))} ${globalName(functionName)}" +
-        // we can't use unique id here, since we do not know it in the extern string.
-        d2s(argumentList(parameters.map {
-          case machine.Param(typ, id) => { /* TODO why is the raw symbol name used here? `assertSaneName(id.name);`*/ s"${d2s(toDoc(typ))} %${id.name}" }
-        })) + " " + s"alwaysinline ${llvmBlock(d2s(string(body)))}"
+      // we can't use unique id here, since we do not know it in the extern string.
+      val params = parameters.map {
+        case machine.Param(typ, id) => { /* TODO why is the raw symbol name used here? `assertSaneName(id.name);`*/ s"${d2s(toDoc(typ))} %${id.name}" }
+      }
+      s"""
+define fastcc ${d2s(toDoc(returnType))} ${globalName(functionName)}(${commaSeparated(params)}) alwaysinline {
+    ${indentFollowingLines(d2s(string(body)))}
+}
+"""
 
     // "DEFine stack SCaNner"
     case DefScn(functionName, env) =>
@@ -143,9 +156,10 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
     ret %Sp null ; THIS IS INCORRECT
 }
 """
-
     case Include(content) =>
-      string(content)
+      s"""
+${d2s(string(content))}
+"""
   }
 
   def transitionalFromBasicBlock(bb: BasicBlock)(implicit C: LLVMContext): LLVMBlock
@@ -288,15 +302,6 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
   // /**
   //  * Auxiliary macros
   //  */
-
-  def define(name: LLVMFragment, args: List[LLVMFragment], body: LLVMFragment): LLVMBlock =
-    s"""
-define fastcc void $name(%Sp noalias %sp, ${args.mkString(", ")}) {
-    %spp = alloca %Sp
-    store %Sp %sp, %Sp* %spp
-    ${indentFollowingLines(body)}
-}
-"""
 
   // TODO Why does `jump` not jump but call?
   def jump(name: Doc, sp: Doc, args: List[Doc])(implicit C: LLVMContext): Doc = {
