@@ -206,29 +206,27 @@ ${d2s(string(content))}
       storeFrm("%spp", freeVars, globalName(blockName), cntType)
     case NewStack(cntType, stackName, blockName, args) =>
       val tmpstkp = freshLocalName("tempstkp")
-      tmpstkp <+> "=" <+> "call fastcc %Stk*" <+> f2d(globalBuiltin("newStack")) <>
-        argumentList(List()) <@>
-        "call fastcc void" <+> f2d(globalBuiltin("pushStack")) <>
-        argumentList(List("%Sp* %spp", "%Stk*" <+> tmpstkp)) <@>
-        storeFrm("%spp", args, globalName(blockName), cntType) <@>
-        localName(stackName) <+> "=" <+>
-        "call fastcc %Stk*" <+> f2d(globalBuiltin("popStack")) <>
-        argumentList(List("%Sp* %spp"))
+      s"""
+$tmpstkp = call fastcc %Stk* ${globalBuiltin("newStack")}()
+call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, %Stk* $tmpstkp)
+${storeFrm("%spp", args, globalName(blockName), cntType)}
+${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)
+"""
 
     // TODO Why is this so assymmetric (`PushStack(stack)` vs. `PopStack(stackName)`)?
     case PushStack(stack) => s"""call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(fromMachineValueWithAnnotatedType(stack))})"""
     case PopStack(stackName) => s"""${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)"""
 
     case CopyStack(stackName, stack) =>
-      localName(stackName) <+> "=" <+>
-        "call fastcc %Stk*" <+> f2d(globalBuiltin("copyStack")) <>
-        argumentList(List(fromMachineValueWithAnnotatedType(stack)))
+      s"${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("copyStack")}(${fromMachineValueWithAnnotatedType(stack)})"
+
     case EraseStack(stack) =>
-      "call fastcc void" <+> f2d(globalBuiltin("eraseStack")) <>
-        argumentList(List(fromMachineValueWithAnnotatedType(stack)))
+      s"call fastcc void ${globalBuiltin("eraseStack")}(${fromMachineValueWithAnnotatedType(stack)})"
+
     case EviPlus(eviName, evi1, evi2: machine.Value) =>
-      localName(eviName) <+> "=" <+>
-        "add" <+> fromMachineValueWithAnnotatedType(evi1) <> comma <+> asFragment(evi2)
+      // TODO [2022-06-21, jfrech] Why is this asymmetric in `evi1` and `evi2`?
+      s"${localName(eviName)} = add ${fromMachineValueWithAnnotatedType(evi1)}, ${asFragment(evi2)}"
+
     case EviDecr(eviName, evi) =>
       localName(eviName) <+> "=" <+>
         "sub" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "1"
@@ -331,12 +329,12 @@ ret void
     loadParams(d2s(spp), envType, envParams)
   }
 
-  def storeFrm(spp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): Doc = {
+  def storeFrm(spp: Doc, values: List[machine.Value], cntName: Doc, cntType: List[machine.Type])(implicit C: LLVMContext): LLVMFragment = {
     val envType =
       envRecordType(values.map(transitionalDocLift compose (asFragment compose correspondingType)) :+ cntTypeDoc(cntType))
     val envValues =
       values.map(v => transitionalDocLift(fromMachineValueWithAnnotatedType(v))) :+ (cntTypeDoc(cntType) <+> cntName)
-    storeValues(spp, envType, envValues)
+    d2s(storeValues(spp, envType, envValues))
   }
 
   def loadSpilled(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
