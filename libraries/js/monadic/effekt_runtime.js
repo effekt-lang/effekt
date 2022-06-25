@@ -2,8 +2,8 @@ const $runtime = (function() {
 
   // Naming convention:
   // k ^= meta-continuation
-  // c ^= computation (wihtin the Control Monad)
-  // p ^= prompt
+  // c ^= computation (within the Control Monad)
+  // p ^= prompt id / handler id
   // a ^= value
   // f ^= frame
 
@@ -45,7 +45,6 @@ const $runtime = (function() {
   }
 
   const EmptyStack = null;
-  const EmptyClauses = Clauses(null, null, null)
 
   // |       |
   // | - T - |
@@ -60,6 +59,8 @@ const $runtime = (function() {
     }
   }
 
+  const EmptyClauses = Clauses(null, null, null)
+
   // return a to stack
   // (stack: Stack<A, B>, a: A) -> Step<B>
   function apply(stack, a) {
@@ -68,7 +69,7 @@ const $runtime = (function() {
       if (s === EmptyStack) return a;
       const fs = s.frames;
       if (fs === Nil) {
-        if (s.clauses.onReturn) {
+        if (s.clauses.onReturn != null) {
           return Step(s.clauses.onReturn(a), s.tail)
         } else {
           s = s.tail;
@@ -113,23 +114,22 @@ const $runtime = (function() {
 
   // Corresponds to a stack rewind.
   // (subcont: Stack, stack: Stack, c: Control[A]) -> Step
-  function pushSubcont(subcont, stack, c) {
+  function pushSubcont(subcont, stack, c, p, rewindedOn) {
     var sub = subcont;
     var s = stack;
 
     while (sub !== EmptyStack) {
-      // push sub onto s while restoring sub's cells
-      s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, s)
-      if (sub.clauses.onRewind != null) {
-        const remainder = sub.tail
+      if (sub.clauses.onRewind != null && sub.prompt !== p && sub.prompt !== rewindedOn) {
+        const remainder = sub
         // push sub onto s and execute the on rewind clause on the resulting stack.
         // Then remember to push sub.tail on the resulting stack k.
         return Step(
           sub.clauses.onRewind(sub.onUnwindData)
-            .then(() => Control(k => pushSubcont(remainder, k, c))),
+            .then(() => Control(k => pushSubcont(remainder, k, c, p, sub.prompt))),
           s
         )
       }
+      s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, s)
       sub = sub.tail
     }
     return Step(c, s);
@@ -151,26 +151,25 @@ const $runtime = (function() {
     var sub_ = sub;
     var s = stack;
 
-    const mkResume = subcont => {
-      const localCont = a => Control(k => pushSubcont(subcont, k, pure(a)))
-      return Step(f(localCont), s.tail)
-    }
-
     while (s !== EmptyStack) {
       const currentPrompt = s.prompt
       const onUnwindOp = s.clauses.onUnwind
-      if (onUnwindOp != null) {
-        const c = onUnwindOp().then(a => 
+      // do not execute the unwind operation if current handle is the needed one
+      if (onUnwindOp != null && currentPrompt !== p) {
+        const c = onUnwindOp().then(a =>
           Control(k => {
             sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, a, sub_)
-            if (currentPrompt === p) { return mkResume(sub_) }
             return splitAt(k, sub_, p, f)
           })
         )
         return Step(c, s.tail)
       }
+
       sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, null, sub_)
-      if (currentPrompt === p) { return mkResume(sub_) }
+      if (currentPrompt === p) {
+        const localCont = a => Control(k => pushSubcont(sub_, k, pure(a), p, 0))
+        return Step(f(localCont), s.tail)
+      }
       s = s.tail
     }
     throw ("Prompt " + p + " not found")
@@ -192,10 +191,10 @@ const $runtime = (function() {
       apply: apply,
       // Control[A] -> A
       run: () => trampoline(Step(self, Stack(Nil, [], toplevel, EmptyClauses, EmptyStack))),
-      // Control[A] -> (A => Control[B]) -> Control[B] 
+      // Control[A] -> (A -> Control[B]) -> Control[B] 
       // which corresponds to monadic bind
       then: f => Control(k => Step(self, flatMap(k, f))),
-      // Control[A] -> (A => Control[B]) -> Control[B]
+      // Control[A] -> (A -> Control[B]) -> Control[B]
       state: f => self.then(init => withState(init, f))
     }
     return self
@@ -232,7 +231,7 @@ const $runtime = (function() {
   const reset = p => clauses => c => Control(k => Step(c, Stack(Nil, [], p, clauses, k)))
 
   const toplevel = 1;
-  // A unique id for each handle.
+  // A unique id for each handle
   var _prompt = 2;
 
   function _while(c, body) {
@@ -253,8 +252,7 @@ const $runtime = (function() {
           const arity = impl.length - 1
           const oargs = args.slice(0, arity)
           const caps = args.slice(arity)
-          var r = shift(p)(k => impl.apply(null, oargs.concat([k])))
-          // resume { caps => e}
+          const r = shift(p)(k => impl.apply(null, oargs.concat([k])))
           if (caps.length > 0) {
             return r.then(f => f.apply(null, caps))
           }
