@@ -497,9 +497,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     success((prog, handler, suspend.headOption, resume.headOption, ret.headOption, fin.headOption))
 
   lazy val handleExpr: P[Expr] =
-    (`try` ~/> stmt ~ some(handler) ~ many(tryClauses)).flatMap {
+    (`try` ~/> stmt ~ opt(some(handler)) ~ many(tryClauses)).flatMap {
       case s ~ h ~ cs =>
-        validateTryClauses(s, h, cs)
+        validateTryClauses(s, h getOrElse(Nil) , cs)
     } ^^ {
       case (s, h, suspend, resume, ret, fin) =>
         // either desugar the finally block or pass the suspend, resume and return clause along
