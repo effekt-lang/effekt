@@ -84,11 +84,11 @@ class PrettyPrinter extends ParenPrettyPrinter {
         braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
       }
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
-      def ppClause[A](clause: Option[A], f: A => Doc): Doc =
-        clause.fold(emptyDoc) { body => braces(nest(f(body))) }
-      val ppSuspend = "on suspend" <+> ppClause(suspend, toDoc)
-      val ppResume = "on resume" <+> ppClause(resume, toDoc)
-      val ppReturn = "on return" <+> ppClause(ret, toDoc)
+      def ppClause[A](name: Doc, clause: Option[A], f: A => Doc): Doc =
+        clause map { body => name <+> braces(nest(f(body))) } getOrElse (emptyDoc)
+      val ppSuspend = ppClause("on suspend", suspend, toDoc)
+      val ppResume = ppClause("on resume", resume, toDoc)
+      val ppReturn = ppClause("on return", ret, toDoc)
       "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs <+> ppSuspend <+> ppResume <+> ppReturn
     case State(id, tpe, get, put, init, body) =>
       "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)

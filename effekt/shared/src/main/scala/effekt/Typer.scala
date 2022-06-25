@@ -201,25 +201,25 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // Check suspend, resume and return clause
         val (suspendType / suspendEffs) = suspend map {
           case source.OnSuspend(blk @ source.BlockArg(List(), body)) =>
-            val suspTpeEff @ (suspendType / suspendEffs) = checkStmt(body, None) 
+            val suspTypeEffs @ (suspendType / suspendEffs) = checkStmt(body, None) 
             val blkType = BlockType(Nil, Nil, suspendType, Pure)
             Context.annotateBlockArgument(blk, blkType)
-            suspTpeEff
+            suspTypeEffs
           case _ =>
             Context.panic(
               "Cannot occur. The parser should have transformed the `on suspend` body into a block arg. with no parameters."
             )
         } getOrElse (TUnit / Pure)
-        val (_ / resumeEffs) = resume map { 
+        val (resumeType / resumeEffs) = resume map { 
           case source.OnResume(blk @ source.BlockArg(List(source.ValueParams(List(param @ source.ValueParam(paramId, paramTpe)))), body)) =>
             // Check if given type corresponds with inferred type
             param.symbol.tpe foreach { Context.unify(_, suspendType) }
             // Assign the resume param type of suspend return type
             Context.define(param.symbol, suspendType)
-            val (resumeType / resumeEffs) = checkStmt(body, Some(TUnit))
+            val resTypeEffs @ (resumeType / resumeEffs) = checkStmt(body, Some(TUnit))
             val blkType = BlockType(Nil, List(List(suspendType)), resumeType, Pure)
             Context.annotateBlockArgument(blk, blkType)
-            resumeType / resumeEffs
+            resTypeEffs
           case _ => 
             Context.panic(
               "Cannot occur. The parser should have already verified that there is only one parameter for 'on resume'."
@@ -231,10 +231,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.define(param.symbol, result)
             // The type of the 'on return' block has to match the expected type of
             // the whole try-expression.
-            val (ret / retEffs) = checkStmt(body, expected)
+            val retTypeEffs @ (ret / retEffs) = checkStmt(body, expected)
             val blkType = BlockType(Nil, List(List(result)), ret, Pure)
             Context.annotateBlockArgument(blk, blkType)
-            ret / retEffs
+            retTypeEffs
           case _ => 
             Context.panic(
               "Cannot occur. The parser should have already verified that there is only one parameter for 'on return'."
