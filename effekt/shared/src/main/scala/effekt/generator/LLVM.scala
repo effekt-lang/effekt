@@ -176,22 +176,12 @@ ${asFragment(terminator)}
         s"${localName(name)} = call fastcc ${asFragment(returnType)} ${globalName(blockName)}(${commaSeparated(args.map(fromMachineValueWithAnnotatedType))})"
 
     case Phi(machine.Param(typ, name), args) => {
-        /* TODO
-      val args2 = args.map(
-          case (label, value: machine.Value) =>
-            brackets(asFragment(value) <> comma <+> localName(label))
-      }
-      s"${localName(name)} = phi ${asFragment(typ)} ${commaSeparated(args2)}"
-        */
-      localName(name) <+> "=" <+> "phi" <+> asFragment(typ) <+>
-        hsep(args.toList.map {
-          case (label, value: machine.Value) =>
-            brackets(asFragment(value) <> comma <+> localName(label))
-        }, comma)
+      val arg2s = args.toList.map { case (label, value: machine.Value) => s"[${asFragment(value)}, ${localName(label)}]" }
+      s"${localName(name)} = phi ${asFragment(typ)} ${commaSeparated(arg2s)}"
     }
 
     case InsertValues(name, typ, args) =>
-      insertValues(localName(name), asFragment(typ), args.map(fromMachineValueWithAnnotatedType))
+      insertAllValues(localName(name), asFragment(typ), args.map(fromMachineValueWithAnnotatedType))
 
     case ExtractValue(name, target, field) =>
       localName(name) <+> "=" <+>
@@ -371,37 +361,25 @@ ${d2s(extractParams(envName, envType, envParams))}
   def storeValues(spp: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): LLVMFragment =
     val envName = freshLocalName("env")
     s"""
-${d2s(insertValues(envName, envType, envValues))}
+${d2s(insertAllValues(envName, envType, envValues))}
 ${d2s(store(spp, envName, envType))}
 """
 
-  def extractParams(envName: Doc, envType: Doc, envParams: List[LLVMFragment]): Doc = {
-      (envParams.zipWithIndex.map {
-        case (p, i) =>
-          p <+> "=" <+> "extractvalue" <+> envType <+> envName <> comma <+> i.toString
-      }).map(d2s).mkString("\n")
-  }
+  def extractParams(envName: LLVMFragment, envType: Doc, envParams: List[LLVMFragment]): LLVMFragment =
+    (envParams.zipWithIndex.map { case (p, idx) => s"$p = extractvalue ${d2s(envType)} $envName, $idx" }).mkString("\n")
 
-  def insertValues(envName: Doc, envType: Doc, envValues: List[Doc])(implicit C: LLVMContext): Doc = {
+  // insert all given values into a one-deep LLVM record
+  def insertAllValues(aggName: LLVMFragment, aggType: Doc, aggValues: List[Doc])(implicit C: LLVMContext): LLVMFragment = {
+    if (aggValues.length <= 0)
+      ???
 
-    // TODO this only works when envValues is nonEmpty
-    var env = "undef"
-
-    def loop(elements: List[(Doc, Int)]): Doc = elements match {
-      case List() => emptyDoc
-      case (element, index) :: List() =>
-        val oldenv = env
-        envName <+> "=" <+> "insertvalue" <+> envType <+> oldenv <> comma <+>
-          element <> comma <+> index.toString
-      case (element, index) :: rest =>
-        val oldenv = env
-        val newenv = freshLocalName("tmpenv")
-        env = newenv
-        newenv <+> "=" <+> "insertvalue" <+> envType <+> oldenv <> comma <+>
-          element <> comma <+> index.toString <@>
-          loop(rest)
-    }
-    loop(envValues.zipWithIndex)
+    var prev = "undef"
+    aggValues.zipWithIndex.map((value, idx) => {
+        val tmp = if (idx == aggValues.length-1) aggName else freshLocalName(s"agg$idx")
+        val ln = s"${tmp} = insertvalue ${d2s(aggType)} ${prev}, ${d2s(value)}, $idx"
+        prev = tmp
+        ln
+    }).mkString("\n")
   }
 
   def load(spp: String, name: String, typ: Doc)(implicit C: LLVMContext): LLVMFragment =
@@ -419,7 +397,7 @@ ${d2s(name)} = load ${d2s(typ)}, $ptrType $newtypedsp
 store %Sp $newsp, %Sp* ${d2s(spp)}
 """
 
-  def store(spp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): Doc =
+  def store(spp: Doc, value: Doc, typ: Doc)(implicit C: LLVMContext): LLVMFragment =
     val ptrType = s"${d2s(typ)}*"
     val oldsp = freshLocalName("oldsp")
     val oldtypedsp = freshLocalName("oldtypedsp")
