@@ -18,6 +18,7 @@ sealed trait Tree extends Product {
 // TODO implement
 class TrueLLVMType();
 
+// [2022-06-27] plan: remove this internal LLVM representation for now (stringly type everything)
 sealed trait Top extends Tree
 case class DefCnt(id: BlockSymbol, params: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
 case class DefFrm(id: BlockSymbol, params: List[machine.Param], env: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
@@ -25,7 +26,6 @@ case class DefClo(id: BlockSymbol, params: List[machine.Param], env: List[machin
 case class DefFun(typ: machine.Type, id: BlockSymbol, params: List[machine.Param], body: String) extends Top
 case class DefScn(id: BlockSymbol, env: List[machine.Param]) extends Top
 case class Include(content: String) extends Top
-
 case class BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminator: Terminator) extends Tree
 
 // TODO this is neither super- nor subset of LLVM

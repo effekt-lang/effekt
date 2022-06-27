@@ -29,10 +29,9 @@ type LLVMBlock = String
 
 
 // indent all but the first line with four spaces
-def indentFollowingLines(text: String): String =
-    text.split("\n").map("    " + _).mkString("\n").drop(4)
-def commaSeparated(args: List[String]): String =
-    args.mkString(", ")
+def indentFollowingLines(text: String): String = text.split("\n").map("    " + _).mkString("\n").drop(4)
+def commaSeparated(args: List[String]): String = args.mkString(", ")
+def spaceSeparated(args: List[String]): String = args.mkString(" ")
 
 class LLVM extends Generator {
   def path(m: Module)(implicit C: Context): String =
@@ -102,7 +101,7 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
     ${d2s(loadSpilled("%spp", spilled))}
     br label ${localName(entry)}
 
-    ${indentFollowingLines(body.map(transitionalFromBasicBlock).mkString("\n\n"))}
+    ${indentFollowingLines(body.map(asFragment).mkString("\n\n"))}
 }
 """
 
@@ -156,20 +155,21 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
     ret %Sp null ; THIS IS INCORRECT
 }
 """
-    case Include(content) =>
-      s"""
-${d2s(string(content))}
-"""
+    case Include(raw: String) =>
+      raw
   }
 
-  def transitionalFromBasicBlock(bb: BasicBlock)(implicit C: LLVMContext): LLVMBlock
-    = d2s(toDoc(bb))
-  def toDoc(basicBlock: BasicBlock)(implicit C: LLVMContext): Doc = basicBlock match {
-    case BasicBlock(blockName, instructions, terminator) =>
-      f2d(nameDef(blockName)) <> colon <@>
-        instructions.map(toDoc).map(d2s).mkString("\n") <@>
-        toDoc(terminator)
+  def asFragment(bb: BasicBlock)(implicit C: LLVMContext): LLVMBlock = bb match {
+    case BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminator: Terminator) =>
+      s"""
+${nameDef(id)}:
+${instructions.map(d2s compose toDoc).mkString("\n")}
+${asFragment(terminator)}
+"""
   }
+  def toDoc(bb: BasicBlock)(implicit C: LLVMContext): Doc = asFragment(bb)
+
+
 
   def toDoc(instruction: Instruction)(implicit C: LLVMContext): Doc = instruction match {
     case Call(name, returnType, blockName, args) =>
@@ -189,8 +189,10 @@ ${d2s(string(content))}
             brackets(asFragment(value) <> comma <+> localName(label))
         }, comma)
     }
+
     case InsertValues(name, typ, args) =>
       insertValues(localName(name), asFragment(typ), args.map(fromMachineValueWithAnnotatedType))
+
     case ExtractValue(name, target, field) =>
       localName(name) <+> "=" <+>
         "extractvalue" <+> fromMachineValueWithAnnotatedType(target) <> comma <+> field.toString
@@ -235,7 +237,7 @@ ${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %s
         "icmp eq" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "0"
   }
 
-  def toDoc(terminator: Terminator)(implicit C: LLVMContext): Doc = terminator match {
+  def asFragment(terminator: Terminator)(implicit C: LLVMContext): LLVMFragment = terminator match {
 
     case Ret(values) =>
       // TODO spill arguments to stack (like with jump)
@@ -265,9 +267,7 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
       s"br ${fromMachineValueWithAnnotatedType(cond)}, label ${localName(thenBlock)}, label ${localName(elseBlock)}"
 
     case Switch(arg: machine.Value, default, labels) =>
-      "switch" <+> "i64" <+> asFragment(arg) <> comma <+> "label" <+> localName(default) <+> brackets(hsep(labels.map {
-        case (i, l) => "i64" <+> i.toString <> comma <+> "label" <+> localName(l)
-      }, " "))
+      s"""switch i64 ${asFragment(arg)}, label ${localName(default)} [${spaceSeparated(labels.map { case (i, l) => s"i64 $i, label ${localName(l)}" })}]"""
 
     case Panic() =>
       s"call void @exit(i64 1) unreachable"
