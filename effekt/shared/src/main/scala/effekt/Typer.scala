@@ -265,7 +265,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedCall(c, field, Nil, List(receiver), Nil, expected)
 
       case c @ source.Do(effect, op, targs, vargs) =>
-        checkOverloadedCall(c, op, targs map { _.resolve }, vargs, Nil, expected)
+        val Result(tpe, effs) = checkOverloadedCall(c, op, targs map { _.resolve }, vargs, Nil, expected)
+        val tp = tpe
+        ???
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
         checkOverloadedCall(c, t.id, targs map { _.resolve }, vargs, bargs, expected)
@@ -279,8 +281,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(t, eff) = checkCallTo(c, None, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
+      // Can be dot-syntax, i.e.,
+      //   def foo(n: Int): String = ...
+      //   42.foo
+      //
+      // or capability member call
+      //
+      //   def foo {f:Exc} = f.raise()
+      //
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
-        ???
+        checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
+
 
       case tree @ source.TryHandle(prog, handlers) =>
 
@@ -289,25 +300,25 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var handledEffects: List[InterfaceType] = Nil
         handlers foreach Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
-          handledEffects = handledEffects :+ effect
-          val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
-
           if (handledEffects contains effect) {
             Context.error(s"Effect ${effect} is handled twice.")
           } else {
             // TODO also relate it to the lexical region
+            handledEffects = handledEffects :+ effect
+            val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
+
             Context.bind(capability, CaptureSet(capability.capture))
             providedCapabilities = providedCapabilities :+ capability
           }
         }
-
-        var handlerEffs: ConcreteEffects = Pure
 
         // Create a fresh capture variable for the continuations ?Ck
         val continuationCapt = Context.freshCaptVar(CaptUnificationVar.HandlerRegion(tree))
 
         // All used captures flow into the continuation capture, except the ones handled by this handler.
         val continuationCaptHandled = Context.without(continuationCapt, providedCapabilities.map(_.capture))
+
+        var handlerEffs: ConcreteEffects = Pure
 
         val Result(ret, effs) = {
 
@@ -915,6 +926,54 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  def attempt[T](f: => T)(using Context): Either[Messages, (T, TyperState)] =
+     val stateBefore = Context.backupTyperstate()
+     try {
+      Try {
+        val result = f
+        (result, Context.backupTyperstate())
+      }
+     } finally {
+       Context.restoreTyperstate(stateBefore)
+     }
+
+  /**
+   * We do not respect nested scoping on overload resolution for methods right now.
+   */
+  def checkOverloadedMethodCall(
+    call: source.CallLike,
+    receiver: source.Term,
+    id: source.IdRef,
+    targs: List[ValueType],
+    vargs: List[source.Term],
+    bargs: List[source.BlockArg],
+    expected: Option[ValueType]
+  )(using Context, Captures): Result[ValueType] = {
+    val sym = id.symbol
+    val syms = sym match {
+      // an overloaded call target
+      case CallTarget(name, syms) => syms.flatten
+      // already resolved by a previous attempt to typecheck
+      case sym: TermSymbol => List(sym)
+      case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
+    }
+
+    val (funs, methods) = syms.partitionMap {
+      // operations can't be called with uniform function syntax.
+      case t: Operation => Right(t)
+      case t: Fun => Left(t)
+      case t => Context.abort(s"Not a valid method: ${t}")
+    }
+
+    // we prefer methods over uniform call syntax
+    if (methods.nonEmpty) {
+      ???
+    } else {
+      // just check as a function.
+      checkOverloadedCall(call, id, targs, receiver :: vargs, bargs, expected)
+    }
+  }
+
   /**
    * Attempts to check a potentially overladed call, not reporting any errors but returning them instead.
    *
@@ -1110,13 +1169,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // TODO it probably would be better to go back to explicitly represent effect calls, for instance,
     //   with `do raise()`.
-    receiver foreach {
-      case op: Operation =>
-        // the first capability provided above is the one for the effect.
-        val capability = capabilities.head
-        usingCapture(CaptureSet(capability.capture))
-      case recv: BlockSymbol => usingCapture(Context.lookupCapture(recv))
-    }
+    //    receiver foreach {
+    //      case op: Operation =>
+    //        // the first capability provided above is the one for the effect.
+    //        val capability = capabilities.head
+    //        usingCapture(CaptureSet(capability.capture))
+    //      case recv: BlockSymbol => usingCapture(Context.lookupCapture(recv))
+    //    }
 
     Result(ret, effs)
   }

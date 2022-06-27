@@ -191,12 +191,20 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
 
     case source.Do(effect, id, targs, vargs) =>
+      val valueArgs = vargs.map(transformAsExpr)
       ???
 
-    case source.Select(receiver, selector) => Select(transformAsExpr(receiver), selector.symbol)
+    case source.Select(receiver, selector) =>
+      Select(transformAsExpr(receiver), selector.symbol)
 
-    case source.MethodCall(receiver, id, targs, vargs, bargs) =>
-      ???
+    case c @ source.MethodCall(receiver, id, targs, vargs, bargs) if c.definition.isInstanceOf[Operation] =>
+      val rec = transformAsBlock(receiver)
+      val valueArgs = vargs.map(transformAsExpr)
+      val blockArgs = bargs.map(transform)
+      Context.bind(Context.inferredTypeOf(tree), App(Member(rec, c.definition), Nil, valueArgs ++ blockArgs))
+
+    case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
+      makeFunctionCall(c, c.definition, receiver :: vargs, bargs)
 
     case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
       val e = transformAsExpr(expr)
@@ -204,40 +212,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transform)
       Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), Nil, valueArgs ++ blockArgs))
 
-    //    case c @ source.Call(source.MemberTarget(block, op), _, vargs, bargs) =>
-    //      // the type arguments, inferred by typer
-    //      // val targs = C.typeArguments(c)
-    //      val valueArgs = vargs.map(transformAsExpr)
-    //      val blockArgs = bargs.map(transform)
-    //      val app = App(Member(BlockVar(block.symbol.asBlockSymbol), op.symbol.asEffectOp), null, valueArgs ++ blockArgs)
-    //      Context.bind(Context.inferredTypeOf(tree), app)
-
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
-      val sym: Symbol = fun.definition
-
-      val as = vargs.map(transformAsExpr) ++ bargs.map(transform)
-
-      // the type arguments, inferred by typer
-      val targs = Context.typeArguments(c)
-
-      sym match {
-        case f: BuiltinFunction if ExternFlag.directStyle(f.purity) =>
-          PureApp(BlockVar(f), targs, as)
-        case r: Record =>
-          PureApp(BlockVar(r), targs, as)
-        case f: Operation =>
-          Context.panic("Should have been translated to a method call!")
-        case f: Field =>
-          val List(arg: Expr) = as
-          Select(arg, f)
-        case f: BlockSymbol if Context.pureOrIO(f) && bargs.forall { Context.pureOrIO } =>
-          Run(App(BlockVar(f), targs, as))
-        case f: BlockSymbol =>
-          Context.bind(Context.inferredTypeOf(tree), App(BlockVar(f), targs, as))
-        case f: ValueSymbol =>
-          Context.bind(Context.inferredTypeOf(tree), App(Unbox(ValueVar(f)), targs, as))
-      }
+      makeFunctionCall(c, fun.definition, vargs, bargs)
 
     case source.TryHandle(prog, handlers) =>
 
@@ -270,6 +247,31 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)
 
+  }
+
+  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.BlockArg])(using Context): Expr = {
+    // the type arguments, inferred by typer
+    val targs = Context.typeArguments(call)
+
+    val as = vargs.map(transformAsExpr) ++ bargs.map(transform)
+
+    sym match {
+      case f: BuiltinFunction if ExternFlag.directStyle(f.purity) =>
+        PureApp(BlockVar(f), targs, as)
+      case r: Record =>
+        PureApp(BlockVar(r), targs, as)
+      case f: Operation =>
+        Context.panic("Should have been translated to a method call!")
+      case f: Field =>
+        val List(arg: Expr) = as
+        Select(arg, f)
+      case f: BlockSymbol if Context.pureOrIO(f) && bargs.forall { Context.pureOrIO } =>
+        Run(App(BlockVar(f), targs, as))
+      case f: BlockSymbol =>
+        Context.bind(Context.inferredTypeOf(call), App(BlockVar(f), targs, as))
+      case f: ValueSymbol =>
+        Context.bind(Context.inferredTypeOf(call), App(Unbox(ValueVar(f)), targs, as))
+    }
   }
 
   def transform(block: source.BlockArg)(using Context): core.Block = block match {

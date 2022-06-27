@@ -377,7 +377,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.MethodCall(receiver, target, targs, vargs, bargs) =>
       resolveGeneric(receiver)
-      resolve(target)
+      Context.resolveCalltarget(target)
       targs foreach resolve
       resolveAll(vargs)
       resolveAll(bargs)

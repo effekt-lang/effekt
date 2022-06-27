@@ -331,7 +331,7 @@ package object symbols {
   case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Fun {
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(resultType)
-    def annotatedEffects = Some(Effects(appliedEffect :: otherEffects.toList))
+    def annotatedEffects = Some(Effects(otherEffects.toList))
 
     def appliedEffect = if (effect.tparams.isEmpty) effect else BlockTypeApp(effect, effect.tparams)
 

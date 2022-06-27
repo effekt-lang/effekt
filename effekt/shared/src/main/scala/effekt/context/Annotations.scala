@@ -335,7 +335,7 @@ trait AnnotationsDB { self: Context =>
   // Types
   // -----
 
-  def typeArguments(c: source.Call): List[symbols.ValueType] =
+  def typeArguments(c: source.CallLike): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[ValueType] =
