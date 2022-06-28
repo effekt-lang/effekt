@@ -746,12 +746,13 @@ trait NamerOps extends ContextOps { Context: Context =>
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveFunctionCalltarget(id: Id): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id.name).flatMap {
+    val syms = scope.lookupOverloaded(id.name).map {
       case scope => scope.filter {
         case o: Operation => false
         case _ => true
       }
-    }
+    }.filterNot(_.isEmpty)
+
     if (syms.isEmpty) {
       val allSyms = scope.lookupOverloaded(id.name).flatten
 
@@ -764,7 +765,7 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(s"Cannot find a function named `${id.name}`.")
     }
 
-    assignSymbol(id, new CallTarget(Name.local(id), List(syms.toSet)))
+    assignSymbol(id, new CallTarget(Name.local(id), syms))
   }
 
   /**
