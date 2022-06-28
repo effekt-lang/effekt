@@ -6,7 +6,7 @@ def main() = {
   var n = 10
   println("start loop")
   try {
-    Loop();
+    do Loop();
   } with Loop {
     resume {
       println(n);

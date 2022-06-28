@@ -3,7 +3,7 @@ module examples/pos/lambdas/higherorder
 effect Yield(): Unit
 
 def effectPolymorphic() = { //: () => Unit at {effectPolymorphic} / Yield = {
-  def local(): Unit = Yield()
+  def local(): Unit = do Yield()
   fun() { local() }
 }
 

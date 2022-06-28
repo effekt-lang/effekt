@@ -191,20 +191,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
 
     case source.Do(effect, id, targs, vargs) =>
-      val valueArgs = vargs.map(transformAsExpr)
-      ???
+      Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
 
     case source.Select(receiver, selector) =>
       Select(transformAsExpr(receiver), selector.symbol)
 
-    case c @ source.MethodCall(receiver, id, targs, vargs, bargs) if c.definition.isInstanceOf[Operation] =>
+    // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
+    case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
       val rec = transformAsBlock(receiver)
       val valueArgs = vargs.map(transformAsExpr)
       val blockArgs = bargs.map(transform)
       Context.bind(Context.inferredTypeOf(tree), App(Member(rec, c.definition), Nil, valueArgs ++ blockArgs))
-
-    case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
-      makeFunctionCall(c, c.definition, receiver :: vargs, bargs)
 
     case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
       val e = transformAsExpr(expr)
@@ -263,8 +260,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Operation =>
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
-        val List(arg: Expr) = as
-        Select(arg, f)
+        Context.panic("Should have been translated to a select!")
       case f: BlockSymbol if Context.pureOrIO(f) && bargs.forall { Context.pureOrIO } =>
         Run(App(BlockVar(f), targs, as))
       case f: BlockSymbol =>

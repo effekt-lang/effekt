@@ -82,9 +82,11 @@ Before we look at examples on how to use the `Layout` effect, we introduce yet a
 emit the layouted documents:
 ```
 effect Emit {
-  def text(content: String): Unit
-  def newline(): Unit
+  def emitText(content: String): Unit
+  def emitNewline(): Unit
 }
+def text(content: String) = do emitText(content)
+def newline() = do emitNewline()
 ```
 This way, the resulting document is represented as a stream of `text` and `newline` events.
 
@@ -178,7 +180,7 @@ effect Pretty = { Emit, Layout, LayoutChoice }
 Using layout choices, we can express the maybe most important pretty printing combinator:
 ```
 def group { p: Unit / Layout } =
-  choice().in { p() }
+  do choice().in { p() }
 ```
 The `group` combinator expresses that depending on the result of `choice` we either layout all children
 horizontally or vertically.
@@ -280,8 +282,8 @@ Handling the output emitter is straightforward. Here, we simply store all emitte
 def writer { p: Unit / Emit } = {
   var out = "";
   try { p(); out } with Emit {
-    def text(t) = { out = out ++ t; resume(()) }
-    def newline() = { out = out ++ "\n"; resume(()) }
+    def emitText(t) = { out = out ++ t; resume(()) }
+    def emitNewline() = { out = out ++ "\n"; resume(()) }
   }
 }
 ```
@@ -294,7 +296,7 @@ def printer(width: Int, defaultIndent: Int) { prog: Unit / { Emit, Layout } } : 
 
   try { prog() }
   // we allow flow to be flexible on the top-level
-  with Flow { () => resume(choice()) }
+  with Flow { () => resume(do choice()) }
   // indentation starts at 0
   with Indent { () => resume(0) }
   // simply handle the default indentation with a constant
@@ -305,12 +307,12 @@ the document exceeds the width. This will potentially cause backtracking and rev
 If the current text still fits the line, we simply re-emit it.
 ```
   with Emit {
-    def text(t) = {
+    def emitText(t) = {
       pos = pos + t.length;
-      if (pos > width) { fail() }
+      if (pos > width) { do fail() }
       else { text(t); resume(()) }
     }
-    def newline() = { pos = 0; newline(); resume(()) }
+    def emitNewline() = { pos = 0; newline(); resume(()) }
   }
 }
 ```

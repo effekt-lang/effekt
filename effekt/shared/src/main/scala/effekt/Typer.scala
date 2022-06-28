@@ -265,9 +265,23 @@ object Typer extends Phase[NameResolved, Typechecked] {
         checkOverloadedCall(c, field, Nil, List(receiver), Nil, expected)
 
       case c @ source.Do(effect, op, targs, vargs) =>
+        // (1) first check the call
         val Result(tpe, effs) = checkOverloadedCall(c, op, targs map { _.resolve }, vargs, Nil, expected)
-        val tp = tpe
-        ???
+        // (2) now we need to find a capability as the receiver of this effect operation
+        // (2a) compute substitution for inferred type arguments
+        val typeArgs = Context.annotatedTypeArgs(c)
+        val operation = c.definition
+        val subst = (operation.tparams zip typeArgs).toMap
+
+        // (2b) substitute into effect type of operation
+        val effect = subst.substitute(operation.appliedEffect)
+        // (2c) search capability
+        val capability = Context.capabilityReceiver(c, effect)
+        // (2d) register capability as being used
+        usingCapture(CaptureSet(capability.capture))
+
+        // (3) add effect to used effects
+        Result(tpe, effs ++ ConcreteEffects(List(effect)))
 
       case c @ source.Call(t: source.IdTarget, targs, vargs, bargs) =>
         checkOverloadedCall(c, t.id, targs map { _.resolve }, vargs, bargs, expected)
@@ -278,7 +292,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, None, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
+        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
       // Can be dot-syntax, i.e.,
@@ -291,7 +305,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
         checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
-
 
       case tree @ source.TryHandle(prog, handlers) =>
 
@@ -1030,7 +1043,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
               case other => None
             }
 
-            val Result(tpe, effs) = checkCallTo(call, receiverAsBlockSymbol, receiver.name.name, funTpe, targs, vargs, bargs, expected)
+            // TODO do something with receiver for capture checking
+
+            val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
             (Result(tpe, effs), Context.backupTyperstate())
           }
       }
@@ -1101,7 +1116,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkCallTo(
     call: source.CallLike,
-    receiver: Option[BlockSymbol],
     name: String,
     funTpe: FunctionType,
     targs: List[ValueType],
@@ -1159,23 +1173,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // This is important since
     //   [A, B](): Unit / { State[A], State[B] }
     // with A := Int and B := Int requires us to pass two capabilities.
-    val capabilities = Context.provideCapabilities(call, retEffs.controlEffects.map(Context.unification.apply).controlEffects)
+    val capabilities = Context.provideCapabilities(call, retEffs.controlEffects.map(Context.unification.apply))
 
     // TODO also use capabilities when instantiating the type scheme
     println(s"Function ${name} uses ${capabilities.map(_.capture)}")
     usingCapture(CaptureSet(capabilities.map(_.capture)))
 
     println(s"Call to ${name} is in region ${currentCapture}. Results in return type: ${ret}")
-
-    // TODO it probably would be better to go back to explicitly represent effect calls, for instance,
-    //   with `do raise()`.
-    //    receiver foreach {
-    //      case op: Operation =>
-    //        // the first capability provided above is the one for the effect.
-    //        val capability = capabilities.head
-    //        usingCapture(CaptureSet(capability.capture))
-    //      case recv: BlockSymbol => usingCapture(Context.lookupCapture(recv))
-    //    }
 
     Result(ret, effs)
   }
@@ -1421,6 +1425,11 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.update(Annotations.CapabilityArguments, call, caps)
     caps
 
+  private [typer] def capabilityReceiver(call: source.Do, eff: InterfaceType): BlockParam =
+    val cap = capabilityFor(eff)
+    annotations.update(Annotations.CapabilityReceiver, call, cap)
+    cap
+
 
   /**
    * Local annotations database, only used by Typer
@@ -1532,7 +1541,12 @@ trait TyperOps extends ContextOps { self: Context =>
   //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
   private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = {
-    annotations.update(Annotations.TypeArguments, call, targs)
+    // apply what we know before saving
+    annotations.update(Annotations.TypeArguments, call, targs map unification.apply)
+  }
+
+  private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = {
+    annotations.apply(Annotations.TypeArguments, call)
   }
 
 //  private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
@@ -1608,6 +1622,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
     annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
+    annotations.updateAndCommit(Annotations.CapabilityReceiver) { case (t, caps) => caps }
 
     // TODO the state capability might still contain unification variables in its effect operations get and set
     //  however, creating a new state capability would also create a fresh block symbol, which might prove problematic

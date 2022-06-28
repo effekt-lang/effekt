@@ -37,9 +37,9 @@ input stream and fails, if it does not match.
 
 ```
 def accept { p: Token => Boolean } : Token / Parser = {
-  val got = next();
+  val got = do next();
   if (p(got)) got
-  else fail("Unexpected token " ++ show(got))
+  else do fail("Unexpected token " ++ show(got))
 }
 ```
 
@@ -52,18 +52,18 @@ def number() = accept(Number()).text
 def punct(p: String) = {
   val tok = accept(Punct())
   if (tok.text == p) ()
-  else fail("Expected " ++ p ++ " but got " ++ tok.text)
+  else do fail("Expected " ++ p ++ " but got " ++ tok.text)
 }
 def kw(exp: String): Unit / Parser = {
   val got = ident();
   if (got == exp) ()
-  else fail("Expected keyword " ++ exp ++ " but got " ++ got)
+  else do fail("Expected keyword " ++ exp ++ " but got " ++ got)
 }
 ```
 Using the effect for non-deterministic choice `alt`, we can model alternatives, optional matches and various repetitions:
 ```
 def or[R] { p: R } { q: R } =
-  if (alt()) { p() } else { q() }
+  if (do alt()) { p() } else { q() }
 
 def opt[R] { p: R }: Option[R] / Parser =
   or { Some(p()) } { None() }
@@ -93,7 +93,7 @@ Let us start by defining the parser for numeric literals.
 def parseNum(): Tree / Parser = {
   val numText = number()
   val num = toInt(numText).getOrElse {
-    fail("Expected number, but cannot convert input to integer: " ++ numText)
+    do fail("Expected number, but cannot convert input to integer: " ++ numText)
   }
   Lit(num)
 }

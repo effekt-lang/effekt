@@ -13,6 +13,11 @@ import effekt.typer.typeMapToSubstitution
  *
  * That is, block parameters are introduced to bind capabilities and arguments are introduced at
  * the call sites. Resume is currently _not_ introduced as a block parameter.
+ *
+ * Also applies elaboration which conceptually is done by Typer. After this phase
+ *   - there are no `Do` nodes anymore (replaced by method calls)
+ *   - `l.foo(x)` where `foo` is a function and not an operation is desugared to `foo(l, x)`
+ *   - all method calls `l.op()` will have `op : Operation`
  */
 object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
 
@@ -32,25 +37,27 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
   override def expr(implicit C: Context) = {
 
     // an effect call -- translate to method call on the inferred capability
-    case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[Operation] =>
+    case c @ Do(effect, id, targs, vargs) =>
       val transformedValueArgs = vargs.map { a => rewrite(a) }
-      val transformedBlockArgs = bargs.map { a => rewrite(a) }
 
-      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
+      // the receiver of this effect operation call
+      val receiver = C.annotation(Annotations.CapabilityReceiver, c)
 
-      // here we use the invariant that the receiver of an effect call is the first supplied capability:
-      val (List(receiver), others) = capabilities.splitAt(1)
+      // for bidirectional effects
+      val others = C.annotation(Annotations.CapabilityArguments, c)
 
       // the remaining capabilities are provided as arguments
       val capabilityArgs = others.map { e => InterfaceArg(C.freshReferenceTo(e)) }
 
-      // construct the member selection on the capability as receiver
-      val target = ExprTarget(Select(Var(C.freshReferenceTo(receiver)), fun.id).inheritPosition(fun))
-
       val typeArguments = C.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
-      Call(target, typeArgs, transformedValueArgs, transformedBlockArgs ++ capabilityArgs)
+      // construct the member selection on the capability as receiver
+      MethodCall(Var(C.freshReferenceTo(receiver)).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
+
+    // the function is a field, desugar to select
+    case c @ Call(fun: IdTarget, targs, List(receiver), Nil) if fun.definition.isInstanceOf[Field] =>
+      Select(rewrite(receiver), fun.id)
 
     // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
     case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[VarBinder] =>
@@ -77,6 +84,24 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       Call(fun, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
+
+    // desugar method calls where `id` is not an operation
+    case c @ MethodCall(receiver, id, targs, vargs, bargs) if !id.symbol.isInstanceOf[Operation] =>
+      rewrite(visit[CallLike](c) { c => Call(IdTarget(id).inheritPosition(id), targs, receiver :: vargs, bargs) })
+
+    case c @ MethodCall(receiver, id, targs, vargs, bargs) =>
+      val valueArgs = vargs.map { a => rewrite(a) }
+      val blockArgs = bargs.map { a => rewrite(a) }
+
+      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
+      val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
+
+      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
+
+      val recv = rewrite(receiver)
+
+      MethodCall(recv, id, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
 
     // TODO share code with Call case above
     case c @ Call(ExprTarget(expr), targs, vargs, bargs) =>

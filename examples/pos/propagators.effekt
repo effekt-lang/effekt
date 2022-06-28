@@ -32,18 +32,18 @@ effect Net {
 }
 
 def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net, Console } =
-  cell.subscribe.foreach { a =>
+  do subscribe(cell).foreach { a =>
     println("received a " ++ a.show);
-    f(a); abort() } // this abort seems to abort also other subscribers?
+    f(a); do abort() } // this abort seems to abort also other subscribers?
 
 // establishes a connection between cellA and cellB
 // will run f once the value of cellA is available to update cellB
 def connect[A, B](cellA: Cell[A])(cellB: Cell[B]) { f: A => B }: Unit / { Net, Console } =
-  cellA.watch { a  => cellB.learn(f(a)) }
+  cellA.watch { a  => do learn(cellB, f(a)) }
 
 def connect[A, B, C](cellA: Cell[A], cellB: Cell[B], cellC: Cell[C]) { f: (A, B) => C }: Unit / { Net, Console } = {
-  cellA.watch { a => cellB.subscribe.foreach { b => cellC.learn(f(a, b)) } }
-  cellB.watch { b => cellA.subscribe.foreach { a => cellC.learn(f(a, b)) } }
+  cellA.watch { a => do subscribe(cellB).foreach { b => do learn(cellC, f(a, b)) } }
+  cellB.watch { b => do subscribe(cellA).foreach { a => do learn(cellC, f(a, b)) } }
 }
 
 def sumOf(res: Cell[Int])(arg1: Cell[Int], arg2: Cell[Int]) = {
@@ -59,14 +59,14 @@ def negated(that: Cell[Int])(inverse: Cell[Int]) = {
 
 def example() = {
   println("make 7")
-  val x = make(7);
+  val x = do make(7);
   println("make 3")
-  val y = make(3);
+  val y = do make(3);
   println("unknown z")
-  val z = unknown[Int]()
+  val z = do unknown[Int]()
 
   println("unknown o")
-  val o = unknown[Int]()
+  val o = do unknown[Int]()
 
   println("o = z + z")
   o.sumOf(z, z)
@@ -74,7 +74,7 @@ def example() = {
   println("z = y + x")
   z.sumOf(y, x)
 
-  println(z.subscribe)
+  println(do subscribe(z))
 }
 
 // cells must not leave the propagator!

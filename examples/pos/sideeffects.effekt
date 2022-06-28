@@ -5,7 +5,7 @@ import immutable/list
 effect Get(): Int
 
 def foo() = println("hello2")
-def bar() = println(Get())
+def bar() = println(do Get())
 
 
 def test1() = {

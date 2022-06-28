@@ -378,8 +378,7 @@ package object symbols {
     def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
     def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
-    // this constitutes the canonical ordering:
-    lazy val controlEffects: List[InterfaceType] = effects.controlEffects.sortBy(f => f.hashCode())
+    lazy val controlEffects: List[InterfaceType] = effects.controlEffects
     lazy val builtinEffects: List[InterfaceType] = effects.builtinEffects
 
     def distinct: Effects = Effects(effects.distinct)
@@ -403,9 +402,10 @@ package object symbols {
   }
 
   extension(effs: List[InterfaceType]) {
+    // establishes the canonical ordering
     def controlEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if !i.builtin => i
-    }
+    }.sortBy(f => f.hashCode())
     def builtinEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if i.builtin => i
     }

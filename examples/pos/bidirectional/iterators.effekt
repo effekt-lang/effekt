@@ -21,7 +21,7 @@ def iter(l: List[Int]): List[Int] / { Yield, Behead } = {
     while (not(in.isEmpty)) { ignoring[EmptyList] {
         val hd = in.head;
         val tl = in.tail;
-        try { Yield(hd); in = tl }
+        try { do Yield(hd); in = tl }
         with Replace { n =>
             out = Cons(n, out);
             // in Effekt we distinguish between value arguments and block arguments
@@ -44,7 +44,7 @@ def main() = ignoring[EmptyList] {
 
     val res = try { lst.iter }
     with Yield { x =>
-      resume { if (x < 0) Behead() else Replace(x * 2) }
+      resume { if (x < 0) do Behead() else do Replace(x * 2) }
     }
     with Behead { () =>
         println("beheading in client?");

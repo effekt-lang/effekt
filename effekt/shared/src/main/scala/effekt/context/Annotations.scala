@@ -255,6 +255,11 @@ object Annotations {
     "capabilities inferred as additional arguments for this call"
   )
 
+  val CapabilityReceiver = Annotation[source.Do, symbols.BlockParam](
+    "CapabilityReceiver",
+    "the receiver as inferred for this effect operation call"
+  )
+
   /**
    * The state capability introduced by typer
    *

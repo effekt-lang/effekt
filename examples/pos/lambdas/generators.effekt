@@ -6,9 +6,9 @@ type Result {
 }
 
 def numbers() = {
-  Yield(1);
-  Yield(2);
-  Yield(3)
+  do Yield(1);
+  do Yield(2);
+  do Yield(3)
 }
 
 def main() = {

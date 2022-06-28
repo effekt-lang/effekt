@@ -377,7 +377,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.MethodCall(receiver, target, targs, vargs, bargs) =>
       resolveGeneric(receiver)
-      Context.resolveCalltarget(target)
+      Context.resolveMethodCalltarget(target)
       targs foreach resolve
       resolveAll(vargs)
       resolveAll(bargs)
@@ -388,7 +388,10 @@ object Namer extends Phase[Parsed, NameResolved] {
       resolveAll(vargs)
 
     case source.Call(target, targs, vargs, bargs) =>
-      resolve(target)
+      Context.focusing(target) {
+        case source.IdTarget(id)     => Context.resolveFunctionCalltarget(id)
+        case source.ExprTarget(expr) => resolveGeneric(expr)
+      }
       targs foreach resolve
       resolveAll(vargs)
       resolveAll(bargs)
@@ -464,11 +467,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym
-  }
-
-  def resolve(target: source.CallTarget)(using Context): Unit = Context.focusing(target) {
-    case source.IdTarget(id)     => Context.resolveCalltarget(id)
-    case source.ExprTarget(expr) => resolveGeneric(expr)
   }
 
   /**
@@ -732,7 +730,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   /**
    * Resolves a potentially overloaded call target
    */
-  private[namer] def resolveCalltarget(id: Id): Unit = at(id) {
+  private[namer] def resolveMethodCalltarget(id: Id): Unit = at(id) {
 
     val syms = scope.lookupOverloaded(id.name)
 
@@ -742,6 +740,31 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     // TODO does local name make sense here?
     assignSymbol(id, new CallTarget(Name.local(id), syms))
+  }
+
+  /**
+   * Resolves a potentially overloaded field access
+   */
+  private[namer] def resolveFunctionCalltarget(id: Id): Unit = at(id) {
+    val syms = scope.lookupOverloaded(id.name).flatMap {
+      case scope => scope.filter {
+        case o: Operation => false
+        case _ => true
+      }
+    }
+    if (syms.isEmpty) {
+      val allSyms = scope.lookupOverloaded(id.name).flatten
+
+      if (allSyms.exists { case o: Operation => true; case _ => false })
+        info(s"There is an equally named effect operation. Use syntax `do ${id.name}() to call it.`")
+
+      if (allSyms.exists { case o: Field => true; case _ => false })
+        info(s"There is an equally named field. Use syntax `obj.${id.name} to access it.`")
+
+      abort(s"Cannot find a function named `${id.name}`.")
+    }
+
+    assignSymbol(id, new CallTarget(Name.local(id), List(syms.toSet)))
   }
 
   /**

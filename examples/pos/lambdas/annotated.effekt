@@ -2,7 +2,7 @@ effect Exc(): Unit
 
 def main() =
   try {
-    def closure(): Unit = Exc()
+    def closure(): Unit = do Exc()
     val g: () => Unit / Exc at {exc} = fun() { closure() }
     g()
   } with exc: Exc {

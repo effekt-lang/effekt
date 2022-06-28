@@ -11,7 +11,7 @@ effect Process {
 }
 
 def fork { p: Unit }: Unit / Process =
-  if (fork()) { p(); exit() }
+  if (do fork()) { p(); do exit() }
   else { () }
 
 // Here we use the unsafe API manually asserting that the continuation does not leave the scope
@@ -36,21 +36,21 @@ def main() = {
         println("Parent: 1");
         fork {
             println("Child: 1");
-            suspend();
+            do suspend();
             println("Child: 2");
-            suspend();
+            do suspend();
             println("Child: 3");
-            suspend();
+            do suspend();
             println("Child: 4");
-            suspend();
+            do suspend();
             println("Child: 5");
-            suspend();
+            do suspend();
             println("Child: 6")
         };
         println("Parent: 2");
-        suspend();
+        do suspend();
         println("Parent: 3");
-        suspend();
+        do suspend();
         println("Parent: 4")
     }
 }

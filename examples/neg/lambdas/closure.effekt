@@ -4,7 +4,7 @@ def twice { someBlock: () => Unit / {} } = {
 effect Yield(): Unit
 def main() = {
   val f = try { // @Yield =>
-    val g = fun(){ Yield() }
+    val g = fun(){ do Yield() }
     twice {
       def unboxed() = { (unbox g)() };
       unboxed()// (@Yield)

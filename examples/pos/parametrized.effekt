@@ -4,16 +4,16 @@ effect State[T] {
 }
 
 def foo() = {
-  get[Int]() + get();
-  get() ++ ""
-  put(1, "")
+  do get[Int]() + do get();
+  do get() ++ ""
+  do put(1, "")
 }
 
 def bar() =
- get[Int]()
+ do get[Int]()
 
 def two[A, B]() =
-  (get[A](), get[B]())
+  (do get[A](), do get[B]())
 
 def main() = {
   try {
@@ -26,7 +26,7 @@ def main() = {
     def get() = resume(42)
     def put(n, x) = {
       val h = x;
-      // resume(get()) // ERROR
+      // resume(do get()) // ERROR
       resume(h)
     }
   } with State[String] {

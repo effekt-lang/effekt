@@ -120,15 +120,16 @@ We define the speaker effect to refer to the contextual speaker of the sentence.
 
 ```
 effect Speaker {
-    def me(): Person
+  def speaker(): Person
 }
+def me() = do speaker()
 ```
 The semantics of `me` depends on the context. If we treat quotes in the above sentence as
 scope, we see that "said" _handles_ me. That is:
 
 ```
 def said(p: Person) { s: Sentence / Speaker }: Sentence / {} =
-  try { Say(p, s()) } with Speaker { def me() = resume(p) }
+  try { Say(p, s()) } with Speaker { def speaker() = resume(p) }
 ```
 
 Here is another definition of `said`, that does _not_ handle the speaker effect, corresponding
@@ -185,8 +186,9 @@ which can be used to model universal quantification ([Maršík and Amblard, 2016
 Instead of modeling `scope` directly as an effect, here we treat quantification as the effect:
 ```
 effect Quantification {
-  def every(who: Predicate): Person
+  def quantify(who: Predicate): Person
 }
+def every(who: Predicate) = do quantify(who)
 ```
 We can use it as follows:
 ```
@@ -201,7 +203,7 @@ def scoped { s: Sentence / Quantification }: Sentence = {
   var tmp = 0;
   def fresh(): Person = { val x = Person("x" ++ show(tmp)); tmp = tmp + 1; x }
   try { s() } with Quantification {
-    def every(who) = {
+    def quantify(who) = {
       val x = fresh()
       ForAll(x, Implies(Is(x, who), resume(x)))
     }
