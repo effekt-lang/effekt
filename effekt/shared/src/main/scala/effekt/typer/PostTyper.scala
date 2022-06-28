@@ -13,6 +13,7 @@ import effekt.typer.typeMapToSubstitution
  * inferred and annotated trees.
  *
  * TODO this does not need to be a Rewrite phase, but can be a visit.
+ * TODO implement existential-effect-leaving-the-scope check
  */
 object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
 

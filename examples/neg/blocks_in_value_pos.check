@@ -1,3 +1,3 @@
-[error] examples/neg/blocks_in_value_pos.effekt:7:12: Required a value of type Unit, but got a block.
+[error] examples/neg/blocks_in_value_pos.effekt:7:12: Expected BoxedType(FunctionType(List(),List(MyPrint),List(),List(),Unit,MyPrint),?164), but got Unit
     resume(prog);
            ^^^^

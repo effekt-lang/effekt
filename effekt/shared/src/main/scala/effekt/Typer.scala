@@ -243,21 +243,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       case l @ source.Box(annotatedCapture, block) =>
+
         val expectedTpe = expected.collect { case BoxedType(tpe, cap) => tpe }
         val inferredCap: Captures = annotatedCapture.map { _.resolve }.getOrElse {
           Context.freshCaptVar(CaptUnificationVar.InferredBox(l))
         }
 
-        expected.map(Context.unification.apply) foreach {
-          case BoxedType(tpe, expected) => Context.requireSubregion(inferredCap, expected)
-          case x: UnificationVar => Context.abort(s"Cannot infer type.")
-          case tpe => Context.abort(s"Required a value of type ${tpe}, but got a block.")
-        }
-
         given Captures = inferredCap
         val Result(inferredTpe, inferredEff) = checkBlockArgument(block, expectedTpe)
-
-        Result(BoxedType(inferredTpe, inferredCap), inferredEff)
+        val tpe = Context.unification(BoxedType(inferredTpe, inferredCap))
+        expected.map(Context.unification.apply) foreach { exp => Context.requireSubtype(tpe, exp) }
+        Result(tpe, inferredEff)
 
       case source.Unbox(_) => insertBoxing(expr, expected)
 
@@ -689,13 +685,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
                 // TODO also annotate the capabilities
-
-                println(s">>>> ${d.id.name}: Inferred ${inferredCapture}, functionCapture ${functionCapture}. Captures ${captures}")
-                Context.unification.dumpConstraints()
-
                 Context.requireSubregionWithout(inferredCapture, functionCapture, annotated.cparams ++ captures ++ List(selfRegion))
-
-                Context.unification.dumpConstraints()
 
                 Result(annotated, effs -- bound)
               case None =>

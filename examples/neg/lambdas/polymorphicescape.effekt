@@ -16,6 +16,7 @@ def two[A, B]() =
   (do get[A](), do get[B]())
 
 def main() = {
+  var leak: () => String at {} = fun() { "" };
   try {
     val (n1, n2) = two[Int, Int]();
     println(n1);
@@ -33,7 +34,7 @@ def main() = {
     def get() = resume("")
     def put(n, x) = {
       val h = x;
-      do put(fun() { resume(h) }, 42) // ERROR
+      leak = fun() { resume(h) } // ERROR
       resume(h)
     }
   }

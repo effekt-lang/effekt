@@ -26,7 +26,7 @@ def main(): Unit / { Console } = {
       if (do Flip()) {
         effect GiveInt(): Int
 
-        println(do GiveInt()) // should be unhandled, but right now overload resolution will backtrack and use the handled effect
+        println(do GiveInt())
       } else {
         println(1)
       }

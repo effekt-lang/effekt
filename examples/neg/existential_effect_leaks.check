@@ -1,6 +1,3 @@
-[warning] examples/neg/existential_effect_leaks.effekt:24:3: Handling effects that are not used: GiveInt
-  try {
-  ^
-[error] examples/neg/existential_effect_leaks.effekt:39:1: Effect GiveInt leaves its defining scope.
-def foo() = {
-^
+[error] examples/neg/existential_effect_leaks.effekt:29:17: Unhandled effect GiveInt
+        println(do GiveInt())
+                ^^^^^^^^^^^^
