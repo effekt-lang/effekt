@@ -78,7 +78,7 @@ def example() = {
 }
 
 // cells must not leave the propagator!
-def propagators { net: Unit / Net }: Unit / Console = {
+def propagators { net: => Unit / Net }: Unit / Console = {
 
   val noop = cont[Unit, Unit] { _ => () }
 
@@ -92,7 +92,7 @@ def propagators { net: Unit / Net }: Unit / Console = {
     case _ => ()
   }
 
-  def enqueue { update: Unit / {} } =
+  def enqueue { update: => Unit / {} } =
     updates = updates.pushFront(cont { _ => update() })
 
   def enqueue[A](value: A, subs: List[Cont[A, Unit]]) =

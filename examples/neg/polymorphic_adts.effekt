@@ -12,7 +12,7 @@ type Tuple[A, B] {
 
 effect Raise[A](): A
 
-def f[A, B](a : A, b: B) { block: A / Console } : A / Console = {
+def f[A, B](a : A, b: B) { block: => A / Console } : A / Console = {
   val b2: B = b;
   block()
 }

@@ -50,7 +50,7 @@ Before we start with the definition of the transformation, we first define a uti
 generate fresh names.
 ```
 effect Fresh(): String
-def freshVars[R] { prog: R / Fresh } : R = {
+def freshVars[R] { prog: => R / Fresh } : R = {
     var i = 0;
     try { prog() }
     with Fresh { () => i = i + 1; resume("x" ++ show(i)) }
@@ -82,7 +82,7 @@ def traverse(e: Tree): Stmt / { Bind, Fresh } = e match {
 The handler `bindHere` handles `Bind` by generating a fresh name and
 inserting a let binding:
 ```
-def bindHere { prog: Stmt / Bind } : Stmt / Fresh =
+def bindHere { prog: => Stmt / Bind } : Stmt / Fresh =
   try { prog() }
   with Bind { (e) =>
     val id = do Fresh()

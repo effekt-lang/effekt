@@ -316,7 +316,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             handledEffects = handledEffects :+ effect
             val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
 
-            Context.bind(capability, CaptureSet(capability.capture))
+            Context.bind(capability, capability.tpe, CaptureSet(capability.capture))
             providedCapabilities = providedCapabilities :+ capability
           }
         }
@@ -434,10 +434,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Result(ret, effs)
         }
 
-        val handled = asConcrete(Effects(providedCapabilities.map { cap => cap.tpe.asEffect }))
+        val handled = asConcrete(Effects(providedCapabilities.map { cap => cap.tpe.asInterfaceType }))
 
         val unusedEffects = handled -- effs
 
+        // TODO only issue warning if they are not bound to capabilities in source
         if (unusedEffects.nonEmpty)
           Context.warning("Handling effects that are not used: " + unusedEffects)
 
@@ -494,13 +495,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort(s"Unbox requires a boxed type, but got $vtpe")
         }
 
-      case source.Var(id) => ???
-//      id.symbol match {
-//        case b: BlockSymbol =>
-//          val (tpe, capt) = Context.lookup(b)
-//          tpe / capt
-//        case e: ValueSymbol => insertUnboxing(expr)
-//      }
+      case source.Var(id) => id.symbol match {
+        case b: BlockSymbol =>
+          val (tpe, capt) = Context.lookup(b)
+          usingCapture(capt)
+          Result(tpe, Pure)
+        case e: ValueSymbol => insertUnboxing(expr, expected)
+      }
 
       case s : source.MethodCall => sys error "Nested capability selection not yet supported"
 
@@ -979,7 +980,51 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // we prefer methods over uniform call syntax
     if (methods.nonEmpty) {
-      ???
+      val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
+
+      val interface = interfaceOf(recvTpe.asInterfaceType)
+      // filter out operations that do not fit the receiver
+      val candidates = methods.filter(op => op.effect == interface)
+      val stateBefore = Context.backupTyperstate()
+      val results = candidates.map {
+        case op =>
+          op -> Try {
+            Context.restoreTyperstate(stateBefore)
+            val (funTpe, capture) = findFunctionTypeFor(op)
+            val Result(tpe, effs) = checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
+            (Result(tpe, effs), Context.backupTyperstate())
+          }
+      }
+      val successes = results.collect { case (sym, Right(r)) => sym -> r }
+      val errors = results.collect { case (sym, Left(r)) => sym -> r }
+
+      // TODO deduplicate with checkOverloadedCall below
+      (successes, errors) match {
+        case (Nil, errs) => ???
+
+        // Exactly one successful result in the current scope
+        case (List((sym, (tpe, st))), _) =>
+          // use the typer state after this checking pass
+          Context.restoreTyperstate(st)
+          // reassign symbol of fun to resolved calltarget symbol
+          Context.assignSymbol(id, sym)
+          return tpe
+
+        // Ambiguous
+        case (results, _) =>
+          val sucMsgs = results.map {
+            case (sym, tpe) =>
+              s"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
+          }.mkString("\n")
+
+          val explanation =
+            s"""| Ambiguous reference to ${id}. The following blocks would typecheck:
+                |
+                |${sucMsgs}
+                |""".stripMargin
+
+          Context.abort(explanation)
+      }
     } else {
       // just check as a function.
       checkOverloadedCall(call, id, targs, receiver :: vargs, bargs, expected)
@@ -1383,7 +1428,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
     bindCapabilities(binder, caps)
-    capabilityScope = BindSome(binder, caps.map { c => c.tpe.asEffect -> c }.toMap, capabilityScope)
+    capabilityScope = BindSome(binder, caps.map { c => c.tpe.asInterfaceType -> c }.toMap, capabilityScope)
     val result = f
     capabilityScope = capabilityScope.parent
     result
@@ -1391,7 +1436,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
-      Typer.assertConcrete(cap.tpe.asEffect)
+      Typer.assertConcrete(cap.tpe.asInterfaceType)
       positions.dupPos(binder, cap)
       cap
     }
@@ -1482,7 +1527,7 @@ trait TyperOps extends ContextOps { self: Context =>
      .getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
-    annotations.get(Annotations.BlockType, s).orElse(functionTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
+    annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
 
   private[typer] def lookupCapture(s: BlockSymbol) =
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {

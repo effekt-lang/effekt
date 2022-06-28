@@ -4,7 +4,7 @@ import immutable/list
 
 effect Exc[A](msg: String): A
 
-def printer { p: Unit / Exc }: Unit / Console = try { p() } with Exc { (msg) =>
+def printer { p: => Unit / Exc }: Unit / Console = try { p() } with Exc { (msg) =>
   println(msg)
 }
 

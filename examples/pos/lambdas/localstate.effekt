@@ -7,7 +7,7 @@ def main() = {
 
     def count1(n: Int): Int = if (n == 0) n else count1(n - 1)
 
-    def hof { g2 : Unit } = fun () {
+    def hof { g2 : => Unit } = fun () {
       x = x + 1
       println(x + y); g2()
     }

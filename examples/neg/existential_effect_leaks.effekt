@@ -5,7 +5,7 @@ module existential_effect_leaks
 effect Flip(): Boolean
 effect GiveInt(): Int
 
-def flipTrue { prog: Unit / { Flip, GiveInt } } : Unit / Console =
+def flipTrue { prog: => Unit / { Flip, GiveInt } } : Unit / Console =
   try {
     try {
       prog()

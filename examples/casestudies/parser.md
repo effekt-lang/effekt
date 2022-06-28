@@ -62,16 +62,16 @@ def kw(exp: String): Unit / Parser = {
 ```
 Using the effect for non-deterministic choice `alt`, we can model alternatives, optional matches and various repetitions:
 ```
-def or[R] { p: R } { q: R } =
+def or[R] { p: => R } { q: => R } =
   if (do alt()) { p() } else { q() }
 
-def opt[R] { p: R }: Option[R] / Parser =
+def opt[R] { p: => R }: Option[R] / Parser =
   or { Some(p()) } { None() }
 
-def many { p: Unit }: Unit / Parser =
+def many { p: => Unit }: Unit / Parser =
   or { some { p() } } { () }
 
-def some { p: Unit }: Unit / Parser =
+def some { p: => Unit }: Unit / Parser =
   { p(); many { p() } }
 ```
 
@@ -201,7 +201,7 @@ type ParseResult[R] {
 The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
-def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
+def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
   lexer(input) { skipWhitespace { Success(p()) } }
 } with Nondet {
   def alt() = resume(true) match {

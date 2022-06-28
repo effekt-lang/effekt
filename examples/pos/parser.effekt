@@ -30,7 +30,7 @@ def accept(exp: String) = {
     }
 }
 
-def or[R] { p: R } { q: R } =
+def or[R] { p: => R } { q: => R } =
   if (do Flip()) { p() } else { q() }
 
 def asOrB(): Int / { Flip, Next, Fail } =
@@ -41,7 +41,7 @@ def parens(): Int / { Flip, Next, Fail } =
      { accept("("); val res = parens(); accept(")"); res + 1 }
 
 // Int = Result
-def reader[R](s: Stream) { p : R / Next } : R / Fail = {
+def reader[R](s: Stream) { p : => R / Next } : R / Fail = {
     var inn = s;
     try{
       p()
@@ -55,7 +55,7 @@ def reader[R](s: Stream) { p : R / Next } : R / Fail = {
     }
 }
 
-def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
+def eager[R] { p: => R / { Flip, Fail, Error } }: ParseResult[R] = try {
   Success(p())
 } with Flip { () =>
     resume(true) match {
@@ -69,20 +69,20 @@ def eager[R] { p: R / { Flip, Fail, Error } }: ParseResult[R] = try {
     ParseError(msg)
 }
 
-def commit[R] { p : R / Fail } : R / Error =
+def commit[R] { p : => R / Fail } : R / Error =
   try { p() } with Fail { (msg) =>
     do Error(msg)
   }
 
-def nocut[R] { p: R / Error } : R / Fail =
+def nocut[R] { p: => R / Error } : R / Fail =
   try { p() } with Error { (msg) =>
      do Fail(msg)
   }
 
-def opt[R] { p: R }: Option[R] / Flip =
+def opt[R] { p: => R }: Option[R] / Flip =
    or { Some(p()) } { None() }
 
-def parse[R](s: Stream) { p : R / { Flip, Next, Fail, Error } } =
+def parse[R](s: Stream) { p : => R / { Flip, Next, Fail, Error } } =
   eager {
     reader(s) {
       p()

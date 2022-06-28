@@ -611,11 +611,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
-  lazy val blockType: P[FunctionType] =
+  lazy val blockType: P[BlockType] =
     ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
     | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), ret, eff) }
     // TODO only allow this on parameters, not elsewhere...
-    | primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
+    | interfaceType
+    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
     )
 
   lazy val interfaceType: P[InterfaceType] =

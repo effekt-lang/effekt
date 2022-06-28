@@ -40,7 +40,7 @@ effect Heap {
   def put(r: Ref, v: Var): Unit
 }
 
-def heap[R] { prog: R / Heap } = {
+def heap[R] { prog: => R / Heap } = {
   var cells: List[Var] = Nil();
   var n = 0;
   try { prog() } with Heap {
@@ -70,12 +70,12 @@ def obs(r: Ref, a: Boolean) =
     case Observed(y) => if (a == y) { () } else { do Fail() }
   }
 
-def choose3[R] { x: R } { y: R } { z: R } : R / Fork =
+def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
   if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
 
-def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
+def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
   val empty: List[Weighted[R]] = Nil();
   try {
     var current = 1.0;
@@ -154,7 +154,7 @@ def heapTest() = heap {
   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
 }
 
-def catch[R] { p: R / IndexOutOfBounds }: Unit / Console =
+def catch[R] { p: => R / IndexOutOfBounds }: Unit / Console =
   try { p(); () }
   with IndexOutOfBounds { () => println("Index out of bounds!") }
 

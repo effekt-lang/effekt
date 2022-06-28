@@ -10,18 +10,18 @@ effect Process {
     def suspend(): Unit
 }
 
-def fork { p: Unit }: Unit / Process =
+def fork { p: => Unit }: Unit / Process =
   if (do fork()) { p(); do exit() }
   else { () }
 
 // Here we use the unsafe API manually asserting that the continuation does not leave the scope
-def roundrobin { p: Unit / Process }: Unit = {
+def roundrobin { p: => Unit / Process }: Unit = {
     var ps: Dequeue[Cont[Unit, Unit]] = emptyQueue();
 
     def dequeue(): Unit =
         ps.popBack.foreach { case (k, q) => ps = q; k.apply(()) }
 
-    def enqueue { p: Unit }: Unit =
+    def enqueue { p: => Unit }: Unit =
         ps = ps.pushFront(cont { (unit) => p() })
 
     try { p(); dequeue() } with Process {

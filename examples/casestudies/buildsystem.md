@@ -93,7 +93,7 @@ For this we need a store, which we represent as a list of pairs of keys and valu
 The `memo` handler function tries to look up the needed key in the store. If the key is found it returns the associated value. Otherwise it itself uses `Need`, stores the result, and returns the value.
 
 ```
-def memo[R] { prog: R / { Need } }: R / { Need } = {
+def memo[R] { prog: => R / { Need } }: R / { Need } = {
     var store: Store = Nil();
     try {
         prog()
@@ -128,7 +128,7 @@ When we run this example without memoization we will see `"B1"`, `"A1"`, and `"A
 Finally, to supply the inputs, we have a handler for the `NeedInput` effect.
 
 ```
-def supplyInput[R](store: Store) { prog: R / { NeedInput } }: R / { KeyNotFound } = {
+def supplyInput[R](store: Store) { prog: => R / { NeedInput } }: R / { KeyNotFound } = {
     try { prog() } with NeedInput { (key) => resume(find(store, key)) }
 }
 ```

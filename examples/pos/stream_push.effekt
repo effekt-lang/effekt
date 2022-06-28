@@ -3,7 +3,7 @@ module stream_push
 effect Emit(n: Int) : Unit
 // type alias PushStream = Unit / Emit
 
-def sum { stream: Unit / Emit } : Int = {
+def sum { stream: => Unit / Emit } : Int = {
   var sum = 0;
   try { stream() } with Emit { (n: Int) =>
     sum = sum + n; resume(())
@@ -12,7 +12,7 @@ def sum { stream: Unit / Emit } : Int = {
 }
 
 
-def map { stream: Unit / Emit } { f : Int => Int } : Unit / Emit =
+def map { stream: => Unit / Emit } { f : Int => Int } : Unit / Emit =
   try { stream() } with Emit { (n: Int) =>
     do Emit(f(n)); resume(())
   }

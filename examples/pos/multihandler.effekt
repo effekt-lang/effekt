@@ -4,7 +4,7 @@ effect Get(): Int
 effect Put(n: Int): Unit
 
 
-def withState(init: Int) { prog : Unit / { Get, Put } } = {
+def withState(init: Int) { prog : => Unit / { Get, Put } } = {
 
     var s = init;
 

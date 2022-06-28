@@ -13,10 +13,10 @@ effect Lexer {
   def next(): Token
 }
 
-def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
+def lexer[R](in: String) { prog: => R / Lexer } : R / LexerError = {
     try { prog() } with Lexer {
         def peek() = resume(None())
-        def next() = 
+        def next() =
             {
                 lexeme()
             }

@@ -2,7 +2,7 @@ module examples/pos/lambdas/higherorder
 
 effect Yield(): Unit
 
-def repeater { f: Unit }: Int => Int at {f} = {
+def repeater { f: => Unit }: Int => Int at {f} = {
   def rec(n: Int): Int = if (n == 0) { f(); n } else rec(n - 1)
   fun(n: Int) { rec(n) }
 }

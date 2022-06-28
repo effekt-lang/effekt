@@ -60,7 +60,7 @@ A dummy lexer reading lexemes from a given list can be implemented as a handler 
 effect LexerError[A](msg: String, pos: Position): A
 val dummyPosition = Position(0, 0, 0)
 
-def lexerFromList[R](l: List[Token]) { program: R / Lexer }: R / LexerError = {
+def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError = {
   var in = l;
   try { program() } with Lexer {
     def peek() = in match {
@@ -76,7 +76,7 @@ def lexerFromList[R](l: List[Token]) { program: R / Lexer }: R / LexerError = {
 ```
 We define a separate handler to report lexer errors to the console:
 ```
-def report { prog: Unit / LexerError }: Unit / Console =
+def report { prog: => Unit / LexerError }: Unit / Console =
   try { prog() } with LexerError { (msg, pos) =>
     println(pos.line.show ++ ":" ++ pos.col.show ++ " " ++ msg)
   }
@@ -117,7 +117,7 @@ val tokenDesriptors = [
 ```
 
 ```
-def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
+def lexer[R](in: String) { prog: => R / Lexer } : R / LexerError = {
 ```
 Additionally, we keep track of the current position in the input stream, by maintaining
 three mutable variables for the zero based index, and one-based column and line position.
@@ -194,7 +194,7 @@ def skipSpaces(): Unit / Lexer = do peek() match {
   case Some(t) => if (t.kind == Space()) { do next(); skipSpaces() } else ()
 }
 
-def skipWhitespace[R] { prog: R / Lexer }: R / Lexer =
+def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
   try { prog() } with Lexer {
     def peek() = { skipSpaces(); resume(do peek()) }
     def next() = { skipSpaces(); resume(do next()) }

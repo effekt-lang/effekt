@@ -11,7 +11,7 @@ extern include "effekt_builtins.js"
 // Pattern Matching
 extern include "effekt_matching.js"
 
-def locally[R] { f: R }: R = f()
+def locally[R] { f: => R }: R = f()
 
 // Side effecting ops
 // ==================
@@ -202,16 +202,16 @@ record RuntimeError()
 def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
 
 // converts exceptions of (static) type E to an uncatchable panic that aborts the program
-def panicOn[E] { prog: Unit / Exception[E] }: Unit =
+def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception, msg) = panic(msg) }
 
 // reports exceptions of (static) type E to the console
-def report[E] { prog: Unit / Exception[E] }: Unit / Console =
+def report[E] { prog: => Unit / Exception[E] }: Unit / Console =
   try { prog() } with Exception[E] { def raise(exception, msg) = println(msg) }
 
 // ignores exceptions of (static) type E
 // TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
-def ignoring[E] { prog: Unit / Exception[E] }: Unit =
+def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise(exception, msg) = () }
 
 // Control Flow
@@ -240,14 +240,14 @@ extern io def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
   "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
 
 // runs the block and returns the time in nanoseconds
-def timed { block: Unit }: Int = {
+def timed { block: => Unit }: Int = {
   val before = currentTimeNanos()
   block()
   val after = currentTimeNanos()
   after - before
 }
 
-def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
+def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit / Console = {
   def run(n: Int, report: Boolean): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };

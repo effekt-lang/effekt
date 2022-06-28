@@ -128,7 +128,7 @@ The semantics of `me` depends on the context. If we treat quotes in the above se
 scope, we see that "said" _handles_ me. That is:
 
 ```
-def said(p: Person) { s: Sentence / Speaker }: Sentence / {} =
+def said(p: Person) { s: => Sentence / Speaker }: Sentence / {} =
   try { Say(p, s()) } with Speaker { def speaker() = resume(p) }
 ```
 
@@ -199,7 +199,7 @@ and introduces a universal quantification at the position of the handler `scoped
 
 The quantification effect is handled by `scoped`:
 ```
-def scoped { s: Sentence / Quantification }: Sentence = {
+def scoped { s: => Sentence / Quantification }: Sentence = {
   var tmp = 0;
   def fresh(): Person = { val x = Person("x" ++ show(tmp)); tmp = tmp + 1; x }
   try { s() } with Quantification {

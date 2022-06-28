@@ -100,7 +100,7 @@ object assertions {
   }
 
   extension(t: symbols.Type)(using reporter: ErrorReporter) {
-    def asEffect: InterfaceType = t match {
+    def asInterfaceType: InterfaceType = t match {
       case t: InterfaceType => t
       case _ => reporter.abort("Expected a capability type")
     }
