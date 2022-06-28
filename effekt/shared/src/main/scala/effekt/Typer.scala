@@ -664,7 +664,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case x: CaptUnificationVar => List(x)
           case _ => Nil
         }
-        Context.withUnificationScope(captVars) {
+        val Result(funTpe, unhandledEffects) = Context.withUnificationScope(captVars) {
 
           sym.vparams foreach Context.bind
           sym.bparams foreach Context.bind
@@ -697,7 +697,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 Context.unification.dumpConstraints()
 
-                Result((), effs -- bound)
+                Result(annotated, effs -- bound)
               case None =>
 
                 // to subtract the capabilities, which are only inferred bottom up, we need a **second** unification variable
@@ -711,23 +711,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
                 // The order of effects annotated to the function is the canonical ordering for capabilities
                 val capabilities = effs.controlEffects.map { caps.apply }
-
-                // TODO also add capture parameters for inferred capabilities
-                val funType = d.symbol.toType(tpe, effs.toEffects, capabilities.map(_.capture))
+                val captures = capabilities.map(_.capture)
 
                 Context.bindCapabilities(d, capabilities)
-
-                Context.bind(sym, funType)
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
 
                 // we subtract all capabilities introduced by this function to compute its capture
                 Context.requireSubregionWithout(inferredCapture, functionCapture, (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion))
 
-                Result((), Pure)
+                // TODO also add capture parameters for inferred capabilities
+                val funType = sym.toType(tpe, effs.toEffects, captures)
+                Result(funType, Pure)
             }
           }
         }
+        // we bind the function type outside of the unification scope to solve for variables.
+        val substituted = Context.unification(funTpe)
+        if (!isConcreteBlockType(substituted)) {
+          Context.abort(s"Cannot infer type for ${id.name}: ${substituted}")
+        }
+        Context.bind(sym, substituted)
+
+        Result((), unhandledEffects)
       case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
         val effectDecl = d.symbol
         effectDecl.ops foreach { op =>
@@ -744,6 +750,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             binding checkAgainst t
           case None => checkStmt(binding, None)
         }
+
         Context.bind(d.symbol, t)
         Result((), effBinding)
 
@@ -930,11 +937,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(tpe, bodyEffs -- effects)
   }
 
-  def findFunctionTypeFor(sym: TermSymbol)(using Context): FunctionType = sym match {
-    case b: BlockSymbol => Context.lookupFunctionType(b)
+  def findFunctionTypeFor(sym: TermSymbol)(using Context): (FunctionType, Captures) = sym match {
+    // capture of effect operations is dealt with by type checking Do or MethodCall
+    case b: Operation => (Context.lookupFunctionType(b), CaptureSet.empty)
+    case b: BlockSymbol => (Context.lookupFunctionType(b), Context.lookupCapture(b))
     case v: ValueSymbol =>
       Context.unification(Context.lookup(v)) match {
-      case BoxedType(b: FunctionType, _) => b
+      case BoxedType(b: FunctionType, capt) => (b, capt)
       case b => Context.abort(s"Required function type, but got ${b}")
     }
   }
@@ -1036,19 +1045,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case receiver =>
           receiver -> Try {
             Context.restoreTyperstate(stateBefore)
-            val funTpe = findFunctionTypeFor(receiver)
-
+            val (funTpe, capture) = findFunctionTypeFor(receiver)
             val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
-
-            val capture = receiver match {
-              // effect operations are dealt with by type checking Do or MethodCall
-              case op: Operation => CaptureSet.empty
-              case b: BlockSymbol => Context.lookupCapture(b)
-              case other => Context.panic(s"Cannot find capture for ${other}")
-            }
-
             usingCapture(capture)
-
             (Result(tpe, effs), Context.backupTyperstate())
           }
       }
@@ -1178,6 +1177,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // with A := Int and B := Int requires us to pass two capabilities.
     val capabilities = Context.provideCapabilities(call, retEffs.controlEffects.map(Context.unification.apply))
 
+    val captParams = captArgs.drop(bargs.size)
+    (captParams zip capabilities) foreach { case (param, cap) =>
+      Context.requireSubregion(CaptureSet(cap.capture), param)
+    }
+
+
     // TODO also use capabilities when instantiating the type scheme
     println(s"Function ${name} uses ${capabilities.map(_.capture)}")
     usingCapture(CaptureSet(capabilities.map(_.capture)))
@@ -1251,7 +1256,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
   }
 
-  private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
+  private[typer] def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
     case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
       vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
     case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
@@ -1480,7 +1485,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def lookupFunctionType(s: BlockSymbol): FunctionType =
     annotations.get(Annotations.BlockType, s)
      .map {
-       case f: FunctionType => f
+       case f: FunctionType => unification(f) // here we apply the substitutions known so far.
        case tpe => abort(s"Expected function type, but got ${tpe}.")
      }
      .orElse(functionTypeOption(s))

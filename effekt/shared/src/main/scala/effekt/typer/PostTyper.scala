@@ -32,7 +32,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
-    case tree @ source.TryHandle(prog, handlers) =>
+    case tree @ source.TryHandle(prog, handlers) => {
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val tpe = Context.inferredTypeOf(prog)
       val selfRegion = Context.getSelfRegion(tree)
@@ -54,6 +54,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
       rewrite(prog)
       handlers foreach rewrite
       tree
+    }
   }
 
   override def defn(using Context) = {

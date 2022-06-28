@@ -1,0 +1,17 @@
+effect Get {
+  def get(): Int
+}
+
+def outer() = {
+  def inner(): Int / {} = do get()
+  fun() { inner() }
+}
+
+def main() = {
+  val f = try { //@Get =>
+    outer()//{@Get}
+  } with Get {
+    def get() = resume(42)
+  }
+  (unbox f)()
+}

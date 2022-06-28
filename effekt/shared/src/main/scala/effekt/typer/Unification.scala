@@ -77,6 +77,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def apply(tpe: BlockType): BlockType =
     substitution.substitute(tpe)
 
+  def apply(tpe: FunctionType): FunctionType =
+    substitution.substitute(tpe)
+
   def apply(tpe: ValueType): ValueType =
     substitution.substitute(tpe)
 
@@ -93,6 +96,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def enterScope() = {
     scope = LocalScope(Nil, Nil, scope)
+  }
+
+  def forceSolve(vars: List[CaptUnificationVar]) = {
+    constraints.leave(Nil, vars)
   }
 
   def leaveScope(additional: List[CaptUnificationVar]) = {
@@ -190,7 +197,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       if (targs.size == tparams.size) targs
       else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
-    assert(cparams.size == (bparams.size + eff.controlEffects.size))
+    if (cparams.size != (bparams.size + eff.controlEffects.size)) {
+      sys error s"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.controlEffects.size}.\n  ${tpe}"
+    }
 
     val captRigids =
       if (cargs.size == cparams.size) cargs
