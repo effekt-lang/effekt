@@ -902,7 +902,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       // (4) Bind capabilities for all effects "handled" by this function
-      val effects = typeSubst substitute effs
+      val effects: ConcreteEffects = typeSubst substitute effs
       val capabilities = effects.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
 
       // (5) Substitute capture params
@@ -925,7 +925,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       Context.requireSubregionWithout(bodyRegion, currentCapture, captParams ++ List(selfRegion))
 
-      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects)
+      val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects.toEffects)
 
       Result(tpe, bodyEffs -- effects)
   }
