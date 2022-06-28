@@ -95,6 +95,7 @@ package object symbols {
   //    override def toString = s"@${tpe.eff.name}"
   //  }
 
+  // to be fair, resume is not tracked anymore, but transparent.
   case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name.local("resume") }
 
   trait Fun extends BlockSymbol {

@@ -1038,14 +1038,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.restoreTyperstate(stateBefore)
             val funTpe = findFunctionTypeFor(receiver)
 
-            val receiverAsBlockSymbol = receiver match {
-              case b: BlockSymbol => Some(b)
-              case other => None
+            val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
+
+            val capture = receiver match {
+              // effect operations are dealt with by type checking Do or MethodCall
+              case op: Operation => CaptureSet.empty
+              case b: BlockSymbol => Context.lookupCapture(b)
+              case other => Context.panic(s"Cannot find capture for ${other}")
             }
 
-            // TODO do something with receiver for capture checking
+            usingCapture(capture)
 
-            val Result(tpe, effs) = checkCallTo(call, receiver.name.name, funTpe, targs, vargs, bargs, expected)
             (Result(tpe, effs), Context.backupTyperstate())
           }
       }
