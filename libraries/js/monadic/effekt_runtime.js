@@ -34,32 +34,45 @@ const $runtime = (function() {
 
   // Metacontinuations / Stacks
   // A metacontinuation is a stack of stacks.
-  // (frames: List[Frame], fields: [Cell], prompt: Int, clauses: Clauses, tail: Stack) -> Stack
-  function Stack(frames, fields, prompt, clauses, tail) {
-    return { frames: frames, fields: fields, prompt: prompt, clauses: clauses, tail: tail }
+
+  // (frames: List[Frame], fields: [Cell], prompt: Int, tail: Stack) -> Stack
+  function Stack(frames, fields, prompt, onReturn, tail) {
+    return { frames: frames, fields: fields, prompt: prompt, onReturn: onReturn, tail: tail }
   }
 
-  // (frames: List[Frame], fields: [Cell], prompt: Int, clauses: Clauses, tail: Stack) -> Stack
-  function SubStack(frames, backup, prompt, clauses, onUnwindData, tail) {
-    return { frames: frames, backup: backup, prompt: prompt, clauses: clauses, onUnwindData: onUnwindData, tail: tail }
+  // (frames: List[Frame], fields: [Cell], prompt: Int, tail: Stack) -> Stack
+  function SubStack(frames, backup, prompt, onReturn, tail) {
+    return { frames: frames, backup: backup, prompt: prompt, onReturn: onReturn, tail: tail }
   }
 
   const EmptyStack = null;
 
-  // |       |
+  // Invariant: a Finalizer stack always occurs as either the tail of a Stack or as predecessor of a SubStack.
+  // Only the top-level stack does not have a Finalizer stack.
+  // 
+  // |       |      
   // | - T - |
-  // |-------| - R
-  //
-  // onReturn: T -> Control[R]
-  // onUnwind: () -> Control[S]
-  // onRewind: S -> Control[Unit]
-  function Clauses(onUnwind, onRewind, onReturn) {
+  // |-------| { onReturn: T -> Control[R]
+  //                                        / onUnwind: () -> Control[S]
+  // |-------| <- Finalizer of Stack above { 
+  //                                        \ onRewind: S -> Control[Unit]
+  //    ...
+  // If a stack is unwound, the Finalizer stack also has to be unwound in order to get to the stacks below.
+  // This ensures that at each unwind, the unwind operation is always executed. The same applies for rewinding.
+  // (frames: List[Frame], clauses: Clauses, onUnwindData: A, tail: Stack) -> Stack
+  function Finalizer(clauses, onUnwindData, doRewindOp, tail) {
+    return { 
+      clauses: clauses, onUnwindData: onUnwindData, isFinilizer: true, doRewindOp: doRewindOp, tail: tail }
+  }
+
+
+  function Clauses(onUnwind, onRewind) {
     return {
-      onUnwind: onUnwind, onRewind: onRewind, onReturn: onReturn
+      onUnwind: onUnwind, onRewind: onRewind
     }
   }
 
-  const EmptyClauses = Clauses(null, null, null)
+  const EmptyClauses = Clauses(null, null)
 
   // return a to stack
   // (stack: Stack<A, B>, a: A) -> Step<B>
@@ -67,10 +80,20 @@ const $runtime = (function() {
     var s = stack;
     while (true) {
       if (s === EmptyStack) return a;
+      // a cannot be applied to a finalizer stack
+      if (s.isFinilizer) {
+        s = s.tail;
+        continue
+      }
       const fs = s.frames;
       if (fs === Nil) {
-        if (s.clauses.onReturn != null) {
-          return Step(s.clauses.onReturn(a), s.tail)
+        if (s.onReturn != null) {
+          // Execute the return operation within the outer context.
+          // Since s is not a finalizer, it is safe to assume that
+          // s.tail is finalizer, hence it is neccessary to execute
+          // the return operation within s.tail.tail, which is in
+          // of type Stack again.
+          return Step(s.onReturn(a), s.tail.tail)
         } else {
           s = s.tail;
           continue
@@ -114,23 +137,35 @@ const $runtime = (function() {
 
   // Corresponds to a stack rewind.
   // (subcont: Stack, stack: Stack, c: Control[A]) -> Step
-  function pushSubcont(subcont, stack, c, p, rewindedOn) {
+  function pushSubcont(subcont, stack, c) {
     var sub = subcont;
     var s = stack;
 
     while (sub !== EmptyStack) {
-      if (sub.clauses.onRewind != null && sub.prompt !== p && sub.prompt !== rewindedOn) {
-        const remainder = sub
-        // push sub onto s and execute the on rewind clause on the resulting stack.
-        // Then remember to push sub.tail on the resulting stack k.
-        return Step(
-          sub.clauses.onRewind(sub.onUnwindData)
-            .then(() => Control(k => pushSubcont(remainder, k, c, p, sub.prompt))),
-          s
-        )
+      if (sub.isFinilizer) {
+        if (sub.doRewindOp && sub.clauses.onRewind != null) {
+          // execute the rewind operation and remember to push the remaining substack
+          // onto the resulting metastack k
+          const c_ = sub.clauses.onRewind(sub.onUnwindData)
+              .then(() => Control(k => {
+                // remember that the rewind operation already has been executed and shall
+                // not be executed again in the next iteration
+                sub = Finalizer(sub.clauses, sub.onUnwindData, false, sub.tail);
+                return pushSubcont(sub, k, c)
+              }));
+              // s is always of type Stack here. 
+              // Proof: Assuming s would be of type Finalizer, then the predecesssor of the current 
+              // sub had to be a Finalizer. However, since the current sub is the tail of the last, 
+              // sub cannot be a Finalizer again due to the invariant that holds for every Finalizer. 
+              // That means we would not be wihtin this if branch.
+          return Step(c_, s)
+        } else {
+          s = Finalizer(sub.clauses, sub.onUnwindData, true, s);
+        }
+      } else {
+        s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.onReturn, s);
       }
-      s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, s)
-      sub = sub.tail
+      sub = sub.tail;
     }
     return Step(c, s);
   }
@@ -138,7 +173,7 @@ const $runtime = (function() {
   // Pushes a frame f onto the stack
   // (stack: Stack, f: Frame) -> Stack
   function flatMap(stack, f) {
-    if (stack === EmptyStack) { return Stack(Cons(f, Nil), [], null, stack) }
+    if (stack === EmptyStack) { return Stack(Cons(f, Nil), [], null, null, stack) }
     var fs = stack.frames
     // it should be safe to mutate the frames field, since they are copied in the subcont
     stack.frames = Cons(f, fs)
@@ -147,32 +182,42 @@ const $runtime = (function() {
 
   // Corresponds to a stack unwind. Pops off stacks until the stack with prompt has been found
   // (stack: Stack, sub: Stack, p: Int, f: Frame) -> Step
-  function splitAt(stack, sub, p, f) {
-    var sub_ = sub;
+  function splitAt(stack, subcont, p, f) {
+    var sub = subcont;
     var s = stack;
 
-    while (s !== EmptyStack) {
-      const currentPrompt = s.prompt
-      const onUnwindOp = s.clauses.onUnwind
-      // do not execute the unwind operation if current handle is the needed one
-      if (onUnwindOp != null && currentPrompt !== p) {
-        const c = onUnwindOp().then(a =>
-          Control(k => {
-            sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, a, sub_)
-            return splitAt(k, sub_, p, f)
-          })
-        )
-        return Step(c, s.tail)
+    while (s != EmptyStack) {
+      if (s.isFinilizer) {
+        if (s.clauses.onUnwind != null) {
+          // execute the unwind operation within the outer context,
+          // remember to pop s afterwards and continue poping off until p has been found.
+          const c = s.clauses.onUnwind().then(a =>
+            Control(k => {
+              sub = Finalizer(s.clauses, a, true, sub);
+              return splitAt(k, sub, p, f)
+            })
+          )
+          // s.tail is a Stack because of the invariant that holds for every
+          // Finalizer
+          return Step(c, s.tail)
+        } else {
+          sub = Finalizer(s.clauses, null, true, sub);
+        }
+      } else {
+        const currentPrompt = s.prompt;
+        sub = SubStack(s.frames, backup(s.fields), currentPrompt, s.onReturn, sub);
+        if (currentPrompt === p) {
+          // if the prompt has been found the unwind operation, as well as the rewind
+          // operation of the current stack, are not to be executed.
+          sub = Finalizer(s.tail.clauses, null, false, sub);
+          const localCont = a => Control(k => pushSubcont(sub, k, pure(a), p, 0));
+          // Due to invariant: s.tail.tail is of type Stack
+          return Step(f(localCont), s.tail.tail)
+        }
       }
-
-      sub_ = SubStack(s.frames, backup(s.fields), currentPrompt, s.clauses, null, sub_)
-      if (currentPrompt === p) {
-        const localCont = a => Control(k => pushSubcont(sub_, k, pure(a), p, 0))
-        return Step(f(localCont), s.tail)
-      }
-      s = s.tail
+      s = s.tail;
     }
-    throw ("Prompt " + p + " not found")
+    throw ("Prompt " + p + " not found");
   }
 
   // (init: A, f: Frame) -> Control[B]
@@ -190,7 +235,7 @@ const $runtime = (function() {
       // Control[A] -> Stack -> Step[Control[B], Stack]
       apply: apply,
       // Control[A] -> A
-      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, EmptyClauses, EmptyStack))),
+      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, null, EmptyStack))),
       // Control[A] -> (A -> Control[B]) -> Control[B] 
       // which corresponds to monadic bind
       then: f => Control(k => Step(self, flatMap(k, f))),
@@ -228,7 +273,12 @@ const $runtime = (function() {
       })).then(a => a.shouldRun ? a.cont() : $effekt.pure(a.cont))
   }
 
-  const reset = p => clauses => c => Control(k => Step(c, Stack(Nil, [], p, clauses, k)))
+  const reset = p => clauses => c => Control(k => {
+    // Establish invariant: Stack -> Finalizer -> k
+    const fS = Finalizer(Clauses(clauses.onUwind, clauses.onRewind), null, true, k);
+    const s = Stack(Nil, [], p, clauses.onReturn, fS);
+    return Step(c, s)
+  })
 
   const toplevel = 1;
   // A unique id for each handle
@@ -264,7 +314,9 @@ const $runtime = (function() {
       }
       return cap;
     });
-    return body => reset(p)(Clauses(onUnwind, onRewind, onReturn))(body.apply(null, caps))
+    return body => reset(p)
+                        ({ onUwind: onUnwind, onRewind: onRewind, onReturn: onReturn })
+                        (body.apply(null, caps))
   }
 
   return {
