@@ -1479,6 +1479,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * - [[Annotations.InferredValueType]]
    * - [[Annotations.InferredBlockType]]
    * - [[Annotations.InferredEffect]]
+   * - [[Annotations.InferredCapture]]
    * - [[Annotations.BlockArgumentType]]
    * - [[Annotations.TypeArguments]]
    */
@@ -1556,6 +1557,10 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
     annotations.update(Annotations.InferredEffect, t, e)
 
+  private[typer] def annotateInferredCapture(t: Tree, e: Captures) =
+    annotations.update(Annotations.InferredCapture, t, e)
+
+
   // TODO also add InferredRegion
   //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
 
@@ -1613,6 +1618,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.InferredValueType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.InferredBlockType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
+    annotations.updateAndCommit(Annotations.InferredCapture) { case (t, effs) => subst.substitute(effs) }
 
     annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
 

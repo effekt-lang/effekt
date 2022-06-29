@@ -160,6 +160,7 @@ package object symbols {
 
   case class BuiltinCapability(effect: InterfaceType) extends BlockSymbol {
     override val name = effect.name
+    lazy val capture: Capture = CaptureParameter(name)
   }
 
   /**

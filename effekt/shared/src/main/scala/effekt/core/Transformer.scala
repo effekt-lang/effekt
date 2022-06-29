@@ -52,7 +52,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = d.symbol
       core.Record(rec, rec.fields, rest())
 
-    case v @ source.ValDef(id, _, binding) if Context.pureOrIO(binding) =>
+    case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       Let(v.symbol, Run(transform(binding)), rest())
 
     case v @ source.ValDef(id, _, binding) =>
@@ -92,7 +92,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(d, () => transform(rest))
 
     // { e; stmt } --> { val _ = e; stmt }
-    case source.ExprStmt(e, rest) if Context.pureOrIO(e) =>
+    case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
       val let = Let(freshWildcardFor(e), expr, transform(rest))
       if (bs.isEmpty) { let }
@@ -261,7 +261,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.panic("Should have been translated to a method call!")
       case f: Field =>
         Context.panic("Should have been translated to a select!")
-      case f: BlockSymbol if Context.pureOrIO(f) && bargs.forall { Context.pureOrIO } =>
+      case f: BlockSymbol if pureOrIO(f) && bargs.forall { pureOrIO } =>
         Run(App(BlockVar(f), targs, as))
       case f: BlockSymbol =>
         Context.bind(Context.inferredTypeOf(call), App(BlockVar(f), targs, as))
@@ -347,6 +347,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
     eliminateReturnRun.rewrite(s)
   }
+
+  def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
+    case c: CaptureSet => c
+    case _ => Context.panic("All capture unification variables should have been replaced by now.")
+  }
+
+  // we conservatively approximate to false
+  def pureOrIO(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
+    case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
+    case _         => false
+  }
+
+  def pureOrIO(t: BlockSymbol)(using Context): Boolean = pureOrIO(asConcreteCaptureSet(Context.captureOf(t)))
+
+  def pureOrIO(r: CaptureSet): Boolean = r.captures.subsetOf(Set(builtins.IOCapability.capture))
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 
@@ -385,14 +400,4 @@ trait TransformerOps extends ContextOps { Context: Context =>
     bindings = before
     (result, b)
   }
-
-  // we conservatively approximate to false
-  def pureOrIO(t: source.Tree): Boolean = inferredCaptureOption(t) match {
-    case Some(reg) => pureOrIO(reg)
-    case _         => false
-  }
-
-  def pureOrIO(t: BlockSymbol): Boolean = false //pureOrIO(regionOf(t).asRegionSet)
-
-  def pureOrIO(r: CaptureSet): Boolean = false //r.subsetOf(Region(builtins.IOCapability))
 }
