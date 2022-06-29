@@ -8,6 +8,23 @@ import effekt.source.{ Def, MatchPattern, Tree }
 import effekt.source.Tree.Visit
 import effekt.typer.typeMapToSubstitution
 
+object PostTyper extends Phase[Typechecked, Typechecked] {
+
+  val phaseName = "post-typer"
+
+  def run(input: Typechecked)(implicit C: Context) =
+    val Typechecked(source, tree, mod) = input
+
+    Wellformedness.check(mod, tree)
+
+    if (Context.buffer.hasErrors) { None }
+    else { Some(input) }
+}
+
+class WFContext(var effectsInScope: List[Interface]) {
+  def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
+}
+
 /**
  * Performs additional wellformed-ness checks that are easier to do on already
  * inferred and annotated trees.
@@ -17,15 +34,9 @@ import effekt.typer.typeMapToSubstitution
  * - lexical scoping of effects
  * - escape of capabilities through types
  */
-class PostTyperContext(var effectsInScope: List[Interface]) {
-  def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
-}
-object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext] {
+object Wellformedness extends Visit[WFContext] {
 
-  val phaseName = "post-typer"
-
-  def run(input: Typechecked)(implicit C: Context) =
-    val Typechecked(source, tree, mod) = input
+  def check(mod: Module, tree: source.ModuleDecl)(using Context): Unit = {
 
     // Effects that are lexically in scope at the top level
     // We use dependencies instead of imports, since types might mention effects of transitive imports.
@@ -33,15 +44,12 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       effs ++ mod.effects.toList
     }
 
-    given PostTyperContext = PostTyperContext(extractInterfaces(toplevelEffects))
+    given WFContext = WFContext(extractInterfaces(toplevelEffects))
 
-    query(input.tree)
+    query(tree)
+  }
 
-    if (Context.buffer.hasErrors) { None }
-    else { Some(input) }
-
-
-  override def expr(using Context, PostTyperContext) = {
+  override def expr(using Context, WFContext) = {
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
@@ -75,7 +83,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       clauses foreach { cl => scoped { query(cl) }}
   }
 
-  override def defn(using Context, PostTyperContext) = {
+  override def defn(using Context, WFContext) = {
     /**
      * For functions we check that the self region does not leave as part of the return type.
      */
@@ -99,7 +107,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       withEffect(effectDecl)
   }
 
-  override def query(b: source.FunctionArg)(using Context, PostTyperContext): Unit = visit(b) {
+  override def query(b: source.FunctionArg)(using Context, WFContext): Unit = visit(b) {
     case tree @ source.FunctionArg(tps, vps, bps, body) =>
       val selfRegion = Context.getSelfRegion(tree)
       val returnType = Context.inferredTypeOf(body)
@@ -117,7 +125,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
    * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
    * can be improved a lot.
    */
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, PostTyperContext): Unit = {
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, WFContext): Unit = {
     import source.{ MatchPattern, AnyPattern, IgnorePattern, TagPattern }
 
     val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
@@ -156,26 +164,26 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       case _ => None
   }
 
-  override def scoped(action: => Unit)(using C: Context, ctx: PostTyperContext): Unit = {
+  override def scoped(action: => Unit)(using C: Context, ctx: WFContext): Unit = {
     val before = ctx.effectsInScope
     action
     ctx.effectsInScope = before
   }
 
-  override def visit[T <: Tree](t: T)(visitor: T => Unit)(using Context, PostTyperContext): Unit = {
+  override def visit[T <: Tree](t: T)(visitor: T => Unit)(using Context, WFContext): Unit = {
     // Make sure that all annotated effects are well-scoped with regard to lexical scoping
     Context.inferredEffectOption(t).foreach { effects => Context.at(t) { wellscoped(effects) } }
     visitor(t)
   }
 
-  def effectsInScope(using ctx: PostTyperContext) = ctx.effectsInScope
+  def effectsInScope(using ctx: WFContext) = ctx.effectsInScope
 
-  def withEffect(e: Interface)(using ctx: PostTyperContext): Unit =
+  def withEffect(e: Interface)(using ctx: WFContext): Unit =
     ctx.addEffect(e)
 
   // TODO extend check to also check in value types
   //   (now that we have first class functions, they could mention effects).
-  def wellscoped(effects: Effects)(using Context, PostTyperContext): Unit = {
+  def wellscoped(effects: Effects)(using Context, WFContext): Unit = {
     def checkInterface(eff: Interface): Unit =
       if (!(effectsInScope contains eff)) Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
 
@@ -213,4 +221,5 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       Set.empty
   }
 
+  def Context(implicit ctx: Context): Context = ctx
 }
