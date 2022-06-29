@@ -115,7 +115,7 @@ case object GlobalCapabilityScope extends CapabilityScope {
   // If we try to find a capability for an effect that is known to be unhandled (that is no outer scope could
   // potentially handle it, then we raise an error.
   def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    C.abort(s"Unhandled effect ${tpe}")
+    C.abort(pp"Unhandled effect ${tpe}")
 }
 class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
   def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
@@ -223,7 +223,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
             usingCapture(capt)
             Result(tpe, Pure)
-          case _ => Context.panic(s"Builtin state cannot be typed.")
+          case _ => Context.panic("Builtin state cannot be typed.")
         }
 
         case b: BlockSymbol => insertBoxing(expr, expected)
@@ -236,7 +236,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
               usingCapture(capt)
               tpe
-            case _ => Context.panic(s"Builtin state cannot be typed.")
+            case _ => Context.panic("Builtin state cannot be typed.")
           }
           val Result(_, eff) = expr checkAgainst stTpe
           Result(TUnit, eff)
@@ -310,7 +310,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         handlers foreach Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
           if (handledEffects contains effect) {
-            Context.error(s"Effect ${effect} is handled twice.")
+            Context.error(pp"Effect ${effect} is handled twice.")
           } else {
             // TODO also relate it to the lexical region
             handledEffects = handledEffects :+ effect
@@ -355,12 +355,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val notCovered = effectSymbol.ops.toSet -- covered.toSet
 
             if (notCovered.nonEmpty) {
-              val explanation = notCovered.map { op => s"${op.name} of effect ${op.effect.name}" }.mkString(", ")
+              val explanation = notCovered.map { op => pp"${op.name} of effect ${op.effect.name}" }.mkString(", ")
               Context.error(s"Missing definitions for effect operations: ${explanation}")
             }
 
             if (covered.size > covered.distinct.size)
-              Context.error(s"Duplicate definitions of effect operations")
+              Context.error("Duplicate definitions of effect operations")
 
             h.clauses foreach Context.withFocus {
               case d @ source.OpClause(op, params, body, resume) =>
@@ -424,7 +424,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   val typesInEffects = freeTypeVars(heffs)
                   existentials.foreach { t =>
                     if (typesInEffects.contains(t)) {
-                      Context.error(s"Type variable ${t} escapes its scope as part of the effect types: $heffs")
+                      Context.error(pp"Type variable ${t} escapes its scope as part of the effect types: ${heffs.toEffects}")
                     }
                   }
                 }
@@ -492,7 +492,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case BoxedType(btpe, capt2) =>
             usingCapture(capt2)
             Result(btpe, eff1)
-          case _ => Context.abort(s"Unbox requires a boxed type, but got $vtpe")
+          case _ => Context.abort(pp"Unbox requires a boxed type, but got $vtpe")
         }
 
       case source.Var(id) => id.symbol match {
@@ -720,7 +720,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // we bind the function type outside of the unification scope to solve for variables.
         val substituted = Context.unification(funTpe)
         if (!isConcreteBlockType(substituted)) {
-          Context.abort(s"Cannot infer type for ${id.name}: ${substituted}")
+          Context.abort(pp"Cannot fully infer type for ${id}: ${substituted}")
         }
         Context.bind(sym, substituted)
 
@@ -753,9 +753,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case b: BlockSymbol =>
             Context.lookup(b) match {
               case (TRegion, capt) => capt
-              case _               => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+              case _               => Context.at(reg.get) { Context.abort("Expected a region.") }
             }
-          case _ => Context.at(reg.get) { Context.abort(s"Expected a region.") }
+          case _ => Context.at(reg.get) { Context.abort("Expected a region.") }
         } getOrElse { CaptureSet(Context.region) }
 
         val Result(tpeBind, effBind) = d.symbol.tpe match {
@@ -837,7 +837,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result(btpe, Pure)
       case (rg@source.InterfaceArg(id), Some(expected)) =>
         if (!id.symbol.isInstanceOf[BlockSymbol]) Context.at(rg) {
-          Context.abort(s"Expected a block variable, but ${id.name} is a value. Maybe use explicit syntax: { () => ${id.name} }")
+          Context.abort(pp"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
         }
         val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
         Context.requireSubtype(btpe, expected)
@@ -935,7 +935,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case v: ValueSymbol =>
       Context.unification(Context.lookup(v)) match {
       case BoxedType(b: FunctionType, capt) => (b, capt)
-      case b => Context.abort(s"Required function type, but got ${b}")
+      case b => Context.abort(pp"Required function type, but got ${b}")
     }
   }
 
@@ -975,7 +975,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // operations can't be called with uniform function syntax.
       case t: Operation => Right(t)
       case t: Fun => Left(t)
-      case t => Context.abort(s"Not a valid method: ${t}")
+      case t => Context.abort(pp"Not a valid method: ${t}")
     }
 
     // we prefer methods over uniform call syntax
@@ -1014,14 +1014,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (results, _) =>
           val sucMsgs = results.map {
             case (sym, tpe) =>
-              s"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
+              pp"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
           }.mkString("\n")
 
           val explanation =
-            s"""| Ambiguous reference to ${id}. The following blocks would typecheck:
-                |
-                |${sucMsgs}
-                |""".stripMargin
+            pp"""| Ambiguous reference to ${id}. The following blocks would typecheck:
+                 |
+                 |${sucMsgs}
+                 |""".stripMargin
 
           Context.abort(explanation)
       }
@@ -1108,14 +1108,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case results =>
         val sucMsgs = results.map {
           case (sym, tpe) =>
-            s"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
+            pp"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
         }.mkString("\n")
 
         val explanation =
-          s"""| Ambiguous reference to ${id}. The following blocks would typecheck:
-              |
-              |${sucMsgs}
-              |""".stripMargin
+          pp"""| Ambiguous reference to ${id}. The following blocks would typecheck:
+               |
+               |${sucMsgs}
+               |""".stripMargin
 
         Context.abort(explanation)
     }
@@ -1147,7 +1147,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Context.reraise(msgs)
 
-        Context.abort(s"Cannot typecheck call. There are multiple overloads, which all fail to check.")
+        Context.abort("Cannot typecheck call. There are multiple overloads, which all fail to check.")
     }
   }
 
@@ -1222,7 +1222,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     println(s"Function ${name} uses ${capabilities.map(_.capture)}")
     usingCapture(CaptureSet(capabilities.map(_.capture)))
 
-    println(s"Call to ${name} is in region ${currentCapture}. Results in return type: ${ret}")
+    println(pp"Call to ${name} is in region ${currentCapture}. Results in return type: ${ret}")
 
     Result(ret, effs)
   }
@@ -1275,11 +1275,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
    */
   private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
-    if (!isConcreteEffects(effs)) C.abort(s"Effects need to be fully known: ${effs}")
+    if (!isConcreteEffects(effs)) C.abort(pp"Effects need to be fully known: ${effs}")
 
   private[typer] def assertConcrete(eff: InterfaceType)(using C: Context): Unit =
     if (!isConcreteEffect(eff)) {
-      C.abort(s"Effects need to be fully known: ${eff}")
+      C.abort(pp"Effects need to be fully known: ${eff}")
     }
 
   private[typer] def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
@@ -1521,13 +1521,13 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.get(Annotations.BlockType, s)
      .map {
        case f: FunctionType => unification(f) // here we apply the substitutions known so far.
-       case tpe => abort(s"Expected function type, but got ${tpe}.")
+       case tpe => abort(pp"Expected function type, but got ${tpe}.")
      }
      .orElse(functionTypeOption(s))
-     .getOrElse(abort(s"Cannot find type for ${s.name.name} -- (mutually) recursive functions need to have an annotated return type."))
+     .getOrElse(abort(pp"Cannot find type for ${s.name} -- (mutually) recursive functions need to have an annotated return type."))
 
   private[typer] def lookupBlockType(s: BlockSymbol): BlockType =
-    annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s)).getOrElse(abort(s"Cannot find type for ${s.name.name}."))
+    annotations.get(Annotations.BlockType, s).orElse(blockTypeOption(s)).getOrElse(abort(pp"Cannot find type for ${s.name}."))
 
   private[typer] def lookupCapture(s: BlockSymbol) =
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
@@ -1646,12 +1646,12 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) =>
       val substituted = subst.substitute(tpe)
-      println(s"${t.name.name}: $tpe \n----> $substituted")
+      println(pp"${t.name.name}: $tpe \n----> $substituted")
       substituted
     }
     annotations.updateAndCommit(Annotations.Captures) { case (t, capt) =>
       val substituted = subst.substitute(capt)
-      println(s"${t.name.name} @ $substituted")
+      println(pp"${t.name.name} @ $substituted")
       substituted
     }
 
@@ -1697,7 +1697,7 @@ trait TyperOps extends ContextOps { self: Context =>
   //   (now that we have first class functions, they could mention effects).
   private[typer] def wellscoped(effects: ConcreteEffects): Unit = {
     def checkInterface(eff: Interface): Unit =
-      if (!(lexicalEffects contains eff)) error(s"Effect ${eff} leaves its defining scope.")
+      if (!(lexicalEffects contains eff)) error(pp"Effect ${eff} leaves its defining scope.")
 
     def checkEffect(eff: InterfaceType): Unit = eff match {
       case e: Interface => checkInterface(e)

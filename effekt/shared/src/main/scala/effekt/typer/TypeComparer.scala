@@ -44,7 +44,7 @@ trait TypeUnifier {
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
       if (args1.size != args2.size)
-        abort(s"Argument count does not match $t1 vs. $t2")
+        abort(pp"Argument count does not match $t1 vs. $t2")
 
       unifyValueTypes(t1, t2)(using Invariant)
 
@@ -56,33 +56,33 @@ trait TypeUnifier {
       unify(capt1, capt2)
 
     case (t, s, p) =>
-      error(s"Expected ${t}, but got ${s}")
+      error(pp"Expected ${t}, but got ${s}")
   }
 
   def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType)(using p: Polarity): Unit = (tpe1, tpe2) match {
     case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s)
     case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s)
-    case (t, s) => error(s"Expected ${t}, but got ${s}")
+    case (t, s) => error(pp"Expected ${t}, but got ${s}")
   }
 
   def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType)(using p: Polarity): Unit = (tpe1, tpe2) match {
-    case (t1: Interface, t2: Interface) => if (t1 != t2) error(s"Expected ${t1}, but got ${t2}")
+    case (t1: Interface, t2: Interface) => if (t1 != t2) error(pp"Expected ${t1}, but got ${t2}")
     // for now block type constructors are invariant
     case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
       unifyInterfaceTypes(c1, c2)(using Invariant)
       (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
-    case _ => error(s"Kind mismatch between ${tpe1} and ${tpe2}")
+    case _ => error(pp"Kind mismatch between ${tpe1} and ${tpe2}")
   }
 
   def unifyEffect(eff1: InterfaceType, eff2: InterfaceType)(using p: Polarity): Unit = (eff1, eff2) match {
     case (e1, e2) if e1 == e2 => ()
     case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2)(using Invariant) }
-    case _ => error(s"Mismatch between ${eff1} and ${eff2}")
+    case _ => error(pp"Mismatch between ${eff1} and ${eff2}")
   }
 
   def unifyEffects(eff1: Effects, eff2: Effects)(using p: Polarity): Unit =
-     if (eff1.toList.toSet != eff2.toList.toSet) error(s"${eff2} is not equal to ${eff1}")
+     if (eff1.toList.toSet != eff2.toList.toSet) error(pp"${eff2} is not equal to ${eff1}")
 
   def unifyFunctionTypes(tpe1: FunctionType, tpe2: FunctionType)(using p: Polarity): Unit = (tpe1, tpe2) match {
     case (
@@ -90,16 +90,16 @@ trait TypeUnifier {
       f2 @ FunctionType(tparams2, cparams2, vparams2, bparams2, ret2, eff2)) =>
 
       if (tparams1.size != tparams2.size)
-        abort(s"Type parameter count does not match $f1 vs. $f2")
+        abort(pp"Type parameter count does not match $f1 vs. $f2")
 
       if (vparams1.size != vparams2.size)
-        abort(s"Value parameter count does not match $f1 vs. $f2")
+        abort(pp"Value parameter count does not match $f1 vs. $f2")
 
       if (bparams1.size != bparams2.size)
-        abort(s"Block parameter count does not match $f1 vs. $f2")
+        abort(pp"Block parameter count does not match $f1 vs. $f2")
 
       if (cparams1.size != cparams2.size)
-        abort(s"Capture parameter count does not match $f1 vs. $f2")
+        abort(pp"Capture parameter count does not match $f1 vs. $f2")
 
       val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
@@ -150,8 +150,8 @@ trait TypeMerger extends TypeUnifier {
       case (tpe: ValueType, x: UnificationVar, p) => unifyValueTypes(tpe, x)(using p); x
 
       case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
-        if (cons1 != cons2) abort(s"Cannot merge different constructors")
-        if (args1.size != args2.size) abort(s"Different count of argument to type constructor")
+        if (cons1 != cons2) abort(pp"Cannot merge different constructors: $cons1 vs. $cons2")
+        if (args1.size != args2.size) abort(pp"Different count of argument to type constructor: $oldBound vs $newBound")
 
         // TODO Here we assume the constructor is invariant
         val mergedArgs = (args1 zip args2).map { case (t1, t2) =>
@@ -163,25 +163,25 @@ trait TypeMerger extends TypeUnifier {
         BoxedType(mergeBlockTypes(tpe1, tpe2, p), mergeCaptures(capt1, capt2, p))
 
       case _ =>
-        abort(s"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
+        abort(pp"Cannot merge ${oldBound} with ${newBound} at ${polarity} polarity")
     }
 
   def mergeBlockTypes(oldBound: BlockType, newBound: BlockType, polarity: Polarity): BlockType = (oldBound, newBound) match {
     case (t: FunctionType, s: FunctionType) => mergeFunctionTypes(t, s, polarity)
     case (t: InterfaceType, s: InterfaceType) => mergeInterfaceTypes(t, s, polarity)
-    case (t, s) => abort(s"The two types ${t} and ${s} are not compatible")
+    case (t, s) => abort(pp"The two types ${t} and ${s} are not compatible")
   }
 
   def mergeInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType, polarity: Polarity): InterfaceType = (tpe1, tpe2) match {
     case (t1: Interface, t2: Interface) =>
-      if (t1 != t2) abort(s"The two types ${t1} and ${t2} are not compatible")
+      if (t1 != t2) abort(pp"The two types ${t1} and ${t2} are not compatible")
       else t1
     // for now block type constructors are invariant
     case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
       unifyInterfaceTypes(c1, c2)(using Invariant)
       val mergedArgs = (targs1 zip targs2) map { case (t1, t2) => mergeValueTypes(t1, t2, Invariant) }
       BlockTypeApp(c1, mergedArgs)
-    case _ => abort(s"Kind mismatch between ${tpe1} and ${tpe2}")
+    case _ => abort(pp"Kind mismatch between ${tpe1} and ${tpe2}")
   }
 
   def mergeFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, polarity: Polarity): FunctionType = (tpe1, tpe2) match {
@@ -191,16 +191,16 @@ trait TypeMerger extends TypeUnifier {
     ) =>
 
       if (tparams1.size != tparams2.size)
-        abort(s"Type parameter count does not match $f1 vs. $f2")
+        abort(pp"Type parameter count does not match $f1 vs. $f2")
 
       if (vparams1.size != vparams2.size)
-        abort(s"Value parameter count does not match $f1 vs. $f2")
+        abort(pp"Value parameter count does not match $f1 vs. $f2")
 
       if (bparams1.size != bparams2.size)
-        abort(s"Block parameter count does not match $f1 vs. $f2")
+        abort(pp"Block parameter count does not match $f1 vs. $f2")
 
       if (cparams1.size != cparams2.size)
-        abort(s"Capture parameter count does not match $f1 vs. $f2")
+        abort(pp"Capture parameter count does not match $f1 vs. $f2")
 
 
       // TODO potentially share code with unifyFunctionTypes and instantiate

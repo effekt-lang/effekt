@@ -2,7 +2,7 @@ package effekt
 
 import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
 import kiama.util.Messaging.{ Messages, message }
@@ -123,7 +123,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
             // TODO this is a bit ad-hoc
             val mainSym = mod.terms("main").head
             val mainTpe = context.functionTypeOf(mainSym)
-            output.emitln(mainTpe.result)
+            output.emitln(pp"${mainTpe.result}")
           }
 
         case Success(other, _) =>
@@ -228,7 +228,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
           case t =>
             None
         }) map { tpe =>
-          outputCode(s"${d.id.name}: ${tpe}", config)
+          outputCode(pp"${d.id}: ${tpe}", config)
         }
       }
 

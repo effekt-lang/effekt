@@ -25,11 +25,11 @@ object DeclPrinter extends ParenPrettyPrinter {
 
     case b @ ValBinder(name, tps, decl) =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      s"val ${name}: ${tpe}"
+      pp"val ${name}: ${tpe}"
 
     case b: VarBinder =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      s"var ${b.name}: ${tpe}"
+      pp"var ${b.name}: ${tpe}"
 
     case TypeAlias(name, tparams, tpe) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
@@ -72,7 +72,7 @@ object DeclPrinter extends ParenPrettyPrinter {
     val returnType = for {
       tpe <- result
       eff <- effects
-    } yield s": $tpe / $eff"
+    } yield pp": $tpe / $eff"
 
     s"$kw ${f.name}$tps$vps$bps${returnType.getOrElse("")}"
   }

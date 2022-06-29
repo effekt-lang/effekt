@@ -160,7 +160,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
     (lower, upper) match {
       case (CaptureSet(lows), CaptureSet(ups)) =>
         val notAllowed = (ups ++ filter) -- lows
-        if (notAllowed.nonEmpty) abort(s"The following captures are not allowed: ${notAllowed}")
+        if (notAllowed.nonEmpty) abort(pp"The following captures are not allowed: ${CaptureSet(notAllowed)}")
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
         constraints.connect(x, y, filter)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>
@@ -198,7 +198,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
 
     if (cparams.size != (bparams.size + eff.controlEffects.size)) {
-      sys error s"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.controlEffects.size}.\n  ${tpe}"
+      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.controlEffects.size}.\n  ${tpe}"
     }
 
     val captRigids =
@@ -241,7 +241,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def mergeCaptures(oldBound: Captures, newBound: Captures, polarity: Polarity): Captures = (oldBound, newBound, polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
     case (CaptureSet(xs), CaptureSet(ys), Contravariant) => CaptureSet(xs union ys)
-    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(s"Capture set ${xs} is not equal to ${ys}")
+    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(pp"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}")
     case (x: CaptUnificationVar, CaptureSet(ys), p) if ys.isEmpty => x
     case (CaptureSet(xs), y: CaptUnificationVar, p) if xs.isEmpty => y
     case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), p)

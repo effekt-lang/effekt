@@ -45,7 +45,7 @@ class JavaScriptTests extends AnyFunSpec with TestUtils {
 trait TestUtils {
 
   lazy val ignored: List[File] = List(
-    examplesDir / "neg" / "lambdas",
+    //examplesDir / "neg" / "lambdas",
     //examplesDir / "neg" / "issue50.effekt",
     examplesDir / "neg" / "coverage.effekt",
     examplesDir / "neg" / "matchdef.effekt"
