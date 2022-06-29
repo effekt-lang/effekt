@@ -143,11 +143,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     try {
       val NameResolved(source, tree, mod) = input
 
-      // Effects that are lexically in scope at the top level
-      val toplevelEffects = mod.imports.foldLeft(asConcrete(mod.effects)) { case (effs, mod) =>
-        effs ++ asConcrete(mod.effects)
-      }
-      Context.initTyperstate(toplevelEffects)
+      Context.initTyperstate()
 
       Context in {
         Context.withUnificationScope {
@@ -682,7 +678,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val Result(tpe, effs) = Context.bindingCapabilities(d, capabilities) {
                    Context in { body checkAgainst annotated.result }
                 }
-                Context.wellscoped(effs)
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
                 // TODO also annotate the capabilities
@@ -698,7 +693,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(d) {
                   Context in { checkStmt(body, None) }
                 }
-                Context.wellscoped(effs) // check they are in scope
 
                 // The order of effects annotated to the function is the canonical ordering for capabilities
                 val capabilities = effs.controlEffects.map { caps.apply }
@@ -732,7 +726,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
             Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
           }
         }
-        Context.withEffect(effectDecl)
         Result((), Pure)
 
       case d @ source.ValDef(id, annot, binding) =>
@@ -816,7 +809,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
           given Captures = inferredCapture
           Context.withRegion(selfRegion) { Context in { checkStmt(body, None) } }
         }
-        Context.wellscoped(effs) // check effects are in scope
 
         // The order of effects annotated to the function is the canonical ordering for capabilities
         val capabilities = effs.controlEffects.map { caps.apply }
@@ -1388,7 +1380,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 /**
  * Instances of this class represent an immutable backup of the typer state
  */
-private[typer] case class TyperState(lexicalEffects: List[Interface], annotations: Annotations, unification: UnificationState, capabilityScope: CapabilityScope)
+private[typer] case class TyperState(annotations: Annotations, unification: UnificationState, capabilityScope: CapabilityScope)
 
 trait TyperOps extends ContextOps { self: Context =>
 
@@ -1417,11 +1409,6 @@ trait TyperOps extends ContextOps { self: Context =>
    * None on the toplevel
    */
   private var lexicalRegion: Option[Capture] = None
-
-  /**
-   * The effects, whose declarations are _lexically_ in scope
-   */
-  private var lexicalEffects: List[Interface] = Nil
 
   private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
 
@@ -1598,39 +1585,16 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //</editor-fold>
 
-  /**
-   * Override the dynamically scoped `in` to also reset typer state
-   */
-  override def in[T](block: => T): T = {
-    val effectsBefore = lexicalEffects
-    val result = super.in(block)
-
-
-    // TyperState has two kinds of components:
-    // - reader-like (like lexicalEffects that are in scope)
-    // - state-like (like annotations and unification constraints)
-    //
-    // The dynamic scoping of `in` should only affect the "reader" components of `typerState`, but
-    // not the "state" components. For those, we manually perform backup and restore in typer.
-    lexicalEffects = effectsBefore
-    result
-  }
-
-  private[typer] def initTyperstate(effects: ConcreteEffects): Unit = {
-    lexicalEffects = effects.toList.collect {
-      case i: Interface => i
-      case BlockTypeApp(i: Interface, _) => i
-    }
+  private[typer] def initTyperstate(): Unit = {
     annotations = Annotations.empty
     capabilityScope = GlobalCapabilityScope
     unification.init()
   }
 
   private[typer] def backupTyperstate(): TyperState =
-    TyperState(lexicalEffects, annotations.copy, unification.backup(), capabilityScope.copy)
+    TyperState(annotations.copy, unification.backup(), capabilityScope.copy)
 
   private[typer] def restoreTyperstate(st: TyperState): Unit = {
-    lexicalEffects = st.lexicalEffects
     annotations = st.annotations.copy
     unification.restore(st.unification)
     capabilityScope = st.capabilityScope.copy
@@ -1682,30 +1646,5 @@ trait TyperOps extends ContextOps { self: Context =>
     val res = prog
     lexicalRegion = before
     res
-  }
-
-  // Effects that are in the lexical scope
-  // =====================================
-  private[typer] def effectsInScope: List[Interface] = lexicalEffects
-
-  private[typer] def withEffect(e: Interface): Context = {
-    lexicalEffects = (e :: lexicalEffects).distinct
-    this
-  }
-
-  // TODO extend check to also check in value types
-  //   (now that we have first class functions, they could mention effects).
-  private[typer] def wellscoped(effects: ConcreteEffects): Unit = {
-    def checkInterface(eff: Interface): Unit =
-      if (!(lexicalEffects contains eff)) error(pp"Effect ${eff} leaves its defining scope.")
-
-    def checkEffect(eff: InterfaceType): Unit = eff match {
-      case e: Interface => checkInterface(e)
-      case BlockTypeApp(e: Interface, args) => checkInterface(e)
-      case b: BuiltinEffect => ()
-      case BlockTypeApp(b: BuiltinEffect, args) => ()
-    }
-
-    effects.toList foreach checkEffect
   }
 }

@@ -15,20 +15,28 @@ import effekt.typer.typeMapToSubstitution
  * TODO this does not need to be a Rewrite phase, but can be a visit.
  * TODO implement existential-effect-leaving-the-scope check
  */
-case class PostTyperContext(effectsInScope: List[Interface])
+class PostTyperContext(var effectsInScope: List[Interface]) {
+  def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
+}
 object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext] {
 
   val phaseName = "post-typer"
 
   def run(input: Typechecked)(implicit C: Context) =
-    given PostTyperContext = PostTyperContext(Nil)
+    val Typechecked(source, tree, mod) = input
+
+    // Effects that are lexically in scope at the top level
+    // We use dependencies instead of imports, since types might mention effects of transitive imports.
+    val toplevelEffects = mod.dependencies.foldLeft(mod.effects.toList) { case (effs, mod) =>
+      effs ++ mod.effects.toList
+    }
+
+    given PostTyperContext = PostTyperContext(extractInterfaces(toplevelEffects))
+
     query(input.tree)
 
-    if (Context.buffer.hasErrors) {
-      None
-    } else {
-      Some(input)
-    }
+    if (Context.buffer.hasErrors) { None }
+    else { Some(input) }
 
 
   override def expr(using Context, PostTyperContext) = {
@@ -54,8 +62,8 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       }
 
       // also check prog and handlers
-      query(prog)
-      handlers foreach query
+      scoped { query(prog) }
+      handlers foreach { h => scoped { query(h) } }
     }
   }
 
@@ -73,7 +81,14 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
         }
       }
 
-      query(body)
+      scoped { query(body) }
+
+    /**
+     * Interface definitions bring an effect in scope that can be handled
+     */
+    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
+      val effectDecl = d.symbol
+      withEffect(effectDecl)
   }
 
   override def query(b: source.FunctionArg)(using Context, PostTyperContext): Unit = visit(b) {
@@ -87,7 +102,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
         }
       }
 
-      query(body)
+      scoped { query(body) }
   }
 
   /**
@@ -126,7 +141,43 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
   //        ()
   //    }
   //  }
+  override def scoped(action: => Unit)(using C: Context, ctx: PostTyperContext): Unit = {
+    val before = ctx.effectsInScope
+    action
+    ctx.effectsInScope = before
+  }
 
+  override def visit[T <: Tree](t: T)(visitor: T => Unit)(using Context, PostTyperContext): Unit = {
+    // Make sure that all annotated effects are well-scoped with regard to lexical scoping
+    Context.inferredEffectOption(t).foreach { effects => Context.at(t) { wellscoped(effects) } }
+    visitor(t)
+  }
+
+  def effectsInScope(using ctx: PostTyperContext) = ctx.effectsInScope
+
+  def withEffect(e: Interface)(using ctx: PostTyperContext): Unit =
+    ctx.addEffect(e)
+
+  // TODO extend check to also check in value types
+  //   (now that we have first class functions, they could mention effects).
+  def wellscoped(effects: Effects)(using Context, PostTyperContext): Unit = {
+    def checkInterface(eff: Interface): Unit =
+      if (!(effectsInScope contains eff)) Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
+
+    def checkEffect(eff: InterfaceType): Unit = eff match {
+      case e: Interface => checkInterface(e)
+      case BlockTypeApp(e: Interface, args) => checkInterface(e)
+      case b: BuiltinEffect => ()
+      case BlockTypeApp(b: BuiltinEffect, args) => ()
+    }
+
+    effects.toList foreach checkEffect
+  }
+
+  def extractInterfaces(e: List[InterfaceType]): List[Interface] = e.collect {
+    case i: Interface => i
+    case BlockTypeApp(i: Interface, _) => i
+  }.distinct
 
   // Can only compute free capture on concrete sets
   def freeCapture(o: Any): Set[Capture] = o match {

@@ -624,14 +624,19 @@ object Tree {
     def defn(using Context, Ctx): PartialFunction[Def, Res] = PartialFunction.empty
 
     /**
-     * Hook that can be overriden to perform an action at every node in the tree
+     * Hook that can be overridden to perform an action at every node in the tree
      */
     def visit[T <: Tree](t: T)(visitor: T => Res)(using Context, Ctx): Res = visitor(t)
+
+    /**
+     * Hook that can be overriden to perform something for each new lexical scope
+     */
+    def scoped(action: => Res)(using Context, Ctx): Res = action
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
     def query(e: ModuleDecl)(using Context, Ctx): Res = visit(e) {
-      case ModuleDecl(path, imports, defs) => combineAll(defs.map(query))
+      case ModuleDecl(path, imports, defs) => scoped { combineAll(defs.map(query)) }
     }
 
     def query(e: Term)(using C: Context, ctx: Ctx): Res = visit(e) {
@@ -639,16 +644,16 @@ object Tree {
       case v: Var                   => empty
       case l: Literal[t]            => empty
 
-      case Assign(id, expr) => query(expr)
+      case Assign(id, expr) => scoped { query(expr) }
 
       case If(cond, thn, els) =>
-        combineAll(query(cond) :: query(thn) :: query(els) :: Nil)
+        combineAll(query(cond) :: scoped { query(thn) } :: scoped { query(els) } :: Nil)
 
       case While(cond, body) =>
-        combineAll(query(cond) :: query(body) :: Nil)
+        combineAll(scoped { query(cond) } :: scoped { query(body) } :: Nil)
 
       case Match(sc, clauses) =>
-        combineAll(query(sc) :: clauses.map(query))
+        combineAll(query(sc) :: clauses.map(cl => scoped { query(cl) }))
 
       case Select(recv, name) =>
         query(recv)
@@ -663,7 +668,7 @@ object Tree {
         combineAll(query(receiver) :: vargs.map(query) ++ bargs.map(query))
 
       case TryHandle(prog, handlers) =>
-        combineAll(query(prog) :: handlers.map(query))
+        combineAll(scoped { query(prog) } :: handlers.map(h => scoped { query(h) }))
 
       case Hole(stmts) =>
         query(stmts)
@@ -679,13 +684,13 @@ object Tree {
       case t if defn.isDefinedAt(t) => defn.apply(t)
 
       case FunDef(id, tparams, vparams, bparams, ret, body) =>
-        query(body)
+        scoped { query(body) }
 
       case ValDef(id, annot, binding) =>
-        query(binding)
+        scoped { query(binding) }
 
       case VarDef(id, annot, region, binding) =>
-        query(binding)
+        scoped { query(binding) }
 
       case d: InterfaceDef  => empty
       case d: DataDef       => empty
@@ -712,7 +717,7 @@ object Tree {
         query(e)
 
       case BlockStmt(b) =>
-        query(b)
+        scoped { query(b) }
     }
 
     def query(b: BlockArg)(using Context, Ctx): Res = b match {
@@ -721,22 +726,22 @@ object Tree {
     }
 
     def query(b: FunctionArg)(using Context, Ctx): Res = b match {
-      case FunctionArg(tps, vps, bps, body) => query(body)
+      case FunctionArg(tps, vps, bps, body) => scoped { query(body) }
     }
 
     def query(h: Handler)(using Context, Ctx): Res = visit(h) {
       case Handler(effect, capability, clauses) =>
-        combineAll(clauses.map(query))
+        combineAll(clauses.map(cl => scoped { query(cl) }))
     }
 
     def query(h: OpClause)(using Context, Ctx): Res = visit(h) {
       case OpClause(id, params, body, resume) =>
-        query(body)
+        scoped { query(body) }
     }
 
     def query(c: MatchClause)(using Context, Ctx): Res = visit(c) {
       case MatchClause(pattern, body) =>
-        query(body)
+        scoped { query(body) }
     }
   }
 }
