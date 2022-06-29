@@ -261,16 +261,6 @@ object Annotations {
   )
 
   /**
-   * The state capability introduced by typer
-   *
-   * Used by [[core.Transformer]] when translating to special state constructs in core.
-   */
-  val StateCapability = Annotation[symbols.VarBinder, typer.StateCapability](
-    "StateCapability",
-    "state capabilities representing mutable variables"
-  )
-
-  /**
    * The lexical region as introduced by namer
    *
    * Used by typer for region checking mutable variables.

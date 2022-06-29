@@ -90,17 +90,6 @@ object ConcreteEffects {
 val Pure = ConcreteEffects.empty
 val Empty = CaptureSet.empty
 
-case class StateCapability(binder: VarBinder, tpe: ValueType) {
-  lazy val (effect, get, put) = {
-    val eff = Interface(binder.name, Nil)
-    val get = Operation(binder.name.rename(name => "get"), Nil, Nil, tpe, Effects.Pure, eff)
-    val put = Operation(binder.name.rename(name => "put"), Nil, List(ValueParam(binder.name, Some(tpe))), builtins.TUnit, Effects.Pure, eff)
-    eff.ops = List(get, put)
-    (eff, get, put)
-  }
-  lazy val param = BlockParam(binder.name, effect)
-}
-
 /**
  * Invariant: Like the result effects of Typer, all types of bound capabilities need to be concrete!
  */
@@ -1630,10 +1619,6 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.BoundCapabilities) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityArguments) { case (t, caps) => caps }
     annotations.updateAndCommit(Annotations.CapabilityReceiver) { case (t, caps) => caps }
-
-    // TODO the state capability might still contain unification variables in its effect operations get and set
-    //  however, creating a new state capability would also create a fresh block symbol, which might prove problematic
-    annotations.updateAndCommit(Annotations.StateCapability) { case (t, state) => state }
   }
 
 
