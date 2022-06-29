@@ -605,4 +605,138 @@ object Tree {
         MatchClause(pattern, rewrite(body))
     }
   }
+
+  trait Visit[Ctx] extends Query[Ctx, Unit] {
+    override def empty = ()
+    override def combine(r1: Unit, r2: Unit): Unit = ()
+    override def combineAll(rs: List[Unit]): Unit = ()
+  }
+
+  trait Query[Ctx, Res] {
+
+    def empty: Res
+    def combine(r1: Res, r2: Res): Res
+    def combineAll(rs: List[Res]): Res = rs.foldLeft(empty)(combine)
+
+    // Hooks to override
+    def expr(using Context, Ctx): PartialFunction[Term, Res] = PartialFunction.empty
+    def stmt(using Context, Ctx): PartialFunction[Stmt, Res] = PartialFunction.empty
+    def defn(using Context, Ctx): PartialFunction[Def, Res] = PartialFunction.empty
+
+    /**
+     * Hook that can be overriden to perform an action at every node in the tree
+     */
+    def visit[T <: Tree](t: T)(visitor: T => Res)(using Context, Ctx): Res = visitor(t)
+
+    //
+    // Entrypoints to use the traversal on, defined in terms of the above hooks
+    def query(e: ModuleDecl)(using Context, Ctx): Res = visit(e) {
+      case ModuleDecl(path, imports, defs) => combineAll(defs.map(query))
+    }
+
+    def query(e: Term)(using C: Context, ctx: Ctx): Res = visit(e) {
+      case e if expr.isDefinedAt(e) => expr.apply(e)
+      case v: Var                   => empty
+      case l: Literal[t]            => empty
+
+      case Assign(id, expr) => query(expr)
+
+      case If(cond, thn, els) =>
+        combineAll(query(cond) :: query(thn) :: query(els) :: Nil)
+
+      case While(cond, body) =>
+        combineAll(query(cond) :: query(body) :: Nil)
+
+      case Match(sc, clauses) =>
+        combineAll(query(sc) :: clauses.map(query))
+
+      case Select(recv, name) =>
+        query(recv)
+
+      case Do(effect, id, targs, vargs) =>
+        combineAll(vargs.map(query))
+
+      case Call(fun, targs, vargs, bargs) =>
+        combineAll(vargs.map(query) ++ bargs.map(query))
+
+      case MethodCall(receiver, id, targs, vargs, bargs) =>
+        combineAll(query(receiver) :: vargs.map(query) ++ bargs.map(query))
+
+      case TryHandle(prog, handlers) =>
+        combineAll(query(prog) :: handlers.map(query))
+
+      case Hole(stmts) =>
+        query(stmts)
+
+      case Box(c, b) =>
+        query(b)
+
+      case Unbox(b) =>
+        query(b)
+    }
+
+    def query(t: Def)(using C: Context, ctx: Ctx): Res = visit(t) {
+      case t if defn.isDefinedAt(t) => defn.apply(t)
+
+      case FunDef(id, tparams, vparams, bparams, ret, body) =>
+        query(body)
+
+      case ValDef(id, annot, binding) =>
+        query(binding)
+
+      case VarDef(id, annot, region, binding) =>
+        query(binding)
+
+      case d: InterfaceDef  => empty
+      case d: DataDef       => empty
+      case d: RecordDef     => empty
+      case d: TypeDef       => empty
+      case d: EffectDef     => empty
+
+      case d: ExternType    => empty
+      case d: ExternEffect  => empty
+      case d: ExternFun     => empty
+      case d: ExternInclude => empty
+    }
+
+    def query(t: Stmt)(using C: Context, ctx: Ctx): Res = visit(t) {
+      case s if stmt.isDefinedAt(s) => stmt.apply(s)
+
+      case DefStmt(d, rest) =>
+        combineAll(query(d) :: query(rest) :: Nil)
+
+      case ExprStmt(e, rest) =>
+        combineAll(query(e) :: query(rest) :: Nil)
+
+      case Return(e) =>
+        query(e)
+
+      case BlockStmt(b) =>
+        query(b)
+    }
+
+    def query(b: BlockArg)(using Context, Ctx): Res = b match {
+      case b: FunctionArg  => query(b)
+      case b: InterfaceArg => empty
+    }
+
+    def query(b: FunctionArg)(using Context, Ctx): Res = b match {
+      case FunctionArg(tps, vps, bps, body) => query(body)
+    }
+
+    def query(h: Handler)(using Context, Ctx): Res = visit(h) {
+      case Handler(effect, capability, clauses) =>
+        combineAll(clauses.map(query))
+    }
+
+    def query(h: OpClause)(using Context, Ctx): Res = visit(h) {
+      case OpClause(id, params, body, resume) =>
+        query(body)
+    }
+
+    def query(c: MatchClause)(using Context, Ctx): Res = visit(c) {
+      case MatchClause(pattern, body) =>
+        query(body)
+    }
+  }
 }

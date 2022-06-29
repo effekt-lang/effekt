@@ -5,7 +5,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.{ Def, MatchPattern, Tree }
-import effekt.source.Tree.Rewrite
+import effekt.source.Tree.Visit
 import effekt.typer.typeMapToSubstitution
 
 /**
@@ -15,12 +15,14 @@ import effekt.typer.typeMapToSubstitution
  * TODO this does not need to be a Rewrite phase, but can be a visit.
  * TODO implement existential-effect-leaving-the-scope check
  */
-object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
+case class PostTyperContext(effectsInScope: List[Interface])
+object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext] {
 
   val phaseName = "post-typer"
 
   def run(input: Typechecked)(implicit C: Context) =
-    rewrite(input.tree)
+    given PostTyperContext = PostTyperContext(Nil)
+    query(input.tree)
 
     if (Context.buffer.hasErrors) {
       None
@@ -29,7 +31,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
     }
 
 
-  override def expr(using Context) = {
+  override def expr(using Context, PostTyperContext) = {
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
@@ -52,13 +54,12 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
       }
 
       // also check prog and handlers
-      rewrite(prog)
-      handlers foreach rewrite
-      tree
+      query(prog)
+      handlers foreach query
     }
   }
 
-  override def defn(using Context) = {
+  override def defn(using Context, PostTyperContext) = {
     /**
      * For functions we check that the self region does not leave as part of the return type.
      */
@@ -72,11 +73,10 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
         }
       }
 
-      rewrite(body)
-      tree
+      query(body)
   }
 
-  override def rewrite(b: source.FunctionArg)(using Context): source.FunctionArg = visit(b) {
+  override def query(b: source.FunctionArg)(using Context, PostTyperContext): Unit = visit(b) {
     case tree @ source.FunctionArg(tps, vps, bps, body) =>
       val selfRegion = Context.getSelfRegion(tree)
       val returnType = Context.inferredTypeOf(body)
@@ -87,8 +87,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
         }
       }
 
-      rewrite(body)
-      tree
+      query(body)
   }
 
   /**
@@ -97,7 +96,7 @@ object PostTyper extends Phase[Typechecked, Typechecked], Rewrite {
    *
    * TODO Maybe move exhaustivity check to a separate phase AFTER typer? This way all types are inferred.
    */
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context): Unit = ()
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, PostTyperContext): Unit = ()
   //  {
   //    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
   //
