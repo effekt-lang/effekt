@@ -748,8 +748,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val stTpe = BlockTypeApp(TState.interface, List(tpeBind))
 
         Context.bind(sym, stTpe, stCapt)
-        // TODO continue. Do we need to still make up a blockparam for state now that VarDef is a block symbol?
-        //Context.stateFor(sym)
 
         Result((), effBind)
 
