@@ -1,11 +1,10 @@
 package effekt
 package source
 
-import effekt.context.{ Context, ContextOps, Annotations }
-import effekt.symbols._
-import effekt.context.assertions._
-import effekt.source.Tree.Rewrite
-
+import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.symbols.*
+import effekt.context.assertions.*
+import effekt.source.Tree.{ Query, Rewrite }
 import effekt.typer.typeMapToSubstitution
 
 /**
@@ -18,14 +17,20 @@ import effekt.typer.typeMapToSubstitution
  *   - there are no `Do` nodes anymore (replaced by method calls)
  *   - `l.foo(x)` where `foo` is a function and not an operation is desugared to `foo(l, x)`
  *   - all method calls `l.op()` will have `op : Operation`
+ *
+ * TODO maybe also insert explicit box and unbox
  */
-object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
+object Elaboration extends Phase[Typechecked, Typechecked] with Rewrite {
 
   val phaseName = "capability-passing"
 
-  def run(input: Typechecked)(implicit C: Context) =
+  def run(input: Typechecked)(implicit C: Context) = {
     val transformedTree = rewrite(input.tree)
+
+    // AnnotateCaptures.annotate(transformedTree)
+
     Some(input.copy(tree = transformedTree))
+  }
 
   override def defn(implicit C: Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
@@ -163,7 +168,7 @@ object CapabilityPassing extends Phase[Typechecked, Typechecked] with Rewrite {
     target
   }
 }
-trait CapabilityPassingOps extends ContextOps { Context: Context =>
+trait ElaborationOps extends ContextOps { Context: Context =>
 
   private[source] def freshReferenceTo(s: symbols.BlockParam): IdRef =
     val id = IdRef(s.name.name)
@@ -175,5 +180,99 @@ trait CapabilityPassingOps extends ContextOps { Context: Context =>
     assignSymbol(id, s)
     val tree = source.BlockParam(id, source.BlockTypeTree(s.tpe))
     tree
+
+}
+
+
+/**
+ * Computes the capture of each subexpression, provided that Typer already solved the constraints.
+ *
+ * TODO remove self-regions
+ * TODO annotate unbox in Typer and use it here
+ *
+ * TODO move this pass after capability-passing / elaboration
+ */
+object AnnotateCaptures extends Query[Unit, CaptureSet] {
+  def empty: CaptureSet = CaptureSet.empty
+  def combine(r1: CaptureSet, r2: CaptureSet): CaptureSet = r1 ++ r2
+
+  override def expr(using Context, Unit) = {
+    case source.Var(id) => id.symbol match {
+      case b: BlockSymbol => captureOf(b)
+      case x: ValueSymbol => CaptureSet.empty
+    }
+
+    case e @ source.Assign(id, expr) =>
+      query(expr) ++ captureOf(id.symbol.asBlockSymbol)
+
+    case l @ source.Box(annotatedCapture, block) =>
+      query(block)
+      CaptureSet.empty
+
+    case source.Unbox(term) =>
+      query(term)
+      CaptureSet.empty
+
+    case t @ source.Do(effect, op, targs, vargs) =>
+      val cap = Context.annotation(Annotations.CapabilityReceiver, t)
+      combineAll(vargs.map(query)) ++ CaptureSet(cap.capture)
+
+    case t @ source.TryHandle(prog, handlers) =>
+      val progCapture = query(prog)
+      val boundCapture = boundCapabilities(t)
+      val usedCapture = combineAll(handlers.map(query))
+      (progCapture -- boundCapture) ++ usedCapture
+
+    case c @ source.Call(target, targs, vargs, bargs) =>
+      // TODO what's with unboxed value references???
+      //  maybe that's solved by inserting explicit box and unbox in Elaboration
+      val tcaps = target match {
+        case IdTarget(id) => captureOf(id.symbol.asBlockSymbol)
+        case ExprTarget(receiver) => query(receiver)
+      }
+
+      tcaps ++ combineAll(vargs map query) ++ combineAll(bargs map query)
+  }
+
+  override def defn(using Context, Unit) = {
+    /**
+     * For functions we check that the self region does not leave as part of the return type.
+     */
+    case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
+      query(body) -- boundCapabilities(tree) -- CaptureSet(bps.map(_.symbol.capture))
+  }
+
+  override def query(b: source.BlockArg)(using Context, Unit): CaptureSet = visit(b) {
+    case b: source.FunctionArg  => query(b)
+    case b: source.InterfaceArg => captureOf(b.definition)
+  }
+
+  override def query(b: source.FunctionArg)(using Context, Unit): CaptureSet = visit(b) {
+    case source.FunctionArg(tps, vps, bps, body) =>
+      query(body) -- boundCapabilities(b) -- CaptureSet(bps.map(_.symbol.capture))
+  }
+
+  def boundCapabilities(t: Tree)(using Context): CaptureSet =
+    val bound = Context.annotation(Annotations.BoundCapabilities, t)
+    CaptureSet(bound.map(_.capture))
+
+  def captureOf(b: BlockSymbol)(using Context): CaptureSet =
+    asConcreteCaptureSet(Context.captureOf(b))
+
+  def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
+    case c: CaptureSet => c
+    case _ => Context.panic("All capture unification variables should have been replaced by now.")
+  }
+
+  def Context(implicit ctx: Context): Context = ctx
+
+  def annotate(tree: source.ModuleDecl)(using Context): Unit =
+    given Unit = ();
+    query(tree)
+
+  override def visit[T <: Tree](t: T)(visitor: T => CaptureSet)(using Context, Unit): CaptureSet =
+    val capt = visitor(t)
+    Context.annotate(Annotations.InferredCapture, t, capt)
+    capt
 
 }

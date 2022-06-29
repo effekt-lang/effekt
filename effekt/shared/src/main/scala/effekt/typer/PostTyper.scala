@@ -4,8 +4,8 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.source.{ Def, MatchPattern, Tree }
-import effekt.source.Tree.Visit
+import effekt.source.{ Def, ExprTarget, IdTarget, MatchPattern, Tree }
+import effekt.source.Tree.{ Query, Visit }
 import effekt.typer.typeMapToSubstitution
 
 object PostTyper extends Phase[Typechecked, Typechecked] {
@@ -14,7 +14,6 @@ object PostTyper extends Phase[Typechecked, Typechecked] {
 
   def run(input: Typechecked)(implicit C: Context) =
     val Typechecked(source, tree, mod) = input
-
     Wellformedness.check(mod, tree)
 
     if (Context.buffer.hasErrors) { None }

@@ -1198,12 +1198,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.requireSubregion(CaptureSet(cap.capture), param)
     }
 
-
-    // TODO also use capabilities when instantiating the type scheme
-    println(s"Function ${name} uses ${capabilities.map(_.capture)}")
     usingCapture(CaptureSet(capabilities.map(_.capture)))
-
-    println(pp"Call to ${name} is in region ${currentCapture}. Results in return type: ${ret}")
 
     Result(ret, effs)
   }
@@ -1431,7 +1426,9 @@ trait TyperOps extends ContextOps { self: Context =>
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
     Typer.assertConcrete(tpe)
-    capabilityScope.capabilityFor(tpe)
+    val cap = capabilityScope.capabilityFor(tpe)
+    annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
+    cap
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val capName = tpe.name.rename(_ + "$capability")
@@ -1479,7 +1476,6 @@ trait TyperOps extends ContextOps { self: Context =>
    * - [[Annotations.InferredValueType]]
    * - [[Annotations.InferredBlockType]]
    * - [[Annotations.InferredEffect]]
-   * - [[Annotations.InferredCapture]]
    * - [[Annotations.BlockArgumentType]]
    * - [[Annotations.TypeArguments]]
    */
@@ -1557,13 +1553,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def annotateInferredEffects(t: Tree, e: Effects) =
     annotations.update(Annotations.InferredEffect, t, e)
 
-  private[typer] def annotateInferredCapture(t: Tree, e: Captures) =
-    annotations.update(Annotations.InferredCapture, t, e)
-
-
-  // TODO also add InferredRegion
-  //private[typer] def annotateInferredCapt(t: Tree, e: CaptureSet) = inferredCaptures = (t -> e) :: inferredCaptures
-
   private[typer] def annotateTypeArgs(call: source.CallLike, targs: List[symbols.ValueType]): Unit = {
     // apply what we know before saving
     annotations.update(Annotations.TypeArguments, call, targs map unification.apply)
@@ -1572,10 +1561,6 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def annotatedTypeArgs(call: source.CallLike): List[symbols.ValueType] = {
     annotations.apply(Annotations.TypeArguments, call)
   }
-
-//  private[typer] def annotateTarget(t: source.CallTarget, tpe: FunctionType): Unit = {
-//    annotations.annotate(Annotations.TargetType, t, tpe)
-//  }
 
   //</editor-fold>
 
@@ -1597,28 +1582,19 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = unification.substitution
 
-    // TODO since (in comparison to System C) we now have type directed overload resolution again,
-    //   we need to make sure the typing context and all the annotations are backtrackable.
-    //   This can be achieved by going back to local `annotations` which are easily backtrackable.
-    //   In the end, we need to postprocess the annotations; see draft below...
+    // Since (in comparison to System C) we now have type directed overload resolution again,
+    // we need to make sure the typing context and all the annotations are backtrackable.
+    // This can be achieved by going back to local `annotations` which are easily backtrackable.
+    // In the end, we need to postprocess the annotations; see draft below...
     annotations.updateAndCommit(Annotations.ValueType) { case (t, tpe) => subst.substitute(tpe) }
-    annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) =>
-      val substituted = subst.substitute(tpe)
-      println(pp"${t.name.name}: $tpe \n----> $substituted")
-      substituted
-    }
-    annotations.updateAndCommit(Annotations.Captures) { case (t, capt) =>
-      val substituted = subst.substitute(capt)
-      println(pp"${t.name.name} @ $substituted")
-      substituted
-    }
+    annotations.updateAndCommit(Annotations.BlockType) { case (t, tpe) => subst.substitute(tpe) }
+    annotations.updateAndCommit(Annotations.Captures) { case (t, capt) => subst.substitute(capt) }
 
     // Update and write out all inferred types and captures for LSP support
     // This info is currently also used by Transformer!
     annotations.updateAndCommit(Annotations.InferredValueType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.InferredBlockType) { case (t, tpe) => subst.substitute(tpe) }
     annotations.updateAndCommit(Annotations.InferredEffect) { case (t, effs) => subst.substitute(effs) }
-    annotations.updateAndCommit(Annotations.InferredCapture) { case (t, effs) => subst.substitute(effs) }
 
     annotations.updateAndCommit(Annotations.TypeArguments) { case (t, targs) => targs map subst.substitute }
 

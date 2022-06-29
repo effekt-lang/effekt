@@ -4,7 +4,7 @@ import effekt.context.Context
 import effekt.core.Transformer
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.source.{ CapabilityPassing, ModuleDecl }
+import effekt.source.{ Elaboration, ModuleDecl }
 import effekt.symbols.Module
 import effekt.typer.{ PostTyper, Typer }
 import effekt.util.messages.FatalPhaseError
@@ -134,7 +134,7 @@ trait Compiler {
        * Uses annotated effects to translate to explicit capability passing
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      CapabilityPassing
+      Elaboration
   }
 
   /**

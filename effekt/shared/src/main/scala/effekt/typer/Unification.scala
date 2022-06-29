@@ -260,7 +260,6 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    * Should create a fresh unification variable bounded by the given captures
    */
   def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], polarity: Polarity): CaptUnificationVar =
-    println(s"Merging captures: ${concreteBounds} and ${variableBounds} into a new unification variable")
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
     polarity match {
       case Covariant =>
@@ -311,7 +310,6 @@ trait TypeInstantiator { self: Unification =>
         // right now, we force solving to continue, instead of giving up.
         case x: CaptUnificationVar =>
           val capt = constraints.forceSolving(x)
-          println(s"Force solving ${x} resulted in ${capt}")
           capt.captures
     }
     val contained = captureParams intersect concreteCapture // Should not contain CaptureOf

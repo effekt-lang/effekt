@@ -345,7 +345,6 @@ class Constraints(
 
   private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =
     val diff = lower -- upper
-    println(s"Checking consistency ${lower} <: ${upper}")
     if (diff.nonEmpty) { C.abort(s"Not allowed ${diff}") }
 
   private def checkEquality(xs: Set[Capture], ys: Set[Capture]): Unit =
@@ -367,8 +366,6 @@ class Constraints(
    * Adds x as a lower bound to y, and y as a lower bound to x.
    */
   def connect(x: CNode, y: CNode, exclude: Set[Capture] = Set.empty): Unit =
-    println(s"Connecting ${x} <[${exclude.mkString(", ")}]< ${y}")
-    dumpCaptureConstraints()
     if (x == y /* || (y.lowerNodes contains x) */) { return () }
 
     // we already solved one of them? Or both?
@@ -383,8 +380,6 @@ class Constraints(
 
         val upperFilter = x.upperNodes(y)
         val lowerFilter = y.lowerNodes(x)
-        println(upperFilter)
-        println(lowerFilter)
 
         x.lower foreach { bounds => requireLower(bounds -- lowerFilter, y) }
         y.upper foreach { bounds => requireUpper(bounds ++ upperFilter, x) }

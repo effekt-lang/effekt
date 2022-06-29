@@ -229,7 +229,7 @@ object Annotations {
   /**
    * Similar to TypeAndEffect: the capture set of a program
    */
-  val InferredCapture = Annotation[source.Tree, symbols.Captures](
+  val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
     "InferredCapture",
     "the inferred capture for source tree"
   )
@@ -360,10 +360,10 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
-  def inferredCapture(t: source.Tree): symbols.Captures =
+  def inferredCapture(t: source.Tree): symbols.CaptureSet =
     annotation(Annotations.InferredCapture, t)
 
-  def inferredCaptureOption(t: source.Tree): Option[symbols.Captures] =
+  def inferredCaptureOption(t: source.Tree): Option[symbols.CaptureSet] =
     annotationOption(Annotations.InferredCapture, t)
 
   // TODO maybe move to TyperOps
