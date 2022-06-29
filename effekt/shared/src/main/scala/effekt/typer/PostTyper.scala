@@ -12,8 +12,10 @@ import effekt.typer.typeMapToSubstitution
  * Performs additional wellformed-ness checks that are easier to do on already
  * inferred and annotated trees.
  *
- * TODO this does not need to be a Rewrite phase, but can be a visit.
- * TODO implement existential-effect-leaving-the-scope check
+ * Checks:
+ * - exhaustivity
+ * - lexical scoping of effects
+ * - escape of capabilities through types
  */
 class PostTyperContext(var effectsInScope: List[Interface]) {
   def addEffect(i: Interface) = effectsInScope = (i :: effectsInScope).distinct
@@ -65,6 +67,12 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
       scoped { query(prog) }
       handlers foreach { h => scoped { query(h) } }
     }
+
+    case tree @ source.Match(scrutinee, clauses) =>
+      val tpe = Context.inferredTypeOf(scrutinee)
+      Context.at(tree) { checkExhaustivity(tpe, clauses.map { _.pattern }) }
+      query(scrutinee)
+      clauses foreach { cl => scoped { query(cl) }}
   }
 
   override def defn(using Context, PostTyperContext) = {
@@ -108,39 +116,46 @@ object PostTyper extends Phase[Typechecked, Typechecked], Visit[PostTyperContext
   /**
    * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
    * can be improved a lot.
-   *
-   * TODO Maybe move exhaustivity check to a separate phase AFTER typer? This way all types are inferred.
    */
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, PostTyperContext): Unit = ()
-  //  {
-  //    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
-  //
-  //    if (catchall)
-  //      return ;
-  //
-  //    sc match {
-  //      case TypeConstructor(t: DataType) =>
-  //        t.variants.foreach { variant =>
-  //          checkExhaustivity(variant, cls)
-  //        }
-  //
-  //      case TypeConstructor(t: Record) =>
-  //        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
-  //          case p if p.definition == t => Left(p.patterns)
-  //          case p => Right(p)
-  //        }
-  //
-  //        if (related.isEmpty) {
-  //          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
-  //        }
-  //
-  //        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
-  //          case (t, ps) => checkExhaustivity(t, ps)
-  //        }
-  //      case other =>
-  //        ()
-  //    }
-  //  }
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, PostTyperContext): Unit = {
+    import source.{ MatchPattern, AnyPattern, IgnorePattern, TagPattern }
+
+    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
+
+    if (catchall)
+      return ;
+
+    sc match {
+      case TypeConstructor(t: DataType) =>
+        t.variants.foreach { variant =>
+          checkExhaustivity(variant, cls)
+        }
+
+      case TypeConstructor(t: Record) =>
+        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
+          case p if p.definition == t => Left(p.patterns)
+          case p => Right(p)
+        }
+
+        if (related.isEmpty) {
+          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
+        }
+
+        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
+          case (t, ps) => checkExhaustivity(t, ps)
+        }
+      case other =>
+        ()
+    }
+  }
+
+  object TypeConstructor {
+    def unapply(tpe: ValueType): Option[TypeConstructor] = tpe match
+      case ValueTypeApp(TypeConstructor(tpe), args) => Some(tpe)
+      case constructor: TypeConstructor => Some(constructor)
+      case _ => None
+  }
+
   override def scoped(action: => Unit)(using C: Context, ctx: PostTyperContext): Unit = {
     val before = ctx.effectsInScope
     action
