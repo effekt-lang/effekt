@@ -292,12 +292,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (1) extract all handled effects and capabilities
         var providedCapabilities: List[symbols.BlockParam] = Nil
         var handledEffects: List[InterfaceType] = Nil
+        val selfRegion = Context.getSelfRegion(tree)
+
         handlers foreach Context.withFocus { h =>
           val effect: InterfaceType = h.effect.resolve
           if (handledEffects contains effect) {
             Context.error(pp"Effect ${effect} is handled twice.")
           } else {
-            // TODO also relate it to the lexical region
             handledEffects = handledEffects :+ effect
             val capability = h.capability.map { _.symbol }.getOrElse { Context.freshCapabilityFor(effect) }
 
@@ -310,7 +311,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val continuationCapt = Context.freshCaptVar(CaptUnificationVar.HandlerRegion(tree))
 
         // All used captures flow into the continuation capture, except the ones handled by this handler.
-        val continuationCaptHandled = Context.without(continuationCapt, providedCapabilities.map(_.capture))
+        val continuationCaptHandled = Context.without(continuationCapt, selfRegion :: providedCapabilities.map(_.capture))
 
         var handlerEffs: ConcreteEffects = Pure
 
@@ -319,7 +320,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // Check the handled program
           val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
             given Captures = continuationCaptHandled
-            checkStmt(prog, expected)
+            Context.withRegion(selfRegion) { checkStmt(prog, expected) }
           }
 
           // Also all capabilities used by the handler flow into the capture of the continuation

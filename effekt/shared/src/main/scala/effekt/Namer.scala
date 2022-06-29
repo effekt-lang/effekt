@@ -296,6 +296,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case tree @ source.TryHandle(body, handlers) =>
       resolveAll(handlers)
 
+      // TODO Here we should actually introduce a term-level region and only bind `this` to region.capture
       val selfRegion = LexicalRegion(Name.local("this"), tree)
       // bind it to both the function name and "this"
       Context.bind("this", selfRegion)

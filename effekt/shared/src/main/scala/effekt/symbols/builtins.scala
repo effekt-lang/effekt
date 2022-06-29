@@ -45,7 +45,8 @@ object builtins {
     "Unit" -> TUnit,
     "String" -> TString,
     "Double" -> TDouble,
-    "IO" -> IOEffect
+    "IO" -> IOEffect,
+    "Region" -> TRegion
   )
 
   // it is a set, because terms can be overloaded...
