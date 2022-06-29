@@ -3,14 +3,13 @@ package generator
 
 import effekt.context.Context
 import effekt.core.*
-import effekt.symbols.Module
-import effekt.symbols.Wildcard
+import effekt.symbols.{ Module, Wildcard }
+import effekt.symbols.builtins.TState
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
 
 import scala.language.implicitConversions
 import effekt.util.paths.*
-
 /**
  * It would be nice if Core could have an Effect Declaration or
  * translate effect declarations to Records...
@@ -93,13 +92,13 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
       parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <> group(nest(line <> toDoc(body, toplevel))))
 
     // do not return on the toplevel
-    case Ret(e) if toplevel      => ""
+    case Ret(e) if toplevel => ""
 
-    case Ret(e)                  => schemeCall("pure", List(toDoc(e)))
+    case Ret(e)             => schemeCall("pure", List(toDoc(e)))
 
-    case State(init, reg, block) => ???
-    // schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
+    case State(init, reg, block) =>
+      schemeCall("state", nameDef(TState.interface), nameDef(TState.get), nameDef(TState.put), toDoc(init, false), toDoc(block))
 
-    case other                   => super.toDoc(s, toplevel)
+    case other => super.toDoc(s, toplevel)
   }
 }
