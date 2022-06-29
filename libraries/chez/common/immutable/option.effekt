@@ -13,12 +13,12 @@ def isDefined[A](self: Option[A]): Boolean = self match {
 def isEmpty[A](self: Option[A]): Boolean =
   self.isEmpty.not
 
-def orElse[A](self: Option[A]) { that: Option[A] }: Option[A] = self match {
+def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {
   case None()  => that()
   case Some(v) => Some(v)
 }
 
-def getOrElse[A](self: Option[A]) { that: A }: A = self match {
+def getOrElse[A](self: Option[A]) { that: => A }: A = self match {
   case None() => that()
   case Some(v) => v
 }
