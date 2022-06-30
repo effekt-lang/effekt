@@ -49,30 +49,48 @@ object Wellformedness extends Visit[WFContext] {
   }
 
   override def expr(using Context, WFContext) = {
+
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
     case tree @ source.TryHandle(prog, handlers) => {
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
+      val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
       val selfRegion = Context.getSelfRegion(tree)
 
       val free = freeCapture(tpe)
       val escape = free intersect bound
+
       if (escape.nonEmpty) {
         Context.at(prog) {
-          Context.error(s"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}")
+          Context.error(pp"The return type ${tpe} of the handled statement is not allowed to refer to any of the bound capabilities, but mentions: ${CaptureSet(escape)}")
         }
       }
+
       if (free contains selfRegion) {
         Context.at(prog) {
-          Context.error(s"The return type ${tpe} of the handler body must not mention the self region.")
+          Context.error(pp"The return type ${tpe} of the handler body must not mention the self region.")
         }
       }
 
       // also check prog and handlers
       scoped { query(prog) }
-      handlers foreach { h => scoped { query(h) } }
+
+      val typesInEffects = freeTypeVars(usedEffects)
+
+      handlers foreach { h =>
+        scoped { query(h) }
+
+        h.clauses.foreach { cl =>
+          val existentials = Context.annotation(Annotations.TypeParameters, cl)
+          existentials.foreach { t =>
+            if (typesInEffects.contains(t)) {
+              Context.error(pp"Type variable ${t} escapes its scope as part of the effect types: ${usedEffects}")
+            }
+          }
+        }
+      }
     }
 
     case tree @ source.Match(scrutinee, clauses) =>
@@ -92,7 +110,7 @@ object Wellformedness extends Visit[WFContext] {
 
       if (freeCapture(returnType) contains selfRegion) {
         Context.at(body) {
-          Context.error(s"The return type ${returnType} of the function body must not mention the region of the function itself.")
+          Context.error(pp"The return type ${returnType} of the function body must not mention the region of the function itself.")
         }
       }
 
@@ -204,7 +222,6 @@ object Wellformedness extends Visit[WFContext] {
   // Can only compute free capture on concrete sets
   def freeCapture(o: Any): Set[Capture] = o match {
     case t: symbols.Capture   => Set(t)
-    case BoxedType(tpe, capt) => freeCapture(tpe) ++ freeCapture(capt)
     case FunctionType(tparams, cparams, vparams, bparams, ret, eff) =>
       // TODO what with capabilities introduced for eff--those are bound in ret?
       freeCapture(vparams) ++ freeCapture(bparams) ++ freeCapture(ret) ++ freeCapture(eff) -- cparams.toSet
@@ -216,6 +233,20 @@ object Wellformedness extends Visit[WFContext] {
       t.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
     case p: Product =>
       p.productIterator.foldLeft(Set.empty[Capture]) { case (r, t) => r ++ freeCapture(t) }
+    case _ =>
+      Set.empty
+  }
+
+  def freeTypeVars(o: Any): Set[TypeVar] = o match {
+    case t: symbols.TypeVar => Set(t)
+    case FunctionType(tps, cps, vps, bps, ret, effs) =>
+      freeTypeVars(vps) ++ freeTypeVars(bps) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tps.toSet
+    case e: Effects            => freeTypeVars(e.toList)
+    case _: Symbol | _: String => Set.empty // don't follow symbols
+    case t: Iterable[t] =>
+      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
+    case p: Product =>
+      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
     case _ =>
       Set.empty
   }

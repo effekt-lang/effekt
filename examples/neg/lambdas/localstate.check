@@ -1,6 +1,6 @@
-[error] examples/neg/lambdas/localstate.effekt:3:14: The return type BoxedType(FunctionType(List(),List(),List(),List(),Unit,{}),{this, this}) of the function body must not mention the region of the function itself.
+[error] examples/neg/lambdas/localstate.effekt:3:14: The return type () => Unit at {this, this, io} of the function body must not mention the region of the function itself.
 def main() = {
              ^
-[error] examples/neg/lambdas/localstate.effekt:5:17: The return type BoxedType(FunctionType(List(),List(),List(),List(),Unit,{}),{this, this}) of the function body must not mention the region of the function itself.
+[error] examples/neg/lambdas/localstate.effekt:5:17: The return type () => Unit at {this, this, io} of the function body must not mention the region of the function itself.
   def local() = {
                 ^

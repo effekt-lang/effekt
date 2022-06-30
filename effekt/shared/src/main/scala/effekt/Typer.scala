@@ -274,6 +274,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
                 // The parameters C, D, ... are existentials
                 val existentials: List[TypeVar] = declaredType.tparams.drop(targs.size).map { r => TypeVar(r.name) }
+                Context.annotate(Annotations.TypeParameters, d, existentials)
 
                 // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
                 // of bidirectional effects and capture polymorphism (still has to be tested).
@@ -321,13 +322,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context in {
                   val Result(_, heffs) = body checkAgainst ret
                   handlerEffs = handlerEffs ++ heffs
-
-                  val typesInEffects = freeTypeVars(heffs)
-                  existentials.foreach { t =>
-                    if (typesInEffects.contains(t)) {
-                      Context.error(pp"Type variable ${t} escapes its scope as part of the effect types: ${heffs.toEffects}")
-                    }
-                  }
                 }
             }
           }
@@ -456,7 +450,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.requireSubtype(sc, ret)
 
       // (6) check for existential type variables
-      // at the moment we do not allow existential type parameters on constructors.
+      // at the moment we do not allow existential type parameters on constructors, so this is not necessary.
       //      val skolems = Context.skolems(rigids)
       //      if (skolems.nonEmpty) {
       //        Context.error(s"Unbound type variables in constructor ${id}: ${skolems.map(_.underlying).mkString(", ")}")
@@ -503,20 +497,33 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def precheckDef(d: Def)(using Context): Unit = Context.focusing(d) {
     case d @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val fun = d.symbol
+
+      // (1) make up a fresh capture unification variable and annotate on function symbol
       val cap = Context.freshCaptVar(CaptUnificationVar.FunctionRegion(d))
-      // TODO here it would be better to just maintain the invariant that it is a single unification variable
       Context.bind(fun, cap)
+
+      // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(d.symbol, tpe) }
 
     case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
       val fun = d.symbol
-      Context.bind(fun, fun.toType, CaptureSet.empty)
+      val cap = pure match {
+        case effekt.source.ExternFlag.Pure => CaptureSet.empty
+        case effekt.source.ExternFlag.IO => CaptureSet(builtins.IOCapability.capture)
+        case effekt.source.ExternFlag.Control => CaptureSet(builtins.ControlCapablity.capture)
+      }
+
+      Context.bind(fun, fun.toType, cap)
       if (fun.effects.controlEffects.nonEmpty) {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       d.symbol.ops.foreach { op =>
+        if (op.otherEffects.toList contains op.appliedEffect) {
+          Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
+        }
+
         val tpe = op.toType
         wellformed(tpe)
         Context.bind(op, tpe)
@@ -543,9 +550,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(field, tpe, CaptureSet())
       }
 
-    case d: source.TypeDef   => wellformed(d.symbol.tpe)
+    case d: source.TypeDef => wellformed(d.symbol.tpe)
     case d: source.EffectDef => wellformed(d.symbol.effs)
-    case _                   => ()
+    case _ => ()
   }
 
   def synthDef(d: Def)(using Context, Captures): Result[Unit] = Context.at(d) {
@@ -624,14 +631,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(sym, substituted)
 
         Result((), unhandledEffects)
-      case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-        val effectDecl = d.symbol
-        effectDecl.ops foreach { op =>
-          if (op.otherEffects.toList contains op.appliedEffect) {
-            Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
-          }
-        }
-        Result((), Pure)
 
       case d @ source.ValDef(id, annot, binding) =>
         val Result(t, effBinding) = d.symbol.tpe match {
@@ -1144,20 +1143,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //</editor-fold>
 
   //<editor-fold desc="Helpers and Extension Methods">
-
-  private def freeTypeVars(o: Any): Set[TypeVar] = o match {
-    case t: symbols.TypeVar => Set(t)
-    case FunctionType(tps, cps, vps, bps, ret, effs) =>
-      freeTypeVars(vps) ++ freeTypeVars(bps) ++ freeTypeVars(ret) ++ freeTypeVars(effs) -- tps.toSet
-    case e: Effects            => freeTypeVars(e.toList)
-    case _: Symbol | _: String => Set.empty // don't follow symbols
-    case t: Iterable[t] =>
-      t.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
-    case p: Product =>
-      p.productIterator.foldLeft(Set.empty[TypeVar]) { case (r, t) => r ++ freeTypeVars(t) }
-    case _ =>
-      Set.empty
-  }
 
   extension (expr: Term) {
     def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =

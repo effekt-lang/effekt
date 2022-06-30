@@ -16,7 +16,7 @@ def two[A, B]() =
   (do get[A](), do get[B]())
 
 def main() = {
-  var leak: () => String at {} = fun() { "" };
+  var leak: () => String at {io} = fun() { "" };
   try {
     val (n1, n2) = two[Int, Int]();
     println(n1);

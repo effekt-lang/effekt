@@ -24,10 +24,10 @@ object builtins {
   val TBottom = BuiltinType(name("⊥"), Nil)
 
   val IOEffect = BuiltinEffect(name("IO"), Nil)
-  val IOCapability = BuiltinCapability(IOEffect)
+  val IOCapability = BuiltinCapability(name("io"), IOEffect)
 
   val ControlEffect = BuiltinEffect(name("Control"), Nil)
-  val ControlCapablity = BuiltinCapability(ControlEffect)
+  val ControlCapablity = BuiltinCapability(name("control"), ControlEffect)
 
   object TState {
     val S = TypeVar(Name.local("S"))
@@ -50,7 +50,10 @@ object builtins {
   )
 
   // it is a set, because terms can be overloaded...
-  val rootTerms: Map[String, Set[TermSymbol]] = Map(
-    "io" -> Set(IOCapability)
+  val rootTerms: Map[String, Set[TermSymbol]] = Map()
+
+  val rootCaptures: Map[String, Capture] = Map(
+    "io" -> IOCapability.capture,
+    "control" -> ControlCapablity.capture
   )
 }

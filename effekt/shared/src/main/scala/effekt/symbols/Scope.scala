@@ -56,14 +56,15 @@ object scopes {
     // TODO rename global to "static" scope
     def enterGlobal(implicit C: Context): Scope = GlobalScope(this)
 
-    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+    def defineAll(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol], cps: Map[String, Capture])(implicit C: Context) = {
       tms.foreach { case (n, syms) => syms.foreach { sym => define(n, sym) } }
       tps.foreach { case (n, sym) => define(n, sym) }
+      cps.foreach { case (n, sym) => define(n, sym) }
     }
 
-    def enterGlobalWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol])(implicit C: Context) = {
+    def enterGlobalWith(tms: Map[String, Set[TermSymbol]], tps: Map[String, TypeSymbol], cps: Map[String, Capture])(implicit C: Context) = {
       val scope = GlobalScope(this)
-      scope.defineAll(tms, tps)
+      scope.defineAll(tms, tps, cps)
       scope
     }
 
@@ -154,6 +155,6 @@ object scopes {
 
   // A global namespace
   case class GlobalScope(parent: Scope) extends BlockScope
-  def toplevel(terms: Map[String, Set[TermSymbol]], types: Map[String, TypeSymbol])(implicit C: Context): Scope =
-    EmptyScope().enterGlobalWith(terms, types)
+  def toplevel(terms: Map[String, Set[TermSymbol]], types: Map[String, TypeSymbol], captures: Map[String, Capture])(implicit C: Context): Scope =
+    EmptyScope().enterGlobalWith(terms, types, captures)
 }

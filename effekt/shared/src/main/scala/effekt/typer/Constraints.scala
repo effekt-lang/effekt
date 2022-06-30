@@ -345,7 +345,7 @@ class Constraints(
 
   private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =
     val diff = lower -- upper
-    if (diff.nonEmpty) { C.abort(s"Not allowed ${diff}") }
+    if (diff.nonEmpty) { C.abort(pp"Not allowed ${CaptureSet(diff)}") }
 
   private def checkEquality(xs: Set[Capture], ys: Set[Capture]): Unit =
     if (xs != ys) { C.abort(s"Capture set ${xs} is not equal to ${ys}") }
