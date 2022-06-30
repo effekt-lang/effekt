@@ -211,22 +211,6 @@ object Annotations {
   )
 
   /**
-   * The blocktype of a calltarget as annotated by typer
-   */
-  //  val TargetType = Annotation[source.CallTarget, symbols.FunctionType](
-  //    "TargetType",
-  //    "the blocktype for calltarget"
-  //  )
-
-  /**
-   * The block type of a block argument as annotated by typer
-   */
-  val BlockArgumentType = Annotation[source.FunctionArg, symbols.FunctionType](
-    "BlockArgumentType",
-    "the inferred type for block argument"
-  )
-
-  /**
    * Similar to TypeAndEffect: the capture set of a program
    */
   val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](

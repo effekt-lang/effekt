@@ -38,91 +38,6 @@ import scala.language.implicitConversions
  */
 case class Result[+T](tpe: T, effects: ConcreteEffects)
 
-/**
- * All effects inferred by Typer are required to be concrete and dealiased.
- *
- * This way, we can easily compare them for equality.
- */
-class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]) {
-
-  def toList: List[InterfaceType] = effects
-  def toEffects: Effects = Effects(effects)
-
-  // both are known to be concrete, no need to go through validation again
-  def ++(other: ConcreteEffects): ConcreteEffects = ConcreteEffects.fromList(this.effects ++ other.effects)
-
-  // we can use set difference since type constructors are assumed to be invariant and all unification variables
-  // are substituted away.
-  def --(other: ConcreteEffects): ConcreteEffects = ConcreteEffects.fromList(
-    (this.effects.toSet -- other.effects.toSet).toList
-  )
-
-  def isEmpty: Boolean = effects.isEmpty
-  def nonEmpty: Boolean = effects.nonEmpty
-
-  def filterNot(p: InterfaceType => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
-
-  def controlEffects: List[InterfaceType] = effects.controlEffects
-  def builtinEffects: List[InterfaceType] = effects.builtinEffects
-
-  def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
-  def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
-
-  override def toString = toEffects.toString
-}
-object ConcreteEffects {
-  // unsafe, doesn't perform check
-  private def fromList(eff: List[InterfaceType]): ConcreteEffects = new ConcreteEffects(eff.distinct)
-
-  /**
-   * These smart constructors should not be used directly.
-   * [[Typer.asConcrete]] should be used instead, since it performs substitution and dealiasing.
-   */
-  def apply(eff: List[InterfaceType])(using Context): ConcreteEffects =
-    eff foreach Typer.assertConcrete
-    fromList(eff)
-
-  def apply(effs: Effects)(using Context): ConcreteEffects = apply(effs.toList)
-
-  def empty: ConcreteEffects = fromList(Nil)
-}
-
-val Pure = ConcreteEffects.empty
-val Empty = CaptureSet.empty
-
-/**
- * Invariant: Like the result effects of Typer, all types of bound capabilities need to be concrete!
- */
-sealed trait CapabilityScope {
-  def copy: CapabilityScope
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam
-  def parent: CapabilityScope
-}
-case object GlobalCapabilityScope extends CapabilityScope {
-  def copy: CapabilityScope = this
-  def parent: CapabilityScope = sys error "No parent"
-  // If we try to find a capability for an effect that is known to be unhandled (that is no outer scope could
-  // potentially handle it, then we raise an error.
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    C.abort(pp"Unhandled effect ${tpe}")
-}
-class BindSome(binder: source.Tree, capabilities: Map[symbols.InterfaceType, symbols.BlockParam],val parent: CapabilityScope) extends CapabilityScope {
-  def copy: CapabilityScope = BindSome(binder, capabilities, parent.copy)
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.getOrElse(tpe, parent.capabilityFor(tpe))
-  override def toString: String = s"BindSome(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
-}
-class BindAll(binder: source.Tree, var capabilities: Map[symbols.InterfaceType, symbols.BlockParam], val parent: CapabilityScope) extends CapabilityScope {
-  def copy: CapabilityScope = BindAll(binder, capabilities, parent.copy)
-  def capabilityFor(tpe: symbols.InterfaceType)(using C: Context): symbols.BlockParam =
-    capabilities.getOrElse(tpe, {
-      val freshCapability = C.freshCapabilityFor(tpe)
-      capabilities = capabilities.updated(tpe, freshCapability)
-      freshCapability
-    })
-  override def toString: String = s"BindAll(${binder.getClass.getSimpleName}, ${capabilities}, ${parent})"
-}
-
 
 object Typer extends Phase[NameResolved, Typechecked] {
 
@@ -595,7 +510,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
       val fun = d.symbol
-      Context.bind(fun, fun.toType, Empty)
+      Context.bind(fun, fun.toType, CaptureSet.empty)
       if (fun.effects.controlEffects.nonEmpty) {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }
@@ -1230,58 +1145,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Helpers and Extension Methods">
 
-  // TODO first substitute and dealias, then check concrete, then convert.
-  implicit def asConcrete(effs: Effects)(using Context): ConcreteEffects =
-    ConcreteEffects(Context.unification(effs))
-
-  /**
-   * Asserts that all effects in the list are _concrete_, that is,
-   * no unification variables (neither type, nor region) are allowed.
-   *
-   * If all effects are concrete (and we assume effect type constructors are INVARIANT):
-   *   - we can use structural equality to compare them
-   *   - we can use sets and hash maps
-   *
-   * Consequences:
-   *   - If we try to add an effect that is not concrete, we should raise an "Could not infer..." error.
-   *   - We need to substitute early in order to have more concrete effects.
-   *   - Requiring effects to be concrete also simplifies effect-set comparison in [[TypeComparer]].
-   *
-   * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
-   */
-  private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
-    if (!isConcreteEffects(effs)) C.abort(pp"Effects need to be fully known: ${effs}")
-
-  private[typer] def assertConcrete(eff: InterfaceType)(using C: Context): Unit =
-    if (!isConcreteEffect(eff)) {
-      C.abort(pp"Effects need to be fully known: ${eff}")
-    }
-
-  private[typer] def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
-    case x: UnificationVar => false
-    case x: TypeVar => true
-    case t: TypeConstructor => true
-    case t : BuiltinType => true
-    case ValueTypeApp(tpe, args) => isConcreteValueType(tpe) && args.forall(isConcreteValueType)
-    case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
-  }
-
-  private[typer] def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
-    case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-      vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
-    case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
-    case t: Interface => true
-    case b: BuiltinEffect => true
-  }
-  private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
-
-  private def isConcreteEffect(eff: InterfaceType): Boolean = eff match {
-    case t: Interface => true
-    case t: BuiltinEffect => true
-    case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
-  }
-  private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteEffect)
-
   private def freeTypeVars(o: Any): Set[TypeVar] = o match {
     case t: symbols.TypeVar => Set(t)
     case FunctionType(tps, cps, vps, bps, ret, effs) =>
@@ -1368,6 +1231,42 @@ private[typer] case class TyperState(annotations: Annotations, unification: Unif
 trait TyperOps extends ContextOps { self: Context =>
 
   /**
+   * Local annotations database, only used by Typer
+   *
+   * It is used to (1) model the typing context, (2) collect information
+   * used for elaboration (i.e., capabilities), and (3) gather inferred
+   * types for LSP support.
+   *
+   * (1) "Typing Context"
+   * --------------------
+   * Since symbols are unique, we can use mutable state instead of reader.
+   * Typer uses local annotations that are immutable and can be backtracked.
+   *
+   * The "Typing Context" consists of:
+   * - typing context for value types [[Annotations.ValueType]]
+   * - typing context for block types [[Annotations.BlockType]]
+   * - modalities on typing context for block symbol [[Annotations.Captures]]
+   *
+   * (2) Elaboration Info
+   * --------------------
+   * - [[Annotations.CapabilityReceiver]]
+   * - [[Annotations.CapabilityArguments]]
+   * - [[Annotations.BoundCapabilities]]
+   * - [[Annotations.TypeArguments]]
+   *
+   * (3) Inferred Information for LSP
+   * --------------------------------
+   * We first store the inferred types here, before substituting and committing to the
+   * global DB, later.
+   * - [[Annotations.InferredValueType]]
+   * - [[Annotations.InferredBlockType]]
+   * - [[Annotations.InferredEffect]]
+   */
+  private [typer] var annotations: Annotations = Annotations.empty
+
+  //<editor-fold desc="(1) Unification">
+
+  /**
    * The unification engine, keeping track of constraints and the current unification scope
    *
    * Contains mutable variables. The methods [[unification.backup()]] and [[unification.restore()]]
@@ -1385,16 +1284,11 @@ trait TyperOps extends ContextOps { self: Context =>
   }
   private[typer] def withUnificationScope[T](block: => T): T = withUnificationScope(Nil)(block)
 
+  //</editor-fold>
 
-  /**
-   * The current lexical region used for mutable variables.
-   *
-   * None on the toplevel
-   */
-  private var lexicalRegion: Option[Capture] = None
+  //<editor-fold desc="(2) Capability Passing">
 
   private [typer] var capabilityScope: CapabilityScope = GlobalCapabilityScope
-
 
   private [typer] def bindingCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam])(f: => R): R = {
     bindCapabilities(binder, caps)
@@ -1406,7 +1300,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def bindCapabilities[R](binder: source.Tree, caps: List[symbols.BlockParam]): Unit =
     val capabilities = caps map { cap =>
-      Typer.assertConcrete(cap.tpe.asInterfaceType)
+      assertConcrete(cap.tpe.asInterfaceType)
       positions.dupPos(binder, cap)
       cap
     }
@@ -1424,7 +1318,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * Has the potential side-effect of creating a fresh capability. Also see [[BindAll.capabilityFor()]]
    */
   private [typer] def capabilityFor(tpe: InterfaceType): symbols.BlockParam =
-    Typer.assertConcrete(tpe)
+    assertConcrete(tpe)
     val cap = capabilityScope.capabilityFor(tpe)
     annotations.update(Annotations.Captures, cap, CaptureSet(cap.capture))
     cap
@@ -1445,42 +1339,9 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.update(Annotations.CapabilityReceiver, call, cap)
     cap
 
+  //</editor-fold>
 
-  /**
-   * Local annotations database, only used by Typer
-   *
-   * It is used to (1) model the typing context, (2) collect information
-   * used for elaboration (i.e., capabilities), and (3) gather inferred
-   * types for LSP support.
-   *
-   * (1) "Typing Context"
-   * --------------------
-   * Since symbols are unique, we can use mutable state instead of reader.
-   * Typer uses local annotations that are immutable and can be backtracked.
-   *
-   * The "Typing Context" consists of:
-   * - typing context for value types [[Annotations.ValueType]]
-   * - typing context for block types [[Annotations.BlockType]]
-   * - ...
-   *
-   * (2) Elaboration Info
-   * --------------------
-   * - [[Annotations.BoundCapabilities]]
-   * - [[Annotations.CapabilityArguments]]
-   *
-   * (3) Inferred Information for LSP
-   * --------------------------------
-   * We first store the inferred types here, before substituting and committing to the
-   * global DB, later.
-   * - [[Annotations.InferredValueType]]
-   * - [[Annotations.InferredBlockType]]
-   * - [[Annotations.InferredEffect]]
-   * - [[Annotations.BlockArgumentType]]
-   * - [[Annotations.TypeArguments]]
-   */
-  private [typer] var annotations: Annotations = Annotations.empty
-
-  //<editor-fold desc="(1) Typing Context">
+  //<editor-fold desc="(3) Typing Context">
 
   // first tries to find the type in the local typing context
   // if not found, it tries the global DB, since it might be a symbol of an already checked dependency
@@ -1509,9 +1370,6 @@ trait TyperOps extends ContextOps { self: Context =>
       }
     }
 
-  private[typer] def getSelfRegion(tree: source.Tree): Capture =
-    annotation(Annotations.SelfRegion, tree)
-
   private[typer] def bind(s: ValueSymbol, tpe: ValueType): Unit =
     annotations.update(Annotations.ValueType, s, tpe)
 
@@ -1526,8 +1384,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def bind(bs: Map[Symbol, ValueType]): Unit =
     bs foreach {
       case (v: ValueSymbol, t: ValueType) => bind(v, t)
-      //        case (v: BlockSymbol, t: FunctionType) => bind(v, t)
-      case other => panic(s"Internal Error: wrong combination of symbols and types: ${other}")
+      case (sym, other) => panic(pp"Internal Error: wrong combination of symbols and types: ${sym}:${other}")
     }
 
   private[typer] def bind(p: ValueParam): Unit = p match {
@@ -1541,7 +1398,32 @@ trait TyperOps extends ContextOps { self: Context =>
 
   //</editor-fold>
 
-  //<editor-fold desc="(3) Inferred Information for LSP">
+  //<editor-fold desc="(4) Lexical Regions">
+
+  /**
+   * The current lexical region used for mutable variables.
+   *
+   * None on the toplevel
+   */
+  private var lexicalRegion: Option[Capture] = None
+
+
+  def region: Capture = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
+  def withRegion[T](c: Capture)(prog: => T): T = {
+    val before = lexicalRegion
+    lexicalRegion = Some(c)
+    val res = prog
+    lexicalRegion = before
+    res
+  }
+
+  private[typer] def getSelfRegion(tree: source.Tree): Capture =
+    annotation(Annotations.SelfRegion, tree)
+
+
+  //</editor-fold>
+
+  //<editor-fold desc="(5) Inferred Information for LSP">
 
   private[typer] def annotateInferredType(t: Tree, e: ValueType) =
     annotations.update(Annotations.InferredValueType, t, e)
@@ -1562,6 +1444,8 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   //</editor-fold>
+
+  //<editor-fold desc="(6) Managing Typer State">
 
   private[typer] def initTyperstate(): Unit = {
     annotations = Annotations.empty
@@ -1602,15 +1486,5 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.updateAndCommit(Annotations.CapabilityReceiver) { case (t, caps) => caps }
   }
 
-
-  // Lexical Regions
-  // ===============
-  def region: Capture = lexicalRegion.getOrElse(abort("Mutable variables are not allowed outside of a function definition"))
-  def withRegion[T](c: Capture)(prog: => T): T = {
-    val before = lexicalRegion
-    lexicalRegion = Some(c)
-    val res = prog
-    lexicalRegion = before
-    res
-  }
+  //</editor-fold>
 }
