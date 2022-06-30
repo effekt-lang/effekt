@@ -1,6 +1,6 @@
-[error] examples/neg/lambdas/inference.effekt:13:8: Expected Boolean, but got Unit
+[error] examples/neg/lambdas/inference.effekt:13:8: Expected Boolean but got Unit
   hof2(fun(f: (Int) => Unit at {}) { "" })
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] examples/neg/lambdas/inference.effekt:13:12: Expected Boolean, but got Unit
+[error] examples/neg/lambdas/inference.effekt:13:12: Expected Unit but got Boolean
   hof2(fun(f: (Int) => Unit at {}) { "" })
            ^^^^^^^^^^^^^^^^^^^^^^

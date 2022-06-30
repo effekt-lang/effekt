@@ -128,28 +128,24 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    *
    * TODO Covariant might not be the right polarity
    */
-  def requireSubtype(t1: ValueType, t2: ValueType): Unit =
+  def requireSubtype(t1: ValueType, t2: ValueType, errorContext: ErrorContext): Unit =
     given Polarity = Covariant;
     unifyValueTypes(
       substitution.substitute(t1),
-      substitution.substitute(t2))
+      substitution.substitute(t2),
+      errorContext)
 
-  def requireEqual(t1: ValueType, t2: ValueType): Unit =
-    given Polarity = Invariant;
-    unifyValueTypes(
-      substitution.substitute(t1),
-      substitution.substitute(t2))
-
-  def requireSubtype(t1: BlockType, t2: BlockType): Unit =
+  def requireSubtype(t1: BlockType, t2: BlockType, errorContext: ErrorContext): Unit =
     given Polarity = Covariant;
     unifyBlockTypes(
       substitution.substitute(t1),
-      substitution.substitute(t2))
+      substitution.substitute(t2),
+      errorContext)
 
   def requireSubregion(c1: Captures, c2: Captures): Unit = requireSubregionWithout(c1, c2, Set.empty)
 
   def join(tpes: ValueType*): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, Covariant) }
+    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.MergeLowerBounds()) }
 
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture]): Unit =
     requireSubregionWithout(lower, upper, filter.toSet)
@@ -222,46 +218,47 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   // ----------------------
 
   def abort(msg: String) = C.abort(msg)
+  def abort(msg: String, ctx: ErrorContext) = C.abort(ErrorContext.explainInContext(msg, ctx))
 
   def error(msg: String) = C.error(msg)
-
+  def error(msg: String, ctx: ErrorContext) = C.error(ErrorContext.explainInContext(msg, ctx))
+  def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = C.error(ErrorContext.explainMismatch(left, right, ctx))
 
   def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
     requireLowerBound(x, tpe)
     requireUpperBound(x, tpe)
 
   def requireLowerBound(x: UnificationVar, tpe: ValueType) =
-    given Polarity = Invariant
-    constraints.learn(x, tpe)(unifyValueTypes)
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant()))
 
   def requireUpperBound(x: UnificationVar, tpe: ValueType) =
-    given Polarity = Invariant
-    constraints.learn(x, tpe)(unifyValueTypes)
+    // Maybe we can provide more error context here?
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant()))
 
-  def mergeCaptures(oldBound: Captures, newBound: Captures, polarity: Polarity): Captures = (oldBound, newBound, polarity) match {
+  def mergeCaptures(oldBound: Captures, newBound: Captures, ctx: ErrorContext): Captures = (oldBound, newBound, ctx.polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)
     case (CaptureSet(xs), CaptureSet(ys), Contravariant) => CaptureSet(xs union ys)
-    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(pp"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}")
+    case (CaptureSet(xs), CaptureSet(ys), Invariant) => if (xs == ys) oldBound else abort(pp"Capture set ${CaptureSet(xs)} is not equal to ${CaptureSet(ys)}", ctx)
     case (x: CaptUnificationVar, CaptureSet(ys), p) if ys.isEmpty => x
     case (CaptureSet(xs), y: CaptUnificationVar, p) if xs.isEmpty => y
-    case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), p)
-    case (CaptureSet(xs), y: CaptUnificationVar, p) => mergeCaptures(xs.toList, List(y), p)
-    case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), p)
+    case (x: CaptUnificationVar, CaptureSet(ys), p) => mergeCaptures(ys.toList, List(x), ctx)
+    case (CaptureSet(xs), y: CaptUnificationVar, p) => mergeCaptures(xs.toList, List(y), ctx)
+    case (x: CaptUnificationVar, y: CaptUnificationVar, p) => mergeCaptures(Nil, List(x, y), ctx)
   }
 
-  def mergeCaptures(cs: List[Captures], polarity: Polarity): CaptUnificationVar =
+  def mergeCaptures(cs: List[Captures], ctx: ErrorContext): CaptUnificationVar =
     val (concrete, variables) = cs.partitionMap {
       case CaptureSet(xs) => Left(xs)
       case x: CaptUnificationVar => Right(x)
     }
-    mergeCaptures(concrete.flatten, variables, polarity)
+    mergeCaptures(concrete.flatten, variables, ctx)
 
    /**
    * Should create a fresh unification variable bounded by the given captures
    */
-  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], polarity: Polarity): CaptUnificationVar =
+  def mergeCaptures(concreteBounds: List[Capture], variableBounds: List[CaptUnificationVar], ctx: ErrorContext): CaptUnificationVar =
     val newVar = freshCaptVar(CaptUnificationVar.Substitution())
-    polarity match {
+    ctx.polarity match {
       case Covariant =>
         constraints.requireLower(concreteBounds.toSet, newVar)
         variableBounds.foreach { b => constraints.connect(b, newVar, Set.empty) }
@@ -318,7 +315,7 @@ trait TypeInstantiator { self: Unification =>
     val remaining = (concreteCapture -- captureParams).toList
 
     // TODO do we need to respect the polarity here? Maybe wellformedness should exclude captures in negative position?
-    mergeCaptures(CaptureSet(remaining) :: contained.toList.map { p => captureInstantiations(p) }, Covariant)
+    mergeCaptures(CaptureSet(remaining) :: contained.toList.map { p => captureInstantiations(p) }, ErrorContext.MergeLowerBounds())
 
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {
