@@ -116,7 +116,7 @@ trait TypeUnifier {
       (vparams1 zip substVParams2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
       (bparams1 zip substBParams2) foreach { case (t1, t2) => unifyBlockTypes(t1, t2, ErrorContext.FunctionArgument(f1, f2, ctx)) }
 
-      unifyValueTypes(ret1, substRet2, ctx)
+      unifyValueTypes(ret1, substRet2, ErrorContext.FunctionReturn(ctx))
 
       // We compare effects to be equal, since we do not have subtyping on effects
       // TODO verify that a different ordering doesn't interact badly with capture polymorphism

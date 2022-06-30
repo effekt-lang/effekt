@@ -1,6 +1,11 @@
 [error] examples/neg/lambdas/inference.effekt:13:8: Expected Boolean but got Unit
+  comparing the argument types of
+    Int => Unit at {} => String (given)
+    Int => Boolean at {} => String (expected)
+  when comparing the return type of the function.
   hof2(fun(f: (Int) => Unit at {}) { "" })
        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-[error] examples/neg/lambdas/inference.effekt:13:12: Expected Unit but got Boolean
+[error] examples/neg/lambdas/inference.effekt:13:12: Type Int => Unit at {} does not match the declared type Int => Boolean at {}.
+  when comparing the return type of the function.
   hof2(fun(f: (Int) => Unit at {}) { "" })
            ^^^^^^^^^^^^^^^^^^^^^^

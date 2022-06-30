@@ -37,6 +37,28 @@ object ErrorContext {
   case class FunctionReturn(outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
   case class FunctionEffects(outer: ErrorContext) extends InvariantContext
 
-  def explainMismatch(tpe1: symbols.Type, tpe2: symbols.Type, ctx: ErrorContext): String = pp"Expected $tpe2 but got $tpe1"
-  def explainInContext(msg: String, ctx: ErrorContext): String = msg
+  // TODO defer rendering of error messages to Context
+  def explainMismatch(tpe1: symbols.Type, tpe2: symbols.Type, outerCtx: ErrorContext): String =
+
+    def go(ctx: ErrorContext): String = ctx match {
+
+      case Expected(tree) => pp"Expected $tpe2 but got $tpe1"
+      case PatternMatch(pattern) => pp"Pattern expected $tpe2 but scrutinee has type $tpe1"
+      case Declaration(param, declared, defined) => pp"Type $defined does not match the declared type $declared."
+
+      case MergeLowerBounds() | MergeUpperBounds() | MergeInvariant() => pp"Trying to merge the two types $tpe1 and $tpe2"
+
+      case BoxedTypeBlock(left, right, outer) => go(outer)
+      case BoxedTypeCapture(left, right, outer) => go(outer)
+      case FunctionArgument(left, right, outer) =>
+        go(outer) + pp"\n  comparing the argument types of\n    ${left} (given)\n    ${right} (expected)"
+      case FunctionReturn(outer) => go(outer) + pp"\n  when comparing the return type of the function."
+      case FunctionEffects(outer) => go(outer)
+      case TypeConstructor(outer) => go(outer)
+      case TypeConstructorArgument(outer) => go(outer)
+    }
+    go(outerCtx)
+
+  def explainInContext(msg: String, ctx: ErrorContext): String =
+    msg
 }
