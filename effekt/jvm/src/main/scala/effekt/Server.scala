@@ -77,19 +77,19 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     }
   }
 
-  override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] = Some(for {
-    // TODO the following two statements should be swapped. Currently, this causes a
-    //  cache lookup and a fingerprint for each symbol that we compiled.
-    sym <- context.sourceSymbols
-    currentMod <- context.runFrontend(source)(context)
-    if !sym.synthetic
-    mod = context.sourceModuleOf(sym)
-    if currentMod == mod
-    id <- context.definitionTreeOption(sym)
-    decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
-    kind <- getSymbolKind(sym)
-    detail <- getInfoOf(sym)(context)
-  } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header))
+  override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
+    val currentMod = context.runFrontend(source)(context)
+    val documentSymbols = for {
+      sym <- context.sourceSymbols
+      if !sym.synthetic
+      mod = context.sourceModuleOf(sym)
+      if currentMod == mod
+      id <- context.definitionTreeOption(sym)
+      decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
+      kind <- getSymbolKind(sym)
+      detail <- getInfoOf(sym)(context)
+    } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header)
+    Some(documentSymbols)
 
   override def getReferences(position: Position, includeDecl: Boolean): Option[Vector[Tree]] =
     for {
