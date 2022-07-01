@@ -119,12 +119,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       case source.Var(id) => id.symbol match {
         case x: VarBinder => Context.lookup(x) match {
-          case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
+          case (btpe, capt) =>
+            val vtpe = TState.extractType(btpe)
             usingCapture(capt)
-            Result(tpe, Pure)
-          case _ => Context.panic("Builtin state cannot be typed.")
+            Result(vtpe, Pure)
         }
-
         case b: BlockSymbol => insertBoxing(expr, expected)
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
       }
@@ -132,10 +131,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case e @ source.Assign(id, expr) => e.definition match {
         case x: VarBinder =>
           val stTpe = Context.lookup(x) match {
-            case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
+            case (btpe, capt) =>
               usingCapture(capt)
-              tpe
-            case _ => Context.panic("Builtin state cannot be typed.")
+              TState.extractType(btpe)
           }
           val Result(_, eff) = expr checkAgainst stTpe
           Result(TUnit, eff)
