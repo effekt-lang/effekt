@@ -1,6 +1,10 @@
-package effekt.symbols
+package effekt
+package symbols
 
 import effekt.source.ModuleDecl
+import effekt.context.Context
+import effekt.symbols.ErrorMessageInterpolator
+
 import kiama.util.StringSource
 
 /**
@@ -35,6 +39,12 @@ object builtins {
     val get = Operation(name("get"), Nil, Nil, S, Effects.Pure, interface)
     val put = Operation(name("put"), Nil, List(ValueParam(Name.local("s"), Some(S))), TUnit, Effects.Pure, interface)
     interface.ops = List(get, put)
+
+    def extractType(state: BlockType)(using C: Context): ValueType =
+      state match {
+        case BlockTypeApp(i, List(tpe)) => tpe
+        case tpe => C.panic(pp"Expected builtin state, but got $tpe")
+      }
   }
 
   val TRegion = Interface(Name.local("Region"), Nil, Nil)
