@@ -117,7 +117,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(_, bodyEffs) = body checkAgainst TUnit
         Result(TUnit, condEffs ++ bodyEffs)
 
-      // TODO the variable now can also be a block variable
       case source.Var(id) => id.symbol match {
         case x: VarBinder => Context.lookup(x) match {
           case (BlockTypeApp(TState.interface, List(tpe)), capt) =>
@@ -264,17 +263,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.error("Duplicate definitions of effect operations")
 
             h.clauses foreach Context.withFocus {
-              case d @ source.OpClause(op, params, body, resume) =>
+              case d @ source.OpClause(op, tparams, params, body, resume) =>
                 val declaration = d.definition
 
                 val declaredType = Context.lookupFunctionType(declaration)
 
                 // Create fresh type parameters for existentials.
-                // TODO they could be annotated!
                 //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
                 // The parameters C, D, ... are existentials
-                val existentials: List[TypeVar] = declaredType.tparams.drop(targs.size).map { r => TypeVar(r.name) }
-                Context.annotate(Annotations.TypeParameters, d, existentials)
+                val existentials: List[TypeVar] = tparams.map(_.symbol.asTypeVar)
+
+                val expectedTypeParams = declaredType.tparams.size - targs.size
+
+                if (existentials.size != expectedTypeParams)
+                  Context.error(pp"Number of type parameters (${existentials.size}) does not match declaration of ${op.name} ($expectedTypeParams).")
 
                 // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
                 // of bidirectional effects and capture polymorphism (still has to be tested).

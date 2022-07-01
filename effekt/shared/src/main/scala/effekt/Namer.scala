@@ -326,7 +326,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(effect) { extractControlEffect(resolve(effect)) }
 
       clauses.foreach {
-        case source.OpClause(op, params, body, resumeId) =>
+        case source.OpClause(op, tparams, params, body, resumeId) =>
 
           // try to find the operation in the handled effect:
           eff.ops.find { o => o.name.toString == op.name } map { opSym =>
@@ -334,10 +334,10 @@ object Namer extends Phase[Parsed, NameResolved] {
           } getOrElse {
             Context.abort(s"Effect operation ${op.name} is not part of effect ${eff}.")
           }
-
-          val ps = params.map(resolve)
+          val tps = tparams.map(resolve)
+          val vps = params.map(resolve)
           Context scoped {
-            Context.bindParams(ps)
+            Context.bindValues(vps)
             Context.define(resumeId, ResumeParam(Context.module))
             resolveGeneric(body)
           }

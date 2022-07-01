@@ -83,7 +83,7 @@ object Wellformedness extends Visit[WFContext] {
         scoped { query(h) }
 
         h.clauses.foreach { cl =>
-          val existentials = Context.annotation(Annotations.TypeParameters, cl)
+          val existentials = cl.tparams.map(_.symbol.asTypeVar)
           existentials.foreach { t =>
             if (typesInEffects.contains(t)) {
               Context.error(pp"Type variable ${t} escapes its scope as part of the effect types: ${usedEffects}")

@@ -63,19 +63,19 @@ def eager[R] { p: => R / { Flip, Fail, Error } }: ParseResult[R] = try {
         case Success(res) => Success(res)
         case ParseError(msg) => ParseError(msg)
     }
-} with Fail { (msg) =>
+} with Fail[A] { (msg) =>
     Failure(msg)
-} with Error { (msg) =>
+} with Error[A] { (msg) =>
     ParseError(msg)
 }
 
 def commit[R] { p : => R / Fail } : R / Error =
-  try { p() } with Fail { (msg) =>
+  try { p() } with Fail[A] { (msg) =>
     do Error(msg)
   }
 
 def nocut[R] { p: => R / Error } : R / Fail =
-  try { p() } with Error { (msg) =>
+  try { p() } with Error[A] { (msg) =>
      do Fail(msg)
   }
 

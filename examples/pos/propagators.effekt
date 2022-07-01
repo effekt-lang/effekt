@@ -99,11 +99,11 @@ def propagators { net: => Unit / Net }: Unit / Console = {
     subs.foreach { k => enqueue { k.apply(value) }}
 
   try { net(); run() } with Net {
-    def unknown() =
+    def unknown[R]() =
       resume(fresh((None(), Nil())))
-    def make(value) =
+    def make[R](value) =
       resume(fresh((Some(value), Nil())))
-    def learn(cell)(value) = (cell.get) match {
+    def learn[A](cell)(value) = (cell.get) match {
       case (None(), k) =>
         // update network with new information
         cell.put((Some(value), Nil()));
@@ -121,7 +121,7 @@ def propagators { net: => Unit / Net }: Unit / Console = {
         ()
       }
     }
-    def subscribe(cell) = (cell.get) match {
+    def subscribe[A](cell) = (cell.get) match {
       case (None(), k) =>
         cell.put((None(), Cons(cont { a => resume(Some(a)); }, k)))
         resume(None())

@@ -84,7 +84,7 @@ trait TypeUnifier {
     case (e1, e2) if e1 == e2 => ()
     case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
       (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
-    case _ => error(pp"Mismatch between ${eff1} and ${eff2}", ctx)
+    case _ => error(eff1, eff2, ctx)
   }
 
   def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =

@@ -84,7 +84,7 @@ def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
       Cons(MkWeighted(current, res), empty)
     } with Score { p => current = current * p; resume(()) }
   } with Fork { () => concat(resume(true), resume(false)) }
-    with Fail { () => empty }
+    with Fail[A] { () => empty }
 }
 
 def fresh(): Ref / Heap = do empty(Unobserved())
@@ -156,7 +156,7 @@ def heapTest() = heap {
 
 def catch[R] { p: => R / IndexOutOfBounds }: Unit / Console =
   try { p(); () }
-  with IndexOutOfBounds { () => println("Index out of bounds!") }
+  with IndexOutOfBounds[A] { () => println("Index out of bounds!") }
 
 def main() = {
   val res = handleProb {

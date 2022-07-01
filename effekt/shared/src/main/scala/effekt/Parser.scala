@@ -262,16 +262,21 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val funDef: P[Def] =
-    `def` ~/> idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful).? ~ ( `=` ~/> stmt) ^^ {
+    `def` ~/> idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful).? ~ (`=` ~/> functionBody) ^^ {
       case id ~ tparams ~ (vparams ~ bparams) ~ eff ~ body => FunDef(id, tparams, vparams, bparams, eff, body)
     }
+
+  lazy val functionBody: P[Stmt] =
+    ( stmt
+    | failure("Expected the body of a function definition, starting with =")
+    )
 
   lazy val effectDef: P[Def] =
     ( `effect` ~> effectOp ^^ {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> some(`def` ~> effectOp)  <~ `}`) ^^ {
+    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
@@ -523,17 +528,17 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         val capability = capabilityName map { name => BlockParam(name, effect) }
         Handler(effect, capability, clauses)
       }
-    | `with` ~> (idDef <~ `:`).? ~ interfaceType ~ implicitResume ~ functionArg ^^ {
-      case capabilityName ~ effect ~ resume ~ FunctionArg(_, vparams, _, body) =>
+    | `with` ~> (idDef <~ `:`).? ~ (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
+      case capabilityName ~ effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
         val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, List(OpClause(synthesizedId, vparams, body, resume) withPositionOf effect))
+        Handler(effect, capability, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
       }
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ valueParamsOpt ~ implicitResume ~ (`=` ~/> stmt) ^^ {
-      case id ~ params ~ resume ~ body => OpClause(id, params, body, resume)
+    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ implicitResume ~ (`=` ~/> functionBody)  ^^ {
+      case id ~ tparams ~ vparams ~ resume ~ body => OpClause(id, tparams, vparams, body, resume)
     }
 
   lazy val clause: P[MatchClause] =

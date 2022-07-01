@@ -228,7 +228,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
-            case op @ source.OpClause(id, vps, body, resume) =>
+            case op @ source.OpClause(id, tps, vps, body, resume) =>
               val ps = vps map transform
 
               // introduce a block parameter for resume

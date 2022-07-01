@@ -136,10 +136,10 @@ object Elaboration extends Phase[Typechecked, Typechecked] with Rewrite {
           case h @ Handler(eff, _, clauses) =>
             val cls = clauses.map { cl =>
               visit(cl) {
-                case OpClause(id, params, body, resume: IdDef) =>
+                case OpClause(id, tparams, params, body, resume: IdDef) =>
 
                   // OpClause also binds a block parameter for resume, which is _not_ annotated here
-                  OpClause(id, params, rewrite(body), resume)
+                  OpClause(id, tparams, params, rewrite(body), resume)
               }
             }
 

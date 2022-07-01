@@ -131,14 +131,6 @@ object Annotations {
   )
 
   /**
-   * Type parameters of a _method definition_ or a _match_ as inferred by typer
-   */
-  val TypeParameters = Annotation[source.OpClause, List[symbols.TypeVar]](
-    "TypeParameters",
-    "the inferred or annotated type parameters of"
-  )
-
-  /**
    * Value type of symbols like value binders or value parameters
    */
   val ValueType = Annotation[symbols.ValueSymbol, symbols.ValueType](

@@ -100,7 +100,7 @@ def memo[R] { prog: => R / { Need } }: R / { Need } = {
     } with Need { (key) =>
         try {
             resume(find(store, key))
-        } with KeyNotFound { (k) =>
+        } with KeyNotFound[A] { (k) =>
             val v = do Need(k);
             store = Cons((k, v), store);
             resume(v)
@@ -147,6 +147,6 @@ def main() = {
         println("");
         val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
         println(result3)
-    } with KeyNotFound { (key) => println("Key not found: " ++ key) }
+    } with KeyNotFound[A] { (key) => println("Key not found: " ++ key) }
 }
 ```

@@ -208,8 +208,8 @@ def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
   }
-  def fail(msg) = Failure(msg)
-} with LexerError { (msg, pos) =>
+  def fail[A](msg) = Failure(msg)
+} with LexerError[A] { (msg, pos) =>
   Failure(msg)
 }
 ```

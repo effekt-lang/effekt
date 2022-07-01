@@ -269,7 +269,7 @@ a handler for `LayoutChoice` that searches for the first successful layout:
 def searchLayout[R] { p : => R / LayoutChoice }: Option[R] =
   try { Some(p()) }
   with LayoutChoice {
-    def fail() = None()
+    def fail[A]() = None()
     def choice() = resume(Horizontal()).orElse { resume(Vertical()) }
   }
 ```
