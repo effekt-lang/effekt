@@ -125,38 +125,41 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    * Checks whether t1 <: t2
    *
    * Has the side effect of registering constraints.
-   *
-   * TODO Covariant might not be the right polarity
    */
   def requireSubtype(t1: ValueType, t2: ValueType, errorContext: ErrorContext): Unit =
-    given Polarity = Covariant;
     unifyValueTypes(
       substitution.substitute(t1),
       substitution.substitute(t2),
       errorContext)
 
   def requireSubtype(t1: BlockType, t2: BlockType, errorContext: ErrorContext): Unit =
-    given Polarity = Covariant;
     unifyBlockTypes(
       substitution.substitute(t1),
       substitution.substitute(t2),
       errorContext)
 
-  def requireSubregion(c1: Captures, c2: Captures): Unit = requireSubregionWithout(c1, c2, Set.empty)
+  def requireSubregion(c1: Captures, c2: Captures)(using C: Context): Unit =
+    requireSubregion(c1, c2, ErrorContext.CaptureFlow(c1, c2, C.focus))
+
+  def requireSubregion(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = requireSubregionWithout(c1, c2, Set.empty, ctx)
 
   def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.MergeLowerBounds()) }
 
-  def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture]): Unit =
-    requireSubregionWithout(lower, upper, filter.toSet)
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture])(using C: Context): Unit =
+    requireSubregionWithout(lower, upper, filter.toSet, ErrorContext.CaptureFlow(lower, upper, C.focus))
 
-  def requireSubregionWithout(lower: Captures, upper: Captures, filter: Set[Capture]): Unit =
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture], ctx: ErrorContext): Unit =
+    requireSubregionWithout(lower, upper, filter.toSet, ctx)
+
+  def requireSubregionWithout(lower: Captures, upper: Captures, filter: Set[Capture], ctx: ErrorContext): Unit =
     if (lower == CaptureSet()) return;
     if (lower == upper) return;
     (lower, upper) match {
       case (CaptureSet(lows), CaptureSet(ups)) =>
-        val notAllowed = (ups ++ filter) -- lows
-        if (notAllowed.nonEmpty) abort(pp"The following captures are not allowed: ${CaptureSet(notAllowed)}")
+        val notAllowed = lows -- (ups ++ filter)
+        if (notAllowed.nonEmpty)
+          error(pp"The following captures are not allowed: ${CaptureSet(notAllowed)}", ctx)
       case (x: CaptUnificationVar, y: CaptUnificationVar) =>
         constraints.connect(x, y, filter)
       case (x: CaptUnificationVar, CaptureSet(cs)) =>
@@ -224,16 +227,15 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
   def error(msg: String, ctx: ErrorContext) = C.error(ErrorContext.explainInContext(msg, ctx))
   def error(left: symbols.Type, right: symbols.Type, ctx: ErrorContext) = C.error(ErrorContext.explainMismatch(left, right, ctx))
 
-  def requireEqual(x: UnificationVar, tpe: ValueType): Unit =
-    requireLowerBound(x, tpe)
-    requireUpperBound(x, tpe)
+  def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit =
+    requireLowerBound(x, tpe, ctx)
+    requireUpperBound(x, tpe, ctx)
 
-  def requireLowerBound(x: UnificationVar, tpe: ValueType) =
-    constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant()))
+  def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
-  def requireUpperBound(x: UnificationVar, tpe: ValueType) =
-    // Maybe we can provide more error context here?
-    constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant()))
+  def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext) =
+    constraints.learn(x, tpe)((tpe1, tpe2) => unifyValueTypes(tpe1, tpe2, ErrorContext.MergeInvariant(ctx)))
 
   def mergeCaptures(oldBound: Captures, newBound: Captures, ctx: ErrorContext): Captures = (oldBound, newBound, ctx.polarity) match {
     case (CaptureSet(xs), CaptureSet(ys), Covariant) => CaptureSet(xs intersect ys)

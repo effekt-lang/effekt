@@ -27,7 +27,7 @@ object builtins {
   val IOCapability = BuiltinCapability(name("io"), IOEffect)
 
   val ControlEffect = BuiltinEffect(name("Control"), Nil)
-  val ControlCapablity = BuiltinCapability(name("control"), ControlEffect)
+  val ControlCapability = BuiltinCapability(name("control"), ControlEffect)
 
   object TState {
     val S = TypeVar(Name.local("S"))
@@ -54,6 +54,6 @@ object builtins {
 
   val rootCaptures: Map[String, Capture] = Map(
     "io" -> IOCapability.capture,
-    "control" -> ControlCapablity.capture
+    "control" -> ControlCapability.capture
   )
 }

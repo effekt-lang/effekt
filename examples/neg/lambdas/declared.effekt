@@ -1,0 +1,20 @@
+
+def foo { f: (Int) => String }: Unit = ()
+
+// def bar { f: (Boolean) => Int }: Unit = foo { (x: Boolean) => f(x) }
+
+
+effect Yield { def yield(): Unit }
+effect Console { def println(msg: String): Unit }
+effect Time { def now(): Int }
+
+def myModule {console: Console} {time: Time}: Unit = {
+  def myFun { f: (Yield at {console}) => Unit }: Unit = ();
+  //myFun { (x: Yield at {}) => () }; // ERROR
+  myFun { (x: Yield at {console}) => () }; // OK
+  myFun { (x: Yield at {time, console}) => () }; // OK
+  myFun { (x: Yield at {time}) => () }; // ERROR
+  ()
+}
+
+def main() = ()

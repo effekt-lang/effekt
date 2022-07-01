@@ -25,9 +25,12 @@ object ErrorContext {
    */
   case class Declaration(param: source.Param, declared: symbols.Type, defined: symbols.Type) extends NegativeContext
 
+
+  case class CaptureFlow(from: symbols.Captures, to: symbols.Captures, checkedTree: source.Tree) extends PositiveContext
+
   case class MergeLowerBounds() extends PositiveContext
   case class MergeUpperBounds() extends NegativeContext
-  case class MergeInvariant() extends InvariantContext
+  case class MergeInvariant(outer: ErrorContext) extends InvariantContext
 
   case class TypeConstructor(outer: ErrorContext) extends InvariantContext
   case class TypeConstructorArgument(outer: ErrorContext) extends InvariantContext
@@ -46,7 +49,11 @@ object ErrorContext {
       case PatternMatch(pattern) => pp"Pattern expected $tpe2 but scrutinee has type $tpe1"
       case Declaration(param, declared, defined) => pp"Type $defined does not match the declared type $declared."
 
-      case MergeLowerBounds() | MergeUpperBounds() | MergeInvariant() => pp"Trying to merge the two types $tpe1 and $tpe2"
+      // This case should not occur.
+      case CaptureFlow(from, to, tree) => sys error "Internal error"
+
+      case MergeLowerBounds() | MergeUpperBounds() => pp"Trying to merge the two types $tpe1 and $tpe2"
+      case MergeInvariant(outer) => go(outer)
 
       case BoxedTypeBlock(left, right, outer) => go(outer)
       case BoxedTypeCapture(left, right, outer) => go(outer)

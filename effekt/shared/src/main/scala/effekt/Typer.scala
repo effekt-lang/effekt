@@ -302,7 +302,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                     val annotType = sym.tpe
                     annotType.foreach { t => Context.at(param) {
                       // Here we are contravariant: declared types have to be subtypes of the actual types
-                      Context.requireSubtype(decl, t, ErrorContext.Declaration(param, decl, t))
+                      Context.requireSubtype(t, decl, ErrorContext.Declaration(param, decl, t))
                     }}
                     Context.bind(sym, annotType.getOrElse(decl))
                 }
@@ -510,7 +510,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val cap = pure match {
         case effekt.source.ExternFlag.Pure => CaptureSet.empty
         case effekt.source.ExternFlag.IO => CaptureSet(builtins.IOCapability.capture)
-        case effekt.source.ExternFlag.Control => CaptureSet(builtins.ControlCapablity.capture)
+        case effekt.source.ExternFlag.Control => CaptureSet(builtins.ControlCapability.capture)
       }
 
       Context.bind(fun, fun.toType, cap)
@@ -774,7 +774,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, expected) =>
           val adjusted = typeSubst substitute expected
           val tpe = param.symbol.tpe.map { got =>
-              Context.at(param) { Context.requireSubtype(adjusted, got, ErrorContext.Declaration(param, adjusted, got)) }
+              Context.at(param) { Context.requireSubtype(got, adjusted, ErrorContext.Declaration(param, adjusted, got)) }
               got
           } getOrElse { adjusted }
           // bind types to check body
@@ -787,7 +787,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
           val got = sym.tpe
-          Context.at(param) { Context.requireSubtype(adjusted, got, ErrorContext.Declaration(param, adjusted, got)) }
+          Context.at(param) { Context.requireSubtype(got, adjusted, ErrorContext.Declaration(param, adjusted, got)) }
           // bind types to check body
           Context.bind(param.symbol, got)
           got
@@ -1022,10 +1022,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case List((sym, errs)) =>
         val msg = errs.head
         val msgs = errs.tail
-        Context.buffer.append(msgs)
+        Context.reraise(msgs)
         // reraise and abort
         // TODO clean this up
-        Context.at(msg.value.asInstanceOf[Tree]) { Context.abort(msg.label) }
+        Context.at(msg.value.asInstanceOf[Tree]) {
+          Context.abort(msg.label)
+        }
 
       case failed =>
         // reraise all and abort

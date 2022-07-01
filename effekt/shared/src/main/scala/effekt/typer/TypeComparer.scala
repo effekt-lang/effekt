@@ -12,20 +12,20 @@ import effekt.typer.ErrorContext.FunctionEffects
  */
 trait TypeUnifier {
   // "unification effects"
-  def requireLowerBound(x: UnificationVar, tpe: ValueType): Unit
-  def requireUpperBound(x: UnificationVar, tpe: ValueType): Unit
-  def requireEqual(x: UnificationVar, tpe: ValueType): Unit
+  def requireLowerBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireUpperBound(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
+  def requireEqual(x: UnificationVar, tpe: ValueType, ctx: ErrorContext): Unit
 
-  def requireSubregion(lower: Captures, upper: Captures): Unit
+  def requireSubregion(lower: Captures, upper: Captures, ctx: ErrorContext): Unit
 
   def abort(msg: String, ctx: ErrorContext): Nothing
   def error(msg: String, ctx: ErrorContext): Unit
   def error(left: Type, right: Type, ctx: ErrorContext): Unit
 
   def unify(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = ctx.polarity match {
-    case Covariant     => requireSubregion(c1, c2)
-    case Contravariant => requireSubregion(c2, c1)
-    case Invariant     => requireSubregion(c1, c2); requireSubregion(c2, c1)
+    case Covariant     => requireSubregion(c1, c2, ctx)
+    case Contravariant => requireSubregion(c2, c1, ctx)
+    case Invariant     => requireSubregion(c1, c2, ctx); requireSubregion(c2, c1, ctx)
   }
   def unify(c1: Capture, c2: Capture, ctx: ErrorContext): Unit = unify(CaptureSet(Set(c1)), CaptureSet(Set(c2)), ctx)
 
@@ -38,14 +38,14 @@ trait TypeUnifier {
     case (TTop, _, Contravariant) => ()
     case (_, TBottom, Contravariant) => ()
 
-    case (s: UnificationVar, t: ValueType, Covariant) => requireUpperBound(s, t)
-    case (s: ValueType, t: UnificationVar, Covariant) => requireLowerBound(t, s)
+    case (s: UnificationVar, t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
+    case (s: ValueType, t: UnificationVar, Covariant) => requireLowerBound(t, s, ctx)
 
-    case (s: UnificationVar, t: ValueType, Contravariant) => requireLowerBound(s, t)
-    case (s: ValueType, t: UnificationVar, Contravariant) => requireUpperBound(t, s)
+    case (s: UnificationVar, t: ValueType, Contravariant) => requireLowerBound(s, t, ctx)
+    case (s: ValueType, t: UnificationVar, Contravariant) => requireUpperBound(t, s, ctx)
 
-    case (s: UnificationVar, t: ValueType, Invariant) => requireEqual(s, t)
-    case (s: ValueType, t: UnificationVar, Invariant) => requireEqual(t, s)
+    case (s: UnificationVar, t: ValueType, Invariant) => requireEqual(s, t, ctx)
+    case (s: ValueType, t: UnificationVar, Invariant) => requireEqual(t, s, ctx)
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
