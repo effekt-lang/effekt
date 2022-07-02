@@ -230,16 +230,4 @@ trait TypeMerger extends TypeUnifier {
 
       FunctionType(tparams1, cparams1, mergedVps, mergedBps, mergedRet, eff1)
   }
-
-  /**
-   * Compute the join of two types
-   */
-  def mergeLower(oldBound: ValueType, newBound: ValueType): ValueType =
-    mergeValueTypes(oldBound, newBound, ErrorContext.MergeLowerBounds())
-
-  /**
-   * Compute the meet of two types
-   */
-  def mergeUpper(oldBound: ValueType, newBound: ValueType): ValueType =
-    mergeValueTypes(oldBound, newBound, ErrorContext.MergeUpperBounds())
 }

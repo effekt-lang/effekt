@@ -144,6 +144,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   def requireSubregion(c1: Captures, c2: Captures, ctx: ErrorContext): Unit = requireSubregionWithout(c1, c2, Set.empty, ctx)
 
+  /**
+   * Computes the join of all types, only called to merge the different arms of if and match
+   */
   def join(tpes: ValueType*): ValueType =
     tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.MergeLowerBounds()) }
 
