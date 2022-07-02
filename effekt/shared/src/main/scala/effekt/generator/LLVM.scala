@@ -170,32 +170,34 @@ ${asFragment(terminator)}
   def toDoc(bb: BasicBlock)(implicit C: LLVMContext): Doc = asFragment(bb)
 
 
-
-  def toDoc(instruction: Instruction)(implicit C: LLVMContext): Doc = instruction match {
+  def toDoc(instruction: Instruction)(implicit C: LLVMContext): LLVMFragment = instruction match {
     case Call(name, returnType, blockName, args) =>
         s"${localName(name)} = call fastcc ${asFragment(returnType)} ${globalName(blockName)}(${commaSeparated(args.map(fromMachineValueWithAnnotatedType))})"
 
-    case Phi(machine.Param(typ, name), args) => {
+    case Phi(machine.Param(typ, name), args) =>
       val arg2s = args.toList.map { case (label, value: machine.Value) => s"[${asFragment(value)}, ${localName(label)}]" }
       s"${localName(name)} = phi ${asFragment(typ)} ${commaSeparated(arg2s)}"
-    }
 
     case InsertValues(name, typ, args) =>
       insertAllValues(localName(name), asFragment(typ), args.map(fromMachineValueWithAnnotatedType))
 
     case ExtractValue(name, target, field) =>
-      localName(name) <+> "=" <+>
-        "extractvalue" <+> fromMachineValueWithAnnotatedType(target) <> comma <+> field.toString
+      s"${localName(name)} = extractvalue ${fromMachineValueWithAnnotatedType(target)}, $field"
+
     case Inject(name, typ, arg, variant) =>
       val tmpCons = freshLocalName("tmpcons")
       val argDocWithType = correspondingType(arg) match {
         case PrimUnit() => fromMachineValueWithAnnotatedType(new machine.UnitLit)
         case _          => fromMachineValueWithAnnotatedType(arg)
       }
-      tmpCons <+> "=" <+> "insertvalue" <+> asFragment(typ) <+> "undef," <+> argDocWithType <> "," <+> (variant + 1).toString <@>
-        s"${localName(name)} =  insertvalue ${asFragment(typ)} $tmpCons, i64 ${variant.toString}, 0"
+      s"""
+$tmpCons = insertvalue ${asFragment(typ)} undef, $argDocWithType, ${variant + 1}
+${localName(name)} = insertvalue ${asFragment(typ)} $tmpCons, i64 ${variant.toString}, 0
+"""
+
     case PushFrame(cntType, blockName, freeVars) =>
       storeFrm("%spp", freeVars, globalName(blockName), cntType)
+
     case NewStack(cntType, stackName, blockName, args) =>
       val tmpstkp = freshLocalName("tempstkp")
       s"""
@@ -206,8 +208,10 @@ ${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %s
 """
 
     // TODO Why is this so assymmetric (`PushStack(stack)` vs. `PopStack(stackName)`)?
-    case PushStack(stack) => s"""call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(fromMachineValueWithAnnotatedType(stack))})"""
-    case PopStack(stackName) => s"""${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)"""
+    case PushStack(stack) =>
+        s"call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(fromMachineValueWithAnnotatedType(stack))})"
+    case PopStack(stackName) =>
+        s"${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)"
 
     case CopyStack(stackName, stack) =>
       s"${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("copyStack")}(${fromMachineValueWithAnnotatedType(stack)})"
@@ -220,15 +224,13 @@ ${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %s
       s"${localName(eviName)} = add ${fromMachineValueWithAnnotatedType(evi1)}, ${asFragment(evi2)}"
 
     case EviDecr(eviName, evi) =>
-      localName(eviName) <+> "=" <+>
-        "sub" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "1"
+      s"${localName(eviName)} = sub ${fromMachineValueWithAnnotatedType(evi)}, 1"
+
     case EviIsZero(condName, evi) =>
-      localName(condName) <+> "=" <+>
-        "icmp eq" <+> fromMachineValueWithAnnotatedType(evi) <> comma <+> "0"
+      s"${localName(condName)} = icmp eq ${fromMachineValueWithAnnotatedType(evi)}, 0"
   }
 
   def asFragment(terminator: Terminator)(implicit C: LLVMContext): LLVMFragment = terminator match {
-
     case Ret(values) =>
       // TODO spill arguments to stack (like with jump)
       val newsp = freshLocalName("newsp")
@@ -265,7 +267,6 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
 
   def fromMachineValueWithAnnotatedType(value: machine.Value)(implicit C: LLVMContext): LLVMFragment =
     s"${asFragment(correspondingType(value))} ${asFragment(value)}"
-
 
   def asFragment(value: machine.Value)(implicit C: LLVMContext): LLVMFragment = value match {
     case machine.Var(typ, name) => s"${localName(name)}"
@@ -327,14 +328,13 @@ ret void
     d2s(storeValues(spp, envType, envValues))
   }
 
-  def loadSpilled(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): Doc = {
+  def loadSpilled(spp: Doc, params: List[machine.Param])(implicit C: LLVMContext): LLVMFragment = {
     params match {
-      case Nil => emptyDoc
+      case Nil =>
+        ""
       case _ =>
-        val envType =
-          envRecordType(params.map(p => asFragment(p.typ)))
-        val envParams =
-          params.map(p => localName(p.id))
+        val envType = envRecordType(params.map(p => asFragment(p.typ)))
+        val envParams = params.map(p => localName(p.id))
         loadParams(d2s(spp), envType, envParams)
     }
   }
@@ -458,12 +458,6 @@ store ${d2s(typ)} ${d2s(value)}, $ptrType $newtypedsp
         throw new Error(s"assertSaneName: $name")
     return true
 
-  def argumentList(args: List[Doc]): Doc =
-    "(" + args.map(d2s).mkString(", ") + ")"
-
-  /**
-   * Extra info in context
-   */
 
   case class LLVMContext() {
     val fresh = new Counter(0)
