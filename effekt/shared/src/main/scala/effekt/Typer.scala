@@ -83,11 +83,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def currentCapture(using capts: Captures) = capts
-
-  def usingCapture(c: Captures)(using C: Context, capts: Captures): Unit =
-    C.requireSubregion(c, capts)
-
   def insertBoxing(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     expr match {
       case source.Var(id) => checkExpr(source.Box(None, source.InterfaceArg(id).inheritPosition(id)).inheritPosition(expr), expected)
@@ -589,8 +584,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
                 Context.annotateInferredType(d, tpe)
                 Context.annotateInferredEffects(d, effs.toEffects)
+
                 // TODO also annotate the capabilities
-                Context.requireSubregionWithout(inferredCapture, functionCapture, annotated.cparams ++ captures ++ List(selfRegion))
+                flowsIntoWithout(inferredCapture, functionCapture) {
+                  annotated.cparams ++ captures ++ List(selfRegion)
+                }
 
                 Result(annotated, effs -- bound)
               case None =>
@@ -612,7 +610,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 Context.annotateInferredEffects(d, effs.toEffects)
 
                 // we subtract all capabilities introduced by this function to compute its capture
-                Context.requireSubregionWithout(inferredCapture, functionCapture, (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion))
+                flowsIntoWithout(inferredCapture, functionCapture) {
+                  (sym.bparams ++ capabilities).map(_.capture) ++ List(selfRegion)
+                }
 
                 // TODO also add capture parameters for inferred capabilities
                 val funType = sym.toType(tpe, effs.toEffects, captures)
@@ -718,7 +718,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
 
         // Like with functions, bound parameters and capabilities are not closed over
-        Context.requireSubregionWithout(inferredCapture, currentCapture, (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion))
+        usingCaptureWithout(inferredCapture) {
+          (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion)
+        }
 
         Result(funType, Pure)
       }
@@ -812,7 +814,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
          Context.withRegion(selfRegion) { body checkAgainst expectedReturn }
       }
 
-      Context.requireSubregionWithout(bodyRegion, currentCapture, captParams ++ List(selfRegion))
+      usingCaptureWithout(bodyRegion) { captParams ++ List(selfRegion) }
 
       val tpe = FunctionType(typeParams, captParams, valueTypes, blockTypes, bodyType, effects.toEffects)
 
@@ -1080,7 +1082,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
 
     (bps zip bargs zip captArgs) foreach { case ((tpe, expr), capt) =>
-      Context.requireSubregion(capt, functionCapture)
+      flowsInto(capt, functionCapture)
       given Captures = capt
       val Result(t, eff) = checkBlockArgument(expr, Some(tpe))
       effs = effs ++ eff
@@ -1107,9 +1109,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val captParams = captArgs.drop(bargs.size)
     (captParams zip capabilities) foreach { case (param, cap) =>
-      Context.requireSubregion(CaptureSet(cap.capture), param)
+      flowsInto(CaptureSet(cap.capture), param)
     }
-
     usingCapture(CaptureSet(capabilities.map(_.capture)))
 
     Result(ret, effs)
@@ -1142,6 +1143,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //</editor-fold>
 
   //<editor-fold desc="Helpers and Extension Methods">
+
+  def currentCapture(using current: Captures) = current
+
+  def usingCapture(c: Captures)(using C: Context, current: Captures): Unit =
+    C.requireSubregion(c, current)
+
+  def usingCaptureWithout(c: Captures)(filter: List[Capture])(using C: Context, current: Captures): Unit =
+    flowsIntoWithout(c, current)(filter)
+
+  def flowsInto(from: Captures, to: Captures)(using C: Context): Unit =
+    C.requireSubregion(from, to)
+
+  def flowsIntoWithout(from: Captures, to: Captures)(filter: List[Capture])(using C: Context): Unit =
+    C.requireSubregionWithout(from, to, filter)
 
   def matchDeclared(got: BlockType, declared: BlockType, param: source.Param)(using Context): Unit =
     Context.at(param) {
