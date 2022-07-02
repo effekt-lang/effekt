@@ -409,7 +409,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | (expr <~ `;`) ~ stmts ^^ ExprStmt.apply
     | (definition <~ `;`) ~ stmts ^^ DefStmt.apply
     | (varDef  <~ `;`) ~ stmts ^^ DefStmt.apply
-    | (expr <~ `;`) ^^ Return.apply
+    | (`return`.? ~> expr <~ `;`.?) ^^ Return.apply
     | matchDef
     | failure("Expected a statement")
     )

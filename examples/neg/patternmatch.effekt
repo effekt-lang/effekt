@@ -1,0 +1,8 @@
+type Foo { Bar() }
+
+def main() = {
+  val f: Int = 42;
+  f match {
+    case Bar() => 42
+  }
+}

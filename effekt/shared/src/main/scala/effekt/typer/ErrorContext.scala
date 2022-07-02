@@ -45,8 +45,8 @@ object ErrorContext {
 
     def go(ctx: ErrorContext): String = ctx match {
 
-      case Expected(tree) => pp"Expected $tpe2 but got $tpe1"
-      case PatternMatch(pattern) => pp"Pattern expected $tpe2 but scrutinee has type $tpe1"
+      case Expected(tree) => pp"Expected $tpe2 but got $tpe1."
+      case PatternMatch(pattern) => pp"Pattern matches against type $tpe2 but scrutinee has type $tpe1."
       case Declaration(param, declared, defined) => pp"Type $defined does not match the declared type $declared."
 
       // This case should not occur.
