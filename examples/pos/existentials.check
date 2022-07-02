@@ -4,6 +4,6 @@
 [error] examples/pos/existentials.effekt:21:16: Type Boolean does not match the declared type C.
     def get[C](c: Boolean) = { resume((42, c)) }
                ^^^^^^^^^^
-[error] examples/pos/existentials.effekt:21:44: Expected C but got Boolean
+[error] examples/pos/existentials.effekt:21:44: Expected C but got Boolean.
     def get[C](c: Boolean) = { resume((42, c)) }
                                            ^
