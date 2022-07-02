@@ -51,3 +51,8 @@ def test5c[R] { p: => R }: List[R] =
    test5 { [ p() ] } { Nil() }
 
 def main() = println(triple(10, 15))
+
+def testNested(l1: List[Int]): List[String] = l1 match {
+  case Cons(a, rest) => Nil[Int]() // failing to check the call here aborts type checking, so this example goes last
+  case Nil() => ""
+}

@@ -13,7 +13,7 @@ object ErrorContext {
   /**
    * A generic context, checking a type against an expected type at position [[checkedTree]].
    */
-  case class Expected(checkedTree: source.Tree) extends PositiveContext
+  case class Expected(got: symbols.Type, exp: symbols.Type, checkedTree: source.Tree) extends PositiveContext
 
   /**
    * A pattern matching context, checking a scrutinee against the return type of the match pattern [[pattern]]
@@ -45,7 +45,18 @@ object ErrorContext {
 
     def go(ctx: ErrorContext): String = ctx match {
 
-      case Expected(tree) => pp"Expected $tpe2 but got $tpe1."
+      case Expected(got, exp, tree) =>
+        val expRendered = pp"$exp"
+        val gotRendered = pp"$got"
+        val msg = if ((expRendered.size + gotRendered.size) < 25) {
+          s"Expected $expRendered but got $gotRendered."
+        } else {
+          s"Expected type\n  $expRendered\nbut got type\n  $gotRendered"
+        }
+        if (tpe1 != got || tpe2 != exp)
+          pp"$msg\n\nType mismatch between $tpe2 and $tpe1."
+        else
+          msg
       case PatternMatch(pattern) => pp"Pattern matches against type $tpe2 but scrutinee has type $tpe1."
       case Declaration(param, declared, defined) => pp"Type $defined does not match the declared type $declared."
 

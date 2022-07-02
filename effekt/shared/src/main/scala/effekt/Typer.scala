@@ -149,7 +149,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         given Captures = inferredCap
         val Result(inferredTpe, inferredEff) = checkBlockArgument(block, expectedTpe)
         val tpe = Context.unification(BoxedType(inferredTpe, inferredCap))
-        expected.map(Context.unification.apply) foreach { exp => Context.requireSubtype(tpe, exp, ErrorContext.Expected(l)) }
+        expected.map(Context.unification.apply) foreach { matchExpected(tpe, _) }
         Result(tpe, inferredEff)
 
       case source.Unbox(_) => insertBoxing(expr, expected)
@@ -300,10 +300,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   case (param, decl) =>
                     val sym = param.symbol
                     val annotType = sym.tpe
-                    annotType.foreach { t => Context.at(param) {
-                      // Here we are contravariant: declared types have to be subtypes of the actual types
-                      Context.requireSubtype(t, decl, ErrorContext.Declaration(param, decl, t))
-                    }}
+                    annotType.foreach { t => matchDeclared(t, decl, param) }
                     Context.bind(sym, annotType.getOrElse(decl))
                 }
 
@@ -447,7 +444,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val (rigids, crigids, FunctionType(_, _, vps, _, ret, _)) = Context.instantiate(sym.toType, Nil, Nil)
 
       // (5) given a scrutinee of `List[Int]`, we learn `?t1 -> Int`
-      Context.requireSubtype(sc, ret, ErrorContext.PatternMatch(p))
+      matchPattern(sc, ret, p)
 
       // (6) check for existential type variables
       // at the moment we do not allow existential type parameters on constructors, so this is not necessary.
@@ -734,7 +731,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Context.abort(pp"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
         }
         val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
-        Context.requireSubtype(btpe, expected, ErrorContext.Expected(arg))
+        matchExpected(btpe, expected)
         usingCapture(capt)
         Result(btpe, Pure)
       case _ =>
@@ -774,8 +771,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case (param, expected) =>
           val adjusted = typeSubst substitute expected
           val tpe = param.symbol.tpe.map { got =>
-              Context.at(param) { Context.requireSubtype(got, adjusted, ErrorContext.Declaration(param, adjusted, got)) }
-              got
+            matchDeclared(got, adjusted, param);
+            got
           } getOrElse { adjusted }
           // bind types to check body
           Context.bind(param.symbol, tpe)
@@ -787,7 +784,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val adjusted = typeSubst substitute expTpe
           val sym = param.symbol
           val got = sym.tpe
-          Context.at(param) { Context.requireSubtype(got, adjusted, ErrorContext.Declaration(param, adjusted, got)) }
+          matchDeclared(got, adjusted, param)
           // bind types to check body
           Context.bind(param.symbol, got)
           got
@@ -1073,7 +1070,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs, Nil)
 
     // (2) check return type
-    expected.foreach { expectedReturn => Context.requireSubtype(ret, expectedReturn, ErrorContext.Expected(call)) }
+    expected.foreach { expected => matchExpected(ret, expected) }
 
     var effs: ConcreteEffects = Pure
 
@@ -1146,6 +1143,29 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Helpers and Extension Methods">
 
+  def matchDeclared(got: BlockType, declared: BlockType, param: source.Param)(using Context): Unit =
+    Context.at(param) {
+      Context.requireSubtype(got, declared,
+        ErrorContext.Declaration(param, Context.unification(declared), Context.unification(got)))
+    }
+
+  def matchDeclared(got: ValueType, declared: ValueType, param: source.Param)(using Context): Unit =
+    Context.at(param) {
+      Context.requireSubtype(got, declared,
+        ErrorContext.Declaration(param, Context.unification(declared), Context.unification(got)))
+    }
+
+  def matchPattern(scrutinee: ValueType, patternTpe: ValueType, pattern: source.MatchPattern)(using Context): Unit =
+    Context.requireSubtype(scrutinee, patternTpe, ErrorContext.PatternMatch(pattern))
+
+  def matchExpected(got: ValueType, expected: ValueType)(using Context): Unit =
+    Context.requireSubtype(got, expected,
+      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
+
+  def matchExpected(got: BlockType, expected: BlockType)(using Context): Unit =
+    Context.requireSubtype(got, expected,
+      ErrorContext.Expected(Context.unification(got), Context.unification(expected), Context.focus))
+
   extension (expr: Term) {
     def checkAgainst(tpe: ValueType)(using Context, Captures): Result[ValueType] =
       checkExpr(expr, Some(tpe))
@@ -1164,7 +1184,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs.toEffects)
-      expected foreach { Context.requireSubtype(got, _, ErrorContext.Expected(t)) }
+      expected foreach { matchExpected(got, _) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)
@@ -1175,7 +1195,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val Result(got, effs) = f(t)
       wellformed(got)
       wellformed(effs.toEffects)
-      expected foreach { Context.requireSubtype(got, _, ErrorContext.Expected(t)) }
+      expected foreach { matchExpected(got, _) }
       Context.annotateInferredType(t, got)
       Context.annotateInferredEffects(t, effs.toEffects)
       Result(got, effs)

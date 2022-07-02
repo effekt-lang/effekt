@@ -1,4 +1,9 @@
-[error] examples/neg/lambdas/inference.effekt:13:8: Expected Boolean but got Unit.
+[error] examples/neg/lambdas/inference.effekt:13:8: Expected type
+  Int => Boolean at {} => String at {}
+but got type
+  Int => Unit at {} => String at ?C
+
+Type mismatch between Boolean and Unit.
   comparing the argument types of
     Int => Unit at {} => String (given)
     Int => Boolean at {} => String (expected)
