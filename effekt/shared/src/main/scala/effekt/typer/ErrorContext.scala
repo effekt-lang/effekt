@@ -28,10 +28,10 @@ object ErrorContext {
 
   case class CaptureFlow(from: symbols.Captures, to: symbols.Captures, checkedTree: source.Tree) extends PositiveContext
 
-  case class MergeLowerBounds() extends PositiveContext
-  case class MergeUpperBounds() extends NegativeContext
-  case class MergeInvariant(outer: ErrorContext) extends InvariantContext
+  case class MergeTypes(left: symbols.Type, right: symbols.Type) extends PositiveContext
+  case class MergeCaptures() extends PositiveContext
 
+  case class MergeInvariant(outer: ErrorContext) extends InvariantContext
   case class TypeConstructor(outer: ErrorContext) extends InvariantContext
   case class TypeConstructorArgument(outer: ErrorContext) extends InvariantContext
   case class BoxedTypeBlock(left: symbols.BoxedType, right: symbols.BoxedType, outer: ErrorContext) extends ErrorContext { def polarity = outer.polarity }
@@ -60,12 +60,22 @@ object ErrorContext {
       case PatternMatch(pattern) => pp"Pattern matches against type $tpe2 but scrutinee has type $tpe1."
       case Declaration(param, declared, defined) => pp"Type $defined does not match the declared type $declared."
 
-      // This case should not occur.
-      case CaptureFlow(from, to, tree) => sys error "Internal error"
+      // TODO
+      //  (1) carry through position information about left and right trees.
+      //  (2) refactor so that explainMismatch is part of Messages and can add additional
+      //      messages (with info about the trees and their types).
+      case MergeTypes(left, right) =>
+        val msg = s"Different arms of a conditional/match have incompatible types.\n\nOne arm has type\n  $left\nwhile another one has type\n  $right"
 
-      case MergeLowerBounds() | MergeUpperBounds() => pp"Trying to merge the two types $tpe1 and $tpe2"
+        if (tpe2 != left || tpe1 != right)
+          pp"$msg\n\nType mismatch between $tpe2 and $tpe1."
+        else
+          msg
+
+      case MergeCaptures() => sys error "Should not occur"
+      case CaptureFlow(from, to, tree) => sys error "Should not occur"
+
       case MergeInvariant(outer) => go(outer)
-
       case BoxedTypeBlock(left, right, outer) => go(outer)
       case BoxedTypeCapture(left, right, outer) => go(outer)
       case FunctionArgument(left, right, outer) =>

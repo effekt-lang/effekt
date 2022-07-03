@@ -148,7 +148,9 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
    * Computes the join of all types, only called to merge the different arms of if and match
    */
   def join(tpes: ValueType*): ValueType =
-    tpes.foldLeft[ValueType](TBottom) { (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.MergeLowerBounds()) }
+    tpes.foldLeft[ValueType](TBottom) { (t1, t2) =>
+      mergeValueTypes(t1, t2, ErrorContext.MergeTypes(apply(t1), apply(t2)))
+    }
 
   def requireSubregionWithout(lower: Captures, upper: Captures, filter: List[Capture])(using C: Context): Unit =
     requireSubregionWithout(lower, upper, filter.toSet, ErrorContext.CaptureFlow(lower, upper, C.focus))
@@ -321,7 +323,7 @@ trait TypeInstantiator { self: Unification =>
     val remaining = (concreteCapture -- captureParams).toList
 
     // TODO do we need to respect the polarity here? Maybe wellformedness should exclude captures in negative position?
-    mergeCaptures(CaptureSet(remaining) :: contained.toList.map { p => captureInstantiations(p) }, ErrorContext.MergeLowerBounds())
+    mergeCaptures(CaptureSet(remaining) :: contained.toList.map { p => captureInstantiations(p) }, ErrorContext.MergeCaptures())
 
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {
