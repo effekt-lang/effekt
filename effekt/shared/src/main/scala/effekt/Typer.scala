@@ -1065,8 +1065,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     if (bargs.size != funTpe.bparams.size)
       Context.error(s"Wrong number of block arguments, given ${bargs.size}, but ${name} expects ${funTpe.bparams.size}.")
 
-    val functionCapture = currentCapture
-
     // (1) Instantiate blocktype
     // e.g. `[A, B] (A, A) => B` becomes `(?A, ?A) => ?B`
     val (typeArgs, captArgs, bt @ FunctionType(_, _, vps, bps, ret, retEffs)) = Context.instantiate(funTpe, targs, Nil)
@@ -1082,7 +1080,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
 
     (bps zip bargs zip captArgs) foreach { case ((tpe, expr), capt) =>
-      flowsInto(capt, functionCapture)
+      usingCapture(capt)
       given Captures = capt
       val Result(t, eff) = checkBlockArgument(expr, Some(tpe))
       effs = effs ++ eff
