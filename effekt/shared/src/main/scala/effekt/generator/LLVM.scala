@@ -1,23 +1,19 @@
 package effekt.generator
 
+import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
+import kiama.util.{ Source, Counter }
+
 import effekt.context.Context
 import effekt.machine
 import effekt.llvm._
 import effekt.symbols.Module
 import effekt.symbols.{ BlockSymbol, Name, Symbol, ValueSymbol }
-import kiama.output.ParenPrettyPrinter
-import kiama.output.PrettyPrinterTypes.Document
-import kiama.output.PrettyPrinterTypes.emptyLinks
-import kiama.util.Source
-import kiama.util.Counter
 import effekt.context.assertions._
 import effekt.machine.{ Evidence, PrimBoolean, PrimInt, PrimUnit, Stack, Variant }
 import effekt.util.GenericPrinter
 
 import scala.language.implicitConversions
 import effekt.util.paths._
-
-import scala.sys.process.Process
 
 
 // TODO This magical 5 ensures that we pass at most 6 64bit parameters
@@ -60,21 +56,21 @@ class LLVM extends Generator {
       machineMods.flatMap(m => LLVMTransformer.transform(m)(LLVMTransformer.LLVMTransformerContext(mod, C)))
     }
 
-    return Some(Document(LLVMPrinter.wholeProgram(mainName, llvmDefs)(LLVMPrinter.LLVMContext()), emptyLinks))
+    val llvm: LLVMFragment = LLVMFragmentPrinter.wholeProgramOneshot(mainName, llvmDefs)
+    return Some(Document(llvm, emptyLinks))
   }
 }
 
-object LLVMPrinter extends ParenPrettyPrinter {
-  // a transitional helper to aid in moving to string interpolation for LLVM code construction
-  def d2s(doc: Doc): String = pretty(doc).layout
-  def s2d(str: String): Doc = Doc(str)
-  val f2d = s2d
-  def transitionalDocLift(src: LLVMFragment): Doc = Doc(src)
 
-  def wholeProgram(mainName: BlockSymbol, defs: List[Top])(implicit C: LLVMContext): LLVMFragment =
-    // NOTE: `vsep(listOfDocs, line) === listOfDocs.map(d2s).mkString("\n\n")` with `listOfDocs: [Doc]`
+object LLVMFragmentPrinter {
+  case class LLVMContext() {
+    val fresh = new Counter(0)
+  }
+
+  def wholeProgramOneshot(mainName: BlockSymbol, defs: List[Top]): LLVMFragment =
+    implicit val C = LLVMFragmentPrinter.LLVMContext()
     s"""
-${defs.map(toDoc).map(d2s).mkString("\n\n")}
+${defs.map(asFragment).mkString("\n\n")}
 
 define void @effektMain() {
     %spp = alloca %Sp
@@ -87,7 +83,7 @@ define void @effektMain() {
 }
 """
 
-  def fromTop(top: Top)(implicit C: LLVMContext): LLVMFragment = top match {
+  def asFragment(top: Top)(implicit C: LLVMContext): LLVMFragment = top match {
 
     // "DEFine C???NT"
     case DefCnt(functionName, params, entry, body) =>
@@ -112,7 +108,7 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
     ${loadEnv("%spp", env)}
     br label ${localName(entry)}
 
-    ${indentFollowingLines(body.map(d2s compose toDoc).mkString("\n\n"))}
+    ${indentFollowingLines(body.map(asFragment).mkString("\n\n"))}
 }
 """
 
@@ -128,19 +124,19 @@ define fastcc void ${globalName(functionName)}(%Sp noalias %sp, ${commaSeparated
     call fastcc void ${globalBuiltin("eraseStack")}(%Stk* $emptyStk)
     br label ${localName(entry)}
 
-    ${indentFollowingLines(body.map(toDoc).map(d2s).mkString("\n\n"))}
+    ${indentFollowingLines(body.map(asFragment).mkString("\n\n"))}
 }
 """
 
     // "DEFine Function"
-    case DefFun(returnType, functionName, parameters, body) =>
+    case DefFun(returnType, functionName, parameters, body: LLVMFragment) =>
       // we can't use unique id here, since we do not know it in the extern string.
       val params = parameters.map {
         case machine.Param(typ, id) => { /* TODO why is the raw symbol name used here? `assertSaneName(id.name);`*/ s"${asFragment(typ)} %${id.name}" }
       }
       s"""
 define fastcc ${asFragment(returnType)} ${globalName(functionName)}(${commaSeparated(params)}) alwaysinline {
-    ${indentFollowingLines(d2s(string(body)))}
+    ${indentFollowingLines(body)}
 }
 """
 
@@ -161,15 +157,12 @@ define fastcc %Sp ${scanningName(functionName)}(%Sp noalias %sp) {
     case BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminator: Terminator) =>
       s"""
 ${nameDef(id)}:
-${instructions.map(d2s compose toDoc).mkString("\n")}
+${instructions.map(asFragment).mkString("\n")}
 ${asFragment(terminator)}
 """
   }
 
-  // XXX These are the remaining `toDoc`s.
-  def toDoc(top: Top)(implicit C: LLVMContext): Doc = fromTop(top)
-  def toDoc(bb: BasicBlock)(implicit C: LLVMContext): Doc = asFragment(bb)
-  def toDoc(instruction: Instruction)(implicit C: LLVMContext): LLVMFragment = instruction match {
+  def asFragment(instruction: Instruction)(implicit C: LLVMContext): LLVMFragment = instruction match {
     case Call(name, returnType, blockName, args) =>
         s"${localName(name)} = call fastcc ${asFragment(returnType)} ${globalName(blockName)}(${commaSeparated(args.map(fromMachineValueWithAnnotatedType))})"
 
@@ -208,7 +201,7 @@ ${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %s
 
     // TODO Why is this so assymmetric (`PushStack(stack)` vs. `PopStack(stackName)`)?
     case PushStack(stack) =>
-        s"call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${d2s(fromMachineValueWithAnnotatedType(stack))})"
+        s"call fastcc void ${globalBuiltin("pushStack")}(%Sp* %spp, ${fromMachineValueWithAnnotatedType(stack)})"
     case PopStack(stackName) =>
         s"${localName(stackName)} = call fastcc %Stk* ${globalBuiltin("popStack")}(%Sp* %spp)"
 
@@ -299,12 +292,8 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
   }
 
 
-
-  // /**
-  //  * Auxiliary macros
-  //  */
-
   // TODO Why does `jump` not jump but call?
+  // [2022-07-04, jfrech] This is a semantic difference between our interpretation of jumping and LLVM's.
   def jump(name: LLVMFragment, sp: LLVMFragment, args: List[LLVMFragment])(implicit C: LLVMContext): LLVMFragment =
     s"""tail call fastcc void $name(%Sp $sp, ${commaSeparated(args)})
 ret void
@@ -354,18 +343,18 @@ ret void
     val envName = freshLocalName("env")
     s"""
 ${load(spp, envName, envType)}
-${d2s(extractParams(envName, envType, envParams))}
+${extractParams(envName, envType, envParams)}
 """
 
   def storeValues(spp: LLVMFragment, envType: LLVMFragment, envValues: List[LLVMFragment])(implicit C: LLVMContext): LLVMFragment =
     val envName = freshLocalName("env")
     s"""
-${d2s(insertAllValues(envName, envType, envValues))}
-${d2s(store(spp, envName, envType))}
+${insertAllValues(envName, envType, envValues)}
+${store(spp, envName, envType)}
 """
 
   def extractParams(envName: LLVMFragment, envType: LLVMFragment, envParams: List[LLVMFragment]): LLVMFragment =
-    (envParams.zipWithIndex.map { case (p, idx) => s"$p = extractvalue ${d2s(envType)} $envName, $idx" }).mkString("\n")
+    (envParams.zipWithIndex.map { case (p, idx) => s"$p = extractvalue ${envType} $envName, $idx" }).mkString("\n")
 
   // insert all given values into a one-deep LLVM record
   def insertAllValues(aggName: LLVMFragment, aggType: LLVMFragment, aggValues: List[LLVMFragment])(implicit C: LLVMContext): LLVMFragment = {
@@ -375,14 +364,14 @@ ${d2s(store(spp, envName, envType))}
     var prev = "undef"
     aggValues.zipWithIndex.map((value, idx) => {
         val tmp = if (idx == aggValues.length-1) aggName else freshLocalName(s"agg$idx")
-        val ln = s"${tmp} = insertvalue ${d2s(aggType)} ${prev}, ${d2s(value)}, $idx"
+        val ln = s"${tmp} = insertvalue ${aggType} ${prev}, ${value}, $idx"
         prev = tmp
         ln
     }).mkString("\n")
   }
 
   def load(spp: LLVMFragment, name: LLVMFragment, typ: LLVMFragment)(implicit C: LLVMContext): LLVMFragment =
-    val ptrType = d2s(typ) + "*"
+    val ptrType = typ + "*"
     val oldsp = freshLocalName("oldsp")
     val newsp = freshLocalName("newsp")
     val oldtypedsp = freshLocalName("oldtypedsp")
@@ -456,9 +445,4 @@ store ${typ} ${value}, $ptrType $newtypedsp
     if (!name.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))
         throw new Error(s"assertSaneName: $name")
     return true
-
-
-  case class LLVMContext() {
-    val fresh = new Counter(0)
-  }
 }
