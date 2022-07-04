@@ -83,15 +83,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="expressions">
 
-  def insertBoxing(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
-    expr match {
-      case source.Var(id) => checkExpr(source.Box(None, source.InterfaceArg(id).inheritPosition(id)).inheritPosition(expr), expected)
-      case _              => Context.abort("Currently automatic boxing is only supported for variables, please bind the block first.")
-    }
-
-  def insertUnboxing(expr: Term, expected: Option[BlockType])(using Context, Captures): Result[BlockType] =
-    checkExprAsBlock(source.Unbox(expr).inheritPosition(expr), expected)
-
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(expr, expected) {
       case source.IntLit(n)     => Result(TInt, Pure)
@@ -119,7 +110,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             usingCapture(capt)
             Result(vtpe, Pure)
         }
-        case b: BlockSymbol => insertBoxing(expr, expected)
+        case b: BlockSymbol => Context.abort("Expected an expression, but got a block.")
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
       }
 
@@ -147,7 +138,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         expected.map(Context.unification.apply) foreach { matchExpected(tpe, _) }
         Result(tpe, inferredEff)
 
-      case source.Unbox(_) => insertBoxing(expr, expected)
+      case source.Unbox(_) =>
+        Context.abort("Expected an expression, but got an unbox (which is a block).")
 
       case c @ source.Select(receiver, field) =>
         checkOverloadedCall(c, field, Nil, List(receiver), Nil, expected)
@@ -183,14 +175,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
-      // Can be dot-syntax, i.e.,
-      //   def foo(n: Int): String = ...
-      //   42.foo
-      //
-      // or capability member call
-      //
-      //   def foo {f:Exc} = f.raise()
-      //
+      // precondition: PreTyper translates all uniform-function calls to `Call`.
+      //   so the method calls here are actually methods calls on blocks as receivers.
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
         checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
 
@@ -218,6 +204,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val continuationCapt = Context.freshCaptVar(CaptUnificationVar.HandlerRegion(tree))
 
         // All used captures flow into the continuation capture, except the ones handled by this handler.
+        // TODO refactor and use flowIntoWithout
         val continuationCaptHandled = Context.without(continuationCapt, selfRegion :: providedCapabilities.map(_.capture))
 
         var handlerEffs: ConcreteEffects = Pure
@@ -375,11 +362,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(vtpe, eff1) = checkExpr(expr, expectedTpe)
         // TODO here we also need unification variables for block types!
         // C.unify(tpe, BoxedType())
-        vtpe match {
+        Context.unification(vtpe) match {
           case BoxedType(btpe, capt2) =>
             usingCapture(capt2)
             Result(btpe, eff1)
-          case _ => Context.abort(pp"Unbox requires a boxed type, but got $vtpe")
+          case _ =>
+            Context.abort(pp"Unbox requires a boxed type, but got $vtpe")
         }
 
       case source.Var(id) => id.symbol match {
@@ -387,33 +375,13 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val (tpe, capt) = Context.lookup(b)
           usingCapture(capt)
           Result(tpe, Pure)
-        case e: ValueSymbol => insertUnboxing(expr, expected)
+        case e: ValueSymbol =>
+          Context.abort("Expected block, but got an expression.")
       }
 
       case s : source.MethodCall => sys error "Nested capability selection not yet supported"
 
-//        checkExprAsBlock(expr) match {
-//          case ((i @ InterfaceType(interface, targs)) / capt) =>
-//            // (1) find the operation
-//            // try to find an operation with name "selector"
-//            val op = interface.ops.collect {
-//              case op if op.name.name == selector.name => op
-//            } match {
-//              case Nil      => Context.at(s) { Context.abort(s"Cannot select ${selector.name} in type ${i}") }
-//              case List(op) => op
-//              case _        => Context.at(s) { Context.abort(s"Multiple operations match ${selector.name} in type ${i}") }
-//            }
-//            // assign the resolved operation to the identifier
-//            Context.assignSymbol(selector, op)
-//
-//            // (2) substitute type arguments
-//            val tsubst = (interface.tparams zip targs).toMap
-//            tsubst.substitute(op.toType) / capt
-//
-//          case _ => Context.abort(s"Selection requires an interface type.")
-//        }
-//
-      case other => insertUnboxing(other, expected)
+      case other => Context.abort("Expected block, but got an expression.")
     }
 
   //</editor-fold>
@@ -821,15 +789,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(tpe, bodyEffs -- effects)
   }
 
-  def findFunctionTypeFor(sym: TermSymbol)(using Context): (FunctionType, Captures) = sym match {
+  def findFunctionTypeFor(sym: BlockSymbol)(using Context): (FunctionType, Captures) = sym match {
     // capture of effect operations is dealt with by type checking Do or MethodCall
     case b: Operation => (Context.lookupFunctionType(b), CaptureSet.empty)
     case b: BlockSymbol => (Context.lookupFunctionType(b), Context.lookupCapture(b))
-    case v: ValueSymbol =>
-      Context.unification(Context.lookup(v)) match {
-      case BoxedType(b: FunctionType, capt) => (b, capt)
-      case b => Context.abort(pp"Required function type, but got ${b}")
-    }
   }
 
   def attempt[T](f: => T)(using Context): Either[Messages, (T, TyperState)] =
@@ -845,6 +808,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   /**
    * We do not respect nested scoping on overload resolution for methods right now.
+   *
+   * Uniform function syntax has been desugared by [[PreTyper]]
    */
   def checkOverloadedMethodCall(
     call: source.CallLike,
@@ -856,71 +821,59 @@ object Typer extends Phase[NameResolved, Typechecked] {
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
     val sym = id.symbol
-    val syms = sym match {
+
+    val methods = sym match {
       // an overloaded call target
-      case CallTarget(name, syms) => syms.flatten
+      case CallTarget(name, syms) => syms.flatten.asInstanceOf[List[Operation]]
       // already resolved by a previous attempt to typecheck
-      case sym: TermSymbol => List(sym)
+      case sym: Operation => List(sym)
       case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
     }
 
-    val (funs, methods) = syms.partitionMap {
-      // operations can't be called with uniform function syntax.
-      case t: Operation => Right(t)
-      case t: Fun => Left(t)
-      case t => Context.abort(pp"Not a valid method: ${t}")
+    val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
+
+    val interface = interfaceOf(recvTpe.asInterfaceType)
+    // filter out operations that do not fit the receiver
+    val candidates = methods.filter(op => op.effect == interface)
+    val stateBefore = Context.backupTyperstate()
+    val results = candidates.map {
+      case op =>
+        op -> Try {
+          Context.restoreTyperstate(stateBefore)
+          val (funTpe, capture) = findFunctionTypeFor(op)
+          val Result(tpe, effs) = checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
+          (Result(tpe, effs), Context.backupTyperstate())
+        }
     }
+    val successes = results.collect { case (sym, Right(r)) => sym -> r }
+    val errors = results.collect { case (sym, Left(r)) => sym -> r }
 
-    // we prefer methods over uniform call syntax
-    if (methods.nonEmpty) {
-      val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
+    // TODO deduplicate with checkOverloadedCall below
+    (successes, errors) match {
+      case (Nil, errs) => ???
 
-      val interface = interfaceOf(recvTpe.asInterfaceType)
-      // filter out operations that do not fit the receiver
-      val candidates = methods.filter(op => op.effect == interface)
-      val stateBefore = Context.backupTyperstate()
-      val results = candidates.map {
-        case op =>
-          op -> Try {
-            Context.restoreTyperstate(stateBefore)
-            val (funTpe, capture) = findFunctionTypeFor(op)
-            val Result(tpe, effs) = checkCallTo(call, op.name.name, funTpe, targs, vargs, bargs, expected)
-            (Result(tpe, effs), Context.backupTyperstate())
-          }
-      }
-      val successes = results.collect { case (sym, Right(r)) => sym -> r }
-      val errors = results.collect { case (sym, Left(r)) => sym -> r }
+      // Exactly one successful result in the current scope
+      case (List((sym, (tpe, st))), _) =>
+        // use the typer state after this checking pass
+        Context.restoreTyperstate(st)
+        // reassign symbol of fun to resolved calltarget symbol
+        Context.assignSymbol(id, sym)
+        return tpe
 
-      // TODO deduplicate with checkOverloadedCall below
-      (successes, errors) match {
-        case (Nil, errs) => ???
+      // Ambiguous
+      case (results, _) =>
+        val sucMsgs = results.map {
+          case (sym, tpe) =>
+            pp"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
+        }.mkString("\n")
 
-        // Exactly one successful result in the current scope
-        case (List((sym, (tpe, st))), _) =>
-          // use the typer state after this checking pass
-          Context.restoreTyperstate(st)
-          // reassign symbol of fun to resolved calltarget symbol
-          Context.assignSymbol(id, sym)
-          return tpe
+        val explanation =
+          pp"""| Ambiguous reference to ${id}. The following blocks would typecheck:
+               |
+               |${sucMsgs}
+               |""".stripMargin
 
-        // Ambiguous
-        case (results, _) =>
-          val sucMsgs = results.map {
-            case (sym, tpe) =>
-              pp"- ${sym.name} of type ${findFunctionTypeFor(sym)}"
-          }.mkString("\n")
-
-          val explanation =
-            pp"""| Ambiguous reference to ${id}. The following blocks would typecheck:
-                 |
-                 |${sucMsgs}
-                 |""".stripMargin
-
-          Context.abort(explanation)
-      }
-    } else {
-      // just check as a function.
-      checkOverloadedCall(call, id, targs, receiver :: vargs, bargs, expected)
+        Context.abort(explanation)
     }
   }
 
@@ -944,7 +897,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // an overloaded call target
       case CallTarget(name, syms) => syms
       // already resolved by a previous attempt to typecheck
-      case sym: TermSymbol => List(Set(sym))
+      case sym: BlockSymbol => List(Set(sym))
       case _ => ???
     }
 

@@ -484,24 +484,24 @@ object Tree {
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
   trait Rewrite {
     // Hooks to override
-    def expr(implicit C: Context): PartialFunction[Term, Term] = PartialFunction.empty
-    def stmt(implicit C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def defn(implicit C: Context): PartialFunction[Def, Def] = PartialFunction.empty
+    def expr(using C: Context): PartialFunction[Term, Term] = PartialFunction.empty
+    def stmt(using C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def defn(using C: Context): PartialFunction[Def, Def] = PartialFunction.empty
 
     /**
      * Hook that can be overriden to perform an action at every node in the tree
      */
-    def visit[T <: Tree](t: T)(visitor: T => T)(implicit C: Context): T = visitor(t)
+    def visit[T <: Tree](t: T)(visitor: T => T)(using C: Context): T = visitor(t)
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: ModuleDecl)(implicit C: Context): ModuleDecl = visit(e) {
+    def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
       case ModuleDecl(path, imports, defs) =>
         ModuleDecl(path, imports, defs.map(rewrite))
     }
 
-    def rewrite(e: Term)(implicit C: Context): Term = visit(e) {
-      case e if expr.isDefinedAt(e) => expr(C)(e)
+    def rewrite(e: Term)(using C: Context): Term = visit(e) {
+      case e if expr.isDefinedAt(e) => expr(e)
       case v: Var                   => v
       case l: Literal[t]            => l
 
@@ -542,8 +542,8 @@ object Tree {
         Unbox(rewrite(b))
     }
 
-    def rewrite(t: Def)(implicit C: Context): Def = visit(t) {
-      case t if defn.isDefinedAt(t) => defn(C)(t)
+    def rewrite(t: Def)(using C: Context): Def = visit(t) {
+      case t if defn.isDefinedAt(t) => defn(t)
 
       case FunDef(id, tparams, vparams, bparams, ret, body) =>
         FunDef(id, tparams, vparams, bparams, ret, rewrite(body))
@@ -566,8 +566,8 @@ object Tree {
       case d: ExternInclude => d
     }
 
-    def rewrite(t: Stmt)(implicit C: Context): Stmt = visit(t) {
-      case s if stmt.isDefinedAt(s) => stmt(C)(s)
+    def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
+      case s if stmt.isDefinedAt(s) => stmt(s)
 
       case DefStmt(d, rest) =>
         DefStmt(rewrite(d), rewrite(rest))
@@ -582,26 +582,26 @@ object Tree {
         BlockStmt(rewrite(b))
     }
 
-    def rewrite(b: BlockArg)(implicit C: Context): BlockArg = b match {
+    def rewrite(b: BlockArg)(using C: Context): BlockArg = b match {
       case b: FunctionArg  => rewrite(b)
       case b: InterfaceArg => b
     }
 
-    def rewrite(b: FunctionArg)(implicit C: Context): FunctionArg =  visit(b) {
+    def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
       case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
     }
 
-    def rewrite(h: Handler)(implicit C: Context): Handler = visit(h) {
+    def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
       case Handler(effect, capability, clauses) =>
         Handler(effect, capability, clauses.map(rewrite))
     }
 
-    def rewrite(h: OpClause)(implicit C: Context): OpClause = visit(h) {
+    def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
       case OpClause(id, tparams, params, body, resume) =>
         OpClause(id, tparams, params, rewrite(body), resume)
     }
 
-    def rewrite(c: MatchClause)(implicit C: Context): MatchClause = visit(c) {
+    def rewrite(c: MatchClause)(using C: Context): MatchClause = visit(c) {
       case MatchClause(pattern, body) =>
         MatchClause(pattern, rewrite(body))
     }

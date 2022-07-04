@@ -20,14 +20,14 @@ import effekt.typer.typeMapToSubstitution
  *
  * TODO maybe also insert explicit box and unbox
  */
-object Elaboration extends Phase[Typechecked, Typechecked] with Rewrite {
+object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
 
   val phaseName = "capability-passing"
 
   def run(input: Typechecked)(implicit C: Context) = {
     val transformedTree = rewrite(input.tree)
 
-    // AnnotateCaptures.annotate(transformedTree)
+    AnnotateCaptures.annotate(transformedTree)
 
     Some(input.copy(tree = transformedTree))
   }
