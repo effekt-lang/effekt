@@ -93,14 +93,14 @@ For this we need a store, which we represent as a list of pairs of keys and valu
 The `memo` handler function tries to look up the needed key in the store. If the key is found it returns the associated value. Otherwise it itself uses `Need`, stores the result, and returns the value.
 
 ```
-def memo[R] { prog: R / { Need } }: R / { Need } = {
+def memo[R] { prog: => R / { Need } }: R / { Need } = {
     var store: Store = Nil();
     try {
         prog()
     } with Need { (key) =>
         try {
             resume(find(store, key))
-        } with KeyNotFound { (k) =>
+        } with KeyNotFound[A] { (k) =>
             val v = do Need(k);
             store = Cons((k, v), store);
             resume(v)
@@ -128,7 +128,7 @@ When we run this example without memoization we will see `"B1"`, `"A1"`, and `"A
 Finally, to supply the inputs, we have a handler for the `NeedInput` effect.
 
 ```
-def supplyInput[R](store: Store) { prog: R / { NeedInput } }: R / { KeyNotFound } = {
+def supplyInput[R](store: Store) { prog: => R / { NeedInput } }: R / { KeyNotFound } = {
     try { prog() } with NeedInput { (key) => resume(find(store, key)) }
 }
 ```
@@ -147,6 +147,6 @@ def main() = {
         println("");
         val result3 = supplyInput(inputs) { build ("B2") { (key) => memo { example2(key) } } };
         println(result3)
-    } with KeyNotFound { (key) => println("Key not found: " ++ key) }
+    } with KeyNotFound[A] { (key) => println("Key not found: " ++ key) }
 }
 ```

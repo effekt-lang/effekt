@@ -37,9 +37,9 @@ input stream and fails, if it does not match.
 
 ```
 def accept { p: Token => Boolean } : Token / Parser = {
-  val got = next();
+  val got = do next();
   if (p(got)) got
-  else fail("Unexpected token " ++ show(got))
+  else do fail("Unexpected token " ++ show(got))
 }
 ```
 
@@ -52,26 +52,26 @@ def number() = accept(Number()).text
 def punct(p: String) = {
   val tok = accept(Punct())
   if (tok.text == p) ()
-  else fail("Expected " ++ p ++ " but got " ++ tok.text)
+  else do fail("Expected " ++ p ++ " but got " ++ tok.text)
 }
 def kw(exp: String): Unit / Parser = {
   val got = ident();
   if (got == exp) ()
-  else fail("Expected keyword " ++ exp ++ " but got " ++ got)
+  else do fail("Expected keyword " ++ exp ++ " but got " ++ got)
 }
 ```
 Using the effect for non-deterministic choice `alt`, we can model alternatives, optional matches and various repetitions:
 ```
-def or[R] { p: R } { q: R } =
-  if (alt()) { p() } else { q() }
+def or[R] { p: => R } { q: => R } =
+  if (do alt()) { p() } else { q() }
 
-def opt[R] { p: R }: Option[R] / Parser =
+def opt[R] { p: => R }: Option[R] / Parser =
   or { Some(p()) } { None() }
 
-def many { p: Unit }: Unit / Parser =
+def many { p: => Unit }: Unit / Parser =
   or { some { p() } } { () }
 
-def some { p: Unit }: Unit / Parser =
+def some { p: => Unit }: Unit / Parser =
   { p(); many { p() } }
 ```
 
@@ -93,7 +93,7 @@ Let us start by defining the parser for numeric literals.
 def parseNum(): Tree / Parser = {
   val numText = number()
   val num = toInt(numText).getOrElse {
-    fail("Expected number, but cannot convert input to integer: " ++ numText)
+    do fail("Expected number, but cannot convert input to integer: " ++ numText)
   }
   Lit(num)
 }
@@ -201,15 +201,15 @@ type ParseResult[R] {
 The parsing algorithm is simply implemented as a handler for `Parser`.
 
 ```
-def parse[R](input: String) { p: R / Parser }: ParseResult[R] = try {
+def parse[R](input: String) { p: => R / Parser }: ParseResult[R] = try {
   lexer(input) { skipWhitespace { Success(p()) } }
 } with Nondet {
   def alt() = resume(true) match {
     case Failure(msg) => resume(false)
     case Success(res) => Success(res)
   }
-  def fail(msg) = Failure(msg)
-} with LexerError { (msg, pos) =>
+  def fail[A](msg) = Failure(msg)
+} with LexerError[A] { (msg, pos) =>
   Failure(msg)
 }
 ```

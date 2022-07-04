@@ -6,6 +6,7 @@ import effekt.context.Context
 import effekt.core.*
 import effekt.symbols.Module
 import effekt.symbols.{ Name, Symbol, Wildcard }
+import effekt.symbols.builtins.TState
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -23,7 +24,7 @@ object ChezSchemeCallCC extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
     C.checkMain(main.mod)
     val deps = dependencies.map { dep => compile(dep) }
     val result = ChezSchemeCallCCPrinter.compilationUnit(main.mod, main.core, deps)
@@ -34,16 +35,16 @@ object ChezSchemeCallCC extends Backend {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
+  def compileSeparate(input: CoreTransformed)(using C: Context) =
     C.using(module = input.mod) { Some(compile(input)) }
 
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  private def compile(in: CoreTransformed)(implicit C: Context): Document =
+  private def compile(in: CoreTransformed)(using Context): Document =
     ChezSchemeCallCCPrinter.format(in.core)
 
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 }
 
@@ -51,20 +52,21 @@ object ChezSchemeCallCC extends Backend {
 // for chez scheme code.
 object ChezSchemeCallCCPrinter extends ChezSchemeBase {
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(implicit C: Context): Document =
+  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[Document])(using Context): Document =
     pretty {
 
       val main = mod.terms("main").toList.head
 
       prelude <>
         "(let () " <+> emptyline <>
+        defineStateAccessors() <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
         defineValue("main", nameDef(main)) <> emptyline <>
         "(run " <> nameRef(main) <> "))"
     }
 
-  override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
+  override def toDoc(b: Block)(using Context): Doc = link(b, b match {
     case BlockVar(v) =>
       nameRef(v)
     case BlockLit(ps, body) =>
@@ -76,11 +78,9 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case Unbox(e) => toDoc(e)
   })
 
-  override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
-    case State(eff, tpe, get, put, init, block) =>
-      defineValue(nameDef(get), "getter") <> line <>
-        defineValue(nameDef(put), "setter") <> line <>
-        schemeCall("state", toDoc(init, false), toDoc(block))
+  override def toDoc(s: Stmt, toplevel: Boolean)(using Context): Doc = s match {
+    case State(init, reg, block) =>
+      schemeCall("state", toDoc(init, false), toDoc(block))
 
     // funnily enough, in callcc, we actually need to wrap toplevel definitions into run
     // pure function calls (that internally use control effects, handled away) still need to
@@ -91,7 +91,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case other => super.toDoc(s, toplevel)
   }
 
-  override def toDoc(e: Expr)(implicit C: Context): Doc = e match {
+  override def toDoc(e: Expr)(using Context): Doc = e match {
     case Run(s) => toDocInBlock(s)
     case other  => super.toDoc(other)
   }
@@ -101,5 +101,17 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case _: Val => true
     case _      => super.requiresBlock(s)
   }
+
+  // (define (getter ref)
+  //  (lambda () (unbox ref)))
+  //
+  // (define (setter ref)
+  //  (lambda (v) (set-box! ref v)))
+  def defineStateAccessors()(using Context): Doc =
+    val getter = defineFunction(nameDef(TState.get), List(string("ref")),
+      schemeLambda(Nil, schemeCall("unbox", "ref")))
+    val setter = defineFunction(nameDef(TState.put), List(string("ref")),
+      schemeLambda(List(string("v")), schemeCall("set-box!", "ref", "v")))
+    getter <> emptyline <> setter
 }
 

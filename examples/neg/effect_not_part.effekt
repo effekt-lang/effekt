@@ -8,7 +8,7 @@ effect State {
     def set(n: Int): Unit
 }
 
-def state[R](init: Int) { f: R / { State, Exception } }: Unit / Console = {
+def state[R](init: Int) { f: => R / { State, Exception } }: Unit / Console = {
     var s = init;
     try { f(); () } with State {
         def get() = resume(s)

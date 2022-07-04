@@ -97,7 +97,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(id, tpe, get, put, init, body) =>
+    case State(init, region, body) =>
       toDocDelayed(init) <> ".state" <> parens(toDoc(body))
 
     case Handle(body, hs) =>
@@ -162,17 +162,17 @@ trait JavaScriptBase extends ParenPrettyPrinter {
   def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
 
   def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _                     => jsEscape(id.name.toString)
+    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
+    case _: symbols.Operation => "op$" + id.name.toString
+    case _ => jsEscape(id.name.toString)
   }
 
   def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.Effect     => toDoc(id.name)
-    case _: symbols.Capability => id.name.toString + "_" + id.id
-    case _: symbols.EffectOp   => "op$" + id.name.toString
-    case _: symbols.Field      => jsEscape(id.name.name)
-    case _                     => jsEscape(jsNameRef(id.name))
+    case _: symbols.InterfaceType => toDoc(id.name)
+    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
+    case _: symbols.Operation => "op$" + id.name.toString
+    case _: symbols.Field => jsEscape(id.name.name)
+    case _ => jsEscape(jsNameRef(id.name))
   }
 
   def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
@@ -189,9 +189,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Select(b, field) =>
       toDoc(b) <> "." <> nameRef(field)
 
-    case Closure(e) => toDoc(e)
+    case Box(e) => toDoc(e)
 
-    case Run(s)     => toDoc(s) <> ".run()"
+    case Run(s) => toDoc(s) <> ".run()"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {

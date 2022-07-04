@@ -1,12 +1,3 @@
-start loop
-10
-9
-8
-7
-6
-5
-4
-3
-2
-1
-end loop
+[error] examples/pos/bidirectional/selfrecursion.effekt:3:1: Bidirectional effects that mention the same effect recursively are not (yet) supported.
+effect Loop(): Unit / Loop
+^^^^^^^^^^^^^^^^^^^^^^^^^^

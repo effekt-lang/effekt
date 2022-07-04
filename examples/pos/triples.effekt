@@ -18,7 +18,7 @@ def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
 
 def choice(n : Int): Int / { Flip, Fail } =
   if (n < 1) {
-    do Fail[Int]()
+    do Fail()
   } else if (do Flip()) {
     n
   } else {
@@ -43,7 +43,7 @@ def handledTriple(n : Int, s : Int) =
     // what if a local function closes over some capabilities and receives a few others?
     // what if that function is used under a handler?
     try { Cons(triple(n, s), Nil[Triple]()) }
-    with Fail { () => Nil[Triple]() }
+    with Fail[A] { () => Nil[Triple]() }
   } with Flip { () => concat(resume(true), resume(false)) }
 
 def main() = println(handledTriple(10, 15))

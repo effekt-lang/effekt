@@ -13,7 +13,7 @@ def stringToInt(str: String): Int / { Fail } =
 
 def perhapsAdd(): Int / { Fail } = stringToInt("1") + stringToInt("2")
 
-def handledExample() = try { perhapsAdd() } with Fail { (msg) => println(msg); 0 }
+def handledExample() = try { perhapsAdd() } with Fail[A] { (msg) => println(msg); 0 }
 
 
 effect Next(): String
@@ -59,7 +59,7 @@ type Result[R] {
 def backtrack[R] { prog: () => R / { Fail, Flip } }: Result[R] / {} =
   try {
     Success(prog())
-  } with Fail { (msg) =>
+  } with Fail[A] { (msg) =>
     Failure(msg)
   } with Flip { () =>
     resume(true) match {

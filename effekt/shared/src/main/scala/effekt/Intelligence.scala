@@ -8,6 +8,7 @@ import kiama.util.Position
 trait Intelligence {
 
   import effekt.symbols._
+  import builtins.TState
 
   type EffektTree = kiama.relation.Tree[Tree, ModuleDecl]
 
@@ -74,7 +75,7 @@ trait Intelligence {
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
-    case d: EffectOp     => C.definitionTreeOption(d.effect)
+    case d: Operation    => C.definitionTreeOption(d.effect)
     case a: Anon         => Some(a.decl)
     case u               => C.definitionTreeOption(u)
   }
@@ -88,17 +89,17 @@ trait Intelligence {
   def getHoleInfo(hole: source.Hole)(implicit C: Context): Option[String] = for {
     outerTpe <- C.inferredTypeAndEffectOption(hole)
     innerTpe <- C.inferredTypeAndEffectOption(hole.stmts)
-  } yield s"""| | Outside       | Inside        |
-              | |:------------- |:------------- |
-              | | `${outerTpe}` | `${innerTpe}` |
-              |""".stripMargin
+  } yield pp"""| | Outside       | Inside        |
+               | |:------------- |:------------- |
+               | | `${outerTpe}` | `${innerTpe}` |
+               |""".stripMargin
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
     case b: BuiltinFunction =>
       SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
 
-    case f: UserFunction if C.blockTypeOption(f).isDefined =>
+    case f: UserFunction if C.functionTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
 
     case f: BuiltinEffect =>
@@ -109,25 +110,25 @@ trait Intelligence {
 
       SymbolInfo(f, "Builtin Effect", None, Some(ex))
 
-    case f: EffectOp =>
+    case f: Operation =>
       val ex =
-        s"""|Effect operations, like `${f.name}` allow to express non-local control flow.
-            |
-            |Other than blocks, the implementation of an effect operation is provided by
-            |the closest
-            |```effekt
-            |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
-            |```
-            |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
-            |
-            |However, note that opposed to languages like Java, effect operations
-            |cannot be _captured_ in Effekt. That is, if the type of a function or block
-            |```effekt
-            |def f(): Int / {}
-            |```
-            |does not mention the effect `${f.effect.name}`, then this effect will not be
-            |handled by the handler. This is important when considering higher-order functions.
-            |""".stripMargin
+        pp"""|Effect operations, like `${f.name}` allow to express non-local control flow.
+             |
+             |Other than blocks, the implementation of an effect operation is provided by
+             |the closest
+             |```effekt
+             |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
+             |```
+             |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
+             |
+             |However, note that opposed to languages like Java, effect operations
+             |cannot be _captured_ in Effekt. That is, if the type of a function or block
+             |```effekt
+             |def f(): Int / {}
+             |```
+             |does not mention the effect `${f.effect.name}`, then this effect will not be
+             |handled by the handler. This is important when considering higher-order functions.
+             |""".stripMargin
 
       SymbolInfo(f, "Effect operation", Some(DeclPrinter(f)), Some(ex))
 
@@ -138,15 +139,15 @@ trait Intelligence {
       SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
     case c: Record =>
-      val ex = s"""|Instances of data types like `${c.tpe}` can only store
-                   |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
-                   |value parameter lists, not block parameters.
-                   |""".stripMargin
+      val ex = pp"""|Instances of data types like `${c.tpe}` can only store
+                    |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
+                    |value parameter lists, not block parameters.
+                    |""".stripMargin
 
       SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
 
     case c: BlockParam =>
-      val signature = C.blockTypeOption(c).map { tpe => s"{ ${c.name}: ${tpe} }" }
+      val signature = C.functionTypeOption(c).map { tpe => s"{ ${c.name}: ${tpe} }" }
 
       val ex =
         s"""|Blocks, like `${c.name}`, are similar to functions in other languages.
@@ -161,9 +162,9 @@ trait Intelligence {
       SymbolInfo(c, "Block parameter", signature, Some(ex))
 
     case c: ResumeParam =>
-      val tpe = C.blockTypeOption(c)
-      val signature = tpe.map { tpe => s"{ ${c.name}: ${tpe} }" }
-      val hint = tpe.map { tpe => s"(i.e., `${tpe.result}`)" }.getOrElse { " " }
+      val tpe = C.functionTypeOption(c)
+      val signature = tpe.map { tpe => pp"{ ${c.name}: ${tpe} }" }
+      val hint = tpe.map { tpe => pp"(i.e., `${tpe.result}`)" }.getOrElse { " " }
 
       val ex =
         s"""|Resumptions are block parameters, implicitly bound
@@ -178,15 +179,15 @@ trait Intelligence {
       SymbolInfo(c, "Resumption", signature, Some(ex))
 
     case c: ValueParam =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value parameter", signature, None)
 
     case c: ValBinder =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
       SymbolInfo(c, "Value binder", signature, None)
 
     case c: VarBinder =>
-      val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => s"${c.name}: ${tpe}" }
+      val signature = C.blockTypeOption(c).map(TState.extractType).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
 
       val ex =
         s"""|Like in other languages, mutable variable binders like `${c.name}`

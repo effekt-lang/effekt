@@ -82,9 +82,11 @@ Before we look at examples on how to use the `Layout` effect, we introduce yet a
 emit the layouted documents:
 ```
 effect Emit {
-  def text(content: String): Unit
-  def newline(): Unit
+  def emitText(content: String): Unit
+  def emitNewline(): Unit
 }
+def text(content: String) = do emitText(content)
+def newline() = do emitNewline()
 ```
 This way, the resulting document is represented as a stream of `text` and `newline` events.
 
@@ -127,16 +129,16 @@ Indentation can be configured by locally handling `Layout` and thereby changing 
 
 ```
 // Uses `n` as the indentation in the given document
-def in[R](n: Int) { doc: R / Layout }: R / Layout =
+def in[R](n: Int) { doc: => R / Layout }: R / Layout =
   try { doc() }
   with Indent { () => resume(n) }
 
 // Adds `j` to the indentation in the current document
-def nest[R](j: Int) { doc: R / Layout }: R / Layout =
+def nest[R](j: Int) { doc: => R / Layout }: R / Layout =
   (do Indent() + j).in { doc() }
 
 // Uses the default indentation to nest a document
-def nested[R] { doc: R / Layout }: R / Layout =
+def nested[R] { doc: => R / Layout }: R / Layout =
   nest(do DefaultIndent()) { doc() }
 ```
 
@@ -146,14 +148,14 @@ are _all_ layouted horizontally or vertically. Similarly, we can implement handl
 fix the direction:
 
 ```
-def in[R](dir: Direction) { doc: R / Layout }: R / Layout =
+def in[R](dir: Direction) { doc: => R / Layout }: R / Layout =
   try { doc() }
   with Flow { () => resume(dir) }
 
-def horizontal { p: Unit / Layout }: Unit / Layout =
+def horizontal { p: => Unit / Layout }: Unit / Layout =
   Horizontal().in { p() }
 
-def vertical { p: Unit / Layout }: Unit / Layout =
+def vertical { p: => Unit / Layout }: Unit / Layout =
   Vertical().in { p() }
 ```
 
@@ -177,8 +179,8 @@ effect Pretty = { Emit, Layout, LayoutChoice }
 
 Using layout choices, we can express the maybe most important pretty printing combinator:
 ```
-def group { p: Unit / Layout } =
-  choice().in { p() }
+def group { p: => Unit / Layout } =
+  do choice().in { p() }
 ```
 The `group` combinator expresses that depending on the result of `choice` we either layout all children
 horizontally or vertically.
@@ -264,10 +266,10 @@ to actually implement pretty printing by providing the necessary handlers. We st
 a handler for `LayoutChoice` that searches for the first successful layout:
 
 ```
-def searchLayout[R] { p : R / LayoutChoice }: Option[R] =
+def searchLayout[R] { p : => R / LayoutChoice }: Option[R] =
   try { Some(p()) }
   with LayoutChoice {
-    def fail() = None()
+    def fail[A]() = None()
     def choice() = resume(Horizontal()).orElse { resume(Vertical()) }
   }
 ```
@@ -277,24 +279,24 @@ for a particular choice-point, we resume a second time with `Vertical`.
 
 Handling the output emitter is straightforward. Here, we simply store all emitted elements in a string:
 ```
-def writer { p: Unit / Emit } = {
+def writer { p: => Unit / Emit } = {
   var out = "";
   try { p(); out } with Emit {
-    def text(t) = { out = out ++ t; resume(()) }
-    def newline() = { out = out ++ "\n"; resume(()) }
+    def emitText(t) = { out = out ++ t; resume(()) }
+    def emitNewline() = { out = out ++ "\n"; resume(()) }
   }
 }
 ```
 We can implement a handler for `Layout` by intercepting emit effects and keeping track of the current
 column position.
 ```
-def printer(width: Int, defaultIndent: Int) { prog: Unit / { Emit, Layout } } : Unit / { Emit, LayoutChoice } = {
+def printer(width: Int, defaultIndent: Int) { prog: => Unit / { Emit, Layout } } : Unit / { Emit, LayoutChoice } = {
   // the position in the current line
   var pos: Int = 0;
 
   try { prog() }
   // we allow flow to be flexible on the top-level
-  with Flow { () => resume(choice()) }
+  with Flow { () => resume(do choice()) }
   // indentation starts at 0
   with Indent { () => resume(0) }
   // simply handle the default indentation with a constant
@@ -305,19 +307,19 @@ the document exceeds the width. This will potentially cause backtracking and rev
 If the current text still fits the line, we simply re-emit it.
 ```
   with Emit {
-    def text(t) = {
+    def emitText(t) = {
       pos = pos + t.length;
-      if (pos > width) { fail() }
+      if (pos > width) { do fail() }
       else { text(t); resume(()) }
     }
-    def newline() = { pos = 0; newline(); resume(()) }
+    def emitNewline() = { pos = 0; newline(); resume(()) }
   }
 }
 ```
 
 Finally, we can compose the different handlers to a single pretty printing handler:
 ```
-def pretty(width: Int) { doc: Unit / Pretty }: String = {
+def pretty(width: Int) { doc: => Unit / Pretty }: String = {
   val result = searchLayout { writer { printer(width, 2) { doc() } } };
   result.getOrElse { "Cannot print document, since it would overflow." }
 }
@@ -332,11 +334,11 @@ which contains the currently printed document is reset to its previous state.
 
 We can of course define some additional combinators to describe documents:
 ```
-def parens { p: Unit }: Unit / Pretty = {
+def parens { p: => Unit }: Unit / Pretty = {
   text("("); p(); text(")")
 }
 
-def braces { p: Unit }: Unit / Pretty = {
+def braces { p: => Unit }: Unit / Pretty = {
   text("{"); p(); text("}")
 }
 ```

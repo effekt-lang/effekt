@@ -48,8 +48,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
-    case Closure(b) => toDoc(b)
-    case Run(s)     => "run" <+> braces(toDoc(s)) <+> "}"
+    case Box(b) => toDoc(b)
+    case Run(s) => "run" <+> braces(toDoc(s)) <+> "}"
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -85,7 +85,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
       }
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
       "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
-    case State(id, tpe, get, put, init, body) =>
+    case State(init, region, body) =>
       "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
 
     case Match(sc, clauses) =>

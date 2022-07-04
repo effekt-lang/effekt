@@ -1,0 +1,9 @@
+def f { g: Int => Int } = g(1)
+def f { g: String => Int } = g("hello")
+
+def main() = {
+    println(f { (s: String) => 42 })
+    println(f { (s: Int) => s })
+    println(f { s => s })
+    // println(f { s => 42 })
+}

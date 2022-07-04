@@ -4,7 +4,7 @@ module bug1
 effect Flip(): Boolean
 effect MyPrint(n: Int): Unit
 
-def flipTrue { prog: Unit / Flip }: Unit =
+def flipTrue { prog: => Unit / Flip }: Unit =
   try { prog() } with Flip { () =>
     resume(true); resume(false)
   }

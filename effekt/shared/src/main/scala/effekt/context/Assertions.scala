@@ -13,7 +13,10 @@ object assertions {
    * in one place
    */
   extension(s: Symbol)(using reporter: ErrorReporter) {
-
+    def asTypeVar: TypeVar = s match {
+      case t: TypeVar => t
+      case _ => reporter.abort("Expected a type variable")
+    }
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
       case _ => reporter.abort("Expected a value parameter")
@@ -22,12 +25,12 @@ object assertions {
       case t: BlockParam => t
       case _ => reporter.abort("Expected a block parameter")
     }
-    def asControlEffect: ControlEffect = s match {
-      case t: ControlEffect => t
+    def asControlEffect: Interface = s match {
+      case t: Interface => t
       case _ => reporter.abort("Expected a user defined control effect")
     }
-    def asEffectOp: EffectOp = s match {
-      case t: EffectOp => t
+    def asEffectOp: Operation = s match {
+      case t: Operation => t
       case _ => reporter.abort("Expected an effect operation, but got " + s)
     }
     def asUserFunction: UserFunction = s match {
@@ -50,8 +53,8 @@ object assertions {
       case t: ValueType => t
       case _ => reporter.abort("Expected a value type")
     }
-    def asBlockType: BlockType = s match {
-      case t: BlockType => t
+    def asFunctionType: FunctionType = s match {
+      case t: FunctionType => t
       case _ => reporter.abort("Expected a block type")
     }
     def asValBinder: ValBinder = s match {
@@ -70,9 +73,13 @@ object assertions {
       case t: Type => t
       case _ => reporter.abort("Expected a type")
     }
-    def asEffect: Effect = s match {
-      case t: Effect => t
-      case _ => reporter.abort("Expected an effect")
+    def asEffect: InterfaceType = s match {
+      case t: InterfaceType => t
+      case t => reporter.abort("Expected an effect")
+    }
+    def asInterface: Interface = s match {
+      case t: Interface => t
+      case t => reporter.abort("Expected an interface")
     }
     def asFun: Fun = s match {
       case t: Fun => t
@@ -88,7 +95,14 @@ object assertions {
     }
     def asBlockSymbol: BlockSymbol = s match {
       case t: BlockSymbol => t
-      case _ => reporter.panic("Expected a term symbol")
+      case _ => reporter.panic("Expected a block symbol")
+    }
+  }
+
+  extension(t: symbols.Type)(using reporter: ErrorReporter) {
+    def asInterfaceType: InterfaceType = t match {
+      case t: InterfaceType => t
+      case _ => reporter.abort("Expected a capability type")
     }
   }
 

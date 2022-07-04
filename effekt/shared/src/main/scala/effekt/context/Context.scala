@@ -4,8 +4,7 @@ package context
 import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
-import effekt.regions.{ RegionCheckerOps, RegionReporter }
-import effekt.source.{ CapabilityPassingOps, Tree }
+import effekt.source.{ ElaborationOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
 import kiama.util.Messaging.Messages
@@ -38,14 +37,12 @@ trait ContextOps
  * - error reporting (mutable focus)
  */
 abstract class Context(val positions: Positions)
-    extends Compiler
-    with NamerOps
-    with ModuleDB
+    extends NamerOps
     with TyperOps
-    with CapabilityPassingOps
-    with RegionCheckerOps
-    with RegionReporter
-    with TransformerOps {
+    with ModuleDB
+    with ElaborationOps
+    with TransformerOps
+    with Compiler {
 
   // bring the context itself in scope
   implicit val context: Context = this

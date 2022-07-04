@@ -1,7 +1,7 @@
 package effekt
 package context
 
-import effekt.symbols.Module
+import effekt.symbols._
 import kiama.util.Source
 
 /**
@@ -69,15 +69,16 @@ trait ModuleDB { self: Context =>
 
     val main = mains.head
 
-    val mainParams = C.blockTypeOf(main).params
-    if ((mainParams.size != 1) || (mainParams.head != Nil)) {
+    val mainValueParams = C.functionTypeOf(main).vparams
+    val mainBlockParams = C.functionTypeOf(main).bparams
+    if (mainValueParams.nonEmpty || mainBlockParams.nonEmpty) {
       C.abort("Main does not take arguments")
     }
 
-    val tpe = C.blockTypeOf(main)
-    val controlEffects = tpe.effects.controlEffects
+    val tpe = C.functionTypeOf(main)
+    val controlEffects = tpe.effects.toList.controlEffects
     if (controlEffects.nonEmpty) {
-      C.abort(s"Main cannot have user defined effects, but includes effects: ${controlEffects}")
+      C.abort(s"Main cannot have user defined effects, but includes effects: ${controlEffects.mkString(", ")}")
     }
   }
 }

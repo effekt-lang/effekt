@@ -17,7 +17,7 @@ class JavaScriptTests extends AnyFunSpec with TestUtils {
 
   def runTestsIn(dir: File): Unit = describe(dir.getName) {
     dir.listFiles.foreach {
-      case f if f.isDirectory => runTestsIn(f)
+      case f if f.isDirectory && !ignored.contains(f) => runTestsIn(f)
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
@@ -28,7 +28,9 @@ class JavaScriptTests extends AnyFunSpec with TestUtils {
           sys error s"Missing checkfile for ${f.getPath}"
         }
 
-        it(f.getName) {
+        if (ignored.contains(f)) {
+          ignore(f.getName) { () }
+        } else it(f.getName) {
           val out = interpret(f)
 
           if (checkfile.exists()) {
@@ -41,6 +43,8 @@ class JavaScriptTests extends AnyFunSpec with TestUtils {
 }
 
 trait TestUtils {
+
+  lazy val ignored: List[File] = List()
 
   // The sources of all testfiles are stored here:
   lazy val examplesDir = new File("examples")
@@ -74,13 +78,15 @@ trait TestUtils {
    */
   def generateCheckFilesIn(dir: File, regenerateAll: Boolean): Unit = {
     dir.listFiles.foreach {
-      case f if f.isDirectory => generateCheckFilesIn(f, regenerateAll)
+      case f if f.isDirectory && !ignored.contains(f) => generateCheckFilesIn(f, regenerateAll)
       case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
         val path = f.getParentFile
         val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
         val checkfile = path / (baseName + ".check")
 
-        if (regenerateAll || f.lastModified() > checkfile.lastModified()) {
+        val isIgnored = ignored.contains(f)
+        val shouldGenerate = regenerateAll || f.lastModified() > checkfile.lastModified()
+        if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
           val out = interpret(f)
           // save checkfile in source folder (e.g. examples/)

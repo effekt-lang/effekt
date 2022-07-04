@@ -1,0 +1,13 @@
+def definition() = {
+  val f = fun() { 1 };
+  f
+}
+
+def callsite() =
+  (definition())()
+
+// def polymorphicError[A](a: A): Unit =
+//  a()
+
+def main() =
+  println(callsite())

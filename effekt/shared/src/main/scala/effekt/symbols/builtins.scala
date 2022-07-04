@@ -1,6 +1,10 @@
-package effekt.symbols
+package effekt
+package symbols
 
 import effekt.source.ModuleDecl
+import effekt.context.Context
+import effekt.symbols.ErrorMessageInterpolator
+
 import kiama.util.StringSource
 
 /**
@@ -20,13 +24,30 @@ object builtins {
   val TString = BuiltinType(name("String"), Nil)
   val TDouble = BuiltinType(name("Double"), Nil)
 
-  val THole = BuiltinType(name("Unknown"), Nil)
+  val TTop = BuiltinType(name("⊤"), Nil)
+  val TBottom = BuiltinType(name("⊥"), Nil)
 
   val IOEffect = BuiltinEffect(name("IO"), Nil)
-  val IOCapability = BuiltinCapability(IOEffect)
+  val IOCapability = BuiltinCapability(name("io"), IOEffect)
 
   val ControlEffect = BuiltinEffect(name("Control"), Nil)
-  val ControlCapablity = BuiltinCapability(ControlEffect)
+  val ControlCapability = BuiltinCapability(name("control"), ControlEffect)
+
+  object TState {
+    val S = TypeVar(Name.local("S"))
+    val interface = Interface(Name.local("$State"), List(S), Nil)
+    val get = Operation(name("get"), Nil, Nil, S, Effects.Pure, interface)
+    val put = Operation(name("put"), Nil, List(ValueParam(Name.local("s"), Some(S))), TUnit, Effects.Pure, interface)
+    interface.ops = List(get, put)
+
+    def extractType(state: BlockType)(using C: Context): ValueType =
+      state match {
+        case BlockTypeApp(i, List(tpe)) => tpe
+        case tpe => C.panic(pp"Expected builtin state, but got $tpe")
+      }
+  }
+
+  val TRegion = Interface(Name.local("Region"), Nil, Nil)
 
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Int" -> TInt,
@@ -34,11 +55,15 @@ object builtins {
     "Unit" -> TUnit,
     "String" -> TString,
     "Double" -> TDouble,
-    "IO" -> IOEffect
+    "IO" -> IOEffect,
+    "Region" -> TRegion
   )
 
   // it is a set, because terms can be overloaded...
-  val rootTerms: Map[String, Set[TermSymbol]] = Map(
-    "io" -> Set(IOCapability)
+  val rootTerms: Map[String, Set[TermSymbol]] = Map()
+
+  val rootCaptures: Map[String, Capture] = Map(
+    "io" -> IOCapability.capture,
+    "control" -> ControlCapability.capture
   )
 }

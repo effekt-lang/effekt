@@ -18,7 +18,7 @@ def sum() = {
   }
 }
 
-def map { f : Int => Int } { prog : Unit / Read } : Unit / {Read} = {
+def map { f : Int => Int } { prog : => Unit / Read } : Unit / {Read} = {
   try {
     prog()
   } with Read { () =>
@@ -26,7 +26,7 @@ def map { f : Int => Int } { prog : Unit / Read } : Unit / {Read} = {
   }
 }
 
-def range(from : Int, to : Int) { prog : Unit / Read } = {
+def range(from : Int, to : Int) { prog : => Unit / Read } = {
   var n = from;
   try {
     prog()
@@ -41,7 +41,7 @@ def range(from : Int, to : Int) { prog : Unit / Read } = {
   }
 }
 
-def state { prog: Unit / State } = {
+def state { prog: => Unit / State } = {
   var s = 0;
   try {
     prog()

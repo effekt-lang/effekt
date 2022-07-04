@@ -33,7 +33,7 @@ def first(l : List) = l match {
 
 A helper function to generate lists of length `n` using `Done` to signal stopping.
 ```
-def genlist { f: Int / Done } : List = {
+def genlist { f: => Int / Done } : List = {
   var l = Nil();
   try {
     while (true) { l = Cons(f(), l) }

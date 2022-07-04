@@ -11,7 +11,7 @@ extern include "effekt.ss"
 extern include "../common/effekt_matching.ss"
 
 
-def locally[R] { f: R }: R = f()
+def locally[R] { f: => R }: R = f()
 
 // String ops
 // ==========
@@ -166,24 +166,24 @@ effect Exception[E] {
 }
 record RuntimeError()
 
-def raise[A](msg: String): A / Exception[RuntimeError] = raise(RuntimeError(), msg)
+def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
 
 // converts exceptions of (static) type E to an uncatchable panic that aborts the program
-def panicOn[E] { prog: Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception, msg) = panic(msg) }
+def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception, msg) = panic(msg) }
 
 // reports exceptions of (static) type E to the console
-def report[E] { prog: Unit / Exception[E] }: Unit / Console =
-  try { prog() } with Exception[E] { def raise(exception, msg) = println(msg) }
+def report[E] { prog: => Unit / Exception[E] }: Unit / Console =
+  try { prog() } with Exception[E] { def raise[A](exception, msg) = println(msg) }
 
 // ignores exceptions of (static) type E
 // TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
-def ignoring[E] { prog: Unit / Exception[E] }: Unit =
-  try { prog() } with Exception[E] { def raise(exception, msg) = () }
+def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception, msg) = () }
 
 
 // Benchmarking
 // ============
 // should only be used with pure blocks
-extern control def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console =
+extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit / Console =
   "(display (measure block warmup iterations))"

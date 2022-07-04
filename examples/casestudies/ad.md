@@ -45,11 +45,11 @@ We can use the number DSL to express two example programs.
 ```
 // d = 3 + 3x^2
 def prog[Num](x: Num): Num / AD[Num] =
-  add(mul(num(3.0), x), mul(mul(x, x), x))
+  do add(do mul(do num(3.0), x), do mul(do mul(x, x), x))
 
 // d = exp(1 + 2x) + 2x*exp(x^2)
 def progExp[Num](x: Num): Num / AD[Num] =
-  add(mul(num(0.5), exp(add(num(1.0), mul(num(2.0), x)))), exp(mul(x, x)))
+  do add(do mul(do num(0.5), do exp(do add(do num(1.0), do mul(do num(2.0), x)))), do exp(do mul(x, x)))
 ```
 These programs use effect operations for multiplication, addition, the exponential function, and for embedding
 constant literals.
@@ -74,11 +74,11 @@ def forwards(in: Double) { prog: NumF => NumF / AD[NumF] }: Double =
 
 record NumH[N](value: N, d: N)
 def forwardsHigher[N](in: N) { prog: NumH[N] => NumH[N] / AD[NumH[N]] }: N / AD[N] =
-  try { prog(NumH(in, num(1.0))).d } with AD[NumH[N]] {
-    def num(v)    = resume(NumH(num(v), num(0.0)))
-    def add(x, y) = resume(NumH(add(x.value, y.value), add(x.d, y.d)))
-    def mul(x, y) = resume(NumH(mul(x.value, y.value), add(mul(x.d, y.value), mul(y.d, x.value))))
-    def exp(x) = resume(NumH(exp(x.value), mul(x.d, exp(x.value))))
+  try { prog(NumH(in, do num(1.0))).d } with AD[NumH[N]] {
+    def num(v)    = resume(NumH(do num(v), do num(0.0)))
+    def add(x, y) = resume(NumH(do add(x.value, y.value), do add(x.d, y.d)))
+    def mul(x, y) = resume(NumH(do mul(x.value, y.value), do add(do mul(x.d, y.value), do mul(y.d, x.value))))
+    def exp(x) = resume(NumH(do exp(x.value), do mul(x.d, do exp(x.value))))
   }
 
 def showString { prog: String => String / AD[String] } =
@@ -159,23 +159,23 @@ def main() = {
 
   // we have the same pertubation confusion as in Lantern
   val result = forwards(1.0) { x =>
-    val shouldBeOne = forwards(1.0) { y => add(x, y) }
-    val z = num[NumF](shouldBeOne)
-    mul(x, z)
+    val shouldBeOne = forwards(1.0) { y => do add(x, y) }
+    val z = do num[NumF](shouldBeOne)
+    do mul(x, z)
   }
   println(result)
 
   val result2 = backwards(1.0) { x =>
-    val shouldBeOne = backwards(1.0) { y => add(x, y) }
-    val z = num[NumB](shouldBeOne)
-    mul(x, z)
+    val shouldBeOne = backwards(1.0) { y => do add(x, y) }
+    val z = do num[NumB](shouldBeOne)
+    do mul(x, z)
   }
   println(result2)
 
   // this is proposed by Wang et al. as a solution to pertubation confusion
   val result3 = backwards(1.0) { x =>
-    val shouldBeOne = forwards(1.0) { y => add(num(x.value), y) }
-    mul(x, num(shouldBeOne))
+    val shouldBeOne = forwards(1.0) { y => do add(do num(x.value), y) }
+    do mul(x, do num(shouldBeOne))
   }
   println(result3)
 }

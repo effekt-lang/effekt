@@ -4,14 +4,12 @@ import effekt.context.Context
 import effekt.core.Transformer
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
-import effekt.regions.RegionChecker
-import effekt.source.{ CapabilityPassing, ModuleDecl }
+import effekt.source.{ Elaborator, ModuleDecl }
 import effekt.symbols.Module
-import effekt.typer.Typer
+import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.Backend
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -123,20 +121,25 @@ trait Compiler {
        */
       Namer andThen
       /**
+       * Explicit box transformation
+       *   [[NameResolved]] --> [[NameResolved]]
+       */
+      PreTyper andThen
+      /**
        * Type checks and annotates trees with inferred types and effects
        *   [[NameResolved]] --> [[Typechecked]]
        */
       Typer andThen
       /**
+       * Wellformedness checks (exhaustivity, non-escape)
+       *   [[Typechecked]] --> [[Typechecked]]
+       */
+      PostTyper andThen
+      /**
        * Uses annotated effects to translate to explicit capability passing
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      CapabilityPassing andThen
-      /**
-       * Infers regions and prevents escaping of first-class functions
-       *   [[Typechecked]] --> [[Typechecked]]
-       */
-      RegionChecker
+      Elaborator
   }
 
   /**

@@ -15,21 +15,21 @@ object DeclPrinter extends ParenPrettyPrinter {
 
   def toDoc(t: Symbol, context: Context): Doc = t match {
 
-    case e @ ControlEffect(name, tparams, List(op)) =>
+    case e @ Interface(name, tparams, List(op)) =>
       format("effect", op, op.annotatedResult, op.annotatedEffects)
 
-    case e @ ControlEffect(name, tparams, ops) =>
+    case e @ Interface(name, tparams, ops) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       val effs = ops.map { op => format("def", op, op.annotatedResult, op.annotatedEffects) }
       "effect" <+> name.toString <> tps <+> braces(nest(line <> vsep(effs)) <> line)
 
     case b @ ValBinder(name, tps, decl) =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      s"val ${name}: ${tpe}"
+      pp"val ${name}: ${tpe}"
 
     case b: VarBinder =>
       val tpe = context.valueTypeOption(b).getOrElse { b.tpe.get }
-      s"var ${b.name}: ${tpe}"
+      pp"var ${b.name}: ${tpe}"
 
     case TypeAlias(name, tparams, tpe) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
@@ -58,25 +58,22 @@ object DeclPrinter extends ParenPrettyPrinter {
       s"extern type ${name}$tps"
 
     case c: Fun =>
-      val tpe = context.blockTypeOption(c)
+      val tpe = context.functionTypeOption(c)
       format("def", c, tpe.map { _.result }, tpe.map { _.effects })
   }
 
   def format(kw: String, f: Fun, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
-    val ps = f.params.map {
-      case List(b: BlockParam) => s"{ ${b.name}: ${b.tpe} }"
-      case l: List[ValueParam @unchecked] =>
-        val vps = l.map { p => s"${p.name}: ${p.tpe.get}" }.mkString(", ")
-        s"($vps)"
-      case _ => sys error "Parameter lists are either singleton block params or a list of value params."
-    }.mkString
+
+    val valueParams = f.vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")
+    val vps = if valueParams.isEmpty then "" else s"($valueParams)"
+    val bps = f.bparams.map { b => pp"{ ${b.name}: ${b.tpe} }" }.mkString("")
 
     val returnType = for {
       tpe <- result
       eff <- effects
-    } yield s": $tpe / $eff"
+    } yield pp": $tpe / $eff"
 
-    s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
+    s"$kw ${f.name}$tps$vps$bps${returnType.getOrElse("")}"
   }
 }

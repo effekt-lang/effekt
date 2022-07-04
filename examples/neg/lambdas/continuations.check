@@ -1,9 +1,3 @@
-[info] examples/neg/lambdas/continuations.effekt:17:14: Not allowed: @Raise
+[error] examples/neg/lambdas/continuations.effekt:17:14: Not allowed {Raise$capability}
       cont = fun() { resume(()) };
              ^^^^^^^^^^^^^^^^^^^^
-[error] examples/neg/lambdas/continuations.effekt:17:14: Region mismatch: expected {main} but got {@Raise}
-      cont = fun() { resume(()) };
-             ^^^^^^^^^^^^^^^^^^^^
-[info] examples/neg/lambdas/continuations.effekt:17:22: Function resume is called, which closes over '@Raise'
-      cont = fun() { resume(()) };
-                     ^^^^^^

@@ -6,14 +6,14 @@ type Result {
 }
 
 def numbers() = {
-  Yield(1);
-  Yield(2);
-  Yield(3)
+  do Yield(1);
+  do Yield(2);
+  do Yield(3)
 }
 
 def main() = {
 
-  var generator: () => Result / {main} = fun() { Done() }
+  var generator: () => Result at {main} = fun() { Done() }
 
   try {
     numbers()
@@ -22,9 +22,12 @@ def main() = {
     generator = fun() { resume(()); Next(n) }
   }
 
-  println(generator())
-  println(generator())
-  println(generator())
-  println(generator())
-  println(generator())
+  // right now we do not infer unbox for a mutable variable since it
+  // already is of block type.
+  def gen() = (unbox generator)()
+  println(gen())
+  println(gen())
+  println(gen())
+  println(gen())
+  println(gen())
 }

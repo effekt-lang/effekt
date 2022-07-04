@@ -9,8 +9,8 @@ effect Proc {
   def exit(): Unit
 }
 
-def scheduler { prog: Unit / Proc } = {
-  var queue: Dequeue[() => Unit / {scheduler}] = emptyQueue();
+def scheduler { prog: => Unit / Proc } = {
+  var queue: Dequeue[() => Unit at {scheduler, prog}] = emptyQueue();
 
   def run(): Unit = queue.popBack match {
     case None() => ()
@@ -34,27 +34,27 @@ def scheduler { prog: Unit / Proc } = {
   run()
 }
 
-def fork { b1: Unit / Proc } { b2: Unit / Proc } =
-  if (fork()) { b1() } else { b2() }
+def fork { b1: => Unit / Proc } { b2: => Unit / Proc } =
+  if (do fork()) { b1() } else { b2() }
 
 def main() = {
   println("Example 1")
   scheduler {
     fork {
       println("hello 1")
-      yield()
+      do yield()
       println(1)
-      yield()
+      do yield()
       println(2)
-      exit()
+      do exit()
       println(3)
     } {
       println("hello 2")
-      yield()
+      do yield()
       println(4)
-      yield()
+      do yield()
       println(5)
-      yield()
+      do yield()
       println(6)
     }
   }

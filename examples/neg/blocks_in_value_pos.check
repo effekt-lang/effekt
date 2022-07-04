@@ -1,3 +1,6 @@
-[error] examples/neg/blocks_in_value_pos.effekt:7:12: Blocks have to be fully applied and can't be used as values.
+[error] examples/neg/blocks_in_value_pos.effekt:7:12: Expected type
+  Unit
+but got type
+  () => Unit / { MyPrint } at ?C
     resume(prog);
            ^^^^

@@ -4,7 +4,7 @@ package context
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
 
-case class Annotation[K, V](name: String, description: String) {
+case class Annotation[K, V](name: String, description: String, bindToObjectIdentity: Boolean = true) {
   type Value = V
   override def toString = name
 }
@@ -18,33 +18,50 @@ case class Annotation[K, V](name: String, description: String) {
  * Local annotations can be "comitted" to become global ones in the DB,
  * that are assumed to not change anymore.
  */
-class Annotations private (private var annotations: Annotations.DB) {
+class Annotations private(
+  /**
+   * Local Annotations are organized differently to allow simple access.
+   */
+  private var annotations: Map[Annotation[_, _], Map[Annotations.Key[Any], Any]]
+) {
   import Annotations._
 
   def copy: Annotations = new Annotations(annotations)
 
-  private def annotationsAt(key: Any): Map[Annotation[_, _], Any] =
-    annotations.getOrElse(new Key(key), Map.empty)
+  private def annotationsAt[K, V](ann: Annotation[K, V]): Map[Key[K], V] =
+    annotations.getOrElse(ann, Map.empty).asInstanceOf
 
-  private def updateAnnotations(key: Any, annos: Map[Annotation[_, _], Any]): Unit =
-    annotations = annotations.updated(new Key(key), annos)
-
-  def annotate[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
-    val anns = annotationsAt(key)
-    updateAnnotations(key, anns + (ann -> value))
+  def update[K, V](ann: Annotation[K, V], key: K, value: V): Unit = {
+    val anns = annotationsAt(ann)
+    val updatedAnns = anns.updated(Annotations.makeKey(ann, key), value)
+    annotations = annotations.updated(ann, updatedAnns.asInstanceOf)
   }
 
-  def annotationOption[K, V](ann: Annotation[K, V], key: K): Option[V] =
-    annotationsAt(key).get(ann).asInstanceOf[Option[V]]
+  def get[K, V](ann: Annotation[K, V], key: K): Option[V] =
+    annotationsAt(ann).get(Annotations.makeKey(ann, key))
 
-  def annotation[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
-    annotationOption(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
+  def getOrElse[K, V](ann: Annotation[K, V], key: K, default: => V): V =
+    annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), default)
 
-  def commit()(implicit global: AnnotationsDB): Unit =
-    annotations.foreach {
-      case (k, annos) =>
-        global.annotate(k.key, annos)
-    }
+  def getOrElseUpdate[K, V](ann: Annotation[K, V], key: K, default: => V): V =
+    annotationsAt(ann).getOrElse(Annotations.makeKey(ann, key), {
+      val value = default
+      update(ann, key, value)
+      value
+    })
+
+  def removed[K, V](ann: Annotation[K, V], key: K): Unit =
+    annotations = annotations.updated(ann, annotationsAt(ann).removed(Annotations.makeKey(ann, key)).asInstanceOf)
+
+  def apply[K, V](ann: Annotation[K, V]): List[(K, V)] =
+    annotationsAt(ann).map { case (k, v) => (k.key, v) }.toList
+
+  def apply[K, V](ann: Annotation[K, V], key: K)(implicit C: ErrorReporter): V =
+    get(ann, key).getOrElse { C.abort(s"Cannot find ${ann.name} '${key}'") }
+
+  def updateAndCommit[K, V](ann: Annotation[K, V])(f: (K, V) => V)(implicit global: AnnotationsDB): Unit =
+    val anns = annotationsAt(ann)
+    anns.foreach { case (kk, v) => global.annotate(ann, kk.key, f(kk.key, v)) }
 
   override def toString = s"Annotations(${annotations})"
 }
@@ -52,15 +69,29 @@ object Annotations {
 
   def empty: Annotations = new Annotations(Map.empty)
 
-  private type DB = Map[Annotations.Key[Any], Map[Annotation[_, _], Any]]
+  private type DB = Map[Annotations.HashKey[Any], Map[Annotation[_, _], Any]]
 
-  private class Key[T](val key: T) {
+  sealed trait Key[T] { def key: T }
+
+  private class HashKey[T](val key: T) extends Key[T] {
     override val hashCode = System.identityHashCode(key)
     override def equals(o: Any) = o match {
-      case k: Key[_] => hashCode == k.hashCode
+      case k: HashKey[_] => hashCode == k.hashCode
       case _         => false
     }
   }
+
+  private class IdKey[T](val key: T) extends Key[T] {
+    override val hashCode = key.hashCode()
+    override def equals(o: Any) = o match {
+      case k: Key[_] => key == k.key
+      case _         => false
+    }
+  }
+
+  private def makeKey[K, V](ann: Annotation[K, V], k: K): Key[K] =
+    if (ann.bindToObjectIdentity) new HashKey(k)
+    else new IdKey(k)
 
   /**
    * The as inferred by typer at a given position in the tree
@@ -78,15 +109,23 @@ object Annotations {
    * Important for finding the types of temporary variables introduced by transformation
    * Can also be used by LSP server to display type information for type-checked trees
    */
-  val InferredType = Annotation[source.Tree, symbols.ValueType](
-    "InferredType",
+  val InferredValueType = Annotation[source.Tree, symbols.ValueType](
+    "InferredValueType",
     "the inferred type of"
+  )
+
+  /**
+   * The type as inferred by typer at a given position in the tree
+   */
+  val InferredBlockType = Annotation[source.Tree, symbols.BlockType](
+    "InferredBlockType",
+    "the inferred block type of"
   )
 
   /**
    * Type arguments of a _function call_ as inferred by typer
    */
-  val TypeArguments = Annotation[source.Call, List[symbols.ValueType]](
+  val TypeArguments = Annotation[source.CallLike, List[symbols.ValueType]](
     "TypeArguments",
     "the inferred or annotated type arguments of"
   )
@@ -102,9 +141,17 @@ object Annotations {
   /**
    * Block type of symbols like function definitions, block parameters, or continuations
    */
-  val BlockType = Annotation[symbols.BlockSymbol, symbols.InterfaceType](
+  val BlockType = Annotation[symbols.BlockSymbol, symbols.BlockType](
     "BlockType",
     "the type of block symbol"
+  )
+
+  /**
+   * Capability set used by a function definition, block parameter, ...
+   */
+  val Captures = Annotation[symbols.BlockSymbol, symbols.Captures](
+    "Captures",
+    "the set of used capabilities of a block symbol"
   )
 
   /**
@@ -158,47 +205,56 @@ object Annotations {
     "the resolved type for"
   )
 
-  /**
-   * The blocktype of a calltarget as annotated by typer
-   */
-  val TargetType = Annotation[source.CallTarget, symbols.BlockType](
-    "TargetType",
-    "the blocktype for calltarget"
+  val Capture = Annotation[source.CaptureSet, symbols.CaptureSet](
+    "Capture",
+    "the resolved capture set for"
   )
 
   /**
-   * The block type of a block argument as annotated by typer
+   * Similar to TypeAndEffect: the capture set of a program
    */
-  val BlockArgumentType = Annotation[source.BlockArg, symbols.BlockType](
-    "BlockArgumentType",
-    "the inferred type for block argument"
-  )
-
-  /*
-   * The region a given symbol can be used in
-   */
-  val Regions = Annotation[symbols.Symbol, regions.Region](
-    "Regions",
-    "the regions associated with symbol"
+  val InferredCapture = Annotation[source.Tree, symbols.CaptureSet](
+    "InferredCapture",
+    "the inferred capture for source tree"
   )
 
   /**
-   * The unifier as computed by typer when type checking the module
+   * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]],
+   *   [[source.VarDef]], or [[source.FunctionArg]].
+   *
+   * Inferred by typer, used by elaboration.
    */
-  val Unifier = Annotation[symbols.Module, substitutions.Unifier](
-    "Unifier",
-    "the unifier for module"
+  val BoundCapabilities = Annotation[source.Tree, List[symbols.BlockParam]](
+    "BoundCapabilities",
+    "capabilities bound by this tree"
   )
 
   /**
-   * Similar to TypeAndEffect: the region of a program inferred by RegionChecker
+   * Capabilities inferred as additional arguments to a call.
+   *
+   * Inferred by typer, used by elaboration.
    */
-  val InferredRegion = Annotation[source.Tree, regions.RegionSet](
-    "InferredRegion",
-    "the inferred region for source tree"
+  val CapabilityArguments = Annotation[source.CallLike, List[symbols.BlockParam]](
+    "CapabilityArguments",
+    "capabilities inferred as additional arguments for this call"
   )
 
+  val CapabilityReceiver = Annotation[source.Do, symbols.BlockParam](
+    "CapabilityReceiver",
+    "the receiver as inferred for this effect operation call"
+  )
+
+  /**
+   * The lexical region as introduced by namer
+   *
+   * Used by typer for region checking mutable variables.
+   */
+  val SelfRegion = Annotation[source.Tree, symbols.Capture](
+    "SelfRegion",
+    "the region corresponding to a lexical scope"
+  )
 }
+
 
 /**
  * A global annotations database
@@ -253,16 +309,16 @@ trait AnnotationsDB { self: Context =>
 
   // Customized Accessors
   // ====================
-  import symbols.{ Symbol, Type, ValueType, BlockType, InterfaceType, ValueSymbol, BlockSymbol, Module, Effects }
+  import symbols.{ Symbol, Type, ValueType, FunctionType, BlockType, ValueSymbol, BlockSymbol, Module, Effects }
 
   // Types
   // -----
 
-  def typeArguments(c: source.Call): List[symbols.ValueType] =
+  def typeArguments(c: source.CallLike): List[symbols.ValueType] =
     annotation(Annotations.TypeArguments, c)
 
   def inferredTypeOption(t: source.Tree): Option[ValueType] =
-    annotationOption(Annotations.InferredType, t)
+    annotationOption(Annotations.InferredValueType, t)
 
   def inferredTypeOf(t: source.Tree): ValueType =
     inferredTypeOption(t).getOrElse {
@@ -288,14 +344,14 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
-  def inferredRegion(t: source.Tree): regions.RegionSet =
-    annotation(Annotations.InferredRegion, t)
+  def inferredCapture(t: source.Tree): symbols.CaptureSet =
+    annotation(Annotations.InferredCapture, t)
 
-  def inferredRegionOption(t: source.Tree): Option[regions.RegionSet] =
-    annotationOption(Annotations.InferredRegion, t)
+  def inferredCaptureOption(t: source.Tree): Option[symbols.CaptureSet] =
+    annotationOption(Annotations.InferredCapture, t)
 
   // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: InterfaceType): Unit = s match {
+  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
     case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
     case _              => panic(s"Trying to store a block type for non block '${s}'")
   }
@@ -311,36 +367,44 @@ trait AnnotationsDB { self: Context =>
   def resolvedType(tree: source.Type): tree.resolved =
     annotation(Annotations.Type, tree).asInstanceOf[tree.resolved]
 
+  def annotateResolvedCapture(tree: source.CaptureSet)(capt: tree.resolved): Unit =
+    annotate(Annotations.Capture, tree, capt)
+
+  def resolvedCapture(tree: source.CaptureSet): tree.resolved =
+    annotation(Annotations.Capture, tree)
+
   def typeOf(s: Symbol): Type = s match {
     case s: ValueSymbol => valueTypeOf(s)
-    case s: BlockSymbol => interfaceTypeOf(s)
+    case s: BlockSymbol => blockTypeOf(s)
     case _              => panic(s"Cannot find a type for symbol '${s}'")
   }
 
+  def functionTypeOf(s: Symbol): FunctionType =
+    functionTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
+
+  def functionTypeOption(s: Symbol): Option[FunctionType] =
+    s match {
+      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
+        case b: FunctionType => Some(b)
+        case _               => None
+      }
+      // The callsite should be adjusted, this is NOT the job of annotations...
+      case v: ValueSymbol => ???
+      //        valueTypeOption(v).flatMap { v =>
+      //          v.dealias match {
+      //            case symbols.BoxedType(tpe: FunctionType, _) => Some(tpe)
+      //            case _ => None
+      //          }
+      //        }
+    }
+
   def blockTypeOf(s: Symbol): BlockType =
-    blockTypeOption(s) getOrElse { panic(s"Cannot find type for block '${s}'") }
+    blockTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
 
   def blockTypeOption(s: Symbol): Option[BlockType] =
     s match {
       case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
         case b: BlockType => Some(b)
-        case _            => None
-      }
-      case v: ValueSymbol => valueTypeOption(v).flatMap { v =>
-        v.dealias match {
-          case symbols.FunType(tpe, _) => Some(tpe)
-          case _ => None
-        }
-      }
-    }
-
-  def interfaceTypeOf(s: Symbol): InterfaceType =
-    interfaceTypeOption(s) getOrElse { panic(s"Cannot find interface type for block '${s}'") }
-
-  def interfaceTypeOption(s: Symbol): Option[InterfaceType] =
-    s match {
-      case b: BlockSymbol => annotationOption(Annotations.BlockType, b) flatMap {
-        case b: InterfaceType => Some(b)
       }
       case _ => panic(s"Trying to find a interface type for non block '${s}'")
     }
@@ -353,21 +417,6 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to find a value type for non-value '${s}'")
   }
 
-  // Calltargets
-  // -----------
-
-  // annotated by capability passing
-  def annotateCalltarget(t: source.CallTarget, tpe: BlockType): Unit =
-    annotate(Annotations.TargetType, t, tpe)
-
-  def blockTypeOf(t: source.CallTarget): BlockType =
-    annotation(Annotations.TargetType, t)
-
-  def blockTypeOption(t: source.CallTarget): Option[BlockType] =
-    annotationOption(Annotations.TargetType, t)
-
-  def blockTypeOf(t: source.BlockArg): BlockType =
-    annotation(Annotations.BlockArgumentType, t)
 
   // Symbols
   // -------
@@ -401,7 +450,7 @@ trait AnnotationsDB { self: Context =>
     annotation(Annotations.SourceModule, sym)
 
   /**
-   * Searching the defitions for a Reference
+   * Searching the definitions for a Reference
    *
    * This one can fail.
    */
@@ -447,9 +496,9 @@ trait AnnotationsDB { self: Context =>
       .getOrElse(Nil)
       .distinctBy(r => System.identityHashCode(r))
 
-  def annotateRegions(sym: Symbol, r: regions.Region): Unit =
-    annotate(Annotations.Regions, sym, r)
+  def captureOf(sym: BlockSymbol): symbols.Captures =
+    annotation(Annotations.Captures, sym)
 
-  def regionOf(sym: Symbol): regions.Region =
-    annotation(Annotations.Regions, sym)
+  def captureOfOption(sym: BlockSymbol): Option[symbols.Captures] =
+    annotationOption(Annotations.Captures, sym)
 }

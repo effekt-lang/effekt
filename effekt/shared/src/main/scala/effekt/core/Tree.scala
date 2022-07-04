@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, ControlEffect, Effect, EffectOp, Type, ValueType, BlockType, InterfaceType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -38,7 +38,7 @@ case class StringLit(value: String) extends Literal[String]
 
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
-case class Closure(b: Block) extends Expr
+case class Box(b: Block) extends Expr
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
 
@@ -47,14 +47,14 @@ case class Run(s: Stmt) extends Expr
  */
 sealed trait Param extends Tree { def id: TermSymbol }
 case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
-case class BlockParam(id: BlockSymbol, tpe: InterfaceType) extends Param
+case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: BlockSymbol) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: EffectOp) extends Block
+case class Member(b: Block, field: TermSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 
@@ -62,7 +62,7 @@ case class Unbox(e: Expr) extends Block
  * Statements
  */
 sealed trait Stmt extends Tree
-case class Def(id: BlockSymbol, tpe: InterfaceType, block: Block, rest: Stmt) extends Stmt
+case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
 case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
@@ -85,10 +85,10 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: ControlEffect, tpe: ValueType, get: EffectOp, put: EffectOp, init: Stmt, body: Block) extends Stmt
+case class State(init: Stmt, region: Option[Symbol], body: Block) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
-case class Handler(id: ControlEffect, clauses: List[(EffectOp, BlockLit)]) extends Tree
+case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
 
 object Tree {
 
@@ -123,7 +123,7 @@ object Tree {
           Select(rewrite(target), field)
         case v: ValueVar   => v
         case l: Literal[_] => l
-        case Closure(b)    => Closure(rewrite(b))
+        case Box(b)        => Box(rewrite(b))
         case Run(s)        => Run(rewrite(s))
       }
 
@@ -150,8 +150,8 @@ object Tree {
           Ret(rewrite(e))
         case Include(contents, rest) =>
           Include(contents, rewrite(rest))
-        case State(id, tpe, get, put, init, body) =>
-          State(id, tpe, get, put, rewrite(init), rewrite(body))
+        case State(init, reg, body) =>
+          State(rewrite(init), reg, rewrite(body))
         case Handle(body, handler) =>
           Handle(rewrite(body), handler map rewrite)
         case Match(scrutinee, clauses) =>

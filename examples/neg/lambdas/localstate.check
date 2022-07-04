@@ -1,12 +1,6 @@
-[error] examples/neg/lambdas/localstate.effekt:5:3: A value that is introduced in 'local' leaves its scope.
+[error] examples/neg/lambdas/localstate.effekt:3:14: The return type () => Unit at {this, this, io} of the function body must not mention the region of the function itself.
+def main() = {
+             ^
+[error] examples/neg/lambdas/localstate.effekt:5:17: The return type () => Unit at {this, this, io} of the function body must not mention the region of the function itself.
   def local() = {
-  ^
-[info] examples/neg/lambdas/localstate.effekt:19:5: Function incrementer is called, which closes over 'local'
-    incrementer()
-    ^^^^^^^^^^^
-[info] examples/neg/lambdas/localstate.effekt:20:5: Function incrementer is called, which closes over 'local'
-    incrementer()
-    ^^^^^^^^^^^
-[info] examples/neg/lambdas/localstate.effekt:21:5: A value is returned that mentions 'local' in its inferred type
-    incrementer
-    ^^^^^^^^^^^
+                ^

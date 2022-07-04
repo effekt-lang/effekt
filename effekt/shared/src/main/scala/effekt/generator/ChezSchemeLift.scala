@@ -4,6 +4,7 @@ package generator
 import effekt.context.Context
 import effekt.lifted.*
 import effekt.symbols.{ Module, Wildcard, Name }
+import effekt.symbols.builtins.TState
 
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -105,8 +106,8 @@ object ChezSchemeLiftPrinter extends ChezSchemeLiftedBase {
       defineFunction(nameDef(id), List(nameDef(sc)),
         schemeLambda(ps map toDoc, toDoc(body, false))) <> emptyline <> toDoc(rest, toplevel)
 
-    case State(eff, tpe, get, put, init, block) =>
-      schemeCall("state", nameDef(eff), nameDef(get), nameDef(put), toDoc(init, false), toDoc(block))
+    case State(init, reg, block) =>
+      schemeCall("state", nameDef(TState.interface), nameDef(TState.get), nameDef(TState.put), toDoc(init, false), toDoc(block))
 
     case other => super.toDoc(s, toplevel)
   }

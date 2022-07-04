@@ -36,18 +36,23 @@ def test4[A](l1: List[A], l2: List[A]): List[A] = l1 match {
   case Cons(a, rest) => Cons(a, test4(rest, l2))
 }
 
-def test5[A] { l1: List[A] } { l2: List[A] }: List[A] = l1() match {
+def test5[A] { l1: => List[A] } { l2: => List[A] }: List[A] = l1() match {
   case Nil() => Nil()
   case Cons(a, rest) => l2()
 }
 
-def test5a[R] { p: R }: List[R] =
+def test5a[R] { p: => R }: List[R] =
    test3([ p() ], Nil())
 
-def test5b[R] { p: R }: List[R] =
+def test5b[R] { p: => R }: List[R] =
    test5 { [ p() ] } { Nil[R]() }
 
-def test5c[R] { p: R }: List[R] =
+def test5c[R] { p: => R }: List[R] =
    test5 { [ p() ] } { Nil() }
 
 def main() = println(triple(10, 15))
+
+def testNested(l1: List[Int]): List[String] = l1 match {
+  case Cons(a, rest) => Nil[Int]() // failing to check the call here aborts type checking, so this example goes last
+  case Nil() => ""
+}

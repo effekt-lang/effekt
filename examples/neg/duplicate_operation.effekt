@@ -6,7 +6,7 @@ effect State {
     def set(n: Int): Unit
 }
 
-def state[R](init: Int) { f: R / { State } }: Unit / Console = {
+def state[R](init: Int) { f: => R / { State } }: Unit / Console = {
     var s = init;
     try { f(); () } with State {
         def get() = resume(s)

@@ -1,13 +1,11 @@
 effect Exc(): Unit
 
-def main() = {
-  val g: () => Unit / Exc = fun() { Exc() }
-
-
+def main() =
   try {
+    def closure(): Unit = do Exc()
+    val g: () => Unit / Exc at {exc} = fun() { closure() }
     g()
-  } with Exc {
+  } with exc: Exc {
     println("exception!");
     resume(())
   }
-}

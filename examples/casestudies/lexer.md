@@ -47,9 +47,9 @@ An example program using the lexer effect is:
 
 ```
 def example1() = {
-  val t1 = next();
-  val t2 = next();
-  val t3 = next();
+  val t1 = do next();
+  val t2 = do next();
+  val t3 = do next();
   (t1, t2, t3)
 }
 ```
@@ -60,7 +60,7 @@ A dummy lexer reading lexemes from a given list can be implemented as a handler 
 effect LexerError[A](msg: String, pos: Position): A
 val dummyPosition = Position(0, 0, 0)
 
-def lexerFromList[R](l: List[Token]) { program: R / Lexer }: R / LexerError = {
+def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError = {
   var in = l;
   try { program() } with Lexer {
     def peek() = in match {
@@ -68,7 +68,7 @@ def lexerFromList[R](l: List[Token]) { program: R / Lexer }: R / LexerError = {
       case Cons(tok, _) => resume(Some(tok))
     }
     def next() = in match {
-      case Nil() => LexerError("Unexpected end of input", dummyPosition)
+      case Nil() => do LexerError("Unexpected end of input", dummyPosition)
       case Cons(tok, _) => resume(tok)
     }
   }
@@ -76,8 +76,8 @@ def lexerFromList[R](l: List[Token]) { program: R / Lexer }: R / LexerError = {
 ```
 We define a separate handler to report lexer errors to the console:
 ```
-def report { prog: Unit / LexerError }: Unit / Console =
-  try { prog() } with LexerError { (msg, pos) =>
+def report { prog: => Unit / LexerError }: Unit / Console =
+  try { prog() } with LexerError[A] { (msg, pos) =>
     println(pos.line.show ++ ":" ++ pos.col.show ++ " " ++ msg)
   }
 ```
@@ -117,7 +117,7 @@ val tokenDesriptors = [
 ```
 
 ```
-def lexer[R](in: String) { prog: R / Lexer } : R / LexerError = {
+def lexer[R](in: String) { prog: => R / Lexer } : R / LexerError = {
 ```
 Additionally, we keep track of the current position in the input stream, by maintaining
 three mutable variables for the zero based index, and one-based column and line position.
@@ -189,15 +189,15 @@ yields the output:
 Interestingly, a whitespace skipping lexer can be implemented as a _effect transformer_. That is, a handler that (partially) re-raises effect operations.
 
 ```
-def skipSpaces(): Unit / Lexer = peek() match {
+def skipSpaces(): Unit / Lexer = do peek() match {
   case None() => ()
-  case Some(t) => if (t.kind == Space()) { next(); skipSpaces() } else ()
+  case Some(t) => if (t.kind == Space()) { do next(); skipSpaces() } else ()
 }
 
-def skipWhitespace[R] { prog: R / Lexer }: R / Lexer =
+def skipWhitespace[R] { prog: => R / Lexer }: R / Lexer =
   try { prog() } with Lexer {
-    def peek() = { skipSpaces(); resume(peek()) }
-    def next() = { skipSpaces(); resume(next()) }
+    def peek() = { skipSpaces(); resume(do peek()) }
+    def next() = { skipSpaces(); resume(do next()) }
   }
 ```
 The handler `skipWhitespace` simply skips all spaces by using the `Lexer` effect itself.
