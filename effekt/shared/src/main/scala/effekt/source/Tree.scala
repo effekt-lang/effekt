@@ -587,7 +587,7 @@ object Tree {
       case b: InterfaceArg => b
     }
 
-    def rewrite(b: FunctionArg)(implicit C: Context): FunctionArg = b match {
+    def rewrite(b: FunctionArg)(implicit C: Context): FunctionArg =  visit(b) {
       case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
     }
 

@@ -6,7 +6,7 @@ import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.source.{ Elaboration, ModuleDecl }
 import effekt.symbols.Module
-import effekt.typer.{ PostTyper, Typer }
+import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.Backend
@@ -120,6 +120,11 @@ trait Compiler {
        *    [[Parsed]] --> [[NameResolved]]
        */
       Namer andThen
+      /**
+       * Explicit box transformation
+       *   [[NameResolved]] --> [[NameResolved]]
+       */
+      PreTyper andThen
       /**
        * Type checks and annotates trees with inferred types and effects
        *   [[NameResolved]] --> [[Typechecked]]
