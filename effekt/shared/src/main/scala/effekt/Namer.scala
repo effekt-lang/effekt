@@ -778,23 +778,28 @@ trait NamerOps extends ContextOps { Context: Context =>
    * 2) If the tighest scope contains blocks, then we will ignore all values
    *    and resolve to an overloaded target.
    */
-  private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[ValueSymbol, List[Set[BlockSymbol]]] =
+  private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[TermSymbol, List[Set[BlockSymbol]]] =
+
+    // Mutable variables are treated as values, not as blocks. Maybe we should change the representation.
+    def isValue(t: TermSymbol): Boolean = t.isInstanceOf[ValueSymbol] || t.isInstanceOf[VarBinder]
+    def isBlock(t: TermSymbol): Boolean = t.isInstanceOf[BlockSymbol] && !t.isInstanceOf[VarBinder]
+
     candidates match {
       case Nil => Right(Nil)
 
       // should not occur by construction
       case terms :: rest if terms.isEmpty => resolveFunctionCalltarget(id, rest)
 
-      case terms :: rest if terms.forall(_.isInstanceOf[BlockSymbol]) =>
+      case terms :: rest if terms.forall(isBlock) =>
         Right(candidates.map { scope => scope.collect { case b: BlockSymbol => b }}.filterNot(_.isEmpty))
 
-      case terms :: rest if terms.exists { _.isInstanceOf[ValueSymbol] } =>
-        if (terms.exists(t => t.isInstanceOf[BlockSymbol])) {
+      case terms :: rest if terms.exists(isValue) =>
+        if (terms.exists(isBlock)) {
           panic("Should not happen by construction.")
         }
         // it is only a SINGLE value in the current scope => take it. It shadows blocks.
         if (terms.size == 1) {
-          Left(terms.head.asInstanceOf[ValueSymbol])
+          Left(terms.head)
         } else {
           abort(pp"Multiple values with the same name $id in one scope. Values cannot be overloaded.")
         }

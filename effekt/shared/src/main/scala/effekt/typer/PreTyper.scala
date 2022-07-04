@@ -37,7 +37,7 @@ class BoxUnboxInference {
    */
   def rewriteAsBlock(e: Term)(using C: Context): Term = visit(e) {
     case v: Var => v.definition match {
-      case sym: ValueSymbol => Unbox(v).inheritPosition(v)
+      case sym: (ValueSymbol | symbols.VarBinder) => Unbox(v).inheritPosition(v)
       case sym: BlockSymbol => v
     }
 
@@ -47,12 +47,11 @@ class BoxUnboxInference {
 
   def rewriteAsExpr(e: Term)(using C: Context): Term = visit(e) {
 
-    case Unbox(expr)              => rewriteAsExpr(expr)
+    case Unbox(expr) => rewriteAsExpr(expr)
 
     case v: Var => v.definition match {
-      case sym: ValueSymbol => v
       // TODO maybe we should synthesize a call to get here already?
-      case sym: VarBinder => v
+      case sym: (ValueSymbol | symbols.VarBinder) => v
       case sym: BlockSymbol => Box(None, InterfaceArg(v.id).inheritPosition(v)).inheritPosition(v)
     }
 
@@ -118,7 +117,7 @@ class BoxUnboxInference {
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
     case source.ExprTarget(receiver) => source.ExprTarget(rewriteAsBlock(receiver))
     case t: source.IdTarget => t.definition match {
-      case sym: ValueSymbol =>
+      case sym: (ValueSymbol | symbols.VarBinder) =>
         source.ExprTarget(source.Unbox(source.Var(t.id).inheritPosition(t)).inheritPosition(t)).inheritPosition(t)
       case sym: BlockSymbol =>
         t

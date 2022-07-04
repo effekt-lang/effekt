@@ -64,36 +64,6 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
     case c @ Call(fun: IdTarget, targs, List(receiver), Nil) if fun.definition.isInstanceOf[Field] =>
       Select(rewrite(receiver), fun.id)
 
-    // the target is a mutable variable --> rewrite it to an expression first, then rewrite again
-    case c @ Call(fun: IdTarget, targs, vargs, bargs) if fun.definition.isInstanceOf[VarBinder] =>
-
-      val target = visit[source.CallTarget](fun) { _ =>
-        val access = Var(fun.id).inheritPosition(fun)
-        // heal the missing type
-        // TODO refactor this
-        C.annotate(Annotations.InferredValueType, access, C.valueTypeOf(fun.definition))
-        ExprTarget(access)
-      }
-      rewrite(visit(c) { c => Call(target, targs, vargs, bargs) })
-
-    // a "regular" function call
-    // assumption: typer removed all ambiguous references, so there is exactly one
-    case c @ Call(fun: IdTarget, targs, vargs, bargs) =>
-      val valueArgs = vargs.map { a => rewrite(a) }
-      val blockArgs = bargs.map { a => rewrite(a) }
-
-      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
-
-      val typeArguments = C.annotation(Annotations.TypeArguments, c)
-      val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
-
-      Call(fun, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
-
-    // desugar method calls where `id` is not an operation
-    case c @ MethodCall(receiver, id, targs, vargs, bargs) if !id.symbol.isInstanceOf[Operation] =>
-      rewrite(visit[CallLike](c) { c => Call(IdTarget(id).inheritPosition(id), targs, receiver :: vargs, bargs) })
-
     case c @ MethodCall(receiver, id, targs, vargs, bargs) =>
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
@@ -108,9 +78,8 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
 
       MethodCall(recv, id, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
 
-    // TODO share code with Call case above
-    case c @ Call(ExprTarget(expr), targs, vargs, bargs) =>
-      val transformedExpr = rewrite(expr)
+    case c @ Call(recv, targs, vargs, bargs) =>
+      val receiver = rewrite(recv)
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
 
@@ -120,7 +89,7 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
       val typeArguments = C.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
-      Call(ExprTarget(transformedExpr), typeArgs, valueArgs, blockArgs ++ capabilityArgs)
+      Call(receiver, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
 
     case h @ TryHandle(prog, handlers) =>
       val body = rewrite(prog)
@@ -149,6 +118,11 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
       }
 
       TryHandle(body, hs)
+  }
+
+  def rewrite(target: source.CallTarget)(implicit C: Context): source.CallTarget = visit(target) {
+    case i: IdTarget => target
+    case ExprTarget(expr) => ExprTarget(rewrite(expr))
   }
 
   override def rewrite(b: source.FunctionArg)(implicit C: Context): source.FunctionArg = visit(b) {
