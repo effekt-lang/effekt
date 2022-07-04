@@ -150,7 +150,7 @@ package object symbols {
    *
    * Refined by typer.
    */
-  case class CallTarget(name: Name, symbols: List[Set[TermSymbol]]) extends Synthetic with BlockSymbol
+  case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
 
   /**
    * Introduced by Transformer

@@ -30,7 +30,7 @@ object scopes {
 
     def lookupCapture(key: String)(implicit C: Context): Capture
 
-    def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]]
+    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(implicit C: Context): List[Set[TermSymbol]]
 
     def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]]
 
@@ -43,6 +43,16 @@ object scopes {
     // TODO add appropriate checks
     def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
       val bindings = terms.getOrElse(key, Set())
+      sym match {
+        case v: ValueSymbol =>
+          if (bindings.exists(_.isInstanceOf[BlockSymbol])) {
+            C.abort(s"Value ${key} has the same name as a block definition in the same scope, which is not allowed.")
+          }
+        case b: BlockSymbol =>
+          if (bindings.exists(_.isInstanceOf[ValueSymbol])) {
+            C.abort(s"Block ${key} has the same name as a value definition in the same scope, which is not allowed.")
+          }
+      }
       terms.update(key, bindings + sym)
     }
 
@@ -88,7 +98,7 @@ object scopes {
 
     // returns a list of sets to model the scopes. This way we can decide in Typer how to deal with
     // the ambiguity. If it is nested, the first one that type checks should be chosen.
-    def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
+    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(implicit C: Context): List[Set[TermSymbol]] =
       Nil
 
     def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]] =
@@ -128,9 +138,12 @@ object scopes {
     def lookupCapture(key: String)(implicit C: Context): Capture =
       captures.getOrElse(key, parent.lookupCapture(key))
 
-    def lookupOverloaded(key: String)(implicit C: Context): List[Set[TermSymbol]] =
-      terms.get(key).map { _ :: parent.lookupOverloaded(key) }.getOrElse {
-        parent.lookupOverloaded(key)
+    def lookupOverloaded(key: String, filter: TermSymbol => Boolean)(implicit C: Context): List[Set[TermSymbol]] =
+      val termsInThisScope = terms.getOrElse(key, Set.empty).filter(filter)
+      if (termsInThisScope.isEmpty) {
+        parent.lookupOverloaded(key, filter)
+      } else {
+        termsInThisScope :: parent.lookupOverloaded(key, filter)
       }
 
     def lookupEffectOp(key: String)(implicit C: Context): List[Set[Operation]] =

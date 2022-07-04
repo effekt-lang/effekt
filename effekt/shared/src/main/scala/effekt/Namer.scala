@@ -733,54 +733,86 @@ trait NamerOps extends ContextOps { Context: Context =>
    */
   private[namer] def resolveMethodCalltarget(id: Id): Unit = at(id) {
 
-    val syms = scope.lookupOverloaded(id.name)
+    val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[BlockSymbol])
 
     if (syms.isEmpty) {
       abort(s"Cannot resolve function ${id.name}")
     }
 
     // TODO does local name make sense here?
-    assignSymbol(id, new CallTarget(Name.local(id), syms))
+    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
   }
 
   /**
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveFunctionCalltarget(id: Id): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id.name).map {
-      case scope => scope.filter {
-        case o: Operation => false
-        case _ => true
-      }
-    }.filterNot(_.isEmpty)
+    val candidates = scope.lookupOverloaded(id.name, term => !term.isInstanceOf[Operation])
 
-    if (syms.isEmpty) {
-      val allSyms = scope.lookupOverloaded(id.name).flatten
+    resolveFunctionCalltarget(id, candidates) match {
+      case Left(value) =>
+        assignSymbol(id, value)
+      case Right(blocks) =>
+        if (blocks.isEmpty) {
+          val allSyms = scope.lookupOverloaded(id.name, term => true).flatten
 
-      if (allSyms.exists { case o: Operation => true; case _ => false })
-        info(pp"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
+          if (allSyms.exists { case o: Operation => true; case _ => false })
+            info(pp"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
 
-      if (allSyms.exists { case o: Field => true; case _ => false })
-        info(pp"There is an equally named field. Use syntax `obj.${id} to access it.`")
+          if (allSyms.exists { case o: Field => true; case _ => false })
+            info(pp"There is an equally named field. Use syntax `obj.${id} to access it.`")
 
-      abort(pp"Cannot find a function named `${id}`.")
+          abort(pp"Cannot find a function named `${id}`.")
+        }
+        assignSymbol(id, CallTarget(Name.local(id), blocks))
     }
-
-    assignSymbol(id, new CallTarget(Name.local(id), syms))
   }
+
+  /**
+   * This function implements the scoping rules for blocks and values.
+   *
+   * 1) A single value in the tightest scope shadows blocks.
+   *    i.e. { def foo() = ...; { val foo = ...; >>>foo<<< }}
+   *    refers to the value foo
+   *
+   * 2) If the tighest scope contains blocks, then we will ignore all values
+   *    and resolve to an overloaded target.
+   */
+  private def resolveFunctionCalltarget(id: Id, candidates: List[Set[TermSymbol]]): Either[ValueSymbol, List[Set[BlockSymbol]]] =
+    candidates match {
+      case Nil => Right(Nil)
+
+      // should not occur by construction
+      case terms :: rest if terms.isEmpty => resolveFunctionCalltarget(id, rest)
+
+      case terms :: rest if terms.forall(_.isInstanceOf[BlockSymbol]) =>
+        Right(candidates.map { scope => scope.collect { case b: BlockSymbol => b }}.filterNot(_.isEmpty))
+
+      case terms :: rest if terms.exists { _.isInstanceOf[ValueSymbol] } =>
+        if (terms.exists(t => t.isInstanceOf[BlockSymbol])) {
+          panic("Should not happen by construction.")
+        }
+        // it is only a SINGLE value in the current scope => take it. It shadows blocks.
+        if (terms.size == 1) {
+          Left(terms.head.asInstanceOf[ValueSymbol])
+        } else {
+          abort(pp"Multiple values with the same name $id in one scope. Values cannot be overloaded.")
+        }
+
+      case _ => panic("Should not happen")
+    }
 
   /**
    * Resolves a potentially overloaded field access
    */
   private[namer] def resolveSelect(id: Id): Unit = at(id) {
-    val syms = scope.lookupOverloaded(id.name).flatMap {
-      case scope => scope.collect { case f: Field => f }
-    }
+    val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[Field])
+
     if (syms.isEmpty) {
       abort(pp"Cannot resolve field access ${id}")
     }
 
-    assignSymbol(id, new CallTarget(Name.local(id), List(syms.toSet)))
+    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
   }
 
   /**
