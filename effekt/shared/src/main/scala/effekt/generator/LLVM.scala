@@ -257,11 +257,12 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
       s"call void @exit(i64 1) unreachable"
   }
 
+  // TODO `fromMachineValueWithAnnotatedType`, `asFragment` and `correspondingType` are all a bit messy and at least one of those can go without being missed.
   def fromMachineValueWithAnnotatedType(value: machine.Value)(implicit C: LLVMContext): LLVMFragment =
     s"${asFragment(correspondingType(value))} ${asFragment(value)}"
 
   def asFragment(value: machine.Value)(implicit C: LLVMContext): LLVMFragment = value match {
-    case machine.Var(typ, name) => s"${localName(name)}"
+    case machine.Var(name, typ) => s"${localName(name)}" // TODO typ is not used at all?
     case machine.IntLit(n)      => s"$n"
     case machine.BooleanLit(b)  => s"$b"
     case machine.UnitLit()      => "0"
@@ -269,7 +270,7 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
   }
 
   def correspondingType(value: machine.Value): machine.Type = value match {
-    case machine.Var(typ, _)   => typ
+    case machine.Var(_, typ)   => typ
     case machine.IntLit(_)     => machine.PrimInt()
     case machine.BooleanLit(_) => machine.PrimBoolean()
     case machine.UnitLit()     => machine.PrimUnit()

@@ -53,4 +53,4 @@ case class Panic() extends Terminator
 sealed trait TrueLLVMType
 case class Int64() extends TrueLLVMType
 case class Pointer(to: TrueLLVMType) extends TrueLLVMType
-case class EffektStack(scanner: Pointer, primititves: List[Int64], boxed: List[Pointer]) extends TrueLLVMType
+case class EffektStack(scanner: Pointer, primitives: List[Int64], boxed: List[Pointer]) extends TrueLLVMType

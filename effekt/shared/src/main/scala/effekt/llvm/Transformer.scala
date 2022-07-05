@@ -200,7 +200,7 @@ object LLVMTransformer {
     case machine.Match(scrutinee, variant, thenBlock, _, elseBlock, _) => { // ToDo: extract first field from scrutinee
       val tagName = FreshValueSymbol("tag", C.module)
       val instructions = List(ExtractValue(tagName, transform(scrutinee), 0))
-      (instructions, Switch(machine.Var(machine.PrimInt(), tagName), transform(elseBlock), List((variant, transform(thenBlock)))))
+      (instructions, Switch(machine.Var(tagName, machine.PrimInt()), transform(elseBlock), List((variant, transform(thenBlock)))))
     }
     case machine.Panic() => {
       (List(), Panic())
@@ -215,8 +215,8 @@ object LLVMTransformer {
     case machine.Record(types) => ??? // TODO not yet supported
     case machine.Variant(types) => ??? // TODO not yet supported
 
-    // TODO What is the purpose of `cntType`? Is this simply a record?
-    case machine.Stack(cntType: List[machine.Type]) => Pointer(EffektStack())
+    // TODO What is the purpose of `cntType`? Is this simply a record? How to map to scanner, primitives and boxeds?
+    case machine.Stack(cntType: List[machine.Type]) => Pointer(EffektStack(???, ???, ???))
 
     // evidence terms for effectful regions (currently a positive integer offset
     // into the stack chain)

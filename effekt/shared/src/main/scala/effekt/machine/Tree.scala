@@ -72,8 +72,8 @@ sealed trait Value extends Arg
 
 // Refers to values and stacks are values
 // TODO Change this symbol back to value symbol.... but what about block parameters?
-// TODO swap typ and id
-case class Var(typ: Type, id: Symbol) extends Value
+// TODO use `typ: TrueLLVMType`? TODO Remove this entirely?
+case class Var(id: Symbol, typ: Type) extends Value
 case class IntLit(value: Int) extends Value
 case class BooleanLit(value: Boolean) extends Value
 case class UnitLit() extends Value
