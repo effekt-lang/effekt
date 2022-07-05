@@ -104,9 +104,11 @@ object LLVMTransformer {
         thisDef :: frameDefs.toList ++ closureDefs.toList ++ transformToplevel(rest)
 
       }
+
       case machine.Ret(List()) =>
         // TODO define main function here
         List()
+
       case _ =>
         C.abort("unsupported " + stmt)
     }
@@ -203,6 +205,11 @@ object LLVMTransformer {
       (List(), Panic())
     }
   }
+
+  // TODO TrueLLVMType is `int64`, `pointer`, ... (truely something LLVM knows of)
+  // `effektStack` defined by our run-time system (`%stk`)
+  // DO NOT scaffold any `boxed` types!
+  def transform(tpe: machine.Type): TrueLLVMType = ???
 
   def transform(arg: machine.Arg)(implicit C: LLVMTransformerContext): machine.Value = arg match {
     case expr: machine.Expr =>

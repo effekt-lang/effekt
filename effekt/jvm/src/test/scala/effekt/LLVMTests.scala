@@ -33,7 +33,7 @@ class LLVMTests extends AnyFunSpec {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--generator", "llvm",
-      "--lib", "llvm"
+      "--lib", "libraries/llvm"
     ))
     configs.verify()
     compiler.compileFile(f.getPath, configs)
