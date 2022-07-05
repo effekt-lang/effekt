@@ -1,0 +1,13 @@
+type Color {
+  RGB(r: Int, g: Int, b: Int);
+  RGBA(r: Int, g: Int, b: Int, a: Int)
+}
+
+def main() = {
+  val c = RGBA(128, 42, 255, 0);
+  c match {
+    case RGB(r, g, b) => println(b)
+    case RGBA(r, g, b, a) => println(b)
+  }
+}
+

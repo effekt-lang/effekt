@@ -1,0 +1,7 @@
+record Point2D(x: Int, y: Int)
+
+def main() = {
+  val myPoint = Point2D(4, 5)
+  println(myPoint.x)
+}
+

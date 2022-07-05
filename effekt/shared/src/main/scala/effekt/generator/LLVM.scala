@@ -358,9 +358,6 @@ ${store(spp, envName, envType)}
 
   // insert all given values into a one-deep LLVM record
   def insertAllValues(aggName: LLVMFragment, aggType: LLVMFragment, aggValues: List[LLVMFragment])(implicit C: LLVMContext): LLVMFragment = {
-    if (aggValues.length <= 0)
-      ???
-
     var prev = "undef"
     aggValues.zipWithIndex.map((value, idx) => {
         val tmp = if (idx == aggValues.length-1) aggName else freshLocalName(s"agg$idx")

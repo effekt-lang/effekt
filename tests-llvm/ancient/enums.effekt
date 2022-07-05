@@ -1,0 +1,12 @@
+type Direction { North(); East(); South(); West() }
+
+def main() = {
+  val d = South();
+  d match {
+    case North() => println(1)
+    case East() => println(2)
+    case South() => println(3)
+    case West() => println(4)
+  }
+}
+
