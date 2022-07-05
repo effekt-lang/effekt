@@ -15,10 +15,6 @@ sealed trait Tree extends Product {
  * Toplevel definitions
  */
 
-// TODO implement
-class TrueLLVMType();
-
-// [2022-06-27] plan: remove this internal LLVM representation for now (stringly type everything)
 sealed trait Top extends Tree
 case class DefCnt(id: BlockSymbol, params: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
 case class DefFrm(id: BlockSymbol, params: List[machine.Param], env: List[machine.Param], entry: BlockSymbol, body: List[BasicBlock]) extends Top
@@ -53,3 +49,8 @@ case class JumpLocal(id: BlockSymbol, args: List[machine.Value]) extends Termina
 case class If(cond: machine.Value, thenBlock: BlockSymbol, thenArgs: List[machine.Value], elseBlock: BlockSymbol, elseArgs: List[machine.Value]) extends Terminator
 case class Switch(arg: machine.Value, default: BlockSymbol, labels: List[(Int, BlockSymbol)]) extends Terminator
 case class Panic() extends Terminator
+
+sealed trait TrueLLVMType
+case class Int64() extends TrueLLVMType
+case class Pointer(to: TrueLLVMType) extends TrueLLVMType
+case class EffektStack() extends TrueLLVMType

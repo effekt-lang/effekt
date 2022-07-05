@@ -126,19 +126,10 @@ case class Param(typ: Type, id: Symbol) extends Tree
  * Types
  */
 sealed trait Type extends Tree
-
 case class PrimUnit() extends Type
 case class PrimInt() extends Type
 case class PrimBoolean() extends Type
-
-// not yet supported
 case class Record(fieldTypes: List[Type]) extends Type
-// not yet supported
 case class Variant(variantTypes: List[Type]) extends Type
-
-// BoxedStack
 case class Stack(cntType: List[Type]) extends Type
-
-// evidence terms for effectful regions (currently a positive integer offset
-// into the stack chain)
 case class Evidence() extends Type
