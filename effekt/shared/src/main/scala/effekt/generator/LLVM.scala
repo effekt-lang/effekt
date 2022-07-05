@@ -16,6 +16,11 @@ import scala.language.implicitConversions
 import effekt.util.paths._
 
 
+// Sane names are important, since unescaping string interpolation is used
+// to construct `LLVMFragment`s. As such, great care should be taken as to
+// not let user-controlled name data leak into LLVM source.
+val SANE_NAME_REGEX = """^[a-zA-Z_$][a-zA-Z0-9_$]*$""".r
+
 // TODO This magical 5 ensures that we pass at most 6 64bit parameters
 val MAGICAL_FIVE = 5
 
@@ -441,9 +446,7 @@ store ${typ} ${value}, $ptrType $newtypedsp
     s"%${name}_${C.fresh.next()}"
 
   def assertSaneName(name: String): Boolean =
-    // TODO Why can this not be a raw string literal:`raw"..."`?
-    // TODO Unelegant: RegExp has to be recompiled often.
-    if (!name.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))
+    if (!SANE_NAME_REGEX.matches(name))
         throw new Error(s"assertSaneName: $name")
     return true
 }
