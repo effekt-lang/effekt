@@ -50,8 +50,43 @@ case class If(cond: machine.Value, thenBlock: BlockSymbol, thenArgs: List[machin
 case class Switch(arg: machine.Value, default: BlockSymbol, labels: List[(Int, BlockSymbol)]) extends Terminator
 case class Panic() extends Terminator
 
+// TODO rename `s/TrueLLVMType/LLVMType/` or even `s/TrueLLVMType/Type/` (since we are in `llvm/Tree.scala`)
+/*
+All these types form compile-time statically known data. These Scala values are
+lifted to LLVM type values during compilation.
+*/
 sealed trait TrueLLVMType
 case class Int64() extends TrueLLVMType
 case class Pointer(to: TrueLLVMType) extends TrueLLVMType
+case class Void() extends TrueLLVMType
+
+/*
+A frame is one function's environment together with its static behaviour.
+The static `@scanner` function pointer knows about the frame's type and layout
+and can therefore both copy and destroy the frame (given its dynamically known
+absolute reference position on the heap).
+frame:
+    @scanner
+    primitive_1
+    primitive_2
+    ...
+    primitive_n
+    boxed_1
+    boxed_2
+    ...
+    boxed_n
+*/
 case class EffektFrame(scanner: Pointer, primitives: List[Int64], boxed: List[Pointer]) extends TrueLLVMType
-case class EffektStack(frames: List[EffektFrame], parent: Pointer) extends TrueLLVMType
+
+/*
+From a function's point of view, its stacks form an array-singly-linked-list-
+hybrid data structure (a "metastack" of sorts) which defines the entire
+environment known to it.
+When no effect arbitration is necessary, a subfunction simply gets its frame
+pushed onto the heap relative to the stack's `top`.
+If an effect split happens, a new stack is created with evidence-sufficiently
+deep parent copying.
+A stack is copiable and destructible to varying depths (the necessary depth is
+called evidence) only utilizing the various frames' `@scanner` implementations.
+*/
+case class EffektStack(base: Pointer, top: Pointer, cap: Pointer, parent: Pointer) extends TrueLLVMType
