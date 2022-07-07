@@ -139,7 +139,7 @@ object Analysis {
     case IntLit(n)      => IntLit(n)
     case BooleanLit(b)  => BooleanLit(b)
     case UnitLit()      => UnitLit()
-    case Var(typ, name) => mapping.getOrElse(name, Var(typ, name))
+    case Var(name, typ) => mapping.getOrElse(name, Var(name, typ))
     case EviLit(n)      => EviLit(n)
   }
 
@@ -152,7 +152,7 @@ object Analysis {
     case Def(name, BlockLit(params, body), rest) =>
       val vars = freeVars(BlockLit(params, body)).toList
       val freshVars = vars.map(v =>
-        Var(v.typ, FreshValueSymbol(v.id.name.name, C.module)));
+        Var(FreshValueSymbol(v.id.name.name, C.module), v.typ));
       val freshParams = freshVars.map { v => Param(v.typ, v.id) }
       val mapping = vars.map(_.id).zip(freshVars).toMap;
       Def(name, BlockLit(
@@ -524,48 +524,48 @@ object Analysis {
     case _: AppPrim =>
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
-        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+        resume.apply(Var(x, expr.typ)).map(rest => Let(x, expr, rest))
       }
     case _: NewStack =>
       control.use(delimiter) { resume =>
         val k = FreshBlockSymbol("k", C.module)
-        resume.apply(Var(expr.typ, k)).map(rest => Let(k, expr, rest))
+        resume.apply(Var(k, expr.typ)).map(rest => Let(k, expr, rest))
       }
     case _: Construct =>
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
-        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+        resume.apply(Var(x, expr.typ)).map(rest => Let(x, expr, rest))
       }
     case _: Select =>
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
-        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+        resume.apply(Var(x, expr.typ)).map(rest => Let(x, expr, rest))
       }
     // TODO deduplicate the following three
     case _: EviPlus =>
       control.use(delimiter) { resume =>
         val l = FreshValueSymbol("l", C.module)
-        resume.apply(Var(Evidence(), l)).map(rest => Let(l, expr, rest))
+        resume.apply(Var(l, Evidence())).map(rest => Let(l, expr, rest))
       }
     case _: EviDecr =>
       control.use(delimiter) { resume =>
         val l = FreshValueSymbol("l", C.module)
-        resume.apply(Var(Evidence(), l)).map(rest => Let(l, expr, rest))
+        resume.apply(Var(l, Evidence())).map(rest => Let(l, expr, rest))
       }
     case _: EviIsZero =>
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
-        resume.apply(Var(PrimBoolean(), x)).map(rest => Let(x, expr, rest))
+        resume.apply(Var(x, PrimBoolean())).map(rest => Let(x, expr, rest))
       }
     case _: Inject =>
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
-        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+        resume.apply(Var(x, expr.typ)).map(rest => Let(x, expr, rest))
       }
     case _: Reject =>
       control.use(delimiter) { resume =>
         val x = FreshValueSymbol("x", C.module)
-        resume.apply(Var(expr.typ, x)).map(rest => Let(x, expr, rest))
+        resume.apply(Var(x, expr.typ)).map(rest => Let(x, expr, rest))
       }
   }
 
@@ -641,13 +641,13 @@ object Analysis {
       val args = (thenArgs.toSet ++ elseArgs.toSet).toList;
       val freshThenVars = args.map {
         case v: Var =>
-          Var(v.typ, FreshValueSymbol(v.id.name.name, C.module))
+          Var(FreshValueSymbol(v.id.name.name, C.module), v.typ)
         case _ =>
           C.abort("Internal error: linearize If non-var argument")
       };
       val freshElseVars = args.map {
         case v: Var =>
-          Var(v.typ, FreshValueSymbol(v.id.name.name, C.module))
+          Var(FreshValueSymbol(v.id.name.name, C.module), v.typ)
         case _ =>
           C.abort("Internal error: linearize If non-var argument")
       };
@@ -668,21 +668,21 @@ object Analysis {
   }
 
   def perhapsCopy(vars: Set[Var], arg: Arg)(implicit C: Context): Control[Value] = arg match {
-    case Var(Stack(typ), name) if (vars.exists { case Var(_, varName) => name == varName }) =>
+    case Var(name, Stack(typ)) if (vars.exists { case Var(varName, _) => name == varName }) =>
       control.use(delimiter) { resume =>
         val newName = machine.FreshBlockSymbol(name.name.name, C.module);
-        resume.apply(Var(Stack(typ), newName)).map(rest =>
-          CopyStack(newName, Var(Stack(typ), name), rest))
+        resume.apply(Var(newName, Stack(typ))).map(rest =>
+          CopyStack(newName, Var(name, Stack(typ)), rest))
       }
     case value: Value => pure(value)
     case _            => C.abort("Internal error: perhapsCopy non-value argument")
   }
 
   def perhapsErase(vars: Set[Var], param: Param)(implicit C: Context): Control[Unit] = param match {
-    case Param(Stack(typ), name) if (!vars.exists { case Var(_, varName) => name == varName }) =>
+    case Param(Stack(typ), name) if (!vars.exists { case Var(varName, _) => name == varName }) =>
       control.use(delimiter) { resume =>
         resume.apply(()).map(rest =>
-          EraseStack(Var(Stack(typ), name), rest))
+          EraseStack(Var(name, Stack(typ)), rest))
       }
     case _ => pure(())
   }

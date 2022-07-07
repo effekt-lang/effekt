@@ -10,6 +10,7 @@ import effekt.symbols.{ /, BlockSymbol, Module, Name, Symbol, UserEffect, ValueS
 import effekt.util.{ Task, control }
 import effekt.util.control._
 
+/* `LLVMTransformer` transforms Effekt Core into intermediate LLVM */
 object LLVMTransformer {
 
   def transform(mod: machine.ModuleDecl)(implicit C: LLVMTransformerContext): List[Top] =
@@ -199,17 +200,28 @@ object LLVMTransformer {
     case machine.Match(scrutinee, variant, thenBlock, _, elseBlock, _) => { // ToDo: extract first field from scrutinee
       val tagName = FreshValueSymbol("tag", C.module)
       val instructions = List(ExtractValue(tagName, transform(scrutinee), 0))
-      (instructions, Switch(machine.Var(machine.PrimInt(), tagName), transform(elseBlock), List((variant, transform(thenBlock)))))
+      (instructions, Switch(machine.Var(tagName, machine.PrimInt()), transform(elseBlock), List((variant, transform(thenBlock)))))
     }
     case machine.Panic() => {
       (List(), Panic())
     }
   }
 
-  // TODO TrueLLVMType is `int64`, `pointer`, ... (truely something LLVM knows of)
-  // `effektStack` defined by our run-time system (`%stk`)
-  // DO NOT scaffold any `boxed` types!
-  def transform(tpe: machine.Type): TrueLLVMType = ???
+  // TODO this is currently dead code
+  def translateType(machineType: machine.Type): TrueLLVMType = machineType match {
+    case machine.PrimUnit() => Int64()
+    case machine.PrimInt() => Int64()
+    case machine.PrimBoolean() => Int64()
+    case machine.Record(types) => ??? // TODO not yet supported
+    case machine.Variant(types) => ??? // TODO not yet supported
+
+    // TODO What is the purpose of `cntType`? Is this simply a record? How to map to scanner, primitives and boxeds?
+    case machine.Stack(cntType: List[machine.Type]) => EffektStack(Pointer(Void()), Pointer(Void()), Pointer(Void()), ???)
+
+    // evidence terms for effectful regions (currently a positive integer offset
+    // into the stack chain)
+    case machine.Evidence() => Int64()
+  }
 
   def transform(arg: machine.Arg)(implicit C: LLVMTransformerContext): machine.Value = arg match {
     case expr: machine.Expr =>

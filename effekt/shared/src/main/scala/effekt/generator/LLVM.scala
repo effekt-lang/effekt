@@ -16,6 +16,11 @@ import scala.language.implicitConversions
 import effekt.util.paths._
 
 
+// Sane names are important, since unescaping string interpolation is used
+// to construct `LLVMFragment`s. As such, great care should be taken as to
+// not let user-controlled name data leak into LLVM source.
+val SANE_NAME_REGEX = """^[a-zA-Z_$][a-zA-Z0-9_$]*$""".r
+
 // TODO This magical 5 ensures that we pass at most 6 64bit parameters
 val MAGICAL_FIVE = 5
 
@@ -65,6 +70,8 @@ class LLVM extends Generator {
 object LLVMFragmentPrinter {
   case class LLVMContext() {
     val fresh = new Counter(0)
+
+    def abort(msg: String) = ???
   }
 
   def wholeProgramOneshot(mainName: BlockSymbol, defs: List[Top]): LLVMFragment =
@@ -257,11 +264,12 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
       s"call void @exit(i64 1) unreachable"
   }
 
+  // TODO `fromMachineValueWithAnnotatedType`, `asFragment` and `correspondingType` are all a bit messy and at least one of those can go without being missed.
   def fromMachineValueWithAnnotatedType(value: machine.Value)(implicit C: LLVMContext): LLVMFragment =
     s"${asFragment(correspondingType(value))} ${asFragment(value)}"
 
   def asFragment(value: machine.Value)(implicit C: LLVMContext): LLVMFragment = value match {
-    case machine.Var(typ, name) => s"${localName(name)}"
+    case machine.Var(name, typ) => s"${localName(name)}" // TODO typ is not used at all?
     case machine.IntLit(n)      => s"$n"
     case machine.BooleanLit(b)  => s"$b"
     case machine.UnitLit()      => "0"
@@ -269,7 +277,7 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
   }
 
   def correspondingType(value: machine.Value): machine.Type = value match {
-    case machine.Var(typ, _)   => typ
+    case machine.Var(_, typ)   => typ
     case machine.IntLit(_)     => machine.PrimInt()
     case machine.BooleanLit(_) => machine.PrimBoolean()
     case machine.UnitLit()     => machine.PrimUnit()
@@ -287,7 +295,7 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
     case machine.Variant(variantTypes) => s"{i64, ${commaSeparated(variantTypes.map(asFragment))}}"
   }
 
-  def asFragment(param: machine.Param): LLVMFragment = param match {
+  def asFragment(param: machine.Param)(implicit C: LLVMContext): LLVMFragment = param match {
     case machine.Param(typ, name) => s"${asFragment(typ)} ${localName(name)}"
   }
 
@@ -408,22 +416,22 @@ store ${typ} ${value}, $ptrType $newtypedsp
   def envRecordType(types: List[LLVMFragment]): LLVMFragment =
     "{" + types.mkString(", ") + "}"
 
-  def localName(id: Symbol): LLVMFragment =
+  def localName(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     "%" + nameDef(id)
 
-  def globalName(id: Symbol): LLVMFragment =
+  def globalName(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     "@" + nameDef(id)
 
   // XXX Major bug potential: `scanningName` can clash with `globalName`.
-  def scanningName(id: Symbol): LLVMFragment =
+  def scanningName(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     "@scan_" + nameDef(id)
 
-  def nameDef(id: Symbol): LLVMFragment =
+  def nameDef(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     val name = s"${id.name}_${id.id}"
     assertSaneName(name)
     s"$name"
 
-  def globalBuiltin(name: String): LLVMFragment =
+  def globalBuiltin(name: String)(implicit C: LLVMContext): LLVMFragment =
     assertSaneName(name)
     s"@$name"
 
@@ -439,10 +447,10 @@ store ${typ} ${value}, $ptrType $newtypedsp
     assertSaneName(name)
     s"%${name}_${C.fresh.next()}"
 
-  def assertSaneName(name: String): Boolean =
-    // TODO Why can this not be a raw string literal:`raw"..."`?
-    // TODO Unelegant: RegExp has to be recompiled often.
-    if (!name.matches("^[a-zA-Z_$][a-zA-Z0-9_$]*$"))
-        throw new Error(s"assertSaneName: $name")
-    return true
+  def assertSaneName(name: String)(implicit C: LLVMContext): Boolean = {
+    val sane = SANE_NAME_REGEX.matches(name)
+    if (!sane)
+        C.abort(s"internal error: insane name: $name")
+    sane
+  }
 }

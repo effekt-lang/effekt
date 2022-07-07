@@ -91,14 +91,14 @@ class Transformer {
         // TODO deal with BlockLit
         if (C.blockParamsSet.contains(name)) {
           // TODO get block type from elsewhere
-          PushStack(Var(transform(C.blockTypeOf(name)), name), Ret(transform(scope) :: args.map(transform)))
+          PushStack(Var(name, transform(C.blockTypeOf(name))), Ret(transform(scope) :: args.map(transform)))
         } else {
           Jump(BlockVar(name), transform(scope) :: args.map(transform))
         }
       case core.App(core.Member(core.ScopeApp(core.BlockVar(name: CapabilityParam), scope), _), null, args) => {
         // TODO fix this null upstream
         // TODO merge this with other application case
-        PushStack(Var(transform(name.tpe), name), Ret(transform(scope) :: args.map(transform)))
+        PushStack(Var(name, transform(name.tpe)), Ret(transform(scope) :: args.map(transform)))
       }
       // TODO add case for resume
       case core.If(cond, thenStmt, elseStmt) => {
@@ -118,7 +118,7 @@ class Transformer {
             val fieldsName = FreshValueSymbol("fields", C.module)
             val fieldTypes = Record(params.map(p => transform(p.asInstanceOf[ValueParam].tpe)))
             val thenBody = params.zipWithIndex.foldRight(transform(body)) {
-              case ((ValueParam(id, tpe), index), rest) => Let(id, Select(transform(tpe), Var(fieldTypes, fieldsName), index), rest)
+              case ((ValueParam(id, tpe), index), rest) => Let(id, Select(transform(tpe), Var(fieldsName, fieldTypes), index), rest)
             }
             // ToDo: do not transform scrutinee twice!
             val thenBlock = BlockLit(List(), Let(fieldsName, Reject(fieldTypes, transform(scrutinee), idx), thenBody))
@@ -141,7 +141,7 @@ class Transformer {
           Stack(List(answerType)),
           BlockLit(
             List(Param(answerType, paramName)),
-            Ret(List(Var(answerType, paramName)))
+            Ret(List(Var(paramName, answerType)))
           ), List()
         );
         val evidence = EviLit(1);
@@ -167,7 +167,7 @@ class Transformer {
         UnitLit()
       case core.ValueVar(name: ValueSymbol) =>
         // TODO get value type from elsewhere
-        Var(transform(C.valueTypeOf(name)), name)
+        Var(name, transform(C.valueTypeOf(name)))
       case core.PureApp(core.BlockVar(blockName: BuiltinFunction), List(), args) =>
         AppPrim(transform(blockName.ret.get.tpe), blockName, args.map(transform))
       case core.PureApp(core.BlockVar(constructorName: symbols.Record), List(), args) =>
@@ -211,11 +211,11 @@ class Transformer {
       case expr: core.Expr =>
         transform(expr)
       case core.BlockVar(name: CapabilityParam) =>
-        Var(transform(name.tpe), name)
+        Var(name, transform(name.tpe))
       case core.Lifted(scope, block) =>
         val blockArg = transform(block: core.Argument);
         val paramTypes = blockArg match {
-          case Var(Stack(typs), _) => typs
+          case Var(_, Stack(typs)) => typs
           case NewStack(Stack(typs), _, _) => typs
           case _ => C.abort("Internal error: Lifted non-block argument.")
         };
@@ -229,7 +229,7 @@ class Transformer {
               Param(paramType, FreshValueSymbol("a", C.module))
           }
         };
-        val paramArgs = params.map { param => Var(param.typ, param.id) }
+        val paramArgs = params.map { param => Var(param.id, param.typ) }
         val args = EviPlus(transform(scope), paramArgs.head) :: paramArgs.tail
         NewStack(Stack(paramTypes), BlockLit(
           params,
@@ -262,7 +262,7 @@ class Transformer {
 
         val resumption = withEvidence(answerType, BlockLit(
           List(Param(resultType, resumptionParamName)),
-          PushStack(Var(Stack(List(resultType)), continuationName), Ret(List(Var(resultType, resumptionParamName))))
+          PushStack(Var(continuationName, Stack(List(resultType))), Ret(List(Var(resumptionParamName, resultType))))
         ));
 
         val capability = withEvidence(resultType, BlockLit(
@@ -287,7 +287,7 @@ class Transformer {
       val evidenceAndParams = Param(evidenceType(), scopeName) :: params;
       BlockLit(
         evidenceAndParams,
-        liftStack(typ, Var(evidenceType(), scopeName), body)
+        liftStack(typ, Var(scopeName, evidenceType()), body)
       )
 
   }
@@ -300,7 +300,7 @@ class Transformer {
     val liftLoop = BlockLit(
       List(Param(evidenceType(), currentScopeName)),
       If(
-        EviIsZero(Var(evidenceType(), currentScopeName)),
+        EviIsZero(Var(currentScopeName, evidenceType())),
         BlockLit(List(), stmt), List(),
         BlockLit(
           List(),
@@ -311,11 +311,11 @@ class Transformer {
               BlockLit(
                 List(Param(typ, paramName)),
                 PushStack(
-                  Var(Stack(List(typ)), currentStackName),
-                  Ret(List(Var(typ, paramName)))
+                  Var(currentStackName, Stack(List(typ))),
+                  Ret(List(Var(paramName, typ)))
                 )
               ), List(),
-              Jump(BlockVar(liftLoopName), List(EviDecr(Var(evidenceType(), currentScopeName))))
+              Jump(BlockVar(liftLoopName), List(EviDecr(Var(currentScopeName, evidenceType()))))
             )
           )
         ), List()
@@ -346,7 +346,7 @@ class Transformer {
         val empty: Arg = EviLit(0);
         scopes.foldRight(empty) { (scope, evi) => EviPlus(transform(scope), evi) }
       case core.ScopeVar(scopeName) =>
-        Var(evidenceType(), scopeName)
+        Var(scopeName, evidenceType())
     }
   }
 
