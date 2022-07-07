@@ -216,7 +216,7 @@ object LLVMTransformer {
     case machine.Variant(types) => ??? // TODO not yet supported
 
     // TODO What is the purpose of `cntType`? Is this simply a record? How to map to scanner, primitives and boxeds?
-    case machine.Stack(cntType: List[machine.Type]) => Pointer(EffektStack(???, ???, ???))
+    case machine.Stack(cntType: List[machine.Type]) => Pointer(EffektStack(???, ???))
 
     // evidence terms for effectful regions (currently a positive integer offset
     // into the stack chain)
