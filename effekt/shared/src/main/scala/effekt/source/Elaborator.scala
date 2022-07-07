@@ -194,7 +194,7 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
     case t @ source.TryHandle(prog, handlers) =>
       val progCapture = query(prog)
       val selfRegion = Context.annotation(Annotations.SelfRegion, t)
-      val boundCapture = boundCapabilities(t) ++ CaptureSet(selfRegion)
+      val boundCapture = boundCapabilities(t) ++ CaptureSet(selfRegion.capture)
       val usedCapture = combineAll(handlers.map(query))
       (progCapture -- boundCapture) ++ usedCapture
 
@@ -215,7 +215,7 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
      */
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val selfRegion = Context.annotation(Annotations.SelfRegion, tree)
-      query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion :: bps.map(_.symbol.capture))
+      query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
   }
 
   override def query(b: source.BlockArg)(using Context, Unit): CaptureSet = visit(b) {
@@ -226,7 +226,7 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
   override def query(b: source.FunctionArg)(using Context, Unit): CaptureSet = visit(b) {
     case source.FunctionArg(tps, vps, bps, body) =>
       val selfRegion = Context.annotation(Annotations.SelfRegion, b)
-      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion :: bps.map(_.symbol.capture))
+      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
   }
 
   def boundCapabilities(t: Tree)(using Context): CaptureSet =

@@ -1340,6 +1340,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
       s match {
         case b: BlockParam => CaptureSet(b.capture)
+        case b: SelfParam => CaptureSet(b.capture)
         case _ => panic(s"Shouldn't happen: we do not have a capture for ${s}, yet.")
       }
     }
@@ -1392,7 +1393,10 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def getSelfRegion(tree: source.Tree): Capture =
-    annotation(Annotations.SelfRegion, tree)
+    val selfParam = annotation(Annotations.SelfRegion, tree)
+    bind(selfParam, TRegion)
+    bind(selfParam, CaptureSet(selfParam.capture))
+    selfParam.capture
 
 
   //</editor-fold>

@@ -699,7 +699,7 @@ trait NamerOps extends ContextOps { Context: Context =>
   private[namer] def bindSelfRegion(tree: Tree) = {
     val selfParam = SelfParam(tree)
     Context.bindBlock("this", selfParam)
-    Context.annotate(Annotations.SelfRegion, tree, selfParam.capture)
+    Context.annotate(Annotations.SelfRegion, tree, selfParam)
   }
 
 
