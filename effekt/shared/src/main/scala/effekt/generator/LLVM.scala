@@ -70,6 +70,8 @@ class LLVM extends Generator {
 object LLVMFragmentPrinter {
   case class LLVMContext() {
     val fresh = new Counter(0)
+
+    def abort(msg: String) = ???
   }
 
   def wholeProgramOneshot(mainName: BlockSymbol, defs: List[Top]): LLVMFragment =
@@ -293,7 +295,7 @@ ${jump(globalName(name), sp, unspilledArgs.map(fromMachineValueWithAnnotatedType
     case machine.Variant(variantTypes) => s"{i64, ${commaSeparated(variantTypes.map(asFragment))}}"
   }
 
-  def asFragment(param: machine.Param): LLVMFragment = param match {
+  def asFragment(param: machine.Param)(implicit C: LLVMContext): LLVMFragment = param match {
     case machine.Param(typ, name) => s"${asFragment(typ)} ${localName(name)}"
   }
 
@@ -414,22 +416,22 @@ store ${typ} ${value}, $ptrType $newtypedsp
   def envRecordType(types: List[LLVMFragment]): LLVMFragment =
     "{" + types.mkString(", ") + "}"
 
-  def localName(id: Symbol): LLVMFragment =
+  def localName(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     "%" + nameDef(id)
 
-  def globalName(id: Symbol): LLVMFragment =
+  def globalName(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     "@" + nameDef(id)
 
   // XXX Major bug potential: `scanningName` can clash with `globalName`.
-  def scanningName(id: Symbol): LLVMFragment =
+  def scanningName(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     "@scan_" + nameDef(id)
 
-  def nameDef(id: Symbol): LLVMFragment =
+  def nameDef(id: Symbol)(implicit C: LLVMContext): LLVMFragment =
     val name = s"${id.name}_${id.id}"
     assertSaneName(name)
     s"$name"
 
-  def globalBuiltin(name: String): LLVMFragment =
+  def globalBuiltin(name: String)(implicit C: LLVMContext): LLVMFragment =
     assertSaneName(name)
     s"@$name"
 
@@ -445,8 +447,10 @@ store ${typ} ${value}, $ptrType $newtypedsp
     assertSaneName(name)
     s"%${name}_${C.fresh.next()}"
 
-  def assertSaneName(name: String): Boolean =
-    if (!SANE_NAME_REGEX.matches(name))
-        throw new Error(s"assertSaneName: $name")
-    return true
+  def assertSaneName(name: String)(implicit C: LLVMContext): Boolean = {
+    val sane = SANE_NAME_REGEX.matches(name)
+    if (!sane)
+        C.abort(s"internal error: insane name: $name")
+    sane
+  }
 }
