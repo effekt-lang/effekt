@@ -8,7 +8,7 @@ def handle2 { prog: () => Unit / { Effect2 } }: Unit = {
 }
 
 def escape { prog: () => Unit / { Effect1, Effect2 } }: Unit = {
-  var k: (Unit) => Unit at { escape, prog } = fun (x: Unit) { () }
+  var k: (Unit) => Unit at { this, prog } = fun (x: Unit) { () }
   handle2 {
     try {
       prog()

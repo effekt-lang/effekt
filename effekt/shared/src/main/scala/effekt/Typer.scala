@@ -1203,6 +1203,7 @@ private[typer] case class TyperState(annotations: Annotations, unification: Unif
 
 trait TyperOps extends ContextOps { self: Context =>
 
+
   /**
    * Local annotations database, only used by Typer
    *
@@ -1245,7 +1246,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * Contains mutable variables. The methods [[unification.backup()]] and [[unification.restore()]]
    * allow to save a copy of the current state.
    */
-  private[typer] val unification = new Unification(using self)
+  private[typer] val unification = new Unification(using this)
   export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope

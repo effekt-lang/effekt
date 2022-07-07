@@ -114,11 +114,6 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     "at", "box", "unbox", "return", "region", "new"
   )
 
-  // we escape names that would conflict with JS early on to simplify the pipeline
-  def additionalKeywords: List[String] = List(
-    "delete", "new", "catch", "in", "finally", "switch", "case", "this", "yield", "Object", "require"
-  )
-
   def keyword(s: String): Parser[String] =
     s // todo check suffix
 
@@ -126,10 +121,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
 
   lazy val ident =
-    (not(anyKeyword) ~> name ^^ { n =>
-      if (additionalKeywords.contains(n)) { "_" + n } else { n }
-    }
-      | failure("Expected an identifier"))
+    ( not(anyKeyword) ~> name
+    | failure("Expected an identifier")
+    )
 
   lazy val idDef: P[IdDef] = ident ^^ IdDef.apply
   lazy val idRef: P[IdRef] = ident ^^ IdRef.apply

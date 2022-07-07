@@ -98,6 +98,14 @@ package object symbols {
   // to be fair, resume is not tracked anymore, but transparent.
   case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name.local("resume") }
 
+  /**
+   * Term-level representation of the current region.
+   */
+  case class SelfParam(tree: source.Tree) extends TrackedParam with BlockSymbol {
+    val name = Name.local("this")
+    override lazy val capture: Capture = LexicalRegion(name, tree)
+  }
+
   trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
     def vparams: List[ValueParam]
