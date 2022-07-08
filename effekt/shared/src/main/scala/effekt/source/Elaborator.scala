@@ -17,48 +17,69 @@ import effekt.typer.typeMapToSubstitution
  *   - there are no `Do` nodes anymore (replaced by method calls)
  *   - `l.foo(x)` where `foo` is a function and not an operation is desugared to `foo(l, x)`
  *   - all method calls `l.op()` will have `op : Operation`
+ *   - all regions are explicitly bound by `region this { ... }` constructs.
  *
- * TODO maybe also insert explicit box and unbox
  */
-object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
+object Elaborator extends Phase[Typechecked, Typechecked] {
 
   val phaseName = "capability-passing"
 
   def run(input: Typechecked)(implicit C: Context) = {
-    val transformedTree = rewrite(input.tree)
+    val transformedTree = ExplicitCapabilities.rewrite(input.tree)
 
     AnnotateCaptures.annotate(transformedTree)
 
-    Some(input.copy(tree = transformedTree))
-  }
+    val treeExplicitRegions = ExplicitRegions.rewrite(transformedTree)
 
-  override def defn(implicit C: Context) = {
+    Some(input.copy(tree = treeExplicitRegions))
+  }
+}
+
+trait ElaborationOps extends ContextOps { Context: Context =>
+
+  private[source] def freshReferenceTo(s: symbols.BlockParam): IdRef =
+    val id = IdRef(s.name.name)
+    assignSymbol(id, s)
+    id
+
+  private[source] def definitionFor(s: symbols.BlockParam): source.BlockParam =
+    val id = IdDef(s.name.name)
+    assignSymbol(id, s)
+    val tree = source.BlockParam(id, source.BlockTypeTree(s.tpe))
+    tree
+
+}
+
+object ExplicitCapabilities extends Rewrite {
+
+  override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
-      val capabilities = C.annotation(Annotations.BoundCapabilities, f)
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, f)
       val capParams = capabilities.map(Context.definitionFor)
+
       f.copy(bparams = bps ++ capParams, body = rewrite(body))
   }
 
-  override def expr(implicit C: Context) = {
+  override def expr(using Context) = {
 
     // an effect call -- translate to method call on the inferred capability
     case c @ Do(effect, id, targs, vargs) =>
       val transformedValueArgs = vargs.map { a => rewrite(a) }
 
       // the receiver of this effect operation call
-      val receiver = C.annotation(Annotations.CapabilityReceiver, c)
+      val receiver = Context.annotation(Annotations.CapabilityReceiver, c)
 
       // for bidirectional effects
-      val others = C.annotation(Annotations.CapabilityArguments, c)
+      val others = Context.annotation(Annotations.CapabilityArguments, c)
 
       // the remaining capabilities are provided as arguments
-      val capabilityArgs = others.map { e => InterfaceArg(C.freshReferenceTo(e)) }
+      val capabilityArgs = others.map { e => InterfaceArg(Context.freshReferenceTo(e)) }
 
-      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       // construct the member selection on the capability as receiver
-      MethodCall(Var(C.freshReferenceTo(receiver)).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
+      MethodCall(Var(Context.freshReferenceTo(receiver)).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
 
     // the function is a field, desugar to select
     case c @ Call(fun: IdTarget, targs, List(receiver), Nil) if fun.definition.isInstanceOf[Field] =>
@@ -68,10 +89,10 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
 
-      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
+      val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
+      val capabilityArgs = capabilities.map { e => InterfaceArg(Context.freshReferenceTo(e)) }
 
-      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       val recv = rewrite(receiver)
@@ -83,10 +104,10 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
       val valueArgs = vargs.map { a => rewrite(a) }
       val blockArgs = bargs.map { a => rewrite(a) }
 
-      val capabilities = C.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => InterfaceArg(C.freshReferenceTo(e)) }
+      val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
+      val capabilityArgs = capabilities.map { e => InterfaceArg(Context.freshReferenceTo(e)) }
 
-      val typeArguments = C.annotation(Annotations.TypeArguments, c)
+      val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       Call(receiver, typeArgs, valueArgs, blockArgs ++ capabilityArgs)
@@ -94,7 +115,7 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
     case h @ TryHandle(prog, handlers) =>
       val body = rewrite(prog)
 
-      val capabilities = C.annotation(Annotations.BoundCapabilities, h)
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, h)
 
       assert(capabilities.size == handlers.size)
 
@@ -120,43 +141,40 @@ object Elaborator extends Phase[Typechecked, Typechecked] with Rewrite {
       TryHandle(body, hs)
   }
 
-  def rewrite(target: source.CallTarget)(implicit C: Context): source.CallTarget = visit(target) {
-    case i: IdTarget => target
-    case ExprTarget(expr) => ExprTarget(rewrite(expr))
-  }
-
-  override def rewrite(b: source.FunctionArg)(implicit C: Context): source.FunctionArg = visit(b) {
+  override def rewrite(b: source.FunctionArg)(using Context): source.FunctionArg = visit(b) {
     case b @ source.FunctionArg(tps, vps, bps, body) =>
-      val capabilities = C.annotation(Annotations.BoundCapabilities, b)
+      val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(Context.definitionFor)
       source.FunctionArg(tps, vps, bps ++ capParams, rewrite(body))
   }
+}
 
-  /**
-   * Copies all annotations and position information from source to target
-   */
-  override def visit[T <: Tree](source: T)(block: T => T)(implicit C: Context): T = {
-    val target = block(source)
-    target.inheritPosition(source)
-    C.copyAnnotations(source, target)
-    target
+object ExplicitRegions extends Rewrite {
+  override def defn(using Context) = {
+    case f @ FunDef(id, tps, vps, bps, ret, body) =>
+
+      val transformedBody = rewrite(body)
+
+      val caps = Context.annotation(Annotations.InferredCapture, body).captures
+      val self = Context.annotation(Annotations.SelfRegion, f)
+
+      val usesMutableState = caps contains self.capture
+
+      val bodyWithRegion = if (usesMutableState) {
+        // synthesize a `region this { ... }`
+        transformedBody
+      } else {
+        transformedBody
+      }
+
+      f.copy(body = bodyWithRegion)
+  }
+
+  override def expr(using Context) = {
+    case h @ TryHandle(prog, handlers) =>
+      TryHandle(rewrite(prog), handlers.map(rewrite))
   }
 }
-trait ElaborationOps extends ContextOps { Context: Context =>
-
-  private[source] def freshReferenceTo(s: symbols.BlockParam): IdRef =
-    val id = IdRef(s.name.name)
-    assignSymbol(id, s)
-    id
-
-  private[source] def definitionFor(s: symbols.BlockParam): source.BlockParam =
-    val id = IdDef(s.name.name)
-    assignSymbol(id, s)
-    val tree = source.BlockParam(id, source.BlockTypeTree(s.tpe))
-    tree
-
-}
-
 
 /**
  * Computes the capture of each subexpression, provided that Typer already solved the constraints.

@@ -103,6 +103,7 @@ package object symbols {
    */
   case class SelfParam(tree: source.Tree) extends TrackedParam with BlockSymbol {
     val name = Name.local("this")
+    def tpe = builtins.TRegion
     override lazy val capture: Capture = LexicalRegion(name, tree)
   }
 
