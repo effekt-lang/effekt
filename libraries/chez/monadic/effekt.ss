@@ -73,9 +73,15 @@
 (define (run c)
   (trampoline c (cons (make-Stack '() '() toplevel) '())))
 
-(define (while cond exp)
-  (then cond c
-    (if c (then exp _ (while cond exp)) (pure #f))))
+
+(define-syntax while
+  (syntax-rules ()
+    [(_ c e)
+     (let ([condition (lambda () c)])
+       (letrec ([loop (lambda ()
+         (then (condition) condValue
+           (if condValue (then e _ (loop)) (pure #f))))])
+         (loop)))]))
 
 (define newPrompt (lambda () (string #\p)))
 
