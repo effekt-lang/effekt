@@ -35,44 +35,34 @@ const $runtime = (function() {
   // Metacontinuations / Stacks
   // A metacontinuation is a stack of stacks.
 
+  // 
+  // |       |      
+  // | - T - |  / onUnwind: () -> Control[S]
+  // |-------| {  onReturn: T -> Control[R]
+  //            \ onRewind: S -> Control[Unit]
+  // |       |
+  // |-------| 
+  //
+  
   // (frames: List[Frame], fields: [Cell], prompt: Int, tail: Stack) -> Stack
-  function Stack(frames, fields, prompt, onReturn, tail) {
-    return { frames: frames, fields: fields, prompt: prompt, onReturn: onReturn, tail: tail }
+  function Stack(frames, fields, prompt, clauses, tail) {
+    return { frames: frames, fields: fields, prompt: prompt, clauses: clauses, tail: tail }
   }
 
   // (frames: List[Frame], fields: [Cell], prompt: Int, tail: Stack) -> Stack
-  function SubStack(frames, backup, prompt, onReturn, tail) {
-    return { frames: frames, backup: backup, prompt: prompt, onReturn: onReturn, tail: tail }
+  function SubStack(frames, backup, prompt, clauses, onUnwindData, tail) {
+    return { frames: frames, backup: backup, prompt: prompt, clauses: clauses, onUnwindData: onUnwindData, tail: tail }
   }
 
   const EmptyStack = null;
 
-  // Invariant: a Finalizer stack always occurs as either the tail of a Stack or as predecessor of a SubStack.
-  // Only the top-level stack does not have a Finalizer stack.
-  // 
-  // |       |      
-  // | - T - |
-  // |-------| { onReturn: T -> Control[R]
-  //                                        / onUnwind: () -> Control[S]
-  // |-------| <- Finalizer of Stack above { 
-  //                                        \ onRewind: S -> Control[Unit]
-  //    ...
-  // If a stack is unwound, the Finalizer stack also has to be unwound in order to get to the stacks below.
-  // This ensures that at each unwind, the unwind operation is always executed. The same applies for rewinding.
-  // (frames: List[Frame], clauses: Clauses, onUnwindData: A, tail: Stack) -> Stack
-  function Finalizer(clauses, onUnwindData, doRewindOp, tail) {
-    return { 
-      clauses: clauses, onUnwindData: onUnwindData, isFinilizer: true, doRewindOp: doRewindOp, tail: tail }
-  }
-
-
-  function Clauses(onUnwind, onRewind) {
+  function Clauses(onUnwind, onRewind, onReturn) {
     return {
-      onUnwind: onUnwind, onRewind: onRewind
+      onUnwind: onUnwind, onRewind: onRewind, onReturn: onReturn
     }
   }
 
-  const EmptyClauses = Clauses(null, null)
+  const EmptyClauses = Clauses(null, null, null)
 
   // return a to stack
   // (stack: Stack<A, B>, a: A) -> Step<B>
@@ -80,20 +70,10 @@ const $runtime = (function() {
     var s = stack;
     while (true) {
       if (s === EmptyStack) return a;
-      // a cannot be applied to a finalizer stack
-      if (s.isFinilizer) {
-        s = s.tail;
-        continue
-      }
       const fs = s.frames;
       if (fs === Nil) {
-        if (s.onReturn != null) {
-          // Execute the return operation within the outer context.
-          // Since s is not a finalizer, it is safe to assume that
-          // s.tail is finalizer, hence it is neccessary to execute
-          // the return operation within s.tail.tail, which is in
-          // of type Stack again.
-          return Step(s.onReturn(a), s.tail.tail)
+        if (s.clauses.onReturn != null) {
+          return Step(s.clauses.onReturn(a), s.tail)
         } else {
           s = s.tail;
           continue
@@ -142,28 +122,19 @@ const $runtime = (function() {
     var s = stack;
 
     while (sub !== EmptyStack) {
-      if (sub.isFinilizer) {
-        if (sub.doRewindOp && sub.clauses.onRewind != null) {
-          // execute the rewind operation and remember to push the remaining substack
-          // onto the resulting metastack k
-          const c_ = sub.clauses.onRewind(sub.onUnwindData)
-              .then(() => Control(k => {
-                // remember that the rewind operation already has been executed and shall
-                // not be executed again in the next iteration
-                sub = Finalizer(sub.clauses, sub.onUnwindData, false, sub.tail);
-                return pushSubcont(sub, k, c)
-              }));
-              // s is always of type Stack here. 
-              // Proof: Assuming s would be of type Finalizer, then the predecesssor of the current 
-              // sub had to be a Finalizer. However, since the current sub is the tail of the last, 
-              // sub cannot be a Finalizer again due to the invariant that holds for every Finalizer. 
-              // That means we would not be wihtin this if branch.
-          return Step(c_, s)
-        } else {
-          s = Finalizer(sub.clauses, sub.onUnwindData, true, s);
-        }
+      if (sub.clauses.onRewind != null) {
+        // execute the rewind operation and remember to push the remaining substack
+        // onto the resulting metastack k
+        const c_ = sub.clauses.onRewind(sub.onUnwindData)
+            .then(() => Control(k => {
+              // Push the current substack before calling pushSubcont so that the on rewind
+              // operation is not executed again
+              const remainder = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, k);
+              return pushSubcont(sub.tail, remainder, c)
+            }));
+        return Step(c_, s)
       } else {
-        s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.onReturn, s);
+        s = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, s);
       }
       sub = sub.tail;
     }
@@ -173,7 +144,7 @@ const $runtime = (function() {
   // Pushes a frame f onto the stack
   // (stack: Stack, f: Frame) -> Stack
   function flatMap(stack, f) {
-    if (stack === EmptyStack) { return Stack(Cons(f, Nil), [], null, null, stack) }
+    if (stack === EmptyStack) { return Stack(Cons(f, Nil), [], null, EmptyClauses, stack) }
     var fs = stack.frames
     // it should be safe to mutate the frames field, since they are copied in the subcont
     stack.frames = Cons(f, fs)
@@ -187,33 +158,31 @@ const $runtime = (function() {
     var s = stack;
 
     while (s != EmptyStack) {
-      if (s.isFinilizer) {
-        if (s.clauses.onUnwind != null) {
+      const currentPrompt = s.prompt;
+      if (currentPrompt !== p && s.clauses.onUnwind != null) {
           // execute the unwind operation within the outer context,
           // remember to pop s afterwards and continue poping off until p has been found.
-          const c = s.clauses.onUnwind().then(a =>
-            Control(k => {
-              sub = Finalizer(s.clauses, a, true, sub);
-              return splitAt(k, sub, p, f)
+          const c = s.clauses.onUnwind()
+            .then(a => Control(k => {
+              const sub_ = SubStack(s.frames, backup(s.fields), s.prompt, s.clauses, a, sub);
+              return splitAt(k, sub_, p, f)
             })
           )
-          // s.tail is a Stack because of the invariant that holds for every
-          // Finalizer
           return Step(c, s.tail)
-        } else {
-          sub = Finalizer(s.clauses, null, true, sub);
-        }
-      } else {
-        const currentPrompt = s.prompt;
-        sub = SubStack(s.frames, backup(s.fields), currentPrompt, s.onReturn, sub);
-        if (currentPrompt === p) {
-          // if the prompt has been found the unwind operation, as well as the rewind
-          // operation of the current stack, are not to be executed.
-          sub = Finalizer(s.tail.clauses, null, false, sub);
-          const localCont = a => Control(k => pushSubcont(sub, k, pure(a), p, 0));
-          // Due to invariant: s.tail.tail is of type Stack
-          return Step(f(localCont), s.tail.tail)
-        }
+      }
+
+      sub = SubStack(s.frames, backup(s.fields), s.prompt, s.clauses, null, sub);
+
+      if (currentPrompt === p) {
+        const localCont = a => Control(k => {
+          // Push the last popped stack onto the metastack again before calling
+          // pushSubcont. This ensures that the rewind operation of that stack is not
+          // executed.
+          const s_ = Stack(sub.frames, restore(sub.backup), sub.prompt, sub.clauses, k);
+          const sub_ = sub.tail;
+          return pushSubcont(sub_, s_, pure(a))
+        });
+        return Step(f(localCont), s.tail)
       }
       s = s.tail;
     }
@@ -229,13 +198,13 @@ const $runtime = (function() {
     })
   }
 
-  // Delimited Control "monad"
+  // Delimited Control Monad
   function Control(apply) {
     const self = {
       // Control[A] -> Stack -> Step[Control[B], Stack]
       apply: apply,
       // Control[A] -> A
-      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, null, EmptyStack))),
+      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, EmptyClauses, EmptyStack))),
       // Control[A] -> (A -> Control[B]) -> Control[B] 
       // which corresponds to monadic bind
       then: f => Control(k => Step(self, flatMap(k, f))),
@@ -274,10 +243,8 @@ const $runtime = (function() {
   }
 
   const reset = p => clauses => c => Control(k => {
-    // Establish invariant: Stack -> Finalizer -> k
-    const fS = Finalizer(Clauses(clauses.onUwind, clauses.onRewind), null, true, k);
-    const s = Stack(Nil, [], p, clauses.onReturn, fS);
-    return Step(c, s)
+      const s = Stack(Nil, [], p, clauses, k);
+      return Step(c, s)
   })
 
   const toplevel = 1;
@@ -314,9 +281,7 @@ const $runtime = (function() {
       }
       return cap;
     });
-    return body => reset(p)
-                        ({ onUwind: onUnwind, onRewind: onRewind, onReturn: onReturn })
-                        (body.apply(null, caps))
+    return body => reset(p)(Clauses(onUnwind, onRewind, onReturn))(body.apply(null, caps))
   }
 
   return {
