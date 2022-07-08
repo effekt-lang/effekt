@@ -484,6 +484,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | funCall
     | doExpr
     | handleExpr
+    | regionExpr
     | lambdaExpr
     | unboxExpr
     | primExpr
@@ -516,8 +517,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val handleExpr: P[Term] =
     `try` ~/> stmt ~ some(handler) ^^ TryHandle.apply
 
+  lazy val regionExpr: P[Term] =
+    `region` ~/> idDef ~ stmt ^^ Region.apply
+
   lazy val handler: P[Handler] =
-    ( `with` ~> (idDef <~ `:`).? ~ interfaceType ~ (`{` ~> some(defClause) <~ `}`) ^^ {
+    ( `with` ~> (idDef <~ `:`).? ~ interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
       case capabilityName ~ effect ~ clauses =>
         val capability = capabilityName map { name => BlockParam(name, effect) }
         Handler(effect, capability, clauses)

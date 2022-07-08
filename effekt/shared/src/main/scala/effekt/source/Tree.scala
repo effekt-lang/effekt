@@ -342,6 +342,10 @@ case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], bo
   type symbol = symbols.Operation
 }
 
+case class Region(id: IdDef, body: Stmt) extends Term with Definition {
+  type symbol = symbols.TrackedParam
+}
+
 case class Hole(stmts: Stmt) extends Term
 
 case class Match(scrutinee: Term, clauses: List[MatchClause]) extends Term
@@ -542,6 +546,9 @@ object Tree {
       case TryHandle(prog, handlers) =>
         TryHandle(rewrite(prog), handlers.map(rewrite))
 
+      case Region(name, body) =>
+        Region(name, rewrite(body))
+
       case Hole(stmts) =>
         Hole(rewrite(stmts))
 
@@ -685,6 +692,9 @@ object Tree {
 
       case TryHandle(prog, handlers) =>
         combineAll(scoped { query(prog) } :: handlers.map(h => scoped { query(h) }))
+
+      case Region(name, body) =>
+        query(body)
 
       case Hole(stmts) =>
         query(stmts)

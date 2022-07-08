@@ -180,6 +180,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
         checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
 
+      case tree @ source.Region(name, body) =>
+        val selfRegion = tree.symbol
+        Context.bind(selfRegion)
+
+        val inferredCapture = Context.freshCaptVar(CaptUnificationVar.RegionRegion(tree))
+        val withoutSelfregion = Context.without(inferredCapture, List(selfRegion.capture))
+        Context.withRegion(selfRegion.capture) {
+          given Captures = withoutSelfregion
+          checkStmt(body, expected)
+        }
+
       case tree @ source.TryHandle(prog, handlers) =>
 
         // (1) extract all handled effects and capabilities
@@ -1367,8 +1378,10 @@ trait TyperOps extends ContextOps { self: Context =>
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
   }
 
-  private[typer] def bind(p: BlockParam): Unit = p match {
+  private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s : SelfParam => bind(s, s.tpe, CaptureSet(s.capture))
+    case r : ResumeParam => panic("Cannot bind resume")
   }
 
   //</editor-fold>

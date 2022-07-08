@@ -85,23 +85,23 @@ package object symbols {
 
   // TODO everywhere else the two universes are called "value" and "block"
 
-  sealed trait TrackedParam extends Param {
+  sealed trait TrackedParam extends Param with BlockSymbol {
     // every block parameter gives rise to a capture parameter
     lazy val capture: Capture = CaptureParameter(name)
   }
-  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam with BlockSymbol
+  case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
   //  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
   //    def effect = tpe.eff
   //    override def toString = s"@${tpe.eff.name}"
   //  }
 
   // to be fair, resume is not tracked anymore, but transparent.
-  case class ResumeParam(module: Module) extends TrackedParam with BlockSymbol { val name = Name.local("resume") }
+  case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
 
   /**
    * Term-level representation of the current region.
    */
-  case class SelfParam(tree: source.Tree) extends TrackedParam with BlockSymbol {
+  case class SelfParam(tree: source.Tree) extends TrackedParam {
     val name = Name.local("this")
     def tpe = builtins.TRegion
     override lazy val capture: Capture = LexicalRegion(name, tree)
@@ -474,6 +474,7 @@ package object symbols {
     sealed trait Role
     case class VariableInstantiation(underlying: Capture, call: source.Tree) extends Role
     case class HandlerRegion(handler: source.TryHandle) extends Role
+    case class RegionRegion(handler: source.Region) extends Role
     case class FunctionRegion(fun: source.FunDef) extends Role
     case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role
     case class InferredBox(box: source.Box) extends Role

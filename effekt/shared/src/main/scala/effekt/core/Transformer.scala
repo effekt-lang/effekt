@@ -217,7 +217,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       makeFunctionCall(c, fun.definition, vargs, bargs)
 
     case source.TryHandle(prog, handlers) =>
-
       val effects = handlers.map(_.definition)
       val caps = handlers.map { h =>
         val cap = h.capability.get.symbol
@@ -243,6 +242,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
       Context.bind(Context.inferredTypeOf(tree), Handle(body, hs))
+
+    case r @ source.Region(name, body) =>
+      val sym = r.symbol
+      val tpe = sym match {
+        case b: BlockParam => b.tpe
+        case b: SelfParam => b.tpe
+        case _ => Context.panic("Continuations cannot be regions")
+      }
+      val cap = core.BlockParam(sym, tpe)
+      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)

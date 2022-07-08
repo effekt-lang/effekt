@@ -2,7 +2,7 @@ package effekt
 package core
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType, TrackedParam }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -90,6 +90,8 @@ case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
 
+case class Region(body: Block) extends Stmt
+
 object Tree {
 
   // Generic traversal of trees, applying the partial function `f` to every contained
@@ -154,6 +156,8 @@ object Tree {
           State(rewrite(init), reg, rewrite(body))
         case Handle(body, handler) =>
           Handle(rewrite(body), handler map rewrite)
+        case Region(body) =>
+          Region(rewrite(body))
         case Match(scrutinee, clauses) =>
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
@@ -198,71 +202,4 @@ object Tree {
     }
   }
 
-  trait Query[T] {
-    // Monoid
-    def concat(x: T, y: T): T
-    def unit: T
-
-    def expr: PartialFunction[Expr, T]
-    def stmt: PartialFunction[Stmt, T]
-    def param: PartialFunction[Param, T]
-    def block: PartialFunction[Block, T]
-    def pattern: PartialFunction[Pattern, T]
-    def handler: PartialFunction[Handler, T]
-
-    def run(e: Expr): T = e match {
-      case e if expr.isDefinedAt(e) => expr(e)
-      case e => runGeneric(e)
-    }
-    def run(e: Stmt): T = e match {
-      case e if stmt.isDefinedAt(e) => stmt(e)
-      case e => runGeneric(e)
-    }
-    def run(e: Param): T = e match {
-      case e if param.isDefinedAt(e) => param(e)
-      case e => runGeneric(e)
-    }
-    def run(e: Block): T = e match {
-      case e if block.isDefinedAt(e) => block(e)
-      case e => runGeneric(e)
-    }
-    def run(e: Pattern): T = e match {
-      case e if pattern.isDefinedAt(e) => pattern(e)
-      case e => runGeneric(e)
-    }
-    def run(e: Handler): T = e match {
-      case e if handler.isDefinedAt(e) => handler(e)
-      case e => runGeneric(e)
-    }
-
-    def run(e: Tree): T = e match {
-      case e: Expr    => run(e)
-      case s: Stmt    => run(s)
-      case p: Param   => run(p)
-      case b: Block   => run(b)
-      case b: Pattern => run(b)
-      case b: Handler => run(b)
-      case other      => runGeneric(other) // TODO explicitly expand
-    }
-
-    def runGeneric(e: Any): T = e match {
-      case t: Iterable[t] => t.map(runGeneric).fold(unit)(concat)
-      case p: Product => p.productIterator.map {
-        case t: Tree => runGeneric(t)
-        case other   => unit
-      }.fold(unit)(concat)
-      case leaf => unit
-    }
-  }
-
-  trait Visit extends Query[Unit] {
-    def concat(x: Unit, y: Unit) = ()
-
-    def expr: PartialFunction[Expr, Unit] = x => ()
-    def stmt: PartialFunction[Stmt, Unit] = x => ()
-    def param: PartialFunction[Param, Unit] = x => ()
-    def block: PartialFunction[Block, Unit] = x => ()
-    def pattern: PartialFunction[Pattern, Unit] = x => ()
-    def handler: PartialFunction[Handler, Unit] = x => ()
-  }
 }

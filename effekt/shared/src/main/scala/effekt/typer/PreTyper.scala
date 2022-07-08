@@ -107,6 +107,9 @@ class BoxUnboxInference {
     case TryHandle(prog, handlers) =>
       TryHandle(rewrite(prog), handlers.map(rewrite))
 
+    case Region(name, body) =>
+      Region(name, rewrite(body))
+
     case Hole(stmts) =>
       Hole(rewrite(stmts))
 

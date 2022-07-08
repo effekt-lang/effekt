@@ -100,12 +100,45 @@ const $runtime = (function() {
     throw ("Prompt " + p + " not found")
   }
 
+  function allocateInto(stack, p, cell) {
+    var s = stack;
+
+    while (s !== EmptyStack) {
+      const currentPrompt = s.prompt
+      if (currentPrompt === p) {
+        return s.fields.push(cell);
+      } else {
+        s = s.tail
+      }
+    }
+    throw ("Prompt " + p + " not found")
+  }
+
   function withState(init, f) {
     const cell = Cell(init)
     return Control(k => {
       k.fields.push(cell);
       return Step(f(cell), k)
     })
+  }
+
+  function withRegion(prog) {
+    return Control(k => {
+      return Step(prog(k.fields), k)
+    })
+  }
+
+  function withStateIn(prompt, init, f) {
+    const cell = Cell(init)
+
+    if (prompt === toplevel) {
+      return f(cell)
+    } else {
+      return Control(k => {
+        allocateInto(k, prompt, cell);
+        return Step(f(cell), k)
+      })
+    }
   }
 
   // Delimited Control
@@ -197,6 +230,7 @@ const $runtime = (function() {
 
     _if: (c, thn, els) => c ? thn() : els(),
     _while: _while,
+    withRegion: withRegion,
     constructor: (_, tag) => function() {
       return { __tag: tag, __data: Array.from(arguments) }
     },

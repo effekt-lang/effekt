@@ -162,7 +162,20 @@ object ExplicitRegions extends Rewrite {
 
       val bodyWithRegion = if (usesMutableState) {
         // synthesize a `region this { ... }`
-        transformedBody
+        val regionId = IdDef("this").inheritPosition(id)
+        // assign symbol
+        Context.annotate(Annotations.Symbol, regionId, self)
+
+        // Also copy the other annotations from transformed body to the synthesized region
+        //   captures of the overall region should not include self
+        val region = Region(regionId, transformedBody)
+        val result = Return(region)
+        Context.copyAnnotations(transformedBody, region)
+        Context.copyAnnotations(transformedBody, result)
+
+        Context.annotate(Annotations.InferredCapture, region, CaptureSet(caps - self.capture))
+        Context.annotate(Annotations.InferredCapture, result, CaptureSet(caps - self.capture))
+        result
       } else {
         transformedBody
       }

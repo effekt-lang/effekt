@@ -105,6 +105,10 @@ trait JavaScriptPrinter extends JavaScriptBase {
       val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
 
+    // TODO implement
+    case Region(body) =>
+      jsCall("$effekt.withRegion", toDoc(body))
+
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {
         case (pattern, b) => jsObject(

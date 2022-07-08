@@ -305,6 +305,15 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
+    case tree @ source.Region(name, body) =>
+      val reg = BlockParam(Name.local(name.name), builtins.TRegion)
+      Context.define(name, reg)
+      Context scoped {
+        Context.bindSelfRegion(tree, reg)
+        Context.bindBlock(reg)
+        resolveGeneric(body)
+      }
+
     case source.Handler(effect, param, clauses) =>
 
       def extractControlEffect(e: InterfaceType): Interface = e match {
@@ -696,12 +705,14 @@ trait NamerOps extends ContextOps { Context: Context =>
     // bind the block parameter as a term
     params.foreach { bindBlock }
 
-  private[namer] def bindSelfRegion(tree: Tree) = {
-    val selfParam = SelfParam(tree)
-    Context.bindBlock("this", selfParam)
-    Context.annotate(Annotations.SelfRegion, tree, selfParam)
+  private[namer] def bindSelfRegion(tree: Tree): Unit = {
+    bindSelfRegion(tree, SelfParam(tree))
   }
 
+  private[namer] def bindSelfRegion(tree: Tree, sym: TrackedParam): Unit = {
+    Context.bindBlock("this", sym)
+    Context.annotate(Annotations.SelfRegion, tree, sym)
+  }
 
   private[namer] def bindBlock(p: TrackedParam) = {
     // bind the block parameter as a term

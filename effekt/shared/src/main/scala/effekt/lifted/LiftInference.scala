@@ -68,6 +68,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       val transformedHandler = handler.map { transform }
       Handle(transformedBody, transformedHandler)
 
+    // right now the region construct is a noop. This can change in the future
+    case core.Region(body) =>
+      Region(transform(body))
+
     case core.App(b: core.Block, targs, args: List[core.Argument]) =>
       b match {
         case b : core.Extern => App(transform(b), targs, liftArguments(args))
