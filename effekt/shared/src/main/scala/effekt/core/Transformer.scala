@@ -348,7 +348,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case core.Ret(core.Run(s)) => rewrite(s)
       }
     }
-    eliminateReturnRun.rewrite(s)
+
+    // rewrite (Val (Ret e) s) to (Let e s)
+    object directStyleVal extends core.Tree.Rewrite {
+      override def stmt = {
+        case core.Val(id, tpe, core.Ret(expr), body) =>
+          core.Let(id, tpe, rewrite(expr), rewrite(body))
+      }
+    }
+    val opt = eliminateReturnRun.rewrite(s)
+    directStyleVal.rewrite(opt)
   }
 
   def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
