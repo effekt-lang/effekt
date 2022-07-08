@@ -77,10 +77,9 @@
     [(_ effid getid setid init body)
      ($then init (lambda (s)
         (define cell (box s))
-        (define (cap ev) cell)
 
-        (define (getid c) (lambda () (lambda (k) (k (unbox c)))))
-        (define (setid c) (lambda (s*) (lambda (k) (set-box! c s*) (k #f))))
+        (define (getid c) (lambda () (unbox c)))
+        (define (setid c) (lambda (s*) (begin (set-box! c s*) #f)))
 
         (define (lift m) (lambda (k)
           (define backup (unbox cell))
@@ -88,7 +87,7 @@
             (set-box! cell backup)
             (k a)))))
 
-        ((body lift) cap)))]))
+        ((body lift) cell)))]))
 
 
 (define-syntax define-effect-op

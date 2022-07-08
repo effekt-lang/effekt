@@ -146,8 +146,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: VarBinder =>
         val tpe = getStateType(sym)
 
-        val get = App(Member(BlockVar(sym), TState.get), Nil, Nil)
-        Context.bind(tpe, get)
+        PureApp(Member(BlockVar(sym), TState.get), Nil, Nil)
         // val state = Context.annotation(Annotations.StateCapability, sym)
         // val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
         // Context.bind(Context.valueTypeOf(sym), get)
@@ -159,9 +158,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsExpr(expr)
       val sym = a.definition
       // val state = Context.annotation(Annotations.StateCapability, a.definition)
-      val put = App(Member(BlockVar(sym), TState.put), Nil, List(e))
-      //val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
-      Context.bind(builtins.TUnit, put)
+       PureApp(Member(BlockVar(sym), TState.put), Nil, List(e))
 
     case l: source.Literal[t] => transformLit(l)
 
@@ -201,7 +198,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = transformAsBlock(receiver)
       val valueArgs = vargs.map(transformAsExpr)
       val blockArgs = bargs.map(transform)
-      Context.bind(Context.inferredTypeOf(tree), App(Member(rec, c.definition), Nil, valueArgs ++ blockArgs))
+
+      c.definition match {
+        case sym if sym == TState.put || sym == TState.get =>
+          PureApp(Member(rec, sym), Nil, valueArgs ++ blockArgs)
+        case sym =>
+          Context.bind(Context.inferredTypeOf(tree), App(Member(rec, sym), Nil, valueArgs ++ blockArgs))
+      }
 
     case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
       val e = transformAsExpr(expr)
@@ -356,6 +359,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // we conservatively approximate to false
   def pureOrIO(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
     case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
+    case _         => false
+  }
+
+  def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
+    case Some(capt) => asConcreteCaptureSet(capt).captures.isEmpty
     case _         => false
   }
 

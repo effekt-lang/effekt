@@ -98,10 +98,10 @@
     [(_ effid getid setid init body)
      (then init s
         (define cell (box s))
-        (define (getid c) (lambda () (pure (unbox c))))
+        (define (getid c) (lambda () (unbox c)))
         (define (setid c) (lambda (s*)
           (set-box! c s*)
-          (pure #f)))
+          #f))
 
         (with-state cell (body cell)))]))
 

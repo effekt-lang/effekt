@@ -47,11 +47,11 @@ const $runtime = (function() {
     var _value = init;
     return {
       "op$get": function() {
-        return $effekt.pure(_value)
+        return _value
       },
       "op$put": function(v) {
         _value = v;
-        return $effekt.pure($effekt.unit)
+        return $effekt.unit
       },
       backup: function() {
         var _backup = _value
