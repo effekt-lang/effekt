@@ -24,14 +24,17 @@ case class DefScn(id: BlockSymbol, env: List[machine.Param]) extends Top
 case class Include(content: String) extends Top
 case class BasicBlock(id: BlockSymbol, instructions: List[Instruction], terminator: Terminator) extends Tree
 
-// TODO this is neither super- nor subset of LLVM
-// TODO `machine.Type` SHOULD be `LLVM.Type`
-// TODO make into a proper subset of LLVM (possibly *dropping* some nuances, not adding anything)
+// see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST-Instruction.html#t:Instruction
 sealed trait Instruction extends Tree
-case class Call(id: ValueSymbol, typ: machine.Type, func: BlockSymbol, args: List[machine.Value]) extends Instruction
+case class Add(x: String, y: String)
+
+// TODO no `machine.` types should appear
 case class Phi(param: machine.Param, args: List[(BlockSymbol, machine.Value)]) extends Instruction
 case class InsertValues(id: ValueSymbol, typ: machine.Record, args: List[machine.Value]) extends Instruction
 case class ExtractValue(id: ValueSymbol, target: machine.Value, field: Int) extends Instruction
+
+// TODO all of these should become machine instructions (and implemented in LLVM via a translation step)
+case class Call(id: ValueSymbol, typ: machine.Type, func: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class Inject(id: ValueSymbol, typ: machine.Variant, arg: machine.Value, variant: Int) extends Instruction
 case class PushFrame(cntType: List[machine.Type], id: BlockSymbol, args: List[machine.Value]) extends Instruction
 case class NewStack(cntType: List[machine.Type], id: BlockSymbol, blockName: BlockSymbol, args: List[machine.Value]) extends Instruction
@@ -43,7 +46,9 @@ case class EviPlus(id: ValueSymbol, l: machine.Value, r: machine.Value) extends 
 case class EviDecr(id: ValueSymbol, l: machine.Value) extends Instruction
 case class EviIsZero(id: ValueSymbol, l: machine.Value) extends Instruction
 
+// An LLVM terminator.
 sealed trait Terminator extends Tree
+// TODO no `machine.` types should appear
 case class Ret(values: List[machine.Value]) extends Terminator
 
 // TODO `jump` does not exist in LLVM. (In LLVM, one can only jump within declarations, not globally to anywhere within the program. When implementing a C compiler, this is of little hinderance, since one wants to use the provided C stack anyways. When one integral feature of one's language's implementation -- here Effekt's LLVM backend -- is correctly and sanely managing stacks, this truly becomes a hinderance.) Therefore, `jump` ought to appear in one of the many machine representations and be implemented using `tail call ; ret void` in the machine->llvm translation.
