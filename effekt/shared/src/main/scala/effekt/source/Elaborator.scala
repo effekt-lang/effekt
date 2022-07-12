@@ -152,40 +152,46 @@ object ExplicitCapabilities extends Rewrite {
 object ExplicitRegions extends Rewrite {
   override def defn(using Context) = {
     case f @ FunDef(id, tps, vps, bps, ret, body) =>
-
-      val transformedBody = rewrite(body)
-
-      val caps = Context.annotation(Annotations.InferredCapture, body).captures
-      val self = Context.annotation(Annotations.SelfRegion, f)
-
-      val usesMutableState = caps contains self.capture
-
-      val bodyWithRegion = if (usesMutableState) {
-        // synthesize a `region this { ... }`
-        val regionId = IdDef("this").inheritPosition(id)
-        // assign symbol
-        Context.annotate(Annotations.Symbol, regionId, self)
-
-        // Also copy the other annotations from transformed body to the synthesized region
-        //   captures of the overall region should not include self
-        val region = Region(regionId, transformedBody)
-        val result = Return(region)
-        Context.copyAnnotations(transformedBody, region)
-        Context.copyAnnotations(transformedBody, result)
-
-        Context.annotate(Annotations.InferredCapture, region, CaptureSet(caps - self.capture))
-        Context.annotate(Annotations.InferredCapture, result, CaptureSet(caps - self.capture))
-        result
-      } else {
-        transformedBody
-      }
-
-      f.copy(body = bodyWithRegion)
+      f.copy(body = wrapInRegion(f, body))
   }
 
   override def expr(using Context) = {
-    case h @ TryHandle(prog, handlers) =>
-      TryHandle(rewrite(prog), handlers.map(rewrite))
+    case f @ TryHandle(body, handler) =>
+      TryHandle(wrapInRegion(f, body), handler.map(rewrite))
+  }
+
+  override def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
+    case FunctionArg(tps, vps, bps, body) =>
+      FunctionArg(tps, vps, bps, wrapInRegion(b, body))
+  }
+
+  def wrapInRegion(outerTree: source.Tree, body: source.Stmt)(using Context): source.Stmt = {
+    val transformedBody = rewrite(body)
+
+    val caps = Context.annotation(Annotations.InferredCapture, body).captures
+    val self = Context.annotation(Annotations.SelfRegion, outerTree)
+
+    val usesMutableState = caps contains self.capture
+
+    if (usesMutableState) {
+      // synthesize a `region this { ... }`
+      val regionId = IdDef("this").inheritPosition(outerTree)
+      // assign symbol
+      Context.annotate(Annotations.Symbol, regionId, self)
+
+      // Also copy the other annotations from transformed body to the synthesized region
+      //   captures of the overall region should not include self
+      val region = Region(regionId, transformedBody)
+      val result = Return(region)
+      Context.copyAnnotations(transformedBody, region)
+      Context.copyAnnotations(transformedBody, result)
+
+      Context.annotate(Annotations.InferredCapture, region, CaptureSet(caps - self.capture))
+      Context.annotate(Annotations.InferredCapture, result, CaptureSet(caps - self.capture))
+      result
+    } else {
+      transformedBody
+    }
   }
 }
 
@@ -247,6 +253,10 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val selfRegion = Context.annotation(Annotations.SelfRegion, tree)
       query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
+//
+//    // TODO explicitly annotate the self region
+//    case tree @ VarDef(id, annot, region, binding) =>
+//      ???
   }
 
   override def query(b: source.BlockArg)(using Context, Unit): CaptureSet = visit(b) {

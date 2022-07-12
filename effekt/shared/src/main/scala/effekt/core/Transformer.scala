@@ -59,10 +59,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Val(v.symbol, transform(binding), rest())
 
     // This phase introduces capabilities for state effects
+    case v @ source.VarDef(id, _, reg, binding) if pureOrIO(binding) =>
+      val sym = v.symbol
+      State(sym, Run(transform(binding)), sym.region, rest())
+
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
-      val b = transform(binding)
-      State(b, reg.map { r => r.symbol }, BlockLit(List(BlockParam(sym)), rest()))
+      val tpe = getStateType(sym)
+      val b = Context.bind(tpe, transform(binding))
+      State(sym, b, sym.region, rest())
 
     case source.ExternType(id, tparams) =>
       rest()
@@ -196,6 +201,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
       val rec = transformAsBlock(receiver)
+      val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
       val blockArgs = bargs.map(transform)
 
@@ -203,14 +209,27 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case sym if sym == TState.put || sym == TState.get =>
           PureApp(Member(rec, sym), Nil, valueArgs ++ blockArgs)
         case sym =>
-          Context.bind(Context.inferredTypeOf(tree), App(Member(rec, sym), Nil, valueArgs ++ blockArgs))
+          Context.bind(Context.inferredTypeOf(tree), App(Member(rec, sym), typeArgs, valueArgs ++ blockArgs))
       }
 
-    case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
+    case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
+      val capture = Context.inferredTypeOf(expr) match {
+        case BoxedType(_, c: CaptureSet) => c
+        case _ => Context.panic("Should be a boxed function type with a known capture set.")
+      }
       val e = transformAsExpr(expr)
+      val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
       val blockArgs = bargs.map(transform)
-      Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), Nil, valueArgs ++ blockArgs))
+
+      if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+      } else {
+        Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+      }
+
+    case c @ source.Call(s : source.ExprTarget, targs, vargs, bargs) =>
+      Context.panic("Should not happen. Unbox should have been inferred.")
 
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
@@ -387,7 +406,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def pureOrIO(t: BlockSymbol)(using Context): Boolean = pureOrIO(asConcreteCaptureSet(Context.captureOf(t)))
 
-  def pureOrIO(r: CaptureSet): Boolean = r.captures.subsetOf(Set(builtins.IOCapability.capture))
+  def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
+    c =>
+      def isIO = c == builtins.IOCapability.capture
+      def isMutableState = c.isInstanceOf[LexicalRegion]
+      isIO || isMutableState
+  }
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 

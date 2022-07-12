@@ -15,8 +15,6 @@ import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
  */
 trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with Driver with Intelligence {
 
-  object prettyCore extends PrettyPrinter
-
   import effekt.symbols._
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
@@ -42,7 +40,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     for ((transformed, js) <- C.compileSeparate(source)) {
 
       if (settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", prettyCore.format(transformed.core))
+        publishProduct(source, "target", "effekt", core.PrettyPrinter.format(transformed.core))
       }
 
       if (settingBool("showTarget")) {

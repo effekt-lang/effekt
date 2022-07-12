@@ -54,8 +54,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Let(id, tpe, binding, body) =>
       Let(id, tpe, transform(binding), transform(body))
 
-    case core.State(init, region, body) =>
-      State(transform(init), region, transform(body))
+    case core.State(id, init, region, body) =>
+      State(id, transform(init), region, transform(body))
 
     case core.Data(id, ctors, rest) =>
       Data(id, ctors, transform(rest))

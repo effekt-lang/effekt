@@ -204,9 +204,16 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case d @ source.VarDef(id, annot, region, binding) =>
       val tpe = annot.map(resolve)
-      val reg = region.map(Context.resolveTerm)
+      val reg = region.map(Context.resolveTerm).getOrElse {
+        Context.getSelfRegion()
+      } match {
+        case t: TrackedParam => t
+        case _ => Context.abort("Region needs to be a tracked parameter.")
+      }
+
       resolveGeneric(binding)
-      val sym = VarBinder(Context.nameFor(id), tpe, d)
+      val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
+
       Context.define(id, sym)
 
     // FunDef and EffDef have already been resolved as part of the module declaration
@@ -713,6 +720,9 @@ trait NamerOps extends ContextOps { Context: Context =>
     Context.bindBlock("this", sym)
     Context.annotate(Annotations.SelfRegion, tree, sym)
   }
+
+  private[namer] def getSelfRegion(): TermSymbol =
+    scope.lookupFirstTerm("this")
 
   private[namer] def bindBlock(p: TrackedParam) = {
     // bind the block parameter as a term

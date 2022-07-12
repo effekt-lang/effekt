@@ -1,5 +1,44 @@
 const $runtime = (function() {
 
+  // Regions
+  function Cell(init) {
+    var _value = init;
+    return {
+      "op$get": function() {
+        return _value
+      },
+      "op$put": function(v) {
+        _value = v;
+        return $effekt.unit
+      },
+      backup: function() {
+        var _backup = _value
+        var cell = this;
+        return () => { _value = _backup; return cell }
+      }
+    }
+  }
+
+  function Arena() {
+    return {
+      fields: [], // Array[Cell],
+      fresh: function(init) {
+        const cell = Cell(init)
+        this.fields.push(cell)
+        return cell;
+      },
+      backup: function() {
+        return this.fields.map(c => c.backup())
+      },
+      restore: function(backup) {
+        this.fields = backup.map(c => c());
+        return this
+      }
+    }
+  }
+
+  const global = Arena()
+
   // Result -- Trampoline
   function Step(c, k) {
     return { isStep: true, c: c, k: k }
@@ -22,11 +61,11 @@ const $runtime = (function() {
 
   // Metacontinuations / Stacks
   // (frames: List<Frame>, fields: [Cell], prompt: Int, tail: Stack) -> Stack
-  function Stack(frames, fields, prompt, tail) {
-    return { frames: frames, fields: fields, prompt: prompt, tail: tail }
+  function Stack(frames, arena, prompt, tail) {
+    return { frames: frames, arena: arena, prompt: prompt, tail: tail }
   }
-  function SubStack(frames, backup, prompt, tail) {
-    return { frames: frames, backup: backup, prompt: prompt, tail: tail }
+  function SubStack(frames, arena, backup, prompt, tail) {
+    return { frames: frames, arena: arena, backup: backup, prompt: prompt, tail: tail }
   }
   const EmptyStack = null;
 
@@ -43,44 +82,20 @@ const $runtime = (function() {
     }
   }
 
-  function Cell(init) {
-    var _value = init;
-    return {
-      "op$get": function() {
-        return _value
-      },
-      "op$put": function(v) {
-        _value = v;
-        return $effekt.unit
-      },
-      backup: function() {
-        var _backup = _value
-        var cell = this;
-        return () => { _value = _backup; return cell }
-      }
-    }
-  }
-  function backup(cells) {
-    return cells.map(c => c.backup())
-  }
-  function restore(b) {
-    return b.map(c => c())
-  }
-
   // (subcont: Stack, stack: Stack) -> Stack
   function pushSubcont(subcont, stack) {
     var sub = subcont;
     var s = stack;
 
     while (sub !== EmptyStack) {
-      s = Stack(sub.frames, restore(sub.backup), sub.prompt, s)
+      s = Stack(sub.frames, sub.arena.restore(sub.backup), sub.prompt, s)
       sub = sub.tail
     }
     return s;
   }
 
   function flatMap(stack, f) {
-    if (stack === EmptyStack) { return Stack(Cons(f, Nil), [], null, stack) }
+    if (stack === EmptyStack) { return Stack(Cons(f, Nil), Arena(), null, stack) }
     var fs = stack.frames
     // it should be safe to mutate the frames field, since they are copied in the subcont
     stack.frames = Cons(f, fs)
@@ -92,9 +107,9 @@ const $runtime = (function() {
     var s = stack;
 
     while (s !== EmptyStack) {
-      const currentPrompt = s.prompt
-      sub = SubStack(s.frames, backup(s.fields), currentPrompt, sub)
-      s = s.tail
+      const currentPrompt = s.prompt;
+      sub = SubStack(s.frames, s.arena, s.arena.backup(), currentPrompt, sub);
+      s = s.tail;
       if (currentPrompt === p) { return Cons(sub, s) }
     }
     throw ("Prompt " + p + " not found")
@@ -124,7 +139,7 @@ const $runtime = (function() {
 
   function withRegion(prog) {
     return Control(k => {
-      return Step(prog(k.fields), k)
+      return Step(prog(k.arena), k)
     })
   }
 
@@ -145,7 +160,7 @@ const $runtime = (function() {
   function Control(apply) {
     const self = {
       apply: apply,
-      run: () => trampoline(Step(self, Stack(Nil, [], toplevel, EmptyStack))),
+      run: () => trampoline(Step(self, Stack(Nil, global, toplevel, EmptyStack))),
       then: f => Control(k => Step(self, flatMap(k, f))),
       state: f => self.then(init => withState(init, f))
     }
@@ -180,7 +195,7 @@ const $runtime = (function() {
       })).then(a => a.shouldRun ? a.cont() : $effekt.pure(a.cont))
   }
 
-  const reset = p => c => Control(k => Step(c, Stack(Nil, [], p, k)))
+  const reset = p => c => Control(k => Step(c, Stack(Nil, Arena(), p, k)))
 
   const toplevel = 1;
   var _prompt = 2;

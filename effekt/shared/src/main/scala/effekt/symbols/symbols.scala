@@ -152,7 +152,7 @@ package object symbols {
     def decl: Def
   }
   case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder with ValueSymbol
-  case class VarBinder(name: Name, tpe: Option[ValueType], decl: VarDef) extends Binder with BlockSymbol
+  case class VarBinder(name: Name, tpe: Option[ValueType], region: TrackedParam, decl: VarDef) extends Binder with BlockSymbol
 
   /**
    * Synthetic symbol representing potentially multiple call targets

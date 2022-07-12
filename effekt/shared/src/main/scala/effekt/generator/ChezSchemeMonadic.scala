@@ -94,10 +94,10 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
     // do not return on the toplevel
     case Ret(e) if toplevel => ""
 
-    case Ret(e)             => schemeCall("pure", List(toDoc(e)))
+    case Ret(e) => schemeCall("pure", List(toDoc(e)))
 
-    case State(init, reg, block) =>
-      schemeCall("state", nameDef(TState.interface), nameDef(TState.get), nameDef(TState.put), toDoc(init, false), toDoc(block))
+    case State(id, init, reg, block) => ???
+    // schemeCall("state", nameDef(TState.interface), nameDef(TState.get), nameDef(TState.put), toDoc(init, false), toDoc(block))
 
     case other => super.toDoc(s, toplevel)
   }

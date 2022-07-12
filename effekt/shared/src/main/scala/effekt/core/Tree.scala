@@ -85,7 +85,7 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(init: Stmt, region: Option[Symbol], body: Block) extends Stmt
+case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
@@ -152,8 +152,8 @@ object Tree {
           Ret(rewrite(e))
         case Include(contents, rest) =>
           Include(contents, rewrite(rest))
-        case State(init, reg, body) =>
-          State(rewrite(init), reg, rewrite(body))
+        case State(id, init, reg, body) =>
+          State(id, rewrite(init), reg, rewrite(body))
         case Handle(body, handler) =>
           Handle(rewrite(body), handler map rewrite)
         case Region(body) =>
