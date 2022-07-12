@@ -1,3 +1,8 @@
+/*
+`machine` is currently only used by `LLVM`.
+One plan is to minutely represent different compilation stages within Scala types.
+*/
+
 package effekt
 package machine
 

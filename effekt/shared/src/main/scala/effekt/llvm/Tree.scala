@@ -46,24 +46,28 @@ case class EviIsZero(id: ValueSymbol, l: machine.Value) extends Instruction
 sealed trait Terminator extends Tree
 case class Ret(values: List[machine.Value]) extends Terminator
 
-// `jump` is in reality `tail call ; ret void` (LLVM does **not** know of a global jump instruction)
+// TODO `jump` does not exist in LLVM. (In LLVM, one can only jump within declarations, not globally to anywhere within the program. When implementing a C compiler, this is of little hinderance, since one wants to use the provided C stack anyways. When one integral feature of one's language's implementation -- here Effekt's LLVM backend -- is correctly and sanely managing stacks, this truly becomes a hinderance.) Therefore, `jump` ought to appear in one of the many machine representations and be implemented using `tail call ; ret void` in the machine->llvm translation.
 case class Jump(id: BlockSymbol, args: List[machine.Value]) extends Terminator // LLVM `tail call`
 case class JumpLocal(id: BlockSymbol, args: List[machine.Value]) extends Terminator // LLVM unconditional `br`
 case class If(cond: machine.Value, thenBlock: BlockSymbol, thenArgs: List[machine.Value], elseBlock: BlockSymbol, elseArgs: List[machine.Value]) extends Terminator
 case class Switch(arg: machine.Value, default: BlockSymbol, labels: List[(Int, BlockSymbol)]) extends Terminator
 case class Panic() extends Terminator
 
-// TODO rename `s/TrueLLVMType/LLVMType/` or even `s/TrueLLVMType/Type/` (since we are in `llvm/Tree.scala`)
+// TODO rename `s/TrueLLVMType/Type/` (it is correctly namespaced since we are in `llvm/Tree.scala`) after name confusion is no longer likely
 /*
 All these types form compile-time statically known data. These Scala values are
 lifted to LLVM type values during compilation.
 */
 // see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Type
 sealed trait TrueLLVMType
-case class Int64() extends TrueLLVMType
-case class Pointer(to: TrueLLVMType) extends TrueLLVMType
-case class Function(ret: TrueLLVMType, args: List[TrueLLVMType]) extends TrueLLVMType
 case class Void() extends TrueLLVMType
+// all integers are 64 bits wide
+case class Int64() extends TrueLLVMType
+// ignoring LLVM's address space semantic
+case class Pointer(to: TrueLLVMType) extends TrueLLVMType
+// TODO struct and union
+// a C-style function (**not** an Effekt function), never variadic
+case class CFunction(args: List[TrueLLVMType], ret: TrueLLVMType) extends TrueLLVMType
 
 /*
 A frame is one function's environment together with its static behaviour.
@@ -84,6 +88,8 @@ frame:
 case class EffektFrame(scanner: Pointer, primitives: List[Int64], boxed: List[Pointer]) extends TrueLLVMType
 
 /*
+[jfrech, 2022-07-12] TODO apparently, this notion is subtly incorrect, yet its clarification requires exact specification of what we mean by an *environment* (local register representation of a frame, C-style environment, or Effekt-stack baked state representation)
+
 From a function's point of view, its stacks form an array-singly-linked-list-
 hybrid data structure (a "metastack" of sorts) which defines the entire
 environment known to it.
