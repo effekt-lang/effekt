@@ -28,10 +28,10 @@ object builtins {
   val TBottom = BuiltinType(name("⊥"), Nil)
 
   val IOEffect = BuiltinEffect(name("IO"), Nil)
-  val IOCapability = BuiltinCapability(name("io"), IOEffect)
+  val IOCapability = BlockParam(name("io"), IOEffect)
 
   val ControlEffect = BuiltinEffect(name("Control"), Nil)
-  val ControlCapability = BuiltinCapability(name("control"), ControlEffect)
+  val ControlCapability = BlockParam(name("control"), ControlEffect)
 
   object TState {
     val S = TypeVar(Name.local("S"))
@@ -59,8 +59,12 @@ object builtins {
     "Region" -> TRegion
   )
 
+  lazy val globalRegion = BlockParam(name("global"), TRegion)
+
   // it is a set, because terms can be overloaded...
-  val rootTerms: Map[String, Set[TermSymbol]] = Map()
+  val rootTerms: Map[String, TermSymbol] = Map(
+    "global" -> globalRegion
+  )
 
   val rootCaptures: Map[String, Capture] = Map(
     "io" -> IOCapability.capture,

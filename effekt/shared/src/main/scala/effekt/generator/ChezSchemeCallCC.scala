@@ -101,17 +101,5 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case _: Val => true
     case _      => super.requiresBlock(s)
   }
-
-  // (define (getter ref)
-  //  (lambda () (unbox ref)))
-  //
-  // (define (setter ref)
-  //  (lambda (v) (set-box! ref v)))
-  def defineStateAccessors()(using Context): Doc =
-    val getter = defineFunction(nameDef(TState.get), List(string("ref")),
-      schemeLambda(Nil, schemeCall("unbox", "ref")))
-    val setter = defineFunction(nameDef(TState.put), List(string("ref")),
-      schemeLambda(List(string("v")), schemeCall("set-box!", "ref", "v")))
-    getter <> emptyline <> setter
 }
 

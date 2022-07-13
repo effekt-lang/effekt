@@ -37,8 +37,6 @@ const $runtime = (function() {
     }
   }
 
-  const global = Arena()
-
   // Result -- Trampoline
   function Step(c, k) {
     return { isStep: true, c: c, k: k }
@@ -242,6 +240,7 @@ const $runtime = (function() {
     // no lifting for prompt based implementation
     lift: f => f,
     handle: handle,
+    fresh: Cell,
 
     _if: (c, thn, els) => c ? thn() : els(),
     _while: _while,

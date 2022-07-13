@@ -77,6 +77,9 @@ trait ChezSchemePrinterUtils extends ParenPrettyPrinter {
   def schemeLambda(params: List[Doc], body: Doc): Doc =
     parens("lambda" <+> parens(hsep(params, space)) <> group(nest(line <> body)))
 
+  def schemeLet(name: Doc, binding: Doc)(body: Doc): Doc =
+    parens("let" <+> parens(brackets(name <+> binding)) <> group(nest(line <> body)))
+
   def jsString(contents: Doc): Doc =
     "\"" <> contents <> "\""
 
@@ -235,4 +238,16 @@ trait ChezSchemeBase extends ChezSchemePrinterUtils {
     case _: State  => true
     case _         => false
   }
+
+    // (define (getter ref)
+  //  (lambda () (unbox ref)))
+  //
+  // (define (setter ref)
+  //  (lambda (v) (set-box! ref v)))
+  def defineStateAccessors()(using Context): Doc =
+    val getter = defineFunction(nameDef(symbols.builtins.TState.get), List(string("ref")),
+      schemeLambda(Nil, schemeCall("unbox", "ref")))
+    val setter = defineFunction(nameDef(symbols.builtins.TState.put), List(string("ref")),
+      schemeLambda(List(string("v")), schemeCall("set-box!", "ref", "v")))
+    getter <> emptyline <> setter
 }

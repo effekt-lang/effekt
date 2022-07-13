@@ -167,10 +167,6 @@ package object symbols {
   case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }
   case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
-  case class BuiltinCapability(name: Name, effect: InterfaceType) extends BlockSymbol {
-    lazy val capture: Capture = CaptureParameter(name)
-  }
-
   /**
    * Types
    */

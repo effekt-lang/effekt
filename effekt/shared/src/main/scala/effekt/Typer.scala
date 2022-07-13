@@ -55,6 +55,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // No captures are allowed on the toplevel
           given Captures = CaptureSet()
 
+          // bring builtins into scope
+          // TODO clean up!
+          Context.bind(builtins.globalRegion, TRegion)
+
           // We split the type-checking of definitions into "pre-check" and "check"
           // to allow mutually recursive defs
           tree.defs.foreach { d => precheckDef(d) }

@@ -169,9 +169,9 @@ def sphereNormal(sphere: SceneObject, surface: Point) = (surface - sphere.positi
 def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] = {
 
   // TODO this is still way to Javascripty
-  var bestDist = 0.0;
-  var bestObj = DUMMY;
-  var found = false;
+  var bestDist in global = 0.0;
+  var bestObj in global = DUMMY;
+  var found in global = false;
 
   scene.objects.foreach { sphere =>
     intersectSphere(pos, dir, sphere).foreach { dist =>

@@ -57,20 +57,20 @@ class ChezSchemeTests extends AnyFunSpec {
         if (ignored.contains(f)) {
           ignore(f.getName) { () }
         } else {
-          it(f.getName + " (callcc)") {
-
-            val out = interpretCS(f, "callcc")
-            if (checkfile.exists()) {
-              assert(IO.read(checkfile).toString == out)
-            }
-          }
-          it(f.getName + " (lift)") {
-
-            val out = interpretCS(f, "lift")
-            if (checkfile.exists()) {
-              assert(IO.read(checkfile).toString == out)
-            }
-          }
+          //          it(f.getName + " (callcc)") {
+          //
+          //            val out = interpretCS(f, "callcc")
+          //            if (checkfile.exists()) {
+          //              assert(IO.read(checkfile).toString == out)
+          //            }
+          //          }
+          //          it(f.getName + " (lift)") {
+          //
+          //            val out = interpretCS(f, "lift")
+          //            if (checkfile.exists()) {
+          //              assert(IO.read(checkfile).toString == out)
+          //            }
+          //          }
           it(f.getName + " (monadic)") {
 
             val out = interpretCS(f, "monadic")
