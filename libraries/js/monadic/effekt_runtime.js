@@ -37,6 +37,10 @@ const $runtime = (function() {
     }
   }
 
+  const global = {
+    fresh: function(init) { return Cell(init) }
+  }
+
   // Result -- Trampoline
   function Step(c, k) {
     return { isStep: true, c: c, k: k }
