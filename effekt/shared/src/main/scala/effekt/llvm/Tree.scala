@@ -4,6 +4,11 @@ package llvm
 import effekt.context.Context
 import effekt.symbols.{ Symbol, ValueSymbol, BlockSymbol }
 
+
+// TODO Rename `s/TrueLLVMType/Type/` (it is correctly namespaced since we are in `llvm/Tree.scala`) after name confusion in other modules is no longer likely.
+type TrueLLVMType = Type
+
+
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
     C.positions.dupPos(from, this);
@@ -47,22 +52,22 @@ case class If(cond: machine.Value, thenBlock: BlockSymbol, thenArgs: List[machin
 case class Switch(arg: machine.Value, default: BlockSymbol, labels: List[(Int, BlockSymbol)]) extends Terminator
 case class Panic() extends Terminator
 
-// TODO rename `s/TrueLLVMType/Type/` (it is correctly namespaced since we are in `llvm/Tree.scala`) after name confusion is no longer likely
 /*
 All these types form compile-time statically known data. These Scala values are
 lifted to LLVM type values during compilation.
 */
 // see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Type
-type TrueLLVMType = Type
-sealed trait TrueLLVMType
-case class Void() extends TrueLLVMType
+sealed trait Type
+case class Void() extends LLVMType
 // all integers are 64 bits wide
-case class Int64() extends TrueLLVMType
+case class Int64() extends LLVMType
 // ignoring LLVM's address space semantic
-case class Pointer(to: TrueLLVMType) extends TrueLLVMType
+case class Pointer(to: LLVMType) extends LLVMType
 // TODO struct and union
 // a C-style function (**not** an Effekt function), never variadic
-case class CFunction(args: List[TrueLLVMType], ret: TrueLLVMType) extends TrueLLVMType
+case class CFunction(args: List[LLVMType], ret: LLVMType) extends LLVMType
+
+/* the following structs are defined in the runtime (`libraries/llvm/rts.ll`) and thus truly LLVM types */
 
 /*
 A frame is one function's environment together with its static behaviour.
@@ -80,7 +85,7 @@ frame:
     ...
     boxed_n
 */
-case class EffektFrame(scanner: Pointer, primitives: List[Int64], boxed: List[Pointer]) extends TrueLLVMType
+case class EffektFrame(scanner: Pointer, primitives: List[Int64], boxed: List[Pointer]) extends LLVMType
 
 /*
 [jfrech, 2022-07-12] TODO apparently, this notion is subtly incorrect, yet its clarification requires exact specification of what we mean by an *environment* (local register representation of a frame, C-style environment, or Effekt-stack baked state representation)
@@ -96,4 +101,4 @@ deep parent copying.
 A stack is copiable and destructible to varying depths (the necessary depth is
 called evidence) only utilizing the various frames' `@scanner` implementations.
 */
-case class EffektStack(base: Pointer, top: Pointer, cap: Pointer, parent: Pointer) extends TrueLLVMType
+case class EffektStack(base: Pointer, top: Pointer, cap: Pointer, parent: Pointer) extends LLVMType
