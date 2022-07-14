@@ -859,7 +859,7 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pp"Cannot resolve effect operation ${id}")
     }
 
-    assignSymbol(id, new CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
   }
 
   /**

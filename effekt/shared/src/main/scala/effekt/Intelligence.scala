@@ -1,8 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.source.{ ModuleDecl, Tree }
-
+import effekt.source.{ FunDef, ModuleDecl, Tree }
 import kiama.util.Position
 
 trait Intelligence {
@@ -77,7 +76,11 @@ trait Intelligence {
     case u: Binder       => Some(u.decl)
     case d: Operation    => C.definitionTreeOption(d.effect)
     case a: Anon         => Some(a.decl)
-    case u               => C.definitionTreeOption(u)
+    case s: SelfParam => s.tree match {
+      case d: source.Def => Some(d.id)
+      case _             => Some(s.tree)
+    }
+    case u => C.definitionTreeOption(u)
   }
 
   // For now, only show the first call target
@@ -177,6 +180,14 @@ trait Intelligence {
             |""".stripMargin
 
       SymbolInfo(c, "Resumption", signature, Some(ex))
+
+    case s: SelfParam =>
+
+      val ex =
+        s"""|A self region...
+            |""".stripMargin
+
+      SymbolInfo(s, "Self region", None, None)
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
