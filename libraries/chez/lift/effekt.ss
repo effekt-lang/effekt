@@ -72,22 +72,39 @@
         (lambda (ev) (cap1 (define-effect-op ev (arg1 ...) kid exp) ...)) ...))]))
 
 
-(define-syntax state
-  (syntax-rules ()
-    [(_ effid getid setid init body)
-     ($then init (lambda (s)
-        (define cell (box s))
+(define (with-region body)
+  (define arena (make-arena))
 
-        (define (getid c) (lambda () (unbox c)))
-        (define (setid c) (lambda (s*) (begin (set-box! c s*) #f)))
+  (define (lift m) (lambda (k)
+    (define fields (backup arena))
+    (m (lambda (a)
+      (restore fields)
+      (k a)))))
 
-        (define (lift m) (lambda (k)
-          (define backup (unbox cell))
-          (m (lambda (a)
-            (set-box! cell backup)
-            (k a)))))
+  ((body lift) arena))
 
-        ((body lift) cell)))]))
+
+; An Arena is a pointer to a list of cells
+(define (make-arena) (box '()))
+
+(define (fresh arena init)
+  (let* ([cell (box init)]
+         [cells (unbox arena)])
+    (set-box! arena (cons cell cells))
+    cell))
+
+; Backup = List<(Cell, Value)>
+
+; Arena -> Backup
+(define (backup arena)
+  (let ([fields (unbox arena)])
+    (map (lambda (cell) (cons cell (unbox cell))) fields)))
+
+; Backup -> ()
+(define (restore data)
+  (for-each (lambda (cell-data)
+    (set-box! (car cell-data) (cdr cell-data)))
+    data))
 
 
 (define-syntax define-effect-op

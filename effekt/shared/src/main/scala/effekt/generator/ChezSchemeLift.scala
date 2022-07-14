@@ -57,6 +57,7 @@ object ChezSchemeLiftPrinter extends ChezSchemeLiftedBase {
 
       prelude <>
         "(let () " <+> emptyline <>
+        defineStateAccessors() <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
         "(run ((" <> nameRef(main) <> " here))))"
@@ -106,8 +107,14 @@ object ChezSchemeLiftPrinter extends ChezSchemeLiftedBase {
       defineFunction(nameDef(id), List(nameDef(sc)),
         schemeLambda(ps map toDoc, toDoc(body, false))) <> emptyline <> toDoc(rest, toplevel)
 
-    case State(id, init, reg, block) => ???
-    // schemeCall("state", nameDef(TState.interface), nameDef(TState.get), nameDef(TState.put), toDoc(init, false), toDoc(block))
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+      schemeLet(nameDef(id), schemeCall("box", toDoc(init))) { toDoc(body, toplevel) }
+
+    case State(id, init, region, body) =>
+      schemeLet(nameDef(id), schemeCall("fresh", nameRef(region), toDoc(init))) { toDoc(body, toplevel) }
+
+    case Region(body) =>
+      schemeCall("with-region", toDoc(body))
 
     case other => super.toDoc(s, toplevel)
   }
@@ -273,4 +280,16 @@ trait ChezSchemeLiftedBase extends ChezSchemePrinterUtils {
     case _: State  => true
     case _         => false
   }
+
+  // (define (getter ref)
+  //  (lambda () (unbox ref)))
+  //
+  // (define (setter ref)
+  //  (lambda (v) (set-box! ref v)))
+  def defineStateAccessors()(using Context): Doc =
+    val getter = defineFunction(nameDef(symbols.builtins.TState.get), List(string("ref")),
+      schemeLambda(Nil, schemeCall("unbox", "ref")))
+    val setter = defineFunction(nameDef(symbols.builtins.TState.put), List(string("ref")),
+      schemeLambda(List(string("v")), schemeCall("set-box!", "ref", "v")))
+    getter <> emptyline <> setter
 }
