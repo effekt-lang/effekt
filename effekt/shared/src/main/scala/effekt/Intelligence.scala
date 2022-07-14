@@ -184,10 +184,15 @@ trait Intelligence {
     case s: SelfParam =>
 
       val ex =
-        s"""|A self region...
+        s"""|Each function definition and handler implicitly introduces a
+            |a local region to allocate mutable variables into.
+            |
+            |The region a variable is allocated into not only affects its lifetime, but
+            |also its backtracking behavior in combination with continuation capture and
+            |resumption.
             |""".stripMargin
 
-      SymbolInfo(s, "Self region", None, None)
+      SymbolInfo(s, "Self region", None, Some(ex))
 
     case c: ValueParam =>
       val signature = C.valueTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
