@@ -1,0 +1,33 @@
+
+
+effect Stop(): Unit
+effect What(): Unit
+effect Emit(n: Int): Unit
+
+
+def emitFew() = {
+  do Emit(1);
+  do Stop();
+  do What();
+  do Emit(2);
+}
+
+def main() = {
+  try {
+    try { 
+      try {
+        emitFew()
+      } with Emit { (n: Int) =>
+        println(n); resume(())
+      };
+      println(13)
+    } with What { () =>
+      println(99); resume(())
+    }
+  } with Stop { () =>
+    println(0)
+  };
+  println(14)
+}
+
+

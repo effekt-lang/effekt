@@ -1,0 +1,15 @@
+
+def count(n: Int): Unit / Console = {
+  if(n < 0) {
+    if(true) {
+      println(0)
+    } else {
+      println(0)
+    }
+  } else {
+    count(n - 1)
+  }
+}
+
+def main() = count(10000000)
+

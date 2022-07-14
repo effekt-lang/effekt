@@ -1,0 +1,21 @@
+// Jonathan Frech, 2022-04-27, 2022-05-19
+
+
+effect Stored {
+    def stored(): Int
+}
+
+def f(x: Int, y: Int): Int = {
+    try {
+        g(x)
+    } with Stored {
+        def stored() = resume(y)
+    }
+}
+
+def g(x: Int): Int / Stored = {
+    val y = do stored()
+    x + y
+}
+
+def main() = { println(f(3, 5)) }
