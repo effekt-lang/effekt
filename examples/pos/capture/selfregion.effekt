@@ -1,0 +1,42 @@
+def bar {r: Region} = {
+  var x in r = 42
+  fun() { x = x + 1; x }
+}
+
+def ex1() = {
+  val alloc = bar {this};
+
+  alloc();
+  println(alloc())
+}
+
+def ex2() = region r {
+  var x in r = 42;
+  println(x + x)
+}
+
+def ex3() = {
+  var x in this = 42;
+  println(x + x)
+}
+
+effect Yield { def yield(): Unit }
+
+def ex4() = {
+  // should not backtrack
+  region r {
+    try {
+      val inc = bar {r};
+      println(inc()) // 43
+      do yield();
+      println(inc()) // 44 | 45
+    } with Yield { def yield() = { resume(()); resume(()) } }
+  }
+}
+
+def main() = {
+  ex1();
+  ex2();
+  ex3();
+  ex4()
+}

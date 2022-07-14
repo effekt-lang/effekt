@@ -5,18 +5,21 @@ import effekt.Phase
 import effekt.context.Context
 import effekt.lifted
 import effekt.core
-import effekt.symbols.Symbol
+import effekt.symbols.{ Symbol, builtins }
 
 object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   val phaseName = "lift-inference"
 
-  def run(input: CoreTransformed)(implicit C: Context): Option[CoreLifted] =
-    val transformed = transform(input.core)(Environment(Map.empty), C)
+  def env(using env: Environment): Environment = env
+
+  def run(input: CoreTransformed)(using Context): Option[CoreLifted] =
+    given Environment = Environment(Map.empty)
+    val transformed = transform(input.core)
     Some(CoreLifted(input.source, input.tree, input.mod, transformed))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
-  def transform(mod: core.ModuleDecl)(implicit env: Environment, C: Context): ModuleDecl =
+  def transform(mod: core.ModuleDecl)(using Environment, Context): ModuleDecl =
     ModuleDecl(mod.path, mod.imports, transform(mod.defs), mod.exports)
 
   def transform(param: core.Param): Param = param match {
@@ -25,7 +28,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   // [[ a -> b ]] = [ev] -> a -> b
-  def transform(tree: core.Block, self: Option[Symbol] = None)(implicit env: Environment, C: Context): Block = tree match {
+  def transform(tree: core.Block, self: Option[Symbol] = None)(using Environment, Context): Block = tree match {
     case core.BlockLit(params, body) =>
       val id = ScopeId()
 
@@ -36,7 +39,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         case (env, core.BlockParam(p, tpe)) => env.bind(p)
         case (env, core.ValueParam(p, tpe)) => env
       }
-      ScopeAbs(id, BlockLit(params.map { p => transform(p) }, transform(body)(extendedEnv, C)))
+      ScopeAbs(id, BlockLit(params.map { p => transform(p) }, transform(body)(using extendedEnv, Context)))
     case core.Member(body, id) => Member(transform(body), id)
     case core.Extern(params, body) => Extern(params.map { p => transform(p) }, body)
     case core.BlockVar(b) => BlockVar(b)
@@ -44,9 +47,9 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Unbox(b) => Unbox(transform(b))
   }
 
-  def transform(tree: core.Stmt)(implicit env: Environment, C: Context): Stmt = tree match {
+  def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
     case core.Def(id, tpe, block, rest) =>
-      Def(id, tpe, transform(block, Some(id)), transform(rest)(env.bind(id), C))
+      Def(id, tpe, transform(block, Some(id)), transform(rest)(using env.bind(id), Context))
 
     case core.Val(id, tpe, binding, body) =>
       Val(id, tpe, transform(binding), transform(body))
@@ -102,7 +105,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Hole                    => Hole
   }
 
-  def transform(tree: core.Expr)(implicit env: Environment, C: Context): Expr = tree match {
+  def transform(tree: core.Expr)(using Environment, Context): Expr = tree match {
     case l: core.Literal[_] => transform(l)
     case core.ValueVar(sym)   => ValueVar(sym)
     case core.PureApp(b: core.Block, targs, args: List[core.Argument]) =>
@@ -125,7 +128,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    * Don't transform the block itself, but only the body. Used for local abstractions like match clauses where
    * we know the evidence is Here.
    */
-  def transformBody(tree: core.BlockLit)(implicit env: Environment, C: Context): BlockLit = tree match {
+  def transformBody(tree: core.BlockLit)(using Environment, Context): BlockLit = tree match {
     case core.BlockLit(params, body) =>
       BlockLit(params.map { p => transform(p) }, transform(body))
   }
@@ -139,7 +142,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // apply lifts to the arguments if it is block variables
   // this is the same as eta expanding them, since then the lifts would be composed for the call
-  def liftArguments(args: List[core.Argument])(implicit env: Environment, C: Context): List[Argument] = args map {
+  def liftArguments(args: List[core.Argument])(using Environment, Context): List[Argument] = args map {
     case b: core.BlockVar =>
       val transformed = BlockVar(b.id)
       env.evidenceFor(b) match {
@@ -150,7 +153,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case e: core.Expr  => transform(e)
   }
 
-  def transform(h: core.Handler)(implicit env: Environment, C: Context): Handler = h match {
+  def transform(h: core.Handler)(using Environment, Context): Handler = h match {
     case core.Handler(id, clauses) =>
       Handler(id, clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
@@ -164,7 +167,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     def bind(s: Symbol, init: Scope) = copy(env = env + (s -> List(init)))
     def adapt(a: Scope) = copy(env = env.map { case (s, as) => s -> (a :: as) })
 
-    def evidenceFor(b: core.Block): Scope = b match {
+    def evidenceFor(b: core.Block)(using Context): Scope = b match {
+      case b: core.BlockVar if Context.blockTypeOf(b.id) == builtins.TRegion => Here()
       case b: core.BlockVar => env.getOrElse(b.id, Nil) match {
         case Nil      => Here()
         case s :: Nil => s
