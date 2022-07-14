@@ -55,6 +55,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // No captures are allowed on the toplevel
           given Captures = CaptureSet()
 
+          // bring builtins into scope
+          // TODO clean up!
+          Context.bind(builtins.globalRegion, TRegion)
+
           // We split the type-checking of definitions into "pre-check" and "check"
           // to allow mutually recursive defs
           tree.defs.foreach { d => precheckDef(d) }
@@ -179,6 +183,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
       //   so the method calls here are actually methods calls on blocks as receivers.
       case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
         checkOverloadedMethodCall(c, receiver, id, targs map { _.resolve }, vargs, bargs, expected)
+
+      case tree @ source.Region(name, body) =>
+        val selfRegion = tree.symbol
+        Context.bind(selfRegion)
+
+        val inferredCapture = Context.freshCaptVar(CaptUnificationVar.RegionRegion(tree))
+        val withoutSelfregion = Context.without(inferredCapture, List(selfRegion.capture))
+        Context.withRegion(selfRegion.capture) {
+          given Captures = withoutSelfregion
+          checkStmt(body, expected)
+        }
 
       case tree @ source.TryHandle(prog, handlers) =>
 
@@ -1203,6 +1218,7 @@ private[typer] case class TyperState(annotations: Annotations, unification: Unif
 
 trait TyperOps extends ContextOps { self: Context =>
 
+
   /**
    * Local annotations database, only used by Typer
    *
@@ -1245,7 +1261,7 @@ trait TyperOps extends ContextOps { self: Context =>
    * Contains mutable variables. The methods [[unification.backup()]] and [[unification.restore()]]
    * allow to save a copy of the current state.
    */
-  private[typer] val unification = new Unification(using self)
+  private[typer] val unification = new Unification(using this)
   export unification.{ requireSubtype, requireSubregion, join, instantiate, freshCaptVar, without, requireSubregionWithout }
 
   // opens a fresh unification scope
@@ -1339,6 +1355,7 @@ trait TyperOps extends ContextOps { self: Context =>
     annotations.get(Annotations.Captures, s).orElse(captureOfOption(s)).getOrElse {
       s match {
         case b: BlockParam => CaptureSet(b.capture)
+        case b: SelfParam => CaptureSet(b.capture)
         case _ => panic(s"Shouldn't happen: we do not have a capture for ${s}, yet.")
       }
     }
@@ -1365,8 +1382,10 @@ trait TyperOps extends ContextOps { self: Context =>
     case s => panic(s"Internal Error: Cannot add $s to typing context.")
   }
 
-  private[typer] def bind(p: BlockParam): Unit = p match {
+  private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s : SelfParam => bind(s, s.tpe, CaptureSet(s.capture))
+    case r : ResumeParam => panic("Cannot bind resume")
   }
 
   //</editor-fold>
@@ -1391,7 +1410,10 @@ trait TyperOps extends ContextOps { self: Context =>
   }
 
   private[typer] def getSelfRegion(tree: source.Tree): Capture =
-    annotation(Annotations.SelfRegion, tree)
+    val selfParam = annotation(Annotations.SelfRegion, tree)
+    bind(selfParam, TRegion)
+    bind(selfParam, CaptureSet(selfParam.capture))
+    selfParam.capture
 
 
   //</editor-fold>

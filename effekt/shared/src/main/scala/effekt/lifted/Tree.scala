@@ -2,7 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType }
+import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType, TrackedParam }
 
 sealed trait Tree extends Product {
   def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
@@ -89,10 +89,12 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(init: Stmt, region: Option[Symbol], body: Block) extends Stmt
+case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
+
+case class Region(body: Block) extends Stmt
 
 /**
  * Explicit Lifts

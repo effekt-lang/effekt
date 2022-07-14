@@ -54,6 +54,7 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
 
       prelude <>
         "(let () " <+> emptyline <>
+        defineStateAccessors() <>
         vsep(dependencies.map { m => string(m.layout) }) <>
         module(core) <> emptyline <>
         defineValue("main", nameDef(main)) <> emptyline <>
@@ -89,15 +90,21 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
       defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
 
     case Let(id, tpe, binding, body) =>
-      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <> group(nest(line <> toDoc(body, toplevel))))
+      schemeLet(nameDef(id), toDoc(binding)) { toDoc(body, toplevel) }
 
     // do not return on the toplevel
     case Ret(e) if toplevel => ""
 
     case Ret(e)             => schemeCall("pure", List(toDoc(e)))
 
-    case State(init, reg, block) =>
-      schemeCall("state", nameDef(TState.interface), nameDef(TState.get), nameDef(TState.put), toDoc(init, false), toDoc(block))
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+      schemeLet(nameDef(id), schemeCall("box", toDoc(init))) { toDoc(body, toplevel) }
+
+    case State(id, init, region, body) =>
+      schemeLet(nameDef(id), schemeCall("fresh", nameRef(region), toDoc(init))) { toDoc(body, toplevel) }
+
+    case Region(body) =>
+      schemeCall("with-region", toDoc(body))
 
     case other => super.toDoc(s, toplevel)
   }

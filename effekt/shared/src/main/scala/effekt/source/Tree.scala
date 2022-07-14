@@ -342,6 +342,10 @@ case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], bo
   type symbol = symbols.Operation
 }
 
+case class Region(id: IdDef, body: Stmt) extends Term with Definition {
+  type symbol = symbols.TrackedParam
+}
+
 case class Hole(stmts: Stmt) extends Term
 
 case class Match(scrutinee: Term, clauses: List[MatchClause]) extends Term
@@ -483,6 +487,9 @@ object Tree {
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
   trait Rewrite {
+
+    def Context(using C: Context): Context = C
+
     // Hooks to override
     def expr(using C: Context): PartialFunction[Term, Term] = PartialFunction.empty
     def stmt(using C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
@@ -490,17 +497,24 @@ object Tree {
 
     /**
      * Hook that can be overriden to perform an action at every node in the tree
+     *
+     * Copies all annotations and position information from source to target
      */
-    def visit[T <: Tree](t: T)(visitor: T => T)(using C: Context): T = visitor(t)
+    def visit[T <: Tree](source: T)(visitor: T => T)(using Context): T = {
+      val target = visitor(source)
+      target.inheritPosition(source)
+      Context.copyAnnotations(source, target)
+      target
+    }
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: ModuleDecl)(using C: Context): ModuleDecl = visit(e) {
+    def rewrite(e: ModuleDecl)(using Context): ModuleDecl = visit(e) {
       case ModuleDecl(path, imports, defs) =>
         ModuleDecl(path, imports, defs.map(rewrite))
     }
 
-    def rewrite(e: Term)(using C: Context): Term = visit(e) {
+    def rewrite(e: Term)(using Context): Term = visit(e) {
       case e if expr.isDefinedAt(e) => expr(e)
       case v: Var                   => v
       case l: Literal[t]            => l
@@ -524,13 +538,16 @@ object Tree {
         Do(effect, id, targs, vargs.map(rewrite))
 
       case Call(fun, targs, vargs, bargs) =>
-        Call(fun, targs, vargs.map(rewrite), bargs.map(rewrite))
+        Call(rewrite(fun), targs, vargs.map(rewrite), bargs.map(rewrite))
 
       case MethodCall(receiver, id, targs, vargs, bargs) =>
         MethodCall(rewrite(receiver), id, targs, vargs.map(rewrite), bargs.map(rewrite))
 
       case TryHandle(prog, handlers) =>
         TryHandle(rewrite(prog), handlers.map(rewrite))
+
+      case Region(name, body) =>
+        Region(name, rewrite(body))
 
       case Hole(stmts) =>
         Hole(rewrite(stmts))
@@ -605,6 +622,11 @@ object Tree {
       case MatchClause(pattern, body) =>
         MatchClause(pattern, rewrite(body))
     }
+
+    def rewrite(target: source.CallTarget)(implicit C: Context): source.CallTarget = visit(target) {
+      case i: IdTarget => target
+      case ExprTarget(expr) => ExprTarget(rewrite(expr))
+    }
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {
@@ -670,6 +692,9 @@ object Tree {
 
       case TryHandle(prog, handlers) =>
         combineAll(scoped { query(prog) } :: handlers.map(h => scoped { query(h) }))
+
+      case Region(name, body) =>
+        query(body)
 
       case Hole(stmts) =>
         query(stmts)

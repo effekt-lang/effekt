@@ -22,24 +22,14 @@
 (define ($pushPrompt p th)
   (call/cc (lambda (k)
     (pushFrame k)
-    (set! mk (cons (make-Stack (list) (list) p) mk))
+    (set! mk (cons (make-Stack (list) (make-arena) p) mk))
     (abort th))))
 
-(define (state init th)
-  (define b (box init))
+(define (with-region body)
   (let* ([stack (car mk)]
-         [frames (Stack-frames stack)]
-         [fields (Stack-fields stack)]
-         [prompt (Stack-prompt stack)]
-         [rest  (cdr mk)])
-    (set! mk (cons (make-Stack frames (cons b fields) prompt) rest))
-    (th b)))
+          [arena (Stack-arena stack)])
+    (body arena)))
 
-(define (getter ref)
-  (lambda () (unbox ref)))
-
-(define (setter ref)
-  (lambda (v) (set-box! ref v)))
 
 (define (withSubCont p f)
   (call/cc (lambda (k)
@@ -53,10 +43,10 @@
     (if (null? mk) (error "ERROR! Cannot push on empty meta cont" #f)
         (let* ([stack (car mk)]
               [frames (Stack-frames stack)]
-              [fields (Stack-fields stack)]
+              [arena (Stack-arena stack)]
               [prompt (Stack-prompt stack)]
               [rest  (cdr mk)])
-          (set! mk (cons (make-Stack (cons f frames) fields prompt) rest))))))
+          (set! mk (cons (make-Stack (cons f frames) arena prompt) rest))))))
 
 (define ($pushSubCont subk th)
   (call/cc (lambda (k)
@@ -67,7 +57,7 @@
 (define newPrompt (lambda () (string #\p)))
 
 (define (run th)
-  (define global (make-Stack '() '() (newPrompt)))
+  (define global (make-Stack '() (make-arena) (newPrompt)))
   (set! mk (list global))
   (underflow
    (call/cc
@@ -81,12 +71,12 @@
   (if (null? mk) v
     (let* ([stack (car mk)]
            [frames (Stack-frames stack)]
-           [fields (Stack-fields stack)]
+           [arena (Stack-arena stack)]
            [prompt (Stack-prompt stack)]
            [rest  (cdr mk)])
       (if (null? frames) (begin (set! mk rest) (underflow v))
           (begin
-            (set! mk (cons (make-Stack (cdr frames) fields prompt) rest))
+            (set! mk (cons (make-Stack (cdr frames) arena prompt) rest))
             ((car frames) v))))))
 
 

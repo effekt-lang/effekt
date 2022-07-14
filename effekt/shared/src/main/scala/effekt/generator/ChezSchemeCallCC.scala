@@ -79,8 +79,15 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(using Context): Doc = s match {
-    case State(init, reg, block) =>
-      schemeCall("state", toDoc(init, false), toDoc(block))
+
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+      schemeLet(nameDef(id), schemeCall("box", toDoc(init))) { toDoc(body, toplevel) }
+
+    case State(id, init, region, body) =>
+      schemeLet(nameDef(id), schemeCall("fresh", nameRef(region), toDoc(init))) { toDoc(body, toplevel) }
+
+    case Region(body) =>
+      schemeCall("with-region", toDoc(body))
 
     // funnily enough, in callcc, we actually need to wrap toplevel definitions into run
     // pure function calls (that internally use control effects, handled away) still need to
@@ -101,17 +108,5 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case _: Val => true
     case _      => super.requiresBlock(s)
   }
-
-  // (define (getter ref)
-  //  (lambda () (unbox ref)))
-  //
-  // (define (setter ref)
-  //  (lambda (v) (set-box! ref v)))
-  def defineStateAccessors()(using Context): Doc =
-    val getter = defineFunction(nameDef(TState.get), List(string("ref")),
-      schemeLambda(Nil, schemeCall("unbox", "ref")))
-    val setter = defineFunction(nameDef(TState.put), List(string("ref")),
-      schemeLambda(List(string("v")), schemeCall("set-box!", "ref", "v")))
-    getter <> emptyline <> setter
 }
 

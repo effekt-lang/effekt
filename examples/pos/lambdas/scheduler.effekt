@@ -10,7 +10,7 @@ effect Proc {
 }
 
 def scheduler { prog: => Unit / Proc } = {
-  var queue: Dequeue[() => Unit at {scheduler, prog}] = emptyQueue();
+  var queue: Dequeue[() => Unit at {this, prog}] = emptyQueue();
 
   def run(): Unit = queue.popBack match {
     case None() => ()

@@ -249,7 +249,7 @@ object Annotations {
    *
    * Used by typer for region checking mutable variables.
    */
-  val SelfRegion = Annotation[source.Tree, symbols.Capture](
+  val SelfRegion = Annotation[source.Tree, symbols.TrackedParam](
     "SelfRegion",
     "the region corresponding to a lexical scope"
   )

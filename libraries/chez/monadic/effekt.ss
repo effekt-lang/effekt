@@ -24,15 +24,15 @@
     (let* ([stack (car mk)]
            [rest  (cdr mk)]
            [frames (Stack-frames stack)]
-           [fields (Stack-fields stack)]
+           [arena (Stack-arena stack)]
            [prompt (Stack-prompt stack)])
       (if (null? frames) (underflow v rest)
-          (values ((car frames) v) (cons (make-Stack (cdr frames) fields prompt) rest))))))
+          (values ((car frames) v) (cons (make-Stack (cdr frames) arena prompt) rest))))))
 
 ; Control, Prompt -> Control
 (define (reset p c)
   (lambda (mk)
-    (c (cons (make-Stack '() '() p) mk))))
+    (c (cons (make-Stack '() (make-arena) p) mk))))
 
 ; Prompt, Body -> Control
 (define (shift p f)
@@ -47,20 +47,26 @@
     (let ([stack (car mk)]
           [rest  (cdr mk)])
       (let ([frames (Stack-frames stack)]
-            [fields (Stack-fields stack)]
+            [arena (Stack-arena stack)]
             [prompt (Stack-prompt stack)])
-          (cons (make-Stack (cons f frames) fields prompt) rest)))))
+          (cons (make-Stack (cons f frames) arena prompt) rest)))))
 
 ; Cell Control -> Control
-(define (with-state cell body)
+; (define (with-state cell body)
+;   (lambda (mk)
+;     (if (null? mk) (error 'push-frame "Cannot store state, meta cont ~s is empty" mk)
+;       (let ([stack (car mk)]
+;             [rest  (cdr mk)])
+;         (let ([frames (Stack-frames stack)]
+;               [arena (Stack-arena stack)]
+;               [prompt (Stack-prompt stack)])
+;             (body (cons (make-Stack frames (cons cell arena) prompt) rest)))))))
+
+(define (with-region body)
   (lambda (mk)
-    (if (null? mk) (error 'push-frame "Cannot store state, meta cont ~s is empty" mk)
-      (let ([stack (car mk)]
-            [rest  (cdr mk)])
-        (let ([frames (Stack-frames stack)]
-              [fields (Stack-fields stack)]
-              [prompt (Stack-prompt stack)])
-            (body (cons (make-Stack frames (cons cell fields) prompt) rest)))))))
+    (let* ([stack (car mk)]
+           [arena (Stack-arena stack)])
+      ((body arena) mk))))
 
 (define-syntax then
   (syntax-rules ()
@@ -71,11 +77,17 @@
 
 ; Control a -> a
 (define (run c)
-  (trampoline c (cons (make-Stack '() '() toplevel) '())))
+  (trampoline c (cons (make-Stack '() (make-arena) toplevel) '())))
 
-(define (while cond exp)
-  (then cond c
-    (if c (then exp _ (while cond exp)) (pure #f))))
+
+(define-syntax while
+  (syntax-rules ()
+    [(_ c e)
+     (let ([condition (lambda () c)])
+       (letrec ([loop (lambda ()
+         (then (condition) condValue
+           (if condValue (then e _ (loop)) (pure #f))))])
+         (loop)))]))
 
 (define newPrompt (lambda () (string #\p)))
 
@@ -92,10 +104,10 @@
     [(_ effid getid setid init body)
      (then init s
         (define cell (box s))
-        (define (getid c) (lambda () (pure (unbox c))))
+        (define (getid c) (lambda () (unbox c)))
         (define (setid c) (lambda (s*)
           (set-box! c s*)
-          (pure #f)))
+          #f))
 
         (with-state cell (body cell)))]))
 

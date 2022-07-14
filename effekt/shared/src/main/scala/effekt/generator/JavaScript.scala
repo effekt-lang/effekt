@@ -97,13 +97,13 @@ trait JavaScriptPrinter extends JavaScriptBase {
     case Ret(e) =>
       jsCall("$effekt.pure", toDoc(e))
 
-    case State(init, region, body) =>
-      toDocDelayed(init) <> ".state" <> parens(toDoc(body))
-
     case Handle(body, hs) =>
       val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
       val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
+
+    case Region(body) =>
+      jsCall("$effekt.withRegion", toDoc(body))
 
     case Match(sc, clauses) =>
       val cs = jsArray(clauses map {
@@ -247,6 +247,12 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Let(id, tpe, binding, body) =>
       "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ";" <> emptyline <> toDocStmt(body)
+
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+      "const" <+> nameDef(id) <+> "=" <+> jsCall("$effekt.fresh", toDoc(init)) <> ";" <> emptyline <> toDocStmt(body)
+
+    case State(id, init, region, body) =>
+      "const" <+> nameDef(id) <+> "=" <+> jsCall(nameRef(region) <> ".fresh", toDoc(init)) <> ";" <> emptyline <> toDocStmt(body)
 
     case other => "return" <+> toDocExpr(other)
   }

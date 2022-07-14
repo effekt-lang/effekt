@@ -59,10 +59,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Val(v.symbol, transform(binding), rest())
 
     // This phase introduces capabilities for state effects
+    case v @ source.VarDef(id, _, reg, binding) if pureOrIO(binding) =>
+      val sym = v.symbol
+      State(sym, Run(transform(binding)), sym.region, rest())
+
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
-      val b = transform(binding)
-      State(b, reg.map { r => r.symbol }, BlockLit(List(BlockParam(sym)), rest()))
+      val tpe = getStateType(sym)
+      val b = Context.bind(tpe, transform(binding))
+      State(sym, b, sym.region, rest())
 
     case source.ExternType(id, tparams) =>
       rest()
@@ -146,8 +151,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: VarBinder =>
         val tpe = getStateType(sym)
 
-        val get = App(Member(BlockVar(sym), TState.get), Nil, Nil)
-        Context.bind(tpe, get)
+        PureApp(Member(BlockVar(sym), TState.get), Nil, Nil)
         // val state = Context.annotation(Annotations.StateCapability, sym)
         // val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
         // Context.bind(Context.valueTypeOf(sym), get)
@@ -159,9 +163,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsExpr(expr)
       val sym = a.definition
       // val state = Context.annotation(Annotations.StateCapability, a.definition)
-      val put = App(Member(BlockVar(sym), TState.put), Nil, List(e))
-      //val put = App(Member(BlockVar(state.param), state.put), Nil, List(e))
-      Context.bind(builtins.TUnit, put)
+       PureApp(Member(BlockVar(sym), TState.put), Nil, List(e))
 
     case l: source.Literal[t] => transformLit(l)
 
@@ -199,22 +201,41 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
       val rec = transformAsBlock(receiver)
+      val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
       val blockArgs = bargs.map(transform)
-      Context.bind(Context.inferredTypeOf(tree), App(Member(rec, c.definition), Nil, valueArgs ++ blockArgs))
 
-    case c @ source.Call(source.ExprTarget(expr), targs, vargs, bargs) =>
+      c.definition match {
+        case sym if sym == TState.put || sym == TState.get =>
+          PureApp(Member(rec, sym), Nil, valueArgs ++ blockArgs)
+        case sym =>
+          Context.bind(Context.inferredTypeOf(tree), App(Member(rec, sym), typeArgs, valueArgs ++ blockArgs))
+      }
+
+    case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
+      val capture = Context.inferredTypeOf(expr) match {
+        case BoxedType(_, c: CaptureSet) => c
+        case _ => Context.panic("Should be a boxed function type with a known capture set.")
+      }
       val e = transformAsExpr(expr)
+      val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
       val blockArgs = bargs.map(transform)
-      Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), Nil, valueArgs ++ blockArgs))
+
+      if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+      } else {
+        Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+      }
+
+    case c @ source.Call(s : source.ExprTarget, targs, vargs, bargs) =>
+      Context.panic("Should not happen. Unbox should have been inferred.")
 
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       makeFunctionCall(c, fun.definition, vargs, bargs)
 
     case source.TryHandle(prog, handlers) =>
-
       val effects = handlers.map(_.definition)
       val caps = handlers.map { h =>
         val cap = h.capability.get.symbol
@@ -240,6 +261,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
       Context.bind(Context.inferredTypeOf(tree), Handle(body, hs))
+
+    case r @ source.Region(name, body) =>
+      val sym = r.symbol
+      val tpe = sym match {
+        case b: BlockParam => b.tpe
+        case b: SelfParam => b.tpe
+        case _ => Context.panic("Continuations cannot be regions")
+      }
+      val cap = core.BlockParam(sym, tpe)
+      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)
@@ -345,7 +376,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case core.Ret(core.Run(s)) => rewrite(s)
       }
     }
-    eliminateReturnRun.rewrite(s)
+
+    // rewrite (Val (Ret e) s) to (Let e s)
+    object directStyleVal extends core.Tree.Rewrite {
+      override def stmt = {
+        case core.Val(id, tpe, core.Ret(expr), body) =>
+          core.Let(id, tpe, rewrite(expr), rewrite(body))
+      }
+    }
+    val opt = eliminateReturnRun.rewrite(s)
+    directStyleVal.rewrite(opt)
   }
 
   def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
@@ -359,9 +399,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _         => false
   }
 
+  def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
+    case Some(capt) => asConcreteCaptureSet(capt).captures.isEmpty
+    case _         => false
+  }
+
   def pureOrIO(t: BlockSymbol)(using Context): Boolean = pureOrIO(asConcreteCaptureSet(Context.captureOf(t)))
 
-  def pureOrIO(r: CaptureSet): Boolean = r.captures.subsetOf(Set(builtins.IOCapability.capture))
+  def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
+    c =>
+      def isIO = c == builtins.IOCapability.capture
+      def isMutableState = c.isInstanceOf[LexicalRegion]
+      isIO || isMutableState
+  }
 }
 trait TransformerOps extends ContextOps { Context: Context =>
 

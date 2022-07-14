@@ -4,9 +4,9 @@ package core
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{ builtins, Name, Wildcard }
+import effekt.symbols.{ Name, TypePrinter, Wildcard, builtins }
 
-class PrettyPrinter extends ParenPrettyPrinter {
+object PrettyPrinter extends ParenPrettyPrinter {
 
   import kiama.output.PrettyPrinterTypes.Document
 
@@ -27,7 +27,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
-    case Unbox(e)         => toDoc(e)
+    case Unbox(e)         => parens("unbox" <+> toDoc(e))
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
@@ -48,8 +48,8 @@ class PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
-    case Box(b) => toDoc(b)
-    case Run(s) => "run" <+> braces(toDoc(s)) <+> "}"
+    case Box(b) => parens("box" <+> toDoc(b))
+    case Run(s) => "run" <+> braces(toDoc(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -61,41 +61,7 @@ class PrettyPrinter extends ParenPrettyPrinter {
     if (requiresBlock(s))
       braces(nest(line <> toDocStmt(s)) <> line)
     else
-      toDocExpr(s)
-
-  // pretty print the statement in a javascript expression context
-  // not all statement types can be printed in this context!
-  def toDocExpr(s: Stmt): Doc = s match {
-    case Val(Wildcard(_), tpe, binding, body) =>
-      toDoc(binding) <> ";" <> line <> toDoc(body)
-    case Val(id, tpe, binding, body) =>
-      "val" <+> toDoc(id.name) <+> ":" <+> tpe.toString <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
-    case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
-    case If(cond, thn, els) =>
-      "if" <+> parens(toDoc(cond)) <+> toDocExpr(thn) <+> "else" <+> toDocExpr(els)
-    case While(cond, body) =>
-      "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
-    case Ret(e) =>
-      toDoc(e)
-    case Handle(body, hs) =>
-      // TODO pretty print correctly
-      val handlers = hs map { handler =>
-        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
-      }
-      val cs = parens("[" <> hsep(handlers, comma) <> "]")
-      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
-    case State(init, region, body) =>
-      "state" <+> parens(toDoc(init)) <+> braces(nest(line <> toDoc(body)) <> line)
-
-    case Match(sc, clauses) =>
-      val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> "=>" <+> toDoc(b) })) <> line)
-      toDoc(sc) <+> "match" <+> cs
-    case Hole =>
-      "<>"
-    case other =>
-      sys error s"Cannot pretty print $other in expression position"
-  }
+      toDocStmt(s)
 
   def toDoc(p: Pattern): Doc = p match {
     case IgnorePattern()          => "_"
@@ -120,11 +86,51 @@ class PrettyPrinter extends ParenPrettyPrinter {
       val fs = fields.map { f => toDoc(f.name) }
       "record" <+> toDoc(did.name) <> parens(hsep(fs, ",")) <> emptyline <> toDocStmt(rest)
 
+    case Val(Wildcard(_), tpe, binding, body) =>
+      toDoc(binding) <> ";" <> line <> toDoc(body)
+
+    case Val(id, tpe, binding, body) =>
+      "val" <+> toDoc(id.name) <+> ":" <+> TypePrinter.show(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+
+    case Let(id, tpe, binding, body) =>
+      "let" <+> toDoc(id.name) <+> ":" <+> TypePrinter.show(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+
+    case App(b, targs, args) =>
+      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+
+    case If(cond, thn, els) =>
+      "if" <+> parens(toDoc(cond)) <+> toDocStmt(thn) <+> "else" <+> toDocStmt(els)
+
+    case While(cond, body) =>
+      "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
+
+    case Ret(e) =>
+      "return" <+> toDoc(e)
+
+    case Handle(body, hs) =>
+      // TODO pretty print correctly
+      val handlers = hs map { handler =>
+        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+      }
+      val cs = parens("[" <> hsep(handlers, comma) <> "]")
+      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
+
+    case State(id, init, region, body) =>
+      "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
+
+    case Region(body) =>
+      "region" <+> toDoc(body)
+
+    case Match(sc, clauses) =>
+      val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> "=>" <+> toDoc(b) })) <> line)
+      toDoc(sc) <+> "match" <+> cs
+
+    case Hole =>
+      "<>"
+
     // for now, don't print includes
     case Include(contents, rest) =>
       toDocStmt(rest)
-
-    case other => toDocExpr(other)
   }
 
   def requiresBlock(s: Stmt): Boolean = s match {

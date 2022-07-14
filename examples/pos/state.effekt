@@ -1,0 +1,40 @@
+effect Amb { def flip(): Boolean }
+effect Yield { def yield(): Unit }
+
+def ex1() = try {
+  var x = 1;
+  if (do flip()) { x = 2 }
+  println(x)
+} with Amb { def flip() = { resume(true); resume(false) } }
+
+def ex2() = try {
+  var x = 1;
+  var y = 0;
+  if (do flip()) { x = y }
+  println(x)
+} with Amb { def flip() = { resume(true); resume(false) } }
+
+def ex3() = try {
+  var x = 1;
+  var y = 0;
+  if (do flip()) {
+    try { x = y } with Yield { def yield() = resume(()) }
+  }
+  println(x)
+} with Amb { def flip() = { resume(true); resume(false) } }
+
+def countDown() = {
+  var n = 10;
+  while (n > 0) {
+    println(n);
+    n = n - 1
+  }
+}
+
+
+def main() = {
+  ex1();
+  ex2();
+  ex3();
+  countDown()
+}

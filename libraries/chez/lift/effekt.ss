@@ -19,9 +19,18 @@
 
 (define (here x) x)
 
-(define (while cond exp)
-  ($then cond (lambda (c)
-    (if c ($then exp (lambda (_) (while cond exp))) (pure #f)))))
+; (define (while cond exp)
+;   ($then cond (lambda (c)
+;     (if c ($then exp (lambda (_) (while cond exp))) (pure #f)))))
+
+(define-syntax while
+  (syntax-rules ()
+    [(_ c e)
+     (let ([condition (lambda () c)])
+       (letrec ([loop (lambda (u)
+         ($then (condition) (lambda (condValue)
+           (if condValue ($then e loop) (pure #f)))))])
+         (loop #f)))]))
 
 ; (define-syntax lift
 ;   (syntax-rules ()
@@ -63,23 +72,41 @@
         (lambda (ev) (cap1 (define-effect-op ev (arg1 ...) kid exp) ...)) ...))]))
 
 
-(define-syntax state
-  (syntax-rules ()
-    [(_ effid getid setid init body)
-     ($then init (lambda (s)
-        (define cell (box s))
-        (define (cap ev) cell)
+(define (with-region body)
+  (define arena (make-arena))
 
-        (define (getid c) (lambda () (lambda (k) (k (unbox c)))))
-        (define (setid c) (lambda (s*) (lambda (k) (set-box! c s*) (k #f))))
+  (define (lift m) (lambda (k)
+    ; on suspend
+    (define fields (backup arena))
+    (m (lambda (a)
+      ; on resume
+      (restore fields)
+      (k a)))))
 
-        (define (lift m) (lambda (k)
-          (define backup (unbox cell))
-          (m (lambda (a)
-            (set-box! cell backup)
-            (k a)))))
+  ((body lift) arena))
 
-        ((body lift) cap)))]))
+
+; An Arena is a pointer to a list of cells
+(define (make-arena) (box '()))
+
+(define (fresh arena init)
+  (let* ([cell (box init)]
+         [cells (unbox arena)])
+    (set-box! arena (cons cell cells))
+    cell))
+
+; Backup = List<(Cell, Value)>
+
+; Arena -> Backup
+(define (backup arena)
+  (let ([fields (unbox arena)])
+    (map (lambda (cell) (cons cell (unbox cell))) fields)))
+
+; Backup -> ()
+(define (restore data)
+  (for-each (lambda (cell-data)
+    (set-box! (car cell-data) (cdr cell-data)))
+    data))
 
 
 (define-syntax define-effect-op

@@ -13,7 +13,7 @@ def numbers() = {
 
 def main() = {
 
-  var generator: () => Result at {main} = fun() { Done() }
+  var generator: () => Result at {this} = fun() { Done() }
 
   try {
     numbers()

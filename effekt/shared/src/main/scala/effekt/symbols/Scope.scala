@@ -168,6 +168,7 @@ object scopes {
 
   // A global namespace
   case class GlobalScope(parent: Scope) extends BlockScope
-  def toplevel(terms: Map[String, Set[TermSymbol]], types: Map[String, TypeSymbol], captures: Map[String, Capture])(implicit C: Context): Scope =
-    EmptyScope().enterGlobalWith(terms, types, captures)
+
+  def toplevel(terms: Map[String, TermSymbol], types: Map[String, TypeSymbol], captures: Map[String, Capture])(implicit C: Context): Scope =
+    EmptyScope().enterGlobalWith(terms.map((k, v) => (k, Set(v))), types, captures)
 }

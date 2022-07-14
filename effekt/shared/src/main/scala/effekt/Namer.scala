@@ -204,9 +204,16 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case d @ source.VarDef(id, annot, region, binding) =>
       val tpe = annot.map(resolve)
-      val reg = region.map(Context.resolveTerm)
+      val reg = region.map(Context.resolveTerm).getOrElse {
+        Context.getSelfRegion()
+      } match {
+        case t: TrackedParam => t
+        case _ => Context.abort("Region needs to be a tracked parameter.")
+      }
+
       resolveGeneric(binding)
-      val sym = VarBinder(Context.nameFor(id), tpe, d)
+      val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
+
       Context.define(id, sym)
 
     // FunDef and EffDef have already been resolved as part of the module declaration
@@ -216,12 +223,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
         Context.bindBlocks(sym.bparams)
-
-        val selfRegion = LexicalRegion(Name.local("this"), f)
-        // bind it to both the function name and "this"
-        Context.bind(id.name, selfRegion)
-        Context.bind("this", selfRegion)
-        Context.annotate(Annotations.SelfRegion, f, selfRegion)
+        Context.bindSelfRegion(f)
 
         resolveGeneric(body)
       }
@@ -296,19 +298,26 @@ object Namer extends Phase[Parsed, NameResolved] {
     case tree @ source.TryHandle(body, handlers) =>
       resolveAll(handlers)
 
-      // TODO Here we should actually introduce a term-level region and only bind `this` to region.capture
-      val selfRegion = LexicalRegion(Name.local("this"), tree)
-      // bind it to both the function name and "this"
-      Context.bind("this", selfRegion)
-      Context.annotate(Annotations.SelfRegion, tree, selfRegion)
-
       Context scoped {
+
         // bind all annotated capabilities
         handlers.foreach { handler =>
           handler.capability.foreach { p =>
             Context.bindBlock(resolve(p))
           }
         }
+
+        Context.bindSelfRegion(tree)
+
+        resolveGeneric(body)
+      }
+
+    case tree @ source.Region(name, body) =>
+      val reg = BlockParam(Name.local(name.name), builtins.TRegion)
+      Context.define(name, reg)
+      Context scoped {
+        Context.bindSelfRegion(tree, reg)
+        Context.bindBlock(reg)
         resolveGeneric(body)
       }
 
@@ -358,10 +367,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
         Context.bindValues(vps)
         Context.bindBlocks(bps)
-
-        val selfRegion = LexicalRegion(Name.local("this"), f)
-        Context.bind("this", selfRegion)
-        Context.annotate(Annotations.SelfRegion, f, selfRegion)
+        Context.bindSelfRegion(f)
 
         resolveGeneric(stmt)
       }
@@ -706,10 +712,26 @@ trait NamerOps extends ContextOps { Context: Context =>
     // bind the block parameter as a term
     params.foreach { bindBlock }
 
-  private[namer] def bindBlock(p: BlockParam) = {
+  private[namer] def bindSelfRegion(tree: Tree): Unit = {
+    bindSelfRegion(tree, SelfParam(tree))
+  }
+
+  private[namer] def bindSelfRegion(tree: Tree, sym: TrackedParam): Unit = {
+    Context.bindBlock("this", sym)
+    Context.annotate(Annotations.SelfRegion, tree, sym)
+  }
+
+  private[namer] def getSelfRegion(): TermSymbol =
+    scope.lookupFirstTerm("this")
+
+  private[namer] def bindBlock(p: TrackedParam) = {
     // bind the block parameter as a term
     bind(p)
     bind(p.capture)
+  }
+  private[namer] def bindBlock(name: String, p: TrackedParam) = {
+    scope.define(name, p)
+    scope.define(name, p.capture)
   }
 
   /**
@@ -837,7 +859,7 @@ trait NamerOps extends ContextOps { Context: Context =>
       abort(pp"Cannot resolve effect operation ${id}")
     }
 
-    assignSymbol(id, new CallTarget(Name.local(id), syms.asInstanceOf))
+    assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
   }
 
   /**
