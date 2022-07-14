@@ -76,8 +76,10 @@
   (define arena (make-arena))
 
   (define (lift m) (lambda (k)
+    ; on suspend
     (define fields (backup arena))
     (m (lambda (a)
+      ; on resume
       (restore fields)
       (k a)))))
 
