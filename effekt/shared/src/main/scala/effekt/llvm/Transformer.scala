@@ -1,0 +1,380 @@
+package effekt
+package llvm
+
+import scala.collection.mutable
+import effekt.machine.Analysis._
+import effekt.context.Context
+import effekt.context.assertions.SymbolAssertions
+import effekt.machine.FreshValueSymbol
+import effekt.symbols.{ /, BlockSymbol, Module, Name, Symbol, UserEffect, ValueSymbol, builtins }
+import effekt.util.{ Task, control }
+import effekt.util.control._
+
+/* `LLVMTransformer` transforms Effekt Core into intermediate LLVM */
+object LLVMTransformer {
+
+  def transform(program: machine.Program): List[Definition] =
+    program match {
+      case machine.Program(declarations, statement) => declarations.map(transform) ++ transformToplevel(statement)
+    }
+
+  def transform(declaration: machine.Declaration): Definition =
+    declaration match {
+      case machine.Foreign(returnType, functionName, parameters, body) =>
+        VerbatimFunction(transform(returnType), functionName, parameters.map(transformParameter), body)
+      case machine.Include(content) =>
+        Verbatim(content)
+    }
+
+  def transformToplevel(statement: machine.Statement): List[Definition] = statement match {
+    case machine.Def(machine.Label(name, _), body, rest) =>
+
+      implicit val C = LLVMTransformerContext();
+
+      val terminator = transform(body);
+
+      val definitions = C.definitions; C.definitions = null;
+      val basicBlocks = C.basicBlocks; C.basicBlocks = null;
+      val instructions = C.instructions; C.instructions = null;
+
+      val parameters = List(Parameter(NamedType("Env"), "env"), Parameter(NamedType("Sp"), "sp"));
+      // TODO load env in entry block
+      val basicBlock = BasicBlock("entry", instructions, terminator);
+      val function = Function(VoidType(), name, parameters, basicBlock :: basicBlocks);
+
+      function :: definitions ++ transformToplevel(rest)
+
+    case machine.Run(machine.Panic(), List(), List()) =>
+      // TODO this is a hack to mark end of list
+      List()
+  }
+  // statement match {
+  //   case machine.Def(functionName, machine.BlockLit(params, body), rest) => {
+
+  //     val normalBody = anormalForm(body);
+  //     val liftedBody = parameterLift(normalBody);
+  //     val linearBody = linearize(liftedBody);
+  //     val (localDefs, entry) = blockFloat(linearBody);
+
+  //     val frameDefs = {
+  //       findFrameDefs(normalBody).flatMap {
+  //         case (blockName, arity) =>
+
+  //           val basicBlocks = reachableBasicBlocks(blockName, localDefs);
+  //           val phiInstructionsMap = findPhiInstructions(basicBlocks);
+
+  //           val liftedParams = localDefs(blockName).params;
+  //           val params = liftedParams.take(arity);
+  //           val env = liftedParams.drop(arity);
+
+  //           List(DefFrm(blockName, params, env, blockName, basicBlocks.toList.map {
+  //             case (blockName, machine.BlockLit(_, blockBody)) =>
+  //               val (instructions, terminator) = transform(blockBody, localDefs.keySet);
+  //               BasicBlock(
+  //                 blockName,
+  //                 phiInstructionsMap(blockName) ++ instructions,
+  //                 terminator
+  //               )
+  //           }), DefScn(blockName, env))
+  //       }
+  //     };
+
+  //     val closureDefs = {
+  //       findClosureDefs(normalBody).flatMap {
+  //         case (blockName, arity) =>
+
+  //           val basicBlocks = reachableBasicBlocks(blockName, localDefs);
+  //           val phiInstructionsMap = findPhiInstructions(basicBlocks);
+
+  //           val liftedParams = localDefs(blockName).params;
+  //           val params = liftedParams.take(arity);
+  //           val env = liftedParams.drop(arity);
+
+  //           List(DefClo(blockName, params, env, blockName, basicBlocks.toList.map {
+  //             case (blockName, machine.BlockLit(_, blockBody)) =>
+  //               val (instructions, terminator) = transform(blockBody, localDefs.keySet);
+  //               BasicBlock(
+  //                 blockName,
+  //                 phiInstructionsMap(blockName) ++ instructions,
+  //                 terminator
+  //               )
+  //           }), DefScn(blockName, env))
+  //       }
+  //     };
+
+  //     val thisDef = {
+
+  //       // TODO is this creating of entry block necessary?
+  //       val entryBlockName: BlockSymbol = machine.FreshBlockSymbol("entry", C.module);
+  //       val entryBlock = machine.BlockLit(params, entry);
+  //       val thisLocalDefs = localDefs + (entryBlockName -> entryBlock);
+
+  //       val basicBlocks = reachableBasicBlocks(entryBlockName, thisLocalDefs);
+  //       val phiInstructionsMap = findPhiInstructions(basicBlocks);
+
+  //       DefCnt(functionName, params, entryBlockName, basicBlocks.toList.map {
+  //         case (blockName, machine.BlockLit(_, blockBody)) =>
+  //           val (instructions, terminator) = transform(blockBody, thisLocalDefs.keySet);
+  //           BasicBlock(
+  //             blockName,
+  //             phiInstructionsMap(blockName) ++ instructions,
+  //             terminator
+  //           )
+  //       })
+  //     }
+
+  //     thisDef :: frameDefs.toList ++ closureDefs.toList ++ transformToplevel(rest)
+
+  //   }
+
+  //   case machine.Ret(List()) =>
+  //     // TODO define main function here
+  //     List()
+
+  //   case _ =>
+  //     C.abort("unsupported " + stmt)
+
+  // }
+
+  def transform(statement: machine.Statement)(implicit C: LLVMTransformerContext): Terminator =
+    statement match {
+      case machine.Substitute(bindings, machine.Jump(label)) =>
+
+        val environment = bindings.map { case (_, x) => x };
+        val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
+        // TODO fresh names
+        // TODO global constant local reference Env env
+        emit(BitCast("env.0", LocalReference(NamedType("Env"), "env"), PointerType(environmentType)));
+        storeEnvironment(environment, LocalReference(PointerType(environmentType), "env.0"));
+
+        emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), C.stackPointer))));
+        RetVoid()
+
+      case machine.Run(machine.Return(), environment, List()) =>
+
+        val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
+        // TODO fresh names
+        // TODO global constant local reference Env env
+        emit(BitCast("env.0", LocalReference(NamedType("Env"), "env"), PointerType(environmentType)));
+        storeEnvironment(environment, LocalReference(PointerType(environmentType), "env.0"));
+
+        val returnAddressType = PointerType(FunctionType(VoidType(), List(NamedType("Env"), NamedType("Sp"))));
+        val returnAddress = popStack(returnAddressType);
+        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), C.stackPointer))));
+        RetVoid()
+      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(machine.Variable(name, machine.Primitive("Int"))), rest))) =>
+        emit(Add(name, ConstantNumber(n), ConstantNumber(0)));
+        transform(rest)
+      case machine.Run(machine.Panic(), List(), List()) =>
+        emit(TailCall(ConstantGlobal(???, "panic"), List()));
+        RetVoid()
+    }
+
+  // def transform(body: machine.Stmt, localBlocks: Set[BlockSymbol])(implicit C: LLVMTransformerContext): (List[Instruction], Terminator) = body match {
+  //   case machine.Let(id: ValueSymbol, machine.Construct(typ, args), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks)
+  //     // ToDo: refactor this
+  //     if (args.isEmpty) {
+  //       (InsertValues(id, machine.Record(List()), args.map(transform)) :: instructions, terminator)
+  //     } else {
+  //       (InsertValues(id, typ.asInstanceOf[machine.Record], args.map(transform)) :: instructions, terminator)
+  //     }
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.Select(_, target, field), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks)
+  //     (ExtractValue(id, transform(target), field) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.Inject(typ, arg, variant), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks)
+  //     (Inject(id, typ.asInstanceOf[machine.Variant], transform(arg), variant) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.Reject(typ, arg, variant), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks)
+  //     (ExtractValue(id, transform(arg), variant + 1) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.AppPrim(typ, func, args), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (Call(id, typ, func, args.map(transform)) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: BlockSymbol, machine.NewStack(machine.Stack(cntType), block, args), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (NewStack(cntType, id, transform(block), args) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.EviPlus(l, r), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (EviPlus(id, transform(l), transform(r)) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.EviDecr(l), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (EviDecr(id, transform(l)) :: instructions, terminator)
+  //   }
+  //   case machine.Let(id: ValueSymbol, machine.EviIsZero(l), rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (EviIsZero(id, transform(l)) :: instructions, terminator)
+  //   }
+  //   case machine.Let(_, _, _) => {
+  //     println(body);
+  //     C.abort("Internal error: binding value to block symbol or block to value symbol")
+  //   }
+  //   case machine.Def(_, _, _) => {
+  //     C.abort("Internal error: local definition in instructions")
+  //   }
+  //   case machine.PushFrame(cntType, block, args, rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (PushFrame(cntType, transform(block), args) :: instructions, terminator)
+  //   }
+  //   case machine.PushStack(stack, rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (PushStack(transform(stack)) :: instructions, terminator)
+  //   }
+  //   case machine.PopStack(id, rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (PopStack(id) :: instructions, terminator)
+  //   }
+  //   case machine.CopyStack(id, stack, rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (CopyStack(id, transform(stack)) :: instructions, terminator)
+  //   }
+  //   case machine.EraseStack(stack, rest) => {
+  //     val (instructions, terminator) = transform(rest, localBlocks);
+  //     (EraseStack(transform(stack)) :: instructions, terminator)
+  //   }
+  //   case machine.Ret(exprs) => {
+  //     (List(), Ret(exprs.map(transform)))
+  //   }
+  //   case machine.Jump(block, args) => {
+  //     val id = transform(block);
+  //     if (localBlocks.contains(id)) {
+  //       (List(), JumpLocal(id, args.map(transform)))
+  //     } else {
+  //       (List(), Jump(id, args.map(transform)))
+  //     }
+  //   }
+  //   case machine.If(cond, thenBlock, thenArgs, elseBlock, elseArgs) => {
+  //     (List(), If(transform(cond), transform(thenBlock), thenArgs, transform(elseBlock), elseArgs))
+  //   }
+  //   case machine.Match(scrutinee, variant, thenBlock, _, elseBlock, _) => { // ToDo: extract first field from scrutinee
+  //     val tagName = FreshValueSymbol("tag", C.module)
+  //     val instructions = List(ExtractValue(tagName, transform(scrutinee), 0))
+  //     (instructions, Switch(machine.Var(tagName, machine.PrimInt()), transform(elseBlock), List((variant, transform(thenBlock)))))
+  //   }
+  //   case machine.Panic() => {
+  //     (List(), Panic())
+  //   }
+  // }
+
+  def transform(label: machine.Label): ConstantGlobal =
+    label match {
+      case machine.Label(name, typ) => ConstantGlobal(PointerType(FunctionType(VoidType(), List(NamedType("Env"), NamedType("Sp")))), name)
+    }
+
+  def transformParameter(variable: machine.Variable): Parameter =
+    variable match {
+      case machine.Variable(name, typ) => Parameter(transform(typ), name)
+    }
+
+  def transform(typ: machine.Type): Type = typ match {
+    case machine.Primitive("Int") => NamedType("Int")
+    case machine.Positive(_)      => StructureType(List(I64(), PointerType(I8())))
+  }
+  //   case machine.PrimUnit() => Int64()
+  //   case machine.PrimInt() => Int64()
+  //   case machine.PrimBoolean() => Int64()
+  //   case machine.Record(types) => ??? // TODO not yet supported
+  //   case machine.Variant(types) => ??? // TODO not yet supported
+
+  //   // TODO What is the purpose of `cntType`? Is this simply a record? How to map to scanner, primitives and boxeds?
+  //   case machine.Stack(cntType: List[machine.Type]) => EffektStack(Pointer(Void()), Pointer(Void()), Pointer(Void()), ???)
+
+  //   // evidence terms for effectful regions (currently a positive integer offset
+  //   // into the stack chain)
+  //   case machine.Evidence() => Int64()
+  // }
+
+  // def transform(arg: machine.Arg)(implicit C: LLVMTransformerContext): machine.Value = arg match {
+  //   case expr: machine.Expr =>
+  //     C.abort("Internal error: expression in value position")
+  //   case value: machine.Value =>
+  //     value
+  // }
+
+  // def transform(block: machine.Block)(implicit C: LLVMTransformerContext): BlockSymbol = block match {
+  //   case machine.BlockVar(id) =>
+  //     id
+  //   case _ =>
+  //     C.abort("Internal error: label literal in label variable position")
+  // }
+
+  // def findPhiInstructions(basicBlocks: Map[BlockSymbol, machine.BlockLit]): Map[BlockSymbol, List[Phi]] = {
+  //   import scala.collection.mutable
+  //   type PhiMap = mutable.Map[machine.Param, List[(BlockSymbol, machine.Value)]]
+  //   type PhiDB = mutable.Map[BlockSymbol, PhiMap]
+  //   val phiDB: PhiDB = mutable.Map.empty
+  //   basicBlocks.keys.foreach(callee => phiDB.update(callee, mutable.Map.empty))
+  //   for {
+  //     (caller, machine.BlockLit(_, blockBody)) <- basicBlocks
+  //     (callee, args) <- jumpTargets(blockBody)
+  //     if phiDB.isDefinedAt(callee)
+  //     phiMap = phiDB(callee)
+  //     calleeParams = basicBlocks(callee).params
+  //     (param, arg) <- calleeParams zip args
+  //     callers = phiMap.getOrElse(param, Nil)
+  //   } phiMap.put(param, (caller, arg) :: callers)
+  //   phiDB.map {
+  //     case (callee, phis) => (callee, phis.map {
+  //       case ((param, args)) => Phi(param, args)
+  //     }.toList)
+  //   }.toMap
+  // }
+
+  def storeEnvironment(environment: machine.Environment, environmentPointer: Operand)(implicit C: LLVMTransformerContext): Unit = {
+    environment.zipWithIndex.foreach {
+      case (machine.Variable(name, typ), i) =>
+        val fieldType = transform(typ);
+        val fieldPointerName = name + "p";
+        emit(GetElementPtr(fieldPointerName, environmentPointer, List(0, i)));
+        emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), LocalReference(fieldType, name)))
+    }
+  }
+
+  def popStack(typ: Type)(implicit C: LLVMTransformerContext): String = {
+    val poppedValue = freshName("x");
+    val oldStackPointer = C.stackPointer;
+    val newStackPointer = freshName("sp");
+    val oldTypedPointer = freshName("sp.t");
+    val newTypedPointer = freshName("sp.t");
+    emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), PointerType(typ)));
+    emit(GetElementPtr(newTypedPointer, LocalReference(PointerType(typ), oldTypedPointer), List(-1)));
+    emit(BitCast(newStackPointer, LocalReference(PointerType(typ), newTypedPointer), NamedType("Sp")));
+    C.stackPointer = newStackPointer;
+    emit(Load(poppedValue, LocalReference(PointerType(typ), newTypedPointer)));
+    poppedValue
+  }
+
+  /**
+   * Extra info in context
+   */
+
+  // TODO do we need this context? why, we shouldn't
+  case class LLVMTransformerContext() {
+    var counter = 0;
+    var definitions: List[Definition] = List();
+    var basicBlocks: List[BasicBlock] = List();
+    var instructions: List[Instruction] = List();
+    var stackPointer: String = "sp";
+  }
+
+  def emit(instruction: Instruction)(implicit C: LLVMTransformerContext) = {
+    C.instructions = C.instructions :+ instruction
+  }
+
+  def emit(definition: Definition)(implicit C: LLVMTransformerContext) = {
+    C.definitions = C.definitions :+ definition
+  }
+
+  def freshName(name: String)(implicit C: LLVMTransformerContext): String = {
+    C.counter = C.counter + 1;
+    name + "." + C.counter
+  }
+
+}
