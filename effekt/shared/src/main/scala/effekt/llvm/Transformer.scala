@@ -1,12 +1,6 @@
 package effekt
 package llvm
 
-import scala.collection.mutable
-import effekt.machine.FreshValueSymbol
-import effekt.symbols.{ BlockSymbol, Module, Name, Symbol, ValueSymbol, builtins }
-import effekt.util.{ Task, control }
-import effekt.util.control._
-
 /* `LLVMTransformer` transforms Effekt Core into intermediate LLVM */
 object LLVMTransformer {
 
@@ -20,7 +14,12 @@ object LLVMTransformer {
         val basicBlocks = C.basicBlocks; C.basicBlocks = null;
         val instructions = C.instructions; C.instructions = null;
 
-        val entryBlock = BasicBlock("entry", instructions, terminator);
+        val entryInstructions = List(
+          Call("env", NamedType("Env"), constantMalloc, List(ConstantNumber(1024))),
+          Call("sp", NamedType("Sp"), constantMalloc, List(ConstantNumber(1024)))
+        )
+
+        val entryBlock = BasicBlock("entry", entryInstructions ++ instructions, terminator);
         val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks);
         declarations.map(transform) ++ definitions :+ entryFunction
     }
@@ -65,7 +64,7 @@ object LLVMTransformer {
 
       case machine.Substitute(bindings, rest) =>
 
-        val environment = bindings.map { case (_, x) => x };
+        val environment = bindings.map { case (_, value) => value };
         transform(environment, rest)
 
       case machine.PushFrame(frame, rest) =>
@@ -87,13 +86,18 @@ object LLVMTransformer {
         transform(variable :: environment, rest)
 
       case machine.Run(machine.Exit(), List(value), List()) =>
-        // emit(TailCall(ConstantGlobal(???, "panic"), List()));
+        emit(Call("_", VoidType(), constantExit, List(transform(value))));
         RetVoid()
     }
 
   def transform(label: machine.Label): ConstantGlobal =
     label match {
       case machine.Label(name, typ) => ConstantGlobal(PointerType(FunctionType(VoidType(), List(NamedType("Env"), NamedType("Sp")))), name)
+    }
+
+  def transform(value: machine.Variable): Operand =
+    value match {
+      case machine.Variable(name, typ) => LocalReference(transform(typ), name)
     }
 
   def transformParameter(variable: machine.Variable): Parameter =
@@ -130,11 +134,11 @@ object LLVMTransformer {
     emit(BitCast(environmentPointerName, environmentReference, PointerType(environmentType)));
 
     environment.zipWithIndex.foreach {
-      case (machine.Variable(name, typ), i) =>
+      case (value @ machine.Variable(name, typ), i) =>
         val fieldType = transform(typ);
         val fieldPointerName = freshName(name + "p");
         emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(environmentType), environmentPointerName), List(0, i)));
-        emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), LocalReference(fieldType, name)))
+        emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), transform(value)))
     }
   }
 
@@ -154,6 +158,9 @@ object LLVMTransformer {
     emit(Load(poppedAddress, LocalReference(pointerType, newTypedPointer)));
     poppedAddress
   }
+
+  def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(I8()), List(I64()))), "malloc");
+  def constantExit = ConstantGlobal(PointerType(FunctionType(VoidType(), List(I64()))), "exit");
 
   /**
    * Extra info in context
