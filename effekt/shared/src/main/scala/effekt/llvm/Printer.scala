@@ -37,6 +37,10 @@ ${asFragment(terminator)}
   }
 
   def asFragment(instruction: Instruction): LLVMFragment = instruction match {
+    case Call(_, VoidType(), ConstantGlobal(_, name), arguments) =>
+       s"call void ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
+    case Call(result, typ, ConstantGlobal(_, name), arguments) =>
+       s"${localName(result)} = call ${asFragment(typ)} ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
     case TailCall(LocalReference(_, name), arguments) =>
       s"tail call fastcc void ${localName(name)}(${commaSeparated(arguments.map(asFragment))})"
     case TailCall(ConstantGlobal(_, name), arguments) =>
