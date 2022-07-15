@@ -3,8 +3,8 @@ package machine
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.core.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
-import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, Module, Name, ResumeParam, Symbol, ValueSymbol, builtins }
+import effekt.lifted.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
+import effekt.symbols.{ BlockSymbol, BlockType, FunctionType, BuiltinFunction, UserFunction, Module, Name, ResumeParam, Symbol, ValueSymbol, builtins }
 import javax.lang.model.`type`.PrimitiveType
 
 // TODO delete imports
@@ -18,112 +18,106 @@ case class FreshBlockSymbol(baseName: String, module: Module) extends BlockSymbo
 
 class Transformer {
 
-  def transform(mod: core.ModuleDecl)(implicit C: TransformerContext): Program = {
-    ???
-    // val core.ModuleDecl(_, _, defs) = mod
+  def transform(mod: lifted.ModuleDecl)(implicit C: TransformerContext): Program = {
+    val lifted.ModuleDecl(_, _, defs, _) = mod
 
-    // Program(transformDeclarations(defs), transformToplevel(defs))
+    Program(transformDeclarations(defs), transformToplevel(defs))
   }
 
-  // def transformDeclarations(stmt: core.Stmt)(implicit C: TransformerContext): List[Declaration] =
-  //   stmt match {
-  //     case core.Def(name, blockType: BlockType, core.Extern(params, body), rest) =>
-  //       Foreign(transform(blockType.ret.tpe), transform(name), params.map(transform), body) :: transformDeclarations(rest)
-  //     case core.Include(content, rest) =>
-  //       Include(content) :: transformDeclarations(rest)
-  //     case core.Record(_, _, rest) =>
-  //       // TODO these are for records and capabilities
-  //       // TODO We only support singleton capabilities
-  //       transformDeclarations(rest)
-  //     case core.Data(_, _, rest) =>
-  //       transformDeclarations(rest)
-  //     case core.Def(_, _, _, rest) =>
-  //       // TODO expand this catch-all case
-  //       transformDeclarations(rest)
-  //     case core.Exports(path, symbols) =>
-  //       List()
-  //     case _ =>
-  //       println(stmt)
-  //       C.abort("unsupported declaration " + stmt)
-  //   }
+  def transformDeclarations(stmt: lifted.Stmt)(implicit C: TransformerContext): List[Declaration] =
+    stmt match {
+      case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
+        Foreign(transform(functionType.result), transform(name), params.map(transform), body) :: transformDeclarations(rest)
+      case lifted.Include(content, rest) =>
+        Include(content) :: transformDeclarations(rest)
+      case lifted.Record(_, _, rest) =>
+        // TODO these are for records and capabilities
+        // TODO We only support singleton capabilities
+        transformDeclarations(rest)
+      case lifted.Data(_, _, rest) =>
+        transformDeclarations(rest)
+      case lifted.Def(_, _, _, rest) =>
+        // TODO expand this catch-all case
+        transformDeclarations(rest)
+      case _ =>
+        println(stmt)
+        C.abort("unsupported declaration " + stmt)
+    }
 
-  // def transformToplevel(stmt: core.Stmt)(implicit C: TransformerContext): Statement =
-  //   stmt match {
-  //     case core.Def(_, _, core.Extern(_, _), rest) =>
-  //       transformToplevel(rest)
-  //     case core.Def(blockName, _, core.ScopeAbs(scopeName, core.BlockLit(params, body)), rest) => {
-  //       // TODO top-level definitions don't need evidence, or do they?
-  //       C.blockParamsSet = Set();
-  //       // TODO add block params to blockparamsset
-  //       // TODO add evidence param
-  //       Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest))
-  //     }
-  //     case core.Def(_, _, block, rest) =>
-  //       // TODO expand this catch-all case
-  //       transformToplevel(rest)
-  //     case core.Include(_, rest) =>
-  //       transformToplevel(rest)
-  //     case core.Record(_, _, rest) =>
-  //       // TODO these are for records and capabilities
-  //       // TODO We only support singleton capabilities
-  //       transformToplevel(rest)
-  //     case core.Exports(path, symbols) =>
-  //       Jump(Label("main", List()))
-  //     case core.Data(_, _, rest) =>
-  //       transformToplevel(rest)
-  //     case _ =>
-  //       println(stmt)
-  //       C.abort("unsupported top-level statement " + stmt)
-  //   }
+  def transformToplevel(stmt: lifted.Stmt)(implicit C: TransformerContext): Statement =
+    stmt match {
+      case lifted.Def(_, _, lifted.Extern(_, _), rest) =>
+        transformToplevel(rest)
+      case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) => {
+        // TODO top-level definitions don't need evidence, or do they?
+        C.blockParamsSet = Set();
+        // TODO add block params to blockparamsset
+        // TODO add evidence param
+        Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest))
+      }
+      case lifted.Def(_, _, block, rest) =>
+        // TODO expand this catch-all case
+        transformToplevel(rest)
+      case lifted.Include(_, rest) =>
+        transformToplevel(rest)
+      case lifted.Record(_, _, rest) =>
+        // TODO these are for records and capabilities
+        // TODO We only support singleton capabilities
+        transformToplevel(rest)
+      case lifted.Data(_, _, rest) =>
+        transformToplevel(rest)
+      case _ =>
+        println(stmt)
+        C.abort("unsupported top-level statement " + stmt)
+    }
 
-  // def transform(stmt: core.Stmt)(implicit C: TransformerContext): Statement =
-  //   stmt match {
-  //     case core.Ret(expr) =>
-  //       val variable = transform(expr);
-  //       val bindings = C.bindings;
-  //       C.bindings = List();
-  //       flushBindings(bindings, Run(Return(), List(variable), List()))
-  //     case core.App(core.ScopeApp(core.BlockVar(name), scope), List(), args) =>
-  //       // TODO deal with BlockLit
-  //       // TODO deal with local block definitions (their free variables must be kept in a map)
-  //       // TODO deal with evidence
-  //       name match {
-  //         case symbols.Fun(_, _, params, _) =>
-  //           val environment = params.flatten.map(transformParamSymbol);
-  //           val variables = args.map(transform);
-  //           val bindings = C.bindings;
-  //           C.bindings = List();
-  //           flushBindings(bindings, Substitute(environment.zip(variables), Jump(Label(transform(name), environment))))
-  //         case _ =>
-  //           println(name);
-  //           C.abort("unsupported blocksymbol " + name)
-  //       }
-  //   }
-  //       case core.Val(name, tpe, bind, rest) =>
-  //         PushFrame(
-  //           List(transform(tpe)),
-  //           BlockLit(List(transform(core.ValueParam(name, tpe))), transform(rest)),
-  //           List(),
-  //           transform(bind)
-  //         )
-  //       case core.Def(blockName, _, block: core.Block, rest) =>
+  def transform(stmt: lifted.Stmt)(implicit C: TransformerContext): Statement =
+    stmt match {
+      case lifted.Ret(expr) =>
+        val variable = transform(expr);
+        val bindings = C.bindings;
+        C.bindings = List();
+        flushBindings(bindings, Return(List(variable)))
+      case lifted.App(lifted.ScopeApp(lifted.BlockVar(name), scope), List(), args) =>
+        // TODO deal with BlockLit
+        // TODO deal with local block definitions (their free variables must be kept in a map)
+        // TODO deal with evidence
+        name match {
+          case UserFunction(_, _, params, _, _, _, _) =>
+            val environment = params.map(transformParamSymbol);
+            val variables = args.map(transform);
+            val bindings = C.bindings;
+            C.bindings = List();
+            flushBindings(bindings, Substitute(environment.zip(variables), Jump(Label(transform(name), environment))))
+          case _ =>
+            println(name);
+            C.abort("unsupported blocksymbol " + name)
+        }
+      case lifted.Val(name, tpe, bind, rest) =>
+        PushFrame(
+          Clause(List(transform(lifted.ValueParam(name, tpe))), transform(rest)),
+          transform(bind)
+        )
+
+    }
+  //       case lifted.Def(blockName, _, block: lifted.Block, rest) =>
   //         Def(blockName, transform(block), transform(rest))
-  //       case core.App(core.Member(core.ScopeApp(core.BlockVar(name: CapabilityParam), scope), _), null, args) => {
+  //       case lifted.App(lifted.Member(lifted.ScopeApp(lifted.BlockVar(name: CapabilityParam), scope), _), null, args) => {
   //         // TODO fix this null upstream
   //         // TODO merge this with other application case
   //         PushStack(Var(name, transform(name.tpe)), Ret(transform(scope) :: args.map(transform)))
   //       }
   //       // TODO add case for resume
-  //       case core.If(cond, thenStmt, elseStmt) => {
+  //       case lifted.If(cond, thenStmt, elseStmt) => {
   //         If(
   //           transform(cond),
   //           BlockLit(List(), transform(thenStmt)), List(),
   //           BlockLit(List(), transform(elseStmt)), List()
   //         )
   //       }
-  //       case core.Match(scrutinee, clauses) => {
+  //       case lifted.Match(scrutinee, clauses) => {
   //         clauses match {
-  //           case (core.TagPattern(tag, _), core.BlockLit(params, body)) :: cs =>
+  //           case (lifted.TagPattern(tag, _), lifted.BlockLit(params, body)) :: cs =>
   //             val idx = C.blockTypeOf(tag).ret.tpe match {
   //               case dataType: symbols.DataType => dataType.variants.indexOf(tag)
   //               case _ => C.abort("unsupported type " + C.blockTypeOf(tag).ret.tpe)
@@ -135,13 +129,13 @@ class Transformer {
   //             }
   //             // ToDo: do not transform scrutinee twice!
   //             val thenBlock = BlockLit(List(), Let(fieldsName, Reject(fieldTypes, transform(scrutinee), idx), thenBody))
-  //             val elseBlock = BlockLit(List(), transform(core.Match(scrutinee, cs)))
+  //             val elseBlock = BlockLit(List(), transform(lifted.Match(scrutinee, cs)))
   //             Match(transform(scrutinee), idx, thenBlock, List(), elseBlock, List())
   //           case Nil => Panic()
   //           case _   => C.abort("unsupported Match statement" + clauses)
   //         }
   //       }
-  //       case core.Handle(body, handlers) => {
+  //       case lifted.Handle(body, handlers) => {
 
   //         val answerType = handlers match {
   //           case handler :: _ => transform(answerTypeOf(handler))
@@ -168,26 +162,26 @@ class Transformer {
   //         println(stmt)
   //         C.abort("unsupported statement " + stmt)
 
-  def transform(expr: core.Argument)(implicit C: TransformerContext): Variable =
+  def transform(expr: lifted.Argument)(implicit C: TransformerContext): Variable =
     expr match {
-      case core.IntLit(value) =>
+      case lifted.IntLit(value) =>
         val x = FreshValueSymbol("x", C.module);
-        emitBinding(x, core.IntLit(value));
+        emitBinding(x, lifted.IntLit(value));
         Variable(transform(x), Primitive("Int"))
-      case core.ValueVar(id) =>
+      case lifted.ValueVar(id) =>
         // TODO find actual type
         Variable(transform(id), Primitive("Int"))
     }
-  //       case core.BooleanLit(value) =>
+  //       case lifted.BooleanLit(value) =>
   //         BooleanLit(value)
-  //       case core.UnitLit() =>
+  //       case lifted.UnitLit() =>
   //         UnitLit()
-  //       case core.ValueVar(name: ValueSymbol) =>
+  //       case lifted.ValueVar(name: ValueSymbol) =>
   //         // TODO get value type from elsewhere
   //         Var(name, transform(C.valueTypeOf(name)))
-  //       case core.PureApp(core.BlockVar(blockName: BuiltinFunction), List(), args) =>
+  //       case lifted.PureApp(lifted.BlockVar(blockName: BuiltinFunction), List(), args) =>
   //         AppPrim(transform(blockName.ret.get.tpe), blockName, args.map(transform))
-  //       case core.PureApp(core.BlockVar(constructorName: symbols.Record), List(), args) =>
+  //       case lifted.PureApp(lifted.BlockVar(constructorName: symbols.Record), List(), args) =>
   //         constructorName.tpe match {
   //           case dataType: symbols.DataType =>
   //             Inject(transform(dataType), Construct(transform(constructorName), args.map(transform)), dataType.variants.indexOf(constructorName))
@@ -199,7 +193,7 @@ class Transformer {
   //             }
   //           case _ => C.abort("unsupported type " + constructorName.tpe)
   //         }
-  //       case core.Select(target, field) =>
+  //       case lifted.Select(target, field) =>
   //         val fld = field.asInstanceOf[symbols.Field]
   //         val idx = fld.rec.fields.indexOf(fld)
   //         Select(transform(fld.tpe), transform(target), idx)
@@ -207,11 +201,11 @@ class Transformer {
   //         println(expr)
   //         C.abort("unsupported expression " + expr)
 
-  //   def transform(block: core.Block)(implicit C: TransformerContext): BlockLit = {
+  //   def transform(block: lifted.Block)(implicit C: TransformerContext): BlockLit = {
   //     block match {
-  //       case core.ScopeAbs(scopeName, core.BlockLit(params, body)) =>
+  //       case lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)) =>
   //         params.foreach {
-  //           case core.BlockParam(name, _) => C.blockParamsSet += name
+  //           case lifted.BlockParam(name, _) => C.blockParamsSet += name
   //           case _ => ()
   //         };
   //         BlockLit(Param(evidenceType(), scopeName) :: params.map(transform), transform(body))
@@ -221,14 +215,14 @@ class Transformer {
   //     }
   //   }
 
-  //   def transform(arg: core.Argument)(implicit C: TransformerContext): Arg = {
+  //   def transform(arg: lifted.Argument)(implicit C: TransformerContext): Arg = {
   //     arg match {
-  //       case expr: core.Expr =>
+  //       case expr: lifted.Expr =>
   //         transform(expr)
-  //       case core.BlockVar(name: CapabilityParam) =>
+  //       case lifted.BlockVar(name: CapabilityParam) =>
   //         Var(name, transform(name.tpe))
-  //       case core.Lifted(scope, block) =>
-  //         val blockArg = transform(block: core.Argument);
+  //       case lifted.Lifted(scope, block) =>
+  //         val blockArg = transform(block: lifted.Argument);
   //         val paramTypes = blockArg match {
   //           case Var(_, Stack(typs)) => typs
   //           case NewStack(Stack(typs), _, _) => typs
@@ -239,7 +233,7 @@ class Transformer {
   //             case Stack(_) =>
   //               Param(paramType, FreshBlockSymbol("c", C.module))
   //             case Evidence() =>
-  //               Param(evidenceType(), core.ScopeId())
+  //               Param(evidenceType(), lifted.ScopeId())
   //             case _ =>
   //               Param(paramType, FreshValueSymbol("a", C.module))
   //           }
@@ -250,7 +244,7 @@ class Transformer {
   //           params,
   //           PushStack(blockArg, Ret(args))
   //         ), List())
-  //       case block: core.Block =>
+  //       case block: lifted.Block =>
   //         // TODO This seems to overlap, move this elsewhere?
   //         val transformedBlock = transform(block);
   //         NewStack(Stack(transformedBlock.params.map(_.typ)), transformedBlock, List())
@@ -260,9 +254,9 @@ class Transformer {
   //     }
   //   }
 
-  //   def transform(handler: core.Handler)(implicit C: TransformerContext): Expr = {
+  //   def transform(handler: lifted.Handler)(implicit C: TransformerContext): Expr = {
   //     handler match {
-  //       case core.Handler(_, List((operationName, core.BlockLit(params :+ resume, body)))) =>
+  //       case lifted.Handler(_, List((operationName, lifted.BlockLit(params :+ resume, body)))) =>
   //         // TODO we assume here that resume is the last param
   //         // TODO we assume that there are no block params in handlers
 
@@ -298,7 +292,7 @@ class Transformer {
 
   //   def withEvidence(typ: Type, block: BlockLit)(implicit C: TransformerContext): BlockLit = block match {
   //     case BlockLit(params, body) =>
-  //       val scopeName = core.ScopeId();
+  //       val scopeName = lifted.ScopeId();
   //       val evidenceAndParams = Param(evidenceType(), scopeName) :: params;
   //       BlockLit(
   //         evidenceAndParams,
@@ -308,7 +302,7 @@ class Transformer {
   //   }
 
   //   def liftStack(typ: Type, evi: Value, stmt: Stmt)(implicit C: TransformerContext): Stmt = {
-  //     val currentScopeName = core.ScopeId();
+  //     val currentScopeName = lifted.ScopeId();
   //     val currentStackName = FreshBlockSymbol("stk", C.module);
   //     val paramName = FreshValueSymbol("a", C.module);
   //     val liftLoopName = FreshBlockSymbol("lift", C.module);
@@ -340,25 +334,25 @@ class Transformer {
   //       Jump(BlockVar(liftLoopName), List(evi)))
   //   }
 
-  def transform(param: core.Param)(implicit C: TransformerContext): Variable =
+  def transform(param: lifted.Param)(implicit C: TransformerContext): Variable =
     param match {
-      case core.ValueParam(name, tpe) =>
+      case lifted.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
-      case core.BlockParam(name, tpe) =>
-        Variable(transform(name), transform(tpe))
+      // case lifted.BlockParam(name, tpe) =>
+      //   Variable(transform(name), transform(tpe))
       case _ =>
         println(param)
         C.abort("unsupported parameter " + param)
     }
 
-  // def transform(scope: core.Scope)(implicit C: TransformerContext): Variable =
+  // def transform(scope: lifted.Scope)(implicit C: TransformerContext): Variable =
   //   scope match {
-  //     case core.ScopeVar(transform(scopeName)) =>
+  //     case lifted.ScopeVar(transform(scopeName)) =>
   //       Variable(scopeName, Primitive("Evi"))
   //   }
-  //       case core.Here() =>
+  //       case lifted.Here() =>
   //         EviLit(0)
-  //       case core.Nested(scopes) =>
+  //       case lifted.Nested(scopes) =>
   //         // TODO optimize non-empty case
   //         val empty: Arg = EviLit(0);
   //         scopes.foldRight(empty) { (scope, evi) => EviPlus(transform(scope), evi) }
@@ -407,19 +401,19 @@ class Transformer {
   def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
 
-  def flushBindings(bindings: List[(symbols.Symbol, core.Expr)], statement: Statement): Statement =
+  def flushBindings(bindings: List[(symbols.Symbol, lifted.Expr)], statement: Statement): Statement =
     bindings match {
       case Nil =>
         statement
-      case (x, core.IntLit(n)) :: rest =>
+      case (x, lifted.IntLit(n)) :: rest =>
         Run(LiteralInt(n), List(), List(Clause(List(Variable(transform(x), Primitive("Int"))), flushBindings(rest, statement))))
     }
 
   //   def evidenceType(): Type = Evidence()
 
-  //   def answerTypeOf(handler: core.Handler)(implicit C: TransformerContext): symbols.Type =
+  //   def answerTypeOf(handler: lifted.Handler)(implicit C: TransformerContext): symbols.Type =
   //     handler match {
-  //       case core.Handler(_, List((_, core.BlockLit(params, _)))) =>
+  //       case lifted.Handler(_, List((_, lifted.BlockLit(params, _)))) =>
   //         // TODO we assume here that resume is the last param
   //         C.blockTypeOf(params.last.id) match {
   //           case symbols.BlockType(_, _, symbols.Effectful(returnType, _)) => returnType
@@ -435,10 +429,10 @@ class Transformer {
 
   case class TransformerContext(context: Context) {
     var blockParamsSet: Set[BlockSymbol] = Set()
-    var bindings: List[(Symbol, core.Expr)] = List()
+    var bindings: List[(Symbol, lifted.Expr)] = List()
   }
 
-  def emitBinding(id: Symbol, expr: core.Expr)(implicit C: TransformerContext) = {
+  def emitBinding(id: Symbol, expr: lifted.Expr)(implicit C: TransformerContext) = {
     C.bindings = C.bindings :+ (id, expr)
   }
 
