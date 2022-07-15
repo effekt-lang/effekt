@@ -3,9 +3,9 @@ package machine
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.context.assertions.SymbolAssertions
 import effekt.core.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
-import effekt.symbols.{ /, BlockParam, BlockSymbol, BlockType, BuiltinFunction, CapabilityParam, Module, Name, ResumeParam, Symbol, UserEffect, ValueSymbol, builtins }
+import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, Module, Name, ResumeParam, Symbol, ValueSymbol, builtins }
+import javax.lang.model.`type`.PrimitiveType
 
 // TODO delete imports
 
@@ -19,93 +19,86 @@ case class FreshBlockSymbol(baseName: String, module: Module) extends BlockSymbo
 class Transformer {
 
   def transform(mod: core.ModuleDecl)(implicit C: TransformerContext): Program = {
-    val core.ModuleDecl(_, _, defs) = mod
+    ???
+    // val core.ModuleDecl(_, _, defs) = mod
 
-    Program(transformDeclarations(defs), transformToplevel(defs))
+    // Program(transformDeclarations(defs), transformToplevel(defs))
   }
 
-  def transformDeclarations(stmt: core.Stmt)(implicit C: TransformerContext): List[Declaration] =
-    stmt match {
-      case core.Def(name, blockType: BlockType, core.Extern(params, body), rest) =>
-        Foreign(transform(blockType.ret.tpe), transform(name), params.map(transform), body) :: transformDeclarations(rest)
-      case core.Include(content, rest) =>
-        Include(content) :: transformDeclarations(rest)
-      case core.Record(_, _, rest) =>
-        // TODO these are for records and capabilities
-        // TODO We only support singleton capabilities
-        transformDeclarations(rest)
-      case core.Data(_, _, rest) =>
-        transformDeclarations(rest)
-      case core.Def(_, _, _, rest) =>
-        // TODO expand this catch-all case
-        transformDeclarations(rest)
-      case core.Exports(path, symbols) =>
-        List()
-      case _ =>
-        println(stmt)
-        C.abort("unsupported declaration " + stmt)
-    }
+  // def transformDeclarations(stmt: core.Stmt)(implicit C: TransformerContext): List[Declaration] =
+  //   stmt match {
+  //     case core.Def(name, blockType: BlockType, core.Extern(params, body), rest) =>
+  //       Foreign(transform(blockType.ret.tpe), transform(name), params.map(transform), body) :: transformDeclarations(rest)
+  //     case core.Include(content, rest) =>
+  //       Include(content) :: transformDeclarations(rest)
+  //     case core.Record(_, _, rest) =>
+  //       // TODO these are for records and capabilities
+  //       // TODO We only support singleton capabilities
+  //       transformDeclarations(rest)
+  //     case core.Data(_, _, rest) =>
+  //       transformDeclarations(rest)
+  //     case core.Def(_, _, _, rest) =>
+  //       // TODO expand this catch-all case
+  //       transformDeclarations(rest)
+  //     case core.Exports(path, symbols) =>
+  //       List()
+  //     case _ =>
+  //       println(stmt)
+  //       C.abort("unsupported declaration " + stmt)
+  //   }
 
-  def transformToplevel(stmt: core.Stmt)(implicit C: TransformerContext): Statement =
-    stmt match {
-      case core.Def(_, _, core.Extern(_, _), rest) =>
-        transformToplevel(rest)
-      case core.Def(blockName, _, core.ScopeAbs(scopeName, core.BlockLit(params, body)), rest) => {
-        // TODO top-level definitions don't need evidence, or do they?
-        C.blockParamsSet = Set();
-        // TODO add block params to blockparamsset
-        // TODO add evidence param
-        Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest))
-      }
-      case core.Def(_, _, block, rest) =>
-        // TODO expand this catch-all case
-        transformToplevel(rest)
-      case core.Include(_, rest) =>
-        transformToplevel(rest)
-      case core.Record(_, _, rest) =>
-        // TODO these are for records and capabilities
-        // TODO We only support singleton capabilities
-        transformToplevel(rest)
-      case core.Exports(path, symbols) =>
-        // TODO jump to main symbol
-        Run(Panic(), List(), List())
-      case core.Data(_, _, rest) =>
-        transformToplevel(rest)
-      case _ =>
-        println(stmt)
-        C.abort("unsupported top-level statement " + stmt)
-    }
+  // def transformToplevel(stmt: core.Stmt)(implicit C: TransformerContext): Statement =
+  //   stmt match {
+  //     case core.Def(_, _, core.Extern(_, _), rest) =>
+  //       transformToplevel(rest)
+  //     case core.Def(blockName, _, core.ScopeAbs(scopeName, core.BlockLit(params, body)), rest) => {
+  //       // TODO top-level definitions don't need evidence, or do they?
+  //       C.blockParamsSet = Set();
+  //       // TODO add block params to blockparamsset
+  //       // TODO add evidence param
+  //       Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest))
+  //     }
+  //     case core.Def(_, _, block, rest) =>
+  //       // TODO expand this catch-all case
+  //       transformToplevel(rest)
+  //     case core.Include(_, rest) =>
+  //       transformToplevel(rest)
+  //     case core.Record(_, _, rest) =>
+  //       // TODO these are for records and capabilities
+  //       // TODO We only support singleton capabilities
+  //       transformToplevel(rest)
+  //     case core.Exports(path, symbols) =>
+  //       Jump(Label("main", List()))
+  //     case core.Data(_, _, rest) =>
+  //       transformToplevel(rest)
+  //     case _ =>
+  //       println(stmt)
+  //       C.abort("unsupported top-level statement " + stmt)
+  //   }
 
-  def transform(stmt: core.Stmt)(implicit C: TransformerContext): Statement =
-    stmt match {
-      case core.Ret(expr) =>
-        val variable = transform(expr);
-        val bindings = C.bindings;
-        C.bindings = List();
-        // TODO flush bindings
-        bindings match {
-          case List((id, core.IntLit(n))) =>
-            Run(LiteralInt(n), List(), List(Clause(
-              List(Variable(transform(id), Primitive("Int"))), Run(Return(), List(variable), List())
-            )))
-        }
-      case core.App(core.ScopeApp(core.BlockVar(name), scope), List(), args) =>
-        // TODO deal with BlockLit
-        // TODO deal with local block definitions (their free variables must be kept in a map)
-        // TODO deal with evidence
-        name match {
-          case symbols.Fun(_, _, params, _) =>
-            val environment = params.flatten.map(transformParamSymbol);
-            // TODO flush bindings
-            Substitute(
-              environment.zip(args.map(transform)),
-              Jump(Label(transform(name), environment))
-            )
-          case _ =>
-            println(name);
-            C.abort("unsupported blocksymbol " + name)
-        }
-    }
+  // def transform(stmt: core.Stmt)(implicit C: TransformerContext): Statement =
+  //   stmt match {
+  //     case core.Ret(expr) =>
+  //       val variable = transform(expr);
+  //       val bindings = C.bindings;
+  //       C.bindings = List();
+  //       flushBindings(bindings, Run(Return(), List(variable), List()))
+  //     case core.App(core.ScopeApp(core.BlockVar(name), scope), List(), args) =>
+  //       // TODO deal with BlockLit
+  //       // TODO deal with local block definitions (their free variables must be kept in a map)
+  //       // TODO deal with evidence
+  //       name match {
+  //         case symbols.Fun(_, _, params, _) =>
+  //           val environment = params.flatten.map(transformParamSymbol);
+  //           val variables = args.map(transform);
+  //           val bindings = C.bindings;
+  //           C.bindings = List();
+  //           flushBindings(bindings, Substitute(environment.zip(variables), Jump(Label(transform(name), environment))))
+  //         case _ =>
+  //           println(name);
+  //           C.abort("unsupported blocksymbol " + name)
+  //       }
+  //   }
   //       case core.Val(name, tpe, bind, rest) =>
   //         PushFrame(
   //           List(transform(tpe)),
@@ -181,6 +174,9 @@ class Transformer {
         val x = FreshValueSymbol("x", C.module);
         emitBinding(x, core.IntLit(value));
         Variable(transform(x), Primitive("Int"))
+      case core.ValueVar(id) =>
+        // TODO find actual type
+        Variable(transform(id), Primitive("Int"))
     }
   //       case core.BooleanLit(value) =>
   //         BooleanLit(value)
@@ -408,8 +404,16 @@ class Transformer {
         C.abort("unsupported symbol param " + param)
     }
 
-  def transform(id: Symbol)(implicit C: TransformerContext): String =
+  def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
+
+  def flushBindings(bindings: List[(symbols.Symbol, core.Expr)], statement: Statement): Statement =
+    bindings match {
+      case Nil =>
+        statement
+      case (x, core.IntLit(n)) :: rest =>
+        Run(LiteralInt(n), List(), List(Clause(List(Variable(transform(x), Primitive("Int"))), flushBindings(rest, statement))))
+    }
 
   //   def evidenceType(): Type = Evidence()
 

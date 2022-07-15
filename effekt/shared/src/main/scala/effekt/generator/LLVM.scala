@@ -9,7 +9,6 @@ import effekt.llvm._
 import effekt.symbols.Module
 import effekt.symbols.{ BlockSymbol, Name, Symbol, ValueSymbol }
 import effekt.context.assertions._
-import effekt.util.GenericPrinter
 
 import scala.language.implicitConversions
 import effekt.util.paths._
@@ -33,7 +32,7 @@ def commaSeparated(args: List[String]): String = args.mkString(", ")
 def spaceSeparated(args: List[String]): String = args.mkString(" ")
 
 
-class LLVM extends Generator {
+class LLVM { // extends Generator {
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath
 
@@ -43,25 +42,26 @@ class LLVM extends Generator {
    */
   //TODO-LLVM refactor
   def run(src: Source)(implicit C: Context): Option[Document] = {
-    val modQ = C.frontend(src)
-    if (modQ.isEmpty)
-      return None
-    val mod = modQ.get
+    None
+    // val modQ = C.frontend(src)
+    // if (modQ.isEmpty)
+    //   return None
+    // val mod = modQ.get
 
-    val mainName = C.checkMain(mod)
+    // val mainName = C.checkMain(mod)
 
-    // TODO why is backend returning Option? What if compilation fails?
-    val coreMods = (mod.dependencies :+ mod).flatMap(m => C.backend(m.source))
-    // TODO get rid of this object!
-    val machiner = new machine.Transformer
-    // TODO get rid of the module! we only need it for fresh name generation
-    val llvmDefs = C.using(module = mod) {
-      val machineMods = coreMods.map(m => machiner.transform(m)(machiner.TransformerContext(C)))
-      machineMods.flatMap(m => LLVMTransformer.transform(m))
-    }
+    // // TODO why is backend returning Option? What if compilation fails?
+    // val coreMods = (mod.dependencies :+ mod).flatMap(m => C.backend(m.source))
+    // // TODO get rid of this object!
+    // val machiner = new machine.Transformer
+    // // TODO get rid of the module! we only need it for fresh name generation
+    // val llvmDefs = C.using(module = mod) {
+    //   val machineMods = coreMods.map(m => machiner.transform(m)(machiner.TransformerContext(C)))
+    //   machineMods.flatMap(m => LLVMTransformer.transform(m))
+    // }
 
-    val llvm: LLVMFragment = LLVMFragmentPrinter.wholeProgramOneshot(mainName, llvmDefs)
-    return Some(Document(llvm, emptyLinks))
+    // val llvm: LLVMFragment = LLVMFragmentPrinter.wholeProgramOneshot(mainName, llvmDefs)
+    // return Some(Document(llvm, emptyLinks))
   }
 }
 
