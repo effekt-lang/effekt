@@ -256,7 +256,6 @@ object LLVMTransformer {
    * Extra info in context
    */
 
-  // TODO do we need this context? why, we shouldn't
   case class LLVMTransformerContext() {
     var counter = 0;
 
