@@ -15,6 +15,7 @@ case class BasicBlock(name: String, instructions: List[Instruction], terminator:
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST-Instruction.html#t:Instruction
  */
 sealed trait Instruction
+case class Call(result: String, resultType: Type, function: Operand, arguments: List[Operand]) extends Instruction
 case class TailCall(function: Operand, arguments: List[Operand]) extends Instruction
 case class Load(result: String, address: Operand) extends Instruction
 case class Store(address: Operand, value: Operand) extends Instruction
