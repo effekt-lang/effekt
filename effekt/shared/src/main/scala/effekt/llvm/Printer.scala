@@ -68,6 +68,7 @@ ret void
 
   def asFragment(operand: Operand): LLVMFragment = operand match {
     case LocalReference(typ, name) => s"${asFragment(typ)} ${localName(name)}"
+    case ConstantGlobal(typ, name) => s"${asFragment(typ)} ${globalName(name)}"
     case ConstantNumber(n) => s"i64 $n"
   }
 

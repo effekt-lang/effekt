@@ -1,6 +1,8 @@
 package effekt
 package llvm
 
+import effekt.machine
+
 /* `LLVMTransformer` transforms Effekt Core into intermediate LLVM */
 object LLVMTransformer {
 
@@ -68,7 +70,32 @@ object LLVMTransformer {
         transform(environment, rest)
 
       case machine.PushFrame(frame, rest) =>
-        // TODO actually push frame
+
+        val frameEnvironment: machine.Environment = machine.freeVariables(frame).toList;
+
+        val frameName = freshName("k");
+
+        val definitions = {
+          implicit val C = LLVMTransformerContext();
+
+          loadEnvironment(frame.parameters);
+          popEnvironment(frameEnvironment);
+          val terminator = transform(frame.parameters ++ frameEnvironment, frame.body);
+
+          val definitions = C.definitions; C.definitions = null;
+          val basicBlocks = C.basicBlocks; C.basicBlocks = null;
+          val instructions = C.instructions; C.instructions = null;
+
+          val parameters = List(Parameter(NamedType("Env"), "env"), Parameter(NamedType("Sp"), "sp"));
+          val entryBlock = BasicBlock("entry", instructions, terminator);
+          val function = Function(VoidType(), frameName, parameters, entryBlock :: basicBlocks);
+
+          function :: definitions
+        };
+        definitions.foreach(emit);
+
+        pushEnvironment(frameEnvironment);
+        pushReturnAddress(frameName);
 
         transform(environment, rest)
 
@@ -115,14 +142,15 @@ object LLVMTransformer {
   def loadEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
+    val pointerType = PointerType(environmentType);
     val environmentPointerName = freshName("env.t.");
-    emit(BitCast(environmentPointerName, environmentReference, PointerType(environmentType)));
+    emit(BitCast(environmentPointerName, environmentReference, pointerType));
 
     environment.zipWithIndex.foreach {
       case (machine.Variable(name, typ), i) =>
         val fieldType = transform(typ);
         val fieldPointerName = freshName(name + "p");
-        emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(environmentType), environmentPointerName), List(0, i)));
+        emit(GetElementPtr(fieldPointerName, LocalReference(pointerType, environmentPointerName), List(0, i)));
         emit(Load(name, LocalReference(PointerType(fieldType), fieldPointerName)))
     }
   }
@@ -130,19 +158,81 @@ object LLVMTransformer {
   def storeEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
+    val pointerType = PointerType(environmentType);
     val environmentPointerName = freshName("env.t.");
-    emit(BitCast(environmentPointerName, environmentReference, PointerType(environmentType)));
+    emit(BitCast(environmentPointerName, environmentReference, pointerType));
 
     environment.zipWithIndex.foreach {
       case (value @ machine.Variable(name, typ), i) =>
         val fieldType = transform(typ);
         val fieldPointerName = freshName(name + "p");
-        emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(environmentType), environmentPointerName), List(0, i)));
+        emit(GetElementPtr(fieldPointerName, LocalReference(pointerType, environmentPointerName), List(0, i)));
         emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), transform(value)))
     }
   }
 
+  def pushEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+
+    val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
+
+    val pointerType = PointerType(environmentType);
+    val oldStackPointer = C.stackPointer;
+    val newStackPointer = freshName("sp");
+    val oldTypedPointer = freshName("sp.t");
+    val newTypedPointer = freshName("sp.t");
+    emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
+    emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(1)));
+    emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
+    C.stackPointer = newStackPointer;
+
+    environment.zipWithIndex.foreach {
+      case (value @ machine.Variable(name, typ), i) =>
+        val fieldType = transform(typ);
+        val fieldPointerName = freshName(name + "p");
+        emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(fieldType), oldTypedPointer), List(0, i)));
+        emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), transform(value)))
+    }
+
+  }
+
+  def popEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+
+    val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
+
+    val pointerType = PointerType(environmentType);
+    val oldStackPointer = C.stackPointer;
+    val newStackPointer = freshName("sp");
+    val oldTypedPointer = freshName("sp.t");
+    val newTypedPointer = freshName("sp.t");
+    emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
+    emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(-1)));
+    emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
+    C.stackPointer = newStackPointer;
+
+    environment.zipWithIndex.foreach {
+      case (value @ machine.Variable(name, typ), i) =>
+        val fieldType = transform(typ);
+        val fieldPointerName = freshName(name + "p");
+        emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(fieldType), newTypedPointer), List(0, i)));
+        emit(Load(name, LocalReference(PointerType(fieldType), fieldPointerName)))
+    }
+
+  }
+
   def returnAddressType = PointerType(FunctionType(VoidType(), List(NamedType("Env"), NamedType("Sp"))))
+
+  def pushReturnAddress(frameName: String)(implicit C: LLVMTransformerContext): Unit = {
+    val pointerType = PointerType(returnAddressType);
+    val oldStackPointer = C.stackPointer;
+    val newStackPointer = freshName("sp");
+    val oldTypedPointer = freshName("sp.t");
+    val newTypedPointer = freshName("sp.t");
+    emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
+    emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(1)));
+    emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
+    C.stackPointer = newStackPointer;
+    emit(Store(LocalReference(pointerType, oldTypedPointer), ConstantGlobal(returnAddressType, frameName)));
+  }
 
   def popReturnAddress()(implicit C: LLVMTransformerContext): String = {
     val pointerType = PointerType(returnAddressType);
