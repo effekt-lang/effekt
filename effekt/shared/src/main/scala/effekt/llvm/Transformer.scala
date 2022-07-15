@@ -58,10 +58,6 @@ object LLVMTransformer {
         transform(environment, rest)
 
       case machine.Jump(label) =>
-        println(C.definitions);
-        println(C.basicBlocks);
-        println(C.instructions);
-        println(label);
 
         storeEnvironment(environment);
         emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), C.stackPointer))));
@@ -101,6 +97,7 @@ object LLVMTransformer {
     case machine.Primitive("Int") => NamedType("Int")
     case machine.Positive(_)      => StructureType(List(I64(), PointerType(I8())))
   }
+
   def environmentReference = LocalReference(NamedType("Env"), "env")
 
   def loadEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
