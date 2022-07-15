@@ -31,16 +31,20 @@ type Environment = List[Variable]
 sealed trait Statement
 case class Def(label: Label, body: Statement, rest: Statement) extends Statement
 case class Jump(label: Label) extends Statement
-case class Let(name: Variable, tag: Int, environment: Environment, rest: Statement) extends Statement
-case class Switch(value: Variable, clauses: List[Clause]) extends Statement
-case class New(name: Variable, clauses: List[Clause], rest: Statement) extends Statement
-case class Invoke(value: Variable, tag: Int, environment: Environment) extends Statement
-case class Run(command: Command, environment: Environment, continuation: List[Clause]) extends Statement
 case class Substitute(bindings: List[(Variable, Variable)], rest: Statement) extends Statement
 
+case class Let(name: Variable, tag: Int, environment: Environment, rest: Statement) extends Statement
+case class Switch(value: Variable, clauses: List[Clause]) extends Statement
+
+case class New(name: Variable, clauses: List[Clause], rest: Statement) extends Statement
+case class Invoke(value: Variable, tag: Int, environment: Environment) extends Statement
+
+case class PushFrame(frame: Clause, rest: Statement) extends Statement
+case class Return(environment: Environment) extends Statement
+case class Run(command: Command, environment: Environment, continuation: List[Clause]) extends Statement
+
 sealed trait Command
-case class Return() extends Command
-case class Panic() extends Command
+case class Exit() extends Command
 case class LiteralInt(n: Int) extends Command
 
 /**

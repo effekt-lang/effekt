@@ -35,13 +35,13 @@ object LLVMTransformer {
 
   def transform(environment: machine.Environment, statement: machine.Statement)(implicit C: LLVMTransformerContext): Terminator =
     statement match {
-      case machine.Def(machine.Label(name, environment), body, rest) =>
+      case machine.Def(machine.Label(name, localEnvironment), body, rest) =>
 
         val definitions = {
           implicit val C = LLVMTransformerContext();
 
-          loadEnvironment(environment);
-          val terminator = transform(environment, body);
+          loadEnvironment(localEnvironment);
+          val terminator = transform(localEnvironment, body);
 
           val definitions = C.definitions; C.definitions = null;
           val basicBlocks = C.basicBlocks; C.basicBlocks = null;
@@ -68,17 +68,25 @@ object LLVMTransformer {
         val environment = bindings.map { case (_, x) => x };
         transform(environment, rest)
 
-      case machine.Run(machine.Return(), environment, List()) =>
+      case machine.PushFrame(frame, rest) =>
+        // TODO actually push frame
+
+        transform(environment, rest)
+
+      case machine.Return(environment) =>
 
         storeEnvironment(environment);
 
         val returnAddress = popReturnAddress();
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(environmentReference, LocalReference(NamedType("Sp"), C.stackPointer))));
         RetVoid()
+
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
+
         emit(Add(name, ConstantNumber(n), ConstantNumber(0)));
         transform(variable :: environment, rest)
-      case machine.Run(machine.Panic(), List(), List()) =>
+
+      case machine.Run(machine.Exit(), List(value), List()) =>
         // emit(TailCall(ConstantGlobal(???, "panic"), List()));
         RetVoid()
     }
