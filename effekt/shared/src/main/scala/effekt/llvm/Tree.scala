@@ -22,15 +22,19 @@ case class Store(address: Operand, value: Operand) extends Instruction
 case class GetElementPtr(result: String, address: Operand, indices: List[Int]) extends Instruction
 case class BitCast(result: String, operand: Operand, typ: Type) extends Instruction
 case class Add(result: String, operand0: Operand, operand1: Operand) extends Instruction
+case class InsertValue(result: String, aggregate: Operand, element: Operand, index: Int) extends Instruction
+case class ExtractValue(result: String, aggregate: Operand, index: Int) extends Instruction
 
 sealed trait Terminator
 case class RetVoid() extends Terminator
+case class Switch(operand: Operand, defaultDest: String, dests: List[(Int, String)]) extends Terminator
 
 case class Parameter(typ: Type, name: String)
 
 sealed trait Operand
 case class LocalReference(typ: Type, name: String) extends Operand
-case class ConstantNumber(n: Int) extends Operand
+case class ConstantInt(n: Int) extends Operand
+case class ConstantAggregateZero(typ: Type) extends Operand
 case class ConstantGlobal(typ: Type, name: String) extends Operand
 
 /*
