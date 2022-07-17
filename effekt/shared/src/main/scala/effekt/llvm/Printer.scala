@@ -23,7 +23,13 @@ define fastcc ${asFragment(returnType)} ${globalName(name)}(${commaSeparated(par
     ${indentedLines(basicBlocks.map(asFragment).mkString("\n\n"))}
 }
 """
-    case VerbatimFunction(_, _, _, _) => ???
+    case VerbatimFunction(returnType, name, parameters, body) =>
+      // TODO what about calling convention?
+      s"""
+define ${asFragment(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(asFragment))}) {
+    $body
+}
+"""
     case Verbatim(content) => content
   }
 
