@@ -61,21 +61,27 @@ ${asFragment(terminator)}
       s"${localName(result)} = load ${asFragment(typ)}, ${asFragment(LocalReference(PointerType(typ), name))}"
     case Store(address, value) =>
       s"store ${asFragment(value)}, ${asFragment(address)}"
-    case Add(result, operand0, ConstantNumber(n)) =>
+    case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${asFragment(operand0)}, $n"
+    case InsertValue(result, aggregate, element, index) =>
+      s"${localName(result)} = insertvalue ${asFragment(aggregate)}, ${asFragment(element)}, $index"
+    case ExtractValue(result, aggregate, index) =>
+      s"${localName(result)} = extractvalue ${asFragment(aggregate)}, $index"
 
   }
   def asFragment(terminator: Terminator): LLVMFragment = terminator match {
     case RetVoid() =>
-      s"""
-ret void
-"""
+      s"ret void"
+    case Switch(operand, defaultDest, dests) =>
+      def destAsFragment(dest: (Int, String)) = s"i32 ${dest._1}, label ${dest._2}";
+      s"switch ${asFragment(operand)}, label ${localName(defaultDest)} [${spaceSeparated(dests.map(destAsFragment))}]"
   }
 
   def asFragment(operand: Operand): LLVMFragment = operand match {
     case LocalReference(typ, name) => s"${asFragment(typ)} ${localName(name)}"
     case ConstantGlobal(typ, name) => s"${asFragment(typ)} ${globalName(name)}"
-    case ConstantNumber(n) => s"i64 $n"
+    case ConstantInt(n) => s"i64 $n"
+    case ConstantAggregateZero(typ) => s"${asFragment(typ)} zeroinitializer"
   }
 
   def asFragment(typ: Type): LLVMFragment = typ match {

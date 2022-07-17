@@ -9,7 +9,7 @@ object LLVMTransformer {
   def transform(program: machine.Program): List[Definition] =
     program match {
       case machine.Program(declarations, statement) =>
-        implicit val C = LLVMTransformerContext();
+        implicit val C = LLVMTransformerContext(LLVMTransformerGlobalContext());
 
         val terminator = transform(List(), statement);
         val definitions = C.definitions; C.definitions = null;
@@ -17,8 +17,8 @@ object LLVMTransformer {
         val instructions = C.instructions; C.instructions = null;
 
         val entryInstructions = List(
-          Call("env", NamedType("Env"), constantMalloc, List(ConstantNumber(1024))),
-          Call("sp", NamedType("Sp"), constantMalloc, List(ConstantNumber(1024)))
+          Call("env", NamedType("Env"), constantMalloc, List(ConstantInt(1024))),
+          Call("sp", NamedType("Sp"), constantMalloc, List(ConstantInt(1024)))
         )
 
         val entryBlock = BasicBlock("entry", entryInstructions ++ instructions, terminator);
@@ -38,23 +38,21 @@ object LLVMTransformer {
     statement match {
       case machine.Def(machine.Label(name, localEnvironment), body, rest) =>
 
-        val definitions = {
-          implicit val C = LLVMTransformerContext();
+        val () = {
+          implicit val C2 = LLVMTransformerContext(C.context);
 
           loadEnvironment(localEnvironment);
           val terminator = transform(localEnvironment, body);
 
-          val definitions = C.definitions; C.definitions = null;
-          val basicBlocks = C.basicBlocks; C.basicBlocks = null;
-          val instructions = C.instructions; C.instructions = null;
+          val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
+          val instructions = C2.instructions; C2.instructions = null;
 
           val parameters = List(Parameter(NamedType("Env"), "env"), Parameter(NamedType("Sp"), "sp"));
           val entryBlock = BasicBlock("entry", instructions, terminator);
           val function = Function(VoidType(), name, parameters, entryBlock :: basicBlocks);
 
-          function :: definitions
+          emit(function)
         };
-        definitions.foreach(emit);
 
         transform(environment, rest)
 
@@ -63,6 +61,41 @@ object LLVMTransformer {
         storeEnvironment(environment);
         emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), C.stackPointer))));
         RetVoid()
+
+      case machine.Let(variable @ machine.Variable(name, _), tag, List(), rest) =>
+        // TODO non-empty environments
+        emit(InsertValue(name, ConstantAggregateZero(StructureType(List(I64(), NamedType("Env")))), ConstantInt(tag), 0))
+        transform(variable :: environment, rest)
+
+      case machine.Switch(value, clauses) =>
+        val tag = freshName("m");
+        emit(ExtractValue(tag, transform(value), 0));
+        val labels = clauses.map {
+          case machine.Clause(List(), body) =>
+            implicit val C2 = LLVMTransformerContext(C.context);
+
+            // TODO read out fields into parameters
+
+            // TODO add parameters to environment
+            val terminator = transform(environment, body);
+
+            val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
+            val instructions = C2.instructions; C2.instructions = null;
+
+            // TODO more nested contexts
+            basicBlocks.foreach(b => emit(b)(C))
+
+            val label = freshName("l");
+            emit(BasicBlock(label, instructions, terminator))(C);
+            label
+        };
+        labels match {
+          case Nil =>
+            // TODO more informative way to end program. Clean up too?
+            RetVoid()
+          case label :: labels =>
+            Switch(LocalReference(I64(), tag), label, labels.zipWithIndex.map { case (l, i) => (i, l) })
+        }
 
       case machine.Substitute(bindings, rest) =>
 
@@ -74,26 +107,23 @@ object LLVMTransformer {
         val frameEnvironment: machine.Environment = machine.freeVariables(frame).toList;
 
         val frameName = freshName("k");
-        // TODO prefix this name with function name
 
-        val definitions = {
-          implicit val C = LLVMTransformerContext();
+        val () = {
+          implicit val C2 = LLVMTransformerContext(C.context);
 
           loadEnvironment(frame.parameters);
           popEnvironment(frameEnvironment);
           val terminator = transform(frame.parameters ++ frameEnvironment, frame.body);
 
-          val definitions = C.definitions; C.definitions = null;
-          val basicBlocks = C.basicBlocks; C.basicBlocks = null;
-          val instructions = C.instructions; C.instructions = null;
+          val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
+          val instructions = C2.instructions; C2.instructions = null;
 
           val parameters = List(Parameter(NamedType("Env"), "env"), Parameter(NamedType("Sp"), "sp"));
           val entryBlock = BasicBlock("entry", instructions, terminator);
           val function = Function(VoidType(), frameName, parameters, entryBlock :: basicBlocks);
 
-          function :: definitions
+          emit(function)
         };
-        definitions.foreach(emit);
 
         pushEnvironment(frameEnvironment);
         pushReturnAddress(frameName);
@@ -108,10 +138,10 @@ object LLVMTransformer {
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(environmentReference, LocalReference(NamedType("Sp"), C.stackPointer))));
         RetVoid()
 
-      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(parameter @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
+      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
 
-        emit(Add(name, ConstantNumber(n), ConstantNumber(0)));
-        transform(parameter :: environment, rest)
+        emit(Add(name, ConstantInt(n), ConstantInt(0)));
+        transform(variable :: environment, rest)
 
       case machine.Run(machine.CallForeign(name), values, List()) =>
         // TODO careful with calling convention?!?
@@ -119,11 +149,11 @@ object LLVMTransformer {
         emit(Call("_", VoidType(), ConstantGlobal(functionType, name), values.map(transform)));
         RetVoid()
 
-      case machine.Run(machine.CallForeign(name), values, List(machine.Clause(List(parameter @ machine.Variable(resultName, resultType)), rest))) =>
+      case machine.Run(machine.CallForeign(name), values, List(machine.Clause(List(variable @ machine.Variable(resultName, resultType)), rest))) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, typ) => transform(typ) }));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
-        transform(parameter :: environment, rest)
+        transform(variable :: environment, rest)
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -149,6 +179,7 @@ object LLVMTransformer {
   def environmentReference = LocalReference(NamedType("Env"), "env")
 
   def loadEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+    // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
     val pointerType = PointerType(environmentType);
@@ -165,6 +196,7 @@ object LLVMTransformer {
   }
 
   def storeEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+    // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
     val pointerType = PointerType(environmentType);
@@ -181,6 +213,7 @@ object LLVMTransformer {
   }
 
   def pushEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+    // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
 
@@ -205,6 +238,7 @@ object LLVMTransformer {
   }
 
   def popEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+    // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
 
@@ -263,19 +297,23 @@ object LLVMTransformer {
   /**
    * Extra info in context
    */
-
-  case class LLVMTransformerContext() {
+  case class LLVMTransformerGlobalContext() {
     var counter = 0;
-
     var definitions: List[Definition] = List();
+  }
+
+  case class LLVMTransformerContext(context: LLVMTransformerGlobalContext) {
     var basicBlocks: List[BasicBlock] = List();
     var instructions: List[Instruction] = List();
-
     var stackPointer: String = "sp";
   }
 
   def emit(instruction: Instruction)(implicit C: LLVMTransformerContext) = {
     C.instructions = C.instructions :+ instruction
+  }
+
+  def emit(basicBlock: BasicBlock)(C: LLVMTransformerContext) = {
+    C.basicBlocks = C.basicBlocks :+ basicBlock
   }
 
   def emit(definition: Definition)(implicit C: LLVMTransformerContext) = {
@@ -287,4 +325,6 @@ object LLVMTransformer {
     name + "." + C.counter
   }
 
+  private implicit def asContext(C: LLVMTransformerContext): LLVMTransformerGlobalContext = C.context
+  private implicit def getContext(implicit C: LLVMTransformerContext): LLVMTransformerGlobalContext = C.context
 }
