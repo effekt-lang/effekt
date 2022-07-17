@@ -11,7 +11,7 @@ case class Program(declarations: List[Declaration], program: Statement)
  */
 sealed trait Declaration
 
-case class Foreign(returns: Type, name: String, parameters: Environment, body: String) extends Declaration
+case class DefineForeign(returns: Type, name: String, parameters: Environment, body: String) extends Declaration
 case class Include(contents: String) extends Declaration
 
 /**
@@ -44,7 +44,7 @@ case class Return(environment: Environment) extends Statement
 case class Run(command: Command, environment: Environment, continuation: List[Clause]) extends Statement
 
 sealed trait Command
-case class Exit() extends Command
+case class CallForeign(name: String) extends Command
 case class LiteralInt(n: Int) extends Command
 
 /**

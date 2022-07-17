@@ -28,7 +28,7 @@ object LLVMTransformer {
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
-      case machine.Foreign(returnType, functionName, parameters, body) =>
+      case machine.DefineForeign(returnType, functionName, parameters, body) =>
         VerbatimFunction(transform(returnType), functionName, parameters.map(transformParameter), body)
       case machine.Include(content) =>
         Verbatim(content)
@@ -74,6 +74,7 @@ object LLVMTransformer {
         val frameEnvironment: machine.Environment = machine.freeVariables(frame).toList;
 
         val frameName = freshName("k");
+        // TODO prefix this name with function name
 
         val definitions = {
           implicit val C = LLVMTransformerContext();
@@ -107,14 +108,22 @@ object LLVMTransformer {
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(environmentReference, LocalReference(NamedType("Sp"), C.stackPointer))));
         RetVoid()
 
-      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
+      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(parameter @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
 
         emit(Add(name, ConstantNumber(n), ConstantNumber(0)));
-        transform(variable :: environment, rest)
+        transform(parameter :: environment, rest)
 
-      case machine.Run(machine.Exit(), List(value), List()) =>
-        emit(Call("_", VoidType(), constantExit, List(transform(value))));
+      case machine.Run(machine.CallForeign(name), values, List()) =>
+        // TODO careful with calling convention?!?
+        val functionType = PointerType(FunctionType(VoidType(), values.map { case machine.Variable(_, typ) => transform(typ) }));
+        emit(Call("_", VoidType(), ConstantGlobal(functionType, name), values.map(transform)));
         RetVoid()
+
+      case machine.Run(machine.CallForeign(name), values, List(machine.Clause(List(parameter @ machine.Variable(resultName, resultType)), rest))) =>
+        // TODO careful with calling convention?!?
+        val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, typ) => transform(typ) }));
+        emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
+        transform(parameter :: environment, rest)
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -250,7 +259,6 @@ object LLVMTransformer {
   }
 
   def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(I8()), List(I64()))), "malloc");
-  def constantExit = ConstantGlobal(PointerType(FunctionType(VoidType(), List(I64()))), "exit");
 
   /**
    * Extra info in context

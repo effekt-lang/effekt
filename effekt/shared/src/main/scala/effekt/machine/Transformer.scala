@@ -27,7 +27,7 @@ class Transformer {
   def transformDeclarations(stmt: lifted.Stmt)(implicit C: TransformerContext): List[Declaration] =
     stmt match {
       case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
-        Foreign(transform(functionType.result), transform(name), params.map(transform), body) :: transformDeclarations(rest)
+        DefineForeign(transform(functionType.result), transform(name), params.map(transform), body) :: transformDeclarations(rest)
       case lifted.Include(content, rest) =>
         Include(content) :: transformDeclarations(rest)
       case lifted.Record(_, _, rest) =>
