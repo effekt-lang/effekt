@@ -1,4 +1,6 @@
-package effekt.generator
+package effekt
+package generator
+package llvm
 
 import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.{ Source, Counter }
@@ -13,7 +15,10 @@ import effekt.context.assertions._
 import scala.language.implicitConversions
 import effekt.util.paths._
 
-class LLVM { // extends Generator {
+object LLVM extends Backend {
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context): Option[Compiled] = ???
+  def compileSeparate(input: CoreTransformed)(implicit C: Context): Option[Document] = ???
+
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath
 
@@ -45,4 +50,3 @@ class LLVM { // extends Generator {
     // return Some(Document(llvm, emptyLinks))
   }
 }
-
