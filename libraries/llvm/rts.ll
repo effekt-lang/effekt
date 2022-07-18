@@ -277,8 +277,4 @@ define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
 
 %Int = type i64
 
-%Boolean = type i1
-
-%Unit = type i64
-
 %Evi = type i64
