@@ -17,23 +17,23 @@ extern pure def println(n: Int): Unit / Console =
 //   "call void @printBoolean_impl(%Boolean %b) ret {i64, %Env} zeroinitializer"
 
 
-// // Math ops
-// // ========
+// Math ops
+// ========
 
-// extern pure def infixAdd(x: Int, y: Int): Int =
-//   "%z = add %Int %x, %y ret %Int %z"
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "%z = add %Int %x, %y ret %Int %z"
 
-// extern pure def infixMul(x: Int, y: Int): Int =
-//   "%z = mul %Int %x, %y ret %Int %z"
+extern pure def infixMul(x: Int, y: Int): Int =
+  "%z = mul %Int %x, %y ret %Int %z"
 
-// extern pure def infixDiv(x: Int, y: Int): Int =
-//   "%z = sdiv %Int %x, %y ret %Int %z"
+extern pure def infixDiv(x: Int, y: Int): Int =
+  "%z = sdiv %Int %x, %y ret %Int %z"
 
-// extern pure def infixSub(x: Int, y: Int): Int =
-//   "%z = sub %Int %x, %y ret %Int %z"
+extern pure def infixSub(x: Int, y: Int): Int =
+  "%z = sub %Int %x, %y ret %Int %z"
 
-// extern pure def mod(x: Int, y: Int): Int =
-//   "%z = srem %Int %x, %y ret %Int %z"
+extern pure def mod(x: Int, y: Int): Int =
+  "%z = srem %Int %x, %y ret %Int %z"
 
 
 // // Comparison ops
@@ -45,8 +45,8 @@ extern pure def println(n: Int): Unit / Console =
 // extern pure def infixNeq(x: Int, y: Int): Boolean =
 //   "%z = icmp ne %Int %x, %y ret %Boolean %z"
 
-// extern pure def infixLt(x: Int, y: Int): Boolean =
-//   "%z = icmp slt %Int %x, %y ret %Boolean %z"
+extern pure def infixLt(x: Int, y: Int): Boolean =
+  "%z = icmp slt %Int %x, %y %w = zext i1 %z to i64 %b = insertvalue {i64, %Env} zeroinitializer, i64 %w, 0 ret {i64, %Env} %b"
 
 // extern pure def infixLte(x: Int, y: Int): Boolean =
 //   "%z = icmp sle %Int %x, %y ret %Boolean %z"
