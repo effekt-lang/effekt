@@ -10,17 +10,18 @@ object LLVMTransformer {
       case machine.Program(declarations, statement) =>
         implicit val C = LLVMTransformerContext(LLVMTransformerGlobalContext());
 
+        // TODO proper initialization of runtime
+        emit(Call("env", NamedType("Env"), constantMalloc, List(ConstantInt(1024))));
+        emit(Call("sp", NamedType("Sp"), constantMalloc, List(ConstantInt(1024))));
+        pushReturnAddress("topLevel");
+
         val terminator = transform(List(), statement);
+
         val definitions = C.definitions; C.definitions = null;
         val basicBlocks = C.basicBlocks; C.basicBlocks = null;
         val instructions = C.instructions; C.instructions = null;
 
-        val entryInstructions = List(
-          Call("env", NamedType("Env"), constantMalloc, List(ConstantInt(1024))),
-          Call("sp", NamedType("Sp"), constantMalloc, List(ConstantInt(1024)))
-        )
-
-        val entryBlock = BasicBlock("entry", entryInstructions ++ instructions, terminator);
+        val entryBlock = BasicBlock("entry", instructions, terminator);
         val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks);
         declarations.map(transform) ++ definitions :+ entryFunction
     }

@@ -265,9 +265,10 @@ define fastcc {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp) noinline {
 
 ; RTS initialization
 
-define fastcc void @topLevel(%Sp noalias %sp, i64 %res) {
+define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
     %base = load %Base, %Base* @base
     call void @free(i8* %base)
+    call void @free(i8* %env)
     ret void
 }
 
