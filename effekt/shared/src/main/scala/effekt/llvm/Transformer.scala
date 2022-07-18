@@ -41,7 +41,7 @@ object LLVMTransformer {
         val () = {
           implicit val C2 = LLVMTransformerContext(C.context);
 
-          loadEnvironment(localEnvironment);
+          loadEnvironment(initialEnvironmentReference, localEnvironment);
           val terminator = transform(localEnvironment, body);
 
           val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
@@ -58,25 +58,34 @@ object LLVMTransformer {
 
       case machine.Jump(label) =>
 
-        storeEnvironment(environment);
+        storeEnvironment(initialEnvironmentReference, environment);
         emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), C.stackPointer))));
         RetVoid()
 
-      case machine.Let(variable @ machine.Variable(name, _), tag, List(), rest) =>
-        // TODO non-empty environments
-        emit(InsertValue(name, ConstantAggregateZero(StructureType(List(I64(), NamedType("Env")))), ConstantInt(tag), 0))
+      case machine.Let(variable @ machine.Variable(name, _), tag, values, rest) =>
+        // TODO do nothing if values is empty
+        val objName = freshName("obj");
+        emit(Call(objName, NamedType("Env"), constantMalloc, List(ConstantInt(environmentSize(values)))));
+        storeEnvironment(LocalReference(NamedType("Env"), objName), values);
+
+        val tmpName = freshName("tmp");
+        emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
+        emit(InsertValue(name, LocalReference(positiveType, tmpName), LocalReference(NamedType("Env"), objName), 1));
+
         transform(variable :: environment, rest)
 
       case machine.Switch(value, clauses) =>
-        val tag = freshName("m");
-        emit(ExtractValue(tag, transform(value), 0));
+        val tagName = freshName("tag");
+        val objName = freshName("obj");
+        emit(ExtractValue(tagName, transform(value), 0));
+        emit(ExtractValue(objName, transform(value), 1));
         val labels = clauses.map {
-          case machine.Clause(List(), body) =>
+          case machine.Clause(parameters, body) =>
             implicit val C2 = LLVMTransformerContext(C.context);
 
-            // TODO read out fields into parameters
+            loadEnvironment(LocalReference(NamedType("Env"), objName), parameters);
+            emit(Call("_", VoidType(), constantFree, List(LocalReference(NamedType("Env"), objName))));
 
-            // TODO add parameters to environment
             val terminator = transform(environment, body);
 
             val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
@@ -94,7 +103,7 @@ object LLVMTransformer {
             // TODO more informative way to end program. Clean up too?
             RetVoid()
           case label :: labels =>
-            Switch(LocalReference(I64(), tag), label, labels.zipWithIndex.map { case (l, i) => (i, l) })
+            Switch(LocalReference(I64(), tagName), label, labels.zipWithIndex.map { case (l, i) => (i, l) })
         }
 
       case machine.Substitute(bindings, rest) =>
@@ -111,7 +120,7 @@ object LLVMTransformer {
         val () = {
           implicit val C2 = LLVMTransformerContext(C.context);
 
-          loadEnvironment(frame.parameters);
+          loadEnvironment(initialEnvironmentReference, frame.parameters);
           popEnvironment(frameEnvironment);
           val terminator = transform(frame.parameters ++ frameEnvironment, frame.body);
 
@@ -132,10 +141,10 @@ object LLVMTransformer {
 
       case machine.Return(environment) =>
 
-        storeEnvironment(environment);
+        storeEnvironment(initialEnvironmentReference, environment);
 
         val returnAddress = popReturnAddress();
-        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(environmentReference, LocalReference(NamedType("Sp"), C.stackPointer))));
+        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, LocalReference(NamedType("Sp"), C.stackPointer))));
         RetVoid()
 
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
@@ -171,14 +180,26 @@ object LLVMTransformer {
       case machine.Variable(name, typ) => Parameter(transform(typ), name)
     }
 
+  def positiveType: Type = StructureType(List(I64(), NamedType("Env")));
+
   def transform(typ: machine.Type): Type = typ match {
     case machine.Primitive("Int") => NamedType("Int")
-    case machine.Positive(_)      => StructureType(List(I64(), PointerType(I8())))
+    case machine.Positive(_)      => positiveType
   }
 
-  def environmentReference = LocalReference(NamedType("Env"), "env")
+  def environmentSize(environment: machine.Environment): Int =
+    environment.map { case machine.Variable(_, typ) => typeSize(typ) }.sum
 
-  def loadEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+  def typeSize(typ: machine.Type): Int =
+    typ match {
+      case machine.Positive(_)      => 16
+      case machine.Negative(_)      => 16
+      case machine.Primitive("Int") => 8
+    }
+
+  def initialEnvironmentReference = LocalReference(NamedType("Env"), "env")
+
+  def loadEnvironment(environmentReference: Operand, environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
@@ -195,7 +216,7 @@ object LLVMTransformer {
     }
   }
 
-  def storeEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+  def storeEnvironment(environmentReference: Operand, environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
@@ -293,6 +314,7 @@ object LLVMTransformer {
   }
 
   def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(I8()), List(I64()))), "malloc");
+  def constantFree = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(I8())))), "free");
 
   /**
    * Extra info in context
