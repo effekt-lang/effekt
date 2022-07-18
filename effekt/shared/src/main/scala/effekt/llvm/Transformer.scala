@@ -252,7 +252,7 @@ object LLVMTransformer {
       case (value @ machine.Variable(name, typ), i) =>
         val fieldType = transform(typ);
         val fieldPointerName = freshName(name + "p");
-        emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(fieldType), oldTypedPointer), List(0, i)));
+        emit(GetElementPtr(fieldPointerName, LocalReference(pointerType, oldTypedPointer), List(0, i)));
         emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), transform(value)))
     }
 
@@ -277,7 +277,7 @@ object LLVMTransformer {
       case (value @ machine.Variable(name, typ), i) =>
         val fieldType = transform(typ);
         val fieldPointerName = freshName(name + "p");
-        emit(GetElementPtr(fieldPointerName, LocalReference(PointerType(fieldType), newTypedPointer), List(0, i)));
+        emit(GetElementPtr(fieldPointerName, LocalReference(pointerType, newTypedPointer), List(0, i)));
         emit(Load(name, LocalReference(PointerType(fieldType), fieldPointerName)))
     }
 

@@ -9,5 +9,8 @@ def fibonacci(n: Int): Int = {
   }
 }
   
-def main() = println(fibonacci(30))
+def main() = {
+  val r = fibonacci(30);
+  println(r)
+}
 

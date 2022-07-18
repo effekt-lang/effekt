@@ -76,7 +76,7 @@ ${asFragment(terminator)}
     case RetVoid() =>
       s"ret void"
     case Switch(operand, defaultDest, dests) =>
-      def destAsFragment(dest: (Int, String)) = s"i32 ${dest._1}, label ${dest._2}";
+      def destAsFragment(dest: (Int, String)) = s"i64 ${dest._1}, label ${localName(dest._2)}";
       s"switch ${asFragment(operand)}, label ${localName(defaultDest)} [${spaceSeparated(dests.map(destAsFragment))}]"
   }
 

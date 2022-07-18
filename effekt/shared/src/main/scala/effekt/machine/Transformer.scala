@@ -66,6 +66,8 @@ object Transformer {
 
   def transform(stmt: lifted.Stmt)(implicit C: Context): Statement =
     stmt match {
+      case lifted.Ret(lifted.Run(stmt)) =>
+        transform(stmt)
       case lifted.Ret(expr) =>
         transform(expr).run(value => Return(List(value)))
       case lifted.App(lifted.ScopeApp(lifted.BlockVar(name), scope), List(), args) =>
@@ -80,12 +82,18 @@ object Transformer {
             println(name);
             C.abort("unsupported blocksymbol " + name)
         }
-      case lifted.Val(name, tpe, bind, rest) =>
+      case lifted.Val(id, tpe, bind, rest) =>
         PushFrame(
-          Clause(List(transform(lifted.ValueParam(name, tpe))), transform(rest)),
+          Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
           transform(bind)
         )
-
+      case lifted.If(cond, thenStmt, elseStmt) =>
+        transform(cond).run(value => Switch(value, List(Clause(List(), transform(thenStmt)), Clause(List(), transform(elseStmt)))))
+      case lifted.Let(id, tpe, lifted.Run(stmt), rest) =>
+        PushFrame(
+          Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
+          transform(stmt)
+        )
     }
   //       case lifted.Def(blockName, _, block: lifted.Block, rest) =>
   //         Def(blockName, transform(block), transform(rest))
@@ -359,8 +367,8 @@ object Transformer {
   //         val empty: Arg = EviLit(0);
   //         scopes.foldRight(empty) { (scope, evi) => EviPlus(transform(scope), evi) }
 
-  def transform(typ: symbols.Type)(implicit C: Context): Type =
-    typ match {
+  def transform(tpe: symbols.Type)(implicit C: Context): Type =
+    tpe match {
       case symbols.BuiltinType(builtins.TUnit.name, List()) =>
         Positive(List(List()))
       case symbols.BuiltinType(builtins.TInt.name, List()) =>
@@ -368,8 +376,8 @@ object Transformer {
       case symbols.BuiltinType(builtins.TBoolean.name, List()) =>
         Positive(List(List(), List()))
       case _ =>
-        println(typ)
-        C.abort("unsupported type " + typ)
+        println(tpe)
+        C.abort("unsupported type " + tpe)
     }
 
   // case symbols.Record(_, _, _, fields) =>
