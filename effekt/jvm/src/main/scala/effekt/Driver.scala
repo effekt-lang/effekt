@@ -13,6 +13,7 @@ import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
 
 import effekt.util.messages.FatalPhaseError
+import effekt.util.paths.file
 
 import scala.sys.process.Process
 
@@ -95,6 +96,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
     C.config.backend() match {
       case gen if gen.startsWith("js")   => evalJS(path)
       case gen if gen.startsWith("chez") => evalCS(path)
+      case gen if gen.startsWith("llvm") => evalLLVM(path)
     }
 
   def evalJS(path: String)(implicit C: Context): Unit =
@@ -118,6 +120,31 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       case FatalPhaseError(e) =>
         C.error(e)
     }
+
+  // build the LLVM source file (`<...>.ll`) and coax it into an executable
+  def evalLLVM(llvmPath: String)(implicit C: Context): Unit = try {
+
+      val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
+
+      val path = llvmPath.stripSuffix(".ll")
+      val xPath = (suffix: String) => path + suffix
+      val optPath = xPath("_opt.ll")
+      val objPath = xPath(".o")
+
+      val optCommand = Process(Seq(s"opt-${LLVM_VERSION}", llvmPath, "-S", "-O2", "-o", optPath))
+      C.config.output().emit(optCommand.!!)
+
+      val llcCommand = Process(Seq(s"llc-${LLVM_VERSION}", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
+      C.config.output().emit(llcCommand.!!)
+
+      val gccMainFile = (C.config.libPath / "main.c").unixPath
+      val executableFile = path //TODO-LLVM C.codeGenerator.path(mod)
+      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath))
+      C.config.output().emit(gccCommand.!!)
+
+      val command = Process(Seq(executableFile))
+      C.config.output().emit(command.!!)
+    } catch case FatalPhaseError(e) => C.error(e)
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.buffer.get, C.config)

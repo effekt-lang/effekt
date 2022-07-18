@@ -3,7 +3,6 @@ package llvm
 
 import effekt.machine
 
-/* `LLVMTransformer` transforms Effekt Core into intermediate LLVM */
 object LLVMTransformer {
 
   def transform(program: machine.Program): List[Definition] =

@@ -4,8 +4,7 @@ package machine
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.lifted.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
-import effekt.symbols.{ BlockSymbol, BlockType, FunctionType, BuiltinFunction, UserFunction, Module, Name, ResumeParam, Symbol, ValueSymbol, builtins }
-import javax.lang.model.`type`.PrimitiveType
+import effekt.symbols.{ TermSymbol, BlockSymbol, BlockType, FunctionType, BuiltinFunction, UserFunction, Module, Name, ResumeParam, Symbol, ValueSymbol, builtins }
 
 // TODO delete imports
 
@@ -16,59 +15,53 @@ case class FreshBlockSymbol(baseName: String, module: Module) extends BlockSymbo
   val name = Name.qualified(baseName, module)
 }
 
-class Transformer {
+object Transformer {
 
-  def transform(mod: lifted.ModuleDecl)(implicit C: TransformerContext): Program = {
-    val lifted.ModuleDecl(_, _, defs, _) = mod
+  def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl, deps: List[lifted.ModuleDecl])(using C: Context): Program = {
+    val lifted.ModuleDecl(_, _, stmt, _) = mod;
+    implicit val TLC = ToplevelContext(transform(mainSymbol));
+    implicit val TC = TransformerContext(C);
 
-    Program(transformDeclarations(defs), transformToplevel(defs))
+    val statement = transformToplevel(stmt, deps);
+
+    val declarations = TLC.declarations; TLC.declarations = null;
+
+    Program(declarations, statement)
   }
 
-  def transformDeclarations(stmt: lifted.Stmt)(implicit C: TransformerContext): List[Declaration] =
+  def transformToplevel(stmt: lifted.Stmt, mods: List[lifted.ModuleDecl])(using ToplevelContext, TransformerContext): Statement =
     stmt match {
       case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
-        DefineForeign(transform(functionType.result), transform(name), params.map(transform), body) :: transformDeclarations(rest)
-      case lifted.Include(content, rest) =>
-        Include(content) :: transformDeclarations(rest)
-      case lifted.Record(_, _, rest) =>
-        // TODO these are for records and capabilities
-        // TODO We only support singleton capabilities
-        transformDeclarations(rest)
-      case lifted.Data(_, _, rest) =>
-        transformDeclarations(rest)
-      case lifted.Def(_, _, _, rest) =>
-        // TODO expand this catch-all case
-        transformDeclarations(rest)
-      case _ =>
-        println(stmt)
-        C.abort("unsupported declaration " + stmt)
-    }
-
-  def transformToplevel(stmt: lifted.Stmt)(implicit C: TransformerContext): Statement =
-    stmt match {
-      case lifted.Def(_, _, lifted.Extern(_, _), rest) =>
-        transformToplevel(rest)
-      case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) => {
+        emitDeclaration(DefineForeign(transform(functionType.result), transform(name), params.map(transform), body));
+        transformToplevel(rest, mods)
+      case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO top-level definitions don't need evidence, or do they?
-        C.blockParamsSet = Set();
         // TODO add block params to blockparamsset
         // TODO add evidence param
-        Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest))
-      }
-      case lifted.Def(_, _, block, rest) =>
+        Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest, mods))
+      case lifted.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
-        transformToplevel(rest)
-      case lifted.Include(_, rest) =>
-        transformToplevel(rest)
+        transformToplevel(rest, mods)
+      case lifted.Include(content, rest) =>
+        emitDeclaration(        Include(content));
+        transformToplevel(rest, mods)
       case lifted.Record(_, _, rest) =>
         // TODO these are for records and capabilities
         // TODO We only support singleton capabilities
-        transformToplevel(rest)
+        transformToplevel(rest, mods)
       case lifted.Data(_, _, rest) =>
-        transformToplevel(rest)
+        transformToplevel(rest, mods)
+      case lifted.Ret(lifted.UnitLit()) =>
+        // TODO this marks the end of the list
+        mods match {
+          case Nil =>
+            Jump(Label(getMainName, List()))
+          case  lifted.ModuleDecl(_, _, stmt, _) :: mods =>
+            transformToplevel(stmt, mods)
+        }
       case _ =>
         println(stmt)
-        C.abort("unsupported top-level statement " + stmt)
+        abort("unsupported declaration " + stmt)
     }
 
   def transform(stmt: lifted.Stmt)(implicit C: TransformerContext): Statement =
@@ -426,6 +419,21 @@ class Transformer {
   /**
    * Extra info in context
    */
+
+  def abort(message: String)(using C: Context) =
+    C.abort(message)
+
+  case class ToplevelContext(val mainName: String) {
+    var declarations: List[Declaration] = List()
+  }
+
+  def emitDeclaration(declaration: Declaration)(implicit TLC: ToplevelContext) = {
+    TLC.declarations = TLC.declarations :+ declaration
+  }
+
+  def getMainName(using TLC: ToplevelContext): String = {
+    TLC.mainName
+  }
 
   case class TransformerContext(context: Context) {
     var blockParamsSet: Set[BlockSymbol] = Set()

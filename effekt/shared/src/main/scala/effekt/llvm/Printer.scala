@@ -16,6 +16,9 @@ def spaceSeparated(args: List[String]): String = args.mkString(" ")
 
 object LLVMFragmentPrinter {
 
+  def asFragment(definitions: List[Definition]): LLVMFragment =
+    definitions.map(asFragment).mkString("\n\n")
+
   def asFragment(definition: Definition): LLVMFragment = definition match {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
