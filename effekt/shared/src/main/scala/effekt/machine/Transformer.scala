@@ -77,7 +77,8 @@ object Transformer {
         name match {
           case UserFunction(_, _, params, _, _, _, _) =>
             val environment = params.map(transformParamSymbol);
-            transform(args).run(values => Substitute(environment.zip(values), Jump(Label(transform(name), environment))))
+            transform(args).run(values =>
+              Substitute(environment.zip(values), Jump(Label(transform(name), environment))))
           case _ =>
             println(name);
             C.abort("unsupported blocksymbol " + name)
@@ -88,12 +89,11 @@ object Transformer {
           transform(bind)
         )
       case lifted.If(cond, thenStmt, elseStmt) =>
-        transform(cond).run(value => Switch(value, List(Clause(List(), transform(thenStmt)), Clause(List(), transform(elseStmt)))))
-      case lifted.Let(id, tpe, lifted.Run(stmt), rest) =>
-        PushFrame(
-          Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
-          transform(stmt)
-        )
+        transform(cond).run(value =>
+          Switch(value, List(Clause(List(), transform(thenStmt)), Clause(List(), transform(elseStmt)))))
+      case lifted.Let(id, tpe, binding, rest) =>
+        transform(binding).run(value =>
+          machine.substitute(transform(rest))(using Map(Variable(transform(id), transform(tpe)) -> value)))
     }
   //       case lifted.Def(blockName, _, block: lifted.Block, rest) =>
   //         Def(blockName, transform(block), transform(rest))
@@ -160,8 +160,8 @@ object Transformer {
   def transform(arg: lifted.Argument)(implicit C: Context): Binding[Variable] =
     arg match {
       case lifted.ValueVar(id) =>
-        // TODO find actual type
-        pure(Variable(transform(id), Primitive("Int")))
+        val tpe = C.valueTypeOf(id);
+        pure(Variable(transform(id), transform(tpe)))
       case lifted.IntLit(value) =>
         // TODO generate fresh name differently...
         val id = FreshValueSymbol("x", C.module);
@@ -177,6 +177,11 @@ object Transformer {
             Run(CallForeign(transform(blockName)), values, List(
               Clause(List(variable),
               k(variable))))))
+      case lifted.Run(stmt) =>
+        val id = FreshValueSymbol("x", C.module);
+        // TODO find actual type
+        val variable = Variable(transform(id), Primitive("Int"));
+        Binding(k => PushFrame(Clause(List(variable), k(variable)), transform(stmt)))
     }
 
   def transform(args: List[lifted.Argument])(implicit C: Context): Binding[List[Variable]] =
