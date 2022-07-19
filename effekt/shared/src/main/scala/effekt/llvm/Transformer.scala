@@ -108,6 +108,7 @@ object LLVMTransformer {
 
       case machine.Substitute(bindings, rest) =>
 
+        // TODO this is a hack
         val environment = bindings.map { case (_, value) => value };
         transform(environment, rest)
 

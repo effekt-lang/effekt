@@ -25,13 +25,16 @@ case class Clause(parameters: Environment, body: Statement)
 
 type Environment = List[Variable]
 
+type Substitution = List[(Variable, Variable)]
+
+
 /**
  * Statements
  */
 sealed trait Statement
 case class Def(label: Label, body: Statement, rest: Statement) extends Statement
 case class Jump(label: Label) extends Statement
-case class Substitute(bindings: List[(Variable, Variable)], rest: Statement) extends Statement
+case class Substitute(bindings: Substitution, rest: Statement) extends Statement
 
 case class Let(name: Variable, tag: Int, environment: Environment, rest: Statement) extends Statement
 case class Switch(value: Variable, clauses: List[Clause]) extends Statement
