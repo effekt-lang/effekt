@@ -34,12 +34,11 @@ def substitute(clause: Clause)(using substitution: Map[Variable, Variable]): Cla
 
 def substitute(statement: Statement)(using substitution: Map[Variable, Variable]): Statement =
   statement match {
-    case Jump(label) =>
-      // TODO are these correct?
-      Jump(label)
+    case Jump(Label(name, environment)) =>
+      val environmentSubstitution = environment.map { case variable => (variable -> substitution.getOrElse(variable, variable)) };
+      Substitute(environmentSubstitution, Jump(Label(name, environment)))
     case Substitute(bindings, statement) =>
-      // TODO are these correct?
-      Substitute(bindings.map { case (variable -> value) => variable -> substitute(value) }, statement)
+      substitute(statement)(using bindings.map { case (variable -> value) => variable -> substitute(value) }.toMap)
     case PushFrame(clause, statement) =>
       PushFrame(substitute(clause), substitute(statement))
     case Return(environment) =>
