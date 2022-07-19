@@ -93,7 +93,7 @@ object Transformer {
           Switch(value, List(Clause(List(), transform(thenStmt)), Clause(List(), transform(elseStmt)))))
       case lifted.Let(id, tpe, binding, rest) =>
         transform(binding).run(value =>
-          machine.substitute(transform(rest))(using Map(Variable(transform(id), transform(tpe)) -> value)))
+          Substitute(List(Variable(transform(id), transform(tpe)) -> value), transform(rest)))
     }
   //       case lifted.Def(blockName, _, block: lifted.Block, rest) =>
   //         Def(blockName, transform(block), transform(rest))
