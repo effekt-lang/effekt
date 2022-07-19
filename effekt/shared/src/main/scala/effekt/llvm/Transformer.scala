@@ -3,12 +3,14 @@ package llvm
 
 import effekt.machine
 
-object LLVMTransformer {
+object Transformer {
 
   def transform(program: machine.Program): List[Definition] =
     program match {
       case machine.Program(declarations, statement) =>
-        implicit val C = LLVMTransformerContext(LLVMTransformerGlobalContext());
+        implicit val MC = ModuleContext();
+        implicit val FC = FunctionContext();
+        implicit val BC = BlockContext();
 
         // TODO proper initialization of runtime
         emit(Call("env", NamedType("Env"), constantMalloc, List(ConstantInt(1024))));
@@ -17,9 +19,9 @@ object LLVMTransformer {
 
         val terminator = transform(List(), statement);
 
-        val definitions = C.definitions; C.definitions = null;
-        val basicBlocks = C.basicBlocks; C.basicBlocks = null;
-        val instructions = C.instructions; C.instructions = null;
+        val definitions = MC.definitions; MC.definitions = null;
+        val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+        val instructions = BC.instructions; BC.instructions = null;
 
         val entryBlock = BasicBlock("entry", instructions, terminator);
         val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks);
@@ -34,18 +36,19 @@ object LLVMTransformer {
         Verbatim(content)
     }
 
-  def transform(environment: machine.Environment, statement: machine.Statement)(implicit C: LLVMTransformerContext): Terminator =
+  def transform(environment: machine.Environment, statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
       case machine.Def(machine.Label(name, localEnvironment), body, rest) =>
 
         val () = {
-          implicit val C2 = LLVMTransformerContext(C.context);
+          implicit val FC = FunctionContext();
+          implicit val BC = BlockContext();
 
           loadEnvironment(initialEnvironmentReference, localEnvironment);
           val terminator = transform(localEnvironment, body);
 
-          val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
-          val instructions = C2.instructions; C2.instructions = null;
+          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+          val instructions = BC.instructions; BC.instructions = null;
 
           val parameters = List(Parameter(NamedType("Env"), "env"), Parameter(NamedType("Sp"), "sp"));
           val entryBlock = BasicBlock("entry", instructions, terminator);
@@ -59,7 +62,7 @@ object LLVMTransformer {
       case machine.Jump(label) =>
 
         storeEnvironment(initialEnvironmentReference, environment);
-        emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), C.stackPointer))));
+        emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), getStackPointer()))));
         RetVoid()
 
       case machine.Let(variable @ machine.Variable(name, _), tag, values, rest) =>
@@ -81,21 +84,17 @@ object LLVMTransformer {
         emit(ExtractValue(objName, transform(value), 1));
         val labels = clauses.map {
           case machine.Clause(parameters, body) =>
-            implicit val C2 = LLVMTransformerContext(C.context);
+            implicit val BC = BlockContext();
 
             loadEnvironment(LocalReference(NamedType("Env"), objName), parameters);
             emit(Call("_", VoidType(), constantFree, List(LocalReference(NamedType("Env"), objName))));
 
             val terminator = transform(environment, body);
 
-            val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
-            val instructions = C2.instructions; C2.instructions = null;
-
-            // TODO more nested contexts
-            basicBlocks.foreach(b => emit(b)(C))
+            val instructions = BC.instructions; BC.instructions = null;
 
             val label = freshName("l");
-            emit(BasicBlock(label, instructions, terminator))(C);
+            emit(BasicBlock(label, instructions, terminator));
             label
         };
         labels match {
@@ -119,14 +118,15 @@ object LLVMTransformer {
         val frameName = freshName("k");
 
         val () = {
-          implicit val C2 = LLVMTransformerContext(C.context);
+          implicit val FC = FunctionContext();
+          implicit val BC = BlockContext();
 
           loadEnvironment(initialEnvironmentReference, frame.parameters);
           popEnvironment(frameEnvironment);
           val terminator = transform(frame.parameters ++ frameEnvironment, frame.body);
 
-          val basicBlocks = C2.basicBlocks; C2.basicBlocks = null;
-          val instructions = C2.instructions; C2.instructions = null;
+          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+          val instructions = BC.instructions; BC.instructions = null;
 
           val parameters = List(Parameter(NamedType("Env"), "env"), Parameter(NamedType("Sp"), "sp"));
           val entryBlock = BasicBlock("entry", instructions, terminator);
@@ -145,7 +145,7 @@ object LLVMTransformer {
         storeEnvironment(initialEnvironmentReference, environment);
 
         val returnAddress = popReturnAddress();
-        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, LocalReference(NamedType("Sp"), C.stackPointer))));
+        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, LocalReference(NamedType("Sp"), getStackPointer()))));
         RetVoid()
 
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
@@ -200,7 +200,7 @@ object LLVMTransformer {
 
   def initialEnvironmentReference = LocalReference(NamedType("Env"), "env")
 
-  def loadEnvironment(environmentReference: Operand, environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+  def loadEnvironment(environmentReference: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
@@ -217,7 +217,7 @@ object LLVMTransformer {
     }
   }
 
-  def storeEnvironment(environmentReference: Operand, environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+  def storeEnvironment(environmentReference: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
@@ -234,20 +234,20 @@ object LLVMTransformer {
     }
   }
 
-  def pushEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+  def pushEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
 
+    val oldStackPointer = getStackPointer();
     val pointerType = PointerType(environmentType);
-    val oldStackPointer = C.stackPointer;
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
     emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
-    C.stackPointer = newStackPointer;
+    setStackPointer(newStackPointer);
 
     environment.zipWithIndex.foreach {
       case (value @ machine.Variable(name, typ), i) =>
@@ -259,20 +259,20 @@ object LLVMTransformer {
 
   }
 
-  def popEnvironment(environment: machine.Environment)(implicit C: LLVMTransformerContext): Unit = {
+  def popEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
 
+    val oldStackPointer = getStackPointer();
     val pointerType = PointerType(environmentType);
-    val oldStackPointer = C.stackPointer;
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
     emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(-1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
-    C.stackPointer = newStackPointer;
+    setStackPointer(newStackPointer);
 
     environment.zipWithIndex.foreach {
       case (value @ machine.Variable(name, typ), i) =>
@@ -286,30 +286,34 @@ object LLVMTransformer {
 
   def returnAddressType = PointerType(FunctionType(VoidType(), List(NamedType("Env"), NamedType("Sp"))))
 
-  def pushReturnAddress(frameName: String)(implicit C: LLVMTransformerContext): Unit = {
+  def pushReturnAddress(frameName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+
+    val oldStackPointer = getStackPointer();
     val pointerType = PointerType(returnAddressType);
-    val oldStackPointer = C.stackPointer;
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
     emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
-    C.stackPointer = newStackPointer;
+    setStackPointer(newStackPointer);
+
     emit(Store(LocalReference(pointerType, oldTypedPointer), ConstantGlobal(returnAddressType, frameName)));
   }
 
-  def popReturnAddress()(implicit C: LLVMTransformerContext): String = {
+  def popReturnAddress()(using ModuleContext, FunctionContext, BlockContext): String = {
+
+    val oldStackPointer = getStackPointer();
     val pointerType = PointerType(returnAddressType);
     val poppedAddress = freshName("f");
-    val oldStackPointer = C.stackPointer;
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
     emit(BitCast(oldTypedPointer, LocalReference(NamedType("Sp"), oldStackPointer), pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(-1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), NamedType("Sp")));
-    C.stackPointer = newStackPointer;
+    setStackPointer(newStackPointer);
+
     emit(Load(poppedAddress, LocalReference(pointerType, newTypedPointer)));
     poppedAddress
   }
@@ -317,37 +321,47 @@ object LLVMTransformer {
   def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(I8()), List(I64()))), "malloc");
   def constantFree = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(I8())))), "free");
 
+}
+
   /**
    * Extra info in context
    */
-  case class LLVMTransformerGlobalContext() {
+  case class ModuleContext() {
     var counter = 0;
     var definitions: List[Definition] = List();
   }
 
-  case class LLVMTransformerContext(context: LLVMTransformerGlobalContext) {
-    var basicBlocks: List[BasicBlock] = List();
-    var instructions: List[Instruction] = List();
-    var stackPointer: String = "sp";
-  }
-
-  def emit(instruction: Instruction)(implicit C: LLVMTransformerContext) = {
-    C.instructions = C.instructions :+ instruction
-  }
-
-  def emit(basicBlock: BasicBlock)(C: LLVMTransformerContext) = {
-    C.basicBlocks = C.basicBlocks :+ basicBlock
-  }
-
-  def emit(definition: Definition)(implicit C: LLVMTransformerContext) = {
+  def emit(definition: Definition)(using C: ModuleContext) = {
     C.definitions = C.definitions :+ definition
   }
 
-  def freshName(name: String)(implicit C: LLVMTransformerContext): String = {
+  def freshName(name: String)(using C: ModuleContext): String = {
     C.counter = C.counter + 1;
     name + "." + C.counter
   }
 
-  private implicit def asContext(C: LLVMTransformerContext): LLVMTransformerGlobalContext = C.context
-  private implicit def getContext(implicit C: LLVMTransformerContext): LLVMTransformerGlobalContext = C.context
-}
+  case class FunctionContext() {
+    var basicBlocks: List[BasicBlock] = List();
+  }
+
+  def emit(basicBlock: BasicBlock)(using C: FunctionContext) = {
+    C.basicBlocks = C.basicBlocks :+ basicBlock
+  }
+
+  case class BlockContext() {
+    var instructions: List[Instruction] = List();
+    var stackPointer: String = "sp";
+  }
+
+  def emit(instruction: Instruction)(using C: BlockContext) = {
+    C.instructions = C.instructions :+ instruction
+  }
+
+  def getStackPointer()(using C: BlockContext) = {
+    C.stackPointer
+  }
+
+  def setStackPointer(stackPointer: String)(using C: BlockContext) = {
+      C.stackPointer = stackPointer;
+    }
+

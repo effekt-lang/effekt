@@ -14,7 +14,7 @@ def indentedLines(text: String): String = text.split("\n").map("    " + _).mkStr
 def commaSeparated(args: List[String]): String = args.mkString(", ")
 def spaceSeparated(args: List[String]): String = args.mkString(" ")
 
-object LLVMFragmentPrinter {
+object PrettyPrinter {
 
   def asFragment(definitions: List[Definition]): LLVMFragment =
     definitions.map(asFragment).mkString("\n\n")
