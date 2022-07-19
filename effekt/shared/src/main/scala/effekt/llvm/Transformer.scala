@@ -17,7 +17,7 @@ object Transformer {
         emit(Call("sp", NamedType("Sp"), constantMalloc, List(ConstantInt(1024))));
         pushReturnAddress("topLevel");
 
-        val terminator = transform(List(), statement);
+        val terminator = transform(statement);
 
         val definitions = MC.definitions; MC.definitions = null;
         val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
@@ -36,16 +36,16 @@ object Transformer {
         Verbatim(content)
     }
 
-  def transform(environment: machine.Environment, statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
+  def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
-      case machine.Def(machine.Label(name, localEnvironment), body, rest) =>
+      case machine.Def(machine.Label(name, environment), body, rest) =>
 
         val () = {
           implicit val FC = FunctionContext();
           implicit val BC = BlockContext();
 
-          loadEnvironment(initialEnvironmentReference, localEnvironment);
-          val terminator = transform(localEnvironment, body);
+          loadEnvironment(initialEnvironmentReference, environment);
+          val terminator = transform(body);
 
           val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
           val instructions = BC.instructions; BC.instructions = null;
@@ -57,15 +57,16 @@ object Transformer {
           emit(function)
         };
 
-        transform(environment, rest)
+        transform(rest)
 
       case machine.Jump(label) =>
 
-        storeEnvironment(initialEnvironmentReference, environment);
+        storeEnvironment(initialEnvironmentReference, label.environment);
+
         emit(TailCall(transform(label), List(LocalReference(NamedType("Env"), "env"), LocalReference(NamedType("Sp"), getStackPointer()))));
         RetVoid()
 
-      case machine.Let(variable @ machine.Variable(name, _), tag, values, rest) =>
+      case machine.Let(variable, tag, values, rest) =>
         // TODO do nothing if values is empty
         val objName = freshName("obj");
         emit(Call(objName, NamedType("Env"), constantMalloc, List(ConstantInt(environmentSize(values)))));
@@ -73,9 +74,9 @@ object Transformer {
 
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
-        emit(InsertValue(name, LocalReference(positiveType, tmpName), LocalReference(NamedType("Env"), objName), 1));
+        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), LocalReference(NamedType("Env"), objName), 1));
 
-        transform(variable :: environment, rest)
+        transform(rest)
 
       case machine.Switch(value, clauses) =>
         val tagName = freshName("tag");
@@ -89,7 +90,7 @@ object Transformer {
             loadEnvironment(LocalReference(NamedType("Env"), objName), parameters);
             emit(Call("_", VoidType(), constantFree, List(LocalReference(NamedType("Env"), objName))));
 
-            val terminator = transform(environment, body);
+            val terminator = transform(body);
 
             val instructions = BC.instructions; BC.instructions = null;
 
@@ -107,9 +108,9 @@ object Transformer {
 
       case machine.Substitute(bindings, rest) =>
 
-        // TODO this is a hack
-        val environment = bindings.map { case (_, value) => value };
-        transform(environment, rest)
+        withBindings(bindings) { () =>
+          transform(rest)
+        }
 
       case machine.PushFrame(frame, rest) =>
 
@@ -123,7 +124,7 @@ object Transformer {
 
           loadEnvironment(initialEnvironmentReference, frame.parameters);
           popEnvironment(frameEnvironment);
-          val terminator = transform(frame.parameters ++ frameEnvironment, frame.body);
+          val terminator = transform(frame.body);
 
           val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
           val instructions = BC.instructions; BC.instructions = null;
@@ -138,20 +139,19 @@ object Transformer {
         pushEnvironment(frameEnvironment);
         pushReturnAddress(frameName);
 
-        transform(environment, rest)
+        transform(rest)
 
-      case machine.Return(environment) =>
+      case machine.Return(values) =>
 
-        storeEnvironment(initialEnvironmentReference, environment);
+        storeEnvironment(initialEnvironmentReference, values);
 
         val returnAddress = popReturnAddress();
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, LocalReference(NamedType("Sp"), getStackPointer()))));
         RetVoid()
 
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
-
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
-        transform(variable :: environment, rest)
+        transform(rest)
 
       case machine.Run(machine.CallForeign(name), values, List()) =>
         // TODO careful with calling convention?!?
@@ -163,7 +163,7 @@ object Transformer {
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, typ) => transform(typ) }));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
-        transform(variable :: environment, rest)
+        transform(rest)
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -171,8 +171,8 @@ object Transformer {
       case machine.Label(name, typ) => ConstantGlobal(PointerType(FunctionType(VoidType(), List(NamedType("Env"), NamedType("Sp")))), name)
     }
 
-  def transform(value: machine.Variable): Operand =
-    value match {
+  def transform(value: machine.Variable)(using FunctionContext): Operand =
+    substitute(value) match {
       case machine.Variable(name, typ) => LocalReference(transform(typ), name)
     }
 
@@ -340,7 +340,8 @@ object Transformer {
     name + "." + C.counter
   }
 
-  case class FunctionContext() {
+  class FunctionContext() {
+    var substitution: Map[machine.Variable, machine.Variable] = Map();
     var basicBlocks: List[BasicBlock] = List();
   }
 
@@ -348,9 +349,21 @@ object Transformer {
     C.basicBlocks = C.basicBlocks :+ basicBlock
   }
 
+  def withBindings[R](bindings: List[(machine.Variable, machine.Variable)])(prog: () => R)(using C: FunctionContext): R = {
+    val substitution = C.substitution;
+    C.substitution = substitution ++ bindings.map { case (variable -> value) => (variable -> substitution.getOrElse(value, value) ) }.toMap;
+    val result = prog();
+    C.substitution = substitution
+    result
+  }
+
+  def substitute(value: machine.Variable)(using C: FunctionContext): machine.Variable = {
+    C.substitution.toMap.getOrElse(value, value)
+  }
+
   case class BlockContext() {
-    var instructions: List[Instruction] = List();
     var stackPointer: String = "sp";
+    var instructions: List[Instruction] = List();
   }
 
   def emit(instruction: Instruction)(using C: BlockContext) = {
