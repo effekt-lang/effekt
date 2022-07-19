@@ -18,7 +18,7 @@ trait REPL[T, C <: REPLConfig] {
 
   import scala.annotation.tailrec
   import kiama.parsing.{ NoSuccess, ParseResult, Success }
-  import kiama.util.Messaging.{ message, Messages }
+  import kiama.util.{ message, Messages }
   import org.rogach.scallop.exceptions.ScallopException
 
   /**
@@ -39,7 +39,7 @@ trait REPL[T, C <: REPLConfig] {
   /**
    * The messaging facilitiy used by this REPL.
    */
-  val messaging = new Messaging(positions)
+  val messaging = new Messaging
 
   /**
    * The entry point for this REPL.
@@ -176,9 +176,7 @@ trait REPL[T, C <: REPLConfig] {
           process(source, e, config)
         case res: NoSuccess =>
           val pos = res.next.position
-          positions.setStart(res, pos)
-          positions.setFinish(res, pos)
-          val messages = message(res, res.message)
+          val messages = message(Range(pos, pos), res.message)
           report(source, messages, config)
       }
     }

@@ -7,8 +7,7 @@ import effekt.core.TransformerOps
 import effekt.source.{ ElaborationOps, Tree }
 import effekt.util.messages.{ ErrorReporter, MessageBuffer }
 import effekt.symbols.Module
-import kiama.util.Messaging.Messages
-import kiama.util.Positions
+import kiama.util.{ Messages, Positions }
 
 /**
  * Phases like Typer can add operations to the context by extending this trait

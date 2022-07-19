@@ -23,7 +23,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
 
   val name = "effekt"
 
-  override val messaging = new ColoredMessaging(positions)
+  override val messaging = new ColoredMessaging
 
   // Compiler context
   // ================
@@ -70,7 +70,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       C.at(mod.decl) { C.checkMain(mod); eval(main) }
     }
   } catch {
-    case FatalPhaseError(msg) => context.error(msg)
+    case FatalPhaseError(range, msg) => context.error(range, msg)
   } finally {
     // This reports error messages
     afterCompilation(source, config)(context)
@@ -103,8 +103,8 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.error(e)
+      case FatalPhaseError(range, e) =>
+        C.error(range, e)
     }
 
   /**
@@ -115,8 +115,8 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       val command = Process(Seq("scheme", "--script", path))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.error(e)
+      case FatalPhaseError(range, e) =>
+        C.error(range, e)
     }
 
   def report(in: Source)(implicit C: Context): Unit =

@@ -5,15 +5,14 @@ import effekt.context.{ Context, IOModuleDB }
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
 import effekt.util.Version.effektVersion
-import kiama.util.Messaging.{ Messages, message }
-import kiama.util.{ Console, REPL, Source, StringSource }
+import kiama.util.{ Messages, message, Console, REPL, Source, StringSource, Range }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
 class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
 
-  override val messaging = new ColoredMessaging(positions)
+  override val messaging = new ColoredMessaging
 
   val logo =
     """|  _____     ______  __  __     _    _
@@ -132,9 +131,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
         // this is usually encapsulated in REPL.processline
         case res: NoSuccess =>
           val pos = res.next.position
-          positions.setStart(res, pos)
-          positions.setFinish(res, pos)
-          val messages = message(res, res.message)
+          val messages = message(Range(pos, pos), res.message)
           report(source, messages, config)
       }
 

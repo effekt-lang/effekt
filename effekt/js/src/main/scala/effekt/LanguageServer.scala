@@ -64,7 +64,7 @@ class LanguageServer extends Intelligence {
     override def Backend(implicit C: Context) = JavaScriptVirtual
   }
 
-  object messaging extends Messaging(positions)
+  object messaging extends Messaging
 
   context.setup(config)
 
@@ -106,7 +106,7 @@ class LanguageServer extends Intelligence {
       mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
       mainOutputPath
     } catch {
-      case FatalPhaseError(msg) =>
+      case FatalPhaseError(range, msg) =>
         throw js.JavaScriptException(msg)
     }
   }
@@ -132,9 +132,10 @@ class LanguageServer extends Intelligence {
   }
 
   private def messageToDiagnostic(m: Message) = {
-    val from = messaging.start(m).map(convertPosition).orNull
-    val to = messaging.finish(m).map(convertPosition).orNull
-    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), m.label)
+    val from = m.from.map(convertPosition).orNull
+    val to = m.to.map(convertPosition).orNull
+    val text = messaging.formatContent(m.content)
+    new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text)
   }
 
   private def convertPosition(p: Position): lsp.Position =

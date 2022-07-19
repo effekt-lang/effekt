@@ -24,7 +24,7 @@ trait Compiler[N, T <: N, C <: Config] {
   import kiama.output.PrettyPrinterTypes.{ Document, emptyDocument }
   import kiama.output.PrettyPrinter.{ any, pretty }
   import kiama.parsing.{ NoSuccess, ParseResult, Success }
-  import kiama.util.Messaging.{ message, Messages }
+  import kiama.util.{ message, Messages }
   import org.rogach.scallop.exceptions.ScallopException
   import scala.collection.mutable
 
@@ -48,7 +48,7 @@ trait Compiler[N, T <: N, C <: Config] {
   /**
    * The messaging facilitiy used by this compiler.
    */
-  val messaging = new Messaging(positions)
+  val messaging = new Messaging
 
   /**
    * The entry point for this compiler.
@@ -169,14 +169,12 @@ trait Compiler[N, T <: N, C <: Config] {
           Left(ast)
         case res: NoSuccess =>
           val input = res.next
-          positions.setStart(res, input.position)
-          positions.setFinish(res, input.nextPosition)
-          val messages = message(res, res.message)
+          val messages = message(Range(input.position, input.nextPosition), res.message)
           Right(messages)
       }
     } catch {
       case e: java.io.FileNotFoundException =>
-        Right(message(e, e.getMessage))
+        Right(message(Range.empty(source), e.getMessage))
     }
   }
 

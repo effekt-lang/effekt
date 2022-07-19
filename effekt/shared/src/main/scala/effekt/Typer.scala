@@ -11,7 +11,7 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError }
-import kiama.util.Messaging.Messages
+import kiama.util.Messages
 
 import scala.language.implicitConversions
 
@@ -992,9 +992,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.reraise(msgs)
         // reraise and abort
         // TODO clean this up
-        Context.at(msg.value.asInstanceOf[Tree]) {
-          Context.abort(msg.label)
-        }
+        Context.abort(msg.range, msg.content.toString)
 
       case failed =>
         // reraise all and abort
@@ -1005,7 +1003,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               case q: QualifiedName => q.qualifiedName
               case n                => n.name
             }
-            msgs.map { m => m.copy(label = s"Possible overload ${fullname}: ${m.label}") }
+            msgs.map { m => m.copy(content = s"Possible overload ${fullname}: ${m.content}") }
         }.toVector
 
         Context.reraise(msgs)
@@ -1093,8 +1091,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val (msgs, optRes) = Context withMessages {
       try { Some(block) } catch {
-        case FatalPhaseError(msg) =>
-          C.error(msg)
+        case FatalPhaseError(range, msg) =>
+          C.error(range, msg)
           None
       }
     }

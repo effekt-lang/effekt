@@ -40,8 +40,8 @@ trait Phase[In, Out] { curr =>
   def apply(input: In)(implicit C: Context): Option[Out] = try {
     run(input)
   } catch {
-    case FatalPhaseError(msg) =>
-      C.error(msg)
+    case FatalPhaseError(range, msg) =>
+      C.error(range, msg)
       None
   }
 

@@ -25,7 +25,7 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
   import java.io.{ InputStream, OutputStream }
   import scala.concurrent.ExecutionException
   import output.PrettyPrinterTypes.{ Document, emptyDocument, LinkRange, LinkValue }
-  import kiama.util.Messaging.Messages
+  import kiama.util.Messages
   import kiama.util.Severities._
   import org.eclipse.lsp4j.jsonrpc.Launcher
 
@@ -197,7 +197,7 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
   // Diagnostics
 
   def publishMessages(messages: Messages): Unit = {
-    val groups = messages.groupBy(messaging.name(_).getOrElse(""))
+    val groups = messages.groupBy(msg => msg.name.getOrElse(""))
     for ((name, msgs) <- groups) {
       publishDiagnostics(name, msgs.map(messageToDiagnostic))
     }
@@ -214,18 +214,21 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
   }
 
   def messageToDiagnostic(message: Message): Diagnostic = {
-    val s = convertPosition(messaging.start(message))
-    val f = convertPosition(messaging.finish(message))
+    val s = convertPosition(message.from)
+    val f = convertPosition(message.to)
     val range = new LSPRange(s, f)
     val severity = convertSeverity(message.severity)
-    new Diagnostic(range, message.label, severity, name)
+    val d = new Diagnostic(range, messaging.formatContent(message.content), severity, name)
+    //    val additional = List(new DiagnosticRelatedInformation(new Location(name, range), "This is some additional information"))
+    //    d.setRelatedInformation(seqToJavaList(additional))
+    d
   }
 
   def convertPosition(optPos: Option[Position]): LSPPosition =
-    optPos match {
-      case Some(p) => new LSPPosition(p.line - 1, p.column - 1)
-      case None    => new LSPPosition(0, 0)
-    }
+    optPos.map(convertPosition).getOrElse(new LSPPosition(0, 0))
+
+  def convertPosition(pos: Position): LSPPosition =
+    new LSPPosition(pos.line - 1, pos.column - 1)
 
   def convertRange(optStart: Option[Position], optFinish: Option[Position]): LSPRange =
     new LSPRange(convertPosition(optStart), convertPosition(optFinish))

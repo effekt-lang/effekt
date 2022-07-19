@@ -5,13 +5,14 @@ import effekt.source.NoSource
 import effekt.symbols.*
 import effekt.typer.*
 import effekt.util.messages.{ ErrorReporter, FatalPhaseError, MessageBuffer }
+import kiama.util.Positions
 import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
 
 class ConstraintTests extends AnyFunSpec {
   var messages = new MessageBuffer
-  given ErrorReporter with { var focus = NoSource; def buffer = messages }
+  given ErrorReporter with { var focus = NoSource; def buffer = messages; val positions = new Positions }
 
   lazy val scope = { val s = new Unification; s.enterScope(); s }
 
