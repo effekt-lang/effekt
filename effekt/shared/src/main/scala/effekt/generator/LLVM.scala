@@ -2,8 +2,6 @@ package effekt
 package generator
 package llvm
 
-import effekt.llvm.{ LLVMFragmentPrinter }
-
 import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.{ Source, Counter }
 
@@ -32,9 +30,9 @@ object LLVM extends Backend {
       machine.Transformer.transform(mainSymbol, liftedMod, liftedDeps)
     };
 
-    val llvmDefinitions = llvm.LLVMTransformer.transform(machineMod);
+    val llvmDefinitions = llvm.Transformer.transform(machineMod);
 
-    val llvmFragment = llvm.LLVMFragmentPrinter.asFragment(llvmDefinitions);
+    val llvmFragment = llvm.PrettyPrinter.asFragment(llvmDefinitions);
 
     val result = Document(llvmFragment, emptyLinks);
 
