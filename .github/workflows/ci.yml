@@ -1,4 +1,4 @@
-name: Continuous Integration
+name: LLVM tests
 
 on: [push, pull_request]
 
@@ -18,16 +18,5 @@ jobs:
       with:
         java-version: 1.8
 
-    - name: Install Chez Scheme
-      run: sudo apt-get install chezscheme
-
-    - name: Set up NodeJS
-      uses: actions/setup-node@v1
-      with:
-        node-version: '10.x'
-
     - name: Run tests
-      run: sbt clean test
-
-    - name: Assemble fully optimized js file
-      run: sbt effektJS/fullOptJS
+      run: sbt 'project effektJVM' clean 'testOnly effekt.LLVMTests'
