@@ -2,7 +2,7 @@ package effekt
 package typer
 
 import effekt.symbols.*
-import effekt.util.messages.ErrorReporter
+import effekt.util.messages.{ ErrorReporter, ErrorMessageReifier }
 
 // Auxiliary Definitions
 // ---------------------
@@ -345,10 +345,10 @@ class Constraints(
 
   private def checkConsistency(lower: Set[Capture], upper: Set[Capture]): Unit =
     val diff = lower -- upper
-    if (diff.nonEmpty) { C.abort(pp"Not allowed ${CaptureSet(diff)}") }
+    if (diff.nonEmpty) { C.abort(pretty"Not allowed ${CaptureSet(diff)}") }
 
   private def checkEquality(xs: Set[Capture], ys: Set[Capture]): Unit =
-    if (xs != ys) { C.abort(s"Capture set ${xs} is not equal to ${ys}") }
+    if (xs != ys) { C.abort(pretty"Capture set ${xs} is not equal to ${ys}") }
 
   // we do not necessarily need mergeLower, since we can take the free union
   private def mergeLower(xs: Set[Capture], ys: Set[Capture]): Set[Capture] =

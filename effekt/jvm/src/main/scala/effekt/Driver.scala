@@ -7,28 +7,26 @@ import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
 import effekt.util.{ ColoredMessaging, MarkdownSource }
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
-
-import effekt.util.messages.FatalPhaseError
+import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 
 import scala.sys.process.Process
 
 /**
  * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
  */
-trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer =>
+trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektError] { outer =>
 
   val name = "effekt"
 
-  override val messaging = new ColoredMessaging
+  object messaging extends ColoredMessaging
 
   // Compiler context
   // ================
   // We always only have one global instance of the compiler
-  object context extends Context(positions) with IOModuleDB
+  object context extends Context(positions) with IOModuleDB { val messaging = outer.messaging }
 
   /**
    * If no file names are given, run the REPL
@@ -70,7 +68,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       C.at(mod.decl) { C.checkMain(mod); eval(main) }
     }
   } catch {
-    case FatalPhaseError(range, msg) => context.error(range, msg)
+    case FatalPhaseError(msg) => context.report(msg)
   } finally {
     // This reports error messages
     afterCompilation(source, config)(context)
@@ -88,7 +86,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
    */
   def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
     // report messages
-    report(source, C.buffer.get, config)
+    report(source, C.messaging.buffer, config)
   }
 
   def eval(path: String)(implicit C: Context): Unit =
@@ -103,8 +101,8 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(range, e) =>
-        C.error(range, e)
+      case FatalPhaseError(e) =>
+        C.report(e)
     }
 
   /**
@@ -115,12 +113,12 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig] { outer
       val command = Process(Seq("scheme", "--script", path))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(range, e) =>
-        C.error(range, e)
+      case FatalPhaseError(e) =>
+        C.report(e)
     }
 
   def report(in: Source)(implicit C: Context): Unit =
-    report(in, C.buffer.get, C.config)
+    report(in, C.messaging.buffer, C.config)
 
   /**
    * Main entry to the compiler, invoked by Kiama after parsing with `parse`.

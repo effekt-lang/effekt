@@ -4,15 +4,16 @@ import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
 import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
+import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
-import kiama.util.{ Messages, message, Console, REPL, Source, StringSource, Range }
+import kiama.util.{ Console, REPL, Source, StringSource, Range }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
-class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
+class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
 
-  override val messaging = new ColoredMessaging
+  val messaging = new ColoredMessaging
 
   val logo =
     """|  _____     ______  __  __     _    _
@@ -131,7 +132,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
         // this is usually encapsulated in REPL.processline
         case res: NoSuccess =>
           val pos = res.next.position
-          val messages = message(Range(pos, pos), res.message)
+          val messages = Vector(messaging.message(Range(pos, pos), res.message))
           report(source, messages, config)
       }
 
@@ -239,14 +240,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.runFrontend(src) map { f } getOrElse {
-      report(source, context.buffer.get, context.config)
+      report(source, context.messaging.buffer, context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     context.runFrontend(source) map { f } getOrElse {
-      report(source, context.buffer.get, context.config)
+      report(source, context.messaging.buffer, context.config)
     }
   }
 

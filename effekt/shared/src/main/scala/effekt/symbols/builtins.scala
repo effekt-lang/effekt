@@ -4,6 +4,7 @@ package symbols
 import effekt.source.ModuleDecl
 import effekt.context.Context
 import effekt.symbols.ErrorMessageInterpolator
+import effekt.util.messages.ErrorMessageReifier
 
 import kiama.util.StringSource
 
@@ -43,7 +44,7 @@ object builtins {
     def extractType(state: BlockType)(using C: Context): ValueType =
       state match {
         case BlockTypeApp(i, List(tpe)) => tpe
-        case tpe => C.panic(pp"Expected builtin state, but got $tpe")
+        case tpe => C.panic(pretty"Expected builtin state, but got $tpe")
       }
   }
 

@@ -9,6 +9,8 @@ import effekt.context.assertions.*
 import effekt.typer.{ Substitutions, typeMapToSubstitution }
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols.*
+import effekt.util.messages.ErrorMessageReifier
+
 import scopes.*
 
 /**
@@ -327,9 +329,9 @@ object Namer extends Phase[Parsed, NameResolved] {
         case BlockTypeApp(e: Interface, args) => extractControlEffect(e)
         case e: Interface          => e
         case b: BuiltinEffect =>
-          Context.abort(s"Cannot handle built in effects like ${b}")
+          Context.abort(pretty"Cannot handle built in effects like ${b}")
         case BlockTypeApp(b: BuiltinEffect, args) =>
-          Context.abort(s"Cannot handle built in effects like ${b}")
+          Context.abort(pretty"Cannot handle built in effects like ${b}")
       }
 
       val eff: Interface = Context.at(effect) { extractControlEffect(resolve(effect)) }
@@ -341,7 +343,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           eff.ops.find { o => o.name.toString == op.name } map { opSym =>
             Context.assignSymbol(op, opSym)
           } getOrElse {
-            Context.abort(s"Effect operation ${op.name} is not part of effect ${eff}.")
+            Context.abort(pretty"Effect operation ${op} is not part of effect ${eff}.")
           }
           val tps = tparams.map(resolve)
           val vps = params.map(resolve)
@@ -407,7 +409,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Assign(id, expr) => Context.resolveVar(id) match {
       case x: VarBinder => resolveGeneric(expr)
-      case _: ValBinder | _: ValueParam => Context.abort(s"Can only assign to mutable variables, but ${id.name} is a constant.")
+      case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")
       case _ => Context.abort(s"Can only assign to mutable variables.")
     }
@@ -508,17 +510,17 @@ object Namer extends Phase[Parsed, NameResolved] {
       case TypeAlias(name, tparams, tpe) =>
         val targs = args.map(resolve)
         if (tparams.size != targs.size) {
-          Context.abort(pp"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")
+          Context.abort(pretty"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")
         }
         val subst = (tparams zip targs).toMap
         subst.substitute(tpe)
-      case other => Context.abort(pp"Expected a value type, but got ${other}")
+      case other => Context.abort(pretty"Expected a value type, but got ${other}")
     }
     case source.TypeVar(id) => Context.resolveType(id) match {
       case x: ValueType => x
       case TypeAlias(name, tparams, tpe) =>
-        if (tparams.nonEmpty) Context.abort(s"Type alias ${name.name} expects ${tparams.size} type arguments, but got none.") else tpe
-      case other => Context.abort(pp"Expected a value type, but got ${other}")
+        if (tparams.nonEmpty) Context.abort(pretty"Type alias ${name.name} expects ${tparams.size} type arguments, but got none.") else tpe
+      case other => Context.abort(pretty"Expected a value type, but got ${other}")
     }
     case source.ValueTypeTree(tpe) =>
       tpe
@@ -579,7 +581,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     Context.resolveType(id) match {
       case i: Interface => i
       case i: EffectAlias => Context.abort("Expected a single interface type; no effect aliases are allowed.")
-      case o =>  Context.abort(pp"Expected a single interface type. Got ${o}")
+      case o =>  Context.abort(pretty"Expected a single interface type. Got ${o}")
     }
   }
 
@@ -603,7 +605,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case source.InterfaceVar(id) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
           if (tparams.nonEmpty) {
-            Context.abort(pp"Effect alias ${name} expects ${tparams.size} type arguments, but got none.")
+            Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got none.")
           }
           effs.toList
         case b: BuiltinEffect => List(b)
@@ -758,7 +760,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[BlockSymbol])
 
     if (syms.isEmpty) {
-      abort(s"Cannot resolve function ${id.name}")
+      abort(pretty"Cannot resolve function ${id.name}")
     }
 
     // TODO does local name make sense here?
@@ -779,12 +781,12 @@ trait NamerOps extends ContextOps { Context: Context =>
           val allSyms = scope.lookupOverloaded(id.name, term => true).flatten
 
           if (allSyms.exists { case o: Operation => true; case _ => false })
-            info(pp"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
+            info(pretty"There is an equally named effect operation. Use syntax `do ${id}() to call it.`")
 
           if (allSyms.exists { case o: Field => true; case _ => false })
-            info(pp"There is an equally named field. Use syntax `obj.${id} to access it.`")
+            info(pretty"There is an equally named field. Use syntax `obj.${id} to access it.`")
 
-          abort(pp"Cannot find a function named `${id}`.")
+          abort(pretty"Cannot find a function named `${id}`.")
         }
         assignSymbol(id, CallTarget(Name.local(id), blocks))
     }
@@ -823,7 +825,7 @@ trait NamerOps extends ContextOps { Context: Context =>
         if (terms.size == 1) {
           Left(terms.head)
         } else {
-          abort(pp"Multiple values with the same name $id in one scope. Values cannot be overloaded.")
+          abort(pretty"Multiple values with the same name $id in one scope. Values cannot be overloaded.")
         }
 
       case _ => panic("Should not happen")
@@ -836,7 +838,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     val syms = scope.lookupOverloaded(id.name, term => term.isInstanceOf[Field])
 
     if (syms.isEmpty) {
-      abort(pp"Cannot resolve field access ${id}")
+      abort(pretty"Cannot resolve field access ${id}")
     }
 
     assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))
@@ -856,7 +858,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     }
 
     if (syms.isEmpty) {
-      abort(pp"Cannot resolve effect operation ${id}")
+      abort(pretty"Cannot resolve effect operation ${id}")
     }
 
     assignSymbol(id, CallTarget(Name.local(id), syms.asInstanceOf))

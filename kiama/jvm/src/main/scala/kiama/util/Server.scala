@@ -18,14 +18,14 @@ import org.eclipse.lsp4j.{ Position => LSPPosition, Range => LSPRange, _ }
  * A language server that is mixed with a compiler that provide the basis
  * for its services. Allows specialisation of configuration via `C`.
  */
-trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageService[N] {
+trait Server[N, T <: N, C <: Config, M <: Message] extends Compiler[N, T, C, M] with LanguageService[N] {
 
   import com.google.gson.{ JsonArray, JsonElement, JsonObject }
   import java.util.Collections
   import java.io.{ InputStream, OutputStream }
   import scala.concurrent.ExecutionException
   import output.PrettyPrinterTypes.{ Document, emptyDocument, LinkRange, LinkValue }
-  import kiama.util.Messages
+
   import kiama.util.Severities._
   import org.eclipse.lsp4j.jsonrpc.Launcher
 
@@ -37,7 +37,7 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
     else
       super.run(config)
 
-  override def report(source: Source, messages: Messages, config: C): Unit =
+  override def report(source: Source, messages: messaging.Messages, config: C): Unit =
     if (config.server())
       publishMessages(messages)
     else
@@ -174,7 +174,7 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
     launcher.startListening()
   }
 
-  def createServices(config: C): Services[N, T, C] = new Services(this, config)
+  def createServices(config: C): Services[N, T, C, M] = new Services(this, config)
 
   // User messages
 
@@ -196,8 +196,8 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
 
   // Diagnostics
 
-  def publishMessages(messages: Messages): Unit = {
-    val groups = messages.groupBy(msg => msg.name.getOrElse(""))
+  def publishMessages(messages: messaging.Messages): Unit = {
+    val groups = messages.groupBy(msg => msg.sourceName.getOrElse(""))
     for ((name, msgs) <- groups) {
       publishDiagnostics(name, msgs.map(messageToDiagnostic))
     }
@@ -213,25 +213,43 @@ trait Server[N, T <: N, C <: Config] extends Compiler[N, T, C] with LanguageServ
     publishDiagnostics(name, Vector())
   }
 
-  def messageToDiagnostic(message: Message): Diagnostic = {
-    val s = convertPosition(message.from)
-    val f = convertPosition(message.to)
-    val range = new LSPRange(s, f)
-    val severity = convertSeverity(message.severity)
-    val d = new Diagnostic(range, messaging.formatContent(message.content), severity, name)
-    //    val additional = List(new DiagnosticRelatedInformation(new Location(name, range), "This is some additional information"))
-    //    d.setRelatedInformation(seqToJavaList(additional))
-    d
+  def messageToDiagnostic(message: M): Diagnostic =
+    diagnostic(message.range, messaging.formatContent(message), message.severity)
+
+  def diagnostic(range: Option[Range], message: String, severity: Severity, related: List[RelatedInfo] = Nil): Diagnostic = {
+    val lspRange = range.map(convertRange).getOrElse(emptyRange)
+    val lspSeverity = convertSeverity(severity)
+    val lspDiagnostic = new Diagnostic(lspRange, message, lspSeverity, name)
+
+    if (related.nonEmpty) {
+      val lspRelated = related.map { r =>
+        val loc = r.range.map(rangeToLocation).getOrElse(emptyLocation)
+        new DiagnosticRelatedInformation(loc, r.message)
+      }
+      lspDiagnostic.setRelatedInformation(seqToJavaList(lspRelated))
+    }
+
+    lspDiagnostic
   }
 
+  def emptyPosition = new LSPPosition(0, 0)
+  def emptyRange = new LSPRange(emptyPosition, emptyPosition)
+  def emptyLocation = new Location("<no-source>", emptyRange)
+
   def convertPosition(optPos: Option[Position]): LSPPosition =
-    optPos.map(convertPosition).getOrElse(new LSPPosition(0, 0))
+    optPos.map(convertPosition).getOrElse(emptyPosition)
 
   def convertPosition(pos: Position): LSPPosition =
     new LSPPosition(pos.line - 1, pos.column - 1)
 
   def convertRange(optStart: Option[Position], optFinish: Option[Position]): LSPRange =
     new LSPRange(convertPosition(optStart), convertPosition(optFinish))
+
+  def convertRange(r: Range): LSPRange =
+    new LSPRange(convertPosition(r.from), convertPosition(r.to))
+
+  def rangeToLocation(r: Range): Location =
+    new Location(r.from.source.name, convertRange(r))
 
   def convertSeverity(severity: Severity): DiagnosticSeverity =
     severity match {
@@ -358,6 +376,8 @@ trait LanguageService[N] {
   // FIXME: can the "to" be a node too? But server can't access correct PP...
   case class TreeAction(name: String, uri: String, rangeFrom: Position, rangeTo: Position, to: String)
 
+  case class RelatedInfo(range: Option[Range], message: String)
+
   /**
    * Return applicable code actions for the given position (if any).
    * Each action is in terms of an old tree node and a new node that
@@ -411,8 +431,8 @@ trait LanguageService[N] {
 
 }
 
-class Services[N, T <: N, C <: Config](
-  server: Server[N, T, C],
+class Services[N, T <: N, C <: Config, M <: Message](
+  server: Server[N, T, C, M],
   config: C
 ) {
 

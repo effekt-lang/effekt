@@ -2,13 +2,13 @@ package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.generator.JavaScriptVirtual
-import effekt.util.messages.FatalPhaseError
-import effekt.util.paths._
-import kiama.util.{ Message, Messaging, Position, Positions, Severities, Source, StringSource }
+import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
+import effekt.util.paths.*
+import kiama.util.{ Messaging, Position, Positions, Severities, Source, StringSource }
 
 import scala.scalajs.js
-import js.JSConverters._
-import scala.scalajs.js.annotation._
+import js.JSConverters.*
+import scala.scalajs.js.annotation.*
 
 // the LSP types
 // https://github.com/microsoft/vscode-languageserver-node/blob/master/types/src/main.ts
@@ -62,9 +62,11 @@ class LanguageServer extends Intelligence {
      * Don't output amdefine module declarations
      */
     override def Backend(implicit C: Context) = JavaScriptVirtual
-  }
 
-  object messaging extends Messaging
+    object messaging extends EffektMessaging {
+      def formatContent(msg: EffektError): String = msg.toString // TODO implement
+    }
+  }
 
   context.setup(config)
 
@@ -79,9 +81,9 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
-    context.buffer.clear()
+    context.messaging.clear()
     context.runFrontend(VirtualFileSource(path))
-    context.buffer.get.distinct.map(messageToDiagnostic).toJSArray
+    context.messaging.buffer.distinct.map(messageToDiagnostic).toJSArray
   }
 
   @JSExport
@@ -106,7 +108,7 @@ class LanguageServer extends Intelligence {
       mainCore.mod.dependencies.foreach { dep => compileCached(dep.source) }
       mainOutputPath
     } catch {
-      case FatalPhaseError(range, msg) =>
+      case FatalPhaseError(msg) =>
         throw js.JavaScriptException(msg)
     }
   }
@@ -131,10 +133,10 @@ class LanguageServer extends Intelligence {
     Phase("compile") { compileSingle }
   }
 
-  private def messageToDiagnostic(m: Message) = {
-    val from = m.from.map(convertPosition).orNull
-    val to = m.to.map(convertPosition).orNull
-    val text = messaging.formatContent(m.content)
+  private def messageToDiagnostic(m: EffektError) = {
+    val from = m.startPosition.map(convertPosition).orNull
+    val to = m.finishPosition.map(convertPosition).orNull
+    val text = context.messaging.formatContent(m)
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text)
   }
 

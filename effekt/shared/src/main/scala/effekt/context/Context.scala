@@ -5,9 +5,9 @@ import effekt.namer.NamerOps
 import effekt.typer.TyperOps
 import effekt.core.TransformerOps
 import effekt.source.{ ElaborationOps, Tree }
-import effekt.util.messages.{ ErrorReporter, MessageBuffer }
+import effekt.util.messages.{ ErrorReporter, EffektMessages }
 import effekt.symbols.Module
-import kiama.util.{ Messages, Positions }
+import kiama.util.Positions
 
 /**
  * Phases like Typer can add operations to the context by extending this trait
@@ -52,8 +52,6 @@ abstract class Context(val positions: Positions)
   // the currently processed node
   var focus: Tree = _
 
-  var _buffer: MessageBuffer = new MessageBuffer
-  def buffer = _buffer
   var _config: EffektConfig = _
   def config = _config
 
@@ -61,7 +59,7 @@ abstract class Context(val positions: Positions)
    * Clear current context to start processing a fresh unit
    */
   def setup(cfg: EffektConfig): Unit = {
-    buffer.clear()
+    messaging.clear()
     _config = cfg
   }
 
@@ -87,13 +85,13 @@ abstract class Context(val positions: Positions)
   }
 
   // temporarily switches the message buffer to collect messages
-  def withMessages[T](block: => T): (Messages, T) = {
-    val bufferBefore = _buffer
+  def withMessages[T](block: => T): (EffektMessages, T) = {
+    val bufferBefore = messaging.buffer
 
-    _buffer = new MessageBuffer
+    messaging.clear()
     val res = block
-    val msgs = _buffer.get
-    _buffer = bufferBefore
+    val msgs = messaging.buffer
+    messaging.buffer = bufferBefore
     (msgs, res)
   }
 

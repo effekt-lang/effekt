@@ -11,6 +11,8 @@
 package kiama
 package util
 
+import scala.math.Ordering._
+
 /**
  * The severities of a message.
  */
@@ -59,58 +61,52 @@ object Severities {
 
 import Severities.*
 
-/**
- * A message record consisting of a value with which the message is associated,
- * a content (potentially not yet rendered), and a severity (which defaults to error).
- */
-case class Message(range: Option[Range], content: Any) {
-  val severity: Severities.Severity = Severities.Error
+trait Message {
+  def severity: Severity
+  def range: Option[Range]
 
-  def name: Option[String] = source.map(_.name)
-  def source: Option[Source] = from.map(_.source)
-  def from: Option[Position] = range.map(_.from)
-  def to: Option[Position] = range.map(_.to)
+  def startPosition: Option[Position] = range.map(_.from)
+  def finishPosition: Option[Position] = range.map(_.to)
+  def sourceName: Option[String] = startPosition.map(_.source.name)
 }
-
-type Messages = Vector[Message]
-
-/**
- * Return a value representing no messages.
- */
-val noMessages = Vector[Message]()
-
-/**
- * If `cond` is true make a singleton message list that associates the
- * label with the start position recorded for `value` (if any).  If `cond`
- * is false make an empty message list. `cond` can be omitted and defaults
- * to true.
- */
-def message(range: Option[Range], content: Any, newSeverity: Severity): Messages =
-  Vector(new Message(range, content) {
-    override val severity = newSeverity
-  })
-
-def message(range: Range, content: Any, newSeverity: Severity = Error): Messages =
-  message(Some(range), content, newSeverity)
 
 /**
  * General facility for processing messages.
+ *
+ * `M` is the type of messages. It should be possible to extract severity and position
  */
-class Messaging {
+trait Messaging[M <: Message] {
 
-  import kiama.util.Severities.severityToWord
-  import scala.math.Ordering._
+  type Messages = Vector[M]
+
+  /**
+   * Return a value representing no messages.
+   */
+  val noMessages = Vector[M]()
+
+  /**
+   * Has to be implemented by subclasses. How should strings be embedded into `M`?
+   */
+  def message(range: Option[Range], content: String, severity: Severity): M
+
+  /**
+   * Format the message content. Should be overridden in subclasses of Messaging.
+   */
+  def formatContent(msg: M): String
+
+  def message(range: Range, content: String, severity: Severity = Error): M =
+    message(Some(range), content, severity)
 
   /**
    * An ordering on messages that uses starting position and prioritises
    * line over column. The messages are assumed to refer to the same
    * source.
    */
-  implicit object messageOrdering extends Ordering[Message] {
-    def compare(m1: Message, m2: Message) =
+  implicit object messageOrdering extends Ordering[M] {
+    def compare(m1: M, m2: M) =
       Ordering[(Option[Int], Option[Int])].compare(
-        (m1.from.map(_.line), m1.from.map(_.column)),
-        (m2.from.map(_.line), m2.from.map(_.column))
+        (m1.startPosition.map(_.line), m1.startPosition.map(_.column)),
+        (m2.startPosition.map(_.line), m2.startPosition.map(_.column))
       )
   }
 
@@ -120,20 +116,15 @@ class Messaging {
    * context of the position. If no position is associated with this
    * message just format as a line containing the label.
    */
-  def formatMessage(message: Message): String =
-    message.from match {
+  def formatMessage(message: M): String =
+    message.startPosition match {
       case Some(pos) =>
         val severity = severityToWord(message.severity)
         val context = pos.optContext.getOrElse("")
-        s"${pos.format}$severity: ${formatContent(message.content)}\n$context\n"
+        s"${pos.format}$severity: ${formatContent(message)}\n$context\n"
       case None =>
-        s"${formatContent(message.content)}\n"
+        s"${formatContent(message)}\n"
     }
-
-  /**
-   * Format the message content. Should be overriden in subclasses of Messaging.
-   */
-  def formatContent(content: Any): String = content.toString
 
   /**
    * Return a string containing all the given messages sorted and formatted.
