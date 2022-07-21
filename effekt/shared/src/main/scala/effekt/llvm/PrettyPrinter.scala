@@ -3,6 +3,7 @@ package effekt.llvm
 // Sane names are important, since unescaping string interpolation is used
 // to construct `LLVMFragment`s. As such, great care should be taken as to
 // not let user-controlled name data leak into LLVM source.
+// TODO Got seized.
 val SANE_NAME_REGEX = """^[a-zA-Z_$][a-zA-Z0-9_$]*$""".r
 
 // after de-kiama-ing, everything will have been dissolved into strings
@@ -40,8 +41,8 @@ define ${asFragment(returnType)} ${globalName(name)}(${commaSeparated(parameters
     case BasicBlock(name, instructions, terminator) =>
       s"""
 ${name}:
-${instructions.map(asFragment).mkString("\n")}
-${asFragment(terminator)}
+${indentedLines(instructions.map(asFragment).mkString("\n"))}
+    ${asFragment(terminator)}
 """
   }
 
@@ -70,8 +71,8 @@ ${asFragment(terminator)}
       s"${localName(result)} = insertvalue ${asFragment(aggregate)}, ${asFragment(element)}, $index"
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${asFragment(aggregate)}, $index"
-
   }
+
   def asFragment(terminator: Terminator): LLVMFragment = terminator match {
     case RetVoid() =>
       s"ret void"
@@ -90,7 +91,7 @@ ${asFragment(terminator)}
   def asFragment(typ: Type): LLVMFragment = typ match {
     case VoidType() => "void"
     case I64() => "i64"
-    case I8() => "i8"
+    case I8() => "i8" // TODO deliberate
     case NamedType(name) => localName(name)
     case PointerType(referentType) => s"${asFragment(referentType)}*"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(asFragment))}}"
@@ -101,10 +102,6 @@ ${asFragment(terminator)}
     case Parameter(typ, name) => s"${asFragment(typ)} ${localName(name)}"
   }
 
-  def localName(name: String): LLVMFragment =
-    "%" + name
-
-  def globalName(name: String): LLVMFragment =
-    "@" + name
+  def localName(name: String): LLVMFragment = "%" + name
+  def globalName(name: String): LLVMFragment = "@" + name
 }
-
