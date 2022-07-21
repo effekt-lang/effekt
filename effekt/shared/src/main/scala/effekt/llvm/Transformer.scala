@@ -103,7 +103,7 @@ object Transformer {
             // TODO more informative way to end program. Clean up too?
             RetVoid()
           case label :: labels =>
-            Switch(LocalReference(I64(), tagName), label, labels.zipWithIndex.map { case (l, i) => (i, l) })
+            Switch(LocalReference(IntegerType64(), tagName), label, labels.zipWithIndex.map { case (l, i) => (i, l) })
         }
 
       case machine.Substitute(bindings, rest) =>
@@ -181,7 +181,7 @@ object Transformer {
       case machine.Variable(name, typ) => Parameter(transform(typ), name)
     }
 
-  def positiveType: Type = StructureType(List(I64(), NamedType("Env")));
+  def positiveType: Type = StructureType(List(IntegerType64(), NamedType("Env")));
 
   def transform(typ: machine.Type): Type = typ match {
     case machine.Primitive("Int") => NamedType("Int")
@@ -318,8 +318,8 @@ object Transformer {
     poppedAddress
   }
 
-  def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(I8()), List(I64()))), "malloc");
-  def constantFree = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(I8())))), "free");
+  def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
+  def constantFree = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
 
 }
 

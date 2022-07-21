@@ -42,8 +42,8 @@ see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t
 */
 sealed trait Type
 case class VoidType() extends Type
-case class I64() extends Type
-case class I8() extends Type
+case class IntegerType64() extends Type
+case class IntegerType8() extends Type
 case class StructureType(elementTypes: List[Type]) extends Type
 case class FunctionType(resultType: Type, argumentTypes: List[Type]) extends Type
 case class PointerType(pointerReferent: Type) extends Type

@@ -90,8 +90,8 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
 
   def asFragment(typ: Type): LLVMFragment = typ match {
     case VoidType() => "void"
-    case I64() => "i64"
-    case I8() => "i8" // TODO deliberate
+    case IntegerType64() => "i64"
+    case IntegerType8() => "i8" // required for `void*` (which only exists as `i8*` in LLVM)
     case NamedType(name) => localName(name)
     case PointerType(referentType) => s"${asFragment(referentType)}*"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(asFragment))}}"
