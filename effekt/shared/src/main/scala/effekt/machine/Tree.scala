@@ -17,7 +17,7 @@ case class Include(contents: String) extends Declaration
 /**
   * Names
   */
-case class Variable(name: String, typ: Type)
+case class Variable(name: String, tpe: Type)
 
 case class Label(name: String, environment: Environment)
 
@@ -54,7 +54,9 @@ case class LiteralInt(n: Int) extends Command
  * Types
  */
 sealed trait Type
-case class Positive(alternatives: List[Environment]) extends Type
-case class Negative(alternatives: List[Environment]) extends Type
+case class Positive(alternatives: List[Signature]) extends Type
+case class Negative(alternatives: List[Signature]) extends Type
 case class Primitive(name: String) extends Type
+
+type Signature = List[Type]
 
