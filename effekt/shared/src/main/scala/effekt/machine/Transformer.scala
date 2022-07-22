@@ -32,11 +32,10 @@ object Transformer {
     stmt match {
       case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
         emitDeclaration(DefineForeign(transform(functionType.result), transform(name),
-          params.map{case ValueParam(id, typ) => Variable(id.name.name, transform(typ)) }, body));
+          params.map{case ValueParam(id, tpe) => Variable(id.name.name, transform(tpe)) }, body));
         transformToplevel(rest, mods)
       case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO top-level definitions don't need evidence, or do they?
-        // TODO add block params to blockparamsset
         // TODO add evidence param
         Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest, mods))
       case lifted.Def(_, _, _, rest) =>
@@ -70,18 +69,21 @@ object Transformer {
         transform(stmt)
       case lifted.Ret(expr) =>
         transform(expr).run(value => Return(List(value)))
-      case lifted.App(lifted.ScopeApp(lifted.BlockVar(name), scope), List(), args) =>
+      case lifted.App(lifted.ScopeApp(lifted.BlockVar(id), scope), List(), args) =>
         // TODO deal with BlockLit
         // TODO deal with local block definitions (their free variables must be kept in a map)
         // TODO deal with evidence
-        name match {
-          case UserFunction(_, _, params, _, _, _, _) =>
-            val environment = params.map(transformParamSymbol);
+        id match {
+          case UserFunction(_, _, vparams, bparams, _, _, _) =>
+            val environment = (vparams ++ bparams).map(transformParamSymbol);
             transform(args).run(values =>
-              Substitute(environment.zip(values), Jump(Label(transform(name), environment))))
+              Substitute(environment.zip(values), Jump(Label(transform(id), environment))))
+          case symbols.BlockParam(_, tpe) =>
+            transform(args).run(values =>
+              Invoke(Variable(transform(id), transform(tpe)) , 0, values))
           case _ =>
-            println(name);
-            C.abort("unsupported blocksymbol " + name)
+            println(id);
+            C.abort("unsupported blocksymbol " + id)
         }
       case lifted.Val(id, tpe, bind, rest) =>
         PushFrame(
@@ -170,8 +172,8 @@ object Transformer {
         Run(LiteralInt(value), List(), List(Clause(List(variable), k(variable)))))
       case lifted.PureApp(lifted.BlockVar(blockName: BuiltinFunction), List(), args) =>
         val id = FreshValueSymbol("x", C.module);
-        val typ = blockName.result;
-        val variable = Variable(transform(id), transform(typ));
+        val tpe = blockName.result;
+        val variable = Variable(transform(id), transform(tpe));
         transform(args).flatMap(values =>
           Binding(k =>
             Run(CallForeign(transform(blockName)), values, List(
@@ -182,6 +184,15 @@ object Transformer {
         // TODO find actual type
         val variable = Variable(transform(id), Primitive("Int"));
         Binding(k => PushFrame(Clause(List(variable), k(variable)), transform(stmt)))
+      case lifted.ScopeAbs(_, lifted.BlockLit(params, body)) =>
+        // TODO deal with evidence
+        val parameters = params.map(transform);
+        val id = FreshValueSymbol("g", C.module);
+        val variable = Variable(transform(id), Negative(List(parameters.map(_.tpe))));
+        Binding(k => New(variable, List(Clause(params.map(transform), transform(body))), k(variable)))
+      case _ =>
+        println(arg)
+        C.abort("unsupported argument " + arg)
     }
 
   def transform(args: List[lifted.Argument])(implicit C: Context): Binding[List[Variable]] =
@@ -353,8 +364,8 @@ object Transformer {
     param match {
       case lifted.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
-      // case lifted.BlockParam(name, tpe) =>
-      //   Variable(transform(name), transform(tpe))
+      case lifted.BlockParam(name, tpe) =>
+        Variable(transform(name), transform(tpe))
       case _ =>
         println(param)
         C.abort("unsupported parameter " + param)
@@ -380,6 +391,9 @@ object Transformer {
         Primitive("Int")
       case symbols.BuiltinType(builtins.TBoolean.name, List()) =>
         Positive(List(List(), List()))
+      case symbols.FunctionType(List(), List(), vparams, List(), _, _) =>
+        // TODO block params too
+        Negative(List(vparams.map(transform)))
       case _ =>
         println(tpe)
         C.abort("unsupported type " + tpe)
@@ -406,8 +420,10 @@ object Transformer {
 
   def transformParamSymbol(param: symbols.Param)(implicit C: Context): Variable =
     param match {
-      case symbols.ValueParam(name, Some(typ)) =>
-        Variable(s"${param.name}_${param.id}", transform(typ))
+      case symbols.ValueParam(name, Some(tpe)) =>
+        Variable(s"${param.name}_${param.id}", transform(tpe))
+      case symbols.BlockParam(name, tpe) =>
+        Variable(s"${param.name}_${param.id}", transform(tpe))
       case _ =>
         println(param);
         C.abort("unsupported symbol param " + param)
