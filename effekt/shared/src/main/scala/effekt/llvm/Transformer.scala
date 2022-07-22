@@ -149,7 +149,7 @@ object Transformer {
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, LocalReference(NamedType("Sp"), getStackPointer()))));
         RetVoid()
 
-      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(variable @ machine.Variable(name, machine.Primitive("Int"))), rest))) =>
+      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(machine.Variable(name, machine.Primitive("Int"))), rest))) =>
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
@@ -159,7 +159,7 @@ object Transformer {
         emit(Call("_", VoidType(), ConstantGlobal(functionType, name), values.map(transform)));
         RetVoid()
 
-      case machine.Run(machine.CallForeign(name), values, List(machine.Clause(List(variable @ machine.Variable(resultName, resultType)), rest))) =>
+      case machine.Run(machine.CallForeign(name), values, List(machine.Clause(List(machine.Variable(resultName, resultType)), rest))) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, typ) => transform(typ) }));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
@@ -326,7 +326,7 @@ object Transformer {
   /**
    * Extra info in context
    */
-  case class ModuleContext() {
+  class ModuleContext() {
     var counter = 0;
     var definitions: List[Definition] = List();
   }
@@ -361,7 +361,7 @@ object Transformer {
     C.substitution.toMap.getOrElse(value, value)
   }
 
-  case class BlockContext() {
+  class BlockContext() {
     var stackPointer: String = "sp";
     var instructions: List[Instruction] = List();
   }
