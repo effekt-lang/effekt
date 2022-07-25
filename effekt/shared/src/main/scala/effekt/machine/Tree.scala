@@ -44,6 +44,10 @@ case class Invoke(value: Variable, tag: Int, environment: Environment) extends S
 
 case class PushFrame(frame: Clause, rest: Statement) extends Statement
 case class Return(environment: Environment) extends Statement
+case class NewStack(name: Variable, frame: Clause, rest: Statement) extends Statement
+case class PushStack(value: Variable, rest: Statement) extends Statement
+case class PopStack(name: Variable, rest: Statement) extends Statement
+
 case class Run(command: Command, environment: Environment, continuation: List[Clause]) extends Statement
 
 sealed trait Command

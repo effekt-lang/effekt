@@ -13,8 +13,9 @@ object Transformer {
         implicit val BC = BlockContext();
 
         // TODO proper initialization of runtime
-        emit(Call("env", envType, constantMalloc, List(ConstantInt(1024))));
-        emit(Call("sp", spType, constantMalloc, List(ConstantInt(1024))));
+        emit(Call("env", envType, malloc, List(ConstantInt(1024))));
+        emit(Call("sp", spType, malloc, List(ConstantInt(1024))));
+        emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
         pushReturnAddress("topLevel");
 
         val terminator = transform(statement);
@@ -63,7 +64,7 @@ object Transformer {
 
         storeEnvironment(initialEnvironmentReference, label.environment);
 
-        emit(TailCall(transform(label), List(LocalReference(envType, "env"), LocalReference(spType, getStackPointer()))));
+        emit(TailCall(transform(label), List(LocalReference(envType, "env"), getStackPointer())));
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
@@ -75,7 +76,7 @@ object Transformer {
       case machine.Let(variable, tag, values, rest) =>
         // TODO do nothing if values is empty
         val objName = freshName("obj");
-        emit(Call(objName, envType, constantMalloc, List(ConstantInt(environmentSize(values)))));
+        emit(Call(objName, envType, malloc, List(ConstantInt(environmentSize(values)))));
         storeEnvironment(LocalReference(envType, objName), values);
 
         val tmpName = freshName("tmp");
@@ -95,7 +96,7 @@ object Transformer {
             implicit val BC = BlockContext();
 
             loadEnvironment(LocalReference(envType, objName), parameters);
-            emit(Call("_", VoidType(), constantFree, List(LocalReference(envType, objName))));
+            emit(Call("_", VoidType(), free, List(LocalReference(envType, objName))));
 
             val terminator = transform(body);
 
@@ -126,7 +127,7 @@ object Transformer {
 
           val objName = "obj";
           loadEnvironment(LocalReference(envType, objName), closureEnvironment);
-          emit(Call("_", VoidType(), constantFree, List(LocalReference(envType, objName))));
+          emit(Call("_", VoidType(), free, List(LocalReference(envType, objName))));
           loadEnvironment(initialEnvironmentReference, clause.parameters);
 
           val terminator = transform(clause.body);
@@ -143,7 +144,7 @@ object Transformer {
 
         // TODO do nothing if closure environment is empty
         val objName = freshName("obj");
-        emit(Call(objName, envType, constantMalloc, List(ConstantInt(environmentSize(closureEnvironment)))));
+        emit(Call(objName, envType, malloc, List(ConstantInt(environmentSize(closureEnvironment)))));
         storeEnvironment(LocalReference(envType, objName), closureEnvironment);
 
         val tmpName = freshName("tmp");
@@ -163,9 +164,8 @@ object Transformer {
 
         emit(ExtractValue(functionName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
-        emit(TailCall(LocalReference(clauseType, functionName), List(LocalReference(envType, objName), initialEnvironmentReference, LocalReference(spType, getStackPointer()))));
+        emit(TailCall(LocalReference(clauseType, functionName), List(LocalReference(envType, objName), initialEnvironmentReference, getStackPointer())));
         RetVoid()
-
 
       case machine.PushFrame(frame, rest) =>
 
@@ -201,8 +201,69 @@ object Transformer {
         storeEnvironment(initialEnvironmentReference, values);
 
         val returnAddress = popReturnAddress();
-        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, LocalReference(spType, getStackPointer()))));
+        emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentReference, getStackPointer())));
         RetVoid()
+
+      case machine.NewStack(variable, frame, rest) =>
+        emit(Call(variable.name, transform(variable.tpe), newStack, List()));
+
+        val frameEnvironment = machine.freeVariables(frame).toList;
+
+        val frameName = freshName("k");
+
+        val () = {
+          implicit val FC = FunctionContext();
+          implicit val BC = BlockContext();
+
+          popEnvironment(frameEnvironment);
+          loadEnvironment(initialEnvironmentReference, frame.parameters);
+
+          val newStackPointer = LocalReference(spType, freshName("sp"));
+          val tmpReference = LocalReference(StructureType(List(NamedType("MStk"), spType)), freshName("tmp"));
+          val oldStack = LocalReference(NamedType("MStk"), freshName("stkp"));
+          emit(Call(tmpReference.name, StructureType(List(NamedType("MStk"), spType)), popStack, List(getStackPointer())));
+          emit(ExtractValue(oldStack.name, tmpReference, 0));
+          emit(ExtractValue(newStackPointer.name, tmpReference, 1));
+          emit(Call("_", VoidType(), eraseStack, List(oldStack)));
+          setStackPointer(newStackPointer);
+
+          val terminator = transform(frame.body);
+
+          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+          val instructions = BC.instructions; BC.instructions = null;
+
+          val parameters = List(Parameter(envType, "env"), Parameter(spType, "sp"));
+          val entryBlock = BasicBlock("entry", instructions, terminator);
+          val function = Function(VoidType(), frameName, parameters, entryBlock :: basicBlocks);
+
+          emit(function)
+        };
+
+        val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
+        val oldStackPointer = LocalReference(spType, freshName("stksp"));
+        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("Stk")), variable.name), List(0, 0)));
+        emit(Load(oldStackPointer.name, stackPointerPointer));
+        val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
+        val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, frameName);
+        emit(Store(stackPointerPointer, newStackPointer));
+
+        transform(rest)
+
+      case machine.PushStack(value, rest) =>
+        val newStackPointerName = freshName("sp");
+        emit(Call(newStackPointerName, spType, pushStack, List(transform(value), getStackPointer())));
+        setStackPointer(LocalReference(spType, newStackPointerName));
+        transform(rest)
+
+      case machine.PopStack(variable, rest) =>
+        val newStackPointerName = freshName("sp");
+        val tmpName = freshName("tmp");
+        val tmpReference = LocalReference(StructureType(List(NamedType("MStk"), spType)), tmpName);
+        emit(Call(tmpName, StructureType(List(NamedType("MStk"), spType)), popStack, List(getStackPointer())));
+        emit(ExtractValue(variable.name, tmpReference, 0));
+        emit(ExtractValue(newStackPointerName, tmpReference, 1));
+        setStackPointer(LocalReference(spType, newStackPointerName));
+        transform(rest)
 
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(machine.Variable(name, machine.Primitive("Int"))), rest))) =>
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
@@ -247,6 +308,7 @@ object Transformer {
     case machine.Positive(_)      => positiveType
     case machine.Negative(_)      => negativeType
     case machine.Primitive("Int") => NamedType("Int")
+    case machine.Primitive("MStk") => NamedType("MStk")
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -254,9 +316,10 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive(_)      => 16
-      case machine.Negative(_)      => 16
-      case machine.Primitive("Int") => 8
+      case machine.Positive(_)       => 16
+      case machine.Negative(_)       => 16
+      case machine.Primitive("Int")  => 8
+      case machine.Primitive("MStk") => 8
     }
 
   def initialEnvironmentReference = LocalReference(envType, "env")
@@ -296,19 +359,21 @@ object Transformer {
   }
 
   def pushEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    setStackPointer(pushEnvironmentOnto(getStackPointer(), environment))
+  }
+
+  def pushEnvironmentOnto(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
 
-    val oldStackPointer = getStackPointer();
     val pointerType = PointerType(environmentType);
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
-    emit(BitCast(oldTypedPointer, LocalReference(spType, oldStackPointer), pointerType));
+    emit(BitCast(oldTypedPointer, oldStackPointer, pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), spType));
-    setStackPointer(newStackPointer);
 
     environment.zipWithIndex.foreach {
       case (value @ machine.Variable(name, typ), i) =>
@@ -318,22 +383,25 @@ object Transformer {
         emit(Store(LocalReference(PointerType(fieldType), fieldPointerName), transform(value)))
     }
 
+    LocalReference(spType, newStackPointer)
   }
 
   def popEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    setStackPointer(popEnvironmentFrom(getStackPointer(), environment))
+  }
+
+  def popEnvironmentFrom(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
     // TODO do nothing if empty
 
     val environmentType = StructureType(environment.map { case machine.Variable(_, typ) => transform(typ) });
 
-    val oldStackPointer = getStackPointer();
     val pointerType = PointerType(environmentType);
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
-    emit(BitCast(oldTypedPointer, LocalReference(spType, oldStackPointer), pointerType));
+    emit(BitCast(oldTypedPointer, oldStackPointer, pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(-1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), spType));
-    setStackPointer(newStackPointer);
 
     environment.zipWithIndex.foreach {
       case (value @ machine.Variable(name, typ), i) =>
@@ -343,44 +411,57 @@ object Transformer {
         emit(Load(name, LocalReference(PointerType(fieldType), fieldPointerName)))
     }
 
+    LocalReference(spType, newStackPointer);
   }
 
   def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)))
 
   def pushReturnAddress(frameName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    setStackPointer(pushReturnAddressOnto(getStackPointer(), frameName));
+  }
 
-    val oldStackPointer = getStackPointer();
+  def pushReturnAddressOnto(oldStackPointer: Operand, frameName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+
     val pointerType = PointerType(returnAddressType);
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
-    emit(BitCast(oldTypedPointer, LocalReference(spType, oldStackPointer), pointerType));
+    emit(BitCast(oldTypedPointer, oldStackPointer, pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), spType));
-    setStackPointer(newStackPointer);
 
     emit(Store(LocalReference(pointerType, oldTypedPointer), ConstantGlobal(returnAddressType, frameName)));
+
+    LocalReference(spType, newStackPointer);
   }
 
   def popReturnAddress()(using ModuleContext, FunctionContext, BlockContext): String = {
+    val (returnAddress, newStackPointer) = popReturnAddressFrom(getStackPointer());
+    setStackPointer(newStackPointer);
+    returnAddress
+  }
 
-    val oldStackPointer = getStackPointer();
+  def popReturnAddressFrom(oldStackPointer: Operand)(using ModuleContext, FunctionContext, BlockContext): (String, Operand) = {
+
     val pointerType = PointerType(returnAddressType);
     val poppedAddress = freshName("f");
     val newStackPointer = freshName("sp");
     val oldTypedPointer = freshName("sp.t");
     val newTypedPointer = freshName("sp.t");
-    emit(BitCast(oldTypedPointer, LocalReference(spType, oldStackPointer), pointerType));
+    emit(BitCast(oldTypedPointer, oldStackPointer, pointerType));
     emit(GetElementPtr(newTypedPointer, LocalReference(pointerType, oldTypedPointer), List(-1)));
     emit(BitCast(newStackPointer, LocalReference(pointerType, newTypedPointer), spType));
-    setStackPointer(newStackPointer);
 
     emit(Load(poppedAddress, LocalReference(pointerType, newTypedPointer)));
-    poppedAddress
+    (poppedAddress, LocalReference(spType, newStackPointer))
   }
 
-  def constantMalloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
-  def constantFree = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
+  def malloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
+  def free = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
+  def newStack = ConstantGlobal(PointerType(FunctionType(NamedType("MStk"),List())), "newStack");
+  def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(NamedType("MStk"), spType))), "pushStack");
+  def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(NamedType("MStk"),spType)),List(spType))), "popStack");
+  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(NamedType("MStk")))), "eraseStack");
 
 }
 
@@ -423,7 +504,7 @@ object Transformer {
   }
 
   class BlockContext() {
-    var stackPointer: String = "sp";
+    var stackPointer: Operand = LocalReference(NamedType("Sp"), "sp");
     var instructions: List[Instruction] = List();
   }
 
@@ -435,7 +516,7 @@ object Transformer {
     C.stackPointer
   }
 
-  def setStackPointer(stackPointer: String)(using C: BlockContext) = {
+  def setStackPointer(stackPointer: Operand)(using C: BlockContext) = {
       C.stackPointer = stackPointer;
     }
 
