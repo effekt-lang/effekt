@@ -35,14 +35,17 @@ declare void @exit(i64)
 
 ; Meta-stack management
 
-define fastcc %Stk* @newStack() alwaysinline {
+define %Stk* @newStack() alwaysinline {
 
     ; TODO find actual size of stack
     %stkm = call i8* @malloc(i64 32)
     %stkp = bitcast i8* %stkm to %Stk*
 
-    %stk.0 = insertvalue %Stk undef, %Sp null, 0
-    %stk.1 = insertvalue %Stk %stk.0, %Base null, 1
+    ; TODO initialize to zero and grow later
+    %sp = call %Sp @malloc(i64 1024)
+
+    %stk.0 = insertvalue %Stk undef, %Sp %sp, 0
+    %stk.1 = insertvalue %Stk %stk.0, %Base %sp, 1
     %stk.2 = insertvalue %Stk %stk.1, %Limit null, 2
     %stk.3 = insertvalue %Stk %stk.2, %MStk null, 3
 
@@ -51,7 +54,7 @@ define fastcc %Stk* @newStack() alwaysinline {
     ret %Stk* %stkp
 }
 
-define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
+define %Sp @pushStack(%Stk* %stkp, %Sp %oldsp) alwaysinline {
 
     %stksp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 0
     %stkbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 1
@@ -64,12 +67,10 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     ; %newrest = load %MStk, %MStk* %stkrest
     ; assert %newrest == null
 
-    %oldsp = load %Sp, %Sp* %spp
     %oldbase = load %Base, %Base* @base
     %oldlimit = load %Limit, %Limit* @limit
     %oldrest = load %MStk, %MStk* @rest
 
-    store %Sp %newsp, %Sp* %spp
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
     store %MStk %stkp, %MStk* @rest
@@ -79,10 +80,10 @@ define fastcc void @pushStack(%Sp* %spp, %Stk* %stkp) alwaysinline {
     store %Limit %oldlimit, %Limit* %stklimit
     store %MStk %oldrest, %MStk* %stkrest
 
-    ret void
+    ret %Sp %newsp
 }
 
-define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
+define {%Stk*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
     %stkp = load %Stk*, %Stk** @rest
 
@@ -96,12 +97,10 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     %newlimit = load %Limit, %Limit* %stklimit
     %newrest = load %MStk, %MStk* %stkrest
 
-    %oldsp = load %Sp, %Sp* %spp
     %oldbase = load %Base, %Base* @base
     %oldlimit = load %Limit, %Limit* @limit
     ; %oldrest = load %MStk, %MStk* @rest
 
-    store %Sp %newsp, %Sp* %spp
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
     store %MStk %newrest, %MStk* @rest
@@ -111,10 +110,13 @@ define fastcc %Stk* @popStack(%Sp* %spp) alwaysinline {
     store %Limit %oldlimit, %Limit* %stklimit
     store %MStk null, %MStk* %stkrest
 
-    ret %Stk* %stkp
+    %ret.0 = insertvalue {%Stk*, %Sp} undef, %Stk* %stkp, 0
+    %ret.1 = insertvalue {%Stk*, %Sp} %ret.0, %Sp %newsp, 1
+
+    ret {%Stk*, %Sp} %ret.1
 }
 
-define fastcc %Stk* @copyStack(%Stk* %stkp) alwaysinline {
+define %Stk* @copyStack(%Stk* %stkp) alwaysinline {
 entry:
     %stk = load %Stk, %Stk* %stkp
 
@@ -161,7 +163,7 @@ entry:
 ;     br i1 %atend, label %done, label %loop
 ; loop:
 ;     %currentstk = load %Stk*, %Stk** %currentboxessp
-;     %currentnewstk = call fastcc %Stk* @copyStack(%Stk* %currentstk)
+;     %currentnewstk = call %Stk* @copyStack(%Stk* %currentstk)
 ;     store %Stk* %currentnewstk, %Stk** %currentnewboxessp
 ;     %nextboxessp = getelementptr %Stk*, %Stk** %currentboxessp, i64 1
 ;     %nextnewboxessp = getelementptr %Stk*, %Stk** %currentnewboxessp, i64 1
@@ -174,12 +176,12 @@ entry:
     %newstk.2 = insertvalue %Stk %newstk.1, %Limit %newlimit, 2
     %newstk.3 = insertvalue %Stk %newstk.2, %MStk null, 3
 
-    %newstkp = call fastcc %Stk* @newStack()
+    %newstkp = call %Stk* @newStack()
     store %Stk %newstk.3, %Stk* %newstkp
     ret %Stk* %newstkp
 }
 
-define fastcc void @eraseStack(%Stk* %stkp) alwaysinline {
+define void @eraseStack(%Stk* %stkp) alwaysinline {
 entry:
     %stk = load %Stk, %Stk* %stkp
 
@@ -209,7 +211,7 @@ entry:
     ret void
 }
 
-define fastcc %Sp @checkOverflow(%Sp %incedsp, %Sp* %spp) alwaysinline {
+define %Sp @checkOverflow(%Sp %incedsp, %Sp* %spp) alwaysinline {
     %sp = load %Sp, %Sp* %spp
     %limit = load %Limit, %Limit* @limit
 
@@ -222,14 +224,14 @@ good:
     store %Sp %incedsp, %Sp* %spp
     ret %Sp %sp
 grow:
-    %results = call fastcc {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp)
+    %results = call {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp)
     %newsp = extractvalue {%Sp, %Sp} %results, 0
     %newincedsp = extractvalue {%Sp, %Sp} %results, 1
     store %Sp %newincedsp, %Sp* %spp
     ret %Sp %newsp
 }
 
-define fastcc {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp) noinline {
+define {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp) noinline {
 
     %intincedsp = ptrtoint %Sp %incedsp to i64
 
