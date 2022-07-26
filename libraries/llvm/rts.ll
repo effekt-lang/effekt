@@ -231,6 +231,29 @@ grow:
     ret %Sp %newsp
 }
 
+define %Sp @underflowStack(%Sp %sp) alwaysinline {
+    %stkp = load %StkVal*, %StkVal** @rest
+
+    %stksp = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 0
+    %stkbase = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 1
+    %stklimit = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 2
+    %stkrest = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 3
+
+    %newsp = load %Sp, %Sp* %stksp
+    %newbase = load %Base, %Base* %stkbase
+    %newlimit = load %Limit, %Limit* %stklimit
+    %newrest = load %Stk, %Stk* %stkrest
+
+    store %Base %newbase, %Base* @base
+    store %Limit %newlimit, %Limit* @limit
+    store %Stk %newrest, %Stk* @rest
+
+    %stkpuntyped = bitcast %StkVal* %stkp to i8*
+    call void @free(%Sp %sp)
+    call void @free(i8* %stkpuntyped)
+    ret %Sp %newsp
+}
+
 define {%Sp, %Sp} @growStack(%Sp %sp, %Sp %incedsp) noinline {
 
     %intincedsp = ptrtoint %Sp %incedsp to i64
