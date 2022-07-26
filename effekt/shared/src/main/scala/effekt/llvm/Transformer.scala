@@ -64,14 +64,11 @@ object Transformer {
         }
 
       case machine.Let(variable, tag, values, rest) =>
-        // TODO do nothing if values is empty
-        val objName = freshName("obj");
-        emit(Call(objName, envType, malloc, List(ConstantInt(environmentSize(values)))));
-        storeEnvironment(LocalReference(envType, objName), values);
 
+        val obj = produceObject(values);
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
-        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), LocalReference(envType, objName), 1));
+        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), obj, 1));
 
         transform(rest)
 
@@ -86,8 +83,7 @@ object Transformer {
             implicit val BC = BlockContext();
             // TODO reset stack pointer to outer one
 
-            loadEnvironment(LocalReference(envType, objName), parameters);
-            emit(Call("_", VoidType(), free, List(LocalReference(envType, objName))));
+            consumeObject(LocalReference(envType, objName), parameters);
 
             val terminator = transform(body);
 
@@ -113,24 +109,16 @@ object Transformer {
         val clauseName = freshName(variable.name);
 
         defineFunction(clauseName, List(Parameter(envType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
-
-          loadEnvironment(LocalReference(envType, "obj"), closureEnvironment);
-          emit(Call("_", VoidType(), free, List(LocalReference(envType, "obj"))));
-
+          consumeObject(LocalReference(envType, "obj"), closureEnvironment);
           loadEnvironment(initialEnvironmentPointer, clause.parameters);
-
           transform(clause.body);
         };
 
-        // TODO do nothing if closure environment is empty
-        val objName = freshName("obj");
-        emit(Call(objName, envType, malloc, List(ConstantInt(environmentSize(closureEnvironment)))));
-        storeEnvironment(LocalReference(envType, objName), closureEnvironment);
-
+        val obj = produceObject(closureEnvironment);
         val tmpName = freshName("tmp");
         val clauseType = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
         emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(clauseType, clauseName), 0));
-        emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), LocalReference(envType, objName), 1));
+        emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
 
         transform(rest)
 
@@ -290,15 +278,41 @@ object Transformer {
   def initialEnvironmentPointer = LocalReference(envType, "env")
 
   def loadEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    // TODO do nothing if empty
-    val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
-    loadEnvironmentAt(typedEnvironmentPointer, environment);
+    if(environment.isEmpty) {
+      ()
+    } else {
+      val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
+      loadEnvironmentAt(typedEnvironmentPointer, environment);
+    }
   }
 
   def storeEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    // TODO do nothing if empty
-    val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
-    storeEnvironmentAt(typedEnvironmentPointer, environment);
+    if(environment.isEmpty) {
+      ()
+    } else {
+      val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
+      storeEnvironmentAt(typedEnvironmentPointer, environment);
+    }
+  }
+
+  def produceObject(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+    if(environment.isEmpty) {
+      ConstantNull(envType)
+    } else {
+      val obj = LocalReference(envType, freshName("obj"));
+      emit(Call(obj.name, envType, malloc, List(ConstantInt(environmentSize(environment)))));
+      storeEnvironment(obj, environment);
+      obj
+    }
+  }
+
+  def consumeObject(obj: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    if(environment.isEmpty) {
+      ()
+    } else {
+      loadEnvironment(obj, environment);
+      emit(Call("_", VoidType(), free, List(obj)));
+    }
   }
 
   def pushEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -306,19 +320,21 @@ object Transformer {
   }
 
   def pushEnvironmentOnto(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
-    // TODO do nothing if empty
+    if(environment.isEmpty) {
+      oldStackPointer
+    } else {
+      val oldTypedPointer = castEnvironmentPointer(oldStackPointer, environment);
 
-    val oldTypedPointer = castEnvironmentPointer(oldStackPointer, environment);
+      storeEnvironmentAt(oldTypedPointer, environment);
 
-    storeEnvironmentAt(oldTypedPointer, environment);
+      val newTypedPointer = LocalReference(oldTypedPointer.tpe, freshName("sp.t"));
+      emit(GetElementPtr(newTypedPointer.name, oldTypedPointer, List(1)));
 
-    val newTypedPointer = LocalReference(oldTypedPointer.tpe, freshName("sp.t"));
-    emit(GetElementPtr(newTypedPointer.name, oldTypedPointer, List(1)));
+      val newStackPointer = LocalReference(spType, freshName("sp"));
+      emit(BitCast(newStackPointer.name, newTypedPointer, spType));
 
-    val newStackPointer = LocalReference(spType, freshName("sp"));
-    emit(BitCast(newStackPointer.name, newTypedPointer, spType));
-
-    newStackPointer
+      newStackPointer
+    }
   }
 
   def popEnvironment(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
@@ -326,19 +342,21 @@ object Transformer {
   }
 
   def popEnvironmentFrom(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
-    // TODO do nothing if empty
+    if(environment.isEmpty) {
+      oldStackPointer
+    } else {
+      val oldTypedPointer = castEnvironmentPointer(oldStackPointer, environment);
 
-    val oldTypedPointer = castEnvironmentPointer(oldStackPointer, environment);
+      val newTypedPointer = LocalReference(oldTypedPointer.tpe, freshName("sp.t"));
+      emit(GetElementPtr(newTypedPointer.name, oldTypedPointer, List(-1)));
 
-    val newTypedPointer = LocalReference(oldTypedPointer.tpe, freshName("sp.t"));
-    emit(GetElementPtr(newTypedPointer.name, oldTypedPointer, List(-1)));
+      loadEnvironmentAt(newTypedPointer, environment);
 
-    loadEnvironmentAt(newTypedPointer, environment);
+      val newStackPointer = LocalReference(spType, freshName("sp"));
+      emit(BitCast(newStackPointer.name, newTypedPointer, spType));
 
-    val newStackPointer = LocalReference(spType, freshName("sp"));
-    emit(BitCast(newStackPointer.name, newTypedPointer, spType));
-
-    newStackPointer
+      newStackPointer
+    }
   }
 
   def castEnvironmentPointer(oldEnvironmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): LocalReference = {

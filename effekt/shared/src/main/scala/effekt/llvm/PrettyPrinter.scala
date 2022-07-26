@@ -49,20 +49,20 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
   def asFragment(instruction: Instruction): LLVMFragment = instruction match {
     case Call(_, VoidType(), ConstantGlobal(_, name), arguments) =>
        s"call void ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
-    case Call(result, typ, ConstantGlobal(_, name), arguments) =>
-       s"${localName(result)} = call ${asFragment(typ)} ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
+    case Call(result, tpe, ConstantGlobal(_, name), arguments) =>
+       s"${localName(result)} = call ${asFragment(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
     case TailCall(LocalReference(_, name), arguments) =>
       s"tail call fastcc void ${localName(name)}(${commaSeparated(arguments.map(asFragment))})"
     case TailCall(ConstantGlobal(_, name), arguments) =>
       s"tail call fastcc void ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
-    case BitCast(result, operand, typ) =>
-      s"${localName(result)} = bitcast ${asFragment(operand)} to ${asFragment(typ)}"
-    case GetElementPtr(result, LocalReference(PointerType(typ), name), List(i0)) =>
-      s"${localName(result)} = getelementptr ${asFragment(typ)}, ${asFragment(LocalReference(PointerType(typ), name))}, i64 $i0"
-    case GetElementPtr(result, LocalReference(PointerType(typ), name), List(i0, i1)) =>
-      s"${localName(result)} = getelementptr ${asFragment(typ)}, ${asFragment(LocalReference(PointerType(typ), name))}, i64 $i0, i32 $i1"
-    case Load(result, LocalReference(PointerType(typ), name)) =>
-      s"${localName(result)} = load ${asFragment(typ)}, ${asFragment(LocalReference(PointerType(typ), name))}"
+    case BitCast(result, operand, tpe) =>
+      s"${localName(result)} = bitcast ${asFragment(operand)} to ${asFragment(tpe)}"
+    case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0)) =>
+      s"${localName(result)} = getelementptr ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}, i64 $i0"
+    case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0, i1)) =>
+      s"${localName(result)} = getelementptr ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}, i64 $i0, i32 $i1"
+    case Load(result, LocalReference(PointerType(tpe), name)) =>
+      s"${localName(result)} = load ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}"
     case Store(address, value) =>
       s"store ${asFragment(value)}, ${asFragment(address)}"
     case Add(result, operand0, ConstantInt(n)) =>
@@ -82,13 +82,14 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
   }
 
   def asFragment(operand: Operand): LLVMFragment = operand match {
-    case LocalReference(typ, name) => s"${asFragment(typ)} ${localName(name)}"
-    case ConstantGlobal(typ, name) => s"${asFragment(typ)} ${globalName(name)}"
+    case LocalReference(tpe, name) => s"${asFragment(tpe)} ${localName(name)}"
+    case ConstantGlobal(tpe, name) => s"${asFragment(tpe)} ${globalName(name)}"
     case ConstantInt(n) => s"i64 $n"
-    case ConstantAggregateZero(typ) => s"${asFragment(typ)} zeroinitializer"
+    case ConstantAggregateZero(tpe) => s"${asFragment(tpe)} zeroinitializer"
+    case ConstantNull(tpe) => s"${asFragment(tpe)} null"
   }
 
-  def asFragment(typ: Type): LLVMFragment = typ match {
+  def asFragment(tpe: Type): LLVMFragment = tpe match {
     case VoidType() => "void"
     case IntegerType64() => "i64"
     case IntegerType8() => "i8" // required for `void*` (which only exists as `i8*` in LLVM)
@@ -99,7 +100,7 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
   }
 
   def asFragment(parameter: Parameter): LLVMFragment = parameter match {
-    case Parameter(typ, name) => s"${asFragment(typ)} ${localName(name)}"
+    case Parameter(tpe, name) => s"${asFragment(tpe)} ${localName(name)}"
   }
 
   def localName(name: String): LLVMFragment = "%" + name
