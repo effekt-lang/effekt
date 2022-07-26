@@ -32,7 +32,9 @@ object Transformer {
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
       case machine.DefineForeign(returnType, functionName, parameters, body) =>
-        VerbatimFunction(transform(returnType), functionName, parameters.map(transformParameter), body)
+        VerbatimFunction(transform(returnType), functionName, parameters.map {
+          case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
+        }, body)
       case machine.Include(content) =>
         Verbatim(content)
     }
@@ -41,21 +43,9 @@ object Transformer {
     statement match {
       case machine.Def(machine.Label(name, environment), body, rest) =>
 
-        val () = {
-          implicit val FC = FunctionContext();
-          implicit val BC = BlockContext();
-
+        defineFunction(name, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
           loadEnvironment(initialEnvironmentReference, environment);
-          val terminator = transform(body);
-
-          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-          val instructions = BC.instructions; BC.instructions = null;
-
-          val parameters = List(Parameter(envType, "env"), Parameter(spType, "sp"));
-          val entryBlock = BasicBlock("entry", instructions, terminator);
-          val function = Function(VoidType(), name, parameters, entryBlock :: basicBlocks);
-
-          emit(function)
+          transform(body);
         };
 
         transform(rest)
@@ -122,25 +112,14 @@ object Transformer {
 
         val clauseName = freshName(variable.name);
 
-        val () = {
-          implicit val FC = FunctionContext();
-          implicit val BC = BlockContext();
+        defineFunction(clauseName, List(Parameter(envType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
-          val objName = "obj";
-          loadEnvironment(LocalReference(envType, objName), closureEnvironment);
-          emit(Call("_", VoidType(), free, List(LocalReference(envType, objName))));
+          loadEnvironment(LocalReference(envType, "obj"), closureEnvironment);
+          emit(Call("_", VoidType(), free, List(LocalReference(envType, "obj"))));
+
           loadEnvironment(initialEnvironmentReference, clause.parameters);
 
-          val terminator = transform(clause.body);
-
-          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-          val instructions = BC.instructions; BC.instructions = null;
-
-          val parameters = List(Parameter(envType, objName), Parameter(envType, "env"), Parameter(spType, "sp"));
-          val entryBlock = BasicBlock("entry", instructions, terminator);
-          val function = Function(VoidType(), clauseName, parameters, entryBlock :: basicBlocks);
-
-          emit(function)
+          transform(clause.body);
         };
 
         // TODO do nothing if closure environment is empty
@@ -174,22 +153,12 @@ object Transformer {
 
         val frameName = freshName("k");
 
-        val () = {
-          implicit val FC = FunctionContext();
-          implicit val BC = BlockContext();
+        defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
           loadEnvironment(initialEnvironmentReference, frame.parameters);
-          val terminator = transform(frame.body);
 
-          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-          val instructions = BC.instructions; BC.instructions = null;
-
-          val parameters = List(Parameter(envType, "env"), Parameter(spType, "sp"));
-          val entryBlock = BasicBlock("entry", instructions, terminator);
-          val function = Function(VoidType(), frameName, parameters, entryBlock :: basicBlocks);
-
-          emit(function)
+          transform(frame.body);
         };
 
         pushEnvironment(frameEnvironment);
@@ -212,9 +181,7 @@ object Transformer {
 
         val frameName = freshName("k");
 
-        val () = {
-          implicit val FC = FunctionContext();
-          implicit val BC = BlockContext();
+        defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
           loadEnvironment(initialEnvironmentReference, frame.parameters);
@@ -228,16 +195,7 @@ object Transformer {
           emit(Call("_", VoidType(), eraseStack, List(oldStack)));
           setStackPointer(newStackPointer);
 
-          val terminator = transform(frame.body);
-
-          val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-          val instructions = BC.instructions; BC.instructions = null;
-
-          val parameters = List(Parameter(envType, "env"), Parameter(spType, "sp"));
-          val entryBlock = BasicBlock("entry", instructions, terminator);
-          val function = Function(VoidType(), frameName, parameters, entryBlock :: basicBlocks);
-
-          emit(function)
+          transform(frame.body);
         };
 
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
@@ -293,11 +251,6 @@ object Transformer {
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 
-  def transformParameter(variable: machine.Variable): Parameter =
-    variable match {
-      case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
-    }
-
   def positiveType = StructureType(List(IntegerType64(), envType));
   // TODO multiple methods (should be pointer to vtable)
   def negativeType = StructureType(List(methodType, envType));
@@ -323,6 +276,21 @@ object Transformer {
       case machine.Primitive("Int") => 8
       case machine.Primitive("Stk") => 8
     }
+
+  def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
+    implicit val FC = FunctionContext();
+    implicit val BC = BlockContext();
+
+    val terminator = prog;
+
+    val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+    val instructions = BC.instructions; BC.instructions = null;
+
+    val entryBlock = BasicBlock("entry", instructions, terminator);
+    val function = Function(VoidType(), name, parameters, entryBlock :: basicBlocks);
+
+    emit(function)
+  }
 
   def initialEnvironmentReference = LocalReference(envType, "env")
 
