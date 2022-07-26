@@ -36,6 +36,7 @@ case class LocalReference(tpe: Type, name: String) extends Operand
 case class ConstantInt(n: Int) extends Operand
 case class ConstantAggregateZero(typ: Type) extends Operand
 case class ConstantGlobal(tpe: Type, name: String) extends Operand
+case class ConstantNull(tpe: Type) extends Operand
 
 /*
 see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Type
