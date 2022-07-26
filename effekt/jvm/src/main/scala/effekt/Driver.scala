@@ -6,7 +6,7 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.{ ColoredMessaging, MarkdownSource }
+import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
@@ -21,7 +21,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
 
   val name = "effekt"
 
-  object messaging extends ColoredMessaging
+  object messaging extends AnsiColoredMessaging
 
   // Compiler context
   // ================

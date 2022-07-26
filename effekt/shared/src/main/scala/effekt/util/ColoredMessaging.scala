@@ -4,16 +4,28 @@ package util
 import effekt.symbols.{ Capture, Captures, Effects, ErrorMessageInterpolator, LocalName, Name, NoName, QualifiedName, TypePrinter }
 import effekt.util.messages.*
 import kiama.util.{ Messaging, Position, Positions, Severities }
+import kiama.util.Severities._
 
-class ColoredMessaging extends EffektMessaging {
+trait ColoredMessaging extends EffektMessaging {
 
-  import Severities._
+  // Colors
+  // ------
+
+  def yellow(s: String): String
+  def red(s: String): String
+  def white(s: String): String
+  def bold(s: String): String
+  def bold_red(s: String): String
+  def highlight(s: String): String
+  def underlined(s: String): String
+
+  def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
 
   def severityToWord(severity: Severity): String =
     severity match {
-      case Error       => s"${Console.RED}error${Console.RESET}"
-      case Warning     => s"${Console.YELLOW}warning${Console.RESET}"
-      case Information => s"${Console.WHITE}info${Console.RESET}"
+      case Error       => red("error")
+      case Warning     => yellow("warning")
+      case Information => white("info")
       case Hint        => "hint"
     }
 
@@ -28,13 +40,13 @@ class ColoredMessaging extends EffektMessaging {
 
   def formatMessage(message: EffektError, from: Position): String = {
     val severity = severityToWord(message.severity)
-    val context = util.Highlight(from.optContext.getOrElse(""))
+    val context = util.AnsiHighlight(from.optContext.getOrElse(""))
     s"[$severity] ${from.format} ${formatContent(message)}\n$context\n"
   }
 
   def formatMessage(message: EffektError, from: Position, to: Position): String = {
     val severity = severityToWord(message.severity)
-    val context = util.Highlight(from.source.optLineContents(from.line).map { src =>
+    val context = util.AnsiHighlight(from.source.optLineContents(from.line).map { src =>
       src + "\n" + (" " * (from.column - 1)) + ("^" * (to.column - from.column))
     }.getOrElse(""))
     s"[$severity] ${from.format} ${formatContent(message)}\n$context\n"
@@ -100,11 +112,34 @@ class ColoredMessaging extends EffektMessaging {
     case n: QualifiedName => n.qualifiedName
     case n: Name          => n.name
   }
+}
 
-  def highlight(s: String): String = Console.WHITE_B + s + Console.RESET
+class PlainMessaging extends ColoredMessaging {
+  def yellow(s: String): String = s
+  def red(s: String): String = s
+  def white(s: String): String = s
+  def bold(s: String): String = s
+  def bold_red(s: String): String = s
+  def highlight(s: String): String = s
+  def underlined(s: String): String = s
+
+  // Don't show context in plain messaging.
+  override def formatMessage(message: EffektError, from: Position): String = {
+    val severity = severityToWord(message.severity)
+    s"[$severity] ${from.format} ${formatContent(message)}\n"
+  }
+
+  override def formatMessage(message: EffektError, from: Position, to: Position): String =
+    formatMessage(message, from)
+}
+
+class AnsiColoredMessaging extends ColoredMessaging {
   def yellow(s: String): String = Console.YELLOW + s + Console.RESET
+  def red(s: String): String = Console.RED + s + Console.RESET
+  def white(s: String): String = Console.WHITE + s + Console.RESET
   def bold(s: String): String = Console.BOLD + s + Console.RESET
   def bold_red(s: String): String = Console.RED_B + s + Console.RESET
+  def highlight(s: String): String = Console.WHITE_B + s + Console.RESET
   def underlined(s: String): String = Console.UNDERLINED + s + Console.RESET
-  def indent(s: String): String = s.linesIterator.map(l => "  " + l).mkString("\n")
 }
+

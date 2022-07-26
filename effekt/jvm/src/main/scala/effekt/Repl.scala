@@ -3,7 +3,7 @@ package effekt
 import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
-import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
+import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource }
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
 import kiama.util.{ Console, REPL, Source, StringSource, Range }
@@ -13,7 +13,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
 
-  val messaging = new ColoredMessaging
+  val messaging = new AnsiColoredMessaging
 
   val logo =
     """|  _____     ______  __  __     _    _
@@ -261,7 +261,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
   }
 
   def outputCode(code: String, config: EffektConfig): Unit =
-    config.output().emitln(Highlight(code))
+    config.output().emitln(AnsiHighlight(code))
 
   /**
    * Enables persistent command history on JLine

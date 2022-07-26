@@ -3,9 +3,10 @@ package effekt
 import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
+import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
 import kiama.util.{ Position, Services, Source }
-import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -18,6 +19,12 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   import effekt.symbols._
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+
+  // Diagnostics
+  object lspMessaging extends PlainMessaging
+
+  override def messageToDiagnostic(message: EffektError): Diagnostic =
+    diagnostic(message.range, lspMessaging.formatMessage(message), message.severity)
 
   override def getDefinition(position: Position): Option[Tree] =
     getDefinitionAt(position)(context)
