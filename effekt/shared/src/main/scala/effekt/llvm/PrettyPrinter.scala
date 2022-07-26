@@ -1,12 +1,5 @@
 package effekt.llvm
 
-// Sane names are important, since unescaping string interpolation is used
-// to construct `LLVMFragment`s. As such, great care should be taken as to
-// not let user-controlled name data leak into LLVM source.
-// TODO Got seized.
-val SANE_NAME_REGEX = """^[a-zA-Z_$][a-zA-Z0-9_$]*$""".r
-
-// after de-kiama-ing, everything will have been dissolved into strings
 type LLVMFragment = String
 
 // indent all but the first line with four spaces
