@@ -187,12 +187,7 @@ object Transformer {
           loadEnvironment(initialEnvironmentReference, frame.parameters);
 
           val newStackPointer = LocalReference(spType, freshName("sp"));
-          val tmpReference = LocalReference(StructureType(List(stkType, spType)), freshName("tmp"));
-          val oldStack = LocalReference(stkType, freshName("stkp"));
-          emit(Call(tmpReference.name, StructureType(List(stkType, spType)), popStack, List(getStackPointer())));
-          emit(ExtractValue(oldStack.name, tmpReference, 0));
-          emit(ExtractValue(newStackPointer.name, tmpReference, 1));
-          emit(Call("_", VoidType(), eraseStack, List(oldStack)));
+          emit(Call(newStackPointer.name, spType, underflowStack, List(getStackPointer())));
           setStackPointer(newStackPointer);
 
           transform(frame.body);
@@ -431,7 +426,7 @@ object Transformer {
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
   def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(stkType,spType)),List(spType))), "popStack");
-  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "eraseStack");
+  def underflowStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "underflowStack");
 
 }
 
