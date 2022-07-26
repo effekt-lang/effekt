@@ -94,6 +94,7 @@ object Transformer {
         val labels = clauses.map {
           case machine.Clause(parameters, body) =>
             implicit val BC = BlockContext();
+            // TODO reset stack pointer to outer one
 
             loadEnvironment(LocalReference(envType, objName), parameters);
             emit(Call("_", VoidType(), free, List(LocalReference(envType, objName))));
@@ -219,9 +220,9 @@ object Transformer {
           loadEnvironment(initialEnvironmentReference, frame.parameters);
 
           val newStackPointer = LocalReference(spType, freshName("sp"));
-          val tmpReference = LocalReference(StructureType(List(NamedType("MStk"), spType)), freshName("tmp"));
-          val oldStack = LocalReference(NamedType("MStk"), freshName("stkp"));
-          emit(Call(tmpReference.name, StructureType(List(NamedType("MStk"), spType)), popStack, List(getStackPointer())));
+          val tmpReference = LocalReference(StructureType(List(stkType, spType)), freshName("tmp"));
+          val oldStack = LocalReference(stkType, freshName("stkp"));
+          emit(Call(tmpReference.name, StructureType(List(stkType, spType)), popStack, List(getStackPointer())));
           emit(ExtractValue(oldStack.name, tmpReference, 0));
           emit(ExtractValue(newStackPointer.name, tmpReference, 1));
           emit(Call("_", VoidType(), eraseStack, List(oldStack)));
@@ -241,7 +242,7 @@ object Transformer {
 
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
         val oldStackPointer = LocalReference(spType, freshName("stksp"));
-        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("Stk")), variable.name), List(0, 0)));
+        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 0)));
         emit(Load(oldStackPointer.name, stackPointerPointer));
         val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, frameName);
@@ -258,8 +259,8 @@ object Transformer {
       case machine.PopStack(variable, rest) =>
         val newStackPointerName = freshName("sp");
         val tmpName = freshName("tmp");
-        val tmpReference = LocalReference(StructureType(List(NamedType("MStk"), spType)), tmpName);
-        emit(Call(tmpName, StructureType(List(NamedType("MStk"), spType)), popStack, List(getStackPointer())));
+        val tmpReference = LocalReference(StructureType(List(stkType, spType)), tmpName);
+        emit(Call(tmpName, StructureType(List(stkType, spType)), popStack, List(getStackPointer())));
         emit(ExtractValue(variable.name, tmpReference, 0));
         emit(ExtractValue(newStackPointerName, tmpReference, 1));
         setStackPointer(LocalReference(spType, newStackPointerName));
@@ -297,18 +298,19 @@ object Transformer {
       case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
     }
 
-  def positiveType: Type = StructureType(List(IntegerType64(), envType));
+  def positiveType = StructureType(List(IntegerType64(), envType));
   // TODO multiple methods (should be pointer to vtable)
-  def negativeType: Type = StructureType(List(methodType, envType));
-  def methodType: Type = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
-  def envType: Type = NamedType("Env");
-  def spType: Type = NamedType("Sp");
+  def negativeType = StructureType(List(methodType, envType));
+  def methodType = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
+  def envType = NamedType("Env");
+  def spType = NamedType("Sp");
+  def stkType = NamedType("Stk");
 
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive(_)      => positiveType
     case machine.Negative(_)      => negativeType
     case machine.Primitive("Int") => NamedType("Int")
-    case machine.Primitive("MStk") => NamedType("MStk")
+    case machine.Primitive("Stk") => stkType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -316,10 +318,10 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive(_)       => 16
-      case machine.Negative(_)       => 16
-      case machine.Primitive("Int")  => 8
-      case machine.Primitive("MStk") => 8
+      case machine.Positive(_)      => 16
+      case machine.Negative(_)      => 16
+      case machine.Primitive("Int") => 8
+      case machine.Primitive("Stk") => 8
     }
 
   def initialEnvironmentReference = LocalReference(envType, "env")
@@ -458,10 +460,10 @@ object Transformer {
 
   def malloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
   def free = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
-  def newStack = ConstantGlobal(PointerType(FunctionType(NamedType("MStk"),List())), "newStack");
-  def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(NamedType("MStk"), spType))), "pushStack");
-  def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(NamedType("MStk"),spType)),List(spType))), "popStack");
-  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(NamedType("MStk")))), "eraseStack");
+  def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
+  def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
+  def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(stkType,spType)),List(spType))), "popStack");
+  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "eraseStack");
 
 }
 
