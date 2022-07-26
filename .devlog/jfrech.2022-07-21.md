@@ -1,19 +1,11 @@
 # [jfrech, 2022-07-21]
 
-## Bring back seized comments and add:
-```
-[jfrech, 2022-07-12] TODO apparently, this notion is subtly incorrect, yet its clarification requires exact specification of what we mean by an *environment* (local register representation of a
- frame, C-style environment, or Effekt-stack baked state representation)
-```
-
-## Bring back RegExp-based name sanitation
+## Do not touch `llvm/Transformer.scala`!
 
 ## Fix all exhaustivity warnings (`asFragment`, `freeVariables`, ...).
 By either shouting loudly or implementing it.
 
 ## Exhaustivity in `machine.scala`: Core -> Machine (or a catch-all)
-
-## Do not touch `llvm/Transformer.scala`
 
 # `libraries/llvm/effekt.effekt`: make `infixEq` work
 Booleans now are ADTs:
