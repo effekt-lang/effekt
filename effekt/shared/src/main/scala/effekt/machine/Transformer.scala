@@ -98,7 +98,7 @@ object Transformer {
               Invoke(Variable(transform(id), transform(tpe)), 0, values))
           case symbols.ResumeParam(_) =>
             transform(args).run(values =>
-              PushStack(Variable(transform(id), Primitive("MStk")),
+              PushStack(Variable(transform(id), Primitive("Stk")),
               Return(values)))
           case _ =>
             println(id);
@@ -122,7 +122,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)));
 
         val delimiterName = FreshBlockSymbol("ret", C.module);
-        val delimiter = Variable(transform(delimiterName), Primitive("MStk"));
+        val delimiter = Variable(transform(delimiterName), Primitive("Stk"));
 
         NewStack(delimiter, returnClause,
         PushStack(delimiter,
@@ -382,7 +382,7 @@ object Transformer {
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         List(Clause(params.map(transform),
-        PopStack(Variable(transform(resume).name, Primitive("MStk")),
+        PopStack(Variable(transform(resume).name, Primitive("Stk")),
         transform(body)
         )))
       case _ =>

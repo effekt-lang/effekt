@@ -7,9 +7,9 @@
 %Base = type %Sp
 %Limit = type %Sp
 
-%Stk = type { %Sp, %Base, %Limit, %Stk* }
+%StkVal = type { %Sp, %Base, %Limit, %StkVal* }
 
-%MStk = type %Stk*
+%Stk = type %StkVal*
 
 %Env = type i8*
 
@@ -18,7 +18,7 @@
 
 @base = private global %Base null
 @limit = private global %Limit null
-@rest = private global %MStk undef
+@rest = private global %Stk undef
 
 
 ; Foreign imports
@@ -35,95 +35,95 @@ declare void @exit(i64)
 
 ; Meta-stack management
 
-define %Stk* @newStack() alwaysinline {
+define %StkVal* @newStack() alwaysinline {
 
     ; TODO find actual size of stack
     %stkm = call i8* @malloc(i64 32)
-    %stkp = bitcast i8* %stkm to %Stk*
+    %stkp = bitcast i8* %stkm to %StkVal*
 
     ; TODO initialize to zero and grow later
     %sp = call %Sp @malloc(i64 1024)
 
-    %stk.0 = insertvalue %Stk undef, %Sp %sp, 0
-    %stk.1 = insertvalue %Stk %stk.0, %Base %sp, 1
-    %stk.2 = insertvalue %Stk %stk.1, %Limit null, 2
-    %stk.3 = insertvalue %Stk %stk.2, %MStk null, 3
+    %stk.0 = insertvalue %StkVal undef, %Sp %sp, 0
+    %stk.1 = insertvalue %StkVal %stk.0, %Base %sp, 1
+    %stk.2 = insertvalue %StkVal %stk.1, %Limit null, 2
+    %stk.3 = insertvalue %StkVal %stk.2, %Stk null, 3
 
-    store %Stk %stk.3, %Stk* %stkp
+    store %StkVal %stk.3, %StkVal* %stkp
 
-    ret %Stk* %stkp
+    ret %StkVal* %stkp
 }
 
-define %Sp @pushStack(%Stk* %stkp, %Sp %oldsp) alwaysinline {
+define %Sp @pushStack(%StkVal* %stkp, %Sp %oldsp) alwaysinline {
 
-    %stksp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 0
-    %stkbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 1
-    %stklimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 2
-    %stkrest = getelementptr %Stk, %Stk* %stkp, i64 0, i32 3
+    %stksp = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 0
+    %stkbase = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 1
+    %stklimit = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 2
+    %stkrest = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 3
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
     %newlimit = load %Limit, %Limit* %stklimit
-    ; %newrest = load %MStk, %MStk* %stkrest
+    ; %newrest = load %Stk, %Stk* %stkrest
     ; assert %newrest == null
 
     %oldbase = load %Base, %Base* @base
     %oldlimit = load %Limit, %Limit* @limit
-    %oldrest = load %MStk, %MStk* @rest
+    %oldrest = load %Stk, %Stk* @rest
 
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
-    store %MStk %stkp, %MStk* @rest
+    store %Stk %stkp, %Stk* @rest
 
     store %Sp %oldsp, %Sp* %stksp
     store %Base %oldbase, %Base* %stkbase
     store %Limit %oldlimit, %Limit* %stklimit
-    store %MStk %oldrest, %MStk* %stkrest
+    store %Stk %oldrest, %Stk* %stkrest
 
     ret %Sp %newsp
 }
 
-define {%Stk*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
+define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
-    %stkp = load %Stk*, %Stk** @rest
+    %stkp = load %StkVal*, %StkVal** @rest
 
-    %stksp = getelementptr %Stk, %Stk* %stkp, i64 0, i32 0
-    %stkbase = getelementptr %Stk, %Stk* %stkp, i64 0, i32 1
-    %stklimit = getelementptr %Stk, %Stk* %stkp, i64 0, i32 2
-    %stkrest = getelementptr %Stk, %Stk* %stkp, i64 0, i32 3
+    %stksp = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 0
+    %stkbase = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 1
+    %stklimit = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 2
+    %stkrest = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 3
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
     %newlimit = load %Limit, %Limit* %stklimit
-    %newrest = load %MStk, %MStk* %stkrest
+    %newrest = load %Stk, %Stk* %stkrest
 
     %oldbase = load %Base, %Base* @base
     %oldlimit = load %Limit, %Limit* @limit
-    ; %oldrest = load %MStk, %MStk* @rest
+    ; %oldrest = load %Stk, %Stk* @rest
 
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
-    store %MStk %newrest, %MStk* @rest
+    store %Stk %newrest, %Stk* @rest
 
     store %Sp %oldsp, %Sp* %stksp
     store %Base %oldbase, %Base* %stkbase
     store %Limit %oldlimit, %Limit* %stklimit
-    store %MStk null, %MStk* %stkrest
+    store %Stk null, %Stk* %stkrest
 
-    %ret.0 = insertvalue {%Stk*, %Sp} undef, %Stk* %stkp, 0
-    %ret.1 = insertvalue {%Stk*, %Sp} %ret.0, %Sp %newsp, 1
+    %ret.0 = insertvalue {%StkVal*, %Sp} undef, %StkVal* %stkp, 0
+    %ret.1 = insertvalue {%StkVal*, %Sp} %ret.0, %Sp %newsp, 1
 
-    ret {%Stk*, %Sp} %ret.1
+    ret {%StkVal*, %Sp} %ret.1
 }
 
-define %Stk* @copyStack(%Stk* %stkp) alwaysinline {
+define %StkVal* @copyStack(%StkVal* %stkp) alwaysinline {
 entry:
-    %stk = load %Stk, %Stk* %stkp
+    %stk = load %StkVal, %StkVal* %stkp
 
-    %sp = extractvalue %Stk %stk, 0
-    %base = extractvalue %Stk %stk, 1
-    %limit = extractvalue %Stk %stk, 2
-    ; %rest = extractvalue %Stk %stk, 3
+    %sp = extractvalue %StkVal %stk, 0
+    %base = extractvalue %StkVal %stk, 1
+    %limit = extractvalue %StkVal %stk, 2
+    ; %rest = extractvalue %StkVal %stk, 3
     ; assert %rest == null
 
     %intsp = ptrtoint %Sp %sp to i64
@@ -152,59 +152,59 @@ entry:
 ;     %newboxeslimit = inttoptr i64 %intnewboxeslimit to %BoxesLimit
 
 ;     ; TODO walk in the other direction
-;     %boxessptyped = bitcast %BoxesSp %boxessp to %Stk**
-;     %boxesbasetyped = bitcast %BoxesSp %boxesbase to %Stk**
-;     %newboxesbasetyped = bitcast %BoxesSp %newboxesbase to %Stk**
+;     %boxessptyped = bitcast %BoxesSp %boxessp to %StkVal**
+;     %boxesbasetyped = bitcast %BoxesSp %boxesbase to %StkVal**
+;     %newboxesbasetyped = bitcast %BoxesSp %newboxesbase to %StkVal**
 ;     br label %comp
 ; comp:
-;     %currentboxessp = phi %Stk** [%boxesbasetyped, %entry], [%nextboxessp, %loop]
-;     %currentnewboxessp = phi %Stk** [%newboxesbasetyped, %entry], [%nextnewboxessp, %loop]
-;     %atend = icmp eq %Stk** %currentboxessp, %boxessptyped
+;     %currentboxessp = phi %StkVal** [%boxesbasetyped, %entry], [%nextboxessp, %loop]
+;     %currentnewboxessp = phi %StkVal** [%newboxesbasetyped, %entry], [%nextnewboxessp, %loop]
+;     %atend = icmp eq %StkVal** %currentboxessp, %boxessptyped
 ;     br i1 %atend, label %done, label %loop
 ; loop:
-;     %currentstk = load %Stk*, %Stk** %currentboxessp
-;     %currentnewstk = call %Stk* @copyStack(%Stk* %currentstk)
-;     store %Stk* %currentnewstk, %Stk** %currentnewboxessp
-;     %nextboxessp = getelementptr %Stk*, %Stk** %currentboxessp, i64 1
-;     %nextnewboxessp = getelementptr %Stk*, %Stk** %currentnewboxessp, i64 1
+;     %currentstk = load %StkVal*, %StkVal** %currentboxessp
+;     %currentnewstk = call %StkVal* @copyStack(%StkVal* %currentstk)
+;     store %StkVal* %currentnewstk, %StkVal** %currentnewboxessp
+;     %nextboxessp = getelementptr %StkVal*, %StkVal** %currentboxessp, i64 1
+;     %nextnewboxessp = getelementptr %StkVal*, %StkVal** %currentnewboxessp, i64 1
 ;     br label %comp
 ; done:
-;     %newboxessp = bitcast %Stk** %currentnewboxessp to %BoxesSp
+;     %newboxessp = bitcast %StkVal** %currentnewboxessp to %BoxesSp
 
-    %newstk.0 = insertvalue %Stk undef, %Sp %newsp, 0
-    %newstk.1 = insertvalue %Stk %newstk.0, %Base %newbase, 1
-    %newstk.2 = insertvalue %Stk %newstk.1, %Limit %newlimit, 2
-    %newstk.3 = insertvalue %Stk %newstk.2, %MStk null, 3
+    %newstk.0 = insertvalue %StkVal undef, %Sp %newsp, 0
+    %newstk.1 = insertvalue %StkVal %newstk.0, %Base %newbase, 1
+    %newstk.2 = insertvalue %StkVal %newstk.1, %Limit %newlimit, 2
+    %newstk.3 = insertvalue %StkVal %newstk.2, %Stk null, 3
 
-    %newstkp = call %Stk* @newStack()
-    store %Stk %newstk.3, %Stk* %newstkp
-    ret %Stk* %newstkp
+    %newstkp = call %StkVal* @newStack()
+    store %StkVal %newstk.3, %StkVal* %newstkp
+    ret %StkVal* %newstkp
 }
 
-define void @eraseStack(%Stk* %stkp) alwaysinline {
+define void @eraseStack(%StkVal* %stkp) alwaysinline {
 entry:
-    %stk = load %Stk, %Stk* %stkp
+    %stk = load %StkVal, %StkVal* %stkp
 
-    %baseuntyped = extractvalue %Stk %stk, 1
+    %baseuntyped = extractvalue %StkVal %stk, 1
 
-;     %boxesspuntyped = extractvalue %Stk %stk, 3
-;     %boxesbaseuntyped = extractvalue %Stk %stk, 4
+;     %boxesspuntyped = extractvalue %StkVal %stk, 3
+;     %boxesbaseuntyped = extractvalue %StkVal %stk, 4
 
-;     %boxessp = bitcast %BoxesSp %boxesspuntyped to %Stk**
-;     %boxesbase = bitcast %BoxesBase %boxesbaseuntyped to %Stk**
+;     %boxessp = bitcast %BoxesSp %boxesspuntyped to %StkVal**
+;     %boxesbase = bitcast %BoxesBase %boxesbaseuntyped to %StkVal**
 
 ;     br label %comp
 ; comp:
-;     %currentboxessp = phi %Stk** [%boxessp, %entry], [%newboxessp, %loop]
-;     %atbase = icmp eq %Stk** %currentboxessp, %boxesbase
+;     %currentboxessp = phi %StkVal** [%boxessp, %entry], [%newboxessp, %loop]
+;     %atbase = icmp eq %StkVal** %currentboxessp, %boxesbase
 ;     br i1 %atbase, label %done, label %loop
 ; loop:
-;     %newboxessp = getelementptr %Stk*, %Stk** %currentboxessp, i64 -1
-;     %nextstk = load %Stk*, %Stk** %newboxessp
-;     call fastcc void @eraseStack(%Stk* %nextstk)
+;     %newboxessp = getelementptr %StkVal*, %StkVal** %currentboxessp, i64 -1
+;     %nextstk = load %StkVal*, %StkVal** %newboxessp
+;     call fastcc void @eraseStack(%StkVal* %nextstk)
 ;     br label %comp
 ; done:
-    %stkuntyped = bitcast %Stk* %stkp to i8*
+    %stkuntyped = bitcast %StkVal* %stkp to i8*
     call void @free(i8* %stkuntyped)
     call void @free(i8* %baseuntyped)
 ;     call void @free(i8* %boxesbaseuntyped)
