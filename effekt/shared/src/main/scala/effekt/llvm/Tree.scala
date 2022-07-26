@@ -38,9 +38,9 @@ case class ConstantAggregateZero(typ: Type) extends Operand
 case class ConstantGlobal(tpe: Type, name: String) extends Operand
 case class ConstantNull(tpe: Type) extends Operand
 
-/*
-see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Type
-*/
+/**
+ *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Type
+ */
 sealed trait Type
 case class VoidType() extends Type
 case class IntegerType64() extends Type
@@ -49,4 +49,3 @@ case class StructureType(elementTypes: List[Type]) extends Type
 case class FunctionType(resultType: Type, argumentTypes: List[Type]) extends Type
 case class PointerType(pointerReferent: Type) extends Type
 case class NamedType(name: String) extends Type
-
