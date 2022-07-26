@@ -1,5 +1,7 @@
 package effekt.llvm
 
+import effekt.context.Context
+
 type LLVMFragment = String
 
 // indent all but the first line with four spaces
@@ -10,10 +12,10 @@ def spaceSeparated(args: List[String]): String = args.mkString(" ")
 
 object PrettyPrinter {
 
-  def asFragment(definitions: List[Definition]): LLVMFragment =
+  def asFragment(definitions: List[Definition])(implicit C: Context): LLVMFragment =
     definitions.map(asFragment).mkString("\n\n")
 
-  def asFragment(definition: Definition): LLVMFragment = definition match {
+  def asFragment(definition: Definition)(implicit C: Context): LLVMFragment = definition match {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
 define fastcc ${asFragment(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(asFragment))}) {
@@ -30,7 +32,7 @@ define ${asFragment(returnType)} ${globalName(name)}(${commaSeparated(parameters
     case Verbatim(content) => content
   }
 
-  def asFragment(basicBlock: BasicBlock): LLVMFragment = basicBlock match {
+  def asFragment(basicBlock: BasicBlock)(implicit C: Context): LLVMFragment = basicBlock match {
     case BasicBlock(name, instructions, terminator) =>
       s"""
 ${name}:
@@ -39,29 +41,44 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
 """
   }
 
-  def asFragment(instruction: Instruction): LLVMFragment = instruction match {
+  def asFragment(instruction: Instruction)(implicit C: Context): LLVMFragment = instruction match {
+
     case Call(_, VoidType(), ConstantGlobal(_, name), arguments) =>
        s"call void ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
     case Call(result, tpe, ConstantGlobal(_, name), arguments) =>
        s"${localName(result)} = call ${asFragment(tpe)} ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
+    case Call(_, _, nonglobal, _) => C.abort(s"cannot call non-global operand: $nonglobal")
+
     case TailCall(LocalReference(_, name), arguments) =>
       s"tail call fastcc void ${localName(name)}(${commaSeparated(arguments.map(asFragment))})"
     case TailCall(ConstantGlobal(_, name), arguments) =>
       s"tail call fastcc void ${globalName(name)}(${commaSeparated(arguments.map(asFragment))})"
-    case BitCast(result, operand, tpe) =>
-      s"${localName(result)} = bitcast ${asFragment(operand)} to ${asFragment(tpe)}"
+    case TailCall(nonglobal, _) => C.abort(s"can only tail call references, not: $nonglobal")
+    // TODO [jfrech, 2022-07-26] Why does tail call even have a return type if we do not use it?
+
+    case Load(result, LocalReference(PointerType(tpe), name)) =>
+      s"${localName(result)} = load ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}"
+    case Load(_, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
+    // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
+    case Store(address, value) =>
+      s"store ${asFragment(value)}, ${asFragment(address)}"
+
     case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0)) =>
       s"${localName(result)} = getelementptr ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}, i64 $i0"
     case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0, i1)) =>
       s"${localName(result)} = getelementptr ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}, i64 $i0, i32 $i1"
-    case Load(result, LocalReference(PointerType(tpe), name)) =>
-      s"${localName(result)} = load ${asFragment(tpe)}, ${asFragment(LocalReference(PointerType(tpe), name))}"
-    case Store(address, value) =>
-      s"store ${asFragment(value)}, ${asFragment(address)}"
+    case GetElementPtr(_, operand, _) => C.abort(s"can only form a pointer to a local reference, not: $operand")
+
+    case BitCast(result, operand, tpe) =>
+      s"${localName(result)} = bitcast ${asFragment(operand)} to ${asFragment(tpe)}"
+
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${asFragment(operand0)}, $n"
+    case Add(_, _, operand1) => C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
+
     case InsertValue(result, aggregate, element, index) =>
       s"${localName(result)} = insertvalue ${asFragment(aggregate)}, ${asFragment(element)}, $index"
+
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${asFragment(aggregate)}, $index"
   }
