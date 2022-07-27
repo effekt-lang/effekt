@@ -25,7 +25,7 @@ object Transformer {
     }
 
   def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
-    implicit val BC: BlockContext = new BlockContext();
+    implicit val BC: BlockContext = new BlockContext(locals);
 
     val frameDescriptor = transformEnvironment(locals);
     val terminator = transform(body);
@@ -44,7 +44,7 @@ object Transformer {
         Jump(BlockName(name))
       }
       case machine.Substitute(bindings, rest) => {
-        emit(Subst(transform(bindings.map({case (_,v) => v}))));
+        ensureEnvironment(bindings.map({case (_,v) => v}));
         transform(rest)
       }
       case machine.Let(machine.Variable(name, typ), tag, environment, rest) => {
@@ -65,8 +65,8 @@ object Transformer {
         transform(rest)
       }
       case machine.New(name, clauses, rest) => ???
-      case machine.Invoke(machine.Variable(name, machine.Negative(List(contTyp))), 0, environment) => {
-        emit(Subst(transform(environment)));
+      case machine.Invoke(machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
+        ensureEnvironment(args);
         Resume(NamedRegister(name))
       }
       case machine.Invoke(value, tag, environment) => ???
@@ -74,9 +74,18 @@ object Transformer {
       case machine.Return(environment) => {
         Return(transform(environment))
       }
-      case machine.Run(machine.CallForeign(name), environment, List(machine.Clause(params, body))) => {
-        emit(PrimOp(name, transform(params), transform(environment)));
-        transform(body)
+      case machine.Run(machine.CallForeign(name), ins, List(machine.Clause(outs, rest))) => {
+        val freeVars = machine.freeVariables(machine.Clause(outs, rest)).toList;
+        val killedIns = (ins.toSet -- outs -- freeVars).toList;
+        ensureEnvironment(freeVars ++ outs ++ killedIns);
+        emit(PrimOp(name, transform(outs), transform(ins)));
+        transform(rest)
+      }
+      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(out), rest))) => {
+        val freeVars = machine.freeVariables(machine.Clause(List(out), rest)).toList;
+        ensureEnvironment(freeVars ++ List(out));
+        emit(Const(NamedRegister(out.name), n));
+        transform(rest)
       }
       case machine.Run(name, environment, continuation) => ???
   }
@@ -130,11 +139,17 @@ object Transformer {
     ProgC.basicBlocks.addOne(block)
   }
 
-  class BlockContext() {
+  class BlockContext(var currentEnvironment: machine.Environment) {
     val instructions: ListBuffer[Instruction] = ListBuffer();
   }
 
   def emit(instruction: Instruction)(using BC: BlockContext): Unit = {
     BC.instructions.addOne(instruction)
+  }
+
+  def ensureEnvironment(newEnviornment: machine.Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    if(newEnviornment == BC.currentEnvironment) return;
+    emit(Subst(transform(newEnviornment)));
+    BC.currentEnvironment = newEnviornment;
   }
 }
