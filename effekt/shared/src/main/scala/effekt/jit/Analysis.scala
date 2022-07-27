@@ -30,10 +30,10 @@ object Analysis {
 
     def getRegisterIndex(reg: Register, typ: Type)(using BC: BlockContext): Register = {
       typ match
-        case Type.Unit => ErasedRegister()
-        case Type.Integer => RegisterIndex(BC.intRegs.indexOfOrInsert(reg))
-        case Type.Continuation => RegisterIndex(BC.contRegs.indexOfOrInsert(reg))
-        case Type.Datatype => RegisterIndex(BC.datatypeRegs.indexOfOrInsert(reg))
+        case Type.Unit() => ErasedRegister()
+        case Type.Integer() => RegisterIndex(BC.intRegs.indexOfOrInsert(reg))
+        case Type.Continuation() => RegisterIndex(BC.contRegs.indexOfOrInsert(reg))
+        case Type.Datatype(idx) => RegisterIndex(BC.datatypeRegs.indexOfOrInsert(reg))
     }
     def getRegisterIndices(regList: RegList)(using BC: BlockContext): RegList = {
       val RegList(intRegs, contRegs, datatypeRegs) = regList;
@@ -59,26 +59,30 @@ object Analysis {
         BasicBlock(id, frameDescriptor , newInstructions, newTerminator)
       }
     def transform(instruction: Instruction)(using BlockContext): Instruction = instruction match {
-      case Const(out, value) => Const(getRegisterIndex(out, Type.Integer), value)
+      case Const(out, value) => Const(getRegisterIndex(out, Type.Integer()), value)
       case PrimOp(name, out, in) => PrimOp(name, getRegisterIndices(out), getRegisterIndices(in))
-      case Add(out, in1, in2) => Add(getRegisterIndex(out, Type.Integer), getRegisterIndex(in1, Type.Integer), getRegisterIndex(in2, Type.Integer))
-      case Mul(out, in1, in2) => Mul(getRegisterIndex(out, Type.Integer), getRegisterIndex(in1, Type.Integer), getRegisterIndex(in2, Type.Integer))
+      case Add(out, in1, in2) =>
+        Add(getRegisterIndex(out, Type.Integer()),
+          getRegisterIndex(in1, Type.Integer()), getRegisterIndex(in2, Type.Integer()))
+      case Mul(out, in1, in2) =>
+        Mul(getRegisterIndex(out, Type.Integer()),
+          getRegisterIndex(in1, Type.Integer()), getRegisterIndex(in2, Type.Integer()))
       case Push(target, args) => Push(target, getRegisterIndices(args))
-      case Shift(out, n) => Shift(getRegisterIndex(out, Type.Continuation), n)
+      case Shift(out, n) => Shift(getRegisterIndex(out, Type.Continuation()), n)
       case Reset() => Reset()
-      case Print(arg) => Print(getRegisterIndex(arg, Type.Integer))
-      case IfZero(arg, Clause(args, target)) => IfZero(getRegisterIndex(arg, Type.Integer),
+      case Print(arg) => Print(getRegisterIndex(arg, Type.Integer()))
+      case IfZero(arg, Clause(args, target)) => IfZero(getRegisterIndex(arg, Type.Integer()),
         Clause(getRegisterIndices(args), target))
-      case IsZero(out, arg) => IsZero(getRegisterIndex(out, Type.Integer), getRegisterIndex(arg, Type.Integer))
+      case IsZero(out, arg) => IsZero(getRegisterIndex(out, Type.Integer()), getRegisterIndex(arg, Type.Integer()))
       case Subst(args) => Subst(getRegisterIndices(args))
-      case Construct(out, adt_type, tag, args) => Construct(getRegisterIndex(out, Type.Datatype),
-        adt_type, tag, getRegisterIndices(args))
+      case Construct(out, adtType, tag, args) => Construct(getRegisterIndex(out, Type.Datatype(adtType)),
+        adtType, tag, getRegisterIndices(args))
     }
     def transform(terminator: Terminator)(using BlockContext): Terminator = terminator match {
       case Return(args) => Return(getRegisterIndices(args))
       case Jump(target) => Jump(target)
-      case Resume(cont) => Resume(getRegisterIndex(cont, Type.Continuation))
-      case Match(adt_type, scrutinee, clauses) => Match(adt_type, getRegisterIndex(scrutinee, Type.Datatype),
+      case Resume(cont) => Resume(getRegisterIndex(cont, Type.Continuation()))
+      case Match(adtType, scrutinee, clauses) => Match(adtType, getRegisterIndex(scrutinee, Type.Datatype(adtType)),
         clauses.map({case Clause(args, target) => Clause(getRegisterIndices(args), target)}))
     }
   }

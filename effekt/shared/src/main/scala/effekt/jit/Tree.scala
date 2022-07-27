@@ -45,14 +45,14 @@ case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause]) exte
 
 // TODO + NewStack, PushStack
 
-enum Type { case Integer, Datatype, Continuation, Unit }
-def typeIndex(typ: Type): Int = {
-  typ match
-    case Type.Integer => 0
-    case Type.Datatype => 2
-    case Type.Continuation => 1
-    case Type.Unit => -1
+sealed trait Type extends Tree
+object Type {
+  case class Unit() extends Type
+  case class Continuation() extends Type
+  case class Integer() extends Type
+  case class Datatype(index: Int) extends Type
 }
+
 
 
 type ConstructorTag = Int

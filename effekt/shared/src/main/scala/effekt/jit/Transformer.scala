@@ -6,6 +6,7 @@ import effekt.symbols.{BlockSymbol, ValueSymbol}
 import effekt.jit.Analysis.*
 import effekt.machine
 import effekt.machine.LiteralInt
+import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.collection.mutable.{HashMap, ListBuffer}
 
@@ -47,12 +48,12 @@ object Transformer {
         transform(rest)
       }
       case machine.Let(machine.Variable(name, typ), tag, environment, rest) => {
-        val adtType: Int = -1; // TODO
+        val Type.Datatype(adtType) = transform(typ);
         emit(Construct(NamedRegister(name), adtType, tag, transform(environment)))
         transform(rest)
       }
       case machine.Switch(machine.Variable(name, typ), clauses) => {
-        val adtType: Int = -1 // TODO
+        val Type.Datatype(adtType) = transform(typ);
         Match(adtType, NamedRegister(name), clauses.map(transform))
       }
       case machine.New(machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
@@ -98,21 +99,21 @@ object Transformer {
     val datatypeRegs: ListBuffer[Register] = ListBuffer();
     for (machine.Variable(name, typ) <- args) {
       transform(typ) match
-        case Type.Integer => intRegs.addOne(NamedRegister(name))
-        case Type.Datatype => datatypeRegs.addOne(NamedRegister(name))
-        case Type.Continuation => contRegs.addOne(NamedRegister(name))
-        case Type.Unit => {}
+        case Type.Integer() => intRegs.addOne(NamedRegister(name))
+        case Type.Datatype(idx) => datatypeRegs.addOne(NamedRegister(name))
+        case Type.Continuation() => contRegs.addOne(NamedRegister(name))
+        case Type.Unit() => {}
     }
     return RegList(intRegs.toList, contRegs.toList, datatypeRegs.toList)
   }
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
     typ match
-      case machine.Positive(List(List())) => Type.Unit
-      case machine.Positive(alternatives) => Type.Datatype
-      case machine.Negative(contType :: Nil) => Type.Continuation
+      case machine.Positive(List(List())) => Type.Unit()
+      case machine.Positive(alternatives) => Type.Datatype(PC.datatypes.indexOfOrInsert(alternatives))
+      case machine.Negative(contType :: Nil) => Type.Continuation()
       case machine.Negative(alternatives) => ???
-      case machine.Primitive("Int") => Type.Integer
+      case machine.Primitive("Int") => Type.Integer()
       case machine.Primitive(name) => ???
   }
 
@@ -122,6 +123,7 @@ object Transformer {
 
   class ProgramContext() {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
+    val datatypes: ListBuffer[List[machine.Environment]] = ListBuffer();
   }
 
   def emit(block: BasicBlock)(using ProgC: ProgramContext): Unit = {
