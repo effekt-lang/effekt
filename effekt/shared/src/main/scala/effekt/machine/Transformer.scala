@@ -114,6 +114,16 @@ object Transformer {
             println(id);
             C.abort("unsupported blocksymbol " + id)
         }
+      case lifted.Match(scrutinee, clauses) =>
+        // TODO unordered matches
+        // TODO overlapping matches
+        // TODO incomplete matches
+        // TODO nested matches
+        transform(scrutinee).run(value =>
+        Switch(value, clauses.map {
+          case (lifted.TagPattern(constructor, patterns), lifted.BlockLit(params, body)) =>
+            Clause(params.map(transform), transform(body))
+        }))
       case lifted.Handle(lifted.ScopeAbs(_, lifted.BlockLit(List(id), body)), List(handler)) =>
         // TODO deal with evidence
         // TODO more than one handler
@@ -214,7 +224,7 @@ object Transformer {
         val variable = Variable(transform(id), Primitive("Int"));
         Binding(k =>
           Run(LiteralInt(value), List(), List(Clause(List(variable), k(variable)))))
-      case lifted.PureApp(lifted.BlockVar(blockName: BuiltinFunction), List(), args) =>
+      case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
         val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.result;
         val variable = Variable(transform(id), transform(tpe));
@@ -223,6 +233,14 @@ object Transformer {
             Run(CallForeign(transform(blockName)), values, List(
               Clause(List(variable),
               k(variable))))))
+      case lifted.PureApp(lifted.BlockVar(blockName: symbols.Record), List(), args) =>
+        val id = FreshValueSymbol("x", C.module);
+        val tpe = blockName.tpe;
+        val variable = Variable(transform(id), transform(tpe));
+        val tag = blockName.tpe.asInstanceOf[symbols.DataType].variants.indexOf(blockName);
+        transform(args).flatMap(values =>
+          Binding(k =>
+          Let(variable, tag, values, k(variable))))
       case lifted.Run(stmt) =>
         val id = FreshValueSymbol("x", C.module);
         // TODO find actual type
@@ -432,6 +450,15 @@ object Transformer {
             vparams.map( param => transform(param.tpe.get))
         };
         Negative(opsSignatures)
+      case symbols.DataType(_, List(), records) =>
+        val recSignatures = records.map {
+          case symbols.Record(_, List(), _, fields) =>
+            fields.map {
+              case symbols.Field(_, symbols.ValueParam(_, Some(tpe)), _) =>
+                transform(tpe)
+            }
+        }
+        Positive(recSignatures)
       case _ =>
         println(tpe.getClass)
         println(tpe)

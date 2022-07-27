@@ -116,8 +116,7 @@ object Transformer {
 
         val obj = produceObject(closureEnvironment);
         val tmpName = freshName("tmp");
-        val clauseType = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
-        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(clauseType, clauseName), 0));
+        emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(methodType, clauseName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
 
         transform(rest)
@@ -128,11 +127,10 @@ object Transformer {
 
         val functionName = freshName("fp");
         val objName = freshName("obj");
-        val clauseType = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
 
         emit(ExtractValue(functionName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
-        emit(TailCall(LocalReference(clauseType, functionName), List(LocalReference(envType, objName), initialEnvironmentPointer, getStackPointer())));
+        emit(TailCall(LocalReference(methodType, functionName), List(LocalReference(envType, objName), initialEnvironmentPointer, getStackPointer())));
         RetVoid()
 
       case machine.PushFrame(frame, rest) =>
@@ -238,6 +236,7 @@ object Transformer {
   // TODO multiple methods (should be pointer to vtable)
   def negativeType = StructureType(List(methodType, envType));
   def methodType = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
+  def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)))
   def envType = NamedType("Env");
   def spType = NamedType("Sp");
   def stkType = NamedType("Stk");
@@ -385,8 +384,6 @@ object Transformer {
         emit(Load(name, field))
     }
   }
-
-  def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)))
 
   def pushReturnAddress(frameName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     setStackPointer(pushReturnAddressOnto(getStackPointer(), frameName));
