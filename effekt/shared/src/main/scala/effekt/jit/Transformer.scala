@@ -20,7 +20,7 @@ object Transformer {
         val entryBlock = transform(mainSymbol, freeVars, main);
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList);
-        numberBlocks(allocateRegisters(compiledProgram))
+        numberBlocks(RegisterAllocation.transform(compiledProgram))
     }
 
   def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
