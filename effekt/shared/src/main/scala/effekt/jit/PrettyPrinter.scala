@@ -43,11 +43,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     } // TODO: throw Error("Internal error: Unnumbered BasicBlock")
   }
 
-  def toDoc(frameDescriptor: List[VariableDescriptor]): Doc = {
+  def toDoc(frameDescriptor: FrameDescriptor): Doc = {
     jsonObjectSmall(Map( // TODO: calculate befor pretty-printing
-      "regs_int" -> frameDescriptor.count((d) => d.typ == Type.Integer).toString,
-      "regs_cont" -> frameDescriptor.count((d) => d.typ == Type.Continuation).toString,
-      "regs_adt" -> frameDescriptor.count((d) => d.typ == Type.Datatype).toString
+      "regs_int" -> frameDescriptor.intRegs.length.toString,
+      "regs_cont" -> frameDescriptor.contRegs.length.toString,
+      "regs_adt" -> frameDescriptor.datatypeRegs.length.toString
     ))
   }
 

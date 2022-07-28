@@ -13,13 +13,16 @@ sealed trait Tree extends Product {
 
 case class Program(blocks: List[BasicBlock]) extends Tree
 
-case class VariableDescriptor(typ: Type, id: Register) extends Tree
 
 case class BasicBlock(id: BlockLabel,
-                      frameDescriptor: List[VariableDescriptor],
+                      frameDescriptor: FrameDescriptor,
                       instructions: List[Instruction],
                       terminator: Terminator) extends Tree // TODO: frame descriptor
 
+case class VariableDescriptor(typ: Type, id: Register) extends Tree
+case class FrameDescriptor(intRegs: List[VariableDescriptor],
+                           contRegs: List[VariableDescriptor],
+                           datatypeRegs: List[VariableDescriptor]) extends Tree
 case class RegList(intRegs: List[Register], contRegs: List[Register], datatypeRegs: List[Register])
 case class Clause(args: RegList, target: BlockLabel)
 

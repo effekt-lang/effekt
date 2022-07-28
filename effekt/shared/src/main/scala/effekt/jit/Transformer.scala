@@ -21,13 +21,14 @@ object Transformer {
         val entryBlock = transform(mainSymbol, freeVars, main);
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList);
-        numberBlocks(RegisterAllocation.transform(compiledProgram))
+        numberBlocks(compiledProgram)
     }
 
   def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
-    implicit val BC: BlockContext = new BlockContext(locals);
+    val frameDescriptor = transformParameters(locals);
 
-    val frameDescriptor = transformEnvironment(locals);
+    implicit val BC: BlockContext = new BlockContext(frameDescriptor);
+
     val terminator = transform(body);
     val instructions = BC.instructions.toList;
 
@@ -44,12 +45,12 @@ object Transformer {
         Jump(BlockName(name))
       }
       case machine.Substitute(bindings, rest) => {
-        ensureEnvironment(bindings.map({case (_,v) => v}));
+        emitSubst(bindings.map({case (v,_) => v}), bindings.map({case (_,v) => v}));
         transform(rest)
       }
       case machine.Let(machine.Variable(name, typ), tag, environment, rest) => {
         val Type.Datatype(adtType) = transform(typ);
-        emit(Construct(NamedRegister(name), adtType, tag, transform(environment)))
+        emit(Construct(NamedRegister(name), adtType, tag, transformArguments(environment)))
         transform(rest)
       }
       case machine.Switch(machine.Variable(name, typ), clauses) => {
@@ -60,7 +61,7 @@ object Transformer {
         val Clause(args, target) = transform(clause);
         emit(Reset())
         val freeVars = machine.freeVariables(clause).toList;
-        emit(Push(target, transform(freeVars)))
+        emit(Push(target, transformArguments(freeVars)))
         emit(Shift(NamedRegister(name), 1))
         transform(rest)
       }
@@ -72,48 +73,34 @@ object Transformer {
       case machine.Invoke(value, tag, environment) => ???
       case machine.PushFrame(frame, rest) => ???
       case machine.Return(environment) => {
-        Return(transform(environment))
+        Return(transformArguments(environment))
       }
       case machine.Run(machine.CallForeign(name), ins, List(machine.Clause(outs, rest))) => {
         val freeVars = machine.freeVariables(machine.Clause(outs, rest)).toList;
         val killedIns = (ins.toSet -- outs -- freeVars).toList;
         ensureEnvironment(freeVars ++ outs ++ killedIns);
-        emit(PrimOp(name, transform(outs), transform(ins)));
+        emit(PrimOp(name, transformArguments(outs), transformArguments(ins)));
         transform(rest)
       }
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(out), rest))) => {
         val freeVars = machine.freeVariables(machine.Clause(List(out), rest)).toList;
         ensureEnvironment(freeVars ++ List(out));
-        emit(Const(NamedRegister(out.name), n));
+        emit(Const(transformArgument(out).id, n));
         transform(rest)
       }
       case machine.Run(name, environment, continuation) => ???
   }
 
-  def transform(clause: machine.Clause)(using ProgramContext): Clause = {
+  def transform(clause: machine.Clause)(using ProgramContext, BlockContext): Clause = {
     clause match {
       case machine.Clause(parameters, body) =>
         val freeVars = machine.freeVariables(clause).toList;
         val locals = freeVars ++ parameters; // TODO: Is this correct?
         val label = new FreshBlockLabel();
-        val args = transform(freeVars);
+        val frees = transformArguments(freeVars);
         emit(transform(label, locals, body));
-        Clause(args, label)
+        Clause(frees, label)
     }
-  }
-
-  def transform(args: List[machine.Variable])(using ProgramContext): RegList = {
-    val intRegs: ListBuffer[Register] = ListBuffer();
-    val contRegs: ListBuffer[Register] = ListBuffer();
-    val datatypeRegs: ListBuffer[Register] = ListBuffer();
-    for (machine.Variable(name, typ) <- args) {
-      transform(typ) match
-        case Type.Integer() => intRegs.addOne(NamedRegister(name))
-        case Type.Datatype(idx) => datatypeRegs.addOne(NamedRegister(name))
-        case Type.Continuation() => contRegs.addOne(NamedRegister(name))
-        case Type.Unit() => {}
-    }
-    return RegList(intRegs.toList, contRegs.toList, datatypeRegs.toList)
   }
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
@@ -126,8 +113,48 @@ object Transformer {
       case machine.Primitive(name) => ???
   }
 
-  def transformEnvironment(env: machine.Environment)(using ProgramContext): List[VariableDescriptor] = {
-    env.map({case machine.Variable(name, typ) => VariableDescriptor(transform(typ), NamedRegister(name))})
+  def transformParameters(args: List[machine.Variable])(using ProgramContext): FrameDescriptor = {
+    val intRegs: ListBuffer[VariableDescriptor] = ListBuffer();
+    val contRegs: ListBuffer[VariableDescriptor] = ListBuffer();
+    val datatypeRegs: ListBuffer[VariableDescriptor] = ListBuffer();
+    for (v <- args) {
+      val vd = transformParameter(v);
+      vd match
+        case VariableDescriptor(Type.Integer(), reg) => intRegs.addOne(vd)
+        case VariableDescriptor(Type.Datatype(idx), reg) => datatypeRegs.addOne(vd)
+        case VariableDescriptor(Type.Continuation(), reg) => contRegs.addOne(vd)
+        case VariableDescriptor(Type.Unit(), ErasedRegister()) => {}
+    }
+    return FrameDescriptor(intRegs.toList, contRegs.toList, datatypeRegs.toList)
+  }
+  def transformArguments(params: List[machine.Variable])(using ProgramContext, BlockContext): RegList = {
+    val intRegs: ListBuffer[Register] = ListBuffer();
+    val contRegs: ListBuffer[Register] = ListBuffer();
+    val datatypeRegs: ListBuffer[Register] = ListBuffer();
+    for (v <- params) {
+      transformArgument(v) match
+        case VariableDescriptor(Type.Integer(), reg) => intRegs.addOne(reg)
+        case VariableDescriptor(Type.Datatype(idx), reg) => datatypeRegs.addOne(reg)
+        case VariableDescriptor(Type.Continuation(), reg) => contRegs.addOne(reg)
+        case VariableDescriptor(Type.Unit(), ErasedRegister()) => {}
+    }
+    return RegList(intRegs.toList, contRegs.toList, datatypeRegs.toList)
+  }
+
+  def transformParameter(v: machine.Variable)(using ProgramContext): VariableDescriptor = {
+    transform(v.tpe) match {
+      case Type.Unit() => VariableDescriptor(Type.Unit(), ErasedRegister())
+      case ty => VariableDescriptor(ty, NamedRegister(v.name))
+    }
+  }
+  def transformArgument(v: machine.Variable)(using ProgC: ProgramContext, BC: BlockContext): VariableDescriptor = {
+    val param = transformParameter(v);
+    transform(v.tpe) match {
+      case Type.Unit() => VariableDescriptor(Type.Unit(), ErasedRegister())
+      case Type.Integer() => VariableDescriptor(Type.Integer(), RegisterIndex(BC.currentFrameDescriptor.intRegs.indexOf(param)))
+      case Type.Continuation() => VariableDescriptor(Type.Integer(), RegisterIndex(BC.currentFrameDescriptor.contRegs.indexOf(param)))
+      case Type.Datatype(adtType) => VariableDescriptor(Type.Integer(), RegisterIndex(BC.currentFrameDescriptor.datatypeRegs.indexOf(param)))
+    }
   }
 
   class ProgramContext() {
@@ -139,7 +166,7 @@ object Transformer {
     ProgC.basicBlocks.addOne(block)
   }
 
-  class BlockContext(var currentEnvironment: machine.Environment) {
+  class BlockContext(var currentFrameDescriptor: FrameDescriptor) {
     val instructions: ListBuffer[Instruction] = ListBuffer();
   }
 
@@ -147,9 +174,16 @@ object Transformer {
     BC.instructions.addOne(instruction)
   }
 
-  def ensureEnvironment(newEnviornment: machine.Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
-    if(newEnviornment == BC.currentEnvironment) return;
-    emit(Subst(transform(newEnviornment)));
-    BC.currentEnvironment = newEnviornment;
+  def emitSubst(params: machine.Environment, args: machine.Environment)
+               (using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    val newFrameDescriptor = transformParameters(params);
+    val newFrameDescriptorWithOldNames = transformParameters(args);
+    if(newFrameDescriptorWithOldNames != BC.currentFrameDescriptor){
+      emit(Subst(transformArguments(args)));
+    }
+    BC.currentFrameDescriptor = newFrameDescriptor;
+  }
+  def ensureEnvironment(newEnvironment: machine.Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    emitSubst(newEnvironment, newEnvironment)
   }
 }
