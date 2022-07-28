@@ -66,7 +66,7 @@ case class NamedRegister(name: String) extends Register
 case class RegisterIndex(index: Int) extends Register
 case class ErasedRegister() extends Register
 
-sealed trait BlockLabel extends Tree
+sealed trait BlockLabel
 case class BlockName(name: String) extends BlockLabel
 case class BlockIndex(index: Int) extends BlockLabel
 class FreshBlockLabel() extends BlockLabel

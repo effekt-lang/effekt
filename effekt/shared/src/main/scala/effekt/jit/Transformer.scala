@@ -16,7 +16,7 @@ object Transformer {
       case machine.Program(declarations, main) =>
         implicit val ProgC: ProgramContext = new ProgramContext();
 
-        val freeVars = machine.freeVariables(main).toList;
+        val freeVars = List();//machine.freeVariables(main).toList;
 
         val entryBlock = transform(mainSymbol, freeVars, main);
 
