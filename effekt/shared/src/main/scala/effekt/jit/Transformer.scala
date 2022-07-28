@@ -20,7 +20,9 @@ object Transformer {
 
         val entryBlock = transform(mainSymbol, freeVars, main);
 
-        val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList);
+        val datatypes = ProgC.datatypes.map(tpe => tpe.map(pars => pars.map(transform))).toList;
+
+        val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes);
         numberBlocks(compiledProgram)
     }
 
@@ -159,7 +161,7 @@ object Transformer {
 
   class ProgramContext() {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
-    val datatypes: ListBuffer[List[machine.Environment]] = ListBuffer();
+    val datatypes: ListBuffer[List[machine.Signature]] = ListBuffer();
   }
 
   def emit(block: BasicBlock)(using ProgC: ProgramContext): Unit = {

@@ -26,7 +26,7 @@ object Analysis {
     for((BasicBlock(id, _, _, _), index) <- prog.blocks.zipWithIndex){
       blockIndices.addOne((id, BlockIndex(index)))
     };
-    Program(prog.blocks.map(numberBlocks(blockIndices)))
+    Program(prog.blocks.map(numberBlocks(blockIndices)), prog.datatypes)
   }
   def numberBlocks(blockIndices: HashMap[BlockLabel, BlockIndex])(block: BasicBlock): BasicBlock = block match {
     case BasicBlock(id, frameDescriptor, instructions, terminator) =>

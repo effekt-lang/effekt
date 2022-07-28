@@ -23,7 +23,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(program: Program): Doc = {
-    jsonObject(Map("blocks" -> jsonList(program.blocks.map(toDoc))))
+    jsonObject(Map(
+      "datatypes" -> jsonList(program.datatypes.map(toDoc)),
+      "blocks" -> jsonList(program.blocks.map(toDoc)),
+    ))
+  }
+  def toDoc(datatype: List[List[Type]]): Doc =
+    jsonList(datatype.map(pars => jsonListSmall(pars.flatMap(tpe => toDoc(tpe).toList))))
+
+  def toDoc(tpe: Type): Option[Doc] = tpe match {
+    case Type.Unit() => None
+    case Type.Continuation() => Some(jsonObjectSmall(Map("type" -> "cont")))
+    case Type.Integer() => Some(jsonObjectSmall(Map("type" -> "int")))
+    case Type.Datatype(index) => Some(jsonObjectSmall(Map("type" -> "adt", "index" -> index.toString)))
   }
 
   def toDoc(block: BasicBlock): Doc = block match {
