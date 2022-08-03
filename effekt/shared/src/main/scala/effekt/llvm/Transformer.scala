@@ -78,10 +78,11 @@ object Transformer {
         val objName = freshName("obj");
         emit(ExtractValue(tagName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
+        val stackPointer = getStackPointer();
         val labels = clauses.map {
           case machine.Clause(parameters, body) =>
             implicit val BC = BlockContext();
-            // TODO reset stack pointer to outer one
+            BC.stackPointer = stackPointer;
 
             consumeObject(LocalReference(envType, objName), parameters);
 
