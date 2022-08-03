@@ -45,6 +45,7 @@ object Transformer {
 
         defineFunction(name, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
           loadEnvironment(initialEnvironmentPointer, environment);
+          // TODO erase what's not free
           transform(body);
         };
 
@@ -52,6 +53,7 @@ object Transformer {
 
       case machine.Jump(label) =>
 
+        // TODO copy what's duplicate (regard substitution)
         storeEnvironment(initialEnvironmentPointer, label.environment);
 
         emit(TailCall(transform(label), List(LocalReference(envType, "env"), getStackPointer())));
@@ -65,15 +67,21 @@ object Transformer {
 
       case machine.Let(variable, tag, values, rest) =>
 
+        // TODO copy duplicate values
+
+        // TODO copy duplicate in rest
+
         val obj = produceObject(values);
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
         emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), obj, 1));
 
+        // TODO free variable
         transform(rest)
 
       case machine.Switch(value, clauses) =>
 
+        // TODO copy value
         val tagName = freshName("tag");
         val objName = freshName("obj");
         emit(ExtractValue(tagName, transform(value), 0));
@@ -85,6 +93,8 @@ object Transformer {
             BC.stackPointer = stackPointer;
 
             consumeObject(LocalReference(envType, objName), parameters);
+            // TODO free what's not free (parameters)
+            // TODO free what's not free (freeVars(body))
 
             val terminator = transform(body);
 
@@ -111,19 +121,25 @@ object Transformer {
 
         defineFunction(clauseName, List(Parameter(envType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
           consumeObject(LocalReference(envType, "obj"), closureEnvironment);
+          // TODO free what's not free (closureEnvironment)
           loadEnvironment(initialEnvironmentPointer, clause.parameters);
+          // TODO free what's not free (parameters)
           transform(clause.body);
         };
 
+        // TODO copy duplicate in rest
         val obj = produceObject(closureEnvironment);
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(methodType, clauseName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
 
+        // TODO free variable
         transform(rest)
 
       case machine.Invoke(value, 0, values) =>
 
+        // TODO copy value
+        // TODO copy duplicate values
         storeEnvironment(initialEnvironmentPointer, values);
 
         val functionName = freshName("fp");
@@ -143,11 +159,14 @@ object Transformer {
         defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
+          // TODO free what's not free (frameEnvironment, unnecessary)
           loadEnvironment(initialEnvironmentPointer, frame.parameters);
+          // TODO free what's not free (parameters)
 
           transform(frame.body);
         };
 
+        // TODO copy duplicate in rest
         pushEnvironment(frameEnvironment);
         pushReturnAddress(frameName);
 
@@ -155,6 +174,7 @@ object Transformer {
 
       case machine.Return(values) =>
 
+        // TODO copy duplicate values
         storeEnvironment(initialEnvironmentPointer, values);
 
         val returnAddress = popReturnAddress();
@@ -171,7 +191,9 @@ object Transformer {
         defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
+          // TODO free what's not free (frameEnvironment, unnecessary)
           loadEnvironment(initialEnvironmentPointer, frame.parameters);
+          // TODO free what's not free (parameters)
 
           val newStackPointer = LocalReference(spType, freshName("sp"));
           emit(Call(newStackPointer.name, spType, underflowStack, List(getStackPointer())));
@@ -180,6 +202,7 @@ object Transformer {
           transform(frame.body);
         };
 
+        // TODO copy duplicate in rest (frameEnvironment)
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
         val oldStackPointer = LocalReference(spType, freshName("stksp"));
         emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 0)));
@@ -188,9 +211,12 @@ object Transformer {
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, frameName);
         emit(Store(stackPointerPointer, newStackPointer));
 
+        // TODO free variable
+
         transform(rest)
 
       case machine.PushStack(value, rest) =>
+        // TODO copy value if duplicate
         val newStackPointerName = freshName("sp");
         emit(Call(newStackPointerName, spType, pushStack, List(transform(value), getStackPointer())));
         setStackPointer(LocalReference(spType, newStackPointerName));
@@ -204,6 +230,7 @@ object Transformer {
         emit(ExtractValue(variable.name, tmpReference, 0));
         emit(ExtractValue(newStackPointerName, tmpReference, 1));
         setStackPointer(LocalReference(spType, newStackPointerName));
+        // TODO free variable
         transform(rest)
 
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(machine.Variable(name, machine.Primitive("Int"))), rest))) =>
@@ -220,6 +247,7 @@ object Transformer {
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
+        // TODO free variable?
         transform(rest)
     }
 
