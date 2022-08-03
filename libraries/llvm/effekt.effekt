@@ -17,8 +17,8 @@ extern pure def println(n: Int): Unit / Console =
 //   "call void @printBoolean_impl(%Boolean %b) ret {i64, %Env} zeroinitializer"
 
 
-// Math ops
-// ========
+// integer primitives
+// ==================
 
 extern pure def infixAdd(x: Int, y: Int): Int =
   "%z = add %Int %x, %y ret %Int %z"
@@ -36,30 +36,35 @@ extern pure def mod(x: Int, y: Int): Int =
   "%z = srem %Int %x, %y ret %Int %z"
 
 
-// // Comparison ops
-// // ==============
+// ordering on signed integers
+// ===========================
 
-// extern pure def infixEq(x: Int, y: Int): Boolean =
-//   "%z = icmp eq %Int %x, %y ret %Boolean %z"
+extern pure def infixEq(x: Int, y: Int): Boolean =
+  // TODO Should we define `{i64, i8*}` as an ADT type?
+  // TODO Should the unused ADT's pointer be zerod or is it allowed to be undefined?
+  "%z = icmp eq %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue {i64, i8*} undef, i64 %fat_z, 0   ret {i64, i8*} %adt_boolean"
 
-// extern pure def infixNeq(x: Int, y: Int): Boolean =
-//   "%z = icmp ne %Int %x, %y ret %Boolean %z"
+extern pure def infixNeq(x: Int, y: Int): Boolean =
+  // TODO Should we define `{i64, i8*}` as an ADT type?
+  // TODO Should the unused ADT's pointer be zerod or is it allowed to be undefined?
+  "%z = icmp ne %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue {i64, i8*} undef, i64 %fat_z, 0   ret {i64, i8*} %adt_boolean"
 
 extern pure def infixLt(x: Int, y: Int): Boolean =
-  "%z = icmp slt %Int %x, %y %w = zext i1 %z to i64 %b = insertvalue {i64, %Env} zeroinitializer, i64 %w, 0 ret {i64, %Env} %b"
+  // TODO is the following more correct? "%z = icmp slt %Int %x, %y %w = zext i1 %z to i64 %b = insertvalue {i64, %Env} zeroinitializer, i64 %w, 0 ret {i64, %Env} %b"
+  "%z = icmp slt %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue {i64, i8*} undef, i64 %fat_z, 0   ret {i64, i8*} %adt_boolean"
 
-// extern pure def infixLte(x: Int, y: Int): Boolean =
-//   "%z = icmp sle %Int %x, %y ret %Boolean %z"
+extern pure def infixLte(x: Int, y: Int): Boolean =
+  "%z = icmp sle %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue {i64, i8*} undef, i64 %fat_z, 0   ret {i64, i8*} %adt_boolean"
 
-// extern pure def infixGt(x: Int, y: Int): Boolean =
-//   "%z = icmp sgt %Int %x, %y ret %Boolean %z"
+extern pure def infixGt(x: Int, y: Int): Boolean =
+  "%z = icmp sgt %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue {i64, i8*} undef, i64 %fat_z, 0   ret {i64, i8*} %adt_boolean"
 
-// extern pure def infixGte(x: Int, y: Int): Boolean =
-//   "%z = icmp sge %Int %x, %y ret %Boolean %z"
+extern pure def infixGte(x: Int, y: Int): Boolean =
+  "%z = icmp sge %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue {i64, i8*} undef, i64 %fat_z, 0   ret {i64, i8*} %adt_boolean"
 
 
-// // Boolean ops
-// // ===========
+// boolean algebra
+// ===============
 
 // extern pure def infixEq(x: Boolean, y: Boolean): Boolean =
 //   "%z = icmp eq %Boolean %x, %y ret %Boolean %z"
