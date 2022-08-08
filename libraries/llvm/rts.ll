@@ -13,6 +13,9 @@
 
 %Env = type i8*
 
+; pos
+%ADT = type {i64, i8*}
+
 
 ; Global locations
 
