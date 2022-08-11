@@ -15,6 +15,13 @@
 
 %Env = type i8*
 
+%Header = type {%Rc, void (%Env)*}
+
+%Obj = type %Header*
+
+%Pos = type {i64, %Obj}
+
+%Neg = type {void (%Obj, %Env, %Sp)*, %Obj}
 
 ; Global locations
 
@@ -33,6 +40,48 @@ declare i64 @llvm.ctlz.i64 (i64 , i1)
 declare i64 @llvm.fshr.i64(i64, i64, i64)
 declare void @print(i64)
 declare void @exit(i64)
+
+; Garbage collection
+
+define %Obj @newObject(i64 %envsize) alwaysinline {
+    ; This magical 16 is the size of the object header
+    %size = add i64 %envsize, 16
+    %mem = call i8* @malloc(i64 %size)
+    ; TODO store erase function
+    %obj = bitcast i8* %mem to %Obj
+    ret %Obj %obj
+}
+
+define %Env @objectEnvironment(%Obj %obj) alwaysinline {
+    ; Environment is stored right after header
+    %obj.1 = getelementptr %Header, %Header* %obj, i64 1
+    %env = bitcast %Obj %obj.1 to %Env
+    ret %Env %env
+}
+
+define void @shareObject(%Obj %obj) alwaysinline {
+    %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
+    %rc.0 = load %Rc, %Rc* %objrc
+    %rc.1 = add %Rc %rc.0, 1
+    store %Rc %rc.1, %Rc* %objrc
+    ret void
+}
+
+define void @sharePositive(%Pos %val) alwaysinline {
+    %obj = extractvalue %Pos %val, 1
+    tail call void @shareObject(%Obj %obj)
+    ret void
+}
+
+define void @shareNegative(%Neg %val) alwaysinline {
+    %obj = extractvalue %Neg %val, 1
+    tail call void @shareObject(%Obj %obj)
+    ret void
+}
+
+define void @eraseObject(%Obj %obj) alwaysinline {
+    ret void
+}
 
 
 ; Meta-stack management
@@ -149,6 +198,14 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     call void @free(%Sp %sp)
     call void @free(i8* %stkpuntyped)
     ret %Sp %newsp
+}
+
+define void @shareStack(%Stk %stk) alwaysinline {
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %rc.0 = load %Rc, %Rc* %stkrc
+    %rc.1 = add %Rc %rc.0, 1
+    store %Rc %rc.1, %Rc* %stkrc
+    ret void
 }
 
 ; RTS initialization
