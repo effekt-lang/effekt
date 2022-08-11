@@ -344,6 +344,7 @@ object Transformer {
       val env = LocalReference(envType, freshName("env"));
       emit(Call(env.name, envType, objectEnvironment, List(obj)));
       loadEnvironment(env, environment);
+      shareEnvironment(environment);
       emit(Call("_", VoidType(), eraseObject, List(obj)));
     }
   }
@@ -419,6 +420,17 @@ object Transformer {
     }
   }
 
+  def shareEnvironment(environment: machine.Environment)(using FunctionContext, BlockContext): Unit = {
+    environment.map { variable =>
+      variable.tpe match {
+        case machine.Positive(_) => emit(Call("_", VoidType(), sharePositive, List(transform(variable))))
+        case machine.Negative(_) => emit(Call("_", VoidType(), shareNegative, List(transform(variable))))
+        case machine.Primitive("Stk") => emit(Call("_", VoidType(), shareStack, List(transform(variable))))
+        case machine.Primitive("Int") => ()
+      }
+    }
+  }
+
   def pushReturnAddress(frameName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     setStackPointer(pushReturnAddressOnto(getStackPointer(), frameName));
   }
@@ -467,9 +479,13 @@ object Transformer {
 
   def malloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
   def free = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
+
   def newObject = ConstantGlobal(PointerType(FunctionType(objType,List(IntegerType64()))), "newObject");
   def objectEnvironment = ConstantGlobal(PointerType(FunctionType(envType,List(objType))), "objectEnvironment");
   def shareObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "shareObject");
+  def sharePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "sharePositive");
+  def shareNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "shareNegative");
+  def shareStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "shareStack");
   def eraseObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseObject");
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
