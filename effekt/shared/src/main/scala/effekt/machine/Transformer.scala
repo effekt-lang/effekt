@@ -223,7 +223,13 @@ object Transformer {
         val id = FreshValueSymbol("x", C.module);
         val variable = Variable(transform(id), Primitive("Int"));
         Binding(k =>
+          // TODO LiteralInt is intrinsic
           Run(LiteralInt(value), List(), List(Clause(List(variable), k(variable)))))
+      case lifted.BooleanLit(value: Boolean) =>
+        val id = FreshValueSymbol("x", C.module)
+        val variable = Variable(transform(id), Positive(List(List(), List())))
+        Binding(k =>
+          Let(variable, if (value) 1 else 0, List(), k(variable)))
       case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
         val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.result;
