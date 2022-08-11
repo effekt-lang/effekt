@@ -92,7 +92,7 @@ object Transformer {
             implicit val BC = BlockContext();
             BC.stackPointer = stackPointer;
 
-            consumeObject(LocalReference(envType, objName), parameters);
+            consumeObject(LocalReference(objType, objName), parameters);
             // TODO free what's not free (parameters)
             // TODO free what's not free (freeVars(body))
 
@@ -119,8 +119,8 @@ object Transformer {
 
         val clauseName = freshName(variable.name);
 
-        defineFunction(clauseName, List(Parameter(envType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
-          consumeObject(LocalReference(envType, "obj"), closureEnvironment);
+        defineFunction(clauseName, List(Parameter(objType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
+          consumeObject(LocalReference(objType, "obj"), closureEnvironment);
           // TODO free what's not free (closureEnvironment)
           loadEnvironment(initialEnvironmentPointer, clause.parameters);
           // TODO free what's not free (parameters)
@@ -147,7 +147,7 @@ object Transformer {
 
         emit(ExtractValue(functionName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
-        emit(TailCall(LocalReference(methodType, functionName), List(LocalReference(envType, objName), initialEnvironmentPointer, getStackPointer())));
+        emit(TailCall(LocalReference(methodType, functionName), List(LocalReference(objType, objName), initialEnvironmentPointer, getStackPointer())));
         RetVoid()
 
       case machine.PushFrame(frame, rest) =>
@@ -261,12 +261,13 @@ object Transformer {
       case machine.Variable(name, tpe) => LocalReference(transform(tpe), name)
     }
 
-  def positiveType = StructureType(List(IntegerType64(), envType));
+  def positiveType = NamedType("Pos");
   // TODO multiple methods (should be pointer to vtable)
-  def negativeType = StructureType(List(methodType, envType));
-  def methodType = PointerType(FunctionType(VoidType(), List(envType, envType, spType)));
+  def negativeType = NamedType("Neg");
+  def methodType = PointerType(FunctionType(VoidType(), List(objType, envType, spType)));
   def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)))
   def envType = NamedType("Env");
+  def objType = NamedType("Obj");
   def spType = NamedType("Sp");
   def stkType = NamedType("Stk");
 
@@ -325,11 +326,13 @@ object Transformer {
 
   def produceObject(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if(environment.isEmpty) {
-      ConstantNull(envType)
+      ConstantNull(objType)
     } else {
-      val obj = LocalReference(envType, freshName("obj"));
-      emit(Call(obj.name, envType, malloc, List(ConstantInt(environmentSize(environment)))));
-      storeEnvironment(obj, environment);
+      val obj = LocalReference(objType, freshName("obj"));
+      val env = LocalReference(envType, freshName("env"));
+      emit(Call(obj.name, objType, newObject, List(ConstantInt(environmentSize(environment)))));
+      emit(Call(env.name, envType, objectEnvironment, List(obj)));
+      storeEnvironment(env, environment);
       obj
     }
   }
@@ -338,8 +341,10 @@ object Transformer {
     if(environment.isEmpty) {
       ()
     } else {
-      loadEnvironment(obj, environment);
-      emit(Call("_", VoidType(), free, List(obj)));
+      val env = LocalReference(envType, freshName("env"));
+      emit(Call(env.name, envType, objectEnvironment, List(obj)));
+      loadEnvironment(env, environment);
+      emit(Call("_", VoidType(), eraseObject, List(obj)));
     }
   }
 
@@ -462,6 +467,10 @@ object Transformer {
 
   def malloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
   def free = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
+  def newObject = ConstantGlobal(PointerType(FunctionType(objType,List(IntegerType64()))), "newObject");
+  def objectEnvironment = ConstantGlobal(PointerType(FunctionType(envType,List(objType))), "objectEnvironment");
+  def shareObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "shareObject");
+  def eraseObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseObject");
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
   def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(stkType,spType)),List(spType))), "popStack");
