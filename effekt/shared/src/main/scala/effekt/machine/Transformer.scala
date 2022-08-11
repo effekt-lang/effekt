@@ -243,10 +243,18 @@ object Transformer {
         val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.tpe;
         val variable = Variable(transform(id), transform(tpe));
-        val tag = blockName.tpe.asInstanceOf[symbols.DataType].variants.indexOf(blockName);
+        val tag = blockName.tpe match {
+          case symbols.DataType(_, List(), variants) => variants.indexOf(blockName)
+          case symbols.Record(_, List(), _, _) => 0
+        };
         transform(args).flatMap(values =>
           Binding(k =>
-          Let(variable, tag, values, k(variable))))
+            Let(variable, tag, values, k(variable))))
+      case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
+        val field_index = field.rec.fields.indexOf(field)
+        val variables = field.rec.fields.map(f => Variable(transform(FreshValueSymbol("val_fieldname", C.module)), transform(f.tpe)))
+        transform(target).flatMap(value => Binding(k =>
+            Switch(value, List(Clause(variables, k(variables(field_index)))))))
       case lifted.Run(stmt) =>
         val id = FreshValueSymbol("x", C.module);
         // TODO find actual type
@@ -465,10 +473,13 @@ object Transformer {
             }
         }
         Positive(recSignatures)
+
+      case symbols.Record(_, List(), tpe, fields) =>
+        Positive(List(fields.map(field => transform(field.tpe))))
+
       case _ =>
-        println(tpe.getClass)
-        println(tpe)
-        C.abort("unsupported type " + tpe)
+        System.err.println(s"UNSUPPORTED TYPE: getClass($tpe) = ${tpe.getClass}")
+        C.abort(s"unsupported type $tpe")
     }
 
   // case symbols.Record(_, _, _, fields) =>
