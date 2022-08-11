@@ -104,12 +104,12 @@ object Transformer {
             emit(BasicBlock(label, instructions, terminator));
             label
         };
-        labels match {
+        labels.zipWithIndex match {
           case Nil =>
             // TODO more informative way to end program. Clean up too?
             RetVoid()
-          case label :: labels =>
-            Switch(LocalReference(IntegerType64(), tagName), label, labels.zipWithIndex.map { case (l, i) => (i, l) })
+          case (label, _) :: labels =>
+            Switch(LocalReference(IntegerType64(), tagName), label, labels.map { case (l, i) => (i, l) })
         }
 
       case machine.New(variable, List(clause), rest) =>

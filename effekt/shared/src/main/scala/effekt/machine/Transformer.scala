@@ -79,7 +79,7 @@ object Transformer {
         )
       case lifted.If(cond, thenStmt, elseStmt) =>
         transform(cond).run(value =>
-          Switch(value, List(Clause(List(), transform(thenStmt)), Clause(List(), transform(elseStmt)))))
+          Switch(value, List(Clause(List(), transform(elseStmt)), Clause(List(), transform(thenStmt)))))
       case lifted.Let(id, tpe, binding, rest) =>
         transform(binding).run(value =>
           Substitute(List(Variable(transform(id), transform(tpe)) -> value), transform(rest)))
