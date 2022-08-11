@@ -265,7 +265,8 @@ object Transformer {
   // TODO multiple methods (should be pointer to vtable)
   def negativeType = NamedType("Neg");
   def methodType = PointerType(FunctionType(VoidType(), List(objType, envType, spType)));
-  def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)))
+  def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)));
+  def eraserType = PointerType(FunctionType(VoidType(), List(envType)));
   def envType = NamedType("Env");
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
@@ -330,7 +331,16 @@ object Transformer {
     } else {
       val obj = LocalReference(objType, freshName("obj"));
       val env = LocalReference(envType, freshName("env"));
-      emit(Call(obj.name, objType, newObject, List(ConstantInt(environmentSize(environment)))));
+      val size = ConstantInt(environmentSize(environment));
+      val eraser = ConstantGlobal(eraserType, freshName("eraser"));
+
+      //TODO cache eraser based on environment
+      defineFunction(eraser.name, List(Parameter(envType, "env"))) {
+        eraseEnvironment(LocalReference(envType, "env"), environment);
+        RetVoid()
+      };
+
+      emit(Call(obj.name, objType, newObject, List(eraser, size)));
       emit(Call(env.name, envType, objectEnvironment, List(obj)));
       storeEnvironment(env, environment);
       obj
@@ -404,16 +414,16 @@ object Transformer {
 
   def storeEnvironmentAt(pointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     environment.zipWithIndex.foreach {
-      case (value @ machine.Variable(name, tpe), i) =>
+      case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(transform(tpe)), freshName(name + "p"));
         emit(GetElementPtr(field.name, pointer, List(0, i)));
-        emit(Store(field, transform(value)))
+        emit(Store(field, transform(machine.Variable(name, tpe))))
     }
   }
 
   def loadEnvironmentAt(pointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
     environment.zipWithIndex.foreach {
-      case (value @ machine.Variable(name, tpe), i) =>
+      case (machine.Variable(name, tpe), i) =>
         val field = LocalReference(PointerType(transform(tpe)), freshName(name + "p"));
         emit(GetElementPtr(field.name, pointer, List(0, i)));
         emit(Load(name, field))
@@ -426,6 +436,20 @@ object Transformer {
         case machine.Positive(_) => emit(Call("_", VoidType(), sharePositive, List(transform(variable))))
         case machine.Negative(_) => emit(Call("_", VoidType(), shareNegative, List(transform(variable))))
         case machine.Primitive("Stk") => emit(Call("_", VoidType(), shareStack, List(transform(variable))))
+        case machine.Primitive("Int") => ()
+      }
+    }
+  }
+
+  def eraseEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
+    // TODO avoid unnecessary loads
+    loadEnvironmentAt(typedEnvironmentPointer, environment);
+    environment.map { variable =>
+      variable.tpe match {
+        case machine.Positive(_) => emit(Call("_", VoidType(), erasePositive, List(transform(variable))))
+        case machine.Negative(_) => emit(Call("_", VoidType(), eraseNegative, List(transform(variable))))
+        case machine.Primitive("Stk") => emit(Call("_", VoidType(), eraseStack, List(transform(variable))))
         case machine.Primitive("Int") => ()
       }
     }
@@ -487,6 +511,9 @@ object Transformer {
   def shareNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "shareNegative");
   def shareStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "shareStack");
   def eraseObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseObject");
+  def erasePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "erasePositive");
+  def eraseNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseNegative");
+  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseStack");
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
   def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(stkType,spType)),List(spType))), "popStack");
