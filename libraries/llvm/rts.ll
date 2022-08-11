@@ -47,8 +47,10 @@ define %Obj @newObject(i64 %envsize) alwaysinline {
     ; This magical 16 is the size of the object header
     %size = add i64 %envsize, 16
     %mem = call i8* @malloc(i64 %size)
-    ; TODO store erase function
     %obj = bitcast i8* %mem to %Obj
+    %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
+    store %Rc 0, %Rc* %objrc
+    ; TODO store erase function
     ret %Obj %obj
 }
 
@@ -61,8 +63,8 @@ define %Env @objectEnvironment(%Obj %obj) alwaysinline {
 
 define void @shareObject(%Obj %obj) alwaysinline {
     %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
-    %rc.0 = load %Rc, %Rc* %objrc
-    %rc.1 = add %Rc %rc.0, 1
+    %rc = load %Rc, %Rc* %objrc
+    %rc.1 = add %Rc %rc, 1
     store %Rc %rc.1, %Rc* %objrc
     ret void
 }
@@ -80,6 +82,15 @@ define void @shareNegative(%Neg %val) alwaysinline {
 }
 
 define void @eraseObject(%Obj %obj) alwaysinline {
+    %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
+    %rc = load %Rc, %Rc* %objrc
+    switch %Rc %rc, label %decr [%Rc 0, label %free]
+    decr:
+    %rc.1 = sub %Rc %rc, 1
+    store %Rc %rc.1, %Rc* %objrc
+    ret void
+    free:
+    ; TODO actually run free function
     ret void
 }
 
@@ -202,8 +213,8 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
 
 define void @shareStack(%Stk %stk) alwaysinline {
     %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
-    %rc.0 = load %Rc, %Rc* %stkrc
-    %rc.1 = add %Rc %rc.0, 1
+    %rc = load %Rc, %Rc* %stkrc
+    %rc.1 = add %Rc %rc, 1
     store %Rc %rc.1, %Rc* %stkrc
     ret void
 }
