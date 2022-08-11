@@ -3,7 +3,14 @@
 
 ; Basic types
 
+%Env = type i8*
+
 %Rc = type i64
+%Eraser = type void (%Env)*
+%Header = type {%Rc, %Eraser}
+
+%Obj = type %Header*
+
 
 %Sp = type i8*
 %Base = type %Sp
@@ -13,15 +20,10 @@
 
 %Stk = type %StkVal*
 
-%Env = type i8*
-
-%Header = type {%Rc, void (%Env)*}
-
-%Obj = type %Header*
 
 %Pos = type {i64, %Obj}
-
 %Neg = type {void (%Obj, %Env, %Sp)*, %Obj}
+
 
 ; Global locations
 
@@ -43,14 +45,15 @@ declare void @exit(i64)
 
 ; Garbage collection
 
-define %Obj @newObject(i64 %envsize) alwaysinline {
+define %Obj @newObject(%Eraser %eraser, i64 %envsize) alwaysinline {
     ; This magical 16 is the size of the object header
     %size = add i64 %envsize, 16
     %mem = call i8* @malloc(i64 %size)
     %obj = bitcast i8* %mem to %Obj
     %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
+    %objeraser = getelementptr %Header, %Header* %obj, i64 0, i32 1
     store %Rc 0, %Rc* %objrc
-    ; TODO store erase function
+    store %Eraser %eraser, %Eraser* %objeraser
     ret %Obj %obj
 }
 
@@ -91,6 +94,12 @@ define void @eraseObject(%Obj %obj) alwaysinline {
     ret void
     free:
     ; TODO actually run free function
+    %objeraser = getelementptr %Header, %Header* %obj, i64 0, i32 1
+    %eraser = load %Eraser, %Eraser* %objeraser
+    %env = call %Env @objectEnvironment(%Obj %obj)
+    call void %eraser(%Env %env)
+    %objuntyped = bitcast %Obj %obj to i8*
+    call void @free(i8* %objuntyped)
     ret void
 }
 
