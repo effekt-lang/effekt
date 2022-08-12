@@ -65,10 +65,15 @@ define %Env @objectEnvironment(%Obj %obj) alwaysinline {
 }
 
 define void @shareObject(%Obj %obj) alwaysinline {
+    %isnull = icmp eq %Obj %obj, null
+    br i1 %isnull, label %done, label %next
+    next:
     %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
     %rc = load %Rc, %Rc* %objrc
     %rc.1 = add %Rc %rc, 1
     store %Rc %rc.1, %Rc* %objrc
+    br label %done
+    done:
     ret void
 }
 
@@ -85,6 +90,9 @@ define void @shareNegative(%Neg %val) alwaysinline {
 }
 
 define void @eraseObject(%Obj %obj) alwaysinline {
+    %isnull = icmp eq %Obj %obj, null
+    br i1 %isnull, label %done, label %next
+    next:
     %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
     %rc = load %Rc, %Rc* %objrc
     switch %Rc %rc, label %decr [%Rc 0, label %free]
@@ -93,13 +101,26 @@ define void @eraseObject(%Obj %obj) alwaysinline {
     store %Rc %rc.1, %Rc* %objrc
     ret void
     free:
-    ; TODO actually run free function
     %objeraser = getelementptr %Header, %Header* %obj, i64 0, i32 1
     %eraser = load %Eraser, %Eraser* %objeraser
     %env = call %Env @objectEnvironment(%Obj %obj)
-    call void %eraser(%Env %env)
+    call fastcc void %eraser(%Env %env)
     %objuntyped = bitcast %Obj %obj to i8*
     call void @free(i8* %objuntyped)
+    br label %done
+    done:
+    ret void
+}
+
+define void @erasePositive(%Pos %val) alwaysinline {
+    %obj = extractvalue %Pos %val, 1
+    tail call void @eraseObject(%Obj %obj)
+    ret void
+}
+
+define void @eraseNegative(%Neg %val) alwaysinline {
+    %obj = extractvalue %Neg %val, 1
+    tail call void @eraseObject(%Obj %obj)
     ret void
 }
 

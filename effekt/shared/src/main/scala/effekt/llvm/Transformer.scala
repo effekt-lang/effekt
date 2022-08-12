@@ -2,6 +2,7 @@ package effekt
 package llvm
 
 import effekt.machine
+import effekt.machine.analysis.*
 
 object Transformer {
 
@@ -45,7 +46,7 @@ object Transformer {
 
         defineFunction(name, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
           loadEnvironment(initialEnvironmentPointer, environment);
-          // TODO erase what's not free
+          eraseValues(environment, freeVariables(body));
           transform(body);
         };
 
@@ -53,7 +54,7 @@ object Transformer {
 
       case machine.Jump(label) =>
 
-        // TODO copy what's duplicate (regard substitution)
+        shareValues(label.environment, Set());
         storeEnvironment(initialEnvironmentPointer, label.environment);
 
         emit(TailCall(transform(label), List(LocalReference(envType, "env"), getStackPointer())));
@@ -67,36 +68,35 @@ object Transformer {
 
       case machine.Let(variable, tag, values, rest) =>
 
-        // TODO copy duplicate values
-
-        // TODO copy duplicate in rest
-
-        val obj = produceObject(values);
+        val obj = produceObject(values, freeVariables(rest));
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
         emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), obj, 1));
 
-        // TODO free variable
+        eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.Switch(value, clauses) =>
 
-        // TODO copy value
+        shareValues(List(value), freeVariables(clauses));
+
         val tagName = freshName("tag");
         val objName = freshName("obj");
         emit(ExtractValue(tagName, transform(value), 0));
         emit(ExtractValue(objName, transform(value), 1));
+
+        val freeInClauses = freeVariables(clauses).toList;
+
         val stackPointer = getStackPointer();
         val labels = clauses.map {
-          case machine.Clause(parameters, body) =>
+          case clause =>
             implicit val BC = BlockContext();
             BC.stackPointer = stackPointer;
 
-            consumeObject(LocalReference(objType, objName), parameters);
-            // TODO free what's not free (parameters)
-            // TODO free what's not free (freeVars(body))
+            consumeObject(LocalReference(objType, objName), clause.parameters, freeVariables(clause.body));
+            eraseValues(freeInClauses, freeVariables(clause));
 
-            val terminator = transform(body);
+            val terminator = transform(clause.body);
 
             val instructions = BC.instructions; BC.instructions = null;
 
@@ -115,31 +115,28 @@ object Transformer {
       case machine.New(variable, List(clause), rest) =>
         // TODO multiple methods
 
-        val closureEnvironment = machine.freeVariables(clause).toList;
+        val closureEnvironment = freeVariables(clause).toList;
 
         val clauseName = freshName(variable.name);
 
         defineFunction(clauseName, List(Parameter(objType, "obj"), Parameter(envType, "env"), Parameter(spType, "sp"))) {
-          consumeObject(LocalReference(objType, "obj"), closureEnvironment);
-          // TODO free what's not free (closureEnvironment)
+          consumeObject(LocalReference(objType, "obj"), closureEnvironment, freeVariables(clause));
           loadEnvironment(initialEnvironmentPointer, clause.parameters);
-          // TODO free what's not free (parameters)
+          eraseValues(clause.parameters, freeVariables(clause.body));
           transform(clause.body);
         };
 
-        // TODO copy duplicate in rest
-        val obj = produceObject(closureEnvironment);
+        val obj = produceObject(closureEnvironment, freeVariables(rest));
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(negativeType), ConstantGlobal(methodType, clauseName), 0));
         emit(InsertValue(variable.name, LocalReference(negativeType, tmpName), obj, 1));
 
-        // TODO free variable
+        eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.Invoke(value, 0, values) =>
 
-        // TODO copy value
-        // TODO copy duplicate values
+        shareValues(value :: values, Set());
         storeEnvironment(initialEnvironmentPointer, values);
 
         val functionName = freshName("fp");
@@ -152,21 +149,21 @@ object Transformer {
 
       case machine.PushFrame(frame, rest) =>
 
-        val frameEnvironment = machine.freeVariables(frame).toList;
+        val frameEnvironment = freeVariables(frame).toList;
 
         val frameName = freshName("k");
 
         defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
-          // TODO free what's not free (frameEnvironment, unnecessary)
+          // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           loadEnvironment(initialEnvironmentPointer, frame.parameters);
-          // TODO free what's not free (parameters)
+          eraseValues(frame.parameters, freeVariables(frame.body))
 
           transform(frame.body);
         };
 
-        // TODO copy duplicate in rest
+        shareValues(frameEnvironment, freeVariables(rest));
         pushEnvironment(frameEnvironment);
         pushReturnAddress(frameName);
 
@@ -174,7 +171,7 @@ object Transformer {
 
       case machine.Return(values) =>
 
-        // TODO copy duplicate values
+        shareValues(values, Set())
         storeEnvironment(initialEnvironmentPointer, values);
 
         val returnAddress = popReturnAddress();
@@ -184,16 +181,16 @@ object Transformer {
       case machine.NewStack(variable, frame, rest) =>
         emit(Call(variable.name, transform(variable.tpe), newStack, List()));
 
-        val frameEnvironment = machine.freeVariables(frame).toList;
+        val frameEnvironment = freeVariables(frame).toList;
 
         val frameName = freshName("k");
 
         defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
-          // TODO free what's not free (frameEnvironment, unnecessary)
+          // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
           loadEnvironment(initialEnvironmentPointer, frame.parameters);
-          // TODO free what's not free (parameters)
+          eraseValues(frame.parameters, freeVariables(frame.body));
 
           val newStackPointer = LocalReference(spType, freshName("sp"));
           emit(Call(newStackPointer.name, spType, underflowStack, List(getStackPointer())));
@@ -202,7 +199,7 @@ object Transformer {
           transform(frame.body);
         };
 
-        // TODO copy duplicate in rest (frameEnvironment)
+        shareValues(frameEnvironment, freeVariables(rest));
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
         val oldStackPointer = LocalReference(spType, freshName("stksp"));
         emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 1)));
@@ -211,12 +208,11 @@ object Transformer {
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, frameName);
         emit(Store(stackPointerPointer, newStackPointer));
 
-        // TODO free variable
-
+        eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.PushStack(value, rest) =>
-        // TODO copy value if duplicate
+        shareValues(List(value), freeVariables(rest));
         val newStackPointerName = freshName("sp");
         emit(Call(newStackPointerName, spType, pushStack, List(transform(value), getStackPointer())));
         setStackPointer(LocalReference(spType, newStackPointerName));
@@ -230,7 +226,8 @@ object Transformer {
         emit(ExtractValue(variable.name, tmpReference, 0));
         emit(ExtractValue(newStackPointerName, tmpReference, 1));
         setStackPointer(LocalReference(spType, newStackPointerName));
-        // TODO free variable
+
+        eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
       case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(machine.Variable(name, machine.Primitive("Int"))), rest))) =>
@@ -325,7 +322,7 @@ object Transformer {
     }
   }
 
-  def produceObject(environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+  def produceObject(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if(environment.isEmpty) {
       ConstantNull(objType)
     } else {
@@ -336,25 +333,29 @@ object Transformer {
 
       //TODO cache eraser based on environment
       defineFunction(eraser.name, List(Parameter(envType, "env"))) {
-        eraseEnvironment(LocalReference(envType, "env"), environment);
+        val typedEnvironmentPointer = castEnvironmentPointer(LocalReference(envType, "env"), environment);
+        // TODO avoid unnecessary loads
+        loadEnvironmentAt(typedEnvironmentPointer, environment);
+        eraseValues(environment, Set());
         RetVoid()
       };
 
       emit(Call(obj.name, objType, newObject, List(eraser, size)));
       emit(Call(env.name, envType, objectEnvironment, List(obj)));
+      shareValues(environment, freeInBody);
       storeEnvironment(env, environment);
       obj
     }
   }
 
-  def consumeObject(obj: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+  def consumeObject(obj: Operand, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit = {
     if(environment.isEmpty) {
       ()
     } else {
       val env = LocalReference(envType, freshName("env"));
       emit(Call(env.name, envType, objectEnvironment, List(obj)));
       loadEnvironment(env, environment);
-      shareEnvironment(environment);
+      shareValues(environment, freeInBody);
       emit(Call("_", VoidType(), eraseObject, List(obj)));
     }
   }
@@ -430,28 +431,50 @@ object Transformer {
     }
   }
 
-  def shareEnvironment(environment: machine.Environment)(using FunctionContext, BlockContext): Unit = {
-    environment.map { variable =>
-      variable.tpe match {
-        case machine.Positive(_) => emit(Call("_", VoidType(), sharePositive, List(transform(variable))))
-        case machine.Negative(_) => emit(Call("_", VoidType(), shareNegative, List(transform(variable))))
-        case machine.Primitive("Stk") => emit(Call("_", VoidType(), shareStack, List(transform(variable))))
-        case machine.Primitive("Int") => ()
+  def shareValues(values: machine.Environment, freeInBody: Set[machine.Variable])(using FunctionContext, BlockContext): Unit = {
+    def loop(values: machine.Environment): Unit = {
+      values match {
+        case Nil => ()
+        case value :: values =>
+        if values.map(substitute).contains(substitute(value)) then {
+          shareValue(value);
+          loop(values)
+        } else if freeInBody.map(substitute).contains(substitute(value)) then {
+          shareValue(value);
+          loop(values)
+        } else {
+          loop(values)
+        }
+      }
+    };
+    loop(values)
+  }
+
+  def eraseValues(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    environment.map { value =>
+      if !freeInBody.map(substitute).contains(substitute(value)) then {
+        eraseValue(value)
+      } else {
+        ()
       }
     }
   }
 
-  def eraseEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
-    // TODO avoid unnecessary loads
-    loadEnvironmentAt(typedEnvironmentPointer, environment);
-    environment.map { variable =>
-      variable.tpe match {
-        case machine.Positive(_) => emit(Call("_", VoidType(), erasePositive, List(transform(variable))))
-        case machine.Negative(_) => emit(Call("_", VoidType(), eraseNegative, List(transform(variable))))
-        case machine.Primitive("Stk") => emit(Call("_", VoidType(), eraseStack, List(transform(variable))))
-        case machine.Primitive("Int") => ()
-      }
+  def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
+    value.tpe match {
+      case machine.Positive(_) => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
+      case machine.Negative(_) => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
+      case machine.Primitive("Stk") => emit(Call("_", VoidType(), shareStack, List(transform(value))))
+      case machine.Primitive("Int") => ()
+    }
+  }
+
+  def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
+    value.tpe match {
+      case machine.Positive(_) => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
+      case machine.Negative(_) => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
+      case machine.Primitive("Stk") => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
+      case machine.Primitive("Int") => ()
     }
   }
 
