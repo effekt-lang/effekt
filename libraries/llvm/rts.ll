@@ -130,8 +130,8 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 define %StkVal* @newStack() alwaysinline {
 
     ; TODO find actual size of stack
-    %stkm = call i8* @malloc(i64 40)
-    %stkp = bitcast i8* %stkm to %StkVal*
+    %stkmem = call i8* @malloc(i64 40)
+    %stk = bitcast i8* %stkmem to %Stk
 
     ; TODO initialize to zero and grow later
     %sp = call %Sp @malloc(i64 1024)
@@ -142,20 +142,20 @@ define %StkVal* @newStack() alwaysinline {
     %stk.3 = insertvalue %StkVal %stk.2, %Limit null, 3
     %stk.4 = insertvalue %StkVal %stk.3, %Stk null, 4
 
-    store %StkVal %stk.4, %StkVal* %stkp
+    store %StkVal %stk.4, %Stk %stk
 
-    ret %StkVal* %stkp
+    ret %Stk %stk
 }
 
-define %Sp @pushStack(%StkVal* %stkp, %Sp %oldsp) alwaysinline {
+define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
 
     ; TODO check reference count and do a deep copy
 
-    %stkrc = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 4
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
@@ -169,7 +169,7 @@ define %Sp @pushStack(%StkVal* %stkp, %Sp %oldsp) alwaysinline {
 
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
-    store %Stk %stkp, %Stk* @rest
+    store %Stk %stk, %Stk* @rest
 
     store %Rc 0, %Rc* %stkrc
     store %Sp %oldsp, %Sp* %stksp
@@ -182,13 +182,13 @@ define %Sp @pushStack(%StkVal* %stkp, %Sp %oldsp) alwaysinline {
 
 define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
-    %stkp = load %StkVal*, %StkVal** @rest
+    %stk = load %StkVal*, %StkVal** @rest
 
-    %stkrc = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 4
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
 
     ; %newrc = load %Rc, %Rc* %stkrc
     %newsp = load %Sp, %Sp* %stksp
@@ -210,20 +210,20 @@ define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
     store %Limit %oldlimit, %Limit* %stklimit
     store %Stk null, %Stk* %stkrest
 
-    %ret.0 = insertvalue {%StkVal*, %Sp} undef, %StkVal* %stkp, 0
+    %ret.0 = insertvalue {%StkVal*, %Sp} undef, %Stk %stk, 0
     %ret.1 = insertvalue {%StkVal*, %Sp} %ret.0, %Sp %newsp, 1
 
     ret {%StkVal*, %Sp} %ret.1
 }
 
 define %Sp @underflowStack(%Sp %sp) alwaysinline {
-    %stkp = load %StkVal*, %StkVal** @rest
+    %stk = load %Stk, %Stk* @rest
 
-    %stkrc = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %StkVal* %stkp, i64 0, i32 4
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
 
     ; %newrc = load %Rc, %Rc* %stkrc
     %newsp = load %Sp, %Sp* %stksp
@@ -235,7 +235,7 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     store %Limit %newlimit, %Limit* @limit
     store %Stk %newrest, %Stk* @rest
 
-    %stkpuntyped = bitcast %StkVal* %stkp to i8*
+    %stkpuntyped = bitcast %Stk %stk to i8*
     call void @free(%Sp %sp)
     call void @free(i8* %stkpuntyped)
     ret %Sp %newsp
@@ -246,6 +246,11 @@ define void @shareStack(%Stk %stk) alwaysinline {
     %rc = load %Rc, %Rc* %stkrc
     %rc.1 = add %Rc %rc, 1
     store %Rc %rc.1, %Rc* %stkrc
+    ret void
+}
+
+define void @eraseStack(%Stk %stk) alwaysinline {
+    ; TODO actually erase it
     ret void
 }
 
