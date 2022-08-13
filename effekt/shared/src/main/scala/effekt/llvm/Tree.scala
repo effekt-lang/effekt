@@ -28,6 +28,7 @@ case class ExtractValue(result: String, aggregate: Operand, index: Int) extends 
 sealed trait Terminator
 case class RetVoid() extends Terminator
 case class Switch(operand: Operand, defaultDest: String, dests: List[(Int, String)]) extends Terminator
+case class CondBr(condition: Operand, trueDest: String, falseDest: String) extends Terminator
 
 case class Parameter(typ: Type, name: String)
 
@@ -45,6 +46,7 @@ sealed trait Type
 case class VoidType() extends Type
 case class IntegerType64() extends Type
 case class IntegerType8() extends Type
+case class IntegerType1() extends Type
 case class StructureType(elementTypes: List[Type]) extends Type
 case class FunctionType(resultType: Type, argumentTypes: List[Type]) extends Type
 case class PointerType(pointerReferent: Type) extends Type
