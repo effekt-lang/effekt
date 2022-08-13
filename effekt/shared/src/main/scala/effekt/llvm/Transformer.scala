@@ -17,7 +17,7 @@ object Transformer {
         emit(Call("env", envType, malloc, List(ConstantInt(1024))));
         emit(Call("sp", spType, malloc, List(ConstantInt(1024))));
         emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
-        pushReturnAddress("topLevel");
+        pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
         val terminator = transform(statement);
 
@@ -151,9 +151,8 @@ object Transformer {
 
         val frameEnvironment = freeVariables(frame).toList;
 
-        val frameName = freshName("k");
-
-        defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
+        val returnAddressName = freshName("k");
+        defineFunction(returnAddressName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
@@ -163,9 +162,31 @@ object Transformer {
           transform(frame.body);
         };
 
+        // TODO cache based on environment
+        val sharerName = freshName("sharer");
+        defineFunction(sharerName, List(Parameter(spType, "sp"))) {
+
+          popEnvironment(frameEnvironment);
+          shareValues(frameEnvironment, Set.from(frameEnvironment));
+          emit(TailCall(shareFrames, List(getStackPointer())));
+          RetVoid()
+
+        };
+
+        // TODO cache based on environment (careful, this is different from other erasers)
+        val eraserName = freshName("eraser");
+        defineFunction(eraserName, List(Parameter(spType, "sp"))) {
+
+          popEnvironment(frameEnvironment);
+          eraseValues(frameEnvironment, Set());
+          emit(TailCall(eraseFrames, List(getStackPointer())));
+          RetVoid()
+
+        };
+
         shareValues(frameEnvironment, freeVariables(rest));
         pushEnvironment(frameEnvironment);
-        pushReturnAddress(frameName);
+        pushReturnAddress(returnAddressName, sharerName, eraserName);
 
         transform(rest)
 
@@ -183,9 +204,8 @@ object Transformer {
 
         val frameEnvironment = freeVariables(frame).toList;
 
-        val frameName = freshName("k");
-
-        defineFunction(frameName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
+        val returnAddressName = freshName("k");
+        defineFunction(returnAddressName, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
 
           popEnvironment(frameEnvironment);
           // eraseValues(frameEnvironment, frameEnvironment) (unnecessary)
@@ -199,13 +219,34 @@ object Transformer {
           transform(frame.body);
         };
 
+        // TODO cache based on environment (this is different from other sharers)
+        val sharerName = freshName("sharer");
+        defineFunction(sharerName, List(Parameter(spType, "sp"))) {
+
+          popEnvironment(frameEnvironment);
+          shareValues(frameEnvironment, Set.from(frameEnvironment));
+          RetVoid()
+
+        };
+
+        // TODO cache based on environment (careful, this is different from other erasers)
+        val eraserName = freshName("eraser");
+        defineFunction(eraserName, List(Parameter(spType, "sp"))) {
+
+          popEnvironment(frameEnvironment);
+          eraseValues(frameEnvironment, Set());
+          emit(Call("_", VoidType(), free, List(getStackPointer())));
+          RetVoid()
+
+        };
+
         shareValues(frameEnvironment, freeVariables(rest));
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
         val oldStackPointer = LocalReference(spType, freshName("stksp"));
         emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 1)));
         emit(Load(oldStackPointer.name, stackPointerPointer));
         val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
-        val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, frameName);
+        val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, returnAddressName, sharerName, eraserName);
         emit(Store(stackPointerPointer, newStackPointer));
 
         eraseValues(List(variable), freeVariables(rest));
@@ -213,8 +254,10 @@ object Transformer {
 
       case machine.PushStack(value, rest) =>
         shareValues(List(value), freeVariables(rest));
+        val newStackName = freshName("stk");
+        emit(Call(newStackName, stkType, uniqueStack, List(transform(value))));
         val newStackPointerName = freshName("sp");
-        emit(Call(newStackPointerName, spType, pushStack, List(transform(value), getStackPointer())));
+        emit(Call(newStackPointerName, spType, pushStack, List(LocalReference(stkType, newStackName), getStackPointer())));
         setStackPointer(LocalReference(spType, newStackPointerName));
         transform(rest)
 
@@ -262,8 +305,10 @@ object Transformer {
   // TODO multiple methods (should be pointer to vtable)
   def negativeType = NamedType("Neg");
   def methodType = PointerType(FunctionType(VoidType(), List(objType, envType, spType)));
-  def returnAddressType = PointerType(FunctionType(VoidType(), List(envType, spType)));
-  def eraserType = PointerType(FunctionType(VoidType(), List(envType)));
+  def returnAddressType = NamedType("RetAdr");
+  def sharerType = NamedType("Sharer");
+  def eraserType = NamedType("Eraser");
+  def frameHeaderType = NamedType("FrameHeader");
   def envType = NamedType("Env");
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
@@ -478,18 +523,27 @@ object Transformer {
     }
   }
 
-  def pushReturnAddress(frameName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    setStackPointer(pushReturnAddressOnto(getStackPointer(), frameName));
+  def pushReturnAddress(returnAddressName: String, scannerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Unit = {
+    setStackPointer(pushReturnAddressOnto(getStackPointer(), returnAddressName, scannerName, eraserName));
   }
 
-  def pushReturnAddressOnto(oldStackPointer: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
+  def pushReturnAddressOnto(oldStackPointer: Operand, returnAddressName: String, sharerName: String, eraserName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
 
-    val pointerType = PointerType(returnAddressType);
+    val pointerType = PointerType(frameHeaderType);
 
     val oldTypedPointer = LocalReference(pointerType, freshName("sp.t"));
     emit(BitCast(oldTypedPointer.name, oldStackPointer, pointerType));
 
-    emit(Store(oldTypedPointer, ConstantGlobal(returnAddressType, returnAddressName)));
+    val returnAddressPointer = LocalReference(PointerType(returnAddressType), freshName("retadrp"));
+    emit(GetElementPtr(returnAddressPointer.name, oldTypedPointer, List(0, 0)));
+    val sharerPointer = LocalReference(PointerType(sharerType), freshName("sharerp"));
+    emit(GetElementPtr(sharerPointer.name, oldTypedPointer, List(0, 1)));
+    val eraserPointer = LocalReference(PointerType(eraserType), freshName("eraserp"));
+    emit(GetElementPtr(eraserPointer.name, oldTypedPointer, List(0, 2)));
+
+    emit(Store(returnAddressPointer, ConstantGlobal(returnAddressType, returnAddressName)));
+    emit(Store(sharerPointer, ConstantGlobal(sharerType, sharerName)));
+    emit(Store(eraserPointer, ConstantGlobal(eraserType, eraserName)));
 
     val newTypedPointer = LocalReference(pointerType, freshName("sp.t"));
     emit(GetElementPtr(newTypedPointer.name, oldTypedPointer, List(1)));
@@ -508,7 +562,7 @@ object Transformer {
 
   def popReturnAddressFrom(oldStackPointer: Operand, returnAddressName: String)(using ModuleContext, FunctionContext, BlockContext): Operand = {
 
-    val pointerType = PointerType(returnAddressType);
+    val pointerType = PointerType(frameHeaderType);
 
     val oldTypedPointer = LocalReference(pointerType, freshName("sp.t"));
     emit(BitCast(oldTypedPointer.name, oldStackPointer, pointerType));
@@ -516,7 +570,10 @@ object Transformer {
     val newTypedPointer = LocalReference(pointerType, freshName("sp.t"));
     emit(GetElementPtr(newTypedPointer.name, oldTypedPointer, List(-1)));
 
-    emit(Load(returnAddressName, newTypedPointer));
+    val returnAddressPointer = LocalReference(PointerType(returnAddressType), freshName("retadrp"));
+    emit(GetElementPtr(returnAddressPointer.name, newTypedPointer, List(0, 0)));
+
+    emit(Load(returnAddressName, returnAddressPointer));
 
     val newStackPointer = LocalReference(spType, freshName("sp"));
     emit(BitCast(newStackPointer.name, newTypedPointer, spType));
@@ -529,18 +586,24 @@ object Transformer {
 
   def newObject = ConstantGlobal(PointerType(FunctionType(objType,List(IntegerType64()))), "newObject");
   def objectEnvironment = ConstantGlobal(PointerType(FunctionType(envType,List(objType))), "objectEnvironment");
+
   def shareObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "shareObject");
   def sharePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "sharePositive");
   def shareNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "shareNegative");
   def shareStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "shareStack");
+  def shareFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "shareFrames");
+
   def eraseObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseObject");
-  def erasePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "erasePositive");
-  def eraseNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseNegative");
-  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseStack");
+  def erasePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "erasePositive");
+  def eraseNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "eraseNegative");
+  def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "eraseStack");
+  def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
+
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
   def popStack = ConstantGlobal(PointerType(FunctionType(StructureType(List(stkType,spType)),List(spType))), "popStack");
   def underflowStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "underflowStack");
+  def uniqueStack = ConstantGlobal(PointerType(FunctionType(stkType,List(stkType))), "uniqueStack");
 
 }
 
