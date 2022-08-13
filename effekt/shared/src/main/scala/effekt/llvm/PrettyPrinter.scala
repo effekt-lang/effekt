@@ -89,6 +89,8 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
     case Switch(operand, defaultDest, dests) =>
       def destAsFragment(dest: (Int, String)) = s"i64 ${dest._1}, label ${localName(dest._2)}";
       s"switch ${asFragment(operand)}, label ${localName(defaultDest)} [${spaceSeparated(dests.map(destAsFragment))}]"
+    case CondBr(condition, trueDest, falseDest) =>
+      s"br ${asFragment(condition)}, label ${localName(trueDest)}, label ${localName(falseDest)}"
   }
 
   def asFragment(operand: Operand): LLVMFragment = operand match {
@@ -103,6 +105,7 @@ ${indentedLines(instructions.map(asFragment).mkString("\n"))}
     case VoidType() => "void"
     case IntegerType64() => "i64"
     case IntegerType8() => "i8" // required for `void*` (which only exists as `i8*` in LLVM)
+    case IntegerType1() => "i1"
     case NamedType(name) => localName(name)
     case PointerType(referentType) => s"${asFragment(referentType)}*"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(asFragment))}}"

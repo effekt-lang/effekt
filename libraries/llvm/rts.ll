@@ -6,11 +6,11 @@
 %Env = type i8*
 
 %Rc = type i64
+%Sharer = type void (%Env)*
 %Eraser = type void (%Env)*
 %Header = type {%Rc, %Eraser}
 
 %Obj = type %Header*
-
 
 %Sp = type i8*
 %Base = type %Sp
@@ -20,6 +20,8 @@
 
 %Stk = type %StkVal*
 
+%RetAdr = type void (%Env, %Sp)*
+%FrameHeader = type { %RetAdr, %Sharer, %Eraser }
 
 %Pos = type {i64, %Obj}
 %Neg = type {void (%Obj, %Env, %Sp)*, %Obj}
@@ -67,12 +69,14 @@ define %Env @objectEnvironment(%Obj %obj) alwaysinline {
 define void @shareObject(%Obj %obj) alwaysinline {
     %isnull = icmp eq %Obj %obj, null
     br i1 %isnull, label %done, label %next
+
     next:
     %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
     %rc = load %Rc, %Rc* %objrc
     %rc.1 = add %Rc %rc, 1
     store %Rc %rc.1, %Rc* %objrc
     br label %done
+
     done:
     ret void
 }
@@ -92,14 +96,17 @@ define void @shareNegative(%Neg %val) alwaysinline {
 define void @eraseObject(%Obj %obj) alwaysinline {
     %isnull = icmp eq %Obj %obj, null
     br i1 %isnull, label %done, label %next
+
     next:
     %objrc = getelementptr %Header, %Header* %obj, i64 0, i32 0
     %rc = load %Rc, %Rc* %objrc
     switch %Rc %rc, label %decr [%Rc 0, label %free]
+
     decr:
     %rc.1 = sub %Rc %rc, 1
     store %Rc %rc.1, %Rc* %objrc
     ret void
+
     free:
     %objeraser = getelementptr %Header, %Header* %obj, i64 0, i32 1
     %eraser = load %Eraser, %Eraser* %objeraser
@@ -108,6 +115,7 @@ define void @eraseObject(%Obj %obj) alwaysinline {
     %objuntyped = bitcast %Obj %obj to i8*
     call void @free(i8* %objuntyped)
     br label %done
+
     done:
     ret void
 }
@@ -127,7 +135,7 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 ; Meta-stack management
 
-define %StkVal* @newStack() alwaysinline {
+define %Stk @newStack() alwaysinline {
 
     ; TODO find actual size of stack
     %stkmem = call i8* @malloc(i64 40)
@@ -149,9 +157,8 @@ define %StkVal* @newStack() alwaysinline {
 
 define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
 
-    ; TODO check reference count and do a deep copy
-
     %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    ; assert %stkrc == null
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
     %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
@@ -241,6 +248,61 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     ret %Sp %newsp
 }
 
+define %Stk @uniqueStack(%Stk %stk) alwaysinline {
+
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %rc = load %Rc, %Rc* %stkrc
+    switch %Rc %rc, label %next [%Rc 0, label %done]
+
+    next:
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
+
+    %sp = load %Sp, %Sp* %stksp
+    %base = load %Base, %Base* %stkbase
+    %limit = load %Limit, %Limit* %stklimit
+    %rest = load %Stk, %Stk* %stkrest
+
+    %intsp = ptrtoint %Sp %sp to i64
+    %intbase = ptrtoint %Base %base to i64
+    %intlimit = ptrtoint %Limit %limit to i64
+    %used = sub i64 %intsp, %intbase
+    %size = sub i64 %intlimit, %intbase
+
+    %newstk = call %Stk @newStack()
+    %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
+    %newstksp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1
+    %newstkbase = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2
+    %newstklimit = getelementptr %StkVal, %Stk %newstk, i64 0, i32 3
+    %newstkrest = getelementptr %StkVal, %Stk %newstk, i64 0, i32 4
+
+    %newbase = load %Base, %Base* %newstkbase
+    %intnewbase = ptrtoint %Base %newbase to i64
+    %intnewsp = add i64 %intnewbase, %used
+    %intnewlimit = add i64 %intnewbase, %size
+    %newsp = inttoptr i64 %intnewsp to %Sp
+    %newlimit = inttoptr i64 %intnewlimit to %Limit
+
+    call void @memcpy(i8* %newbase, i8* %base, i64 %used)
+    call fastcc void @shareFrames(%Sp %newsp)
+
+    store %Rc 0, %Rc* %stkrc
+    store %Sp %newsp, %Sp* %newstksp
+    store %Base %newbase, %Base* %newstkbase
+    store %Limit %newlimit, %Limit* %newstklimit
+    store %Stk null, %Stk* %newstkrest
+
+    %newoldrc = sub %Rc %rc, 1
+    store %Rc %newoldrc, %Rc* %stkrc
+
+    ret %Stk %newstk
+
+    done:
+    ret %Stk %stk
+}
+
 define void @shareStack(%Stk %stk) alwaysinline {
     %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
     %rc = load %Rc, %Rc* %stkrc
@@ -250,7 +312,41 @@ define void @shareStack(%Stk %stk) alwaysinline {
 }
 
 define void @eraseStack(%Stk %stk) alwaysinline {
-    ; TODO actually erase it
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %rc = load %Rc, %Rc* %stkrc
+    switch %Rc %rc, label %decr [%Rc 0, label %free]
+
+    decr:
+    %rc.1 = sub %Rc %rc, 1
+    store %Rc %rc.1, %Rc* %stkrc
+    ret void
+
+    free:
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
+    %sp = load %Sp, %Sp* %stksp
+    call fastcc void @eraseFrames(%Sp %sp)
+    %stkuntyped = bitcast %Stk %stk to i8*
+    call void @free(i8* %stkuntyped)
+    ret void
+}
+
+define fastcc void @shareFrames(%Sp %sp) alwaysinline {
+    %sptyped = bitcast %Sp %sp to %FrameHeader*
+    %newsptyped = getelementptr %FrameHeader, %FrameHeader* %sptyped, i64 -1
+    %stksharer = getelementptr %FrameHeader, %FrameHeader* %newsptyped, i64 0, i32 1
+    %sharer = load %Sharer, %Sharer* %stksharer
+    %newsp = bitcast %FrameHeader* %newsptyped to %Sp
+    tail call fastcc void %sharer(%Sp %newsp)
+    ret void
+}
+
+define fastcc void @eraseFrames(%Sp %sp) alwaysinline {
+    %sptyped = bitcast %Sp %sp to %FrameHeader*
+    %newsptyped = getelementptr %FrameHeader, %FrameHeader* %sptyped, i64 -1
+    %stkeraser = getelementptr %FrameHeader, %FrameHeader* %newsptyped, i64 0, i32 2
+    %eraser = load %Eraser, %Eraser* %stkeraser
+    %newsp = bitcast %FrameHeader* %newsptyped to %Sp
+    tail call fastcc void %eraser(%Sp %newsp)
     ret void
 }
 
@@ -263,6 +359,15 @@ define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
     ret void
 }
 
+define fastcc void @topLevelSharer(%Env %env) {
+    ; TODO this should never be called
+    ret void
+}
+
+define fastcc void @topLevelEraser(%Env %env) {
+    ; TODO this should never be called
+    ret void
+}
 
 ; Primitive Types
 
