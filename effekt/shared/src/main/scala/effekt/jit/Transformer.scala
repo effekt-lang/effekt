@@ -73,9 +73,23 @@ object Transformer {
         emit(Construct(NamedRegister(name), adtType, tag, transformArguments(environment)))
         transform(rest)
       }
-      case machine.Switch(machine.Variable(name, typ), clauses) => {
-        val Type.Datatype(adtType) = transform(typ);
-        Match(adtType, NamedRegister(name), clauses.map(transform))
+      case machine.Switch(v @ machine.Variable(name, typ), clauses) => {
+        transform(typ) match {
+        case Type.Datatype(adtType) =>
+          Match(adtType, transformArgument(v).id, for (clause <- clauses) yield {
+            val (closesOver, args, block) = transformInline(clause);
+            emit(block);
+            Clause(closesOver, block.id)
+          })
+        case Type.Integer() => {
+          val List(elseClause, thenClause) = clauses;
+          val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);
+          val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause)
+          emit(elseBlock);
+          emit(IfZero(transformArgument(v).id, Clause(elseClosesOver, elseBlock.id)));
+          emitInlined(thenBlock)
+        }
+        }
       }
       case machine.New(v @ machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
         val (args, _, target) = transformClosure(clause); // TODO
@@ -109,6 +123,7 @@ object Transformer {
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
     typ match
       case machine.Positive(List(List())) => Type.Unit()
+      case machine.Positive(List(List(),List())) => Type.Integer() // Boolean
       case machine.Positive(alternatives) => Type.Datatype(PC.datatypes.indexOfOrInsert(alternatives))
       case machine.Negative(contType :: Nil) => Type.Continuation()
       case machine.Negative(alternatives) => ???
