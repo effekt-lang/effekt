@@ -21,9 +21,9 @@ case class BasicBlock(id: BlockLabel,
                       terminator: Terminator) extends Tree // TODO: frame descriptor
 
 case class VariableDescriptor(typ: Type, id: Register) extends Tree
-case class Clause(args: RegList, target: BlockLabel)
 case class FrameDescriptor(locals: Map[RegisterType, Int]) extends Tree
 case class RegList(regs: Map[RegisterType, List[Register]])
+case class Clause(closesOver: RegList, target: BlockLabel)
 
 sealed trait Instruction extends Tree
 case class Const(out: Register, value: Int) extends Instruction
