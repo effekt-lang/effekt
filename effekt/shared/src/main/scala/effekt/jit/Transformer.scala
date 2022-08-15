@@ -30,12 +30,24 @@ object Transformer {
   def transform(label: BlockLabel, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val frameDescriptor = FrameDescriptor(env.locals.view.mapValues(_.length).toMap);
 
-    implicit val BC: BlockContext = new BlockContext(frameDescriptor);
+    implicit val BC: BlockContext = new BlockContext(frameDescriptor, env);
 
     val terminator = transform(body);
-    val instructions = BC.instructions.toList;
+    var instructions = BC.instructions.toList;
 
-    BasicBlock(label, frameDescriptor, instructions, terminator)
+    val environmentTooSmall = RegisterType.values.exists(t =>
+      env.locals.applyOrElse(t, t => List()).length
+        < BC.frameDescriptor.locals.applyOrElse(t, t=>0));
+    if(environmentTooSmall) {
+      val subst = Subst(RegList(RegisterType.values.map(t =>
+        (t, ((0 to env.locals.applyOrElse(t, t=>List()).length)
+          ++ List.fill(BC.frameDescriptor.locals.applyOrElse(t, t=>0)
+                       - env.locals.applyOrElse(t, t=>List()).length)(-1)).map(RegisterIndex).toList))
+        .toMap));
+      instructions = subst :: instructions;
+    }
+    BasicBlock(label, BC.frameDescriptor, instructions, terminator)
+  }
   def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val env = transformParameters(locals);
     transform(label, env, body)
@@ -51,7 +63,9 @@ object Transformer {
         Jump(BlockName(name))
       }
       case machine.Substitute(bindings, rest) => {
-        emitSubst(bindings.map({case (v,_) => v}), bindings.map({case (_,v) => v}));
+        val newEnv = transformParameters(bindings.map(_._1));
+        val oldEnv = transformParameters(bindings.map(_._2));
+        emitSubst(newEnv, oldEnv);
         transform(rest)
       }
       case machine.Let(machine.Variable(name, typ), tag, environment, rest) => {
@@ -152,7 +166,26 @@ object Transformer {
     ProgC.basicBlocks.addOne(block)
   }
 
-  class BlockContext(var currentFrameDescriptor: FrameDescriptor) {
+  case class Environment(locals: Map[RegisterType, List[VariableDescriptor]]) {
+    def registerIndex(vd: VariableDescriptor): Register = {
+      vd.typ.registerType match {
+        case None => ErasedRegister()
+        case Some(t) => RegisterIndex(locals(t).indexOf(vd))
+      }
+    }
+    @targetName("extended")
+    def ++(vs: Environment): Environment = {
+      Environment(RegisterType.values.map(t => t -> (locals.applyOrElse(t, x => List()) ++ vs.locals.applyOrElse(t, x => List()))).toMap)
+    }
+  }
+  object Environment {
+    def from(vs: List[VariableDescriptor]): Environment = {
+      Environment(vs.filter(_.typ.registerType.isDefined).groupBy(_.typ.registerType.get))
+    }
+  }
+
+  class BlockContext(var frameDescriptor: FrameDescriptor,
+                     var environment: Environment) {
     val instructions: ListBuffer[Instruction] = ListBuffer();
   }
 
@@ -160,16 +193,24 @@ object Transformer {
     BC.instructions.addOne(instruction)
   }
 
-  def emitSubst(params: machine.Environment, args: machine.Environment)
+  def emitSubst(newEnv: Environment, vals: Environment)
                (using ProgC: ProgramContext, BC: BlockContext): Unit = {
-    val newFrameDescriptor = transformParameters(params);
-    val newFrameDescriptorWithOldNames = transformParameters(args);
-    if(newFrameDescriptorWithOldNames != BC.currentFrameDescriptor){
-      emit(Subst(transformArguments(args)));
-    }
-    BC.currentFrameDescriptor = newFrameDescriptor;
+    val oldVals = transformArguments(vals);
+    BC.environment = newEnv;
+    val newVals = transformArguments(newEnv);
+    if (oldVals == newVals) return // nothing to do
+    emit(Subst(oldVals))
   }
-  def ensureEnvironment(newEnvironment: machine.Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
-    emitSubst(newEnvironment, newEnvironment)
+  def ensureEnvironment(newEnvironment: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    emitSubst(newEnvironment, newEnvironment);
+  }
+  def extendEnvironment(additional: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    BC.environment = BC.environment ++ additional;
+    extendFrameDescriptorTo(BC.environment);
+  }
+  def extendFrameDescriptorTo(env: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    BC.frameDescriptor = FrameDescriptor(
+      RegisterType.values.map(t =>(t ->
+        Math.max(BC.frameDescriptor.locals.applyOrElse(t, x => 0), env.locals.applyOrElse(t, x => List()).length))).toMap);
   }
 }
