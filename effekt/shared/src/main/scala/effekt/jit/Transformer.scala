@@ -102,7 +102,11 @@ object Transformer {
         Resume(transformArgument(v).id)
       }
       case machine.Invoke(value, tag, environment) => ???
-      case machine.PushFrame(frame, rest) => ???
+      case machine.PushFrame(frame, rest) => {
+        val (args, _, target) = transformClosure(frame);
+        emit(Push(target, args));
+        transform(rest)
+      }
       case machine.Return(environment) => {
         Return(transformArguments(environment))
       }
@@ -118,6 +122,19 @@ object Transformer {
         emitInlined(block)
       }
       case machine.Run(name, environment, continuation) => ???
+      case machine.NewStack(name, frame, rest) => {
+        val (closesOver, _ignored, target) = transformClosure(frame);
+        emit(NewStack(transformArgument(name).id, target, closesOver));
+        transform(rest)
+      }
+      case machine.PushStack(value, rest) => {
+        emit(PushStack(transformArgument(value).id));
+        transform(rest)
+      }
+      case machine.PopStack(name, rest) => {
+        emit(Shift(transformArgument(name).id, 1));
+        transform(rest)
+      }
   }
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
