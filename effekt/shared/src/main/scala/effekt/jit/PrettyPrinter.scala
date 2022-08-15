@@ -96,7 +96,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(args) => jsonObjectSmall(Map("op" -> "\"Return\"", "args" -> toDoc(args)))
     case Jump(target) => jsonObjectSmall(Map("op" -> "\"Jump\"", "target" -> toDoc(target)))
     case Resume(cont) => jsonObjectSmall(Map("op" -> "\"Resume\"", "cont" -> toDoc(cont)))
-    case Match(adt_type, scrutinee, clauses) => jsonObjectSmall(Map("op" -> "Match",
+    case Match(adt_type, scrutinee, clauses) => jsonObjectSmall(Map("op" -> "\"Match\"",
       "type" -> adt_type.toString,
       "scrutinee" -> toDoc(scrutinee),
       "clauses" -> jsonListSmall(clauses.map(toDoc))))
