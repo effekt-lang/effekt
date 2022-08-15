@@ -77,12 +77,9 @@ object Transformer {
         val Type.Datatype(adtType) = transform(typ);
         Match(adtType, NamedRegister(name), clauses.map(transform))
       }
-      case machine.New(machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
-        val Clause(args, target) = transform(clause);
-        emit(Reset())
-        val freeVars = machine.freeVariables(clause).toList;
-        emit(Push(target, transformArguments(freeVars)))
-        emit(Shift(NamedRegister(name), 1))
+      case machine.New(v @ machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
+        val (args, _, target) = transformClosure(clause); // TODO
+        emit(NewStack(transformArgument(v).id, target, args));
         transform(rest)
       }
       case machine.New(name, clauses, rest) => ???
@@ -100,25 +97,13 @@ object Transformer {
         emit(PrimOp(name, transformArguments(outs), transformArguments(ins)));
         transform(rest)
       }
-      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(out), rest))) => {
-        val freeVars = machine.freeVariables(machine.Clause(List(out), rest)).toList;
-        ensureEnvironment(freeVars ++ List(out));
-        emit(Const(transformArgument(out).id, n));
-        transform(rest)
+      case machine.Run(machine.LiteralInt(n), List(), List(cont)) => {
+        //extendEnvironment(Environment.from(List(transformParameter(out))));
+        val (_, RegList(outs), block) = transformInline(cont);
+        emit(Const(outs(RegisterType.Integer).head, n));
+        emitInlined(block)
       }
       case machine.Run(name, environment, continuation) => ???
-  }
-
-  def transform(clause: machine.Clause)(using ProgramContext, BlockContext): Clause = {
-    clause match {
-      case machine.Clause(parameters, body) =>
-        val freeVars = machine.freeVariables(clause).toList;
-        val locals = freeVars ++ parameters; // TODO: Is this correct?
-        val label = new FreshBlockLabel();
-        val frees = transformArguments(freeVars);
-        emit(transform(label, locals, body));
-        Clause(frees, label)
-    }
   }
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
@@ -131,6 +116,25 @@ object Transformer {
       case machine.Primitive(name) => ???
   }
 
+  def transformClosure(clause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
+    val machine.Clause(parameters, body) = clause;
+    val freeVars = transformParameters(machine.analysis.freeVariables(clause).toList);
+    val label = new FreshBlockLabel();
+    val frees = transformArguments(freeVars);
+    val params = transformParameters(parameters);
+    val locals = freeVars ++ params;
+    val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
+    emit(transform(label, locals, body));
+    (frees, args, label)
+  }
+
+  def transformInline(clause: machine.Clause)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
+    val machine.Clause(parameters, body) = clause;
+    val params = transformParameters(parameters);
+    val locals = BC.environment ++ params;
+    extendFrameDescriptorTo(locals);
+    val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
+    (transformArguments(BC.environment), args, transform(new FreshBlockLabel(), locals, body))
   }
 
   def transformParameters(params: List[machine.Variable])(using ProgramContext): Environment =
@@ -191,6 +195,11 @@ object Transformer {
 
   def emit(instruction: Instruction)(using BC: BlockContext): Unit = {
     BC.instructions.addOne(instruction)
+  }
+
+  def emitInlined(block: BasicBlock)(using BC: BlockContext): Terminator = {
+    BC.instructions.appendAll(block.instructions);
+    block.terminator
   }
 
   def emitSubst(newEnv: Environment, vals: Environment)
