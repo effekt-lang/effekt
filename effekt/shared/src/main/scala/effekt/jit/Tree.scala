@@ -38,14 +38,14 @@ case class IfZero(arg: Register, thenClause: Clause) extends Instruction
 case class IsZero(out: Register, arg: Register) extends Instruction
 case class Subst(args: RegList) extends Instruction
 case class Construct(out: Register, adt_type: Int, tag: ConstructorTag, args: RegList) extends Instruction
+case class PushStack(arg: Register) extends Instruction
+case class NewStack(out: Register, target: BlockLabel, args: RegList) extends Instruction
 
 sealed trait Terminator extends Tree
 case class Return(args: RegList) extends Terminator
 case class Jump(target: BlockLabel) extends Terminator
 case class Resume(cont: Register) extends Terminator
 case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause]) extends Terminator
-
-// TODO + NewStack, PushStack
 
 sealed trait Type extends Tree
 object Type {

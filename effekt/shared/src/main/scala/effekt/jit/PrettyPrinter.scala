@@ -90,6 +90,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "tag" -> tag.toString,
       "args" -> toDoc(args)
     ))
+    case NewStack(out, target, args) => jsonObjectSmall(Map("op" -> "\"NewStack\"",
+      "out" -> toDoc(out),
+      "target" -> toDoc(target),
+      "args" -> toDoc(args)
+    ))
+    case PushStack(arg) => jsonObjectSmall(Map("op" -> "\"PushStack\"",
+      "arg" -> toDoc(arg)
+    ))
   }
 
   def toDoc(terminator: Terminator): Doc = terminator match {
