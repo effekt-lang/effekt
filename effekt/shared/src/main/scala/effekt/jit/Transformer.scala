@@ -8,6 +8,7 @@ import effekt.machine
 import effekt.machine.LiteralInt
 import effekt.jit.Analysis.indexOfOrInsert
 
+import scala.annotation.targetName
 import scala.collection.mutable.{HashMap, ListBuffer}
 
 object Transformer {
@@ -26,8 +27,8 @@ object Transformer {
         numberBlocks(compiledProgram)
     }
 
-  def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
-    val frameDescriptor = transformParameters(locals);
+  def transform(label: BlockLabel, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
+    val frameDescriptor = FrameDescriptor(env.locals.view.mapValues(_.length).toMap);
 
     implicit val BC: BlockContext = new BlockContext(frameDescriptor);
 
@@ -35,6 +36,9 @@ object Transformer {
     val instructions = BC.instructions.toList;
 
     BasicBlock(label, frameDescriptor, instructions, terminator)
+  def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
+    val env = transformParameters(locals);
+    transform(label, env, body)
   }
 
   def transform(stmt: machine.Statement)(using ProgramContext, BlockContext): Terminator = {
@@ -68,9 +72,9 @@ object Transformer {
         transform(rest)
       }
       case machine.New(name, clauses, rest) => ???
-      case machine.Invoke(machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
-        ensureEnvironment(args);
-        Resume(NamedRegister(name))
+      case machine.Invoke(v @ machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
+        ensureEnvironment(transformParameters(args));
+        Resume(transformArgument(v).id)
       }
       case machine.Invoke(value, tag, environment) => ???
       case machine.PushFrame(frame, rest) => ???
@@ -78,9 +82,7 @@ object Transformer {
         Return(transformArguments(environment))
       }
       case machine.Run(machine.CallForeign(name), ins, List(machine.Clause(outs, rest))) => {
-        val freeVars = machine.freeVariables(machine.Clause(outs, rest)).toList;
-        val killedIns = (ins.toSet -- outs -- freeVars).toList;
-        ensureEnvironment(freeVars ++ outs ++ killedIns);
+        extendEnvironment(transformParameters(outs));
         emit(PrimOp(name, transformArguments(outs), transformArguments(ins)));
         transform(rest)
       }
@@ -115,33 +117,17 @@ object Transformer {
       case machine.Primitive(name) => ???
   }
 
-  def transformParameters(args: List[machine.Variable])(using ProgramContext): FrameDescriptor = {
-    val intRegs: ListBuffer[VariableDescriptor] = ListBuffer();
-    val contRegs: ListBuffer[VariableDescriptor] = ListBuffer();
-    val datatypeRegs: ListBuffer[VariableDescriptor] = ListBuffer();
-    for (v <- args) {
-      val vd = transformParameter(v);
-      vd match
-        case VariableDescriptor(Type.Integer(), reg) => intRegs.addOne(vd)
-        case VariableDescriptor(Type.Datatype(idx), reg) => datatypeRegs.addOne(vd)
-        case VariableDescriptor(Type.Continuation(), reg) => contRegs.addOne(vd)
-        case VariableDescriptor(Type.Unit(), ErasedRegister()) => {}
-    }
-    return FrameDescriptor(intRegs.toList, contRegs.toList, datatypeRegs.toList)
   }
-  def transformArguments(params: List[machine.Variable])(using ProgramContext, BlockContext): RegList = {
-    val intRegs: ListBuffer[Register] = ListBuffer();
-    val contRegs: ListBuffer[Register] = ListBuffer();
-    val datatypeRegs: ListBuffer[Register] = ListBuffer();
-    for (v <- params) {
-      transformArgument(v) match
-        case VariableDescriptor(Type.Integer(), reg) => intRegs.addOne(reg)
-        case VariableDescriptor(Type.Datatype(idx), reg) => datatypeRegs.addOne(reg)
-        case VariableDescriptor(Type.Continuation(), reg) => contRegs.addOne(reg)
-        case VariableDescriptor(Type.Unit(), ErasedRegister()) => {}
-    }
-    return RegList(intRegs.toList, contRegs.toList, datatypeRegs.toList)
-  }
+
+  def transformParameters(params: List[machine.Variable])(using ProgramContext): Environment =
+    Environment.from(params.map(transformParameter))
+  @targetName("transformMachineArguments")
+  def transformArguments(args: List[machine.Variable])(using ProgramContext, BlockContext): RegList =
+    RegList(args.map(transformArgument).filter(_.typ.registerType.isDefined).groupMap(_.typ.registerType.get)(_.id))
+  def transformArguments(args: List[VariableDescriptor])(using ProgramContext, BlockContext): RegList =
+    RegList(args.map(transformArgument).filter(_.typ.registerType.isDefined).groupMap(_.typ.registerType.get)(_.id))
+  def transformArguments(args: Environment)(using ProgramContext, BlockContext): RegList =
+    RegList(args.locals.view.mapValues(_.map(transformArgument(_).id)).toMap)
 
   def transformParameter(v: machine.Variable)(using ProgramContext): VariableDescriptor = {
     transform(v.tpe) match {
@@ -149,14 +135,12 @@ object Transformer {
       case ty => VariableDescriptor(ty, NamedRegister(v.name))
     }
   }
+
+  def transformArgument(v: VariableDescriptor)(using ProgC: ProgramContext, BC: BlockContext): VariableDescriptor = {
+    VariableDescriptor(v.typ, BC.environment.registerIndex(v))
+  }
   def transformArgument(v: machine.Variable)(using ProgC: ProgramContext, BC: BlockContext): VariableDescriptor = {
-    val param = transformParameter(v);
-    transform(v.tpe) match {
-      case Type.Unit() => VariableDescriptor(Type.Unit(), ErasedRegister())
-      case Type.Integer() => VariableDescriptor(Type.Integer(), RegisterIndex(BC.currentFrameDescriptor.intRegs.indexOf(param)))
-      case Type.Continuation() => VariableDescriptor(Type.Integer(), RegisterIndex(BC.currentFrameDescriptor.contRegs.indexOf(param)))
-      case Type.Datatype(adtType) => VariableDescriptor(Type.Integer(), RegisterIndex(BC.currentFrameDescriptor.datatypeRegs.indexOf(param)))
-    }
+    transformArgument(transformParameter(v))
   }
 
   class ProgramContext() {

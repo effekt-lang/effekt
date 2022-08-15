@@ -57,9 +57,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(frameDescriptor: FrameDescriptor): Doc = {
     jsonObjectSmall(Map( // TODO: calculate befor pretty-printing
-      "regs_int" -> frameDescriptor.intRegs.length.toString,
-      "regs_cont" -> frameDescriptor.contRegs.length.toString,
-      "regs_adt" -> frameDescriptor.datatypeRegs.length.toString
+      "regs_int" -> frameDescriptor.locals.applyOrElse(RegisterType.Integer, x => 0).toString,
+      "regs_cont" -> frameDescriptor.locals.applyOrElse(RegisterType.Continuation, x => 0).toString,
+      "regs_adt" -> frameDescriptor.locals.applyOrElse(RegisterType.Datatype, x => 0).toString
     ))
   }
 
@@ -108,11 +108,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     }
 
   def toDoc(args: RegList): Doc = args match
-    case RegList(args_int, args_cont, args_adt) => {
+    case RegList(args) => {
       jsonObjectSmall(Map(
-        "int" -> jsonListSmall(args_int.map(toDoc)),
-        "cont" -> jsonListSmall(args_cont.map(toDoc)),
-        "adt" -> jsonListSmall(args_adt.map(toDoc))
+        "int" -> jsonListSmall(args.applyOrElse(RegisterType.Integer, x => List()).map(toDoc)),
+        "cont" -> jsonListSmall(args.applyOrElse(RegisterType.Continuation, x => List()).map(toDoc)),
+        "adt" -> jsonListSmall(args.applyOrElse(RegisterType.Datatype, x => List()).map(toDoc))
       ))
     }
 

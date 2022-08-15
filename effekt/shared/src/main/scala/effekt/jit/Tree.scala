@@ -21,11 +21,9 @@ case class BasicBlock(id: BlockLabel,
                       terminator: Terminator) extends Tree // TODO: frame descriptor
 
 case class VariableDescriptor(typ: Type, id: Register) extends Tree
-case class FrameDescriptor(intRegs: List[VariableDescriptor],
-                           contRegs: List[VariableDescriptor],
-                           datatypeRegs: List[VariableDescriptor]) extends Tree
-case class RegList(intRegs: List[Register], contRegs: List[Register], datatypeRegs: List[Register])
 case class Clause(args: RegList, target: BlockLabel)
+case class FrameDescriptor(locals: Map[RegisterType, Int]) extends Tree
+case class RegList(regs: Map[RegisterType, List[Register]])
 
 sealed trait Instruction extends Tree
 case class Const(out: Register, value: Int) extends Instruction
@@ -55,9 +53,16 @@ object Type {
   case class Continuation() extends Type
   case class Integer() extends Type
   case class Datatype(index: Int) extends Type
+
+  extension(self: Type) def registerType: Option[RegisterType] = {
+    self match
+      case Unit() => None
+      case Continuation() => Some(RegisterType.Continuation)
+      case Integer() => Some(RegisterType.Integer)
+      case Datatype(index) => Some(RegisterType.Datatype)
+  }
 }
-
-
+enum RegisterType { case Integer, Continuation, Datatype }
 
 type ConstructorTag = Int
 
