@@ -53,7 +53,7 @@ object Transformer {
     transform(label, env, body)
   }
 
-  def transform(stmt: machine.Statement)(using ProgramContext, BlockContext): Terminator = {
+  def transform(stmt: machine.Statement)(using ProgC: ProgramContext, BC: BlockContext): Terminator = {
     stmt match
       case machine.Def(machine.Label(name, environment), body, rest) => {
         emit(transform(BlockName(name), environment, body));
@@ -65,7 +65,8 @@ object Transformer {
       case machine.Substitute(bindings, rest) => {
         val newEnv = transformParameters(bindings.map(_._1));
         val oldEnv = transformParameters(bindings.map(_._2));
-        emitSubst(newEnv, oldEnv);
+        val unchanged = Environment.from(BC.environment.locals.valuesIterator.flatten.filterNot(newEnv.contains).toList);
+        emitSubst(unchanged ++ newEnv, unchanged ++ oldEnv);
         transform(rest)
       }
       case machine.Let(machine.Variable(name, typ), tag, environment, rest) => {
@@ -213,6 +214,14 @@ object Transformer {
     def ++(vs: Environment): Environment = {
       Environment(RegisterType.values.map(t => t -> (locals.applyOrElse(t, x => List()) ++ vs.locals.applyOrElse(t, x => List()))).toMap)
     }
+
+    def contains(vd: VariableDescriptor): Boolean = {
+      locals.valuesIterator.flatten.contains(vd)
+    }
+
+    def frameDescriptor: FrameDescriptor =
+      FrameDescriptor(RegisterType.values.map(t =>
+        (t,locals.applyOrElse(t, t=>List()).length)).toMap)
   }
   object Environment {
     def from(vs: List[VariableDescriptor]): Environment = {
@@ -250,8 +259,11 @@ object Transformer {
     extendFrameDescriptorTo(BC.environment);
   }
   def extendFrameDescriptorTo(env: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
+    extendFrameDescriptorTo(env.frameDescriptor)
+  }
+  def extendFrameDescriptorTo(fd: FrameDescriptor)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
     BC.frameDescriptor = FrameDescriptor(
       RegisterType.values.map(t =>(t ->
-        Math.max(BC.frameDescriptor.locals.applyOrElse(t, x => 0), env.locals.applyOrElse(t, x => List()).length))).toMap);
+        Math.max(BC.frameDescriptor.locals.applyOrElse(t, x => 0), fd.locals.applyOrElse(t, x => 0)))).toMap);
   }
 }
