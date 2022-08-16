@@ -640,6 +640,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
         val stTpe = BlockTypeApp(TState.interface, List(tpeBind))
 
+        // to allocate into the region, it needs to be live...
+        usingCapture(stCapt)
+
         Context.bind(sym, stTpe, stCapt)
 
         Result((), effBind)
