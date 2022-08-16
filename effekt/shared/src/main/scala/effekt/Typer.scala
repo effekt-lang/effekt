@@ -1270,7 +1270,9 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val capName = tpe.name.rename(_ + "$capability")
-    val param = BlockParam(capName, tpe)
+    val param = new BlockParam(capName, tpe) {
+      override def synthetic = true
+    }
     bind(param, tpe)
     param
 
