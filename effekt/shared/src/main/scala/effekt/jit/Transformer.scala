@@ -111,10 +111,11 @@ object Transformer {
       case machine.Return(environment) => {
         Return(transformArguments(environment))
       }
-      case machine.Run(machine.CallForeign(name), ins, List(machine.Clause(outs, rest))) => {
-        extendEnvironment(transformParameters(outs));
-        emit(PrimOp(name, transformArguments(outs), transformArguments(ins)));
-        transform(rest)
+      case machine.Run(machine.CallForeign(name), ins, List(cont)) => {
+        val in_args = transformArguments(ins);
+        val (_, outs, block) = transformInline(cont);
+        emit(PrimOp(name, outs, in_args));
+        emitInlined(block)
       }
       case machine.Run(machine.LiteralInt(n), List(), List(cont)) => {
         //extendEnvironment(Environment.from(List(transformParameter(out))));
