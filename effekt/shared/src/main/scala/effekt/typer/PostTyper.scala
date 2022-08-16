@@ -53,7 +53,7 @@ object Wellformedness extends Visit[WFContext] {
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
-    case tree @ source.TryHandle(prog, handlers) => {
+    case tree @ source.TryHandle(prog, handlers) =>
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
@@ -91,7 +91,20 @@ object Wellformedness extends Visit[WFContext] {
           }
         }
       }
-    }
+
+    case tree @ source.Region(id, body) =>
+      val reg = tree.symbol
+      val tpe = Context.inferredTypeOf(body)
+
+      val free = freeCapture(tpe)
+
+      if (free contains reg.capture) {
+        Context.at(body) {
+          Context.error(pp"The return type ${tpe} of the statement is not allowed to refer to region ${reg}")
+        }
+      }
+
+      scoped { query(body) }
 
     case tree @ source.Match(scrutinee, clauses) =>
       val tpe = Context.inferredTypeOf(scrutinee)
