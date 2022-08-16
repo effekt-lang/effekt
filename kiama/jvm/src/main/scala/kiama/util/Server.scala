@@ -199,7 +199,7 @@ trait Server[N, T <: N, C <: Config, M <: Message] extends Compiler[N, T, C, M] 
   def publishMessages(messages: messaging.Messages): Unit = {
     val groups = messages.groupBy(msg => msg.sourceName.getOrElse(""))
     for ((name, msgs) <- groups) {
-      publishDiagnostics(name, msgs.map(messageToDiagnostic))
+      publishDiagnostics(name, msgs.distinct.map(messageToDiagnostic))
     }
   }
 

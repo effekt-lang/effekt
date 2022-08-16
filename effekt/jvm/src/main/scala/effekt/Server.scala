@@ -24,7 +24,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   object lspMessaging extends PlainMessaging
 
   override def messageToDiagnostic(message: EffektError): Diagnostic =
-    diagnostic(message.range, lspMessaging.formatMessage(message), message.severity)
+    diagnostic(message.range, lspMessaging.formatContent(message), message.severity)
 
   override def getDefinition(position: Position): Option[Tree] =
     getDefinitionAt(position)(context)
