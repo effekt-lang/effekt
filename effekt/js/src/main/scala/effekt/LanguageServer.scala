@@ -2,6 +2,7 @@ package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.generator.JavaScriptVirtual
+import effekt.util.PlainMessaging
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
 import kiama.util.{ Messaging, Position, Positions, Severities, Source, StringSource }
@@ -63,9 +64,7 @@ class LanguageServer extends Intelligence {
      */
     override def Backend(implicit C: Context) = JavaScriptVirtual
 
-    object messaging extends EffektMessaging {
-      def formatContent(msg: EffektError): String = msg.toString // TODO implement
-    }
+    object messaging extends PlainMessaging
   }
 
   context.setup(config)
