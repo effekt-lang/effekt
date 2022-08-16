@@ -75,15 +75,22 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
     }
   }
 
+  def getSourceTreeFor(sym: Symbol): Option[Tree] = sym match {
+    case a: Anon => Some(a.decl)
+    case f: UserFunction => Some(f.decl)
+    case b: Binder => Some(b.decl)
+    case _ => context.definitionTreeOption(sym)
+  }
+
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
-    val currentMod = context.runFrontend(source)(context)
+
+    val mod = context.runFrontend(source)(context)
+
     val documentSymbols = for {
-      sym <- context.sourceSymbols
+      sym <- context.sourceSymbolsFor(source).toVector
       if !sym.synthetic
-      mod = context.sourceModuleOf(sym)
-      if currentMod == mod
       id <- context.definitionTreeOption(sym)
-      decl = id // TODO for now we use id as the declaration. This should be improved in SymbolsDB
+      decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
       detail <- getInfoOf(sym)(context)
     } yield new DocumentSymbol(sym.name.name, kind, rangeOfNode(decl), rangeOfNode(id), detail.header)
