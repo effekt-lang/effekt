@@ -165,9 +165,10 @@ object Transformer {
     val machine.Clause(parameters, body) = clause;
     val params = transformParameters(parameters);
     val locals = BC.environment ++ params;
-    extendFrameDescriptorTo(locals);
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    (transformArguments(BC.environment), args, transform(new FreshBlockLabel(), locals, body))
+    val block = transform(new FreshBlockLabel(), locals, body);
+    extendFrameDescriptorTo(block.frameDescriptor);
+    (transformArguments(BC.environment), args, block)
   }
 
   def transformParameters(params: List[machine.Variable])(using ProgramContext): Environment =
