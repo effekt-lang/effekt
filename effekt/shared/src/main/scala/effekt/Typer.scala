@@ -66,7 +66,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             val unhandled = effs.toEffects
             if (unhandled.nonEmpty)
               Context.at(d) {
-                Context.error(pretty"Unhandled effects ${unhandled} ")
+                Context.error(pretty"Unhandled effects ${unhandled}")
               }
           }
         }
