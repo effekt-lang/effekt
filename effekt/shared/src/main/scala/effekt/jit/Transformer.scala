@@ -5,7 +5,6 @@ import effekt.context.Context
 import effekt.symbols.{BlockSymbol, ValueSymbol}
 import effekt.jit.Analysis.*
 import effekt.machine
-import effekt.machine.LiteralInt
 import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.annotation.targetName
@@ -40,12 +39,13 @@ object Transformer {
         < BC.frameDescriptor.locals.applyOrElse(t, t=>0));
     if(environmentTooSmall) {
       val subst = Subst(RegList(RegisterType.values.map(t =>
-        (t, ((0 to env.locals.applyOrElse(t, t=>List()).length)
+        (t, ((env.locals.applyOrElse(t, t=>List()).indices)
           ++ List.fill(BC.frameDescriptor.locals.applyOrElse(t, t=>0)
-                       - env.locals.applyOrElse(t, t=>List()).length)(-1)).map(RegisterIndex).toList))
+                       - env.locals.applyOrElse(t, t=>List()).length+1)(-1)).map(RegisterIndex).toList))
         .toMap));
       instructions = subst :: instructions;
     }
+
     BasicBlock(label, BC.frameDescriptor, instructions, terminator)
   }
   def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
@@ -206,7 +206,7 @@ object Transformer {
     def registerIndex(vd: VariableDescriptor): Register = {
       vd.typ.registerType match {
         case None => ErasedRegister()
-        case Some(t) => RegisterIndex(locals(t).indexOf(vd))
+        case Some(t) => RegisterIndex(locals.applyOrElse(t,t=>List()).indexOf(vd))
       }
     }
     @targetName("extended")
