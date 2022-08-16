@@ -147,7 +147,17 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       C.config.output().emit(command.!!)
     } catch case FatalPhaseError(e) => C.report(e)
 
-  def evalJIT(jitPath: String)(implicit C: Context): Unit = ???
+  def evalJIT(jitPath: String)(implicit C: Context): Unit = {
+    val arch = Process(Seq(s"uname", "-m"));
+    val platform = (arch.!!).strip();
+    val platforms = List("x86_64");
+    if (!platforms.contains(platform)) {
+      C.error(s"Unsupported platform ${platform}. Currently supported platforms; ${platforms.mkString(", ")}");
+      return
+    }
+    val runCommand = Process(Seq(s"./bin/${platform}/rpyeffect-jit", jitPath)) // TODO use path independent of cwd
+    C.config.output().emit(runCommand.!!)
+  }
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.messaging.buffer, C.config)

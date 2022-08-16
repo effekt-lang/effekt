@@ -1,0 +1,46 @@
+module effekt
+
+// Side effection ops
+// ==================
+extern io def random(): Int = ""
+
+// Console ops
+// ===========
+
+extern effect Console
+
+extern pure def println(n: Int): Unit / Console = ""
+
+extern pure def println(b: Boolean): Unit / Console = ""
+
+// integer primitives
+// ==================
+
+extern pure def infixAdd(x: Int, y: Int): Int = ""
+extern pure def infixMul(x: Int, y: Int): Int = ""
+extern pure def infixDiv(x: Int, y: Int): Int = ""
+extern pure def infixSub(x: Int, y: Int): Int = ""
+extern pure def mod(x: Int, y: Int): Int = ""
+
+// ordering on signed integers
+// ===========================
+
+extern pure def infixEq(x: Int, y: Int): Boolean = ""
+extern pure def infixNeq(x: Int, y: Int): Boolean = ""
+extern pure def infixLt(x: Int, y: Int): Boolean = ""
+extern pure def infixLte(x: Int, y: Int): Boolean = ""
+extern pure def infixGt(x: Int, y: Int): Boolean = ""
+extern pure def infixGte(x: Int, y: Int): Boolean = ""
+
+// boolean algebra
+// ===============
+
+extern pure def infixEq(x: Boolean, y: Boolean): Boolean = ""
+extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = ""
+extern pure def not(b: Boolean): Boolean = ""
+extern pure def infixOr(x: Boolean, y: Boolean): Boolean = ""
+extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = ""
+
+// Benchmarking
+// ============
+extern io def currentTimeNanos(): Int = "" // TODO: should be control?, not io
