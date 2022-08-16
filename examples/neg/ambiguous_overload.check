@@ -1,0 +1,21 @@
+[error] examples/neg/ambiguous_overload.effekt:4:14: Cannot typecheck call.
+There are multiple overloads, which all fail to check:
+
+Possible overload: effekt.infixAdd of type (Int, Int) => Int
+  Ambiguous overload.
+  There are multiple overloads, which all would type check:
+  - ambiguous_overload.foo:  Int => Int
+  - ambiguous_overload.foo$1:[A]A => A
+
+Possible overload: effekt.infixAdd$1 of type (Double, Double) => Double
+  Cannot typecheck call.
+  There are multiple overloads, which all fail to check:
+  
+  Possible overload: ambiguous_overload.foo of type Int => Int
+    Expected Double but got Int.
+  
+  Possible overload: ambiguous_overload.foo$1 of type [A]A => A
+    Expected Double but got Int.
+
+def main() = foo(1) + 2 // nested overload!
+             ^^^^^^^

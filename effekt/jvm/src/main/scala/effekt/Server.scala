@@ -3,9 +3,10 @@ package effekt
 import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-
-import kiama.util.{ Position, Source, Services }
-import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
+import effekt.util.PlainMessaging
+import effekt.util.messages.EffektError
+import kiama.util.{ Position, Services, Source }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -13,11 +14,17 @@ import org.eclipse.lsp4j.{ DocumentSymbol, SymbolKind }
  *     v
  * effekt.Compiler
  */
-trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with Driver with Intelligence {
+trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, EffektError] with Driver with Intelligence {
 
   import effekt.symbols._
 
   import org.eclipse.lsp4j.{ Location, Range => LSPRange }
+
+  // Diagnostics
+  object lspMessaging extends PlainMessaging
+
+  override def messageToDiagnostic(message: EffektError): Diagnostic =
+    diagnostic(message.range, lspMessaging.formatContent(message), message.severity)
 
   override def getDefinition(position: Position): Option[Tree] =
     getDefinitionAt(position)(context)
@@ -182,7 +189,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig] with D
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 
   // Class to easily test custom LSP services not (yet) meant to go into kiama.Services
-  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig](server, config) {}
+  class LSPServices(server: LSPServer, config: EffektConfig) extends Services[Tree, ModuleDecl, EffektConfig, EffektError](server, config) {}
 }
 
 /**

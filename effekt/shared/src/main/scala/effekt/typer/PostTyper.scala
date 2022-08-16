@@ -16,7 +16,7 @@ object PostTyper extends Phase[Typechecked, Typechecked] {
     val Typechecked(source, tree, mod) = input
     Wellformedness.check(mod, tree)
 
-    if (Context.buffer.hasErrors) { None }
+    if (Context.messaging.hasErrors) { None }
     else { Some(input) }
 }
 

@@ -3,6 +3,7 @@ package typer
 
 import effekt.context.Context
 import effekt.symbols._
+import effekt.util.messages.ErrorMessageReifier
 
 
 /**
@@ -76,11 +77,11 @@ implicit def asConcrete(effs: Effects)(using C: Context): ConcreteEffects =
  * TODO Question: should we ALWAYS require effects to be concrete, also when compared with [[TypeUnifier]]?
  */
 private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
-  if (!isConcreteEffects(effs)) C.abort(pp"Effects need to be fully known: ${effs}")
+  if (!isConcreteEffects(effs)) C.abort(pretty"Effects need to be fully known: ${effs}")
 
 private[typer] def assertConcrete(eff: InterfaceType)(using C: Context): Unit =
   if (!isConcreteEffect(eff)) {
-    C.abort(pp"Effects need to be fully known: ${eff}")
+    C.abort(pretty"Effects need to be fully known: ${eff}")
   }
 
 private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {

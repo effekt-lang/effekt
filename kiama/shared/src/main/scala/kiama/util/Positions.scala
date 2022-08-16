@@ -81,6 +81,12 @@ case class Position(line: Int, column: Int, source: Source) {
 
 }
 
+case class Range(from: Position, to: Position)
+
+object Range {
+  def empty(source: Source): Range = Range(Position(1, 1, source), Position(1, 1, source))
+}
+
 /**
  * Record of source positions that correspond to program elements.
  */
@@ -158,6 +164,15 @@ class Positions {
     finishMap.dup(b, t)
     t
   }
+
+  /**
+   * Get the range for a given element `t`.
+   */
+  def getRange(t: Any): Option[Range] =
+    getStart(t).map { from =>
+      val to = getFinish(t).getOrElse(from)
+      Range(from, to)
+    }
 
   /**
    * Reset the position maps to be empty.

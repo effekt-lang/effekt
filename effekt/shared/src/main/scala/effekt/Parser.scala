@@ -3,8 +3,9 @@ package effekt
 import effekt.context.Context
 import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.messages.ParseError
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Source }
+import kiama.util.{ Position, Positions, Range, Source }
 
 import scala.language.implicitConversions
 
@@ -41,9 +42,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
       case res: NoSuccess =>
         val input = res.next
-        positions.setStart(res, input.position)
-        positions.setFinish(res, input.nextPosition)
-        C.error(res, res.message)
+        val range = Range(input.position, input.nextPosition)
+        C.report(ParseError(res.message, Some(range)))
         None
     }
 

@@ -5,7 +5,7 @@ import kiama.util.Positions
 
 import scala.util.matching._
 
-object Highlight {
+object AnsiHighlight {
 
   object parser extends EffektParsers(new Positions)
 

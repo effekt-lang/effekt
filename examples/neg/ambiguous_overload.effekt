@@ -1,0 +1,4 @@
+def foo(n: Int): Int = n + 1
+def foo[A](a: A): A = a
+
+def main() = foo(1) + 2 // nested overload!

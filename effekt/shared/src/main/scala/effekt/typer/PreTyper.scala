@@ -12,7 +12,7 @@ object PreTyper extends Phase[NameResolved, NameResolved] {
     val traversal = new BoxUnboxInference
     val transformedTree = traversal.rewrite(input.tree)
 
-    if (Context.buffer.hasErrors) { None }
+    if (Context.messaging.hasErrors) { None }
     else { Some(input.copy(tree = transformedTree)) }
   }
 }

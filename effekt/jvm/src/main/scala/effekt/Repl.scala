@@ -3,17 +3,17 @@ package effekt
 import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
-import effekt.util.{ ColoredMessaging, Highlight, VirtualSource }
+import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource }
+import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
-import kiama.util.Messaging.{ Messages, message }
-import kiama.util.{ Console, REPL, Source, StringSource }
+import kiama.util.{ Console, REPL, Source, StringSource, Range }
 import kiama.parsing.{ NoSuccess, ParseResult, Success }
 
-class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
+class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
   private implicit lazy val context: Context with IOModuleDB = driver.context
 
-  override val messaging = new ColoredMessaging(positions)
+  val messaging = new AnsiColoredMessaging
 
   val logo =
     """|  _____     ______  __  __     _    _
@@ -132,9 +132,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
         // this is usually encapsulated in REPL.processline
         case res: NoSuccess =>
           val pos = res.next.position
-          positions.setStart(res, pos)
-          positions.setFinish(res, pos)
-          val messages = message(res, res.message)
+          val messages = Vector(messaging.message(Range(pos, pos), res.message))
           report(source, messages, config)
       }
 
@@ -242,14 +240,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
     context.setup(config)
     val src = VirtualSource(ast, source)
     context.runFrontend(src) map { f } getOrElse {
-      report(source, context.buffer.get, context.config)
+      report(source, context.messaging.buffer, context.config)
     }
   }
 
   private def runParsingFrontend(source: Source, config: EffektConfig)(f: Module => Unit): Unit = {
     context.setup(config)
     context.runFrontend(source) map { f } getOrElse {
-      report(source, context.buffer.get, context.config)
+      report(source, context.messaging.buffer, context.config)
     }
   }
 
@@ -263,7 +261,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig] {
   }
 
   def outputCode(code: String, config: EffektConfig): Unit =
-    config.output().emitln(Highlight(code))
+    config.output().emitln(AnsiHighlight(code))
 
   /**
    * Enables persistent command history on JLine

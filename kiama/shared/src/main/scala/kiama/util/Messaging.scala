@@ -11,6 +11,8 @@
 package kiama
 package util
 
+import scala.math.Ordering._
+
 /**
  * The severities of a message.
  */
@@ -57,120 +59,56 @@ object Severities {
     }
 }
 
-/**
- * A message record consisting of a value with which the message is associated,
- * a label string, and a severity (which defaults to error).
- */
-case class Message(value: AnyRef, label: String) {
-  val severity: Severities.Severity = Severities.Error
+import Severities.*
+
+trait Message {
+  def severity: Severity
+  def range: Option[Range]
+
+  def startPosition: Option[Position] = range.map(_.from)
+  def finishPosition: Option[Position] = range.map(_.to)
+  def sourceName: Option[String] = startPosition.map(_.source.name)
 }
 
 /**
- * Shared definitions for all messaging.
+ * General facility for processing messages.
+ *
+ * `M` is the type of messages. It should be possible to extract severity and position
  */
-object Messaging {
+trait Messaging[M <: Message] {
 
-  import kiama.relation.Tree
-  import kiama.util.Severities._
-
-  /**
-   * The type of a sequence of messages.
-   */
-  type Messages = Vector[Message]
+  type Messages = Vector[M]
 
   /**
    * Return a value representing no messages.
    */
-  def noMessages = Vector[Message]()
+  val noMessages = Vector[M]()
 
   /**
-   * Recursively collect all messages in the given tree using the partial
-   * function `messages` at all nodes where it is defined.
+   * Has to be implemented by subclasses. How should strings be embedded into `M`?
    */
-  def collectMessages[T <: AnyRef with Product, U <: T](tree: Tree[T, U])(messages: PartialFunction[T, Messages]): Messages =
-    tree.nodes.flatMap(messages.orElse { case _ => noMessages }).toVector
+  def message(range: Option[Range], content: String, severity: Severity): M
 
   /**
-   * If `cond` is true make a singleton message list that associates the
-   * label with the start position recorded for `value` (if any).  If `cond`
-   * is false make an empty message list. `cond` can be omitted and defaults
-   * to true.
+   * Format the message content. Should be overridden in subclasses of Messaging.
    */
-  def message(value: AnyRef, label: String, newSeverity: Severity = Error,
-    cond: Boolean = true): Messages =
-    if (cond)
-      Vector(new Message(value, label) {
-        override val severity = newSeverity
-      })
-    else
-      noMessages
+  def formatContent(msg: M): String
 
-  /**
-   * As for `message` but forces an error severity.
-   */
-  def error(value: AnyRef, label: String, cond: Boolean = true): Messages =
-    message(value, label, Error, cond)
-
-  /**
-   * As for `message` but forces a warning severity.
-   */
-  def warning(value: AnyRef, label: String, cond: Boolean = true): Messages =
-    message(value, label, Warning, cond)
-
-  /**
-   * As for `message` but forces an information severity.
-   */
-  def info(value: AnyRef, label: String, cond: Boolean = true): Messages =
-    message(value, label, Information, cond)
-
-  /**
-   * As for `message` but forces a hint severity.
-   */
-  def hint(value: AnyRef, label: String, cond: Boolean = true): Messages =
-    message(value, label, Hint, cond)
-
-}
-
-/**
- * General facility for processing messages relative to positioned values.
- */
-class Messaging(positions: Positions) {
-
-  import kiama.util.Messaging._
-  import kiama.util.Severities.severityToWord
-  import scala.math.Ordering._
+  def message(range: Range, content: String, severity: Severity = Error): M =
+    message(Some(range), content, severity)
 
   /**
    * An ordering on messages that uses starting position and prioritises
    * line over column. The messages are assumed to refer to the same
    * source.
    */
-  implicit object messageOrdering extends Ordering[Message] {
-    def compare(m1: Message, m2: Message) =
-      Ordering[(Option[Int], Option[Int], String)].compare(
-        (startLine(m1), startColumn(m1), m1.label),
-        (startLine(m2), startColumn(m2), m2.label)
+  implicit object messageOrdering extends Ordering[M] {
+    def compare(m1: M, m2: M) =
+      Ordering[(Option[Int], Option[Int])].compare(
+        (m1.startPosition.map(_.line), m1.startPosition.map(_.column)),
+        (m2.startPosition.map(_.line), m2.startPosition.map(_.column))
       )
   }
-
-  /**
-   * A message's finishing position as determined from the finishing position
-   * of the message's value. Will be `None` if the value has no position.
-   */
-  def finish(message: Message): Option[Position] =
-    positions.getFinish(message.value)
-
-  /**
-   * Return the optional finishing column number of a message.
-   */
-  def finishColumn(message: Message): Option[Int] =
-    finish(message).map(_.column)
-
-  /**
-   * Return the optional finishing line number of a message.
-   */
-  def finishLine(message: Message): Option[Int] =
-    finish(message).map(_.line)
 
   /**
    * Format the message for reporting as a line containing the starting
@@ -178,14 +116,14 @@ class Messaging(positions: Positions) {
    * context of the position. If no position is associated with this
    * message just format as a line containing the label.
    */
-  def formatMessage(message: Message): String =
-    start(message) match {
+  def formatMessage(message: M): String =
+    message.startPosition match {
       case Some(pos) =>
         val severity = severityToWord(message.severity)
         val context = pos.optContext.getOrElse("")
-        s"${pos.format}$severity: ${message.label}\n$context\n"
+        s"${pos.format}$severity: ${formatContent(message)}\n$context\n"
       case None =>
-        s"${message.label}\n"
+        s"${formatContent(message)}\n"
     }
 
   /**
@@ -195,40 +133,10 @@ class Messaging(positions: Positions) {
     messages.sorted.map(formatMessage).mkString("")
 
   /**
-   * A message's source name as determined from the source of the
-   * message's value's position. Will be `None` if the value has no
-   * position.
-   */
-  def name(message: Message): Option[String] =
-    positions.getStart(message.value).map(_.source.name)
-
-  /**
-   * A message's starting position as determined from the starting position
-   * of the message's value. Will be `None` if the value has no position.
-   */
-  def start(message: Message): Option[Position] =
-    positions.getStart(message.value)
-
-  /**
-   * Return the optional starting column number of a message.
-   */
-  def startColumn(message: Message): Option[Int] =
-    start(message).map(_.column)
-
-  /**
-   * Return the optional starting line number of a message.
-   */
-  def startLine(message: Message): Option[Int] =
-    start(message).map(_.line)
-
-  /**
    * Output the messages arising from the given source in order of position
    * using the given emitter, which defaults to terminal output.
    */
-  // XXX replace with OutputEmitter again!
-  def report(source: Source, messages: Messages,
-    emitter: Emitter = new StringEmitter): Unit = {
+  def report(source: Source, messages: Messages, emitter: Emitter = new OutputEmitter): Unit = {
     emitter.emit(formatMessages(messages))
   }
-
 }

@@ -1,10 +1,10 @@
 package effekt.util
 
 import effekt.context.Context
-import kiama.util.Messaging.Messages
+import effekt.util.messages.EffektMessages
+import kiama.util.Source
 
 import scala.collection.mutable
-import kiama.util.Source
 
 trait Task[In, Out] { self =>
 
@@ -101,7 +101,7 @@ object Task { build =>
 
   // The datatype Trace is adapted from the paper "Build systems a la carte" (Mokhov et al. 2018)
   // currently the invariant that Info.target.V =:= V is not enforced
-  case class Trace[V](current: Info, depends: List[Info], value: Option[V], msgs: Messages) {
+  case class Trace[V](current: Info, depends: List[Info], value: Option[V], msgs: EffektMessages) {
     def trace = current :: depends
     def isValid: Boolean = current.isValid && depends.forall { _.isValid }
     override def toString = {
@@ -143,7 +143,7 @@ object Task { build =>
     val (msgs, res) = C.withMessages {
       target.task.run(target.key)
     }
-    C.buffer.append(msgs)
+    C.messaging.append(msgs)
 
     val tr = Trace(Info(target, target.fingerprint), trace, res, msgs)
     build.update(target, tr)
@@ -157,7 +157,7 @@ object Task { build =>
   def reuse[V](tr: Trace[V])(implicit C: Context): Option[V] = {
     // log(s"reusing ${tr.current.target}")
     // replay the trace
-    C.buffer.append(tr.msgs)
+    C.messaging.append(tr.msgs)
     appendToTrace(tr.trace)
     tr.value
   }
