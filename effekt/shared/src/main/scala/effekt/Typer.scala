@@ -63,10 +63,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           tree.defs.foreach { d => precheckDef(d) }
           tree.defs.foreach { d =>
             val Result(_, effs) = synthDef(d)
-            val controlEffects = effs.toEffects.controlEffects
-            if (controlEffects.nonEmpty)
+            val unhandled = effs.toEffects
+            if (unhandled.nonEmpty)
               Context.at(d) {
-                Context.error("Unhandled effects: " + Effects(controlEffects))
+                Context.error(pretty"Unhandled effects ${unhandled} ")
               }
           }
         }

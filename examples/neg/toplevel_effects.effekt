@@ -1,0 +1,6 @@
+def sayHello(): Unit / { Console } =
+  println("Hello World!")
+
+def pureFun(): Unit / {} = sayHello()
+
+def main() = ()
