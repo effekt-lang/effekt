@@ -149,7 +149,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
 
   def evalJIT(jitPath: String)(implicit C: Context): Unit = {
     val arch = Process(Seq(s"uname", "-m"));
-    val platform = (arch.!!).strip();
+    val platform = (arch.!!).trim;
     val platforms = List("x86_64");
     if (!platforms.contains(platform)) {
       C.error(s"Unsupported platform ${platform}. Currently supported platforms; ${platforms.mkString(", ")}");
