@@ -34,18 +34,6 @@ object Transformer {
     val terminator = transform(body);
     var instructions = BC.instructions.toList;
 
-    val environmentTooSmall = RegisterType.values.exists(t =>
-      env.locals.applyOrElse(t, t => List()).length
-        < BC.frameDescriptor.locals.applyOrElse(t, t=>0));
-    if(environmentTooSmall) {
-      val subst = Subst(RegList(RegisterType.values.map(t =>
-        (t, ((env.locals.applyOrElse(t, t=>List()).indices)
-          ++ List.fill(BC.frameDescriptor.locals.applyOrElse(t, t=>0)
-                       - env.locals.applyOrElse(t, t=>List()).length+1)(-1)).map(RegisterIndex).toList))
-        .toMap));
-      instructions = subst :: instructions;
-    }
-
     BasicBlock(label, BC.frameDescriptor, instructions, terminator)
   }
   def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
