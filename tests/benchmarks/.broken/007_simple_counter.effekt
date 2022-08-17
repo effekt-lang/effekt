@@ -1,0 +1,15 @@
+// Jonathan Frech, 2022-08-17
+// adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/007_simple_counter/benchmark.kk
+
+// primitives currently missing in Effekt
+def abs(n: Int): Int = if (n < 0) 0 - n else n
+
+////////////////////////////////////////////////////////////////////////////////
+
+effect increment(j: Int): Unit
+
+def operator(x: Int, y: Int): Int = {
+    mod(abs(x - (503 * y) + 37), 1009)
+}
+
+// TODO Effekt is currently missing higher-order (second-class!) functions.
