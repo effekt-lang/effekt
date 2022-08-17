@@ -63,17 +63,16 @@ extern pure def infixGte(x: Int, y: Int): Boolean =
 // ===============
 
 extern pure def infixEq(x: Boolean, y: Boolean): Boolean =
-  //"%z = icmp eq %Boolean %x, %y ret %Boolean %z"
-  "%slim_x = extractvalue %Pos %x, 0   %slim_y = extractvalue %Pos %y, 0   %z = icmp eq i64 %slim_x, %slim_y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+  "%slim_x = extractvalue %Pos %x, 0   %slim_y = extractvalue %Pos %y, 0   %slim_z = icmp eq i64 %slim_x, %slim_y   %fat_z = zext i1 %slim_z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
 
-// extern pure def infixNeq(x: Boolean, y: Boolean): Boolean =
-//   "%z = icmp ne %Boolean %x, %y ret %Boolean %z"
+extern pure def infixNeq(x: Boolean, y: Boolean): Boolean =
+  "%slim_x = extractvalue %Pos %x, 0   %slim_y = extractvalue %Pos %y, 0   %slim_z = icmp ne i64 %slim_x, %slim_y   %fat_z = zext i1 %slim_z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
 
-// extern pure def not(b: Boolean): Boolean =
-//   "%z = icmp eq %Boolean 0, %b ret %Boolean %z"
+extern pure def not(adt_p: Boolean): Boolean =
+  "%p = extractvalue %Pos %adt_p, 0   %q = xor i64 1, %p   %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0   ret %Pos %adt_q"
 
-// extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-//   "%z = or %Boolean %x, %y ret %Boolean %z"
+extern pure def infixOr(adt_p: Boolean, adt_q: Boolean): Boolean =
+  "%p = extractvalue %Pos %adt_p, 0   %q = extractvalue %Pos %adt_q, 0   %r = or i64 %p, %q   %adt_r = insertvalue %Pos zeroinitializer, i64 %r, 0   ret %Pos %adt_r"
 
-// extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-//   "%z = and %Boolean %x, %y ret %Boolean %z"
+extern pure def infixAnd(adt_p: Boolean, adt_q: Boolean): Boolean =
+  "%p = extractvalue %Pos %adt_p, 0   %q = extractvalue %Pos %adt_q, 0   %r = and i64 %p, %q   %adt_r = insertvalue %Pos zeroinitializer, i64 %r, 0   ret %Pos %adt_r"
