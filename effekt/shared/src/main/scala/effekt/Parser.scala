@@ -83,6 +83,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `while` = keyword("while")
   lazy val `type` = keyword("type")
   lazy val `effect` = keyword("effect")
+  lazy val `interface` = keyword("interface")
   lazy val `try` = keyword("try")
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
@@ -109,7 +110,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "with", "case", "do", "if", "while",
+    "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
     "at", "box", "unbox", "return", "region", "new"
   )
@@ -271,7 +272,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
+    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
