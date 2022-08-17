@@ -647,6 +647,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result((), effBind)
 
+      case d @ source.DefDef(id, annot, binding) =>
+        val Result(t, effBinding) = checkBlockArgument(binding, d.symbol.tpe)
+        Context.bind(d.symbol, t)
+        Result((), effBinding)
+
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind

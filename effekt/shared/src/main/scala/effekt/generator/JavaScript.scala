@@ -232,6 +232,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
 
+    case Def(id, tpe, block, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocStmt(rest)
+
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
@@ -285,6 +288,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
+
+    case Def(id, tpe, block, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }

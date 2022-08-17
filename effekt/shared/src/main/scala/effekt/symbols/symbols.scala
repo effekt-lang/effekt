@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.source.{ Def, ExternFlag, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ DefDef, Def, ExternFlag, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -153,6 +153,7 @@ package object symbols {
   }
   case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder with ValueSymbol
   case class VarBinder(name: Name, tpe: Option[ValueType], region: TrackedParam, decl: VarDef) extends Binder with BlockSymbol
+  case class DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder with BlockSymbol
 
   /**
    * Synthetic symbol representing potentially multiple call targets

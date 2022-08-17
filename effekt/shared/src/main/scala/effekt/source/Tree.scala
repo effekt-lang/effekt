@@ -179,6 +179,10 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
+// TODO BlockArg is not precisely the right syntactic category, but we reuse it for now.
+case class DefDef(id: IdDef, annot: Option[BlockType], block: BlockArg) extends Def {
+  type symbol = symbols.DefBinder
+}
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {
   type symbol = symbols.Interface
 }
@@ -571,6 +575,9 @@ object Tree {
       case VarDef(id, annot, region, binding) =>
         VarDef(id, annot, region, rewrite(binding))
 
+      case DefDef(id, annot, block) =>
+        DefDef(id, annot, rewrite(block))
+
       case d: InterfaceDef        => d
       case d: DataDef       => d
       case d: RecordDef     => d
@@ -717,6 +724,9 @@ object Tree {
 
       case VarDef(id, annot, region, binding) =>
         scoped { query(binding) }
+
+      case DefDef(id, annot, block) =>
+        scoped { query(block) }
 
       case d: InterfaceDef  => empty
       case d: DataDef       => empty

@@ -58,6 +58,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest())
 
+    case v @ source.DefDef(id, annot, binding) =>
+      val sym = v.symbol
+      Def(sym, Context.blockTypeOf(sym), transform(binding), rest())
+
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, reg, binding) if pureOrIO(binding) =>
       val sym = v.symbol

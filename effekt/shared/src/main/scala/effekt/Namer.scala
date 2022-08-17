@@ -75,6 +75,9 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.VarDef(id, annot, region, binding) =>
       ()
 
+    case d @ source.DefDef(id, annot, block) =>
+      ()
+
     case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
       val uniqueId = Context.freshNameFor(id)
 
@@ -217,6 +220,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
 
       Context.define(id, sym)
+
+    case d @ source.DefDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>

@@ -243,6 +243,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val definition: P[Def] =
     ( valDef
     | funDef
+    | defDef
     | effectDef
     | typeDef
     | effectAliasDef
@@ -355,6 +356,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | functionArg
     )
 
+  lazy val blockDefinition: P[BlockArg] =
+    ( idRef ^^ { case id => source.InterfaceArg(id) }
+    | functionArg
+    )
+
   lazy val functionArg: P[FunctionArg] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(Nil, ps, Nil, body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
@@ -430,6 +436,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case id ~ tpe ~ reg ~ expr => VarDef(id, tpe, reg, expr)
     }
 
+  lazy val defDef: P[DefDef] =
+    `def` ~/> idDef ~ (`:` ~/> blockType).? ~ (`=` ~/> blockDefinition) ^^ {
+      case id ~ tpe ~ block => DefDef(id, tpe, block)
+    }
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
