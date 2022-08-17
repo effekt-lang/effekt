@@ -123,18 +123,8 @@ object ExplicitCapabilities extends Rewrite {
 
       val hs = (handlers zip capabilities).map {
         case (h, cap) => visit(h) {
-          case h @ Handler(eff, _, clauses) =>
-            val cls = clauses.map { cl =>
-              visit(cl) {
-                case OpClause(id, tparams, params, body, resume: IdDef) =>
-
-                  // OpClause also binds a block parameter for resume, which is _not_ annotated here
-                  OpClause(id, tparams, params, rewrite(body), resume)
-              }
-            }
-
-            // here we annotate the synthesized capability
-            Handler(eff, Some(Context.definitionFor(cap)), cls)
+          // here we annotate the synthesized capability
+          case h @ Handler(_, impl) => Handler(Some(Context.definitionFor(cap)), rewrite(impl))
         }
       }
 

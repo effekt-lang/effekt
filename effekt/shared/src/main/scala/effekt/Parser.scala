@@ -532,16 +532,22 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `region` ~/> idDef ~ stmt ^^ Region.apply
 
   lazy val handler: P[Handler] =
-    ( `with` ~> (idDef <~ `:`).? ~ interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
-      case capabilityName ~ effect ~ clauses =>
-        val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, clauses)
+    ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
+      case capabilityName ~ impl =>
+        val capability = capabilityName map { name => BlockParam(name, impl.interface) }
+        Handler(capability, impl)
       }
-    | `with` ~> (idDef <~ `:`).? ~ (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case capabilityName ~ effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
+    )
+
+  lazy val implementation: P[Implementation] =
+    ( interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
+      case effect ~ clauses =>
+        Implementation(effect, clauses)
+      }
+    | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
+      case effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
-        val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
+        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
       }
     )
 

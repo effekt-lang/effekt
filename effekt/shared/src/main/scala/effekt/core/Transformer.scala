@@ -176,6 +176,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.Unbox(b) => transformBox(tree)
 
+    case source.New(impl) => transformBox(tree)
+
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)
       val exprTpe = Context.inferredTypeOf(tree)
@@ -249,7 +251,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
-        case h @ source.Handler(eff, cap, cls) =>
+        case h @ source.Handler(cap, source.Implementation(eff, cls)) =>
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {

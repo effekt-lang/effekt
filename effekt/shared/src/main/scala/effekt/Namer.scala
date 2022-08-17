@@ -331,7 +331,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case source.Handler(effect, param, clauses) =>
+    case source.Implementation(interface, clauses) =>
 
       def extractControlEffect(e: InterfaceType): Interface = e match {
         case BlockTypeApp(e: Interface, args) => extractControlEffect(e)
@@ -342,7 +342,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.abort(pretty"Cannot handle built in effects like ${b}")
       }
 
-      val eff: Interface = Context.at(effect) { extractControlEffect(resolve(effect)) }
+      val eff: Interface = Context.at(interface) { extractControlEffect(resolve(interface)) }
 
       clauses.foreach {
         case source.OpClause(op, tparams, params, body, resumeId) =>
@@ -351,7 +351,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           eff.ops.find { o => o.name.toString == op.name } map { opSym =>
             Context.assignSymbol(op, opSym)
           } getOrElse {
-            Context.abort(pretty"Effect operation ${op} is not part of effect ${eff}.")
+            Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
           }
           val tps = tparams.map(resolve)
           val vps = params.map(resolve)

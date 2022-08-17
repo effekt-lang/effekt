@@ -42,6 +42,7 @@ class BoxUnboxInference {
     }
 
     case Unbox(t) => Unbox(rewriteAsExpr(t))
+    case New(impl) => New(rewrite(impl))
     case other => Unbox(rewriteAsExpr(other))
   }
 
@@ -54,6 +55,8 @@ class BoxUnboxInference {
       case sym: (ValueSymbol | symbols.VarBinder) => v
       case sym: BlockSymbol => Box(None, InterfaceArg(v.id).inheritPosition(v)).inheritPosition(v)
     }
+
+    case n: New => ??? // Box(None, rewriteAsBlock(n)).inheritPosition(n)
 
     case l: Literal[t]            => l
 
@@ -167,26 +170,31 @@ class BoxUnboxInference {
       BlockStmt(rewrite(b))
   }
 
-  def rewrite(b: BlockArg)(using C: Context): BlockArg = b match {
+  def rewrite(b: BlockArg)(using Context): BlockArg = b match {
     case b: FunctionArg  => rewrite(b)
     case b: InterfaceArg => b
   }
 
-  def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
+  def rewrite(b: FunctionArg)(using Context): FunctionArg =  visit(b) {
     case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
   }
 
-  def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
-    case Handler(effect, capability, clauses) =>
-      Handler(effect, capability, clauses.map(rewrite))
+  def rewrite(h: Handler)(using Context): Handler = visit(h) {
+    case Handler(capability, impl) =>
+      Handler(capability, rewrite(impl))
   }
 
-  def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
+  def rewrite(i: Implementation)(using Context): Implementation = visit(i) {
+    case Implementation(interface, clauses) =>
+      Implementation(interface, clauses.map(rewrite))
+  }
+
+  def rewrite(h: OpClause)(using Context): OpClause = visit(h) {
     case OpClause(id, tparams, params, body, resume) =>
       OpClause(id, tparams, params, rewrite(body), resume)
   }
 
-  def rewrite(c: MatchClause)(using C: Context): MatchClause = visit(c) {
+  def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {
     case MatchClause(pattern, body) =>
       MatchClause(pattern, rewrite(body))
   }

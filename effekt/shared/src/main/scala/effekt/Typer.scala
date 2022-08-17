@@ -335,6 +335,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
+      case tree @ source.New(impl) => ???
+
       case tree @ source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
