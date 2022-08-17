@@ -212,8 +212,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       val reg = region.map(Context.resolveTerm).getOrElse {
         Context.getSelfRegion()
       } match {
-        case t: TrackedParam => t
-        case _ => Context.abort("Region needs to be a tracked parameter.")
+        case t: BlockSymbol => t
+        case _ => Context.abort("Region needs to be a block.")
       }
 
       resolveGeneric(binding)

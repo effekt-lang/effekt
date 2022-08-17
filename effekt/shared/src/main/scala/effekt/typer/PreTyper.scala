@@ -139,7 +139,7 @@ class BoxUnboxInference {
       VarDef(id, annot, region, rewrite(binding))
 
     case DefDef(id, annot, binding) =>
-      DefDef(id, annot, rewrite(binding))
+      DefDef(id, annot, rewriteAsBlock(binding))
 
     case d: InterfaceDef        => d
     case d: DataDef       => d

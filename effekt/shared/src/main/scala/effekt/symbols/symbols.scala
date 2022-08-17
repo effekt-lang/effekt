@@ -152,7 +152,7 @@ package object symbols {
     def decl: Def
   }
   case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder with ValueSymbol
-  case class VarBinder(name: Name, tpe: Option[ValueType], region: TrackedParam, decl: VarDef) extends Binder with BlockSymbol
+  case class VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder with BlockSymbol
   case class DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder with BlockSymbol
 
   /**
@@ -473,6 +473,7 @@ package object symbols {
     case class HandlerRegion(handler: source.TryHandle) extends Role
     case class RegionRegion(handler: source.Region) extends Role
     case class FunctionRegion(fun: source.FunDef) extends Role
+    case class BlockRegion(fun: source.DefDef) extends Role
     case class AnonymousFunctionRegion(fun: source.FunctionArg) extends Role
     case class InferredBox(box: source.Box) extends Role
     case class InferredUnbox(unbox: source.Unbox) extends Role

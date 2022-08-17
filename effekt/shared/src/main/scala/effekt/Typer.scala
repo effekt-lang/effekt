@@ -648,8 +648,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Result((), effBind)
 
       case d @ source.DefDef(id, annot, binding) =>
-        val Result(t, effBinding) = checkBlockArgument(binding, d.symbol.tpe)
-        Context.bind(d.symbol, t)
+
+        given inferredCapture: Captures = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+
+        val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
+        Context.bind(d.symbol, t, inferredCapture)
         Result((), effBinding)
 
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>

@@ -216,5 +216,9 @@ trait Intelligence {
          """.stripMargin
 
       SymbolInfo(c, "Mutable variable binder", signature, Some(ex))
+
+    case c: DefBinder =>
+      val signature = C.blockTypeOption(c).orElse(c.tpe).map { tpe => pp"${c.name}: ${tpe}" }
+      SymbolInfo(c, "Block binder", signature, None)
   }
 }

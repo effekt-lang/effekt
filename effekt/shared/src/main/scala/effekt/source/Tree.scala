@@ -180,7 +180,7 @@ case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], bi
   type symbol = symbols.VarBinder
 }
 // TODO BlockArg is not precisely the right syntactic category, but we reuse it for now.
-case class DefDef(id: IdDef, annot: Option[BlockType], block: BlockArg) extends Def {
+case class DefDef(id: IdDef, annot: Option[BlockType], block: Term) extends Def {
   type symbol = symbols.DefBinder
 }
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {

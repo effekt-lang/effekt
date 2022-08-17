@@ -189,6 +189,13 @@ trait ChezSchemeLiftedBase extends ChezSchemePrinterUtils {
     case Def(id, tpe, Extern(ps, body), rest) =>
       defineFunction(nameDef(id), ps.map { p => p.id.name.toString }, body) <> emptyline <> toDoc(rest, toplevel)
 
+    case Def(id, tpe, binding, body) if toplevel =>
+      defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
+
+    case Def(id, tpe, binding, body) =>
+      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body, false))))
+
+
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs) <> emptyline <> toDoc(rest, toplevel)

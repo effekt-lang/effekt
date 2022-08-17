@@ -437,7 +437,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val defDef: P[DefDef] =
-    `def` ~/> idDef ~ (`:` ~/> blockType).? ~ (`=` ~/> blockDefinition) ^^ {
+    `def` ~/> idDef ~ (`:` ~/> blockType).? ~ (`=` ~/> expr) ^^ {
       case id ~ tpe ~ block => DefDef(id, tpe, block)
     }
 
