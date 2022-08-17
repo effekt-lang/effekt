@@ -353,26 +353,26 @@ object Typer extends Phase[NameResolved, Typechecked] {
               Context.bind(sym, annotType.getOrElse(decl))
           }
 
-          val Result(_, effs) = continuationDetails.fold {
+          val Result(_, effs) = continuationDetails match {
             // no answer type, just check body
-            body checkAgainst tpe
-          } { case (ret, continuationCapt) =>
-            // answer type, we have a continuation!
+            case None => body checkAgainst tpe
+            case Some(ret, continuationCapt) =>
+              // answer type, we have a continuation!
 
-            // (4) synthesize type of continuation
-            val resumeType = if (otherEffs.nonEmpty) {
-              // resume { e }
-              val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
-              val resumeCapt = CaptureParameter(Name.local("resumeBlock"))
-              FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
-            } else {
-              // resume(v)
-              FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
-            }
+              // (4) synthesize type of continuation
+              val resumeType = if (otherEffs.nonEmpty) {
+                // resume { e }
+                val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
+                val resumeCapt = CaptureParameter(Name.local("resumeBlock"))
+                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
+              } else {
+                // resume(v)
+                FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
+              }
 
-            Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
+              Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
 
-            body checkAgainst ret
+              body checkAgainst ret
           }
 
           handlerEffects = handlerEffects ++ effs
