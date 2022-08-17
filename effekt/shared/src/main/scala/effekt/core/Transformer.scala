@@ -139,6 +139,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case s @ source.Select(receiver, selector) =>
       Member(transformAsBlock(receiver), s.definition)
 
+    case s @ source.New(h @ source.Implementation(tpe, members)) =>
+      New(Handler(h.definition, members map {
+        case op @ source.OpClause(id, tparams, vparams, body, resume) =>
+          val vps = vparams map transform
+          // currently the don't take block params
+          val opBlock = BlockLit(vps, transform(body))
+          (op.definition, opBlock)
+      }))
+
     case source.Unbox(b) =>
       Unbox(transformAsExpr(b))
 

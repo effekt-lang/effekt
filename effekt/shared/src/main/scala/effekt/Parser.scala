@@ -498,6 +498,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | regionExpr
     | lambdaExpr
     | unboxExpr
+    | newExpr
     | primExpr
     )
 
@@ -510,6 +511,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     idRef ^^ IdTarget.apply
 
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
+
+  lazy val newExpr: P[New] = `new` ~/> implementation ^^ New.apply
 
   lazy val funCall: P[Term] =
     ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply

@@ -233,7 +233,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         var handlerEffs: ConcreteEffects = Pure
 
         handlers foreach Context.withFocus { h =>
-          val Result((), usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+          val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
           handlerEffs = handlerEffs ++ usedEffects
         }
 
@@ -250,7 +250,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
-      case tree @ source.New(impl) => ???
+      case tree @ source.New(impl) => Context.abort("Expected an expression, but got an object implementation (which is a block).")
 
       case tree @ source.Match(sc, clauses) =>
 
@@ -282,13 +282,15 @@ object Typer extends Phase[NameResolved, Typechecked] {
   /**
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
-  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[Unit] = Context.focusing(impl) {
+  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
     case source.Implementation(interface, clauses) =>
 
       var handlerEffects: ConcreteEffects = Pure
 
+      val tpe = interface.resolve
+
       // Extract interface and type arguments from annotated effect
-      val (effectSymbol, targs) = interface.resolve match {
+      val (effectSymbol, targs) = tpe match {
         case BlockTypeApp(eff: Interface, args) => (eff, args)
         case eff: Interface => (eff, Nil)
         case BlockTypeApp(b: BuiltinEffect, args) => Context.abort("Cannot implement builtin effect")
@@ -376,7 +378,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           handlerEffects = handlerEffects ++ effs
       }
 
-      Result((), handlerEffects)
+      Result(tpe, handlerEffects)
   }
 
 
@@ -411,6 +413,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case e: ValueSymbol =>
           Context.abort("Expected block, but got an expression.")
       }
+
+      case source.New(impl) => checkImplementation(impl, None)
 
       case s : source.MethodCall => sys error "Nested capability selection not yet supported"
 

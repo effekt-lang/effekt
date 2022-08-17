@@ -28,6 +28,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
+    case New(handler)     => "new" <+> toDoc(handler)
   }
 
   def toDoc(p: Param): Doc = p.id.name.toString
@@ -70,6 +71,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case TagPattern(id, patterns) => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
   }
 
+  def toDoc(handler: Handler): Doc = braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+
   def toDocStmt(s: Stmt): Doc = s match {
     case Def(id, tpe, Extern(ps, body), rest) =>
       "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+>
@@ -109,9 +112,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Handle(body, hs) =>
       // TODO pretty print correctly
-      val handlers = hs map { handler =>
-        braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
-      }
+      val handlers = hs.map(toDoc)
       val cs = parens("[" <> hsep(handlers, comma) <> "]")
       "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
 

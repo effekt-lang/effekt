@@ -76,6 +76,7 @@ object ChezSchemeCallCCPrinter extends ChezSchemeBase {
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
     case Unbox(e) => toDoc(e)
+    case New(impl) => ???
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(using Context): Doc = s match {

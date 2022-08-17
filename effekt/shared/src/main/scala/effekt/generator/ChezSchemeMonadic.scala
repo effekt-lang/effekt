@@ -70,7 +70,8 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
       schemeCall(nameRef(id), toDoc(b))
     case Extern(ps, body) =>
       schemeLambda(ps map toDoc, body)
-    case Unbox(e) => toDoc(e)
+    case Unbox(e)  => toDoc(e)
+    case New(impl) => ???
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {

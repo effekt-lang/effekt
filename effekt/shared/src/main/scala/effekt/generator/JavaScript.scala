@@ -69,7 +69,8 @@ trait JavaScriptPrinter extends JavaScriptBase {
       toDoc(b) <> "." <> nameRef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
-    case Unbox(e) => toDoc(e)
+    case Unbox(e)     => toDoc(e)
+    case New(handler) => toDoc(handler)
   })
 
   // pretty print the statement in a javascript expression context
@@ -98,7 +99,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall("$effekt.pure", toDoc(e))
 
     case Handle(body, hs) =>
-      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
+      val handlers = hs.map(toDoc)
       val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
 
@@ -119,6 +120,9 @@ trait JavaScriptPrinter extends JavaScriptBase {
 
     case other => jsCall(parens(jsLambda(Nil, jsBlock(toDocStmt(other)))), Nil)
   }
+
+  def toDoc(handler: Handler)(using Context): Doc =
+    jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) })
 }
 
 trait JavaScriptBase extends ParenPrettyPrinter {

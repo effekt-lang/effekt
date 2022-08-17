@@ -45,6 +45,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.BlockVar(b) => BlockVar(b)
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
+    case core.New(h) => ???
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
@@ -179,6 +180,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       case b: core.Extern     => sys error "Cannot provide scope evidence for built in function"
       // TODO check whether this makes any sense
       case b: core.Unbox      => Here()
+      case b: core.New => ???
     }
   }
 }
