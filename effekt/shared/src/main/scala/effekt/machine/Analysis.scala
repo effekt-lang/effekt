@@ -39,3 +39,26 @@ def freeVariables(statement: Statement): Set[Variable] =
       environment.toSet ++ continuation.flatMap(freeVariables)
   }
 
+def substitute(subst: Substitution, v: Variable): Variable =
+  subst.findLast { case (k, _) => k == v }.map { _._2 }.getOrElse(v)
+
+def substitute(subst: Substitution, into: Substitution): Substitution = into map {
+  case (k, v) => (k, substitute(subst, v))
+}
+
+def substitute(subst: Substitution, stmt: Statement): Statement = stmt match {
+  case Def(label, body, rest) => substitute(subst, stmt)
+  case Jump(label) => Substitute(subst, Jump(label))
+  // we float substitutions downwards...
+  case Substitute(bindings, rest) => substitute(substitute(subst, bindings) ++ subst, rest)
+  case Let(name, tag, values, rest) => ???
+  case Switch(value, clauses) => ???
+  case New(name, clauses, rest) => ???
+  case Invoke(value, tag, values) => ???
+  case PushFrame(frame, rest) => ???
+  case Return(environment) => ???
+  case NewStack(name, frame, rest) => ???
+  case PushStack(value, rest) => ???
+  case PopStack(name, rest) => ???
+  case Run(command, environment, continuation) => ???
+}

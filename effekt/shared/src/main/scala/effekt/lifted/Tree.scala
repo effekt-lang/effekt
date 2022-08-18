@@ -162,6 +162,6 @@ def freeVariables(block: Block): Set[Symbol] = block match {
 
 def freeVariables(scope: Scope): Set[Symbol] = scope match {
   case Here() => Set.empty
-  case Nested(list) => list.toSet.flatMap(freeVariables)
+  case Nested(list) => list.flatMap(freeVariables).toSet
   case ScopeVar(id) => Set(id)
 }
