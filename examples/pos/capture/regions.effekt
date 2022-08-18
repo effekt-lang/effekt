@@ -82,7 +82,7 @@ def testLifted2() = try {
 
   // shouldn't affect the result:
   println(underHandler { o.get() })
-} with Get { resume(42); println("after") }
+} with Get { println("before"); resume(42); println("after") }
 
 def main() = {
 
@@ -102,7 +102,6 @@ def main() = {
   };
 
   twoCounters()
-
 
   testLifted();
 

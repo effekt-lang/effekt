@@ -60,7 +60,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case v @ source.DefDef(id, annot, binding) =>
       val sym = v.symbol
-      Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), rest())
+      insertBindings { Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), rest()) }
 
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, reg, binding) if pureOrIO(binding) =>
@@ -70,8 +70,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
       val tpe = getStateType(sym)
-      val b = Context.bind(tpe, transform(binding))
-      State(sym, b, sym.region, rest())
+      insertBindings {
+        val b = Context.bind(tpe, transform(binding))
+        State(sym, b, sym.region, rest())
+      }
 
     case source.ExternType(id, tparams) =>
       rest()
@@ -261,7 +263,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val cap = h.capability.get.symbol
         core.BlockParam(cap, cap.tpe)
       }
-      val body = BlockLit(caps, insertBindings { transform(prog) })
+      val body = BlockLit(caps, transform(prog))
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
@@ -290,7 +292,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Continuations cannot be regions")
       }
       val cap = core.BlockParam(sym, tpe)
-      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), insertBindings { transform(body) })))
+      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)
@@ -414,10 +416,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   // we can conservatively approximate to false, in order to disable the optimizations
-  def pureOrIO(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
-    case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
-    case _         => false
-  }
+  def pureOrIO(t: source.Tree)(using Context): Boolean =
+    Context.inferredCaptureOption(t) match {
+      case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
+      case _         => false
+    }
 
   def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
     case Some(capt) => asConcreteCaptureSet(capt).captures.isEmpty
