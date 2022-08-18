@@ -195,7 +195,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Box(e) => toDoc(e)
 
-    case Run(s) => toDoc(s) <> ".run()"
+    case Run(s) => toDocDelayed(s) <> ".run()"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
