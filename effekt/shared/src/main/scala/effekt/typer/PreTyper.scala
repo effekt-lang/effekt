@@ -56,7 +56,7 @@ class BoxUnboxInference {
       case sym: BlockSymbol => Box(None, InterfaceArg(v.id).inheritPosition(v)).inheritPosition(v)
     }
 
-    case n: New => ??? // Box(None, rewriteAsBlock(n)).inheritPosition(n)
+    case n: New => C.panic("Not implemented, yet.") // Box(None, rewriteAsBlock(n)).inheritPosition(n)
 
     case l: Literal[t]            => l
 

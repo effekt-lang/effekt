@@ -413,7 +413,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
   }
 
-  // we conservatively approximate to false
+  // we can conservatively approximate to false, in order to disable the optimizations
   def pureOrIO(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
     case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
     case _         => false
