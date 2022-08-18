@@ -10,11 +10,12 @@ effect Fail {
 }
 
 type Triple {
-    Tiple(a: Int, b: Int, c: Int)
+    Triple(a: Int, b: Int, c: Int)
 }
 
-def hash_triple(triple): Int = { mod((53 * triple.a + 2809 * triple.b + 148877 * triple.c), 1000000007) }
+def hash_triple(triple: Triple): Int = triple match { case Triple(a,b,c) => mod(((53 * a) + 2809 * b + 148877 * c), 1000000007) }
 
 def main() = {
     println(hash_triple(Triple(1,2,3)))
 }
+
