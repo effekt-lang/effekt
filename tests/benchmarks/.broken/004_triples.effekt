@@ -1,0 +1,20 @@
+// Jonathan Frech, 2022-08-18
+// adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/004_triples/benchmark.kk
+
+effect Flip {
+    def flip(): Boolean
+}
+
+effect Fail {
+    def fail[A](): A
+}
+
+type Triple {
+    Tiple(a: Int, b: Int, c: Int)
+}
+
+def hash_triple(triple): Int = { mod((53 * triple.a + 2809 * triple.b + 148877 * triple.c), 1000000007) }
+
+def main() = {
+    println(hash_triple(Triple(1,2,3)))
+}
