@@ -13,6 +13,8 @@ def freeVariables(clause: Clause): Set[Variable] =
 
 def freeVariables(statement: Statement): Set[Variable] =
   statement match {
+    case Def(_, _, rest) =>
+      freeVariables(rest)
     case Jump(Label(_, environment)) =>
       environment.toSet
     case Substitute(bindings, rest) =>

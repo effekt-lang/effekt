@@ -4,7 +4,7 @@ package machine
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.lifted.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
-import effekt.symbols.{ TermSymbol, BlockSymbol, BlockType, FunctionType, BuiltinFunction, UserFunction, Module, Name, ResumeParam, Symbol, ValueSymbol, builtins }
+import effekt.symbols.{ TermSymbol, BlockSymbol, BlockType, FunctionType, BuiltinFunction, UserFunction, Module, Name, Symbol, ValueSymbol, builtins }
 
 // TODO delete imports
 
@@ -36,10 +36,10 @@ object Transformer {
         emitDeclaration(DefineForeign(transform(functionType.result), transform(name),
           params.map{case ValueParam(id, tpe) => Variable(id.name.name, transform(tpe)) }, body));
         transformToplevel(rest, mods)
-      case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
+      case lifted.Def(id, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO top-level definitions don't need evidence, or do they?
         // TODO add evidence param
-        Def(Label(transform(blockName), params.map(transform)), transform(body), transformToplevel(rest, mods))
+        Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, mods))
       case lifted.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
         transformToplevel(rest, mods)
@@ -77,20 +77,28 @@ object Transformer {
           Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
           transform(bind)
         )
-      case lifted.If(cond, thenStmt, elseStmt) =>
-        transform(cond).run(value =>
-          Switch(value, List(Clause(List(), transform(elseStmt)), Clause(List(), transform(thenStmt)))))
       case lifted.Let(id, tpe, binding, rest) =>
         transform(binding).run(value =>
           Substitute(List(Variable(transform(id), transform(tpe)) -> value), transform(rest)))
+      case lifted.Def(id, tpe, lifted.ScopeAbs(_, lifted.BlockLit(params, body)), rest) =>
+        // TODO deal with evidence
+        val freeParams = lifted.freeVariables(lifted.BlockLit(params,body)).toList.flatMap { id => id match
+          case id: symbols.ValueSymbol => Some(lifted.ValueParam(id, C.valueTypeOf(id)))
+          case id: symbols.BlockParam => Some(lifted.BlockParam(id, C.blockTypeOf(id)))
+          case id: symbols.ResumeParam => Some(lifted.BlockParam(id, C.blockTypeOf(id)))
+          case id: symbols.Fun => None
+          case id: lifted.ScopeId => None
+        };
+        val allParams = params ++ freeParams;
+        noteBlockParams(id, allParams);
+        Def(Label(transform(id), allParams.map(transform)), transform(body), transform(rest))
       case lifted.App(lifted.ScopeApp(lifted.BlockVar(id), scope), List(), args) =>
         // TODO deal with BlockLit
-        // TODO deal with local block definitions (their free variables must be kept in a map)
         // TODO deal with evidence
         id match {
           case symbols.UserFunction(_, _, _, _, _, _, _) =>
+            // TODO this is a hack, values is in general shorter than environment
             val environment = getBlocksParams(id).map(transform);
-            // TODO find actual free variables
             transform(args).run(values =>
               Substitute(environment.zip(values), Jump(Label(transform(id), environment))))
           case symbols.BlockParam(_, tpe) =>
@@ -114,6 +122,9 @@ object Transformer {
             println(id);
             C.abort("unsupported blocksymbol " + id)
         }
+      case lifted.If(cond, thenStmt, elseStmt) =>
+        transform(cond).run(value =>
+          Switch(value, List(Clause(List(), transform(elseStmt)), Clause(List(), transform(thenStmt)))))
       case lifted.Match(scrutinee, clauses) =>
         // TODO unordered matches
         // TODO overlapping matches
@@ -512,7 +523,8 @@ object Transformer {
         findToplevelBlocksParams(rest)
       case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO add evidence param
-        noteBlockParams(blockName, params)
+        noteBlockParams(blockName, params);
+        findToplevelBlocksParams(rest)
       case lifted.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
         findToplevelBlocksParams(rest)
