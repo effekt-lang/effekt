@@ -77,6 +77,8 @@ object ChezSchemeLiftPrinter extends ChezSchemeLiftedBase {
     case ScopeAbs(id, b) => schemeLambda(List(nameDef(id)), toDoc(b))
     case Lifted(ev, b)   => schemeCall("lift-block", List(toDoc(b), toDoc(ev)))
     case Unbox(e)        => toDoc(e)
+    case New(Handler(id, clauses)) =>
+      schemeCall("make-" <> nameRef(id), clauses.map { case (_, block) => toDoc(block) })
   })
 
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
@@ -238,15 +240,15 @@ trait ChezSchemeLiftedBase extends ChezSchemePrinterUtils {
       val handlers: List[Doc] = handler.map { h =>
 
         brackets("make-" <> nameRef(h.id) <+> vsep(h.clauses.map {
-          case (op, impl) =>
+          // for handlers the operations are always implemented as block literals
+          case (op, BlockLit(params, body)) =>
             // the LAST argument is the continuation...
-            val params = impl.params.init
-            val kParam = impl.params.last
+            val kParam = params.last
 
             parens(nameDef(op) <+>
-              parens(hsep(params.map { p => nameRef(p.id) }, space)) <+>
+              parens(hsep(params.init.map { p => nameRef(p.id) }, space)) <+>
               nameRef(kParam.id) <+>
-              toDocInBlock(impl.body))
+              toDocInBlock(body))
         }, line))
       }
       parens("handle" <+> parens(vsep(handlers)) <+> toDoc(body))
