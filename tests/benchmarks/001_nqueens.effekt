@@ -2,7 +2,8 @@
 // adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/001_nqueens/benchmark.kk
 // ref.: https://oeis.org/A000170
 
-////////////////////////////////////////////////////////////////////////////////
+
+// missing Effekt stdlib features
 
 def range(a: Int, b: Int) : List[Int] = {
     if (a > b) {
@@ -17,7 +18,8 @@ def sum(xs: List[Int]): Int = xs match {
     case Cons(x, xs) => x + sum(xs)
 }
 
-////////////////////////////////////////////////////////////////////////////////
+
+// manually transpiled koka
 
 type Solution = List[Int]
 
@@ -40,8 +42,8 @@ def findOneSolution(size: Int, queen: Int) : Solution / Search = {
         if (safe(next, 1, sol)) {
             Cons(next, sol)
         } else {
-          do fail()
-          Nil()
+            do fail()
+            Nil()
         }
     }
 }
@@ -53,13 +55,21 @@ def countSolutions(size: Int): Int = {
     } with Search {
         def fail() = 0
         def pick(sz) = {
-            sum(map(range(1, sz)) { x => resume(x) })
-            // TODO what is faster on my machine
+            //sum(map(range(1, sz)) { x => resume(x) }) // This is slower on Filip Koprivec's machine (in koka)
+            def loop(i: Int, acc: Int): Int = {
+                if (i == sz) {
+                    resume(i) + acc
+                } else {
+                    loop(i+1, resume(i) + acc)
+                }
+            }
+            loop(1, 0)
         }
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
+
+// Effekt does not know of command-line arguments
 
 def main(): Unit / Console = {
   println(countSolutions(0))
