@@ -36,11 +36,11 @@ case class Def(label: Label, body: Statement, rest: Statement) extends Statement
 case class Jump(label: Label) extends Statement
 case class Substitute(bindings: Substitution, rest: Statement) extends Statement
 
-case class Let(name: Variable, tag: Int, environment: Environment, rest: Statement) extends Statement
+case class Let(name: Variable, tag: Int, values: Environment, rest: Statement) extends Statement
 case class Switch(value: Variable, clauses: List[Clause]) extends Statement
 
 case class New(name: Variable, clauses: List[Clause], rest: Statement) extends Statement
-case class Invoke(value: Variable, tag: Int, environment: Environment) extends Statement
+case class Invoke(value: Variable, tag: Int, values: Environment) extends Statement
 
 case class PushFrame(frame: Clause, rest: Statement) extends Statement
 case class Return(environment: Environment) extends Statement
@@ -63,4 +63,3 @@ case class Negative(alternatives: List[Signature]) extends Type
 case class Primitive(name: String) extends Type
 
 type Signature = List[Type]
-
