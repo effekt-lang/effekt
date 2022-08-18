@@ -1,0 +1,77 @@
+// Jonathan Frech, 2022-08-18
+// adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/001_nqueens/benchmark.kk
+// ref.: https://oeis.org/A000170
+
+def range(a: Int, b: Int) : List[Int] = {
+    if (a > b) {
+        Nil()
+    } else {
+        Cons(a, range(a+1, b))
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+type Solution = List[Int]
+type Solutions = List[List[Int]]
+
+effect Search {
+    def pick(size: Int): Int
+    def fail(): Unit
+}
+
+def safe(queen: Int, diag: Int, xs: Solution): Boolean = xs match {
+    case Cons(q, qs) => queen != q && queen != q + diag && queen != q - diag && safe(queen, diag+1, qs)
+    case _ => true
+}
+
+def findOneSolution(size: Int, queen: Int) : Solution / Search = {
+    if (queen == 0) {
+        Nil()
+    } else {
+        val sol = findOneSolution(size, queen-1)
+        val next = do pick(size)
+        if (safe(next, 1, sol)) {
+            Cons(next, sol)
+        } else {
+          do fail()
+          Nil()
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+effect Count {
+  def inc(): Unit
+}
+
+def countSolutions(size: Int): Unit / Count = {
+    try {
+        if (findOneSolution(size, size).size == size) { do inc() } else { () }
+    } with Search {
+        def fail() = { resume(()) }
+        def pick(sz) = {
+          (map(range(1, sz)) { x => resume(x) }); ()
+        }
+    }
+}
+
+def nqueens(size: Int): Int = {
+    var found = 0
+    try {
+      countSolutions(size)
+    } with Count {
+      def inc() = { found = found+1; resume(()) }
+    }
+    found
+}
+
+def main(): Unit / Console = {
+  println(nqueens(1))
+  println(nqueens(2))
+  println(nqueens(3))
+  println(nqueens(4))
+  println(nqueens(5))
+  println(nqueens(6))
+}
