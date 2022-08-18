@@ -75,6 +75,9 @@ object Namer extends Phase[Parsed, NameResolved] {
     case d @ source.VarDef(id, annot, region, binding) =>
       ()
 
+    case d @ source.DefDef(id, annot, block) =>
+      ()
+
     case f @ source.FunDef(id, tparams, vparams, bparams, annot, body) =>
       val uniqueId = Context.freshNameFor(id)
 
@@ -209,14 +212,19 @@ object Namer extends Phase[Parsed, NameResolved] {
       val reg = region.map(Context.resolveTerm).getOrElse {
         Context.getSelfRegion()
       } match {
-        case t: TrackedParam => t
-        case _ => Context.abort("Region needs to be a tracked parameter.")
+        case t: BlockSymbol => t
+        case _ => Context.abort("Region needs to be a block.")
       }
 
       resolveGeneric(binding)
       val sym = VarBinder(Context.nameFor(id), tpe, reg, d)
 
       Context.define(id, sym)
+
+    case d @ source.DefDef(id, annot, binding) =>
+      val tpe = annot.map(resolve)
+      resolveGeneric(binding)
+      Context.define(id, DefBinder(Context.nameFor(id), tpe, d))
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
@@ -323,7 +331,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case source.Handler(effect, param, clauses) =>
+    case source.Implementation(interface, clauses) =>
 
       def extractControlEffect(e: InterfaceType): Interface = e match {
         case BlockTypeApp(e: Interface, args) => extractControlEffect(e)
@@ -334,7 +342,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.abort(pretty"Cannot handle built in effects like ${b}")
       }
 
-      val eff: Interface = Context.at(effect) { extractControlEffect(resolve(effect)) }
+      val eff: Interface = Context.at(interface) { extractControlEffect(resolve(interface)) }
 
       clauses.foreach {
         case source.OpClause(op, tparams, params, body, resumeId) =>
@@ -343,7 +351,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           eff.ops.find { o => o.name.toString == op.name } map { opSym =>
             Context.assignSymbol(op, opSym)
           } getOrElse {
-            Context.abort(pretty"Effect operation ${op} is not part of effect ${eff}.")
+            Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
           }
           val tps = tparams.map(resolve)
           val vps = params.map(resolve)

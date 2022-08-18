@@ -61,6 +61,7 @@ case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: TermSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
+case class New(impl: Handler) extends Block
 
 /**
  * Statements

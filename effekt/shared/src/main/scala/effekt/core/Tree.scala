@@ -57,6 +57,7 @@ case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: TermSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
+case class New(impl: Handler) extends Block
 
 /**
  * Statements
@@ -179,6 +180,8 @@ object Tree {
         Extern(params map rewrite, body)
       case Unbox(e) =>
         Unbox(rewrite(e))
+      case New(impl) =>
+        New(rewrite(impl))
       case b: BlockVar => b
     }
     def rewrite(e: Pattern): Pattern = e match {

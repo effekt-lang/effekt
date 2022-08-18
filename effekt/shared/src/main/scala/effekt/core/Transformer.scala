@@ -58,6 +58,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest())
 
+    case v @ source.DefDef(id, annot, binding) =>
+      val sym = v.symbol
+      insertBindings { Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), rest()) }
+
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, reg, binding) if pureOrIO(binding) =>
       val sym = v.symbol
@@ -66,8 +70,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
       val tpe = getStateType(sym)
-      val b = Context.bind(tpe, transform(binding))
-      State(sym, b, sym.region, rest())
+      insertBindings {
+        val b = Context.bind(tpe, transform(binding))
+        State(sym, b, sym.region, rest())
+      }
 
     case source.ExternType(id, tparams) =>
       rest()
@@ -135,6 +141,20 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case s @ source.Select(receiver, selector) =>
       Member(transformAsBlock(receiver), s.definition)
 
+    case s @ source.New(h @ source.Implementation(tpe, members)) =>
+      // we need to establish a canonical ordering of methods
+      // we use the order in which they are declared in the signature (like with handlers)
+      val clauses = members.map { cl => (cl.definition, cl) }.toMap
+      val sig = h.definition
+
+      New(Handler(sig, sig.ops.map(clauses.apply).map {
+        case op @ source.OpClause(id, tparams, vparams, body, resume) =>
+          val vps = vparams map transform
+          // currently the don't take block params
+          val opBlock = BlockLit(vps, transform(body))
+          (op.definition, opBlock)
+      }))
+
     case source.Unbox(b) =>
       Unbox(transformAsExpr(b))
 
@@ -171,6 +191,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Box(transform(block))
 
     case source.Unbox(b) => transformBox(tree)
+
+    case source.New(impl) => transformBox(tree)
 
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)
@@ -245,7 +267,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
-        case h @ source.Handler(eff, cap, cls) =>
+        case h @ source.Handler(cap, source.Implementation(eff, cls)) =>
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
@@ -393,11 +415,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
   }
 
-  // we conservatively approximate to false
-  def pureOrIO(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
-    case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
-    case _         => false
-  }
+  // we can conservatively approximate to false, in order to disable the optimizations
+  def pureOrIO(t: source.Tree)(using Context): Boolean =
+    Context.inferredCaptureOption(t) match {
+      case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
+      case _         => false
+    }
 
   def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
     case Some(capt) => asConcreteCaptureSet(capt).captures.isEmpty

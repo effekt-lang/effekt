@@ -221,105 +221,20 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // TODO refactor and use flowIntoWithout
         val continuationCaptHandled = Context.without(continuationCapt, selfRegion :: providedCapabilities.map(_.capture))
 
+        // Check the handled program
+        val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
+          given Captures = continuationCaptHandled
+          Context.withRegion(selfRegion) { checkStmt(prog, expected) }
+        }
+
+        // Also all capabilities used by the handler flow into the capture of the continuation
+        given Captures = continuationCaptHandled
+
         var handlerEffs: ConcreteEffects = Pure
 
-        val Result(ret, effs) = {
-
-          // Check the handled program
-          val Result(ret, effs) = Context.bindingCapabilities(tree, providedCapabilities) {
-            given Captures = continuationCaptHandled
-            Context.withRegion(selfRegion) { checkStmt(prog, expected) }
-          }
-
-          // Also all capabilities used by the handler flow into the capture of the continuation
-          given Captures = continuationCaptHandled
-
-          handlers foreach Context.withFocus { h =>
-
-            // Extract interface and type arguments from annotated effect
-            val (effectSymbol, targs) = h.effect.resolve match {
-              case BlockTypeApp(eff: Interface, args) => (eff, args)
-              case eff: Interface => (eff, Nil)
-              case BlockTypeApp(b: BuiltinEffect, args) => Context.abort("Cannot handle builtin effect")
-              case b: BuiltinEffect => Context.abort("Cannot handle builtin effect")
-            }
-
-            // (3) check all operations are covered
-            val covered = h.clauses.map { _.definition }
-            val notCovered = effectSymbol.ops.toSet -- covered.toSet
-
-            if (notCovered.nonEmpty) {
-              val explanation = notCovered.map { op => pp"${op.name} of effect ${op.effect.name}" }.mkString(", ")
-              Context.error(pretty"Missing definitions for effect operations: ${explanation}")
-            }
-
-            if (covered.size > covered.distinct.size)
-              Context.error("Duplicate definitions of effect operations")
-
-            h.clauses foreach Context.withFocus {
-              case d @ source.OpClause(op, tparams, params, body, resume) =>
-                val declaration = d.definition
-
-                val declaredType = Context.lookupFunctionType(declaration)
-
-                // Create fresh type parameters for existentials.
-                //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
-                // The parameters C, D, ... are existentials
-                val existentials: List[TypeVar] = tparams.map(_.symbol.asTypeVar)
-
-                val expectedTypeParams = declaredType.tparams.size - targs.size
-
-                if (existentials.size != expectedTypeParams)
-                  Context.error(pretty"Number of type parameters (${existentials.size}) does not match declaration of ${op.name} ($expectedTypeParams).")
-
-                // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
-                // of bidirectional effects and capture polymorphism (still has to be tested).
-                val cparams = declaredType.effects.controlEffects.map { tpe => CaptureParameter(tpe.name) }
-
-                // (1) Instantiate block type of effect operation
-                // Bidirectional example:
-                //   effect Bidirectional { def op(): Int / {Exc} }
-                // where op has
-                //   FunctionType(Nil, List(@exc), Nil, Nil, TInt, List((TExc, @exc)), Nil)
-                // in general @exc could occur in TInt.
-                //
-                // TODO we need to do something with bidirectional effects and region checking here.
-                //  probably change instantiation to also take capture args.
-                val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
-                  Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap)))
-
-                // (3) check parameters
-                if (vps.size != params.size)
-                  Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${vps.size}.")
-
-                (params zip vps).foreach {
-                  case (param, decl) =>
-                    val sym = param.symbol
-                    val annotType = sym.tpe
-                    annotType.foreach { t => matchDeclared(t, decl, param) }
-                    Context.bind(sym, annotType.getOrElse(decl))
-                }
-
-                // (4) synthesize type of continuation
-                val resumeType = if (otherEffs.nonEmpty) {
-                  // resume { e }
-                  val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
-                  val resumeCapt = CaptureParameter(Name.local("resumeBlock"))
-                  FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
-                } else {
-                  // resume(v)
-                  FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
-                }
-
-                Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
-                Context in {
-                  val Result(_, heffs) = body checkAgainst ret
-                  handlerEffs = handlerEffs ++ heffs
-                }
-            }
-          }
-
-          Result(ret, effs)
+        handlers foreach Context.withFocus { h =>
+          val Result(_, usedEffects) = checkImplementation(h.impl, Some((ret, continuationCapt)))
+          handlerEffs = handlerEffs ++ usedEffects
         }
 
         val handled = asConcrete(Effects(providedCapabilities.map { cap => cap.tpe.asInterfaceType }))
@@ -334,6 +249,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         usingCapture(continuationCapt)
 
         Result(ret, (effs -- handled) ++ handlerEffs)
+
+      case tree @ source.New(impl) => Context.abort("Expected an expression, but got an object implementation (which is a block).")
 
       case tree @ source.Match(sc, clauses) =>
 
@@ -361,6 +278,110 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val Result(tpe, effs) = checkStmt(stmt, None)
         Result(expected.getOrElse(TBottom), Pure)
     }
+
+  /**
+   * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
+   */
+  def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
+    case source.Implementation(interface, clauses) =>
+
+      var handlerEffects: ConcreteEffects = Pure
+
+      val tpe = interface.resolve
+
+      // Extract interface and type arguments from annotated effect
+      val (effectSymbol, targs) = tpe match {
+        case BlockTypeApp(eff: Interface, args) => (eff, args)
+        case eff: Interface => (eff, Nil)
+        case BlockTypeApp(b: BuiltinEffect, args) => Context.abort("Cannot implement builtin effect")
+        case b: BuiltinEffect => Context.abort("Cannot implement builtin effect")
+      }
+
+      // (3) check all operations are covered
+      val covered = clauses.map { _.definition }
+      val notCovered = effectSymbol.ops.toSet -- covered.toSet
+
+      if (notCovered.nonEmpty) {
+        val explanation = notCovered.map { op => pp"${op.name} of interface ${op.effect.name}" }.mkString(", ")
+        Context.error(pretty"Missing definitions for operations: ${explanation}")
+      }
+
+      if (covered.size > covered.distinct.size)
+        Context.error("Duplicate definitions of operations")
+
+      clauses foreach Context.withFocus {
+        case d @ source.OpClause(op, tparams, params, body, resume) =>
+          val declaration = d.definition
+
+          val declaredType = Context.lookupFunctionType(declaration)
+
+          // Create fresh type parameters for existentials.
+          //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
+          // The parameters C, D, ... are existentials
+          val existentials: List[TypeVar] = tparams.map(_.symbol.asTypeVar)
+
+          val expectedTypeParams = declaredType.tparams.size - targs.size
+
+          if (existentials.size != expectedTypeParams)
+            Context.error(pretty"Number of type parameters (${existentials.size}) does not match declaration of ${op.name} ($expectedTypeParams).")
+
+          // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
+          // of bidirectional effects and capture polymorphism (still has to be tested).
+          val cparams = declaredType.effects.controlEffects.map { tpe => CaptureParameter(tpe.name) }
+
+          // (1) Instantiate block type of effect operation
+          // Bidirectional example:
+          //   effect Bidirectional { def op(): Int / {Exc} }
+          // where op has
+          //   FunctionType(Nil, List(@exc), Nil, Nil, TInt, List((TExc, @exc)), Nil)
+          // in general @exc could occur in TInt.
+          //
+          // TODO we need to do something with bidirectional effects and region checking here.
+          //  probably change instantiation to also take capture args.
+          val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
+            Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap)))
+
+          // (3) check parameters
+          if (vps.size != params.size)
+            Context.abort(s"Wrong number of value arguments, given ${params.size}, but ${op.name} expects ${vps.size}.")
+
+          (params zip vps).foreach {
+            case (param, decl) =>
+              val sym = param.symbol
+              val annotType = sym.tpe
+              annotType.foreach { t => matchDeclared(t, decl, param) }
+              Context.bind(sym, annotType.getOrElse(decl))
+          }
+
+          val Result(_, effs) = continuationDetails match {
+            // no answer type, just check body
+            case None => body checkAgainst tpe
+            case Some(ret, continuationCapt) =>
+              // answer type, we have a continuation!
+
+              // (4) synthesize type of continuation
+              val resumeType = if (otherEffs.nonEmpty) {
+                // resume { e }
+                val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
+                val resumeCapt = CaptureParameter(Name.local("resumeBlock"))
+                FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
+              } else {
+                // resume(v)
+                FunctionType(Nil, Nil, List(tpe), Nil, ret, Effects.Pure)
+              }
+
+              Context.bind(Context.symbolOf(resume).asBlockSymbol, resumeType, continuationCapt)
+
+              body checkAgainst ret
+          }
+
+          handlerEffects = handlerEffects ++ effs
+      }
+
+      Result(tpe, handlerEffects)
+  }
+
+
 
   /**
    * We defer checking whether something is first-class or second-class to Typer now.
@@ -392,6 +413,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case e: ValueSymbol =>
           Context.abort("Expected block, but got an expression.")
       }
+
+      case source.New(impl) => checkImplementation(impl, None)
 
       case s : source.MethodCall => sys error "Nested capability selection not yet supported"
 
@@ -614,11 +637,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case d @ source.ValDef(id, annot, binding) =>
         val Result(t, effBinding) = d.symbol.tpe match {
           case Some(t) =>
-            binding checkAgainst t
+            val Result(_, eff) = binding checkAgainst t
+            // use annotated, not inferred type
+            Result(t, eff)
           case None => checkStmt(binding, None)
         }
 
         Context.bind(d.symbol, t)
+
         Result((), effBinding)
 
       case d @ source.VarDef(id, annot, reg, binding) =>
@@ -646,6 +672,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(sym, stTpe, stCapt)
 
         Result((), effBind)
+
+      case d @ source.DefDef(id, annot, binding) =>
+
+        given inferredCapture: Captures = Context.freshCaptVar(CaptUnificationVar.BlockRegion(d))
+
+        val Result(t, effBinding) = checkExprAsBlock(binding, d.symbol.tpe)
+        Context.bind(d.symbol, t, inferredCapture)
+        Result((), effBinding)
 
       case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind

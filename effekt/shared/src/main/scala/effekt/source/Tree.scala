@@ -179,6 +179,9 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
 }
+case class DefDef(id: IdDef, annot: Option[BlockType], block: Term) extends Def {
+  type symbol = symbols.DefBinder
+}
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {
   type symbol = symbols.Interface
 }
@@ -321,22 +324,44 @@ case class ExprTarget(receiver: Term) extends CallTarget
 case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
 case class While(cond: Term, block: Stmt) extends Term
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
-
 /**
- * Currently, the source language does not allow us to explicitly bind the capabilities.
- * The capability parameter here is annotated by the capability-passing transformation
+ * Handling effects
  *
  *   try {
  *     <prog>
- *   } with <eff> : <Effect> { ... }
+ *   } with <capability> : <Effect> { ... }
  *
- * Here eff is the capability parameter, as introduced by the transformation.
+ * Each with-clause is modeled as an instance of type [[Handler]].
  */
-case class Handler(effect: InterfaceType, capability: Option[BlockParam] = None, clauses: List[OpClause]) extends Reference {
-  def id = effect.id
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
+
+/**
+ * An implementation of a given interface
+ *
+ *     <Interface> {
+ *       def <opClause> = ...
+ *     }
+ *
+ * Called "template" or "class" in other languages.
+ */
+case class Implementation(interface: InterfaceType, clauses: List[OpClause]) extends Reference {
+  def id = interface.id
   type symbol = symbols.Interface
 }
+
+/**
+ * A handler is a pair of an optionally named capability and the handler [[Implementation]]
+ */
+case class Handler(capability: Option[BlockParam] = None, impl: Implementation) extends Reference {
+  def effect = impl.interface
+  def clauses = impl.clauses
+  def id = impl.id
+  type symbol = symbols.Interface
+}
+
+case class New(impl: Implementation) extends Term
+
+
 // TODO also allow block params and add a check in TryHandle to rule out continuation capture and block params.
 case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.Operation
@@ -546,6 +571,9 @@ object Tree {
       case TryHandle(prog, handlers) =>
         TryHandle(rewrite(prog), handlers.map(rewrite))
 
+      case New(impl) =>
+        New(rewrite(impl))
+
       case Region(name, body) =>
         Region(name, rewrite(body))
 
@@ -570,6 +598,9 @@ object Tree {
 
       case VarDef(id, annot, region, binding) =>
         VarDef(id, annot, region, rewrite(binding))
+
+      case DefDef(id, annot, block) =>
+        DefDef(id, annot, rewrite(block))
 
       case d: InterfaceDef        => d
       case d: DataDef       => d
@@ -609,8 +640,13 @@ object Tree {
     }
 
     def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
-      case Handler(effect, capability, clauses) =>
-        Handler(effect, capability, clauses.map(rewrite))
+      case Handler(capability, impl) =>
+        Handler(capability, rewrite(impl))
+    }
+
+    def rewrite(impl: Implementation)(using Context): Implementation = visit(impl) {
+      case source.Implementation(interface, clauses) =>
+        Implementation(interface, clauses.map(rewrite))
     }
 
     def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
@@ -693,6 +729,9 @@ object Tree {
       case TryHandle(prog, handlers) =>
         combineAll(scoped { query(prog) } :: handlers.map(h => scoped { query(h) }))
 
+      case New(impl) =>
+        query(impl)
+
       case Region(name, body) =>
         query(body)
 
@@ -717,6 +756,9 @@ object Tree {
 
       case VarDef(id, annot, region, binding) =>
         scoped { query(binding) }
+
+      case DefDef(id, annot, block) =>
+        scoped { query(block) }
 
       case d: InterfaceDef  => empty
       case d: DataDef       => empty
@@ -756,7 +798,11 @@ object Tree {
     }
 
     def query(h: Handler)(using Context, Ctx): Res = visit(h) {
-      case Handler(effect, capability, clauses) =>
+      case Handler(capability, impl) => query(impl)
+    }
+
+    def query(h: Implementation)(using Context, Ctx): Res = visit(h) {
+      case Implementation(interface, clauses) =>
         combineAll(clauses.map(cl => scoped { query(cl) }))
     }
 

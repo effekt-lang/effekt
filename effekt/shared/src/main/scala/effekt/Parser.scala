@@ -83,6 +83,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `while` = keyword("while")
   lazy val `type` = keyword("type")
   lazy val `effect` = keyword("effect")
+  lazy val `interface` = keyword("interface")
   lazy val `try` = keyword("try")
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
@@ -109,7 +110,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "with", "case", "do", "if", "while",
+    "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
     "at", "box", "unbox", "return", "region", "new"
   )
@@ -243,6 +244,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val definition: P[Def] =
     ( valDef
     | funDef
+    | defDef
     | effectDef
     | typeDef
     | effectAliasDef
@@ -270,7 +272,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
+    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
@@ -355,6 +357,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | functionArg
     )
 
+  lazy val blockDefinition: P[BlockArg] =
+    ( idRef ^^ { case id => source.InterfaceArg(id) }
+    | functionArg
+    )
+
   lazy val functionArg: P[FunctionArg] =
     ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(Nil, ps, Nil, body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
@@ -430,6 +437,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case id ~ tpe ~ reg ~ expr => VarDef(id, tpe, reg, expr)
     }
 
+  lazy val defDef: P[DefDef] =
+    `def` ~/> idDef ~ (`:` ~/> blockType).? ~ (`=` ~/> expr) ^^ {
+      case id ~ tpe ~ block => DefDef(id, tpe, block)
+    }
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
@@ -487,6 +498,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | regionExpr
     | lambdaExpr
     | unboxExpr
+    | newExpr
     | primExpr
     )
 
@@ -499,6 +511,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     idRef ^^ IdTarget.apply
 
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
+
+  lazy val newExpr: P[New] = `new` ~/> implementation ^^ New.apply
 
   lazy val funCall: P[Term] =
     ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply
@@ -521,16 +535,22 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `region` ~/> idDef ~ stmt ^^ Region.apply
 
   lazy val handler: P[Handler] =
-    ( `with` ~> (idDef <~ `:`).? ~ interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
-      case capabilityName ~ effect ~ clauses =>
-        val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, clauses)
+    ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
+      case capabilityName ~ impl =>
+        val capability = capabilityName map { name => BlockParam(name, impl.interface) }
+        Handler(capability, impl)
       }
-    | `with` ~> (idDef <~ `:`).? ~ (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case capabilityName ~ effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
+    )
+
+  lazy val implementation: P[Implementation] =
+    ( interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
+      case effect ~ clauses =>
+        Implementation(effect, clauses)
+      }
+    | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
+      case effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
-        val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
+        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
       }
     )
 

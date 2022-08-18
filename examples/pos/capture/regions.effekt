@@ -1,0 +1,112 @@
+import immutable/list
+
+interface Counter {
+  def get(): Int
+  def inc(): Unit
+}
+
+effect Dummy(): Unit
+effect Get(): Int
+
+def underHandler[R] { prog: => R }: R =
+  try { prog() } with Dummy { resume(()) }
+
+def makeCounter {r: Region} = {
+  var state in r = 0
+
+  def c1 = new Counter {
+    def get() = state
+    def inc() = state = state + 1
+  }
+  c1
+}
+
+def twoCounters() = {
+  region outer {
+    region inner {
+      val c1: Counter at {inner} = makeCounter {inner}
+      val c2: Counter at {outer} = makeCounter {outer}
+      val l = Cons[Counter at {inner, outer}](c1, Cons(c2, Nil())); // works
+
+      // Doesnt work since we implement "SimplerSub"
+      // We check ?A <: Counter at {inner}
+      // this immediately creates the substitution {?A !-> Counter at {inner}}
+      // Hence, later the check ?A <: Counter at {outer} fails.
+      // val l2 = Cons(c1, Cons(c2, Nil()));
+
+      val _ = {
+        val c1 = makeCounter {inner} // infers now {inner,outer} on c1
+        val c2: Counter at {outer} = makeCounter {outer}
+        val l = Cons(c1, Cons(c2, Nil())); // works
+        ()
+      };
+
+      // also works since boxing is now moved
+      val _ = {
+        def c1 = makeCounter {inner}
+        def c2 = makeCounter {outer}
+        val l = Cons(c1, Cons(c2, Nil()));
+        ()
+      };
+      ()
+    }
+  }
+}
+
+def testLifted() = try {
+  def obj = new Counter {
+    def get() = do Get()
+    def inc() = ()
+  };
+  // should print 42
+  println(obj.get())
+
+  // shouldn't affect the result:
+  println(underHandler { obj.get() })
+
+  // shouldn't affect the result:
+  println(try { obj.get() } with Get { resume(21) })
+} with Get { println("before"); resume(42); println("after") }
+
+def testLifted2() = try {
+
+  val o = underHandler {
+    def obj = new Counter {
+      def get() = do Get()
+      def inc() = ()
+    };
+    obj
+  }
+  // should print 42
+  println(o.get())
+
+  // shouldn't affect the result:
+  println(underHandler { o.get() })
+} with Get { println("before"); resume(42); println("after") }
+
+def main() = {
+
+  def outer = this
+
+  val leaked = region myregion {
+    def c1 = makeCounter {outer}
+
+    println(c1.get())
+    c1.inc()
+    println(c1.get())
+    c1.inc()
+    println(c1.get())
+
+    val boxed = c1;
+    boxed
+  };
+
+  twoCounters()
+
+  testLifted();
+
+  // doesn't work for the Chez Scheme Lift Backend, yet.
+  // testLifted2();
+
+  ()
+}
