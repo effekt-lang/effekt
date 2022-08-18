@@ -637,11 +637,14 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case d @ source.ValDef(id, annot, binding) =>
         val Result(t, effBinding) = d.symbol.tpe match {
           case Some(t) =>
-            binding checkAgainst t
+            val Result(_, eff) = binding checkAgainst t
+            // use annotated, not inferred type
+            Result(t, eff)
           case None => checkStmt(binding, None)
         }
 
         Context.bind(d.symbol, t)
+
         Result((), effBinding)
 
       case d @ source.VarDef(id, annot, reg, binding) =>
