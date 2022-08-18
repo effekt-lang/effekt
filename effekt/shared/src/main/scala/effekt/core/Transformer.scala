@@ -261,7 +261,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val cap = h.capability.get.symbol
         core.BlockParam(cap, cap.tpe)
       }
-      val body = BlockLit(caps, transform(prog))
+      val body = BlockLit(caps, insertBindings { transform(prog) })
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
@@ -290,7 +290,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Continuations cannot be regions")
       }
       val cap = core.BlockParam(sym, tpe)
-      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), transform(body))))
+      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), insertBindings { transform(body) })))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)
