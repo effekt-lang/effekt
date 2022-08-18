@@ -100,7 +100,19 @@ trait ChezSchemeBase extends ChezSchemePrinterUtils {
   def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
     toDoc(m.defs, true)
 
-  def toDoc(b: Block)(implicit C: Context): Doc
+  def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
+    case BlockVar(v) =>
+      nameRef(v)
+    case BlockLit(ps, body) =>
+      schemeLambda(ps map toDoc, toDoc(body, false))
+    case Member(b, id) =>
+      schemeCall(nameRef(id), toDoc(b))
+    case Extern(ps, body) =>
+      schemeLambda(ps map toDoc, body)
+    case Unbox(e) => toDoc(e)
+    case New(Handler(id, clauses)) =>
+      schemeCall("make-" <> nameRef(id), clauses.map { case (_, block) => toDoc(block) })
+  })
 
   def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
 
@@ -151,7 +163,7 @@ trait ChezSchemeBase extends ChezSchemePrinterUtils {
       defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
 
     case Def(id, tpe, binding, body) =>
-      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body, false))))
+      schemeLet(nameDef(id), toDoc(binding)) { toDoc(body, false) }
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -178,13 +190,13 @@ trait ChezSchemeBase extends ChezSchemePrinterUtils {
       toDoc(binding, false) <> line <> toDocInBlock(body)
 
     case Val(id, tpe, binding, body) =>
-      parens("let" <+> parens(brackets(nameDef(id) <+> toDocInBlock(binding))) <+> group(nest(line <> toDoc(body, false))))
+      schemeLet(nameDef(id), toDocInBlock(binding)) { toDoc(body, false) }
 
     case Let(id, tpe, binding, body) if toplevel =>
       defineValue(nameDef(id), toDoc(binding)) <> line <> toDoc(body, toplevel)
 
     case Let(id, tpe, binding, body) =>
-      parens("let" <+> parens(brackets(nameDef(id) <+> toDoc(binding))) <+> group(nest(line <> toDoc(body, false))))
+      schemeLet(nameDef(id), toDoc(binding)) { toDoc(body, false) }
 
     // do not return on the toplevel...
     case Ret(e) if toplevel => ""

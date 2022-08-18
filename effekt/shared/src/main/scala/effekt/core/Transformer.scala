@@ -140,7 +140,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Member(transformAsBlock(receiver), s.definition)
 
     case s @ source.New(h @ source.Implementation(tpe, members)) =>
-      New(Handler(h.definition, members map {
+      // we need to establish a canonical ordering of methods
+      // we use the order in which they are declared in the signature (like with handlers)
+      val clauses = members.map { cl => (cl.definition, cl) }.toMap
+      val sig = h.definition
+
+      New(Handler(sig, sig.ops.map(clauses.apply).map {
         case op @ source.OpClause(id, tparams, vparams, body, resume) =>
           val vps = vparams map transform
           // currently the don't take block params
