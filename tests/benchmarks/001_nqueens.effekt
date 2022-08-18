@@ -12,15 +12,6 @@ def range(a: Int, b: Int) : List[Int] = {
     }
 }
 
-
-def range(a: Int, b: Int) : List[Int] = {
-    if (a > b) {
-        Nil()
-    } else {
-        Cons(a, range(a+1, b))
-    }
-}
-
 def sum(xs: List[Int]): Int = xs match {
     case Nil() => 0
     case Cons(x, xs) => x + sum(xs)
