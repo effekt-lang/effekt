@@ -136,7 +136,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         }
 
         given Captures = inferredCap
-        val Result(inferredTpe, inferredEff) = checkBlockArgument(block, expectedTpe)
+        val Result(inferredTpe, inferredEff) = checkExprAsBlock(block, expectedTpe)
         val tpe = Context.unification(BoxedType(inferredTpe, inferredCap))
         expected.map(Context.unification.apply) foreach { matchExpected(tpe, _) }
         Result(tpe, inferredEff)
@@ -250,8 +250,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         Result(ret, (effs -- handled) ++ handlerEffs)
 
-      case tree @ source.New(impl) => Context.abort("Expected an expression, but got an object implementation (which is a block).")
-
       case tree @ source.Match(sc, clauses) =>
 
         // (1) Check scrutinee
@@ -277,6 +275,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.Hole(stmt) =>
         val Result(tpe, effs) = checkStmt(stmt, None)
         Result(expected.getOrElse(TBottom), Pure)
+
+      case tree : source.New => Context.abort("Expected an expression, but got an object implementation (which is a block).")
+      case tree : source.BlockLiteral => Context.abort("Expected an expression, but got a block literal.")
     }
 
   /**
@@ -408,15 +409,22 @@ object Typer extends Phase[NameResolved, Typechecked] {
       case source.Var(id) => id.symbol match {
         case b: BlockSymbol =>
           val (tpe, capt) = Context.lookup(b)
+          expected.foreach(exp => matchExpected(tpe, exp))
           usingCapture(capt)
           Result(tpe, Pure)
         case e: ValueSymbol =>
-          Context.abort("Expected block, but got an expression.")
+          Context.abort(pretty"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
       }
 
       case source.New(impl) => checkImplementation(impl, None)
 
       case s : source.MethodCall => sys error "Nested capability selection not yet supported"
+
+      case arg: source.BlockLiteral => expected match {
+        case Some(tpe: FunctionType) => checkFunctionArgument(arg, tpe)
+        case Some(tpe) => Context.abort(pretty"Block literal has a function type, but expected type is: ${tpe}")
+        case None => inferFunctionArgument(arg)
+      }
 
       case other => Context.abort("Expected block, but got an expression.")
     }
@@ -696,69 +704,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   //<editor-fold desc="Function calls, arguments, and parameters">
 
-  def checkBlockArgument(arg: source.BlockArg, expected: Option[BlockType])(using Context, Captures): Result[BlockType] =
-    (arg, expected) match {
-      // Use expected type, if present
-      case (arg: source.FunctionArg, Some(tpe: FunctionType)) =>
-        checkFunctionArgument(arg, tpe)
-      case (arg@source.FunctionArg(tparams, vparams, bparams, body), None) => Context in {
-        val tps = tparams.map { p => p.symbol.asTypeVar }
-        val vps = vparams.map { p =>
-          val param = p.symbol
-          val tpe = p.symbol.tpe.getOrElse {
-            Context.abort("Expected type needs to be known for function arguments at the moment.")
-          }
-          Context.bind(param, tpe)
-          tpe
-        }
-        val bps = bparams.map { p =>
-          val param = p.symbol
-          val tpe = param.tpe
-          Context.bind(param, tpe)
-          tpe
-        }
-
-        val selfRegion = Context.getSelfRegion(arg)
-
-        // like with non-annotated function definitions, we need to use a separate unification variable to
-        // subtract bound (but inferred) capabilities later.
-        val inferredCapture = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
-        val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(arg) {
-          given Captures = inferredCapture
-          Context.withRegion(selfRegion) { Context in { checkStmt(body, None) } }
-        }
-
-        // The order of effects annotated to the function is the canonical ordering for capabilities
-        val capabilities = effs.controlEffects.map { caps.apply }
-        Context.bindCapabilities(arg, capabilities)
-
-        val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
-
-        val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
-
-        // Like with functions, bound parameters and capabilities are not closed over
-        usingCaptureWithout(inferredCapture) {
-          (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion)
-        }
-
-        Result(funType, Pure)
-      }
-      case (rg@source.InterfaceArg(id), None) =>
-        val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
-        usingCapture(capt)
-        Result(btpe, Pure)
-      case (rg@source.InterfaceArg(id), Some(expected)) =>
-        if (!id.symbol.isInstanceOf[BlockSymbol]) Context.at(rg) {
-          Context.abort(pretty"Expected a block variable, but ${id} is a value. Maybe use explicit syntax: { () => ${id} }")
-        }
-        val (btpe, capt) = Context.lookup(id.symbol.asBlockSymbol)
-        matchExpected(btpe, expected)
-        usingCapture(capt)
-        Result(btpe, Pure)
-      case _ =>
-        Context.abort("Can only type check function arguments, right now. Not capability arguments.")
-    }
-
   // Example.
   //   BlockParam: def foo { f: Int => String / Print }
   //   BlockArg: foo { n => println("hello" + n) }
@@ -766,9 +711,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
   //   BlockArg: foo { (n: Int) => println("hello" + n) }
   //
   // TODO For now we assume that handled effects can not show up in the return type of the block argument.
-  def checkFunctionArgument(arg: source.FunctionArg, expected: FunctionType)(using Context, Captures): Result[BlockType] = Context.focusing(arg) {
+  def checkFunctionArgument(arg: source.BlockLiteral, expected: FunctionType)(using Context, Captures): Result[BlockType] = Context.focusing(arg) {
 
-    case decl @ source.FunctionArg(tparams, vparams, bparams, body) =>
+    case decl @ source.BlockLiteral(tparams, vparams, bparams, body) =>
 
       // (1) Apply what we already know.
       val bt @ FunctionType(tps, cps, vps, bps, tpe1, effs) = expected
@@ -840,6 +785,51 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Result(tpe, bodyEffs -- effects)
   }
 
+  def inferFunctionArgument(arg: source.BlockLiteral)(using Context, Captures): Result[BlockType] = Context.focusing(arg) {
+    case arg @ source.BlockLiteral(tparams, vparams, bparams, body) => Context in {
+      val tps = tparams.map { p => p.symbol.asTypeVar }
+      val vps = vparams.map { p =>
+        val param = p.symbol
+        val tpe = p.symbol.tpe.getOrElse {
+          Context.abort("Expected type needs to be known for function arguments at the moment.")
+        }
+        Context.bind(param, tpe)
+        tpe
+      }
+      val bps = bparams.map { p =>
+        val param = p.symbol
+        val tpe = param.tpe
+        Context.bind(param, tpe)
+        tpe
+      }
+
+      val selfRegion = Context.getSelfRegion(arg)
+
+      // like with non-annotated function definitions, we need to use a separate unification variable to
+      // subtract bound (but inferred) capabilities later.
+      val inferredCapture = Context.freshCaptVar(CaptUnificationVar.AnonymousFunctionRegion(arg))
+      val (Result(tpe, effs), caps) = Context.bindingAllCapabilities(arg) {
+        given Captures = inferredCapture
+        Context.withRegion(selfRegion) { Context in { checkStmt(body, None) } }
+      }
+
+      // The order of effects annotated to the function is the canonical ordering for capabilities
+      val capabilities = effs.controlEffects.map { caps.apply }
+      Context.bindCapabilities(arg, capabilities)
+
+      val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
+
+      val funType = FunctionType(tps, cps, vps, bps, tpe, effs.toEffects)
+
+      // Like with functions, bound parameters and capabilities are not closed over
+      usingCaptureWithout(inferredCapture) {
+        (bparams.map(_.symbol) ++ capabilities).map(_.capture) ++ List(selfRegion)
+      }
+
+      Result(funType, Pure)
+    }
+  }
+
   def findFunctionTypeFor(sym: BlockSymbol)(using Context): (FunctionType, Captures) = sym match {
     // capture of effect operations is dealt with by type checking Do or MethodCall
     case b: Operation => (Context.lookupFunctionType(b), CaptureSet.empty)
@@ -868,7 +858,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     id: source.IdRef,
     targs: List[ValueType],
     vargs: List[source.Term],
-    bargs: List[source.BlockArg],
+    bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
     val sym = id.symbol
@@ -906,7 +896,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     id: source.IdRef,
     targs: List[ValueType],
     vargs: List[source.Term],
-    bargs: List[source.BlockArg],
+    bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
 
@@ -996,7 +986,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     funTpe: FunctionType,
     targs: List[ValueType],
     vargs: List[source.Term],
-    bargs: List[source.BlockArg],
+    bargs: List[source.Term],
     expected: Option[ValueType]
   )(using Context, Captures): Result[ValueType] = {
 
@@ -1026,7 +1016,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     (bps zip bargs zip captArgs) foreach { case ((tpe, expr), capt) =>
       usingCapture(capt)
       given Captures = capt
-      val Result(t, eff) = checkBlockArgument(expr, Some(tpe))
+      val Result(t, eff) = checkExprAsBlock(expr, Some(tpe))
       effs = effs ++ eff
     }
 

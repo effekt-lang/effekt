@@ -111,6 +111,18 @@ object Wellformedness extends Visit[WFContext] {
       Context.at(tree) { checkExhaustivity(tpe, clauses.map { _.pattern }) }
       query(scrutinee)
       clauses foreach { cl => scoped { query(cl) }}
+
+    case tree @ source.BlockLiteral(tps, vps, bps, body) =>
+      val selfRegion = Context.getSelfRegion(tree)
+      val returnType = Context.inferredTypeOf(body)
+
+      if (freeCapture(returnType) contains selfRegion) {
+        Context.at(body) {
+          Context.error(s"The return type ${returnType} of the function body must not mention the region of the function itself.")
+        }
+      }
+
+      scoped { query(body) }
   }
 
   override def defn(using Context, WFContext) = {
@@ -135,20 +147,6 @@ object Wellformedness extends Visit[WFContext] {
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       val effectDecl = d.symbol
       withEffect(effectDecl)
-  }
-
-  override def query(b: source.FunctionArg)(using Context, WFContext): Unit = visit(b) {
-    case tree @ source.FunctionArg(tps, vps, bps, body) =>
-      val selfRegion = Context.getSelfRegion(tree)
-      val returnType = Context.inferredTypeOf(body)
-
-      if (freeCapture(returnType) contains selfRegion) {
-        Context.at(body) {
-          Context.error(s"The return type ${returnType} of the function body must not mention the region of the function itself.")
-        }
-      }
-
-      scoped { query(body) }
   }
 
   /**

@@ -21,11 +21,6 @@ import effekt.symbols.Symbol
  *   |  |- BlockParam
  *   |  |- CapabilityParam (*)
  *   |
- *   |- ArgSection
- *   |  |- ValueArgs
- *   |  |- BlockArg
- *   |  |- CapabilityArg (*)
- *   |
  *   |- Def
  *   |  |- FunDef
  *   |  |- ValDef
@@ -46,7 +41,7 @@ import effekt.symbols.Symbol
  *   |  |- BlockStmt
  *   |  |- Return
  *   |
- *   |- Expr
+ *   |- Term
  *   |  |- Var
  *   |  |- Assign
  *   |  |- Literal
@@ -158,11 +153,11 @@ sealed trait Param extends Definition
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Param { type symbol = symbols.ValueParam }
 case class BlockParam(id: IdDef, tpe: BlockType) extends Param { type symbol = symbols.BlockParam }
 
-sealed trait BlockArg extends Tree
-case class FunctionArg(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
-case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
-  type symbol = symbols.BlockParam
-}
+/**
+ * Lambdas / function literals (e.g., { x => x + 1 })
+ */
+case class BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
+
 
 /**
  * Global and local definitions
@@ -268,7 +263,7 @@ case class StringLit(value: String) extends Literal[String]
 /**
  * Represents a first-class function
  */
-case class Box(capt: Option[CaptureSet], block: BlockArg) extends Term
+case class Box(capt: Option[CaptureSet], block: Term) extends Term
 
 case class Unbox(term: Term) extends Term
 
@@ -298,7 +293,7 @@ case class Do(effect: Option[InterfaceType], id: IdRef, targs: List[ValueType], 
 /**
  * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
  */
-case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
+case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term
 
 /**
  * Models:
@@ -307,7 +302,7 @@ case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], b
  *
  * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
  */
-case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term, Reference {
+case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference {
   type symbol = symbols.TermSymbol
 }
 
@@ -574,6 +569,9 @@ object Tree {
       case New(impl) =>
         New(rewrite(impl))
 
+      case BlockLiteral(tps, vps, bps, body) =>
+        BlockLiteral(tps, vps, bps, rewrite(body))
+
       case Region(name, body) =>
         Region(name, rewrite(body))
 
@@ -628,15 +626,6 @@ object Tree {
 
       case BlockStmt(b) =>
         BlockStmt(rewrite(b))
-    }
-
-    def rewrite(b: BlockArg)(using C: Context): BlockArg = b match {
-      case b: FunctionArg  => rewrite(b)
-      case b: InterfaceArg => b
-    }
-
-    def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
-      case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
     }
 
     def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
@@ -732,6 +721,9 @@ object Tree {
       case New(impl) =>
         query(impl)
 
+      case BlockLiteral(tps, vps, bps, body) =>
+        scoped { query(body) }
+
       case Region(name, body) =>
         query(body)
 
@@ -786,15 +778,6 @@ object Tree {
 
       case BlockStmt(b) =>
         scoped { query(b) }
-    }
-
-    def query(b: BlockArg)(using Context, Ctx): Res = b match {
-      case b: FunctionArg  => query(b)
-      case b: InterfaceArg => empty
-    }
-
-    def query(b: FunctionArg)(using Context, Ctx): Res = b match {
-      case FunctionArg(tps, vps, bps, body) => scoped { query(body) }
     }
 
     def query(h: Handler)(using Context, Ctx): Res = visit(h) {

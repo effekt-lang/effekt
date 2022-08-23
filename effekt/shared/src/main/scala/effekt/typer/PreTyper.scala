@@ -43,6 +43,7 @@ class BoxUnboxInference {
 
     case Unbox(t) => Unbox(rewriteAsExpr(t))
     case New(impl) => New(rewrite(impl))
+    case BlockLiteral(tps, vps, bps, body) => BlockLiteral(tps, vps, bps, rewrite(body))
     case other => Unbox(rewriteAsExpr(other))
   }
 
@@ -53,10 +54,12 @@ class BoxUnboxInference {
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.VarBinder) => v
-      case sym: BlockSymbol => Box(None, InterfaceArg(v.id).inheritPosition(v)).inheritPosition(v)
+      case sym: BlockSymbol => Box(None, v).inheritPosition(v)
     }
 
-    case n: New => C.panic("Not implemented, yet.") // Box(None, rewriteAsBlock(n)).inheritPosition(n)
+    case n: New => Box(None, rewriteAsBlock(n)).inheritPosition(n)
+
+    case b: BlockLiteral => Box(None, rewriteAsBlock(b)).inheritPosition(b)
 
     case l: Literal[t]            => l
 
@@ -82,11 +85,11 @@ class BoxUnboxInference {
       Do(effect, id, targs, vargs.map(rewriteAsExpr))
 
     case Call(fun, targs, vargs, bargs) =>
-      Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewrite))
+      Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock))
 
     case m @ MethodCall(receiver, id, targs, vargs, bargs) =>
       val vargsTransformed = vargs.map(rewriteAsExpr)
-      val bargsTransformed = bargs.map(rewrite)
+      val bargsTransformed = bargs.map(rewriteAsBlock)
 
       val syms = m.definition match {
         // an overloaded call target
@@ -117,7 +120,7 @@ class BoxUnboxInference {
       Hole(rewrite(stmts))
 
     case Box(c, b) =>
-      Box(c, rewrite(b))
+      Box(c, rewriteAsBlock(b))
   }
 
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
@@ -168,15 +171,6 @@ class BoxUnboxInference {
 
     case BlockStmt(b) =>
       BlockStmt(rewrite(b))
-  }
-
-  def rewrite(b: BlockArg)(using Context): BlockArg = b match {
-    case b: FunctionArg  => rewrite(b)
-    case b: InterfaceArg => b
-  }
-
-  def rewrite(b: FunctionArg)(using Context): FunctionArg =  visit(b) {
-    case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
   }
 
   def rewrite(h: Handler)(using Context): Handler = visit(h) {

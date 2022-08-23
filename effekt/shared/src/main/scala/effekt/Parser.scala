@@ -346,35 +346,30 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
    * Arguments
    */
 
-  lazy val maybeBlockArgs: P[List[BlockArg]] =
+  lazy val maybeBlockArgs: P[List[Term]] =
     many(blockArg)
 
-  lazy val blockArgs: P[List[BlockArg]] =
+  lazy val blockArgs: P[List[Term]] =
     some(blockArg)
 
-  lazy val blockArg: P[BlockArg] =
-    ( `{` ~> idRef <~ `}` ^^ { case id => source.InterfaceArg(id) }
+  lazy val blockArg: P[Term] =
+    ( `{` ~> idRef <~ `}` ^^ Var.apply
     | functionArg
     )
 
-  lazy val blockDefinition: P[BlockArg] =
-    ( idRef ^^ { case id => source.InterfaceArg(id) }
-    | functionArg
-    )
-
-  lazy val functionArg: P[FunctionArg] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(Nil, ps, Nil, body) }
+  lazy val functionArg: P[BlockLiteral] =
+    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLiteral(Nil, ps, Nil, body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
-      FunctionArg(
+      BlockLiteral(
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
         Return(Match(Var(IdRef(name)), cs))) withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => FunctionArg(Nil, Nil, Nil, s) }
+    | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) }
     | failure("Expected a block argument")
     )
 
@@ -420,12 +415,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
           (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, params, Nil, body)) withPositionOf params))
+          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, Nil, Nil, body)) withPositionOf id))
+          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
        }
     )
 
@@ -516,7 +511,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val funCall: P[Term] =
     ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply
-    | callTarget ~ maybeTypeArgs ~ valueArgs ~ success(List.empty[BlockArg]) ^^ Call.apply
+    | callTarget ~ maybeTypeArgs ~ valueArgs ~ success(List.empty[Term]) ^^ Call.apply
     | callTarget ~ maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs ^^ Call.apply
     )
 
@@ -548,7 +543,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         Implementation(effect, clauses)
       }
     | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
+      case effect ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
         Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
       }
@@ -599,7 +594,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     double | int | bool | unit | string
 
   lazy val lambdaExpr: P[Box] =
-    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, FunctionArg(Nil, ps, Nil, body)) }
+    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
 
   lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }

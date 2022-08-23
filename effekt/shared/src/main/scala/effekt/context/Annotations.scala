@@ -230,7 +230,7 @@ object Annotations {
 
   /**
    * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]],
-   *   [[source.VarDef]], or [[source.FunctionArg]].
+   *   [[source.VarDef]], or [[source.BlockLiteral]].
    *
    * Inferred by typer, used by elaboration.
    */

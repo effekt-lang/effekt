@@ -369,7 +369,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case f @ source.FunctionArg(tparams, vparams, bparams, stmt) =>
+    case f @ source.BlockLiteral(tparams, vparams, bparams, stmt) =>
       Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve

@@ -158,6 +158,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Unbox(b) =>
       Unbox(transformAsExpr(b))
 
+    case source.BlockLiteral(tps, vps, bps, body) =>
+      BlockLit((vps map transform) ++ (bps map transform), transform(body))
+
     case _ =>
       transformUnbox(tree)
   }
@@ -188,11 +191,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case l: source.Literal[t] => transformLit(l)
 
     case l @ source.Box(capt, block) =>
-      Box(transform(block))
+      Box(transformAsBlock(block))
 
     case source.Unbox(b) => transformBox(tree)
 
     case source.New(impl) => transformBox(tree)
+
+    case source.BlockLiteral(tps, vps, bps, body) => transformBox(tree)
 
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)
@@ -225,7 +230,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = transformAsBlock(receiver)
       val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
-      val blockArgs = bargs.map(transform)
+      val blockArgs = bargs.map(transformAsBlock)
 
       c.definition match {
         case sym if sym == TState.put || sym == TState.get =>
@@ -242,7 +247,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsExpr(expr)
       val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
-      val blockArgs = bargs.map(transform)
+      val blockArgs = bargs.map(transformAsBlock)
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
         Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
@@ -299,11 +304,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   }
 
-  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.BlockArg])(using Context): Expr = {
+  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
     val targs = Context.typeArguments(call)
 
-    val as = vargs.map(transformAsExpr) ++ bargs.map(transform)
+    val as = vargs.map(transformAsExpr) ++ bargs.map(transformAsBlock)
 
     sym match {
       case f: BuiltinFunction if ExternFlag.directStyle(f.purity) =>
@@ -321,16 +326,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: ValueSymbol =>
         Context.bind(Context.inferredTypeOf(call), App(Unbox(ValueVar(f)), targs, as))
     }
-  }
-
-  def transform(block: source.BlockArg)(using Context): core.Block = block match {
-    case source.FunctionArg(tps, vps, bps, body) =>
-      BlockLit((vps map transform) ++ (bps map transform), transform(body))
-    case c @ source.InterfaceArg(id) => BlockVar(c.definition)
-  }
-
-  def transform(block: source.FunctionArg)(using Context): core.BlockLit = block match {
-    case source.FunctionArg(tps, vps, bps, body) => BlockLit((vps map transform) ++ (bps map transform), transform(body))
   }
 
   def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol)
