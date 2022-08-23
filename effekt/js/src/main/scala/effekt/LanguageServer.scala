@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.generator.JavaScriptVirtual
+import effekt.generator.js.JavaScriptVirtual
 import effekt.util.PlainMessaging
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*

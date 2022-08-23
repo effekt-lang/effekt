@@ -10,6 +10,7 @@ import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.Backend
+import effekt.generator.js.JavaScriptMonadic
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -154,7 +155,7 @@ trait Compiler {
    * Backend
    */
   def Backend(implicit C: Context): Backend = C.config.backend() match {
-    case "js"           => effekt.generator.JavaScriptMonadic
+    case "js"           => JavaScriptMonadic
     case "chez-callcc"  => effekt.generator.ChezSchemeCallCC
     case "chez-monadic" => effekt.generator.ChezSchemeMonadic
     case "chez-lift"    => effekt.generator.ChezSchemeLift

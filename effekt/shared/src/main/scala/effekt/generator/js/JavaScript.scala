@@ -1,14 +1,16 @@
 package effekt
 package generator
+package js
 
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.*
 import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, Wildcard }
+import effekt.util.paths.*
+import effekt.{ Compiled, CoreTransformed, symbols }
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
-import effekt.util.paths.*
 
 import scala.language.implicitConversions
 

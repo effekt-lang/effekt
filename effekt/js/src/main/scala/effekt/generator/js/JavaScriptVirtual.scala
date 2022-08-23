@@ -1,7 +1,10 @@
-package effekt.generator
+package effekt
+package generator
+package js
 
 import effekt.context.Context
 import effekt.core.ModuleDecl
+import effekt.generator.js.{ JavaScript, JavaScriptPrinter }
 import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
