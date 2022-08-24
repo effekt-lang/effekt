@@ -14,13 +14,19 @@ import kiama.util.Source
 
 import scala.language.implicitConversions
 
+// used by the website
+object JavaScriptVirtual extends JavaScript {
+  def jsModuleSystem(module: js.Module): List[js.Stmt] = module.virtual
+}
+
+// used by REPL and compiler
 object JavaScriptMonadic extends JavaScript {
-  val prettyPrinter: JavaScriptPrinter = new JavaScriptPrinter {}
+  def jsModuleSystem(module: js.Module): List[js.Stmt] = module.commonjs
 }
 
 trait JavaScript extends Backend {
 
-  def prettyPrinter: JavaScriptPrinter
+  def jsModuleSystem(module: js.Module): List[js.Stmt]
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
@@ -37,13 +43,15 @@ trait JavaScript extends Backend {
    * Entrypoint used by the LSP server to show the compiled output
    */
   def compileSeparate(input: CoreTransformed)(implicit C: Context) =
-    C.using(module = input.mod) { Some(prettyPrinter.format(input.core)) }
+    C.using(module = input.mod) {
+      Some(js.PrettyPrinter.format(jsModuleSystem(toJS(input.core))))
+    }
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: Module)(implicit C: Context): String =
-    (C.config.outputPath() / prettyPrinter.moduleFile(m.path)).unixPath
+    (C.config.outputPath() / jsModuleFile(m.path)).unixPath
 
   /**
    * Compiles only the given module, does not compile dependencies
@@ -54,306 +62,228 @@ trait JavaScript extends Backend {
     compileSeparate(in).map { doc =>
       (path(in.mod), doc)
     }
-}
 
-/**
- * A JavaScript PrettyPrinter that generates code using the
- * control monad.
- */
-trait JavaScriptPrinter extends JavaScriptBase {
 
-  def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v) =>
-      nameRef(v)
-    case BlockLit(ps, body) =>
-      jsLambda(ps map toDoc, toDoc(body))
-    case Member(b, id) =>
-      toDoc(b) <> "." <> nameRef(id)
-    case Extern(ps, body) =>
-      jsLambda(ps map toDoc, body)
-    case Unbox(e)     => toDoc(e)
-    case New(handler) => toDoc(handler)
-  })
-
-  // pretty print the statement in a javascript expression context
-  // not all statement types can be printed in this context!
-  def toDocExpr(s: Stmt)(implicit C: Context): Doc = s match {
-    case Val(Wildcard(_), tpe, binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(jsLambda(Nil, toDoc(body)))
-
-    case Val(id, tpe, binding, body) =>
-      toDocDelayed(binding) <> ".then" <> parens(jsLambda(List(nameDef(id)), toDoc(body)))
-
-    case App(b, targs, args) =>
-      jsCall(toDoc(b), args map argToDoc)
-
-    case If(cond, thn, els) =>
-      parens(parens(toDoc(cond)) <+> "?" <+> toDocDelayed(thn) <+> ":" <+> toDocDelayed(els))
-
-    case While(cond, body) =>
-      jsCall(
-        "$effekt._while",
-        jsLambda(Nil, toDoc(cond)),
-        jsLambda(Nil, toDoc(body))
-      )
-
-    case Ret(e) =>
-      jsCall("$effekt.pure", toDoc(e))
-
-    case Handle(body, hs) =>
-      val handlers = hs.map(toDoc)
-      val cs = parens(jsArray(handlers))
-      "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
-
-    case Region(body) =>
-      jsCall("$effekt.withRegion", toDoc(body))
-
-    case Match(sc, clauses) =>
-      val cs = jsArray(clauses map {
-        case (pattern, b) => jsObject(
-          text("pattern") -> toDoc(pattern),
-          text("exec") -> toDoc(b)
-        )
-      })
-      jsCall("$effekt.match", toDoc(sc), cs)
-
-    case Hole =>
-      jsCall("$effekt.hole", Nil)
-
-    case other => jsCall(parens(jsLambda(Nil, jsBlock(toDocStmt(other)))), Nil)
-  }
-
-  def toDoc(handler: Handler)(using Context): Doc =
-    jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) })
-}
-
-trait JavaScriptBase extends ParenPrettyPrinter {
-
-  def moduleFile(path: String): String = path.replace('/', '_') + ".js"
-
-  def format(t: ModuleDecl)(implicit C: Context): Document =
-    pretty(commonjs(t))
-
-  val prelude = "if (typeof define !== 'function') { var define = require('amdefine')(module) }"
-
-  val emptyline: Doc = line <> line
-
-  def amdefine(m: ModuleDecl)(implicit C: Context): Doc = {
-    val deps = m.imports
-    val imports = brackets(hsep(deps.map { i => "'./" + moduleFile(i) + "'" }, comma))
-    prelude <> line <> "define" <>
-      parens(imports <> comma <+> jsFunction("", deps.map { d => jsModuleName(d) }, toDoc(m)))
-  }
-
-  def commonjs(m: ModuleDecl)(implicit C: Context): Doc = {
-    val deps = m.imports
-    val imports = vsep(deps.map { i =>
-      "const" <+> jsModuleName(i) <+> "=" <+> jsCall("require", "'./" + moduleFile(i) + "'")
-    }, semi)
-
-    imports <> emptyline <> toDoc(m)
-  }
-
-  def toDoc(m: ModuleDecl)(implicit C: Context): Doc =
-    "var" <+> jsModuleName(m.path) <+> "=" <+> "{};" <> emptyline <> toDocTopLevel(m.defs) <> emptyline <> jsCall(
-      "module.exports = Object.assign",
-      jsModuleName(m.path),
-      jsObject(m.exports.map { e => nameDef(e) -> nameDef(e) })
-    )
-
-  def toDoc(b: Block)(implicit C: Context): Doc
-
-  def toDoc(p: Param)(implicit C: Context): Doc = link(p, nameDef(p.id))
-
-  def toDoc(n: Name)(implicit C: Context): Doc = link(n, n.toString)
-
-  def nameDef(id: Symbol)(implicit C: Context): Doc = id match {
-    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
-    case _: symbols.Operation => "op$" + id.name.toString
-    case _ => jsEscape(id.name.toString)
-  }
-
-  def nameRef(id: Symbol)(implicit C: Context): Doc = id match {
-    case _: symbols.InterfaceType => toDoc(id.name)
-    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
-    case _: symbols.Operation => "op$" + id.name.toString
-    case _: symbols.Field => jsEscape(id.name.name)
-    case _ => jsEscape(jsNameRef(id.name))
-  }
-
-  def toDoc(e: Expr)(implicit C: Context): Doc = link(e, e match {
-    case UnitLit()     => "$effekt.unit"
-    case StringLit(s)  => jsString(s)
-    case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => nameRef(id)
-
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr  => toDoc(e)
-      case b: Block => toDoc(b)
-    }, comma))
-
-    case Select(b, field) =>
-      toDoc(b) <> "." <> nameRef(field)
-
-    case Box(e) => toDoc(e)
-
-    case Run(s) => toDocDelayed(s) <> ".run()"
-  })
-
-  def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
-  }
-
-  def toDoc(s: Stmt)(implicit C: Context): Doc =
-    if (requiresBlock(s))
-      link(s, jsBlock(toDocStmt(s)))
-    else
-      link(s, toDocExpr(s))
-
-  def toDocDelayed(s: Stmt)(implicit C: Context): Doc =
-    if (requiresBlock(s))
-      jsCall("$effekt.delayed", jsLambda(Nil, jsBlock(toDocStmt(s))))
-    else
-      parens(toDocExpr(s))
-
-  // pretty print the statement in a javascript expression context
-  // not all statement types can be printed in this context!
-  def toDocExpr(s: Stmt)(implicit C: Context): Doc
-
-  def toDoc(p: Pattern)(implicit C: Context): Doc = p match {
-    case IgnorePattern()   => "$effekt.ignore"
-    case AnyPattern()      => "$effekt.any"
-    case LiteralPattern(l) => jsCall("$effekt.literal", toDoc(l))
-    case TagPattern(id, ps) =>
-      val tag = jsString(nameDef(id))
-      val childMatchers = ps map { p => toDoc(p) }
-      jsCall("$effekt.tagged", tag :: childMatchers)
-  }
-
-  def toDocStmt(s: Stmt)(implicit C: Context): Doc = s match {
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocStmt(rest)
-
-    case Def(id, tpe, Extern(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
-
-    case Def(id, tpe, block, rest) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocStmt(rest)
-
-    case Data(did, ctors, rest) =>
-      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
-      vsep(cs, ";") <> ";" <> line <> line <> toDocStmt(rest)
-
-    case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> ";" <> emptyline <> toDocStmt(rest)
-
-    case Include(contents, rest) =>
-      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocStmt(rest)
-
-    case Let(Wildcard(_), tpe, binding, body) =>
-      toDoc(binding) <> ";" <> emptyline <> toDocStmt(body)
-
-    case Let(id, tpe, binding, body) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ";" <> emptyline <> toDocStmt(body)
-
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      "const" <+> nameDef(id) <+> "=" <+> jsCall("$effekt.fresh", toDoc(init)) <> ";" <> emptyline <> toDocStmt(body)
-
-    case State(id, init, region, body) =>
-      "const" <+> nameDef(id) <+> "=" <+> jsCall(nameRef(region) <> ".fresh", toDoc(init)) <> ";" <> emptyline <> toDocStmt(body)
-
-    case other => "return" <+> toDocExpr(other)
-  }
-
-  def generateConstructor(ctor: symbols.Record)(implicit C: Context): Doc =
-    generateConstructor(ctor, ctor.fields)
-
-  def generateConstructor(ctor: Symbol, fields: List[Symbol])(implicit C: Context): Doc = {
-    jsFunction(nameDef(ctor), fields.map { f => nameDef(f) }, "return" <+> jsObject(List(
-      text("__tag") -> jsString(nameDef(ctor)),
-      text("__data") -> jsArray(fields map { f => nameDef(f) }),
-    ) ++ fields.map { f =>
-        (nameDef(f), nameDef(f))
-      }))
-  }
-
-  /**
-   * This is an alternative statement printer, rendering toplevel value bindings
-   * as variables, instead of using the monadic bind.
-   */
-  def toDocTopLevel(s: Stmt)(implicit C: Context): Doc = s match {
-    case Val(id, tpe, binding, body) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ".run()" <> ";" <> emptyline <> toDocTopLevel(body)
-
-    case Let(id, tpe, binding, body) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(binding) <> ";" <> emptyline <> toDocTopLevel(body)
-
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, toDocStmt(body)) <> emptyline <> toDocTopLevel(rest)
-
-    case Def(id, tpe, Extern(ps, body), rest) =>
-      jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
-
-    case Def(id, tpe, block, rest) =>
-      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocTopLevel(rest)
-
-    case Data(did, ctors, rest) =>
-      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
-      vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
-
-    case Record(did, fields, rest) =>
-      generateConstructor(did, fields) <> ";" <> emptyline <> toDocTopLevel(rest)
-
-    case Include(contents, rest) =>
-      line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
-
-    case Ret(e) => ""
-
-    case other => toDocExpr(other)
-  }
+  // Names
+  // -----
 
   val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this")
-  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
-  def jsNameRef(name: Name)(implicit C: Context): String = name match {
-    case LocalName(name) => name
-    case QualifiedName(Nil, name) => name
-    // TODO this is rather fragile...
-    case QualifiedName(path, name) if C.module.path == path.mkString("/") => name
-    case QualifiedName(path, name) => "$" + path.mkString("_") + "." + jsEscape(name)
-    case NoName => sys error "Trying to generate code for an anonymous entity"
-  }
+  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
   def jsModuleName(path: String): String = "$" + path.replace('/', '_')
 
-  def jsLambda(params: List[Doc], body: Doc) =
-    parens(hsep(params, comma)) <+> "=>" <> group(nest(line <> body))
+  def jsModuleFile(path: String): String = path.replace('/', '_') + ".js"
 
-  def jsFunction(name: Doc, params: List[Doc], body: Doc): Doc =
-    "function" <+> name <> parens(hsep(params, comma)) <+> jsBlock(body)
+  def toJSName(s: String): JSName = JSName(jsEscape(s))
 
-  def jsObject(fields: (Doc, Doc)*): Doc =
-    jsObject(fields.toList)
+  val `pattern` = JSName("pattern")
+  val `exec` = JSName("exec")
+  val `fresh` = JSName("fresh")
+  val `tag` = JSName("__tag")
+  val `data` = JSName("__data")
 
-  def jsObject(fields: List[(Doc, Doc)]): Doc =
-    group(jsBlock(vsep(fields.map { case (n, d) => jsString(n) <> ":" <+> d }, comma)))
+  def nameDef(id: Symbol): JSName = JSName(jsEscape(id match {
+    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
+    case _: symbols.Operation => "op$" + id.name.toString
+    case _ => id.name.toString
+  }))
 
-  def jsBlock(content: Doc): Doc = braces(nest(line <> content) <> line)
-
-  def jsArray(els: List[Doc]): Doc =
-    brackets(hsep(els, comma))
-
-  def jsString(contents: Doc): Doc =
-    "\"" <> contents <> "\""
-
-  def jsCall(fun: Doc, args: Doc*): Doc = jsCall(fun, args.toList)
-  def jsCall(fun: Doc, args: List[Doc]): Doc = fun <> parens(hsep(args, comma))
-
-  def requiresBlock(s: Stmt): Boolean = s match {
-    case Data(did, ctors, rest) => true
-    case Record(did, fields, rest) => true
-    case Def(id, tpe, d, rest) => true
-    case _ => false
+  def nameRef(id: Symbol)(using C: Context): js.Expr = {
+    def ref(name: String): js.Expr = Variable(JSName(jsEscape(name)))
+    id match {
+      case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => ref(id.name.toString + "_" + id.id)
+      case _: symbols.Operation => ref("op$" + id.name.toString)
+      case _: symbols.InterfaceType => ref(id.name.name)
+      case _: symbols.Field => ref(id.name.name)
+      case _ => id.name match {
+        case LocalName(name) => ref(name)
+        case QualifiedName(Nil, name) => ref(name)
+        // TODO this is rather fragile...
+        case QualifiedName(path, name) if C.module.path == path.mkString("/") => ref(name)
+        case QualifiedName(path, name) =>
+          val prefix = ref("$" + path.mkString("_"))
+          val member = JSName(jsEscape(name))
+          js.Member(prefix, member)
+        case NoName => sys error "Trying to generate code for an anonymous entity"
+      }
+    }
   }
+
+  // name references for fields and methods
+  def memberNameRef(id: Symbol): JSName = JSName(jsEscape(id match {
+    case _: symbols.Operation => "op$" + id.name.toString
+    case _: symbols.Field => id.name.name
+    case _ => sys error "Trying to generate a member reference for something that is not a field or operation!"
+  }))
+
+  def toJS(p: Param): JSName = nameDef(p.id)
+
+  def toJS(e: core.Argument)(using Context): js.Expr = e match {
+    case e: core.Expr  => toJS(e)
+    case b: core.Block => toJS(b)
+  }
+
+  def toJS(b: core.Block)(using Context): js.Expr = b match {
+    case BlockVar(v) =>
+      nameRef(v)
+    case BlockLit(ps, body) =>
+      val (stmts, ret) = toJSStmt(body)
+      monadic.Lambda(ps map toJS, stmts, ret) // TODO
+    case Member(b, id) =>
+      js.Member(toJS(b), memberNameRef(id))
+    case Extern(ps, body) =>
+      js.Lambda(ps map toJS, js.RawExpr(body))
+    case Unbox(e)     => toJS(e)
+    case New(handler) => toJS(handler)
+  }
+
+  def toJS(pattern: core.Pattern)(using Context): js.Expr = pattern match {
+    case IgnorePattern() => builtin("ignore")
+    case AnyPattern() => builtin("any")
+    case LiteralPattern(l) => js.Call(builtin("literal"), List(toJS(l)))
+    case TagPattern(id, patterns) =>
+      val tag = JsString(nameDef(id).name) // TODO improve
+      val childMatchers = patterns map toJS
+      js.Call(builtin("tagged"), tag :: childMatchers)
+  }
+
+  def builtin(name: String): js.Expr = js.Member($effekt, JSName(name))
+
+  def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
+    case UnitLit() => builtin("unit")
+    case StringLit(s) => JsString(s)
+    case literal: Literal[_] => js.RawExpr(literal.value.toString)
+    case ValueVar(id) => nameRef(id)
+    case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
+    case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
+    case Box(b) => toJS(b)
+    case Run(s) => monadic.Run(toJSMonadic(s))
+  }
+
+  def toJS(handler: core.Handler)(using Context): js.Expr =
+    js.Object(handler.clauses.map { case (id, b) => nameDef(id) -> toJS(b) })
+
+  // TODO
+  //  def toJSMonadic(s: core.Stmt)(using Context, Buffer[js.Stmt]): monadic.Control = s match {
+
+  def toJS(module: core.ModuleDecl)(using Context): js.Module = {
+    val name    = JSName(jsModuleName(module.path))
+    val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
+    val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
+    val (stmts, _) = toJSStmt(module.defs)
+
+    js.Module(name, imports, exports, stmts)
+  }
+
+
+  /**
+   * Translate the statement to a javascript expression in a monadic expression context.
+   *
+   * Not all statement types can be printed in this context!
+   */
+  def toJSMonadic(s: core.Stmt)(using Context): monadic.Control = s match {
+    case core.Val(Wildcard(_), tpe, binding, body) =>
+      monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
+
+    case core.Val(id, tpe, binding, body) =>
+      monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
+
+    case core.App(b, targs, args) =>
+      monadic.Call(toJS(b), args map toJS)
+
+    case core.If(cond, thn, els) =>
+      monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
+
+    case core.While(cond, body) =>
+      monadic.While(toJSMonadic(cond), toJSMonadic(body))
+
+    case core.Ret(e) =>
+      monadic.Pure(toJS(e))
+
+    case core.Handle(body, hs) =>
+      monadic.Handle(hs map toJS, toJS(body))
+
+    case core.Region(body) =>
+      monadic.Builtin("withRegion", toJS(body))
+
+    case core.Match(sc, clauses) =>
+      val cs = js.ArrayLiteral(clauses map {
+        case (p, b) => js.Object(`pattern` -> toJS(p), `exec` -> toJS(b))
+      })
+      monadic.Builtin("match", toJS(sc), cs)
+
+    case core.Hole =>
+      monadic.Builtin("hole")
+
+    case other => toJSStmt(other) match {
+      case (Nil, ret) => ret
+      case (stmts, ret) => monadic.Call(monadic.Lambda(Nil, stmts, ret), Nil)
+    }
+  }
+
+  /**
+   * Translate the statement in a js "direct-style" statement context.
+   *
+   * That is, multiple statements that end in one monadic return
+   */
+  def toJSStmt(s: core.Stmt)(using Context): (List[js.Stmt], monadic.Control) = s match {
+    case Def(id, tpe, BlockLit(ps, body), rest) =>
+      val (restStmts, ret) = toJSStmt(rest)
+      val (stmts, jsBody) = toJSStmt(body)
+      (monadic.Function(nameDef(id), ps map toJS, stmts, jsBody) :: restStmts, ret)
+
+    case Def(id, tpe, Extern(ps, body), rest) =>
+      val (stmts, ret) = toJSStmt(rest)
+      (js.Function(nameDef(id), ps map toJS, List(js.Return(js.RawExpr(body)))) :: stmts, ret)
+
+    case Def(id, tpe, block, rest) =>
+      val (stmts, ret) = toJSStmt(rest)
+      (js.Const(nameDef(id), toJS(block)) :: stmts, ret)
+
+    case Data(did, ctors, rest) =>
+      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
+      val (stmts, ret) = toJSStmt(rest)
+      (cs ++ stmts, ret)
+
+    case Record(did, fields, rest) =>
+      val (stmts, ret) = toJSStmt(rest)
+      (generateConstructor(did, fields) :: stmts, ret)
+
+    case Include(contents, rest) =>
+      val (stmts, ret) = toJSStmt(rest)
+      (js.RawStmt(contents) :: stmts, ret)
+
+    case Let(Wildcard(_), tpe, binding, body) =>
+      val (stmts, ret) = toJSStmt(body)
+      (js.ExprStmt(toJS(binding)) :: stmts, ret)
+
+    case Let(id, tpe, binding, body) =>
+      val (stmts, ret) = toJSStmt(body)
+      (js.Const(nameDef(id), toJS(binding)) :: stmts, ret)
+
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+      val (stmts, ret) = toJSStmt(body)
+      (js.Const(nameDef(id), js.MethodCall($effekt, `fresh`, toJS(init))) :: stmts, ret)
+
+    case State(id, init, region, body) =>
+      val (stmts, ret) = toJSStmt(body)
+      (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
+
+    case other =>
+      (Nil, toJSMonadic(other))
+  }
+
+  def generateConstructor(ctor: symbols.Record): js.Stmt =
+    generateConstructor(ctor, ctor.fields)
+
+  def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt =
+    js.Function(
+      nameDef(ctor),
+      fields.map { f => nameDef(f) },
+      List(js.Return(js.Object(List(
+        `tag`  -> JsString(nameDef(ctor).name), // TODO improve
+        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f)) })
+      ) ++ fields.map { f => (nameDef(f), Variable(nameDef(f))) })))
+    )
 }
