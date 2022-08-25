@@ -157,7 +157,7 @@ trait Compiler {
     case "js"           => effekt.generator.js.JavaScriptMonadic
     case "chez-callcc"  => effekt.generator.chez.ChezSchemeCallCC
     case "chez-monadic" => effekt.generator.chez.ChezSchemeMonadic
-    case "chez-lift"    => effekt.generator.ChezSchemeLift
+    case "chez-lift"    => effekt.generator.chez.ChezSchemeLift
   }
 
   object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
