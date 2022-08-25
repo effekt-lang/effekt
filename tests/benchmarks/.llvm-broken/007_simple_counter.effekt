@@ -25,7 +25,7 @@ def looper(i: Int, s: Int): Int / Increment = {
     }
 }
 
-def incrementHandler(action: (() => Int at {Increment})): Int = {
+def incrementHandler { action: () => Int / {Increment} }: Int = {
     try {
         action()
     } with Increment {
@@ -34,14 +34,11 @@ def incrementHandler(action: (() => Int at {Increment})): Int = {
 }
 
 def count(n: Int): Int = {
-    def step(l: Int, s: Int): Int / Increment = {
+    def step(l: Int, s: Int): Int = {
         if (l == 0) {
             s
         } else {
-            def f(): Int = {
-                looper(n, s)
-            }
-            step(l-1, incrementHandler(f))
+            step(l-1, incrementHandler { looper(n, s) })
         }
     }
     step(1000, 0)
@@ -51,6 +48,6 @@ def count(n: Int): Int = {
 // deviating invocation
 
 def main() = {
-    val n = 2000
-    println(count(n))
+    val n = 1000
+    println(1ount(n))
 }
