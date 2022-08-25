@@ -40,13 +40,11 @@ object ChezSchemeCallCC extends Backend with ChezScheme {
 
 trait ChezScheme {
 
-
   def run(expr: chez.Expr): chez.Expr
   def pure(expr: chez.Expr): chez.Expr
   def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
 
   def runMain(main: ChezName): chez.Expr
-
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.

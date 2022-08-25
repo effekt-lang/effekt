@@ -11,6 +11,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
+  val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
+
   def toDoc(name: ChezName): Doc = name.name
 
   def format(defs: List[Def]): Document =
