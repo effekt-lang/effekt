@@ -73,4 +73,8 @@ def sumPaths(tree: Tree[Int]): Int = {
 
 // deviating invocation
 
-def main() = println(sumPaths(makeTree(4))) // `16` is too large for the JS backend
+def main() = {
+    println(sumPaths(makeTree(4)))
+    println(sumPaths(makeTree(8)))
+    // `16` is too large for the JS backend
+}
