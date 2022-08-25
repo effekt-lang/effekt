@@ -1,5 +1,10 @@
-// Jonathan Frech, 2022-08-18
+// Jonathan Frech, 2022-08-18, 2022-08-25
 // adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/004_triples/benchmark.kk
+
+
+record Triple(a: Int, b: Int, c: Int)
+
+////////////////////////////////////////////////////////////////////////////////
 
 effect Flip {
     def flip(): Boolean
@@ -9,10 +14,10 @@ effect Fail {
     def fail[A](): A
 }
 
-record Triple(a: Int, b: Int, c: Int)
 
 def hashTriple(triple: Triple): Int = triple match { case Triple(a,b,c) =>
     mod(((53 * a) + 2809 * b + 148877 * c), 1000000007) }
+
 
 def choice(n: Int): Int / {Flip, Fail} = {
     if (n < 1) {
@@ -40,7 +45,7 @@ def sumTriples(n: Int, s: Int): Int = {
         val r = triple(n, s)
         hashTriple(r)
     } with Flip {
-        def flip() = mod((resume(true) + resume(false)), 1000000007)
+        def flip() = mod(resume(true) + resume(false), 1000000007)
     } with Fail {
         def fail[A]() = 0
     }
