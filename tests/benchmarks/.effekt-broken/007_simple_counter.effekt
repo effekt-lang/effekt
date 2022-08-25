@@ -1,15 +1,56 @@
-// Jonathan Frech, 2022-08-17
+// Jonathan Frech, 2022-08-17, 2022-08-25
 // adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/007_simple_counter/benchmark.kk
 
-// primitives currently missing in Effekt
+
+// missing Effekt stdlib features
+
 def abs(n: Int): Int = if (n < 0) 0 - n else n
 
-////////////////////////////////////////////////////////////////////////////////
 
-effect increment(j: Int): Unit
+// manually transpiled koka
 
-def operator(x: Int, y: Int): Int = {
-    mod(abs(x - (503 * y) + 37), 1009)
+effect Increment {
+    def increment(j: Int): Unit
 }
 
-// TODO Effekt is currently missing higher-order (second-class!) functions.
+def operator(x: Int, y: Int): Int =
+    mod(abs(x - (503 * y) + 37), 1009)
+
+def looper(i: Int, s: Int): Int / Increment = {
+    if (i == 0) {
+        s
+    } else {
+        do increment(i)
+        looper(i-1, s)
+    }
+}
+
+def incrementHandler(action: (() => Int at {Increment})): Int = {
+    try {
+        action()
+    } with Increment {
+        def increment(j: Int) = operator(j, resume(()))
+    }
+}
+
+def count(n: Int): Int = {
+    def step(l: Int, s: Int): Int / Increment = {
+        if (l == 0) {
+            s
+        } else {
+            def f(): Int = {
+                looper(n, s)
+            }
+            step(l-1, incrementHandler(f))
+        }
+    }
+    step(1000, 0)
+}
+
+
+// deviating invocation
+
+def main() = {
+    val n = 2000
+    println(count(n))
+}
