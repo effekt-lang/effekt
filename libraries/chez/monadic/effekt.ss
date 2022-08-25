@@ -70,8 +70,8 @@
 
 (define-syntax then
   (syntax-rules ()
-    [(_ m a f1 ...)
-     (lambda (k) (values m (push-frame (lambda (a) (let () f1 ...)) k)))]))
+    [(_ m f)
+     (lambda (k) (values m (push-frame f k)))]))
 
 (define toplevel 0)
 
@@ -85,8 +85,8 @@
     [(_ c e)
      (let ([condition (lambda () c)])
        (letrec ([loop (lambda ()
-         (then (condition) condValue
-           (if condValue (then e _ (loop)) (pure #f))))])
+         (then (condition) (lambda (condValue)
+           (if condValue (then e (lambda (_) (loop))) (pure #f)))))])
          (loop)))]))
 
 (define newPrompt (lambda () (string #\p)))
@@ -102,14 +102,14 @@
 (define-syntax state
   (syntax-rules ()
     [(_ effid getid setid init body)
-     (then init s
+     (then init (lambda (s)
         (define cell (box s))
         (define (getid c) (lambda () (unbox c)))
         (define (setid c) (lambda (s*)
           (set-box! c s*)
           #f))
 
-        (with-state cell (body cell)))]))
+        (with-state cell (body cell))))]))
 
 (define-syntax define-effect-op
   (syntax-rules ()
