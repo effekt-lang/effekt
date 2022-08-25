@@ -22,14 +22,15 @@ object Transformer {
 
         val datatypes = ProgC.datatypes.map(tpe => tpe.map(pars => pars.map(transform))).toList;
 
-        val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes);
+        val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, ProgC.frameSize);
         numberBlocks(compiledProgram)
     }
 
   def transform(label: BlockLabel, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
-    val frameDescriptor = FrameDescriptor(env.locals.view.mapValues(_.length).toMap);
+    val frameDescriptor = env.frameDescriptor;
 
     implicit val BC: BlockContext = new BlockContext(frameDescriptor, env);
+    extendFrameDescriptorTo(frameDescriptor);
 
     val terminator = transform(body);
     var instructions = BC.instructions.toList;
@@ -187,6 +188,7 @@ object Transformer {
   class ProgramContext() {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
     val datatypes: ListBuffer[List[machine.Signature]] = ListBuffer();
+    var frameSize: jit.FrameDescriptor = FrameDescriptor(Map());
   }
 
   def emit(block: BasicBlock)(using ProgC: ProgramContext): Unit = {
@@ -217,6 +219,11 @@ object Transformer {
     def from(vs: List[VariableDescriptor]): Environment = {
       Environment(vs.filter(_.typ.registerType.isDefined).groupBy(_.typ.registerType.get))
     }
+  }
+
+  private def max(a: FrameDescriptor, b: FrameDescriptor): FrameDescriptor = {
+    FrameDescriptor(RegisterType.values.map(t => (t ->
+      Math.max(a.locals.applyOrElse(t, x => 0), b.locals.applyOrElse(t, x => 0)))).toMap)
   }
 
   class BlockContext(var frameDescriptor: FrameDescriptor,
@@ -252,8 +259,7 @@ object Transformer {
     extendFrameDescriptorTo(env.frameDescriptor)
   }
   def extendFrameDescriptorTo(fd: FrameDescriptor)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
-    BC.frameDescriptor = FrameDescriptor(
-      RegisterType.values.map(t =>(t ->
-        Math.max(BC.frameDescriptor.locals.applyOrElse(t, x => 0), fd.locals.applyOrElse(t, x => 0)))).toMap);
+    BC.frameDescriptor = max(BC.frameDescriptor, fd);
+    ProgC.frameSize = max(ProgC.frameSize, fd);
   }
 }

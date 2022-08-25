@@ -26,6 +26,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     jsonObject(Map(
       "datatypes" -> jsonList(program.datatypes.map(toDoc)),
       "blocks" -> jsonList(program.blocks.map(toDoc)),
+      "frameSize" -> toDoc(program.frameSize),
     ))
   }
   def toDoc(datatype: List[List[Type]]): Doc =

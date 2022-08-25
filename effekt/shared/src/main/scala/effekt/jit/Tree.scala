@@ -12,7 +12,8 @@ sealed trait Tree extends Product {
 }
 
 case class Program(blocks: List[BasicBlock],
-                   datatypes: List[List[List[Type]]]
+                   datatypes: List[List[List[Type]]],
+                   frameSize: FrameDescriptor
                   ) extends Tree
 
 case class BasicBlock(id: BlockLabel,
