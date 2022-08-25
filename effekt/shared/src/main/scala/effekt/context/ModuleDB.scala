@@ -56,7 +56,7 @@ trait ModuleDB { self: Context =>
   /**
    * Util to check whether main exists on the given module
    */
-  def checkMain(mod: Module)(implicit C: Context): Unit = C.at(mod.decl) {
+  def checkMain(mod: Module)(implicit C: Context): TermSymbol = C.at(mod.decl) {
     val mains = mod.terms.getOrElse("main", Set())
 
     if (mains.isEmpty) {
@@ -80,5 +80,7 @@ trait ModuleDB { self: Context =>
     if (controlEffects.nonEmpty) {
       C.abort(s"Main cannot have user defined effects, but includes effects: ${controlEffects.mkString(", ")}")
     }
+
+    main
   }
 }

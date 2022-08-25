@@ -1,0 +1,78 @@
+module effekt
+
+extern include "rts.ll"
+
+extern include "primitives.ll"
+
+
+// // Console ops
+// // ===========
+
+extern effect Console
+
+extern pure def println(n: Int): Unit / Console =
+  "call void @printInt_impl(%Int %n) ret %Pos zeroinitializer"
+
+// extern pure def println(b: Boolean): Unit / Console =
+//   "call void @printBoolean_impl(%Boolean %b) ret %Pos zeroinitializer"
+
+
+// integer primitives
+// ==================
+
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "%z = add %Int %x, %y ret %Int %z"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  "%z = mul %Int %x, %y ret %Int %z"
+
+extern pure def infixDiv(x: Int, y: Int): Int =
+  "%z = sdiv %Int %x, %y ret %Int %z"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  "%z = sub %Int %x, %y ret %Int %z"
+
+extern pure def mod(x: Int, y: Int): Int =
+  "%z = srem %Int %x, %y ret %Int %z"
+
+
+// ordering on signed integers
+// ===========================
+
+extern pure def infixEq(x: Int, y: Int): Boolean =
+  "%z = icmp eq %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def infixNeq(x: Int, y: Int): Boolean =
+  "%z = icmp ne %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def infixLt(x: Int, y: Int): Boolean =
+  // TODO is the following more correct? "%z = icmp slt %Int %x, %y %w = zext i1 %z to i64 %b = insertvalue %Pos zeroinitializer, i64 %w, 0 ret %Pos %b"
+  "%z = icmp slt %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def infixLte(x: Int, y: Int): Boolean =
+  "%z = icmp sle %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def infixGt(x: Int, y: Int): Boolean =
+  "%z = icmp sgt %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def infixGte(x: Int, y: Int): Boolean =
+  "%z = icmp sge %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+
+// boolean algebra
+// ===============
+
+extern pure def infixEq(x: Boolean, y: Boolean): Boolean =
+  "%slim_x = extractvalue %Pos %x, 0   %slim_y = extractvalue %Pos %y, 0   %slim_z = icmp eq i64 %slim_x, %slim_y   %fat_z = zext i1 %slim_z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def infixNeq(x: Boolean, y: Boolean): Boolean =
+  "%slim_x = extractvalue %Pos %x, 0   %slim_y = extractvalue %Pos %y, 0   %slim_z = icmp ne i64 %slim_x, %slim_y   %fat_z = zext i1 %slim_z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
+
+extern pure def not(adt_p: Boolean): Boolean =
+  "%p = extractvalue %Pos %adt_p, 0   %q = xor i64 1, %p   %adt_q = insertvalue %Pos zeroinitializer, i64 %q, 0   ret %Pos %adt_q"
+
+extern pure def infixOr(adt_p: Boolean, adt_q: Boolean): Boolean =
+  "%p = extractvalue %Pos %adt_p, 0   %q = extractvalue %Pos %adt_q, 0   %r = or i64 %p, %q   %adt_r = insertvalue %Pos zeroinitializer, i64 %r, 0   ret %Pos %adt_r"
+
+extern pure def infixAnd(adt_p: Boolean, adt_q: Boolean): Boolean =
+  "%p = extractvalue %Pos %adt_p, 0   %q = extractvalue %Pos %adt_q, 0   %r = and i64 %p, %q   %adt_r = insertvalue %Pos zeroinitializer, i64 %r, 0   ret %Pos %adt_r"

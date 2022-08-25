@@ -109,3 +109,61 @@ case class Nested(list: List[Scope]) extends Scope
 case class ScopeVar(id: Symbol) extends Scope
 
 case class ScopeId() extends Symbol { val name = Name.local(s"ev${id}") }
+
+
+def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
+  case Def(id, tpe, block, rest) => (freeVariables(block) ++ freeVariables(rest)) -- Set(id)
+  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
+  case Let(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
+  case Data(id, ctors, rest) => freeVariables(rest)
+  case Record(id, fields, rest) =>freeVariables(rest)
+  case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
+  case While(cond, body) => freeVariables(cond) ++ freeVariables(body)
+  case Ret(e) => freeVariables(e)
+  case Match(scrutinee, clauses) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) }
+  case Include(contents, rest) => freeVariables(rest)
+  case Hole => Set.empty
+  case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
+  case Handle(body, handlers) => freeVariables(body) ++ handlers.flatMap {
+    case Handler(id, clauses) => clauses.flatMap { case (operation, lit) => freeVariables(lit) }
+  }
+  case Region(body) => freeVariables(body)
+}
+
+def freeVariables(expr: Expr): Set[Symbol] = expr match {
+  case ValueVar(id) => Set(id)
+  case literal: Literal[_] => Set.empty
+  case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case Select(target, field) => freeVariables(target) // we do not count fields in...
+  case Closure(b) => freeVariables(b) // well, well, well...
+  case Run(s) => freeVariables(s)
+}
+
+def freeVariables(arg: Argument): Set[Symbol] = arg match {
+  case expr: Expr => freeVariables(expr)
+  case block: Block => freeVariables(block)
+}
+
+def freeVariables(block: Block): Set[Symbol] = block match {
+  case BlockVar(id) => Set(id)
+  case ScopeAbs(scope, body) => freeVariables(body) -- Set(scope)
+  case ScopeApp(b, evidence) => freeVariables(b) ++ freeVariables(evidence)
+  case Lifted(s, b) => freeVariables(b) ++ freeVariables(s)
+  case BlockLit(params, body) =>
+    val bound = params.map {
+      case ValueParam(id, tpe) => id
+      case BlockParam(id, tpe) => id
+    }
+    freeVariables(body) -- bound
+  case Member(b, field) => freeVariables(b)
+  case Extern(params, body) => Set.empty
+  case Unbox(e) => freeVariables(e) // TODO well, well, well...
+  case _ => ??? // TODO
+}
+
+def freeVariables(scope: Scope): Set[Symbol] = scope match {
+  case Here() => Set.empty
+  case Nested(list) => list.flatMap(freeVariables).toSet
+  case ScopeVar(id) => Set(id)
+}
