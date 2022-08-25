@@ -69,4 +69,6 @@ def ChezString(chezString: String): Expr = RawExpr(s"\"${chezString}\"")
 
 def Builtin(name: String, args: Expr*): Expr = Call(Variable(ChezName(name)), args.toList)
 
-import effekt.symbols.Symbol
+def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](chez.Lambda(Nil, lam.body)) {
+  case (p, body) => chez.Lambda(List(p), body)
+}

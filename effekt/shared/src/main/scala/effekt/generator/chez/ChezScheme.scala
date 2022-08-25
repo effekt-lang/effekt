@@ -4,21 +4,55 @@ package chez
 
 import effekt.context.Context
 import effekt.core.*
-import effekt.generator.chez
 import effekt.symbols.{ Module, Symbol, Wildcard }
-import effekt.symbols.builtins.{ TRegion, TState }
-import kiama.output.PrettyPrinterTypes.Document
-import kiama.util.Source
 
 import scala.language.implicitConversions
 import effekt.util.paths.*
+import kiama.output.PrettyPrinterTypes.Document
 
-object ChezSchemeMonadic extends Backend {
+object ChezSchemeMonadic extends Backend with ChezScheme {
+
+  def run(expr: chez.Expr): chez.Expr =
+    Builtin("run", expr)
+
+  def pure(expr: chez.Expr): chez.Expr =
+    Builtin("pure", expr)
+
+  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
+    Builtin("then", binding, chez.Lambda(List(param), body))
+
+  def runMain(main: ChezName): chez.Expr =
+    chez.Builtin("run", chez.Call(main))
+}
+
+object ChezSchemeCallCC extends Backend with ChezScheme {
+
+  def run(expr: chez.Expr): chez.Expr = expr
+
+  def pure(expr: chez.Expr): chez.Expr = expr
+
+  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
+    chez.Let(List(Binding(param, binding)), body)
+
+  def runMain(main: ChezName): chez.Expr =
+    chez.Builtin("run", Variable(main))
+}
+
+trait ChezScheme {
+
+
+  def run(expr: chez.Expr): chez.Expr
+  def pure(expr: chez.Expr): chez.Expr
+  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr
+
+  def runMain(main: ChezName): chez.Expr
+
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using Context) = {
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
+    C.checkMain(main.mod)
     val deps = dependencies.flatMap { dep => toChez(dep.core) }
     val chezModule = chez.Let(Nil, compilationUnit(main.mod, main.core, deps))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
@@ -39,15 +73,9 @@ object ChezSchemeMonadic extends Backend {
     chez.PrettyPrinter.format(toChez(in.core))
 
   def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
-
     val defs = toChez(core)
-
     val mainSymbol = mod.terms("main").toList.head
-
-    val main = chez.Constant(ChezName("main"), chez.Variable(nameRef(mainSymbol)))
-    val run = monadic.Run(chez.Call(nameRef(mainSymbol)))
-
-    chez.Block(generateStateAccessors ++ dependencies ++ (defs :+ main), Nil, run)
+    chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
   }
 
   /**
@@ -56,109 +84,6 @@ object ChezSchemeMonadic extends Backend {
   def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 
-  def uniqueName(id: Symbol): String = id.name.toString + "_" + id.id
-
-  def nameRef(id: Symbol): ChezName = nameDef(id)
-
-  // TODO sanitize
-  def nameDef(id: Symbol): ChezName = ChezName(uniqueName(id))
-
-  def intersperse[T](l: List[T], el: T): List[T] = l match {
-    case Nil => Nil
-    case head :: Nil => head :: Nil
-    case head :: rest => head :: el :: intersperse(rest, el)
-  }
-
-  case class RecordNames(sym: Symbol) {
-    val name = uniqueName(sym)
-    val basename = sym.name.name
-    val id = sym.id.toString
-
-    val uid = ChezName(name)
-    val typeName = ChezName(basename + "$Type" + id)
-    val predicate = ChezName(name + "?")
-    val constructor = sym match {
-      case _: effekt.symbols.InterfaceType => ChezName(s"make-${name}")
-      case _ => uid
-    }
-  }
-
-
-  def generateConstructor(ctor: effekt.symbols.Record): List[chez.Def] =
-    generateConstructor(ctor, ctor.fields)
-
-  // https://www.scheme.com/csug8/objects.html
-  // https://scheme.com/tspl4/records.html
-  def generateConstructor(did: Symbol, fields: List[Symbol]): List[chez.Def] = {
-
-    val names = RecordNames(did)
-
-    // Record
-    val record = chez.Record(names.typeName, names.constructor, names.predicate, names.uid, fields map nameDef)
-
-    // Matcher
-    def matcher = {
-
-      var fresh = 0;
-      val fieldNames = fields map { _ => fresh += 1; ChezName("p" + fresh) }
-      val matcherName = ChezName("match-" + names.name)
-      val sc = ChezName("sc")
-      val matched = ChezName("matched")
-      val failed = ChezName("failed")
-      val k = ChezName("k")
-
-      val matcherBody = fields match {
-
-        // (define (<MATCHER-NAME>)
-        //   (lambda (sc matched failed k)
-        //     (if (pred sc) (k matched) (failed))))
-        case Nil => chez.Call(k, Variable(matched))
-
-        // (define (name p1 p2 ...)
-        //   (lambda (sc matched failed k)
-        //     ;; has correct tag?
-        //     (if (pred sc)
-        //       (match-fields sc matched failed k ([p1 sel1] [p2 sel2] ...))
-        //       (failed))))]))
-        case _ =>
-          def matchFields(fields: List[(ChezName, Symbol)]): chez.Expr = fields match {
-            case Nil => chez.Call(k, Variable(matched))
-            case (p, field) :: fields =>
-              val sel = nameRef(field)
-              chez.Call(p, chez.Call(sel, Variable(sc)), Variable(matched), Variable(failed),
-                chez.Lambda(List(matched), // the continuation shadows `matched`
-                  matchFields(fields)))
-          }
-          matchFields(fieldNames zip fields)
-      }
-      chez.Function(matcherName, fieldNames,
-            chez.Lambda(List(sc, matched, failed, k),
-              chez.If(
-                chez.Call(names.predicate, Variable(sc)),
-                matcherBody,
-                chez.Call(failed))))
-    }
-
-    List(record, matcher)
-  }
-
-  // (define (getter ref)
-  //  (lambda () (unbox ref)))
-  //
-  // (define (setter ref)
-  //  (lambda (v) (set-box! ref v)))
-  def generateStateAccessors: List[chez.Function] = {
-    val ref = ChezName("ref")
-    val value = ChezName("value")
-
-    val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-      chez.Lambda(Nil, chez.Builtin("unbox", Variable(ref))))
-
-    val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-      chez.Lambda(List(value), chez.Builtin("set-box!", Variable(ref), Variable(value))))
-
-    List(getter, setter)
-  }
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 
@@ -171,20 +96,17 @@ object ChezSchemeMonadic extends Backend {
     toChez(module.defs).definitions // TODO FIXME, once there is a let _ = ... in there, we are doomed!
   }
 
-  def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](chez.Lambda(Nil, lam.body)) {
-    case (p, body) => chez.Lambda(List(p), body)
-  }
-
-  def toChezMonadic(stmt: Stmt): monadic.Control = stmt match {
-    case Ret(e) => monadic.Pure(toChez(e))
+  def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
+    case Ret(e) => pure(toChez(e))
     case App(b, targs, args) => chez.Call(toChez(b), args map toChez)
-    case If(cond, thn, els) => chez.If(toChez(cond), toChezMonadic(thn), toChezMonadic(els))
-    case Val(id, tpe, binding, body) => monadic.Bind(toChezMonadic(binding), nameDef(id), toChez(body))
-    case While(cond, body) => chez.Builtin("while", toChezMonadic(cond), toChezMonadic(body))
+    case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
+    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
     case Match(scrutinee, clauses) =>
       chez.Match(toChez(scrutinee), clauses.map { case (pattern, branch) =>
         (toChez(pattern), curry(toChez(branch)))
       })
+
     case Hole => ???
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
@@ -199,7 +121,7 @@ object ChezSchemeMonadic extends Backend {
         chez.Handler(names.constructor, h.clauses.map {
           case (op, BlockLit(params, body)) =>
             // the LAST argument is the continuation...
-            chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezMonadic(body))
+            chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
         })
       }
       chez.Handle(handlers, toChez(body))
@@ -249,7 +171,7 @@ object ChezSchemeMonadic extends Backend {
       val constant = chez.Constant(nameDef(id), toChez(binding))
       chez.Block(constant :: defs, exprs, result)
 
-    case other => chez.Block(Nil, Nil, toChezMonadic(other))
+    case other => chez.Block(Nil, Nil, toChezExpr(other))
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
@@ -294,7 +216,7 @@ object ChezSchemeMonadic extends Backend {
 
     case Box(b) => toChez(b)
 
-    case Run(s) => monadic.Run(toChezMonadic(s))
+    case Run(s) => run(toChezExpr(s))
   }
 
   def toChez(p: Pattern): chez.Expr = p match {
@@ -303,31 +225,4 @@ object ChezSchemeMonadic extends Backend {
     case LiteralPattern(l)  => Builtin("literal", toChez(l))
     case TagPattern(id, ps) => Builtin("match-" + uniqueName(id), ps map { p => toChez(p) }: _*)
   }
-}
-
-object monadic {
-
-  import chez.*
-
-  // For Chez Scheme, we do not perform the (opaque) distinction between monadic.Control and chez.Expr, since we
-  // want to reuse the translation for different versions (monadic, callcc).
-  type Control = Expr
-
-  def Pure(expr: Expr): Control = Builtin("pure", expr)
-  def Run(m: Control): Expr = Builtin("run", m)
-
-  def Bind(m: Control, param: ChezName, body: Block): Control = Builtin("then", m, chez.Lambda(List(param), body))
-//
-//  def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
-//  def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)
-//  def While(cond: Control, body: Control): Control = Builtin("_while", js.Lambda(Nil, cond), js.Lambda(Nil, body))
-//  def Handle(handlers: List[Expr], body: Expr): Control = js.Call(Builtin("handle", js.ArrayLiteral(handlers)), List(body))
-//
-
-//
-//  def Lambda(params: List[JSName], stmts: List[Stmt], ret: Control): Expr =
-//    js.Lambda(params, js.Block(stmts :+ js.Return(ret)))
-//
-//  def Function(name: JSName, params: List[JSName], stmts: List[Stmt], ret: Control): Stmt =
-//    js.Function(name, params, stmts :+ js.Return(ret))
 }
