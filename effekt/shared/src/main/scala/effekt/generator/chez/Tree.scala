@@ -72,3 +72,74 @@ def Builtin(name: String, args: Expr*): Expr = Call(Variable(ChezName(name)), ar
 def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](chez.Lambda(Nil, lam.body)) {
   case (p, body) => chez.Lambda(List(p), body)
 }
+
+object LetFusion extends Tree.Rewrite[Unit] {
+  override def expr(using C: Unit) = {
+    case Let(bindings, body) => rewrite(body) match {
+      case Block(Nil, Nil, Let(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
+      case Block(Nil, Nil, Let_*(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
+      case b => Let(bindings map rewrite, b)
+    }
+    case Let_*(bindings, body) => rewrite(body) match {
+      case Block(Nil, Nil, Let(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
+      case Block(Nil, Nil, Let_*(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
+      case b => Let(bindings map rewrite, b)
+    }
+  }
+}
+
+
+object Tree {
+
+  // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
+  trait Rewrite[Ctx] {
+
+    // Hooks to override
+    def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
+    def defn(using C: Ctx): PartialFunction[Def, Def] = PartialFunction.empty
+
+    /**
+     * Hook that can be overridden to perform an action at every node in the tree
+     */
+    def visit[T](source: T)(visitor: T => T)(using Ctx): T = visitor(source)
+
+    def rewrite(block: Block)(using Ctx): Block = visit(block) {
+      case Block(defs, exprs, result) => Block(defs map rewrite, exprs map rewrite, rewrite(result))
+    }
+
+    def rewrite(binding: Binding)(using Ctx): Binding = visit(binding) {
+      case Binding(name, expr) => Binding(name, rewrite(expr))
+    }
+
+    def rewrite(h: Handler)(using Ctx): Handler = visit(h) {
+      case Handler(constructorName, operations) => Handler(constructorName, operations map rewrite)
+    }
+    def rewrite(op: Operation)(using Ctx): Operation = visit(op) {
+      case Operation(name, params, k, body) => Operation(name, params, k, rewrite(body))
+    }
+
+    def rewrite(e: Expr)(using Ctx): Expr = visit(e) {
+      case e if expr.isDefinedAt(e) => expr(e)
+      case e: Variable => e
+      case e: RawExpr => e
+
+      case Call(callee, arguments) => Call(rewrite(callee), arguments map rewrite)
+      case Let(bindings, body) => Let(bindings map rewrite, rewrite(body))
+      case Let_*(bindings, body) => Let_*(bindings map rewrite, rewrite(body))
+      case Lambda(params, body) => Lambda(params, rewrite(body))
+      case If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
+      case Match(scrutinee, clauses) => Match(rewrite(scrutinee), clauses map {
+        case (p, e) => (rewrite(p), rewrite(e))
+      })
+      case Handle(handlers, body) => Handle(handlers map rewrite, rewrite(body))
+    }
+
+    def rewrite(t: Def)(using C: Ctx): Def = visit(t) {
+      case t if defn.isDefinedAt(t) => defn(t)
+      case r : RawDef => r
+      case r : Record => r
+      case Constant(name, value) => Constant(name, rewrite(value))
+      case Function(name, params, body) => Function(name, params, rewrite(body))
+    }
+  }
+}

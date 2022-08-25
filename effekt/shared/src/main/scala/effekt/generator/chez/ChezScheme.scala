@@ -51,8 +51,8 @@ trait ChezScheme {
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
     C.checkMain(main.mod)
-    val deps = dependencies.flatMap { dep => toChez(dep.core) }
-    val chezModule = chez.Let(Nil, compilationUnit(main.mod, main.core, deps))
+    val deps = dependencies.flatMap { dep => compile(dep) }
+    val chezModule = LetFusion.rewrite(chez.Let(Nil, compilationUnit(main.mod, main.core, deps)))(using ())
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
     Some(Compiled(mainFile, Map(mainFile -> result)))
@@ -62,13 +62,13 @@ trait ChezScheme {
    * Entrypoint used by the LSP server to show the compiled output
    */
   def compileSeparate(input: CoreTransformed)(using C: Context) =
-    C.using(module = input.mod) { Some(compile(input)) }
+    C.using(module = input.mod) { Some(chez.PrettyPrinter.format(compile(input))) }
 
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  private def compile(in: CoreTransformed)(using Context): Document =
-    chez.PrettyPrinter.format(toChez(in.core))
+  private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
+    toChez(in.core)
 
   def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
     val defs = toChez(core)
