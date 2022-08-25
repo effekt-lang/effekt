@@ -1,6 +1,9 @@
-// Jonathan Frech, 2022-08-18
+// Jonathan Frech, 2022-08-18, 2022-08-25
 // adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/001_nqueens/benchmark.kk
 // ref.: https://oeis.org/A000170
+
+
+import immutable/list
 
 
 // missing Effekt stdlib features
@@ -69,7 +72,7 @@ def countSolutions(size: Int): Int = {
 }
 
 
-// Effekt does not know of command-line arguments
+// deviating invocation
 
 def main(): Unit / Console = {
   println(countSolutions(0))
@@ -81,4 +84,5 @@ def main(): Unit / Console = {
   println(countSolutions(6))
   println(countSolutions(7))
   println(countSolutions(8))
+  println(countSolutions(9))
 }

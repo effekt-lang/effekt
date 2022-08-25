@@ -2,9 +2,12 @@
 // adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/004_triples/benchmark.kk
 
 
+// using a named record instead of an anonymous triple
+
 record Triple(a: Int, b: Int, c: Int)
 
-////////////////////////////////////////////////////////////////////////////////
+
+// transpiled koka
 
 effect Flip {
     def flip(): Boolean
@@ -51,6 +54,7 @@ def sumTriples(n: Int, s: Int): Int = {
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
+
+// deviating invocation
 
 def main() = println(sumTriples(300, 300))
