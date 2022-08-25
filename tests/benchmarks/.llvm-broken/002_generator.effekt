@@ -1,0 +1,62 @@
+// Jonathan Frech, 2022-08-17, 2022-08-18, 2022-08-25
+// adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/002_generator/benchmark.kk
+
+
+// manually transpiled koka
+
+effect YieldNum {
+    def yieldNum(num: Int): Unit
+}
+
+type Tree[A] {
+    Leaf();
+    Node(left: Tree[A], v: A, right: Tree[A])
+}
+
+type Generator[A] {
+    Empty();
+    Thunk(v: A, rest: () => Generator[A] at {}) // TODO `at`?
+}
+
+def makeTree(n: Int): Tree[Int] = {
+    if (n == 0) {
+        Leaf()
+    } else {
+        val sub = makeTree(n-1)
+        Node(sub, n, sub)
+    }
+}
+
+def iterate(tree: Tree[Int]): Unit / YieldNum = tree match {
+    case Leaf() => ()
+    case Node(left, v, right) =>
+        iterate(left)
+        do yieldNum(v)
+        iterate(right)
+}
+
+def consumer(g: () => Generator[Int] at {}, acc: Int): Int = g() match {
+    case Empty() => acc
+    case Thunk(v, rest) => consumer(rest, acc + v)
+}
+
+def sumGenerator(tree: Tree[Int]): (() => Generator[Int] at {}) = {
+    try {
+        iterate(tree)
+        def f(): Generator[Int] = Empty()
+        f
+    } with YieldNum {
+        def yieldNum(x) = {
+            def f() = Thunk(x, resume(())) // TODO What does koka's `rcontext.resume(())` do exactly?
+            f
+        }
+    }
+}
+
+
+// deviating invokation
+
+def main() = {
+    val sz = 5 // TODO `25` exhausts the stack.
+    println(consumer(sumGenerator(makeTree(sz)), 0))
+}

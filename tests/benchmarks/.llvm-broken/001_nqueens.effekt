@@ -1,0 +1,88 @@
+// Jonathan Frech, 2022-08-18, 2022-08-25
+// adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/001_nqueens/benchmark.kk
+// ref.: https://oeis.org/A000170
+
+
+import immutable/list
+
+
+// missing Effekt stdlib features
+
+def range(a: Int, b: Int) : List[Int] = {
+    if (a > b) {
+        Nil()
+    } else {
+        Cons(a, range(a+1, b))
+    }
+}
+
+def sum(xs: List[Int]): Int = xs match {
+    case Nil() => 0
+    case Cons(x, xs) => x + sum(xs)
+}
+
+
+// manually transpiled koka
+
+type Solution = List[Int]
+
+effect Search {
+    def pick(size: Int): Int
+    def fail(): Unit
+}
+
+def safe(queen: Int, diag: Int, xs: Solution): Boolean = xs match {
+    case Cons(q, qs) => queen != q && queen != q + diag && queen != q - diag && safe(queen, diag+1, qs)
+    case _ => true
+}
+
+def findOneSolution(size: Int, queen: Int) : Solution / Search = {
+    if (queen == 0) {
+        Nil()
+    } else {
+        val sol = findOneSolution(size, queen-1)
+        val next = do pick(size)
+        if (safe(next, 1, sol)) {
+            Cons(next, sol)
+        } else {
+            do fail()
+            Nil()
+        }
+    }
+}
+
+def countSolutions(size: Int): Int = {
+    try {
+        findOneSolution(size, size)
+        1
+    } with Search {
+        def fail() = 0
+        def pick(sz) = {
+            //sum(map(range(1, sz)) { x => resume(x) }) // This is slower on Filip Koprivec's machine (in koka)
+            def loop(i: Int, acc: Int): Int = {
+                if (i == sz) {
+                    resume(i) + acc
+                } else {
+                    loop(i+1, resume(i) + acc)
+                }
+            }
+            loop(1, 0)
+        }
+    }
+}
+
+
+// deviating invocation
+
+def main(): Unit / Console = {
+  println(countSolutions(0))
+  println(countSolutions(1))
+  println(countSolutions(2))
+  println(countSolutions(3))
+  println(countSolutions(4))
+  println(countSolutions(5))
+  println(countSolutions(6))
+  println(countSolutions(7))
+  println(countSolutions(8))
+  println(countSolutions(9))
+}
