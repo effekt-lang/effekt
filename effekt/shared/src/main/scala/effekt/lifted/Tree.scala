@@ -158,7 +158,7 @@ def freeVariables(block: Block): Set[Symbol] = block match {
     freeVariables(body) -- bound
   case Member(b, field) => freeVariables(b)
   case Extern(params, body) => Set.empty
-  case Unbox(e) => freeVariables(e) // well, well, well...
+  case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case _ => ??? // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }
 
