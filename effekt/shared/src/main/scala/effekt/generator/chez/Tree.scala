@@ -20,8 +20,11 @@ enum Expr {
   // e.g. (<EXPR> <EXPR>)
   case Call(callee: Expr, arguments: List[Expr])
 
-  // e.g. 42 (represented as Scala string "42") and inserted verbatim
+  // e.g. (display "foo")
   case RawExpr(raw: String)
+
+  // e.g. 42 (represented as Scala string "42") and inserted verbatim
+  case RawValue(raw: String)
 
   // e.g. (let ([x 42]) (+ x x))
   case Let(bindings: List[Binding], body: Block)
@@ -73,8 +76,10 @@ def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](che
   case (p, body) => chez.Lambda(List(p), body)
 }
 
+def cleanup(expr: Expr): Expr = DeadCodeElimination.rewrite(LetFusion.rewrite(expr)(using ()))(using ())
+
 object LetFusion extends Tree.Rewrite[Unit] {
-  override def expr(using C: Unit) = {
+  override def expr(using Unit) = {
     case Let(bindings, body) => rewrite(body) match {
       case Block(Nil, Nil, Let(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
       case Block(Nil, Nil, Let_*(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
@@ -85,6 +90,84 @@ object LetFusion extends Tree.Rewrite[Unit] {
       case Block(Nil, Nil, Let_*(otherBindings, body)) => Let_*((bindings map rewrite) ++ otherBindings, body)
       case b => Let(bindings map rewrite, b)
     }
+  }
+}
+
+object DeadCodeElimination extends Tree.Rewrite[Unit] {
+  override def expr(using Unit) = {
+    case Let(bindings, body) =>
+      val transformedBody = rewrite(body)
+      val fv = FreeVariables.query(transformedBody)
+      val bs = bindings.filter {
+        case Binding(name, binding) => (fv contains name) || !isInlinable(binding)
+      }
+      Let(bs, transformedBody)
+  }
+}
+
+def isInlinable(e: Expr): Boolean = e match {
+  case _: Variable => true
+  case _: RawValue => true
+  case _: Lambda => true
+  case _ => false
+}
+
+object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
+
+  given Unit = ()
+
+  def empty = Set.empty
+  def combine = _ ++ _
+
+  def bound(bindings: List[Binding]): Set[ChezName] = bindings.map { b => b.name }.toSet
+  def free(bindings: List[Binding]): Set[ChezName] = bindings.flatMap { b => query(b.expr) }.toSet
+
+  override def expr(using Unit) = {
+    case Variable(name) => Set(name)
+
+    case Let(bindings, body) =>
+      free(bindings) ++ (query(body) -- bound(bindings))
+
+    case Let_*(bindings, body) =>
+      val freeInBindings = bindings.foldRight(Set.empty[ChezName]) {
+        case (Binding(name, b), free) => (free - name) ++ query(b)
+      }
+      freeInBindings ++ (query(body) -- bound(bindings))
+
+    case Lambda(params, body) => query(body) -- params.toSet
+
+    case Handle(handlers, body) =>
+      query(body) ++ handlers.flatMap {
+        case Handler(name, ops) => ops flatMap {
+          case Operation(name, params, k, body) => query(body) -- params.toSet - k
+        }
+      }
+  }
+
+  override def defn(using Unit) = {
+    case chez.Function(name, params, body) => query(body) -- params.toSet - name // recursive functions
+    case chez.Constant(name, expr) => query(expr)
+  }
+
+  override def query(b: Block)(using Unit): Set[ChezName] = b match {
+    // defs are potentially recursive!
+    case Block(defs, exprs, result) =>
+      val mutualFunctions = defs.collect { case f: chez.Function => f.name }.toSet
+
+      val freeInDefs = defs.foldRight(Set.empty[ChezName]) {
+        case (f : chez.Function, free) => (free - f.name) ++ (query(f) -- mutualFunctions)
+        case (c : chez.Constant, free) => (free - c.name) ++ query(c)
+        // TODO Records!
+        case (_, free) => free
+      }
+
+      val boundByDefs = defs.collect {
+        case f: chez.Function => f.name
+        case c: chez.Constant => c.name
+        // TODO Records!
+      }.toSet
+
+      freeInDefs ++ ((query(result) ++ exprs.flatMap(query)) -- boundByDefs)
   }
 }
 
@@ -122,6 +205,7 @@ object Tree {
       case e if expr.isDefinedAt(e) => expr(e)
       case e: Variable => e
       case e: RawExpr => e
+      case e: RawValue => e
 
       case Call(callee, arguments) => Call(rewrite(callee), arguments map rewrite)
       case Let(bindings, body) => Let(bindings map rewrite, rewrite(body))
@@ -140,6 +224,75 @@ object Tree {
       case r : Record => r
       case Constant(name, value) => Constant(name, rewrite(value))
       case Function(name, params, body) => Function(name, params, rewrite(body))
+    }
+  }
+
+  trait Visit[Ctx] extends Query[Ctx, Unit] {
+    override def empty = ()
+    override def combine = (_, _) => ()
+    override def combineAll(rs: List[Unit]): Unit = ()
+  }
+
+  trait Query[Ctx, Res] {
+
+    def empty: Res
+    def combine: (Res, Res) => Res
+    def combineAll(rs: List[Res]): Res = rs.foldLeft(empty)(combine)
+
+    // Hooks to override
+    def expr(using Ctx): PartialFunction[Expr, Res] = PartialFunction.empty
+    def defn(using Ctx): PartialFunction[Def, Res] = PartialFunction.empty
+
+    /**
+     * Hook that can be overridden to perform an action at every node in the tree
+     */
+    def visit[T](t: T)(visitor: T => Res)(using Ctx): Res = visitor(t)
+
+    /**
+     * Hook that can be overridden to perform something for each new lexical scope
+     */
+    def scoped(action: => Res)(using Ctx): Res = action
+
+    def query(e: Expr)(using Ctx): Res = visit(e) {
+
+      case e if expr.isDefinedAt(e) => expr.apply(e)
+
+      case e: RawExpr => empty
+      case e: RawValue => empty
+      case e: Variable => empty
+
+      case Let(bindings, body) => combineAll(query(body) :: bindings.map(query))
+      case Let_*(bindings, body) => combineAll(query(body) :: bindings.map(query))
+      case Lambda(params, body) => query(body)
+
+      case Call(callee, arguments) => combineAll(query(callee) :: arguments.map(query))
+      case If(cond, thn, els) => combineAll(List(query(cond), query(thn), query(els)))
+
+      case Match(scrutinee, clauses) => combineAll(query(scrutinee) :: clauses.map { case (p, e) => combine(query(p), query(e)) })
+      case Handle(handlers, body) =>
+        combineAll(query(body) :: handlers.map {
+          case Handler(name, ops) => combineAll(ops map {
+            case Operation(name, params, k, body) => query(body)
+          })
+        })
+    }
+
+    def query(d: Def)(using Ctx): Res = visit(d) {
+
+      case d if defn.isDefinedAt(d) => defn.apply(d)
+
+      case Constant(name, value) => query(value)
+      case Function(name, params, body) => query(body)
+      case RawDef(raw) => empty
+      case Record(typeName, constructorName, predicateName, uid, fields) => empty
+    }
+
+    def query(b: Block)(using Ctx): Res = visit(b) {
+      case Block(defs, exprs, result) => scoped { combineAll(query(result) :: defs.map(query) ++ exprs.map(query)) }
+    }
+
+    def query(b: Binding)(using Ctx): Res = visit(b) {
+      case Binding(name, expr) => query(expr)
     }
   }
 }
