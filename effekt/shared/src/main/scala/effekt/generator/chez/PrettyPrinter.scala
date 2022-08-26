@@ -24,6 +24,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Call(callee, Nil)       => parens(toDoc(callee))
     case Call(callee, arguments) => parens(toDoc(callee) <+> group(align(hsep(arguments map toDoc, line))))
     case RawExpr(raw)            => string(raw)
+    case RawValue(raw)           => string(raw)
     case Let(bindings, body)     => parens("let" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
     case Let_*(bindings, body)   => parens("let*" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
     case Lambda(params, body)    => parens("lambda" <+> parens(params.map(toDoc)) <> toDoc(body))
