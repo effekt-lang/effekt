@@ -3,7 +3,8 @@ module unsafe/cont
 // The type of a captured continuation
 extern type Cont[A, B]
 
-extern pure def cont[A, B] { r: A => B / {} }: Cont[A, B] = "r"
+// we mark this as {io} since pure functions should not take block parameters.
+extern io def cont[A, B] { r: A => B / {} }: Cont[A, B] = "r"
 
 // This is unsafe if the continuation left the scope of the
 // capabilities it closed over

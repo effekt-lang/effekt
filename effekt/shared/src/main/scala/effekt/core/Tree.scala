@@ -126,18 +126,26 @@ object Tree {
     def pattern: PartialFunction[Pattern, Pattern] = PartialFunction.empty
     def handler: PartialFunction[Handler, Handler] = PartialFunction.empty
 
+    def rewrite(p: Pure): Pure =
+      p match {
+        case e if pure.isDefinedAt(e) => pure(e)
+        case PureApp(b, targs, args) =>
+          PureApp(rewrite(b), targs, args map rewrite)
+        case Select(target, field) =>
+          Select(rewrite(target), field)
+        case v: ValueVar   => v
+        case l: Literal[_] => l
+        case Box(b)        => Box(rewrite(b))
+      }
+
     // Entrypoints to use the traversal on, defined in terms of the above hooks
     def rewrite(e: Expr): Expr =
       e match {
         case e if expr.isDefinedAt(e) => expr(e)
         case DirectApp(b, targs, args) =>
           DirectApp(rewrite(b), targs, args map rewrite)
-        case Select(target, field) =>
-          Select(rewrite(target), field)
-        case v: ValueVar   => v
-        case l: Literal[_] => l
-        case Box(b)        => Box(rewrite(b))
-        case Run(s)        => Run(rewrite(s))
+        case Run(s)  => Run(rewrite(s))
+        case p: Pure => rewrite(p)
       }
 
     def rewrite(e: Stmt): Stmt =
@@ -210,7 +218,7 @@ object Tree {
     }
 
     def rewrite(e: Argument): Argument = e match {
-      case e: Expr  => rewrite(e)
+      case p: Pure  => rewrite(p)
       case e: Block => rewrite(e)
     }
   }

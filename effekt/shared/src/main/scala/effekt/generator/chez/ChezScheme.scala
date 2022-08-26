@@ -85,18 +85,18 @@ trait ChezScheme {
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 
-  def toChez(e: core.Argument): chez.Expr = e match {
-    case e: core.Expr  => toChez(e)
-    case b: core.Block => toChez(b)
-  }
-
   def toChez(module: ModuleDecl): List[chez.Def] = {
     toChez(module.defs).definitions // TODO FIXME, once there is a let _ = ... in there, we are doomed!
   }
 
+  def toChez(args: List[Argument]): List[chez.Expr] = args map {
+    case b: Block => toChez(b)
+    case e: Pure => toChez(e)
+  }
+
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
     case Ret(e) => pure(toChez(e))
-    case App(b, targs, args) => chez.Call(toChez(b), args map toChez)
+    case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
@@ -204,10 +204,8 @@ trait ChezScheme {
     case l: Literal[t] => chez.RawValue(l.value.toString)
     case ValueVar(id)  => chez.Variable(nameRef(id))
 
-    case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
-      case e: Expr  => toChez(e)
-      case b: Block => toChez(b)
-    })
+    case DirectApp(b, targs, args) => chez.Call(toChez(b), toChez(args))
+    case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
 
     case Select(b, field) =>
       chez.Call(nameRef(field), toChez(b))
