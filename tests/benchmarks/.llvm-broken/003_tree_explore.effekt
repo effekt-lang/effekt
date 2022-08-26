@@ -1,15 +1,9 @@
-// Jonathan Frech, 2022-08-25
+// Jonathan Frech, 2022-08-25, 2022-08-26
 // adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/003_tree_explore/benchmark.kk
 
 
 import immutable/list
-
-
-// missing Effekt stdlib features
-
-def abs(n: Int): Int = if (n < 0) 0 - n else n
-
-def max(n: Int, m: Int): Int = if (n > m) n else m
+import stdlib/integer_arithmetic
 
 
 // manually transpiled koka

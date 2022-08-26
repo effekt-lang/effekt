@@ -1,0 +1,14 @@
+module stdlib/integer_arithmetic
+
+
+def min(n: Int, m: Int): Int =
+    if (n < m) n else m
+
+def max(n: Int, m: Int): Int =
+    if (n > m) n else m
+
+def neg(n: Int): Int =
+    0 - n
+
+def abs(n: Int): Int =
+    max(n, neg(n))
