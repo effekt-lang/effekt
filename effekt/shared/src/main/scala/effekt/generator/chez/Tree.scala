@@ -76,7 +76,7 @@ def curry(lam: chez.Lambda): chez.Lambda = lam.params.foldRight[chez.Lambda](che
   case (p, body) => chez.Lambda(List(p), body)
 }
 
-def cleanup(expr: Expr): Expr = DeadCodeElimination.rewrite(LetFusion.rewrite(expr)(using ()))(using ())
+def cleanup(expr: Expr): Expr = LetFusion.rewrite(DeadCodeElimination.rewrite(expr)(using ()))(using ())
 
 object LetFusion extends Tree.Rewrite[Unit] {
   override def expr(using Unit) = {
@@ -98,10 +98,28 @@ object DeadCodeElimination extends Tree.Rewrite[Unit] {
     case Let(bindings, body) =>
       val transformedBody = rewrite(body)
       val fv = FreeVariables.query(transformedBody)
-      val bs = bindings.filter {
-        case Binding(name, binding) => (fv contains name) || !isInlinable(binding)
+      val bs = bindings.collect {
+        case b @ Binding(name, binding) if (fv contains name) || !isInlinable(binding) => rewrite(b)
       }
       Let(bs, transformedBody)
+  }
+
+  override def rewrite(block: Block)(using Unit): Block = visit(block) {
+
+    case Block(defs, exprs, result) =>
+      val transformedResult = rewrite(result)
+      val transformedExprs = exprs.map(rewrite)
+      val transformedDefs = defs.map(rewrite)
+
+      val fv = transformedDefs.flatMap(FreeVariables.query) ++ transformedExprs.flatMap(FreeVariables.query) ++ FreeVariables.query(transformedResult)
+
+      val filteredDefs = transformedDefs.filter {
+        case Constant(name, expr) => (fv contains name) || !isInlinable(expr)
+        case Function(name, params, body) => fv contains name
+        case _ => true
+      }
+
+      Block(filteredDefs, transformedExprs, transformedResult)
   }
 }
 
@@ -152,22 +170,15 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
   override def query(b: Block)(using Unit): Set[ChezName] = b match {
     // defs are potentially recursive!
     case Block(defs, exprs, result) =>
-      val mutualFunctions = defs.collect { case f: chez.Function => f.name }.toSet
-
-      val freeInDefs = defs.foldRight(Set.empty[ChezName]) {
-        case (f : chez.Function, free) => (free - f.name) ++ (query(f) -- mutualFunctions)
-        case (c : chez.Constant, free) => (free - c.name) ++ query(c)
-        // TODO Records!
-        case (_, free) => free
-      }
 
       val boundByDefs = defs.collect {
         case f: chez.Function => f.name
-        case c: chez.Constant => c.name
-        // TODO Records!
+        case f: chez.Constant => f.name
       }.toSet
 
-      freeInDefs ++ ((query(result) ++ exprs.flatMap(query)) -- boundByDefs)
+      val freeInDefs = defs.flatMap(query).toSet
+
+      (freeInDefs ++ query(result) ++ exprs.flatMap(query)) -- boundByDefs
   }
 }
 
