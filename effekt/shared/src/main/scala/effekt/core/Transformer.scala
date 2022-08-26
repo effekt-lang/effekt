@@ -171,13 +171,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transformAsExpr(tree: source.Term)(using Context): Expr = withPosition(tree) {
     case v: source.Var => v.definition match {
-      case sym: VarBinder =>
-        val tpe = getStateType(sym)
-
-        DirectApp(Member(BlockVar(sym), TState.get), Nil, Nil)
-        // val state = Context.annotation(Annotations.StateCapability, sym)
-        // val get = App(Member(BlockVar(state.param), state.get), Nil, Nil)
-        // Context.bind(Context.valueTypeOf(sym), get)
+      case sym: VarBinder => DirectApp(Member(BlockVar(sym), TState.get), Nil, Nil)
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -279,7 +273,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           Context.bind(Context.inferredTypeOf(tree), App(Member(rec, sym), typeArgs, valueArgs ++ blockArgs))
       }
 
-    // TODO actually do something here...
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
       val capture = Context.inferredTypeOf(expr) match {
         case BoxedType(_, c: CaptureSet) => c
@@ -290,11 +283,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val valueArgs = vargs.map(transformAsPure)
       val blockArgs = bargs.map(transformAsBlock)
 
-//      if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
-//        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
-//      } else {
-      Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
-//      }
+      if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+      } else {
+        Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+      }
 
     case c @ source.Call(s : source.ExprTarget, targs, vargs, bargs) =>
       Context.panic("Should not happen. Unbox should have been inferred.")
@@ -418,6 +411,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def pureOrIO(t: BlockSymbol)(using Context): Boolean = pureOrIO(asConcreteCaptureSet(Context.captureOf(t)))
+
+  def isPure(r: CaptureSet): Boolean = r.captures.isEmpty
 
   def pureOrIO(r: CaptureSet): Boolean = r.captures.forall {
     c =>
