@@ -17,17 +17,28 @@ sealed trait Tree extends Product {
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt, exports: List[Symbol]) extends Tree
 
 /**
- * Fine-grain CBV: Arguments can be either expressions or blocks
+ * Fine-grain CBV: Arguments can be either pure expressions or blocks
  */
 sealed trait Argument extends Tree
 
 /**
- * Expressions
+ * Expressions (with potential IO effects)
  */
-sealed trait Expr extends Tree with Argument
-case class ValueVar(id: ValueSymbol) extends Expr
+sealed trait Expr extends Tree
 
-sealed trait Literal[T] extends Expr {
+// invariant, block b is {io}.
+case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
+
+// only inserted by the transformer if stmt is pure / io
+case class Run(s: Stmt) extends Expr
+
+/**
+ * Pure Expressions (no IO effects, or control effects)
+ */
+sealed trait Pure extends Expr with Argument
+case class ValueVar(id: ValueSymbol) extends Pure
+
+sealed trait Literal[T] extends Pure {
   def value: T
 }
 case class UnitLit() extends Literal[Unit] { def value = () }
@@ -36,11 +47,11 @@ case class BooleanLit(value: Boolean) extends Literal[Boolean]
 case class DoubleLit(value: Double) extends Literal[Double]
 case class StringLit(value: String) extends Literal[String]
 
-case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol) extends Expr
-case class Box(b: Block) extends Expr
-// only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt) extends Expr
+// invariant, block b is pure.
+case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
+case class Select(target: Pure, field: Symbol) extends Pure
+
+case class Box(b: Block) extends Pure
 
 /**
  * Blocks
@@ -51,12 +62,10 @@ case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
 
 sealed trait Block extends Tree with Argument
 case class BlockVar(id: BlockSymbol) extends Block
-
-// TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: TermSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
-case class Unbox(e: Expr) extends Block
+case class Unbox(p: Pure) extends Block
 case class New(impl: Handler) extends Block
 
 /**
@@ -71,10 +80,10 @@ case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
-case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
+case class If(cond: Pure, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
-case class Ret(e: Expr) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
+case class Ret(e: Pure) extends Stmt
+case class Match(scrutinee: Pure, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree
 case class IgnorePattern() extends Pattern
@@ -86,7 +95,7 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
-case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
+case class State(id: Symbol, init: Pure, region: Symbol, body: Stmt) extends Stmt
 case class Handle(body: Block, handler: List[Handler]) extends Stmt
 // TODO change to Map
 case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
@@ -109,6 +118,7 @@ object Tree {
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
   trait Rewrite {
     // Hooks to override
+    def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def param: PartialFunction[Param, Param] = PartialFunction.empty
@@ -120,8 +130,8 @@ object Tree {
     def rewrite(e: Expr): Expr =
       e match {
         case e if expr.isDefinedAt(e) => expr(e)
-        case PureApp(b, targs, args) =>
-          PureApp(rewrite(b), targs, args map rewrite)
+        case DirectApp(b, targs, args) =>
+          DirectApp(rewrite(b), targs, args map rewrite)
         case Select(target, field) =>
           Select(rewrite(target), field)
         case v: ValueVar   => v
