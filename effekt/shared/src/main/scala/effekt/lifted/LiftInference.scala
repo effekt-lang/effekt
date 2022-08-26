@@ -105,7 +105,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Expr)(using Environment, Context): Expr = tree match {
     case l: core.Literal[_] => transform(l)
     case core.ValueVar(sym)   => ValueVar(sym)
-    case core.PureApp(b: core.Block, targs, args: List[core.Argument]) =>
+    case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>
+      PureApp(transform(b), targs, liftArguments(args))
+    // TODO also distinguish between pure and io expressions in lift
+    case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs, liftArguments(args))
     case core.Select(target, field) => Select(transform(target), field)
     case core.Box(b)                   => Closure(transform(b))

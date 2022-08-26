@@ -41,10 +41,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
+    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
+
+    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map toDoc, comma))
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
