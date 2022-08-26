@@ -21,11 +21,6 @@ import effekt.symbols.Symbol
  *   |  |- BlockParam
  *   |  |- CapabilityParam (*)
  *   |
- *   |- ArgSection
- *   |  |- ValueArgs
- *   |  |- BlockArg
- *   |  |- CapabilityArg (*)
- *   |
  *   |- Def
  *   |  |- FunDef
  *   |  |- ValDef
@@ -46,7 +41,7 @@ import effekt.symbols.Symbol
  *   |  |- BlockStmt
  *   |  |- Return
  *   |
- *   |- Expr
+ *   |- Term
  *   |  |- Var
  *   |  |- Assign
  *   |  |- Literal
@@ -158,11 +153,11 @@ sealed trait Param extends Definition
 case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Param { type symbol = symbols.ValueParam }
 case class BlockParam(id: IdDef, tpe: BlockType) extends Param { type symbol = symbols.BlockParam }
 
-sealed trait BlockArg extends Tree
-case class FunctionArg(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends BlockArg
-case class InterfaceArg(id: IdRef) extends BlockArg with Reference {
-  type symbol = symbols.BlockParam
-}
+/**
+ * Lambdas / function literals (e.g., { x => x + 1 })
+ */
+case class BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
+
 
 /**
  * Global and local definitions
@@ -178,6 +173,9 @@ case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends De
 }
 case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) extends Def {
   type symbol = symbols.VarBinder
+}
+case class DefDef(id: IdDef, annot: Option[BlockType], block: Term) extends Def {
+  type symbol = symbols.DefBinder
 }
 case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {
   type symbol = symbols.Interface
@@ -265,7 +263,7 @@ case class StringLit(value: String) extends Literal[String]
 /**
  * Represents a first-class function
  */
-case class Box(capt: Option[CaptureSet], block: BlockArg) extends Term
+case class Box(capt: Option[CaptureSet], block: Term) extends Term
 
 case class Unbox(term: Term) extends Term
 
@@ -295,7 +293,7 @@ case class Do(effect: Option[InterfaceType], id: IdRef, targs: List[ValueType], 
 /**
  * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
  */
-case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term
+case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term
 
 /**
  * Models:
@@ -304,7 +302,7 @@ case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], b
  *
  * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
  */
-case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[BlockArg]) extends Term, Reference {
+case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference {
   type symbol = symbols.TermSymbol
 }
 
@@ -321,22 +319,44 @@ case class ExprTarget(receiver: Term) extends CallTarget
 case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
 case class While(cond: Term, block: Stmt) extends Term
 
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
-
 /**
- * Currently, the source language does not allow us to explicitly bind the capabilities.
- * The capability parameter here is annotated by the capability-passing transformation
+ * Handling effects
  *
  *   try {
  *     <prog>
- *   } with <eff> : <Effect> { ... }
+ *   } with <capability> : <Effect> { ... }
  *
- * Here eff is the capability parameter, as introduced by the transformation.
+ * Each with-clause is modeled as an instance of type [[Handler]].
  */
-case class Handler(effect: InterfaceType, capability: Option[BlockParam] = None, clauses: List[OpClause]) extends Reference {
-  def id = effect.id
+case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
+
+/**
+ * An implementation of a given interface
+ *
+ *     <Interface> {
+ *       def <opClause> = ...
+ *     }
+ *
+ * Called "template" or "class" in other languages.
+ */
+case class Implementation(interface: InterfaceType, clauses: List[OpClause]) extends Reference {
+  def id = interface.id
   type symbol = symbols.Interface
 }
+
+/**
+ * A handler is a pair of an optionally named capability and the handler [[Implementation]]
+ */
+case class Handler(capability: Option[BlockParam] = None, impl: Implementation) extends Reference {
+  def effect = impl.interface
+  def clauses = impl.clauses
+  def id = impl.id
+  type symbol = symbols.Interface
+}
+
+case class New(impl: Implementation) extends Term
+
+
 // TODO also allow block params and add a check in TryHandle to rule out continuation capture and block params.
 case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.Operation
@@ -546,6 +566,12 @@ object Tree {
       case TryHandle(prog, handlers) =>
         TryHandle(rewrite(prog), handlers.map(rewrite))
 
+      case New(impl) =>
+        New(rewrite(impl))
+
+      case BlockLiteral(tps, vps, bps, body) =>
+        BlockLiteral(tps, vps, bps, rewrite(body))
+
       case Region(name, body) =>
         Region(name, rewrite(body))
 
@@ -570,6 +596,9 @@ object Tree {
 
       case VarDef(id, annot, region, binding) =>
         VarDef(id, annot, region, rewrite(binding))
+
+      case DefDef(id, annot, block) =>
+        DefDef(id, annot, rewrite(block))
 
       case d: InterfaceDef        => d
       case d: DataDef       => d
@@ -599,18 +628,14 @@ object Tree {
         BlockStmt(rewrite(b))
     }
 
-    def rewrite(b: BlockArg)(using C: Context): BlockArg = b match {
-      case b: FunctionArg  => rewrite(b)
-      case b: InterfaceArg => b
-    }
-
-    def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
-      case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
-    }
-
     def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
-      case Handler(effect, capability, clauses) =>
-        Handler(effect, capability, clauses.map(rewrite))
+      case Handler(capability, impl) =>
+        Handler(capability, rewrite(impl))
+    }
+
+    def rewrite(impl: Implementation)(using Context): Implementation = visit(impl) {
+      case source.Implementation(interface, clauses) =>
+        Implementation(interface, clauses.map(rewrite))
     }
 
     def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
@@ -693,6 +718,12 @@ object Tree {
       case TryHandle(prog, handlers) =>
         combineAll(scoped { query(prog) } :: handlers.map(h => scoped { query(h) }))
 
+      case New(impl) =>
+        query(impl)
+
+      case BlockLiteral(tps, vps, bps, body) =>
+        scoped { query(body) }
+
       case Region(name, body) =>
         query(body)
 
@@ -717,6 +748,9 @@ object Tree {
 
       case VarDef(id, annot, region, binding) =>
         scoped { query(binding) }
+
+      case DefDef(id, annot, block) =>
+        scoped { query(block) }
 
       case d: InterfaceDef  => empty
       case d: DataDef       => empty
@@ -746,17 +780,12 @@ object Tree {
         scoped { query(b) }
     }
 
-    def query(b: BlockArg)(using Context, Ctx): Res = b match {
-      case b: FunctionArg  => query(b)
-      case b: InterfaceArg => empty
-    }
-
-    def query(b: FunctionArg)(using Context, Ctx): Res = b match {
-      case FunctionArg(tps, vps, bps, body) => scoped { query(body) }
-    }
-
     def query(h: Handler)(using Context, Ctx): Res = visit(h) {
-      case Handler(effect, capability, clauses) =>
+      case Handler(capability, impl) => query(impl)
+    }
+
+    def query(h: Implementation)(using Context, Ctx): Res = visit(h) {
+      case Implementation(interface, clauses) =>
         combineAll(clauses.map(cl => scoped { query(cl) }))
     }
 

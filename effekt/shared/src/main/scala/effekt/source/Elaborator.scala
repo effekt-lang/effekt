@@ -73,7 +73,7 @@ object ExplicitCapabilities extends Rewrite {
       val others = Context.annotation(Annotations.CapabilityArguments, c)
 
       // the remaining capabilities are provided as arguments
-      val capabilityArgs = others.map { e => InterfaceArg(Context.freshReferenceTo(e)) }
+      val capabilityArgs = others.map { e => Var(Context.freshReferenceTo(e)) }
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
@@ -90,7 +90,7 @@ object ExplicitCapabilities extends Rewrite {
       val blockArgs = bargs.map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => InterfaceArg(Context.freshReferenceTo(e)) }
+      val capabilityArgs = capabilities.map { e => Var(Context.freshReferenceTo(e)) }
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
@@ -105,7 +105,7 @@ object ExplicitCapabilities extends Rewrite {
       val blockArgs = bargs.map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => InterfaceArg(Context.freshReferenceTo(e)) }
+      val capabilityArgs = capabilities.map { e => Var(Context.freshReferenceTo(e)) }
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
@@ -123,29 +123,17 @@ object ExplicitCapabilities extends Rewrite {
 
       val hs = (handlers zip capabilities).map {
         case (h, cap) => visit(h) {
-          case h @ Handler(eff, _, clauses) =>
-            val cls = clauses.map { cl =>
-              visit(cl) {
-                case OpClause(id, tparams, params, body, resume: IdDef) =>
-
-                  // OpClause also binds a block parameter for resume, which is _not_ annotated here
-                  OpClause(id, tparams, params, rewrite(body), resume)
-              }
-            }
-
-            // here we annotate the synthesized capability
-            Handler(eff, Some(Context.definitionFor(cap)), cls)
+          // here we annotate the synthesized capability
+          case h @ Handler(_, impl) => Handler(Some(Context.definitionFor(cap)), rewrite(impl))
         }
       }
 
       TryHandle(body, hs)
-  }
 
-  override def rewrite(b: source.FunctionArg)(using Context): source.FunctionArg = visit(b) {
-    case b @ source.FunctionArg(tps, vps, bps, body) =>
+    case b @ source.BlockLiteral(tps, vps, bps, body) =>
       val capabilities = Context.annotation(Annotations.BoundCapabilities, b)
       val capParams = capabilities.map(Context.definitionFor)
-      source.FunctionArg(tps, vps, bps ++ capParams, rewrite(body))
+      source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body))
   }
 }
 
@@ -158,11 +146,9 @@ object ExplicitRegions extends Rewrite {
   override def expr(using Context) = {
     case f @ TryHandle(body, handler) =>
       TryHandle(wrapInRegion(f, body), handler.map(rewrite))
-  }
 
-  override def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
-    case FunctionArg(tps, vps, bps, body) =>
-      FunctionArg(tps, vps, bps, wrapInRegion(b, body))
+    case b @ BlockLiteral(tps, vps, bps, body) =>
+      BlockLiteral(tps, vps, bps, wrapInRegion(b, body))
   }
 
   def wrapInRegion(outerTree: source.Tree, body: source.Stmt)(using Context): source.Stmt = {
@@ -244,6 +230,10 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
       }
 
       tcaps ++ combineAll(vargs map query) ++ combineAll(bargs map query)
+
+    case b @ source.BlockLiteral(tps, vps, bps, body) =>
+      val selfRegion = Context.annotation(Annotations.SelfRegion, b)
+      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
   }
 
   override def defn(using Context, Unit) = {
@@ -257,17 +247,6 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
 //    // TODO explicitly annotate the self region
 //    case tree @ VarDef(id, annot, region, binding) =>
 //      ???
-  }
-
-  override def query(b: source.BlockArg)(using Context, Unit): CaptureSet = visit(b) {
-    case b: source.FunctionArg  => query(b)
-    case b: source.InterfaceArg => captureOf(b.definition)
-  }
-
-  override def query(b: source.FunctionArg)(using Context, Unit): CaptureSet = visit(b) {
-    case source.FunctionArg(tps, vps, bps, body) =>
-      val selfRegion = Context.annotation(Annotations.SelfRegion, b)
-      query(body) -- boundCapabilities(b) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
   }
 
   def boundCapabilities(t: Tree)(using Context): CaptureSet =

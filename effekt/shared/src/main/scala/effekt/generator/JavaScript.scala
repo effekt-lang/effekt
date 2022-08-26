@@ -69,7 +69,8 @@ trait JavaScriptPrinter extends JavaScriptBase {
       toDoc(b) <> "." <> nameRef(id)
     case Extern(ps, body) =>
       jsLambda(ps map toDoc, body)
-    case Unbox(e) => toDoc(e)
+    case Unbox(e)     => toDoc(e)
+    case New(handler) => toDoc(handler)
   })
 
   // pretty print the statement in a javascript expression context
@@ -98,7 +99,7 @@ trait JavaScriptPrinter extends JavaScriptBase {
       jsCall("$effekt.pure", toDoc(e))
 
     case Handle(body, hs) =>
-      val handlers = hs map { handler => jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) }) }
+      val handlers = hs.map(toDoc)
       val cs = parens(jsArray(handlers))
       "$effekt.handle" <> cs <> parens(nest(line <> toDoc(body)))
 
@@ -119,6 +120,9 @@ trait JavaScriptPrinter extends JavaScriptBase {
 
     case other => jsCall(parens(jsLambda(Nil, jsBlock(toDocStmt(other)))), Nil)
   }
+
+  def toDoc(handler: Handler)(using Context): Doc =
+    jsObject(handler.clauses.map { case (id, b) => nameDef(id) -> toDoc(b) })
 }
 
 trait JavaScriptBase extends ParenPrettyPrinter {
@@ -191,7 +195,7 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Box(e) => toDoc(e)
 
-    case Run(s) => toDoc(s) <> ".run()"
+    case Run(s) => toDocDelayed(s) <> ".run()"
   })
 
   def argToDoc(e: Argument)(implicit C: Context): Doc = e match {
@@ -231,6 +235,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocStmt(rest)
+
+    case Def(id, tpe, block, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
@@ -286,6 +293,9 @@ trait JavaScriptBase extends ParenPrettyPrinter {
     case Def(id, tpe, Extern(ps, body), rest) =>
       jsFunction(nameDef(id), ps map toDoc, "return" <+> body) <> emptyline <> toDocTopLevel(rest)
 
+    case Def(id, tpe, block, rest) =>
+      "const" <+> nameDef(id) <+> "=" <+> toDoc(block) <> ";" <> emptyline <> toDocTopLevel(rest)
+
     case Data(did, ctors, rest) =>
       val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
       vsep(cs, ";") <> ";" <> emptyline <> toDocTopLevel(rest)
@@ -295,6 +305,8 @@ trait JavaScriptBase extends ParenPrettyPrinter {
 
     case Include(contents, rest) =>
       line <> vsep(contents.split('\n').toList.map(c => text(c))) <> emptyline <> toDocTopLevel(rest)
+
+    case Ret(e) => ""
 
     case other => toDocExpr(other)
   }

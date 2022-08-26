@@ -12,7 +12,7 @@ object PreTyper extends Phase[NameResolved, NameResolved] {
     val traversal = new BoxUnboxInference
     val transformedTree = traversal.rewrite(input.tree)
 
-    if (Context.buffer.hasErrors) { None }
+    if (Context.messaging.hasErrors) { None }
     else { Some(input.copy(tree = transformedTree)) }
   }
 }
@@ -42,6 +42,8 @@ class BoxUnboxInference {
     }
 
     case Unbox(t) => Unbox(rewriteAsExpr(t))
+    case New(impl) => New(rewrite(impl))
+    case BlockLiteral(tps, vps, bps, body) => BlockLiteral(tps, vps, bps, rewrite(body))
     case other => Unbox(rewriteAsExpr(other))
   }
 
@@ -52,8 +54,12 @@ class BoxUnboxInference {
     case v: Var => v.definition match {
       // TODO maybe we should synthesize a call to get here already?
       case sym: (ValueSymbol | symbols.VarBinder) => v
-      case sym: BlockSymbol => Box(None, InterfaceArg(v.id).inheritPosition(v)).inheritPosition(v)
+      case sym: BlockSymbol => Box(None, v).inheritPosition(v)
     }
+
+    case n: New => Box(None, rewriteAsBlock(n)).inheritPosition(n)
+
+    case b: BlockLiteral => Box(None, rewriteAsBlock(b)).inheritPosition(b)
 
     case l: Literal[t]            => l
 
@@ -79,11 +85,11 @@ class BoxUnboxInference {
       Do(effect, id, targs, vargs.map(rewriteAsExpr))
 
     case Call(fun, targs, vargs, bargs) =>
-      Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewrite))
+      Call(rewrite(fun), targs, vargs.map(rewriteAsExpr), bargs.map(rewriteAsBlock))
 
     case m @ MethodCall(receiver, id, targs, vargs, bargs) =>
       val vargsTransformed = vargs.map(rewriteAsExpr)
-      val bargsTransformed = bargs.map(rewrite)
+      val bargsTransformed = bargs.map(rewriteAsBlock)
 
       val syms = m.definition match {
         // an overloaded call target
@@ -114,7 +120,7 @@ class BoxUnboxInference {
       Hole(rewrite(stmts))
 
     case Box(c, b) =>
-      Box(c, rewrite(b))
+      Box(c, rewriteAsBlock(b))
   }
 
   def rewrite(target: source.CallTarget)(using C: Context): source.CallTarget = visit(target) {
@@ -137,6 +143,9 @@ class BoxUnboxInference {
 
     case VarDef(id, annot, region, binding) =>
       VarDef(id, annot, region, rewrite(binding))
+
+    case DefDef(id, annot, binding) =>
+      DefDef(id, annot, rewriteAsBlock(binding))
 
     case d: InterfaceDef        => d
     case d: DataDef       => d
@@ -164,26 +173,22 @@ class BoxUnboxInference {
       BlockStmt(rewrite(b))
   }
 
-  def rewrite(b: BlockArg)(using C: Context): BlockArg = b match {
-    case b: FunctionArg  => rewrite(b)
-    case b: InterfaceArg => b
+  def rewrite(h: Handler)(using Context): Handler = visit(h) {
+    case Handler(capability, impl) =>
+      Handler(capability, rewrite(impl))
   }
 
-  def rewrite(b: FunctionArg)(using C: Context): FunctionArg =  visit(b) {
-    case FunctionArg(tps, vps, bps, body) => FunctionArg(tps, vps, bps, rewrite(body))
+  def rewrite(i: Implementation)(using Context): Implementation = visit(i) {
+    case Implementation(interface, clauses) =>
+      Implementation(interface, clauses.map(rewrite))
   }
 
-  def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
-    case Handler(effect, capability, clauses) =>
-      Handler(effect, capability, clauses.map(rewrite))
-  }
-
-  def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
+  def rewrite(h: OpClause)(using Context): OpClause = visit(h) {
     case OpClause(id, tparams, params, body, resume) =>
       OpClause(id, tparams, params, rewrite(body), resume)
   }
 
-  def rewrite(c: MatchClause)(using C: Context): MatchClause = visit(c) {
+  def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {
     case MatchClause(pattern, body) =>
       MatchClause(pattern, rewrite(body))
   }

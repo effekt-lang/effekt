@@ -29,22 +29,19 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // [[ a -> b ]] = [ev] -> a -> b
   def transform(tree: core.Block, self: Option[Symbol] = None)(using Environment, Context): Block = tree match {
-    case core.BlockLit(params, body) =>
+    case b @ core.BlockLit(params, body) =>
       val id = ScopeId()
-
-      val ownBindings = self.map { sym => env.bind(sym) }.getOrElse { env }
-
-      // recursive functions need to bind the own id
-      val extendedEnv = params.foldLeft(ownBindings.adapt(ScopeVar(id))) {
-        case (env, core.BlockParam(p, tpe)) => env.bind(p)
-        case (env, core.ValueParam(p, tpe)) => env
-      }
-      ScopeAbs(id, BlockLit(params.map { p => transform(p) }, transform(body)(using extendedEnv, Context)))
+      ScopeAbs(id, liftBlockLitTo(b, id, self))
     case core.Member(body, id) => Member(transform(body), id)
     case core.Extern(params, body) => Extern(params.map { p => transform(p) }, body)
     case core.BlockVar(b) => BlockVar(b)
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
+
+    case core.New(core.Handler(interface, clauses)) =>
+      val id = ScopeId()
+      val transformedMethods = clauses.map { case (op, block) => (op, liftBlockLitTo(block, id)) }
+      ScopeAbs(id, New(Handler(interface, transformedMethods)))
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
@@ -124,6 +121,18 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.StringLit(value: String) => StringLit(value)
   }
 
+  def liftBlockLitTo(b: core.BlockLit, scope: ScopeId, self: Option[Symbol] = None)(using Environment, Context): BlockLit = b match {
+    case core.BlockLit(params, body) =>
+      val ownBindings = self.map { sym => env.bind(sym) }.getOrElse { env }
+
+      // recursive functions need to bind the own id
+      val extendedEnv = params.foldLeft(ownBindings.adapt(ScopeVar(scope))) {
+        case (env, core.BlockParam(p, tpe)) => env.bind(p)
+        case (env, core.ValueParam(p, tpe)) => env
+      }
+      BlockLit(params.map { p => transform(p) }, transform(body)(using extendedEnv, Context))
+  }
+
   /**
    * Don't transform the block itself, but only the body. Used for local abstractions like match clauses where
    * we know the evidence is Here.
@@ -179,6 +188,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       case b: core.Extern     => sys error "Cannot provide scope evidence for built in function"
       // TODO check whether this makes any sense
       case b: core.Unbox      => Here()
+      case b: core.New => Here()
     }
   }
 }

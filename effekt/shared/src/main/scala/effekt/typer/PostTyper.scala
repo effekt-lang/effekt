@@ -16,7 +16,7 @@ object PostTyper extends Phase[Typechecked, Typechecked] {
     val Typechecked(source, tree, mod) = input
     Wellformedness.check(mod, tree)
 
-    if (Context.buffer.hasErrors) { None }
+    if (Context.messaging.hasErrors) { None }
     else { Some(input) }
 }
 
@@ -53,7 +53,7 @@ object Wellformedness extends Visit[WFContext] {
     /**
      * For handlers we check that the return type does not mention any bound capabilities
      */
-    case tree @ source.TryHandle(prog, handlers) => {
+    case tree @ source.TryHandle(prog, handlers) =>
       val bound = Context.annotation(Annotations.BoundCapabilities, tree).map(_.capture).toSet
       val usedEffects = Context.annotation(Annotations.InferredEffect, tree)
       val tpe = Context.inferredTypeOf(prog)
@@ -91,13 +91,38 @@ object Wellformedness extends Visit[WFContext] {
           }
         }
       }
-    }
+
+    case tree @ source.Region(id, body) =>
+      val reg = tree.symbol
+      val tpe = Context.inferredTypeOf(body)
+
+      val free = freeCapture(tpe)
+
+      if (free contains reg.capture) {
+        Context.at(body) {
+          Context.error(pp"The return type ${tpe} of the statement is not allowed to refer to region ${reg}")
+        }
+      }
+
+      scoped { query(body) }
 
     case tree @ source.Match(scrutinee, clauses) =>
       val tpe = Context.inferredTypeOf(scrutinee)
       Context.at(tree) { checkExhaustivity(tpe, clauses.map { _.pattern }) }
       query(scrutinee)
       clauses foreach { cl => scoped { query(cl) }}
+
+    case tree @ source.BlockLiteral(tps, vps, bps, body) =>
+      val selfRegion = Context.getSelfRegion(tree)
+      val returnType = Context.inferredTypeOf(body)
+
+      if (freeCapture(returnType) contains selfRegion) {
+        Context.at(body) {
+          Context.error(s"The return type ${returnType} of the function body must not mention the region of the function itself.")
+        }
+      }
+
+      scoped { query(body) }
   }
 
   override def defn(using Context, WFContext) = {
@@ -122,20 +147,6 @@ object Wellformedness extends Visit[WFContext] {
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       val effectDecl = d.symbol
       withEffect(effectDecl)
-  }
-
-  override def query(b: source.FunctionArg)(using Context, WFContext): Unit = visit(b) {
-    case tree @ source.FunctionArg(tps, vps, bps, body) =>
-      val selfRegion = Context.getSelfRegion(tree)
-      val returnType = Context.inferredTypeOf(body)
-
-      if (freeCapture(returnType) contains selfRegion) {
-        Context.at(body) {
-          Context.error(s"The return type ${returnType} of the function body must not mention the region of the function itself.")
-        }
-      }
-
-      scoped { query(body) }
   }
 
   /**

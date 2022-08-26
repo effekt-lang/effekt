@@ -58,6 +58,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest())
 
+    case v @ source.DefDef(id, annot, binding) =>
+      val sym = v.symbol
+      insertBindings { Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), rest()) }
+
     // This phase introduces capabilities for state effects
     case v @ source.VarDef(id, _, reg, binding) if pureOrIO(binding) =>
       val sym = v.symbol
@@ -66,8 +70,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
       val tpe = getStateType(sym)
-      val b = Context.bind(tpe, transform(binding))
-      State(sym, b, sym.region, rest())
+      insertBindings {
+        val b = Context.bind(tpe, transform(binding))
+        State(sym, b, sym.region, rest())
+      }
 
     case source.ExternType(id, tparams) =>
       rest()
@@ -135,8 +141,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case s @ source.Select(receiver, selector) =>
       Member(transformAsBlock(receiver), s.definition)
 
+    case s @ source.New(h @ source.Implementation(tpe, members)) =>
+      // we need to establish a canonical ordering of methods
+      // we use the order in which they are declared in the signature (like with handlers)
+      val clauses = members.map { cl => (cl.definition, cl) }.toMap
+      val sig = h.definition
+
+      New(Handler(sig, sig.ops.map(clauses.apply).map {
+        case op @ source.OpClause(id, tparams, vparams, body, resume) =>
+          val vps = vparams map transform
+          // currently the don't take block params
+          val opBlock = BlockLit(vps, transform(body))
+          (op.definition, opBlock)
+      }))
+
     case source.Unbox(b) =>
       Unbox(transformAsExpr(b))
+
+    case source.BlockLiteral(tps, vps, bps, body) =>
+      BlockLit((vps map transform) ++ (bps map transform), transform(body))
 
     case _ =>
       transformUnbox(tree)
@@ -168,9 +191,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case l: source.Literal[t] => transformLit(l)
 
     case l @ source.Box(capt, block) =>
-      Box(transform(block))
+      Box(transformAsBlock(block))
 
     case source.Unbox(b) => transformBox(tree)
+
+    case source.New(impl) => transformBox(tree)
+
+    case source.BlockLiteral(tps, vps, bps, body) => transformBox(tree)
 
     case source.If(cond, thn, els) =>
       val c = transformAsExpr(cond)
@@ -203,7 +230,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val rec = transformAsBlock(receiver)
       val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
-      val blockArgs = bargs.map(transform)
+      val blockArgs = bargs.map(transformAsBlock)
 
       c.definition match {
         case sym if sym == TState.put || sym == TState.get =>
@@ -220,7 +247,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsExpr(expr)
       val typeArgs = Context.typeArguments(c)
       val valueArgs = vargs.map(transformAsExpr)
-      val blockArgs = bargs.map(transform)
+      val blockArgs = bargs.map(transformAsBlock)
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
         Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
@@ -245,7 +272,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       val hs = handlers.map {
-        case h @ source.Handler(eff, cap, cls) =>
+        case h @ source.Handler(cap, source.Implementation(eff, cls)) =>
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
@@ -277,11 +304,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   }
 
-  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.BlockArg])(using Context): Expr = {
+  def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
     val targs = Context.typeArguments(call)
 
-    val as = vargs.map(transformAsExpr) ++ bargs.map(transform)
+    val as = vargs.map(transformAsExpr) ++ bargs.map(transformAsBlock)
 
     sym match {
       case f: BuiltinFunction if ExternFlag.directStyle(f.purity) =>
@@ -299,16 +326,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: ValueSymbol =>
         Context.bind(Context.inferredTypeOf(call), App(Unbox(ValueVar(f)), targs, as))
     }
-  }
-
-  def transform(block: source.BlockArg)(using Context): core.Block = block match {
-    case source.FunctionArg(tps, vps, bps, body) =>
-      BlockLit((vps map transform) ++ (bps map transform), transform(body))
-    case c @ source.InterfaceArg(id) => BlockVar(c.definition)
-  }
-
-  def transform(block: source.FunctionArg)(using Context): core.BlockLit = block match {
-    case source.FunctionArg(tps, vps, bps, body) => BlockLit((vps map transform) ++ (bps map transform), transform(body))
   }
 
   def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol)
@@ -393,11 +410,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
   }
 
-  // we conservatively approximate to false
-  def pureOrIO(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
-    case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
-    case _         => false
-  }
+  // we can conservatively approximate to false, in order to disable the optimizations
+  def pureOrIO(t: source.Tree)(using Context): Boolean =
+    Context.inferredCaptureOption(t) match {
+      case Some(capt) => pureOrIO(asConcreteCaptureSet(capt))
+      case _         => false
+    }
 
   def isPure(t: source.Tree)(using Context): Boolean = Context.inferredCaptureOption(t) match {
     case Some(capt) => asConcreteCaptureSet(capt).captures.isEmpty

@@ -3,8 +3,9 @@ package effekt
 import effekt.context.Context
 import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
+import effekt.util.messages.ParseError
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Source }
+import kiama.util.{ Position, Positions, Range, Source }
 
 import scala.language.implicitConversions
 
@@ -41,9 +42,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
       case res: NoSuccess =>
         val input = res.next
-        positions.setStart(res, input.position)
-        positions.setFinish(res, input.nextPosition)
-        C.error(res, res.message)
+        val range = Range(input.position, input.nextPosition)
+        C.report(ParseError(res.message, Some(range)))
         None
     }
 
@@ -83,6 +83,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `while` = keyword("while")
   lazy val `type` = keyword("type")
   lazy val `effect` = keyword("effect")
+  lazy val `interface` = keyword("interface")
   lazy val `try` = keyword("try")
   lazy val `with` = keyword("with")
   lazy val `case` = keyword("case")
@@ -109,7 +110,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
-    "effect", "try", "with", "case", "do", "if", "while",
+    "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
     "at", "box", "unbox", "return", "region", "new"
   )
@@ -243,6 +244,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val definition: P[Def] =
     ( valDef
     | funDef
+    | defDef
     | effectDef
     | typeDef
     | effectAliasDef
@@ -270,7 +272,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)
       }
-    | `effect` ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
+    | (`effect` | `interface`) ~> idDef ~ maybeTypeParams ~ (`{` ~/> many(`def` ~> effectOp)  <~ `}`) ^^ {
         case id ~ tps ~ ops => InterfaceDef(id, tps, ops, true)
       }
     )
@@ -344,30 +346,30 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
    * Arguments
    */
 
-  lazy val maybeBlockArgs: P[List[BlockArg]] =
+  lazy val maybeBlockArgs: P[List[Term]] =
     many(blockArg)
 
-  lazy val blockArgs: P[List[BlockArg]] =
+  lazy val blockArgs: P[List[Term]] =
     some(blockArg)
 
-  lazy val blockArg: P[BlockArg] =
-    ( `{` ~> idRef <~ `}` ^^ { case id => source.InterfaceArg(id) }
+  lazy val blockArg: P[Term] =
+    ( `{` ~> idRef <~ `}` ^^ Var.apply
     | functionArg
     )
 
-  lazy val functionArg: P[FunctionArg] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => FunctionArg(Nil, ps, Nil, body) }
+  lazy val functionArg: P[BlockLiteral] =
+    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLiteral(Nil, ps, Nil, body) }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
-      FunctionArg(
+      BlockLiteral(
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
         Return(Match(Var(IdRef(name)), cs))) withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => FunctionArg(Nil, Nil, Nil, s) }
+    | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) }
     | failure("Expected a block argument")
     )
 
@@ -413,12 +415,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
           (`=` ~/> idRef) ~ maybeTypeArgs ~ maybeValueArgs ~ (`;`  ~> stmts) ^^ {
         case params ~ id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, params, Nil, body)) withPositionOf params))
+          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, params, Nil, body)) withPositionOf params))
        }
     | `with` ~> idRef ~ maybeTypeArgs ~ maybeValueArgs ~ (`;` ~> stmts) ^^ {
         case id ~ tps ~ vargs ~ body =>
           val tgt = IdTarget(id) withPositionOf(id)
-          Return(Call(tgt, tps, vargs, List(FunctionArg(Nil, Nil, Nil, body)) withPositionOf id))
+          Return(Call(tgt, tps, vargs, List(BlockLiteral(Nil, Nil, Nil, body)) withPositionOf id))
        }
     )
 
@@ -430,6 +432,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case id ~ tpe ~ reg ~ expr => VarDef(id, tpe, reg, expr)
     }
 
+  lazy val defDef: P[DefDef] =
+    `def` ~/> idDef ~ (`:` ~/> blockType).? ~ (`=` ~/> expr) ^^ {
+      case id ~ tpe ~ block => DefDef(id, tpe, block)
+    }
 
   // TODO make the scrutinee a statement
   lazy val matchDef: P[Stmt] =
@@ -487,6 +493,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | regionExpr
     | lambdaExpr
     | unboxExpr
+    | newExpr
     | primExpr
     )
 
@@ -500,9 +507,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
 
+  lazy val newExpr: P[New] = `new` ~/> implementation ^^ New.apply
+
   lazy val funCall: P[Term] =
     ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply
-    | callTarget ~ maybeTypeArgs ~ valueArgs ~ success(List.empty[BlockArg]) ^^ Call.apply
+    | callTarget ~ maybeTypeArgs ~ valueArgs ~ success(List.empty[Term]) ^^ Call.apply
     | callTarget ~ maybeTypeArgs ~ success(List.empty[Term]) ~ blockArgs ^^ Call.apply
     )
 
@@ -521,16 +530,22 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `region` ~/> idDef ~ stmt ^^ Region.apply
 
   lazy val handler: P[Handler] =
-    ( `with` ~> (idDef <~ `:`).? ~ interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
-      case capabilityName ~ effect ~ clauses =>
-        val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, clauses)
+    ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
+      case capabilityName ~ impl =>
+        val capability = capabilityName map { name => BlockParam(name, impl.interface) }
+        Handler(capability, impl)
       }
-    | `with` ~> (idDef <~ `:`).? ~ (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case capabilityName ~ effect ~ tparams ~ resume ~ FunctionArg(_, vparams, _, body) =>
+    )
+
+  lazy val implementation: P[Implementation] =
+    ( interfaceType ~ (`{` ~> many(defClause) <~ `}`) ^^ {
+      case effect ~ clauses =>
+        Implementation(effect, clauses)
+      }
+    | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
+      case effect ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
-        val capability = capabilityName map { name => BlockParam(name, effect) }
-        Handler(effect, capability, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
+        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
       }
     )
 
@@ -579,7 +594,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     double | int | bool | unit | string
 
   lazy val lambdaExpr: P[Box] =
-    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, FunctionArg(Nil, ps, Nil, body)) }
+    `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
 
   lazy val listLiteral: P[Term] =
     `[` ~> manySep(expr, `,`) <~ `]` ^^ { exprs => exprs.foldRight(NilTree) { ConsTree } withPositionOf exprs }

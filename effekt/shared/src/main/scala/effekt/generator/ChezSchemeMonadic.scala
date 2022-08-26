@@ -61,18 +61,6 @@ object ChezSchemeMonadicPrinter extends ChezSchemeBase {
         "(run (" <> nameRef(main) <> ")))"
     }
 
-  override def toDoc(b: Block)(implicit C: Context): Doc = link(b, b match {
-    case BlockVar(v) =>
-      nameRef(v)
-    case BlockLit(ps, body) =>
-      schemeLambda(ps map toDoc, toDoc(body, false))
-    case Member(b, id) =>
-      schemeCall(nameRef(id), toDoc(b))
-    case Extern(ps, body) =>
-      schemeLambda(ps map toDoc, body)
-    case Unbox(e) => toDoc(e)
-  })
-
   override def toDoc(s: Stmt, toplevel: Boolean)(implicit C: Context): Doc = s match {
     case Val(Wildcard(_), tpe, binding, body) if toplevel =>
       "(run " <> toDoc(binding, false) <> ")" <> emptyline <> toDoc(body, toplevel)

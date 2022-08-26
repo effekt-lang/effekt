@@ -61,6 +61,7 @@ case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: TermSymbol) extends Block
 case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
+case class New(impl: Handler) extends Block
 
 /**
  * Statements
@@ -157,7 +158,8 @@ def freeVariables(block: Block): Set[Symbol] = block match {
     freeVariables(body) -- bound
   case Member(b, field) => freeVariables(b)
   case Extern(params, body) => Set.empty
-  case Unbox(e) => freeVariables(e) // well, well, well...
+  case Unbox(e) => freeVariables(e) // TODO well, well, well...
+  case _ => ??? // TODO
 }
 
 def freeVariables(scope: Scope): Set[Symbol] = scope match {

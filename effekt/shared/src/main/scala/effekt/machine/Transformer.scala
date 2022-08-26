@@ -34,7 +34,10 @@ object Transformer {
     stmt match {
       case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
         emitDeclaration(DefineForeign(transform(functionType.result), transform(name),
-          params.map{case ValueParam(id, tpe) => Variable(id.name.name, transform(tpe)) }, body));
+          params.map{param => param match
+            case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
+            case lifted.BlockParam(id, tpe) => ???
+          }, body));
         transformToplevel(rest, mods)
       case lifted.Def(id, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO top-level definitions don't need evidence, or do they?
@@ -131,9 +134,12 @@ object Transformer {
         // TODO incomplete matches
         // TODO nested matches
         transform(scrutinee).run(value =>
-        Switch(value, clauses.map {
+        Switch(value, clauses.map{pattern => pattern match
+          case (lifted.IgnorePattern(), _) => ??? // Clause(List(), NOOP) // TODO verify
+          case (lifted.AnyPattern(), _) => ???
           case (lifted.TagPattern(constructor, patterns), lifted.BlockLit(params, body)) =>
             Clause(params.map(transform), transform(body))
+          case (lifted.LiteralPattern(l), block) => ???
         }))
       case lifted.Handle(lifted.ScopeAbs(_, lifted.BlockLit(List(id), body)), List(handler)) =>
         // TODO deal with evidence
@@ -256,7 +262,14 @@ object Transformer {
         val variable = Variable(transform(id), transform(tpe));
         val tag = blockName.tpe match {
           case symbols.DataType(_, List(), variants) => variants.indexOf(blockName)
+          // TODO
+          case symbols.DataType(_, _, _) => throw new Exception("not yet supported: (data) type polymorphism")
+
           case symbols.Record(_, List(), _, _) => 0
+          // TODO
+          case symbols.Record(_, _, _, _) => throw new Exception("not yet supported: record polymorphism")
+
+          case symbol => throw new Exception(s"application to an unknown symbol: $symbol")
         };
         transform(args).flatMap(values =>
           Binding(k =>
@@ -440,9 +453,11 @@ object Transformer {
         Variable(transform(name), transform(tpe))
       case lifted.BlockParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
+/*
       case _ =>
         println(param)
         C.abort("unsupported parameter " + param)
+*/
     }
 
   // def transform(scope: lifted.Scope)(implicit C: Context): Variable =
@@ -469,19 +484,25 @@ object Transformer {
         // TODO block params too
         Negative(List(vparams.map(transform)))
       case symbols.Interface(_, List(), ops) =>
-        val opsSignatures = ops.map {
+        val opsSignatures = ops.map{ op => op match
           case symbols.Operation(_, List(), vparams, _, _, _) =>
             // TODO why is field type in param optional?
             vparams.map( param => transform(param.tpe.get))
+          // TODO
+          case op => throw new Exception("not yet supported: polymorphic operations")
         };
         Negative(opsSignatures)
       case symbols.DataType(_, List(), records) =>
-        val recSignatures = records.map {
+        val recSignatures = records.map{ record => record match
           case symbols.Record(_, List(), _, fields) =>
-            fields.map {
+            fields.map{
               case symbols.Field(_, symbols.ValueParam(_, Some(tpe)), _) =>
                 transform(tpe)
+              // TODO
+              case _ => ???
             }
+          // TODO
+          case _ => throw new Exception("not yet supported: polymorphic records")
         }
         Positive(recSignatures)
 
@@ -548,6 +569,7 @@ object Transformer {
         // TODO we assume here that resume is the last param
         C.blockTypeOf(params.last.id) match {
           case symbols.FunctionType(_, _, _, _, returnType, _) => returnType
+          case _ => ???
         }
       case _ =>
         println(handler)

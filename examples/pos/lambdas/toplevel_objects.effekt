@@ -1,0 +1,12 @@
+interface MyInterface {
+  def doIt(): Unit
+}
+
+// this tests toplevel declaration of objects (as preparation for modules)
+def foo = new MyInterface {
+  def doIt() = println("Hello World!")
+}
+
+def bar {m: MyInterface}: Unit = m.doIt()
+
+def main() = bar {foo}

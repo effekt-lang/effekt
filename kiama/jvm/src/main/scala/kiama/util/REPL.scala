@@ -14,11 +14,10 @@ package util
 /**
  * General support for applications that implement read-eval-print loops (REPLs).
  */
-trait REPL[T, C <: REPLConfig] {
+trait REPL[T, C <: REPLConfig, M <: Message] {
 
   import scala.annotation.tailrec
   import kiama.parsing.{ NoSuccess, ParseResult, Success }
-  import kiama.util.Messaging.{ message, Messages }
   import org.rogach.scallop.exceptions.ScallopException
 
   /**
@@ -39,7 +38,7 @@ trait REPL[T, C <: REPLConfig] {
   /**
    * The messaging facilitiy used by this REPL.
    */
-  val messaging = new Messaging(positions)
+  val messaging: Messaging[M]
 
   /**
    * The entry point for this REPL.
@@ -176,9 +175,7 @@ trait REPL[T, C <: REPLConfig] {
           process(source, e, config)
         case res: NoSuccess =>
           val pos = res.next.position
-          positions.setStart(res, pos)
-          positions.setFinish(res, pos)
-          val messages = message(res, res.message)
+          val messages = Vector(messaging.message(Range(pos, pos), res.message))
           report(source, messages, config)
       }
     }
@@ -189,7 +186,7 @@ trait REPL[T, C <: REPLConfig] {
    * Output the messages in order of position using the given configuration,
    * which defaults to that configuration's output.
    */
-  def report(source: Source, messages: Messages, config: C): Unit = {
+  def report(source: Source, messages: messaging.Messages, config: C): Unit = {
     config.output().emit(messaging.formatMessages(messages))
   }
 }

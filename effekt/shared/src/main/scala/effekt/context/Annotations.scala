@@ -156,10 +156,20 @@ object Annotations {
 
   /**
    * The module a given symbol is defined in
+   *
+   * @deprecated
    */
   val SourceModule = Annotation[symbols.Symbol, symbols.Module](
     "SourceModule",
     "the source module of symbol"
+  )
+
+  /**
+   * All symbols defined in a source file
+   */
+  val DefinedSymbols = Annotation[kiama.util.Source, Set[symbols.Symbol]](
+    "DefinedSymbols",
+    "all symbols for source file"
   )
 
   /**
@@ -220,7 +230,7 @@ object Annotations {
 
   /**
    * Capabilities bound by either a [[source.TryHandle]], [[source.FunDef]],
-   *   [[source.VarDef]], or [[source.FunctionArg]].
+   *   [[source.VarDef]], or [[source.BlockLiteral]].
    *
    * Inferred by typer, used by elaboration.
    */
@@ -434,10 +444,10 @@ trait AnnotationsDB { self: Context =>
     case id: source.IdDef =>
       annotate(Annotations.DefinitionTree, sym, id)
       annotate(Annotations.Symbol, id, sym)
-      annotate(Annotations.SourceModule, sym, module)
+      addDefinedSymbolToSource(sym)
     case _ =>
       annotate(Annotations.Symbol, id, sym)
-      annotate(Annotations.SourceModule, sym, module)
+      // addDefinedSymbolToSource(sym)
   }
 
   def symbolOf(id: source.Id): Symbol = symbolOption(id) getOrElse {
@@ -445,9 +455,6 @@ trait AnnotationsDB { self: Context =>
   }
   def symbolOption(id: source.Id): Option[Symbol] =
     annotationOption(Annotations.Symbol, id)
-
-  def sourceModuleOf(sym: Symbol): Module =
-    annotation(Annotations.SourceModule, sym)
 
   /**
    * Searching the definitions for a Reference
@@ -477,14 +484,22 @@ trait AnnotationsDB { self: Context =>
     annotationOption(Annotations.DefinitionTree, s)
 
   /**
+   * Adds [[s]] to the set of defined symbols for the current module, by writing
+   * it into the [[Annotations.DefinedSymbols]] annotation.
+   */
+  def addDefinedSymbolToSource(s: Symbol): Unit =
+    if (module != null) {
+      val syms = annotationOption(Annotations.DefinedSymbols, module.source).getOrElse(Set.empty)
+      annotate(Annotations.DefinedSymbols, module.source, syms + s)
+    }
+
+  /**
    * List all symbols that have a source module
    *
    * Used by the LSP server to generate outline
    */
-  def sourceSymbols: Vector[Symbol] =
-    annotations.keys.collect {
-      case s: Symbol if hasAnnotation(Annotations.SourceModule, s) => s
-    }
+  def sourceSymbolsFor(src: kiama.util.Source): Set[Symbol] =
+    annotationOption(Annotations.DefinedSymbols, src).getOrElse(Set.empty)
 
   /**
    * List all references for a symbol

@@ -17,14 +17,13 @@ package util
  * `N` is the syntax tree node type used by this compiler. `T` is
  * the type of the syntax tree communicated from the parser
  * to the main processing of the compiler. `C` is the type of the
- * configuration.
+ * configuration. `M` is the type of error messages.
  */
-trait Compiler[N, T <: N, C <: Config] {
+trait Compiler[N, T <: N, C <: Config, M <: Message] {
 
   import kiama.output.PrettyPrinterTypes.{ Document, emptyDocument }
   import kiama.output.PrettyPrinter.{ any, pretty }
   import kiama.parsing.{ NoSuccess, ParseResult, Success }
-  import kiama.util.Messaging.{ message, Messages }
   import org.rogach.scallop.exceptions.ScallopException
   import scala.collection.mutable
 
@@ -48,7 +47,7 @@ trait Compiler[N, T <: N, C <: Config] {
   /**
    * The messaging facilitiy used by this compiler.
    */
-  val messaging = new Messaging(positions)
+  val messaging: Messaging[M]
 
   /**
    * The entry point for this compiler.
@@ -162,21 +161,19 @@ trait Compiler[N, T <: N, C <: Config] {
    * Make an AST by running the parser on the given source, returning messages
    * instead if the parse fails.
    */
-  def makeast(source: Source, config: C): Either[T, Messages] = {
+  def makeast(source: Source, config: C): Either[T, messaging.Messages] = {
     try {
       parse(source) match {
         case Success(ast, _) =>
           Left(ast)
         case res: NoSuccess =>
           val input = res.next
-          positions.setStart(res, input.position)
-          positions.setFinish(res, input.nextPosition)
-          val messages = message(res, res.message)
+          val messages = Vector(messaging.message(Range(input.position, input.nextPosition), res.message))
           Right(messages)
       }
     } catch {
       case e: java.io.FileNotFoundException =>
-        Right(message(e, e.getMessage))
+        Right(Vector(messaging.message(Range.empty(source), e.getMessage)))
     }
   }
 
@@ -201,7 +198,7 @@ trait Compiler[N, T <: N, C <: Config] {
   /**
    * Output the messages in order of position to the configuration's output.
    */
-  def report(source: Source, messages: Messages, config: C): Unit = {
+  def report(source: Source, messages: messaging.Messages, config: C): Unit = {
     messaging.report(source, messages, config.output())
   }
 

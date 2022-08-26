@@ -42,8 +42,8 @@ object Transformer {
 
   def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
-      case machine.Def(machine.Label(name, environment), body, rest) =>
 
+      case machine.Def(machine.Label(name, environment), body, rest) =>
         defineFunction(name, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
           loadEnvironment(initialEnvironmentPointer, environment);
           eraseValues(environment, freeVariables(body));
@@ -53,7 +53,6 @@ object Transformer {
         transform(rest)
 
       case machine.Jump(label) =>
-
         shareValues(label.environment, Set());
         storeEnvironment(initialEnvironmentPointer, label.environment);
 
@@ -61,13 +60,11 @@ object Transformer {
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
-
         withBindings(bindings) { () =>
           transform(rest)
         }
 
       case machine.Let(variable, tag, values, rest) =>
-
         val obj = produceObject(values, freeVariables(rest));
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
@@ -77,7 +74,6 @@ object Transformer {
         transform(rest)
 
       case machine.Switch(value, clauses) =>
-
         shareValues(List(value), freeVariables(clauses));
 
         val tagName = freshName("tag");
@@ -113,7 +109,7 @@ object Transformer {
         }
 
       case machine.New(variable, List(clause), rest) =>
-        // TODO multiple methods
+        // TODO multiple methods (see case below)
 
         val closureEnvironment = freeVariables(clause).toList;
 
@@ -134,8 +130,11 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
-      case machine.Invoke(value, 0, values) =>
+      // TODO multiple methods (for one method see case above)
+      case machine.New(variable, clauses, rest) =>
+        ???
 
+      case machine.Invoke(value, 0, values) =>
         shareValues(value :: values, Set());
         storeEnvironment(initialEnvironmentPointer, values);
 
@@ -147,8 +146,11 @@ object Transformer {
         emit(TailCall(LocalReference(methodType, functionName), List(LocalReference(objType, objName), initialEnvironmentPointer, getStackPointer())));
         RetVoid()
 
-      case machine.PushFrame(frame, rest) =>
+      // TODO What is `tag`'s meaning?
+      case machine.Invoke(value, tag, values) =>
+        ???
 
+      case machine.PushFrame(frame, rest) =>
         val frameEnvironment = freeVariables(frame).toList;
 
         val returnAddressName = freshName("k");
@@ -165,23 +167,19 @@ object Transformer {
         // TODO cache based on environment
         val sharerName = freshName("sharer");
         defineFunction(sharerName, List(Parameter(spType, "sp"))) {
-
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           emit(TailCall(shareFrames, List(getStackPointer())));
           RetVoid()
-
         };
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
         defineFunction(eraserName, List(Parameter(spType, "sp"))) {
-
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
           emit(TailCall(eraseFrames, List(getStackPointer())));
           RetVoid()
-
         };
 
         shareValues(frameEnvironment, freeVariables(rest));
@@ -191,7 +189,6 @@ object Transformer {
         transform(rest)
 
       case machine.Return(values) =>
-
         shareValues(values, Set())
         storeEnvironment(initialEnvironmentPointer, values);
 
@@ -289,6 +286,10 @@ object Transformer {
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
         // TODO free variable?
         transform(rest)
+
+       // TODO
+       case machine.Run(command, environment, continuation) =>
+         ???
     }
 
   def transform(label: machine.Label): ConstantGlobal =
@@ -319,6 +320,7 @@ object Transformer {
     case machine.Negative(_)      => negativeType
     case machine.Primitive("Int") => NamedType("Int")
     case machine.Primitive("Stk") => stkType
+    case machine.Primitive(prim)  => throw new Exception(s"unsupported machine primitive: $prim")
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -328,8 +330,9 @@ object Transformer {
     tpe match {
       case machine.Positive(_)      => 16
       case machine.Negative(_)      => 16
-      case machine.Primitive("Int") => 8
-      case machine.Primitive("Stk") => 8
+      case machine.Primitive("Int") => 8 // TODO Make fat?
+      case machine.Primitive("Stk") => 8 // TODO Make fat?
+      case machine.Primitive(prim)  => throw new Exception(s"unsupported machine primitive: $prim")
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -511,6 +514,7 @@ object Transformer {
       case machine.Negative(_) => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
       case machine.Primitive("Stk") => emit(Call("_", VoidType(), shareStack, List(transform(value))))
       case machine.Primitive("Int") => ()
+      case machine.Primitive(prim) => throw new Exception(s"unsupported machine primitive: $prim")
     }
   }
 
@@ -520,6 +524,7 @@ object Transformer {
       case machine.Negative(_) => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
       case machine.Primitive("Stk") => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
       case machine.Primitive("Int") => ()
+      case machine.Primitive(prim) => throw new Exception(s"unsupported machine primitive: $prim")
     }
   }
 

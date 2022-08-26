@@ -1,3 +1,13 @@
+[error] Expected type
+  Int => Boolean at {} => String
+but got type
+  Int => Unit at {} => String
+
+Type mismatch between Boolean and Unit.
+  comparing the argument types of
+    Int => Unit at {} => String (given)
+    Int => Boolean at {} => String (expected)
+  when comparing the return type of the function.
 [error] examples/neg/lambdas/inference.effekt:13:8: Expected type
   Int => Boolean at {} => String at {}
 but got type
