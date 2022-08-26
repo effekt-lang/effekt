@@ -52,7 +52,7 @@ trait ChezScheme {
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
     val mainSym = C.checkMain(main.mod)
     val deps = dependencies.flatMap { dep => compile(dep) }
-    val chezModule = LetFusion.rewrite(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core, deps)))(using ())
+    val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core, deps)))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
     Some(Compiled(mainFile, Map(mainFile -> result)))
@@ -197,10 +197,10 @@ trait ChezScheme {
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
-    case UnitLit()     => chez.RawExpr("#f")
+    case UnitLit()     => chez.RawValue("#f")
     case StringLit(s)  => ChezString(s)
-    case BooleanLit(b) => if (b) chez.RawExpr("#t") else chez.RawExpr("#f")
-    case l: Literal[t] => chez.RawExpr(l.value.toString)
+    case BooleanLit(b) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case l: Literal[t] => chez.RawValue(l.value.toString)
     case ValueVar(id)  => chez.Variable(nameRef(id))
 
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
