@@ -614,7 +614,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                   Context in { checkStmt(body, None) }
                 }
 
-                // The order of effects annotated to the function is the canonical ordering for capabilities
+                // We do no longer use the order annotated on the function, but always the canonical ordering.
                 val capabilities = effs.controlEffects.map { caps.apply }
                 val captures = capabilities.map(_.capture)
 
