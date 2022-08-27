@@ -203,7 +203,7 @@ case class TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType) extends Def {
 /**
  * Effect aliases like `effect Set = { Get, Put }`
  */
-case class EffectDef(id: IdDef, effs: Effects) extends Def {
+case class EffectDef(id: IdDef, tparams: List[Id], effs: Effects) extends Def {
   type symbol = symbols.EffectAlias
 }
 
