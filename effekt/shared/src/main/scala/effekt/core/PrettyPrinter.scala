@@ -67,10 +67,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDocStmt(s)
 
   def toDoc(p: Pattern): Doc = p match {
-    case IgnorePattern()          => "_"
-    case LiteralPattern(l)        => toDoc(l)
-    case AnyPattern()             => "*"
-    case TagPattern(id, patterns) => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
+    case IgnorePattern()           => "_"
+    case Pattern.LiteralPattern(l) => toDoc(l)
+    case AnyPattern()              => "*"
+    case TagPattern(id, patterns)  => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
   }
 
   def toDoc(handler: Handler): Doc = braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)

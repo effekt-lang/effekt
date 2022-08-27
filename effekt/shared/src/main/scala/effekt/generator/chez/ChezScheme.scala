@@ -131,19 +131,19 @@ trait ChezScheme {
   def toChez(stmt: Stmt): chez.Block = stmt match {
 
     case Def(id, tpe, block, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
+      val chez.Block(defs, exprs, result) = toChez(rest)
       val constDef = chez.Constant(nameDef(id), toChez(block))
-      Block(constDef :: defs, exprs, result)
+      chez.Block(constDef :: defs, exprs, result)
 
     case Data(did, ctors, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
+      val chez.Block(defs, exprs, result) = toChez(rest)
       val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
-      Block(constructors ++ defs, exprs, result)
+      chez.Block(constructors ++ defs, exprs, result)
 
     case Record(did, fields, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
+      val chez.Block(defs, exprs, result) = toChez(rest)
       val constructors = generateConstructor(did, fields)
-      Block(constructors ++ defs, exprs, result)
+      chez.Block(constructors ++ defs, exprs, result)
 
     case Include(contents, rest) =>
       val include = RawDef(contents)
