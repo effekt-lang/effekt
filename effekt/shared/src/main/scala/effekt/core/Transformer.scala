@@ -33,13 +33,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val optimized = optimize(transformed)
 
-    ModuleDecl(path, imports.map { _.path }, optimized, exports).inheritPosition(tree)
+    ModuleDecl(path, imports.map { _.path }, optimized, exports)
   }
 
   /**
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
-  def transform(d: source.Def, rest: () => Stmt)(using Context): Stmt = withPosition(d) {
+  def transform(d: source.Def, rest: () => Stmt)(using Context): Stmt = d match {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
       val ps = (vps map transform) ++ (bps map transform)
@@ -93,7 +93,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       core.Record(d.symbol, ops.map { e => e.symbol }, rest())
   }
 
-  def transform(tree: source.Stmt)(using Context): Stmt = withPosition(tree) {
+  def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     case source.DefStmt(d, rest) =>
       transform(d, () => transform(rest))
 
@@ -114,7 +114,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(b)
   }
 
-  def transformLit[T](tree: source.Literal[T])(using Context): Literal[T] = withPosition[source.Literal[T], Literal[T]](tree) {
+  def transformLit[T](tree: source.Literal[T])(using Context): Literal[T] = tree match {
     case source.UnitLit()         => UnitLit()
     case source.IntLit(value)     => IntLit(value)
     case source.BooleanLit(value) => BooleanLit(value)
@@ -128,7 +128,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformBox(tree: source.Term)(implicit C: Context): Pure =
     Box(transformAsBlock(tree))
 
-  def transformAsBlock(tree: source.Term)(using Context): Block = withPosition(tree) {
+  def transformAsBlock(tree: source.Term)(using Context): Block = tree match {
     case v: source.Var => v.definition match {
       case sym: ValueSymbol => transformUnbox(tree)
       case sym: BlockSymbol => BlockVar(sym)
@@ -169,7 +169,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e: Expr => Context.bind(Context.inferredTypeOf(tree), e)
   }
 
-  def transformAsExpr(tree: source.Term)(using Context): Expr = withPosition(tree) {
+  def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
     case v: source.Var => v.definition match {
       case sym: VarBinder => DirectApp(Member(BlockVar(sym), TState.get), Nil, Nil)
       case sym: ValueSymbol => ValueVar(sym)
@@ -350,9 +350,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
     x
   }
-
-  def withPosition[T <: source.Tree, R <: core.Tree](t: T)(block: T => R)(using Context): R =
-    block(t).inheritPosition(t)
 
   def insertBindings(stmt: => Stmt)(using Context): Stmt = {
     val (body, bindings) = Context.withBindings { stmt }

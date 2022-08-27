@@ -4,13 +4,7 @@ package lifted
 import effekt.context.Context
 import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType, TrackedParam }
 
-sealed trait Tree extends Product {
-  def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
-    C.positions.dupPos(from, this);
-    this
-  }
-}
-
+sealed trait Tree
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
