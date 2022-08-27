@@ -146,7 +146,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case op @ source.OpClause(id, tparams, vparams, body, resume) =>
           val vps = vparams map transform
           // currently the don't take block params
-          val opBlock = BlockLit(vps, transform(body))
+          val opBlock: BlockLit = BlockLit(vps, transform(body))
           (op.definition, opBlock)
       }))
 
@@ -230,7 +230,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               // introduce a block parameter for resume
               val resumeParam = BlockParam(resume.symbol.asInstanceOf[BlockSymbol])
 
-              val opBlock = BlockLit(ps :+ resumeParam, transform(body))
+              val opBlock: BlockLit = BlockLit(ps :+ resumeParam, transform(body))
               (op.definition, opBlock)
           })
       }
