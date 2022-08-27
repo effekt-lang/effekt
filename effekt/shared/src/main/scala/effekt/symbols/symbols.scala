@@ -413,10 +413,23 @@ package object symbols {
     // establishes the canonical ordering
     def controlEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if !i.builtin => i
-    }.sortBy(f => f.hashCode())
+    }.sortBy(canonicalOrdering)
     def builtinEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if i.builtin => i
     }
+  }
+
+  /**
+   * The canonical ordering needs to be stable, but should also distinguish two types, 
+   * if they are different.
+   * 
+   * Bugs with the canonical ordering can lead to runtime errors as observed in ticket #108
+   */
+  def canonicalOrdering(i: InterfaceType): Int = i match {
+    case BlockTypeApp(typeConstructor: Interface, args) => typeConstructor.id + args.map(_.hashCode()).sum
+    case BlockTypeApp(typeConstructor: BuiltinEffect, args) => typeConstructor.id + args.map(_.hashCode()).sum
+    case b : Interface => b.id
+    case b : BuiltinEffect => b.id
   }
 
   /**
