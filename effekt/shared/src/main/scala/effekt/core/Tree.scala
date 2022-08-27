@@ -23,6 +23,10 @@ sealed trait Argument extends Tree
 
 /**
  * Expressions (with potential IO effects)
+ *
+ * - [[DirectApp]]
+ * - [[Run]]
+ * - [[Pure]]
  */
 sealed trait Expr extends Tree
 
@@ -38,14 +42,14 @@ case class Run(s: Stmt) extends Expr
 sealed trait Pure extends Expr with Argument
 case class ValueVar(id: ValueSymbol) extends Pure
 
-sealed trait Literal[T] extends Pure {
-  def value: T
+enum Literal[T](val value: T) extends Pure {
+  case UnitLit() extends Literal(())
+  case IntLit(v: Int) extends Literal(v)
+  case BooleanLit(v: Boolean) extends Literal(v)
+  case DoubleLit(v: Double) extends Literal(v)
+  case StringLit(v: String) extends Literal(v)
 }
-case class UnitLit() extends Literal[Unit] { def value = () }
-case class IntLit(value: Int) extends Literal[Int]
-case class BooleanLit(value: Boolean) extends Literal[Boolean]
-case class DoubleLit(value: Double) extends Literal[Double]
-case class StringLit(value: String) extends Literal[String]
+export Literal.*
 
 // invariant, block b is pure.
 case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
@@ -56,51 +60,63 @@ case class Box(b: Block) extends Pure
 /**
  * Blocks
  */
-sealed trait Param extends Tree { def id: TermSymbol }
-case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
-case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
 
-sealed trait Block extends Tree with Argument
-case class BlockVar(id: BlockSymbol) extends Block
-case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: TermSymbol) extends Block
-case class Extern(params: List[Param], body: String) extends Block
-case class Unbox(p: Pure) extends Block
-case class New(impl: Handler) extends Block
+enum Param extends Tree {
+  def id: TermSymbol
+
+  case ValueParam(id: ValueSymbol, tpe: ValueType)
+  case BlockParam(id: BlockSymbol, tpe: BlockType)
+}
+export Param.*
+
+enum Block extends Argument {
+  case BlockVar(id: BlockSymbol)
+  case BlockLit(params: List[Param], body: Stmt)
+  case Member(b: Block, field: TermSymbol)
+  case Extern(params: List[Param], body: String)
+  case Unbox(p: Pure)
+  case New(impl: Handler)
+}
+export Block.*
+
+enum Pattern extends Tree {
+  case IgnorePattern()
+  case AnyPattern()
+  case TagPattern(tag: Symbol, patterns: List[Pattern])
+  case LiteralPattern[T](l: Literal[T])
+}
+export Pattern.*
+
 
 /**
  * Statements
  */
-sealed trait Stmt extends Tree
-case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
-case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
-case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
-case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
-case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
+enum Stmt extends Tree {
+  case Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt)
+  case Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt)
+  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt)
+  case Data(id: Symbol, ctors: List[Symbol], rest: Stmt)
+  case Record(id: Symbol, fields: List[Symbol], rest: Stmt)
 
-case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
+  case App(b: Block, targs: List[Type], args: List[Argument])
 
-case class If(cond: Pure, thn: Stmt, els: Stmt) extends Stmt
-case class While(cond: Stmt, body: Stmt) extends Stmt
-case class Ret(e: Pure) extends Stmt
-case class Match(scrutinee: Pure, clauses: List[(Pattern, BlockLit)]) extends Stmt
+  case If(cond: Pure, thn: Stmt, els: Stmt)
+  case While(cond: Stmt, body: Stmt)
+  case Ret(e: Pure)
+  case Match(scrutinee: Pure, clauses: List[(Pattern, BlockLit)])
 
-sealed trait Pattern extends Tree
-case class IgnorePattern() extends Pattern
-case class AnyPattern() extends Pattern
-case class TagPattern(tag: Symbol, patterns: List[Pattern]) extends Pattern
-case class LiteralPattern[T](l: Literal[T]) extends Pattern
+  case Include(contents: String, rest: Stmt)
 
-case class Include(contents: String, rest: Stmt) extends Stmt
+  case Hole
 
-case object Hole extends Stmt
+  case State(id: Symbol, init: Pure, region: Symbol, body: Stmt)
+  case Handle(body: Block, handler: List[Handler])
+  case Region(body: Block)
+}
+export Stmt.*
 
-case class State(id: Symbol, init: Pure, region: Symbol, body: Stmt) extends Stmt
-case class Handle(body: Block, handler: List[Handler]) extends Stmt
-// TODO change to Map
-case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
+case class Handler(id: Interface, clauses: List[(Operation, Block.BlockLit)]) extends Tree
 
-case class Region(body: Block) extends Stmt
 
 object Tree {
 
@@ -206,7 +222,7 @@ object Tree {
       case e if pattern.isDefinedAt(e) => pattern(e)
       case TagPattern(tag, patterns: List[Pattern]) =>
         TagPattern(tag, patterns map rewrite)
-      case LiteralPattern(l) =>
+      case Pattern.LiteralPattern(l) =>
         LiteralPattern(rewrite(l).asInstanceOf[Literal[_]])
       case p => p
     }
