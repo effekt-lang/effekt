@@ -99,7 +99,7 @@ enum Stmt extends Tree {
 
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case While(cond: Stmt, body: Stmt)
-  case Ret(e: Pure)
+  case Return(e: Pure)
   case Match(scrutinee: Pure, clauses: List[(Pattern, BlockLit)])
 
   case Include(contents: String, rest: Stmt)
@@ -180,8 +180,8 @@ object Tree {
           If(rewrite(cond), rewrite(thn), rewrite(els))
         case While(cond, body) =>
           While(rewrite(cond), rewrite(body))
-        case Ret(e: Expr) =>
-          Ret(rewrite(e))
+        case Return(e: Expr) =>
+          Return(rewrite(e))
         case Include(contents, rest) =>
           Include(contents, rewrite(rest))
         case State(id, init, reg, body) =>

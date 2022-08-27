@@ -27,7 +27,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     }.toList
 
-    val transformed = defs.foldRight(Ret(UnitLit()) : Stmt) {
+    val transformed = defs.foldRight(Return(UnitLit()) : Stmt) {
       case (d, r) => transform(d, () => r)
     }
 
@@ -102,10 +102,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
-      Val(freshWildcardFor(e), insertBindings { Ret(transformAsPure(e)) }, transform(rest))
+      Val(freshWildcardFor(e), insertBindings { Return(transformAsPure(e)) }, transform(rest))
 
     case source.Return(e) =>
-      insertBindings { Ret(transformAsPure(e)) }
+      insertBindings { Return(transformAsPure(e)) }
 
     case source.BlockStmt(b) =>
       transform(b)
@@ -197,7 +197,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.While(cond, body) =>
       val exprTpe = Context.inferredTypeOf(tree)
-      Context.bind(exprTpe, While(insertBindings { Ret(transformAsPure(cond)) }, transform(body)))
+      Context.bind(exprTpe, While(insertBindings { Return(transformAsPure(cond)) }, transform(body)))
 
     case source.Match(sc, clauses) =>
       val scrutinee = transformAsPure(sc)
@@ -369,14 +369,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
-        case core.Run(core.Ret(p)) => rewrite(p)
+        case core.Run(core.Return(p)) => rewrite(p)
       }
     }
 
     // rewrite (Val (Ret e) s) to (Let e s)
     object directStyleVal extends core.Tree.Rewrite {
       override def stmt = {
-        case core.Val(id, tpe, core.Ret(expr), body) =>
+        case core.Val(id, tpe, core.Return(expr), body) =>
           core.Let(id, tpe, rewrite(expr), rewrite(body))
       }
     }
@@ -473,7 +473,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def reifyBindings(body: Stmt, bindings: ListBuffer[Binding]): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
-      case (Binding.Val(x, tpe, b), Ret(ValueVar(y))) if x == y => b
+      case (Binding.Val(x, tpe, b), Return(ValueVar(y))) if x == y => b
       case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
       case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
     }

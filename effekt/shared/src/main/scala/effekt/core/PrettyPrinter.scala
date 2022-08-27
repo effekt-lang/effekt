@@ -109,7 +109,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case While(cond, body) =>
       "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
 
-    case Ret(e) =>
+    case Return(e) =>
       "return" <+> toDoc(e)
 
     case Handle(body, hs) =>
