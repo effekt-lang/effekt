@@ -448,7 +448,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef.apply
 
   lazy val effectAliasDef: P[EffectDef] =
-    `effect` ~> idDef ~ (`=` ~/> effects) ^^ EffectDef.apply
+    `effect` ~> idDef ~ maybeTypeParams ~ (`=` ~/> effects) ^^ EffectDef.apply
 
   lazy val dataDef: P[DataDef] =
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef.apply
