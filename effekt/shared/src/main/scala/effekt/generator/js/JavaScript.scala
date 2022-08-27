@@ -199,7 +199,7 @@ trait JavaScript extends Backend {
     case core.While(cond, body) =>
       monadic.While(toJSMonadic(cond), toJSMonadic(body))
 
-    case core.Ret(e) =>
+    case core.Return(e) =>
       monadic.Pure(toJS(e))
 
     case core.Handle(body, hs) =>

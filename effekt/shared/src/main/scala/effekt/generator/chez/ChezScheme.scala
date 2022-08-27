@@ -94,7 +94,7 @@ trait ChezScheme {
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Ret(e) => pure(toChez(e))
+    case Return(e) => pure(toChez(e))
     case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
