@@ -17,7 +17,7 @@ sealed trait Tree extends Product {
 case class ModuleDecl(path: String, imports: List[String], defs: Stmt, exports: List[Symbol]) extends Tree
 
 /**
- * Fine-grain CBV: Arguments can be either pure expressions or blocks
+ * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
  */
 sealed trait Argument extends Tree
 
@@ -40,22 +40,25 @@ case class Run(s: Stmt) extends Expr
  * Pure Expressions (no IO effects, or control effects)
  */
 sealed trait Pure extends Expr with Argument
-case class ValueVar(id: ValueSymbol) extends Pure
+object Pure {
+  case class ValueVar(id: ValueSymbol) extends Pure
 
-enum Literal[T](val value: T) extends Pure {
-  case UnitLit() extends Literal(())
-  case IntLit(v: Int) extends Literal(v)
-  case BooleanLit(v: Boolean) extends Literal(v)
-  case DoubleLit(v: Double) extends Literal(v)
-  case StringLit(v: String) extends Literal(v)
+  enum Literal[T](val value: T) extends Pure {
+    case UnitLit() extends Literal(())
+    case IntLit(v: Int) extends Literal(v)
+    case BooleanLit(v: Boolean) extends Literal(v)
+    case DoubleLit(v: Double) extends Literal(v)
+    case StringLit(v: String) extends Literal(v)
+  }
+
+  // invariant, block b is pure.
+  case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
+  case class Select(target: Pure, field: Symbol) extends Pure
+
+  case class Box(b: Block) extends Pure
 }
+export Pure.*
 export Literal.*
-
-// invariant, block b is pure.
-case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
-case class Select(target: Pure, field: Symbol) extends Pure
-
-case class Box(b: Block) extends Pure
 
 /**
  * Blocks
