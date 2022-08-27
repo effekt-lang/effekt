@@ -1,8 +1,7 @@
 package effekt
 package core
 
-import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType, TrackedParam }
+import effekt.symbols.{ Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, Operation, Type, ValueType, BlockType }
 
 sealed trait Tree
 
