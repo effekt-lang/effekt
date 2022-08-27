@@ -70,14 +70,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         State(sym, b, sym.region, rest())
       }
 
-    case source.ExternType(id, tparams) =>
-      rest()
-
-    case source.TypeDef(id, tparams, tpe) =>
-      rest()
-
-    case source.EffectDef(id, tparams, effs) =>
-      rest()
+    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
+      core.Record(d.symbol, ops.map { e => e.symbol }, rest())
 
     case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
@@ -86,24 +80,27 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest())
 
-    case e: source.ExternEffect =>
-      rest()
+    case d: source.ExternEffect => rest()
 
-    case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      core.Record(d.symbol, ops.map { e => e.symbol }, rest())
+    case d: source.ExternType => rest()
+
+    case d : source.TypeDef => rest()
+
+    case d: source.EffectDef => rest()
   }
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     case source.DefStmt(d, rest) =>
       transform(d, () => transform(rest))
 
-    // { e; stmt } --> { val _ = e; stmt }
+    // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
       val let = Let(freshWildcardFor(e), expr, transform(rest))
       if (bs.isEmpty) { let }
       else { Context.reifyBindings(let, bs) }
 
+    // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
       Val(freshWildcardFor(e), insertBindings { Ret(transformAsPure(e)) }, transform(rest))
 
@@ -145,7 +142,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       New(Handler(sig, sig.ops.map(clauses.apply).map {
         case op @ source.OpClause(id, tparams, vparams, body, resume) =>
           val vps = vparams map transform
-          // currently the don't take block params
+          // currently the operations don't take block params
           val opBlock: BlockLit = BlockLit(vps, transform(body))
           (op.definition, opBlock)
       }))
@@ -181,20 +178,22 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), selector.symbol)
 
-    case l @ source.Box(capt, block) =>
-      Box(transformAsBlock(block))
+    case source.Box(capt, block) =>
+      transformBox(block)
 
-    case source.New(impl) => transformBox(tree)
+    case source.New(impl) =>
+      transformBox(tree)
 
-    case source.Unbox(b) => transformBox(tree)
+    case source.Unbox(b) =>
+      transformBox(tree)
 
-    case source.BlockLiteral(tps, vps, bps, body) => transformBox(tree)
+    case source.BlockLiteral(tps, vps, bps, body) =>
+      transformBox(tree)
 
     case source.If(cond, thn, els) =>
       val c = transformAsPure(cond)
       val exprTpe = Context.inferredTypeOf(tree)
       Context.bind(exprTpe, If(c, transform(thn), transform(els)))
-
 
     case source.While(cond, body) =>
       val exprTpe = Context.inferredTypeOf(tree)
@@ -211,7 +210,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(Context.inferredTypeOf(tree), Match(scrutinee, cs))
 
     case source.TryHandle(prog, handlers) =>
-      val effects = handlers.map(_.definition)
       val caps = handlers.map { h =>
         val cap = h.capability.get.symbol
         core.BlockParam(cap, cap.tpe)
@@ -219,7 +217,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val body = BlockLit(caps, transform(prog))
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
-      val hs = handlers.map {
+      def transformHandler: source.Handler => core.Handler = {
         case h @ source.Handler(cap, source.Implementation(eff, cls)) =>
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
@@ -235,7 +233,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           })
       }
 
-      Context.bind(Context.inferredTypeOf(tree), Handle(body, hs))
+      Context.bind(Context.inferredTypeOf(tree), Handle(body, handlers map transformHandler))
 
     case r @ source.Region(name, body) =>
       val sym = r.symbol
@@ -250,14 +248,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)
 
-    case source.Do(effect, id, targs, vargs) =>
-      Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
-
     case a @ source.Assign(id, expr) =>
       val e = transformAsPure(expr)
       val sym = a.definition
-      // val state = Context.annotation(Annotations.StateCapability, a.definition)
-       DirectApp(Member(BlockVar(sym), TState.put), Nil, List(e))
+      DirectApp(Member(BlockVar(sym), TState.put), Nil, List(e))
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
@@ -289,12 +283,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
       }
 
-    case c @ source.Call(s : source.ExprTarget, targs, vargs, bargs) =>
-      Context.panic("Should not happen. Unbox should have been inferred.")
-
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
       // assumption: typer removed all ambiguous references, so there is exactly one
       makeFunctionCall(c, fun.definition, vargs, bargs)
+
+    case c @ source.Call(s: source.ExprTarget, targs, vargs, bargs) =>
+      Context.panic("Should not happen. Unbox should have been inferred.")
+
+    case source.Do(effect, id, targs, vargs) =>
+      Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
   }
 
   def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
@@ -338,9 +335,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val (patterns, params) = ps.map(transform).unzip
       (core.TagPattern(p.definition, patterns), params.flatten)
   }
-
-  def transform(exprs: List[source.Term])(using Context): List[Expr] =
-    exprs.map(transformAsExpr)
 
   def freshWildcardFor(e: source.Tree)(using Context): Wildcard = {
     val x = Wildcard(Context.module)
