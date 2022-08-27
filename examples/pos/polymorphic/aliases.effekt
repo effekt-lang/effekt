@@ -1,0 +1,15 @@
+effect Foo[A] { def foo(): A }
+effect Bar[B] { def bar(): B }
+
+effect Both[A] = { Foo[A], Bar[A] }
+
+def test(): Int / Both[Int] =
+  do foo[Int]() + do bar[Int]()
+
+def main() = try {
+  println(test())
+} with Foo[Int] {
+  def foo() = resume(1)
+} with Bar[Int] {
+  def bar() = resume(2)
+}
