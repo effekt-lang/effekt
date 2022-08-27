@@ -81,7 +81,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.TypeDef(id, tparams, tpe) =>
       rest()
 
-    case source.EffectDef(id, effs) =>
+    case source.EffectDef(id, tparams, effs) =>
       rest()
 
     case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
