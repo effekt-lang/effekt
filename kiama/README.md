@@ -2,7 +2,11 @@
 # Kiama
 
 > This is a fork of the Kiama library. An excerpt of the original README is attached below.
+>
+> For more information, please refer to the original repository:
+>     <https://github.com/inkytonik/kiama>
 
+---
 
 [![License: MPL v2.0](https://img.shields.io/badge/License-MPL%20v2-blue.svg)](http://mozilla.org/MPL/2.0/)
 
