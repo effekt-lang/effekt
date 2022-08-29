@@ -29,6 +29,10 @@ class ChezSchemeTests extends AnyFunSpec {
     // the number representations differ in JS and Chez
     examplesDir / "casestudies" / "ad.md",
 
+    // in the CallCC variant, we cannot have toplevel vals at the moment (their bindings need to be wrapped in `(run (thunk ...))`
+    // see comment on commit 61492d9
+    examplesDir / "casestudies" / "anf.md",
+
     // we do not need to run the negative tests for the other backends
     examplesDir / "neg",
 
