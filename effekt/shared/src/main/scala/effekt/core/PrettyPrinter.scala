@@ -41,10 +41,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal[t] => l.value.toString
     case ValueVar(id)  => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
+    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
       case e: Expr  => toDoc(e)
       case b: Block => toDoc(b)
     }, comma))
+
+    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map toDoc, comma))
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
@@ -65,10 +67,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDocStmt(s)
 
   def toDoc(p: Pattern): Doc = p match {
-    case IgnorePattern()          => "_"
-    case LiteralPattern(l)        => toDoc(l)
-    case AnyPattern()             => "*"
-    case TagPattern(id, patterns) => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
+    case IgnorePattern()           => "_"
+    case Pattern.LiteralPattern(l) => toDoc(l)
+    case AnyPattern()              => "*"
+    case TagPattern(id, patterns)  => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
   }
 
   def toDoc(handler: Handler): Doc = braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
@@ -107,7 +109,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case While(cond, body) =>
       "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
 
-    case Ret(e) =>
+    case Return(e) =>
       "return" <+> toDoc(e)
 
     case Handle(body, hs) =>
