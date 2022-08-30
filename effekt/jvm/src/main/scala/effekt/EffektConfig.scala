@@ -6,7 +6,7 @@ import effekt.util.paths.file
 import kiama.util.REPLConfig
 
 import org.rogach.scallop.ScallopOption
-import org.rogach.scallop.{ fileConverter, fileListConverter }
+import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
@@ -42,6 +42,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
+    noshort = true
+  )
+
+  val llvmVersion: ScallopOption[String] = opt[String](
+    "llvm-version",
+    descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",
+    default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "12")),
     noshort = true
   )
 
