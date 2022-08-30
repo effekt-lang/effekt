@@ -8,6 +8,6 @@ def main() = {
   val a = Two(5, 9);
   a match {
     case One(u) => println(u)
-    case Two(v, w) => println(v)
+    case Two(v, w) => println(v + w)
   }
 }
