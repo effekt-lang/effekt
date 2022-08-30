@@ -6,14 +6,14 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
+
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
+
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
-
-import effekt.util.paths.file
+import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
 
 import scala.sys.process.Process
 

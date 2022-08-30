@@ -8,8 +8,10 @@ import scala.language.implicitConversions
 import scala.sys.process.Process
 
 class LLVMTests extends AnyFunSpec {
-  Process(Seq("rm", "-rf", "out/")).!! // TODO globally configure sbt to clear out before running tests
-  findAllTests(new File("tests/llvm"))
+
+  lazy val examplesDir = new File("examples")
+
+  findAllTests(examplesDir / "llvm")
 
   // Unix jargon for odd Scala names:
   // `.getName` -> "base"
