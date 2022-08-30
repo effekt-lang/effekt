@@ -131,10 +131,14 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       val optPath = xPath("_opt.ll")
       val objPath = xPath(".o")
 
-      val optCommand = Process(Seq(s"opt-${LLVM_VERSION}", llvmPath, "-S", "-O2", "-o", optPath))
+      // TODO figure out whether "opt" or "opt-VERSION" exist as file
+      //   if not, raise error.
+      // Same for llc
+      val optCommand = Process(Seq(s"opt", llvmPath, "-S", "-O2", "-o", optPath))
+      
       C.config.output().emit(optCommand.!!)
 
-      val llcCommand = Process(Seq(s"llc-${LLVM_VERSION}", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
+      val llcCommand = Process(Seq(s"llc", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
       C.config.output().emit(llcCommand.!!)
 
       val gccMainFile = (C.config.libPath / "main.c").unixPath
