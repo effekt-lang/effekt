@@ -105,8 +105,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.report(e)
+      case FatalPhaseError(e) => C.report(e)
     }
 
   /**
@@ -117,38 +116,44 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       val command = Process(Seq("scheme", "--script", path))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.report(e)
+      case FatalPhaseError(e) => C.report(e)
     }
 
-  // build the LLVM source file (`<...>.ll`) and coax it into an executable
+  /**
+   * Compile the LLVM source file (`<...>.ll`) to an executable
+   *
+   * Requires LLVM and GCC to be installed on the machine.
+   * Assumes [[llvmPath]] has the format "SOMEPATH.ll".
+   */
   def evalLLVM(llvmPath: String)(implicit C: Context): Unit = try {
 
-      val LLVM_VERSION = C.config.llvmVersion()
+    val LLVM_VERSION = C.config.llvmVersion()
 
-      val path = llvmPath.stripSuffix(".ll")
-      val xPath = (suffix: String) => path + suffix
-      val optPath = xPath("_opt.ll")
-      val objPath = xPath(".o")
+    val basePath = llvmPath.stripSuffix(".ll")
+    val optPath = basePath + "_opt.ll"
+    val objPath = basePath + ".o"
 
-      // TODO figure out whether "opt" or "opt-VERSION" exist as file
-      //   if not, raise error.
-      // Same for llc
-      val optCommand = Process(Seq(s"opt", llvmPath, "-S", "-O2", "-o", optPath))
-      
-      C.config.output().emit(optCommand.!!)
+    val out = C.config.output()
 
-      val llcCommand = Process(Seq(s"llc", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
-      C.config.output().emit(llcCommand.!!)
+    // TODO figure out whether "opt" or "opt-VERSION" exist as file
+    //   if not, raise error.
+    // Same for llc
+    val optCommand = Process(Seq(s"opt", llvmPath, "-S", "-O2", "-o", optPath))
+    out.emit(optCommand.!!)
 
-      val gccMainFile = (C.config.libPath / "main.c").unixPath
-      val executableFile = path //TODO-LLVM C.codeGenerator.path(mod)
-      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath))
-      C.config.output().emit(gccCommand.!!)
+    val llcCommand = Process(Seq(s"llc", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
+    out.emit(llcCommand.!!)
 
-      val command = Process(Seq(executableFile))
-      C.config.output().emit(command.!!)
-    } catch case FatalPhaseError(e) => C.report(e)
+    val gccMainFile = (C.config.libPath / "main.c").unixPath
+    val executableFile = basePath //TODO-LLVM C.codeGenerator.path(mod)
+    val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath))
+    out.emit(gccCommand.!!)
+
+    val command = Process(Seq(executableFile))
+    out.emit(command.!!)
+  } catch {
+    case FatalPhaseError(e) => C.report(e)
+  }
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.messaging.buffer, C.config)
