@@ -6,10 +6,10 @@ object PrettyPrinter {
 
   type LLVMString = String
 
-  def show(definitions: List[Definition])(implicit C: Context): LLVMString =
+  def show(definitions: List[Definition])(using C: Context): LLVMString =
     definitions.map(show).mkString("\n\n")
 
-  def show(definition: Definition)(implicit C: Context): LLVMString = definition match {
+  def show(definition: Definition)(using C: Context): LLVMString = definition match {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
 define fastcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
@@ -26,7 +26,7 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
     case Verbatim(content) => content
   }
 
-  def show(basicBlock: BasicBlock)(implicit C: Context): LLVMString = basicBlock match {
+  def show(basicBlock: BasicBlock)(using C: Context): LLVMString = basicBlock match {
     case BasicBlock(name, instructions, terminator) =>
       s"""
 ${name}:
@@ -35,7 +35,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 """
   }
 
-  def show(instruction: Instruction)(implicit C: Context): LLVMString = instruction match {
+  def show(instruction: Instruction)(using C: Context): LLVMString = instruction match {
 
     case Call(_, VoidType(), ConstantGlobal(_, name), arguments) =>
       s"call void ${globalName(name)}(${commaSeparated(arguments.map(show))})"
