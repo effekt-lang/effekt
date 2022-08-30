@@ -107,6 +107,7 @@ package object symbols {
     override lazy val capture: Capture = LexicalRegion(name, tree)
   }
 
+  // TODO rename to Callable
   trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
     def vparams: List[ValueParam]
@@ -260,10 +261,10 @@ package object symbols {
    *
    * param: The underlying constructor parameter
    */
-  case class Field(name: Name, param: ValueParam, rec: Record) extends Fun with Synthetic {
-    val tparams = rec.tparams
+  case class Field(name: Name, param: ValueParam, record: Record) extends Fun with Synthetic {
+    val tparams = record.tparams
     val tpe = param.tpe.get
-    val vparams = List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else ValueTypeApp(rec, rec.tparams))))
+    val vparams = List(ValueParam(record.name, Some(if (record.tparams.isEmpty) record else ValueTypeApp(record, record.tparams))))
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
     def annotatedEffects = Some(Effects.Pure)

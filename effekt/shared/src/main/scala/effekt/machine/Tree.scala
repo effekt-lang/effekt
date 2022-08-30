@@ -33,6 +33,8 @@ case class Label(name: String, environment: Environment)
  */
 type Substitution = List[(Variable, Variable)]
 
+type Tag = Int
+
 
 /**
  * A module declaration
@@ -102,7 +104,7 @@ enum Statement {
   /**
    * e.g. v.m(v1, ...)
    */
-  case Invoke(receiver: Variable, tag: Int, arguments: Environment)
+  case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
    * e.g. push { (x, ...) => s }; s
@@ -148,10 +150,26 @@ export Statement.*
 enum Type {
   case Positive(alternatives: List[Signature])
   case Negative(alternatives: List[Signature])
-  case Primitive(name: String)
+  case Stack()
+  case Int()
 }
-
-export Type.*
+export Type.{ Positive, Negative }
 
 
 type Signature = List[Type]
+
+object builtins {
+  /**
+   * Blocks types are interfaces with a single operation.
+   */
+  val Apply: Tag = 0
+
+  val Unit: Tag = 0
+  val UnitType = Positive(List(List()))
+
+  val True: Tag = 1
+  val False: Tag = 0
+  val BooleanType = Positive(List(List(), List()))
+
+  val SingletonRecord: Tag = 0
+}
