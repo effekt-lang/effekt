@@ -8,33 +8,30 @@ import kiama.util.{ Source, Counter }
 import effekt.context.Context
 import effekt.lifted.*
 import effekt.machine
-import effekt.llvm._
-import effekt.symbols.Module
-import effekt.symbols.{ BlockSymbol, Name, Symbol, ValueSymbol }
-import effekt.context.assertions._
-
-import scala.language.implicitConversions
-import effekt.util.paths._
+import effekt.llvm.*
+import effekt.symbols.{ Module, BlockSymbol, Name, Symbol, ValueSymbol }
+import effekt.context.assertions.*
+import effekt.util.paths.*
 
 object LLVM extends Backend {
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context): Option[Compiled] = {
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context): Option[Compiled] = {
 
-    val mainSymbol = C.checkMain(main.mod);
-    val mainFile = path(main.mod);
+    val mainSymbol = C.checkMain(main.mod)
+    val mainFile = path(main.mod)
 
-    val Some(liftedMod) = LiftInference(main).map(_.core);
-    // TODO this flatmap is wrong, or?
-    val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) };
+    val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main)
+    
+    // TODO this flatMap is wrong. If LiftInference returns None, then this will not fail but the dep. will be ignored.
+    //   future me, or anybody else: if you fix this, also fix in ChezLift
+    val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) }
 
     val machineMod = C.using(module = main.mod) {
-      machine.Transformer.transform(mainSymbol, liftedMod, liftedDeps)
-    };
+      machine.Transformer.transform(mainSymbol, liftedMain, liftedDeps)
+    }
 
-    val llvmDefinitions = Transformer.transform(machineMod);
-
-    val llvmFragment = PrettyPrinter.asFragment(llvmDefinitions);
-
-    val result = Document(llvmFragment, emptyLinks);
+    val llvmDefinitions = Transformer.transform(machineMod)
+    val llvmString = PrettyPrinter.show(llvmDefinitions)
+    val result = Document(llvmString, emptyLinks)
 
     Some(Compiled(mainFile, Map(mainFile -> result)))
   }
