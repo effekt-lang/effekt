@@ -124,7 +124,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
   // build the LLVM source file (`<...>.ll`) and coax it into an executable
   def evalLLVM(llvmPath: String)(implicit C: Context): Unit = try {
 
-      val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
+      val LLVM_VERSION = C.config.llvmVersion()
 
       val path = llvmPath.stripSuffix(".ll")
       val xPath = (suffix: String) => path + suffix
