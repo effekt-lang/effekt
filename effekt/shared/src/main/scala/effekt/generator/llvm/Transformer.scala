@@ -307,9 +307,8 @@ object Transformer {
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive(_)      => positiveType
     case machine.Negative(_)      => negativeType
-    case machine.Primitive("Int") => NamedType("Int")
-    case machine.Primitive("Stk") => stkType
-    case machine.Primitive(prim)  => throw new Exception(s"unsupported machine primitive: $prim")
+    case machine.Type.Int()       => NamedType("Int")
+    case machine.Type.Stack()     => stkType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -319,9 +318,8 @@ object Transformer {
     tpe match {
       case machine.Positive(_)      => 16
       case machine.Negative(_)      => 16
-      case machine.Primitive("Int") => 8 // TODO Make fat?
-      case machine.Primitive("Stk") => 8 // TODO Make fat?
-      case machine.Primitive(prim)  => throw new Exception(s"unsupported machine primitive: $prim")
+      case machine.Type.Int()       => 8 // TODO Make fat?
+      case machine.Type.Stack()     => 8 // TODO Make fat?
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -499,21 +497,19 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_) => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
-      case machine.Negative(_) => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
-      case machine.Primitive("Stk") => emit(Call("_", VoidType(), shareStack, List(transform(value))))
-      case machine.Primitive("Int") => ()
-      case machine.Primitive(prim) => throw new Exception(s"unsupported machine primitive: $prim")
+      case machine.Positive(_)  => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
+      case machine.Negative(_)  => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
+      case machine.Type.Stack() => emit(Call("_", VoidType(), shareStack, List(transform(value))))
+      case machine.Type.Int()   => ()
     }
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_) => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
-      case machine.Negative(_) => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
-      case machine.Primitive("Stk") => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
-      case machine.Primitive("Int") => ()
-      case machine.Primitive(prim) => throw new Exception(s"unsupported machine primitive: $prim")
+      case machine.Positive(_)  => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
+      case machine.Negative(_)  => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
+      case machine.Type.Stack() => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
+      case machine.Type.Int()   => ()
     }
   }
 
