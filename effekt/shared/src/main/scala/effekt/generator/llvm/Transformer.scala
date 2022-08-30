@@ -32,7 +32,7 @@ object Transformer {
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
-      case machine.DefineForeign(returnType, functionName, parameters, body) =>
+      case machine.Extern(functionName, parameters, returnType, body) =>
         VerbatimFunction(transform(returnType), functionName, parameters.map {
           case machine.Variable(name, tpe) => Parameter(transform(tpe), name)
         }, body)
@@ -64,7 +64,7 @@ object Transformer {
           transform(rest)
         }
 
-      case machine.Let(variable, tag, values, rest) =>
+      case machine.Construct(variable, tag, values, rest) =>
         val obj = produceObject(values, freeVariables(rest));
         val tmpName = freshName("tmp");
         emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
@@ -270,26 +270,15 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
-      case machine.Run(machine.LiteralInt(n), List(), List(machine.Clause(List(machine.Variable(name, machine.Primitive("Int"))), rest))) =>
+      case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
-      case machine.Run(machine.CallForeign(name), values, List()) =>
-        // TODO careful with calling convention?!?
-        val functionType = PointerType(FunctionType(VoidType(), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
-        emit(Call("_", VoidType(), ConstantGlobal(functionType, name), values.map(transform)));
-        RetVoid()
-
-      case machine.Run(machine.CallForeign(name), values, List(machine.Clause(List(machine.Variable(resultName, resultType)), rest))) =>
+      case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
-        emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, name), values.map(transform)));
-        // TODO free variable?
+        emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, foreign), values.map(transform)));
         transform(rest)
-
-       // TODO
-       case machine.Run(command, environment, continuation) =>
-         ???
     }
 
   def transform(label: machine.Label): ConstantGlobal =
