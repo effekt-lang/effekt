@@ -19,7 +19,7 @@ def freeVariables(statement: Statement): Set[Variable] =
       environment.toSet
     case Substitute(bindings, rest) =>
       freeVariables(rest) -- bindings.map(_._1).toSet ++ bindings.map(_._2).toSet
-    case Let(name, tag, values, rest) =>
+    case Construct(name, tag, values, rest) =>
       Set.from(values) ++ (freeVariables(rest) -- Set(name))
     case Switch(value, clauses) =>
       Set(value) ++ freeVariables(clauses)
@@ -37,8 +37,10 @@ def freeVariables(statement: Statement): Set[Variable] =
       Set(value) ++ freeVariables(rest)
     case PopStack(name, rest) =>
       freeVariables(rest) -- Set(name)
-    case Run(_, environment, continuation) =>
-      environment.toSet ++ continuation.flatMap(freeVariables)
+    case LiteralInt(name, value, rest) =>
+      freeVariables(rest) - name
+    case ForeignCall(name, builtin, arguments, rest) =>
+      arguments.toSet ++ freeVariables(rest) - name
   }
 
 def substitute(subst: Substitution, v: Variable): Variable =
@@ -53,7 +55,7 @@ def substitute(subst: Substitution, stmt: Statement): Statement = stmt match {
   case Jump(label) => Substitute(subst, Jump(label))
   // we float substitutions downwards...
   case Substitute(bindings, rest) => substitute(substitute(subst, bindings) ++ subst, rest)
-  case Let(name, tag, values, rest) => ???
+  case Construct(name, tag, values, rest) => ???
   case Switch(value, clauses) => ???
   case New(name, clauses, rest) => ???
   case Invoke(value, tag, values) => ???
@@ -62,5 +64,6 @@ def substitute(subst: Substitution, stmt: Statement): Statement = stmt match {
   case NewStack(name, frame, rest) => ???
   case PushStack(value, rest) => ???
   case PopStack(name, rest) => ???
-  case Run(command, environment, continuation) => ???
+  case LiteralInt(name, value, rest) => ???
+  case ForeignCall(name, builtin, arguments, rest) => ???
 }

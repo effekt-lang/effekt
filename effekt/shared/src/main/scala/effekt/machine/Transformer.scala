@@ -33,11 +33,11 @@ object Transformer {
   def transformToplevel(stmt: lifted.Stmt, mods: List[lifted.ModuleDecl])(using ToplevelContext, BlocksParamsContext, Context): Statement =
     stmt match {
       case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
-        emitDeclaration(DefineForeign(transform(functionType.result), transform(name),
+        emitDeclaration(Extern(transform(name),
           params.map{param => param match
             case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
             case lifted.BlockParam(id, tpe) => ???
-          }, body));
+          }, transform(functionType.result), body));
         transformToplevel(rest, mods)
       case lifted.Def(id, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO top-level definitions don't need evidence, or do they?
@@ -234,28 +234,26 @@ object Transformer {
         val id = FreshValueSymbol("x", C.module);
         val variable = Variable(transform(id), Positive(List(List())));
         Binding(k =>
-          Let(variable, 0, List(), k(variable)))
+          Construct(variable, 0, List(), k(variable)))
       case lifted.IntLit(value) =>
         // TODO generate fresh name differently...
         val id = FreshValueSymbol("x", C.module);
         val variable = Variable(transform(id), Primitive("Int"));
-        Binding(k =>
-          // TODO LiteralInt is intrinsic
-          Run(LiteralInt(value), List(), List(Clause(List(variable), k(variable)))))
+        Binding(k => 
+          LiteralInt(variable, value, k(variable)))
       case lifted.BooleanLit(value: Boolean) =>
         val id = FreshValueSymbol("x", C.module)
         val variable = Variable(transform(id), Positive(List(List(), List())))
         Binding(k =>
-          Let(variable, if (value) 1 else 0, List(), k(variable)))
+          Construct(variable, if (value) 1 else 0, List(), k(variable)))
       case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
         val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.result;
         val variable = Variable(transform(id), transform(tpe));
         transform(args).flatMap(values =>
           Binding(k =>
-            Run(CallForeign(transform(blockName)), values, List(
-              Clause(List(variable),
-              k(variable))))))
+            ForeignCall(variable, transform(blockName), values,
+              k(variable))))
       case lifted.PureApp(lifted.BlockVar(blockName: symbols.Record), List(), args) =>
         val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.tpe;
@@ -273,7 +271,7 @@ object Transformer {
         };
         transform(args).flatMap(values =>
           Binding(k =>
-            Let(variable, tag, values, k(variable))))
+            Construct(variable, tag, values, k(variable))))
       case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
         val field_index = field.rec.fields.indexOf(field)
         val variables = field.rec.fields.map(f => Variable(transform(FreshValueSymbol("val_fieldname", C.module)), transform(f.tpe)))

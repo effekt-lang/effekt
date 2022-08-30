@@ -2,62 +2,145 @@ package effekt
 package machine
 
 /**
+ * Variables stand for values
+ */
+case class Variable(name: String, tpe: Type)
+
+/**
+ * An environment is an ordered list of type-annotated variable names.
+ * 
+ * Used to represent contexts, free variables, parameters, ...
+ */
+type Environment = List[Variable]
+
+/**
+ * Labels
+ * 
+ *   def l = { s1 }; s2
+ * 
+ * Here l is the label and [[environment]] is the list of free variables of s1.
+ * It thus can be understood as the type of the label.
+ */
+case class Label(name: String, environment: Environment)
+
+/**
+ * Applying a substitution 
+ *  
+ *    List(x -> y)
+ *
+ * will replace all occurrences of x by y. Here x is a binding occurrence 
+ * and y is a bound occurrence.
+ */
+type Substitution = List[(Variable, Variable)]
+
+
+/**
  * A module declaration
  */
 case class Program(declarations: List[Declaration], program: Statement)
 
 /**
- * Toplevel declarations
+ * Toplevel declarations for FFI
  */
 enum Declaration {
-  case DefineForeign(returns: Type, name: String, parameters: Environment, body: String)
+  case Extern(name: String, parameters: Environment, returnType: Type, body: String)
   case Include(contents: String)
 }
 export Declaration.*
 
+
 /**
-  * Names
-  */
-case class Variable(name: String, tpe: Type)
-
-case class Label(name: String, environment: Environment)
-
+ * Clauses are parametrized statements 
+ * 
+ * e.g. { (x1...) => s }
+ * 
+ * The parameters (x1, etc.) are binding occurrences.
+ * 
+ *    Gamma ++ Delta |- s
+ *    -----------------------
+ *    Gamma |- { Delta => s }
+ * 
+ * In the typing rule Delta corresponds to [[parameters]].
+ */
 case class Clause(parameters: Environment, body: Statement)
-
-type Environment = List[Variable]
-
-type Substitution = List[(Variable, Variable)]
-
 
 /**
  * Statements
  */
 enum Statement {
+
+  /**
+   * e.g. def l = { s1 }; s2
+   */
   case Def(label: Label, body: Statement, rest: Statement)
+
+  /**
+   * e.g. jump l
+   */
   case Jump(label: Label)
+
+  /**
+   * e.g. s[x1 -> v1, ...]
+   */
   case Substitute(bindings: Substitution, rest: Statement)
 
-  case Let(name: Variable, tag: Int, values: Environment, rest: Statement)
-  case Switch(value: Variable, clauses: List[Clause])
+  /**
+   * e.g. let x = make C(v1, ...); s
+   */
+  case Construct(name: Variable, tag: Int, arguments: Environment, rest: Statement)
 
-  case New(name: Variable, clauses: List[Clause], rest: Statement)
-  case Invoke(value: Variable, tag: Int, values: Environment)
+  /**
+   * e.g. switch v { (x1, ...) => s1; ... }
+   */
+  case Switch(scrutinee: Variable, clauses: List[Clause])
 
+  /**
+   * e.g. let x = new { (x1, ...) => s1; ... }; s
+   */
+  case New(name: Variable, operations: List[Clause], rest: Statement)
+
+  /**
+   * e.g. v.m(v1, ...)
+   */
+  case Invoke(receiver: Variable, tag: Int, arguments: Environment)
+
+  /**
+   * e.g. push { (x, ...) => s }; s
+   */
   case PushFrame(frame: Clause, rest: Statement)
-  case Return(environment: Environment)
+
+  /**
+   * e.g. return (v1: t1, ...)
+   */
+  case Return(arguments: Environment)
+
+  /**
+   * e.g. let k = stack { (x, ...) => s }; s
+   */
   case NewStack(name: Variable, frame: Clause, rest: Statement)
-  case PushStack(value: Variable, rest: Statement)
+
+  /**
+   * e.g. push k; s
+   */
+  case PushStack(stack: Variable, rest: Statement)
+
+  /**
+   * e.g. let k = shift0; s  
+   */
   case PopStack(name: Variable, rest: Statement)
 
-  case Run(command: Command, environment: Environment, continuation: List[Clause])
+  /**
+   * let x = #infix_add(v1, ...); s
+   */
+  case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
+
+  /**
+   * let x = 42; s
+   */
+  case LiteralInt(name: Variable, value: Int, rest: Statement)
 }
 export Statement.*
 
-enum Command {
-  case CallForeign(name: String)
-  case LiteralInt(n: Int)
-}
-export Command.*
 
 /**
  * Types
@@ -67,6 +150,8 @@ enum Type {
   case Negative(alternatives: List[Signature])
   case Primitive(name: String)
 }
+
 export Type.*
+
 
 type Signature = List[Type]
