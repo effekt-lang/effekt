@@ -9,10 +9,11 @@ case class Program(declarations: List[Declaration], program: Statement)
 /**
  * Toplevel declarations
  */
-sealed trait Declaration
-
-case class DefineForeign(returns: Type, name: String, parameters: Environment, body: String) extends Declaration
-case class Include(contents: String) extends Declaration
+enum Declaration {
+  case DefineForeign(returns: Type, name: String, parameters: Environment, body: String)
+  case Include(contents: String)
+}
+export Declaration.*
 
 /**
   * Names
@@ -31,35 +32,41 @@ type Substitution = List[(Variable, Variable)]
 /**
  * Statements
  */
-sealed trait Statement
-case class Def(label: Label, body: Statement, rest: Statement) extends Statement
-case class Jump(label: Label) extends Statement
-case class Substitute(bindings: Substitution, rest: Statement) extends Statement
+enum Statement {
+  case Def(label: Label, body: Statement, rest: Statement)
+  case Jump(label: Label)
+  case Substitute(bindings: Substitution, rest: Statement)
 
-case class Let(name: Variable, tag: Int, values: Environment, rest: Statement) extends Statement
-case class Switch(value: Variable, clauses: List[Clause]) extends Statement
+  case Let(name: Variable, tag: Int, values: Environment, rest: Statement)
+  case Switch(value: Variable, clauses: List[Clause])
 
-case class New(name: Variable, clauses: List[Clause], rest: Statement) extends Statement
-case class Invoke(value: Variable, tag: Int, values: Environment) extends Statement
+  case New(name: Variable, clauses: List[Clause], rest: Statement)
+  case Invoke(value: Variable, tag: Int, values: Environment)
 
-case class PushFrame(frame: Clause, rest: Statement) extends Statement
-case class Return(environment: Environment) extends Statement
-case class NewStack(name: Variable, frame: Clause, rest: Statement) extends Statement
-case class PushStack(value: Variable, rest: Statement) extends Statement
-case class PopStack(name: Variable, rest: Statement) extends Statement
+  case PushFrame(frame: Clause, rest: Statement)
+  case Return(environment: Environment)
+  case NewStack(name: Variable, frame: Clause, rest: Statement)
+  case PushStack(value: Variable, rest: Statement)
+  case PopStack(name: Variable, rest: Statement)
 
-case class Run(command: Command, environment: Environment, continuation: List[Clause]) extends Statement
+  case Run(command: Command, environment: Environment, continuation: List[Clause])
+}
+export Statement.*
 
-sealed trait Command
-case class CallForeign(name: String) extends Command
-case class LiteralInt(n: Int) extends Command
+enum Command {
+  case CallForeign(name: String)
+  case LiteralInt(n: Int)
+}
+export Command.*
 
 /**
  * Types
  */
-sealed trait Type
-case class Positive(alternatives: List[Signature]) extends Type
-case class Negative(alternatives: List[Signature]) extends Type
-case class Primitive(name: String) extends Type
+enum Type {
+  case Positive(alternatives: List[Signature])
+  case Negative(alternatives: List[Signature])
+  case Primitive(name: String)
+}
+export Type.*
 
 type Signature = List[Type]

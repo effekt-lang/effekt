@@ -1,6 +1,6 @@
-package effekt.machine.analysis
-
-import effekt.machine.*
+package effekt
+package machine
+package analysis
 
 def freeVariables(clauses: List[Clause]): Set[Variable] = {
   clauses.flatMap(freeVariables).toSet
