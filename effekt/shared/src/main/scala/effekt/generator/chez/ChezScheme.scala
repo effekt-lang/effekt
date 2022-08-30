@@ -50,9 +50,9 @@ trait ChezScheme {
    * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
-    C.checkMain(main.mod)
+    val mainSym = C.checkMain(main.mod)
     val deps = dependencies.flatMap { dep => compile(dep) }
-    val chezModule = LetFusion.rewrite(chez.Let(Nil, compilationUnit(main.mod, main.core, deps)))(using ())
+    val chezModule = LetFusion.rewrite(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core, deps)))(using ())
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
     Some(Compiled(mainFile, Map(mainFile -> result)))
@@ -70,9 +70,8 @@ trait ChezScheme {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     toChez(in.core)
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
     val defs = toChez(core)
-    val mainSymbol = mod.terms("main").toList.head
     chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
   }
 
