@@ -3,17 +3,9 @@ package machine
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.lifted.{ AnyPattern, IgnorePattern, LiteralPattern, TagPattern, ValueParam }
+
+import effekt.symbols
 import effekt.symbols.{ TermSymbol, BlockSymbol, BlockType, FunctionType, BuiltinFunction, UserFunction, Module, Name, Symbol, ValueSymbol, builtins }
-
-// TODO delete imports
-
-case class FreshValueSymbol(baseName: String, module: Module) extends ValueSymbol {
-  val name = Name.qualified(baseName, module)
-}
-case class FreshBlockSymbol(baseName: String, module: Module) extends BlockSymbol {
-  val name = Name.qualified(baseName, module)
-}
 
 object Transformer {
 
@@ -144,12 +136,9 @@ object Transformer {
       case lifted.Handle(lifted.ScopeAbs(_, lifted.BlockLit(List(id), body)), List(handler)) =>
         // TODO deal with evidence
         // TODO more than one handler
-        val variableName = FreshValueSymbol("a", C.module);
-        val variable = Variable(transform(variableName), transform(answerTypeOf(handler)));
+        val variable = Variable(freshName("a"), transform(answerTypeOf(handler)));
         val returnClause = Clause(List(variable), Return(List(variable)));
-
-        val delimiterName = FreshBlockSymbol("ret", C.module);
-        val delimiter = Variable(transform(delimiterName), Primitive("Stk"));
+        val delimiter = Variable(freshName("ret"), Primitive("Stk"));
 
         NewStack(delimiter, returnClause,
         PushStack(delimiter,
@@ -230,34 +219,27 @@ object Transformer {
         val tpe = C.blockTypeOf(id);
         pure(Variable(transform(id), transform(tpe)))
       case lifted.UnitLit() =>
-        // TODO generate fresh name differently...
-        val id = FreshValueSymbol("x", C.module);
-        val variable = Variable(transform(id), Positive(List(List())));
+        val variable = Variable(freshName("x"), Positive(List(List())));
         Binding(k =>
           Construct(variable, 0, List(), k(variable)))
       case lifted.IntLit(value) =>
-        // TODO generate fresh name differently...
-        val id = FreshValueSymbol("x", C.module);
-        val variable = Variable(transform(id), Primitive("Int"));
+        val variable = Variable(freshName("x"), Primitive("Int"));
         Binding(k => 
           LiteralInt(variable, value, k(variable)))
       case lifted.BooleanLit(value: Boolean) =>
-        val id = FreshValueSymbol("x", C.module)
-        val variable = Variable(transform(id), Positive(List(List(), List())))
+        val variable = Variable(freshName("x"), Positive(List(List(), List())))
         Binding(k =>
           Construct(variable, if (value) 1 else 0, List(), k(variable)))
       case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
-        val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.result;
-        val variable = Variable(transform(id), transform(tpe));
+        val variable = Variable(freshName("x"), transform(tpe));
         transform(args).flatMap(values =>
           Binding(k =>
             ForeignCall(variable, transform(blockName), values,
               k(variable))))
       case lifted.PureApp(lifted.BlockVar(blockName: symbols.Record), List(), args) =>
-        val id = FreshValueSymbol("x", C.module);
         val tpe = blockName.tpe;
-        val variable = Variable(transform(id), transform(tpe));
+        val variable = Variable(freshName("x"), transform(tpe));
         val tag = blockName.tpe match {
           case symbols.DataType(_, List(), variants) => variants.indexOf(blockName)
           // TODO
@@ -274,20 +256,18 @@ object Transformer {
             Construct(variable, tag, values, k(variable))))
       case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
         val field_index = field.rec.fields.indexOf(field)
-        val variables = field.rec.fields.map(f => Variable(transform(FreshValueSymbol("val_fieldname", C.module)), transform(f.tpe)))
+        val variables = field.rec.fields.map(f => Variable(freshName("fieldName"), transform(f.tpe)))
         transform(target).flatMap(value => Binding(k =>
             Switch(value, List(Clause(variables, k(variables(field_index)))))))
       case lifted.Run(stmt) =>
-        val id = FreshValueSymbol("x", C.module);
         // TODO find actual type
-        val variable = Variable(transform(id), Primitive("Int"));
+        val variable = Variable(freshName("x"), Primitive("Int"));
         Binding(k =>
           PushFrame(Clause(List(variable), k(variable)), transform(stmt)))
       case lifted.ScopeAbs(_, lifted.BlockLit(params, body)) =>
         // TODO deal with evidence
         val parameters = params.map(transform);
-        val id = FreshValueSymbol("g", C.module);
-        val variable = Variable(transform(id), Negative(List(parameters.map(_.tpe))));
+        val variable = Variable(freshName("g"), Negative(List(parameters.map(_.tpe))));
         Binding(k =>
           New(variable, List(Clause(parameters, transform(body))), k(variable)))
       case _ =>
@@ -533,6 +513,9 @@ object Transformer {
 
   def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
+
+  def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
+
 
   //   def evidenceType(): Type = Evidence()
 
