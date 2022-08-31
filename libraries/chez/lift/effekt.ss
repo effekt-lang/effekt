@@ -68,8 +68,19 @@
 (define-syntax handle
   (syntax-rules ()
     [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
-     (reset ((body lift)
-        (lambda (ev) (cap1 (define-effect-op ev (arg1 ...) kid exp) ...)) ...))]))
+     (reset (body lift
+       (cap1 (define-effect-op ev (arg1 ...) kid exp) ...) ...))]))
+
+
+(define-syntax define-effect-op
+  (syntax-rules ()
+    [(_ ev1 (arg1 ...) kid exp ...)
+     (lambda (ev1 arg1 ...)
+        ; we apply the outer evidence to the body of the operation
+        (ev1 (lambda (resume)
+          ; k itself also gets evidence!
+          (let ([kid (lambda (ev v) (ev (resume v)))])
+            exp ...))))]))
 
 
 (define (with-region body)
@@ -83,7 +94,7 @@
       (restore fields)
       (k a)))))
 
-  ((body lift) arena))
+  (body lift arena))
 
 
 ; An Arena is a pointer to a list of cells
@@ -107,17 +118,6 @@
   (for-each (lambda (cell-data)
     (set-box! (car cell-data) (cdr cell-data)))
     data))
-
-
-(define-syntax define-effect-op
-  (syntax-rules ()
-    [(_ ev1 (arg1 ...) kid exp ...)
-     (lambda (arg1 ...)
-        ; we apply the outer evidence to the body of the operation
-        (ev1 (lambda (resume)
-          ; k itself also gets evidence!
-          (let ([kid (lambda (ev) (lambda (v) (ev (resume v))))])
-            exp ...))))]))
 
 (define-syntax nested-helper
   (syntax-rules ()
