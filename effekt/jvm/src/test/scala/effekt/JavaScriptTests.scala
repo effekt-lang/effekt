@@ -13,6 +13,10 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends AnyFunSpec with TestUtils {
 
+  override lazy val ignored: List[File] = List(
+    examplesDir / "llvm"
+  )
+
   runTestsIn(examplesDir)
 
   def runTestsIn(dir: File): Unit = describe(dir.getName) {
