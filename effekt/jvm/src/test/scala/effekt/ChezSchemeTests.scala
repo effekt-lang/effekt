@@ -16,6 +16,8 @@ class ChezSchemeTests extends AnyFunSpec {
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
   lazy val ignored: List[File] = List(
+    examplesDir / "llvm",
+
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "maps.effekt",
 

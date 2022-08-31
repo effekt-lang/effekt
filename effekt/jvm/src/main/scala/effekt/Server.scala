@@ -2,6 +2,7 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
+import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.PlainMessaging
 import effekt.util.messages.EffektError
@@ -44,10 +45,10 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     val showAnything = settingBool("showCore") || settingBool("showTarget")
     if (!showAnything) return ;
 
-    for ((transformed, js) <- C.compileSeparate(source)) {
+    for ((transformed, js) <- C.compileSeparate(source); liftedCore <- LiftInference.run(transformed)) {
 
       if (settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", core.PrettyPrinter.format(transformed.core))
+        publishProduct(source, "target", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
       }
 
       if (settingBool("showTarget")) {
