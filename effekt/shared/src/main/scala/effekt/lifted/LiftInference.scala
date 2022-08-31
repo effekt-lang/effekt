@@ -237,6 +237,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    * Traverses the statement to look for function definitions.
    *
    * Important for mutually (and self) recursive functions.
+   *
+   * TODO add mutual blocks to core and lifted. This way we know exactly what to pretransform.
    */
   def pretransform(s: core.Stmt)(using env: Environment, C: Context): Environment = s match {
     case core.Def(id, tpe, block, rest) =>
