@@ -18,7 +18,7 @@ sealed trait Argument extends Tree
 /**
  * Expressions
  */
-sealed trait Expr extends Tree with Argument
+sealed trait Expr extends Argument
 case class ValueVar(id: ValueSymbol) extends Expr
 
 sealed trait Literal[T] extends Expr {
@@ -38,17 +38,13 @@ case class Run(s: Stmt) extends Expr
 /**
  * Blocks
  */
-sealed trait Param extends Tree { def id: TermSymbol }
+sealed trait Param extends Tree { def id: Symbol }
 case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
 case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
+case class EvidenceParam(id: EvidenceSymbol) extends Param
 
-sealed trait Block extends Tree with Argument
+sealed trait Block extends Argument
 case class BlockVar(id: BlockSymbol) extends Block
-
-// introduced by lift inference only
-case class ScopeAbs(scope: Symbol, body: Block) extends Block
-case class ScopeApp(b: Block, evidence: Scope) extends Block
-case class Lifted(s: Scope, b: Block) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
@@ -71,7 +67,7 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
-case class Ret(e: Expr) extends Stmt
+case class Return(e: Expr) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
 
 sealed trait Pattern extends Tree
@@ -92,14 +88,11 @@ case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends 
 case class Region(body: Block) extends Stmt
 
 /**
- * Explicit Lifts
- * ---
- * introduced by lift inference only
- * TODO maybe add a separate core language with explicit lifts
+ * Evidence for lifts
  */
-sealed trait Scope extends Tree
-case class Here() extends Scope
-case class Nested(list: List[Scope]) extends Scope
-case class ScopeVar(id: Symbol) extends Scope
+case class Evidence(scopes: List[EvidenceSymbol]) extends Argument
 
-case class ScopeId() extends Symbol { val name = Name.local(s"ev${id}") }
+def Here() = Evidence(Nil)
+
+class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
+
