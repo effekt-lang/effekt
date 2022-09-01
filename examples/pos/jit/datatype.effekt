@@ -1,0 +1,12 @@
+type List {
+  Nil();
+  Cons(head: Int)
+}
+
+def main() = {
+  val x:List = Cons(2);
+  x match {
+  case Nil() => println(0);
+  case Cons(h) => println(h);
+  }
+}
