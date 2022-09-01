@@ -2,6 +2,7 @@ package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
 import effekt.generator.js.JavaScriptVirtual
+import effekt.lifted.LiftInference
 import effekt.util.PlainMessaging
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.*
@@ -110,6 +111,27 @@ class LanguageServer extends Intelligence {
       case FatalPhaseError(msg) =>
         throw js.JavaScriptException(msg)
     }
+  }
+
+  @JSExport
+  def showCore(path: String): String = {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
+      return null
+    }
+    core.PrettyPrinter.format(mainCore.core.defs)
+  }
+
+  @JSExport
+  def showLiftedCore(path: String): String = {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
+      return null
+    }
+
+    val liftedCore = LiftInference.run(mainCore).getOrElse {
+      return null
+    }
+
+    lifted.PrettyPrinter.format(liftedCore.core.defs)
   }
 
   /**

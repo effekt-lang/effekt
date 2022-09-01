@@ -4,14 +4,19 @@ package core
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
-import effekt.symbols.{ Name, TypePrinter, Wildcard, builtins }
+import effekt.symbols.{ Name, Wildcard, builtins }
 
 object PrettyPrinter extends ParenPrettyPrinter {
 
   import kiama.output.PrettyPrinterTypes.Document
 
+  override val defaultIndent = 2
+
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
+
+  def format(s: Stmt): String =
+    pretty(toDocStmt(s), 60).layout
 
   val emptyline: Doc = line <> line
 
@@ -23,7 +28,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v) => v.name.toString
     case BlockLit(ps, body) =>
-      parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> toDoc(body)) <> line)
+      braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
     case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
@@ -36,23 +41,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()     => "()"
-    case StringLit(s)  => "\"" + s + "\""
-    case l: Literal[t] => l.value.toString
-    case ValueVar(id)  => id.name.toString
+    case UnitLit()                 => "()"
+    case StringLit(s)              => "\"" + s + "\""
+    case l: Literal[t]             => l.value.toString
+    case ValueVar(id)              => id.name.toString
 
-    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map {
-      case e: Expr  => toDoc(e)
-      case b: Block => toDoc(b)
-    }, comma))
-
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map toDoc, comma))
+    case PureApp(b, targs, args)   => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Box(b) => parens("box" <+> toDoc(b))
-    case Run(s) => "run" <+> braces(toDoc(s))
+    case Run(s) => "run" <+> block(toDocStmt(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -73,50 +74,62 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case TagPattern(id, patterns)  => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
   }
 
-  def toDoc(handler: Handler): Doc = braces(nest(line <> vsep(handler.clauses.map { case (id, b) => toDoc(id.name) <> ":" <+> toDoc(b) }, comma)) <> line)
+  def toDoc(handler: Handler): Doc = {
+    val handlerName = toDoc(handler.id.name)
+    val clauses = handler.clauses.map {
+      case (id, BlockLit(params, body)) =>
+        "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDocStmt(body))
+    }
+    handlerName <+> block(vsep(clauses))
+  }
 
   def toDocStmt(s: Stmt): Doc = s match {
     case Def(id, tpe, Extern(ps, body), rest) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=>" <+>
-        braces(nest(body) <> line) <> emptyline <> toDocStmt(rest)
+      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\"" <> emptyline <>
+        toDocStmt(rest)
+
+    case Def(id, tpe, BlockLit(params, body), rest) =>
+      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDocStmt(body)) <> emptyline <>
+        toDocStmt(rest)
 
     case Def(id, tpe, b, rest) =>
-      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <> toDocStmt(rest)
+      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <>
+        toDocStmt(rest)
 
     case Data(did, ctors, rest) =>
-      val cs = ctors.map { id => toDoc(id.name) }
-      "type" <+> toDoc(did.name) <> parens(hsep(cs, ",")) <> emptyline <> toDocStmt(rest)
+      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) }) <> emptyline <>
+        toDocStmt(rest)
 
     case Record(did, fields, rest) =>
-      val fs = fields.map { f => toDoc(f.name) }
-      "record" <+> toDoc(did.name) <> parens(hsep(fs, ",")) <> emptyline <> toDocStmt(rest)
+      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) }) <> emptyline <>
+        toDocStmt(rest)
 
     case Val(Wildcard(_), tpe, binding, body) =>
-      toDoc(binding) <> ";" <> line <> toDoc(body)
+      toDoc(binding) <> ";" <> line <>
+        toDoc(body)
 
     case Val(id, tpe, binding, body) =>
-      "val" <+> toDoc(id.name) <+> ":" <+> TypePrinter.show(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+      "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+        toDoc(body)
 
     case Let(id, tpe, binding, body) =>
-      "let" <+> toDoc(id.name) <+> ":" <+> TypePrinter.show(tpe) <+> "=" <+> toDoc(binding) <> ";" <> line <> toDoc(body)
+      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
+        toDoc(body)
 
     case App(b, targs, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
     case If(cond, thn, els) =>
-      "if" <+> parens(toDoc(cond)) <+> toDocStmt(thn) <+> "else" <+> toDocStmt(els)
+      "if" <+> parens(toDoc(cond)) <+> block(toDocStmt(thn)) <+> "else" <+> block(toDocStmt(els))
 
     case While(cond, body) =>
-      "while" <+> parens(toDoc(cond)) <+> braces(nest(line <> toDoc(body)) <+> line)
+      "while" <+> parens(toDoc(cond)) <+> block(toDoc(body)) <+> line
 
     case Return(e) =>
-      "return" <+> toDoc(e)
+      toDoc(e)
 
     case Handle(body, hs) =>
-      // TODO pretty print correctly
-      val handlers = hs.map(toDoc)
-      val cs = parens("[" <> hsep(handlers, comma) <> "]")
-      "handle" <+> braces(nest(line <> toDoc(body)) <> line) <+> "with" <+> cs
+      "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
     case State(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
@@ -141,5 +154,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Def(id, tpe, d, rest) => true
     case _ => false
   }
+
+  def nested(content: Doc): Doc = group(nest(line <> content))
+
+  def parens(docs: List[Doc]): Doc = parens(hsep(docs, comma))
+
+  def brackets(docs: List[Doc]): Doc = brackets(hsep(docs, comma))
+
+  def block(content: Doc): Doc = braces(nest(line <> content) <> line)
+
+  def block(docs: List[Doc]): Doc = block(vsep(docs, line))
 
 }
