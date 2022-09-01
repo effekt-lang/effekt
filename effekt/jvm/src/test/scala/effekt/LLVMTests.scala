@@ -13,17 +13,17 @@ class LLVMTests extends AnyFunSpec {
 
   findAllTests(examplesDir / "llvm")
 
-  // Translation from odd Scala names to Unix jargon:
-  // `.getName` -> "base"
-  // `.getParentFile` -> "dir"
   def findAllTests(root: File): Unit = describe(root.getName) {
+    // Reminder: mapping of Scala names to Unix jargon:
+    // `.getName` -> "base"
+    // `.getParentFile` -> "dir"
     root.listFiles.foreach {
       case h if h.getName.startsWith(".") => ()
       case d if d.isDirectory             => findAllTests(d)
       case e if e.getName.endsWith(".effekt") =>
         val c = e.getParentFile / (e.getName.stripSuffix(".effekt") + ".check")
         if (!c.exists())
-          sys error s"WAKKA missing checkfile for: ${e.getPath}"
+          sys error s"Missing checkfile for: ${e.getPath}"
         it(e.getName) {
           assert(IO.read(c).toString == run(e))
         }
