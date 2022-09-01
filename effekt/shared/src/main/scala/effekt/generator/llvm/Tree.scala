@@ -26,6 +26,8 @@ enum Instruction {
   case Add(result: String, operand0: Operand, operand1: Operand)
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
+
+  case Comment(msg: String)
 }
 export Instruction.*
 
