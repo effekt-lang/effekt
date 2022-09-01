@@ -1,0 +1,3 @@
+def identity(x) = x
+
+def main() = ()
