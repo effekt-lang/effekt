@@ -159,6 +159,9 @@ export Type.{ Positive, Negative }
 type Signature = List[Type]
 
 object builtins {
+
+  val Evidence = Type.Int()
+
   /**
    * Blocks types are interfaces with a single operation.
    */
