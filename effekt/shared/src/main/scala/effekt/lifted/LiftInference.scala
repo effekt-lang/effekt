@@ -148,16 +148,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     // TODO also distinguish between pure and io expressions in lift
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
-      PureApp(transform(b), targs, transform(args))
-
-    case core.Select(target, field) =>
-      Select(transform(target), field)
-
-    case core.Box(b)                   =>
-      Closure(transform(b))
-
-    case core.Run(s) =>
-      Run(transform(s))
+      PureApp(transform(b), targs, liftArguments(args))
+    case core.Select(target, field) => Select(transform(target), field)
+    case core.Box(b)                   => Closure(transform(b))
+    case core.Run(s, tpe) =>
+      Run(transform(s), tpe)
   }
 
   def transform[T](tree: core.Literal[T]): Literal[T] = tree match {

@@ -75,7 +75,7 @@ object Transformer {
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Statement =
     stmt match {
-      case lifted.Return(lifted.Run(stmt)) =>
+      case lifted.Ret(lifted.Run(stmt, tpe)) =>
         transform(stmt)
 
       case lifted.Return(expr) =>
@@ -267,11 +267,9 @@ object Transformer {
         }
       }
 
-    case lifted.Run(stmt) =>
-      // TODO find actual type (annotate Run with the type?)
-      val tpe = Type.Int()
-      //System.err.println(s"??? $stmt")
-      val variable = Variable(freshName("x"), tpe)
+    case lifted.Run(stmt, tpe) =>
+      // NOTE: `stmt` is guaranteed to be of type `tpe`.
+      val variable = Variable(freshName("x"), transform(tpe))
       Binding { k =>
         PushFrame(Clause(List(variable), k(variable)), transform(stmt))
       }

@@ -33,7 +33,7 @@ case class StringLit(value: String) extends Literal[String]
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Closure(b: Block) extends Expr
-case class Run(s: Stmt) extends Expr
+case class Run(s: Stmt, tpe: ValueType) extends Expr
 
 /**
  * Blocks
@@ -124,7 +124,7 @@ def freeVariables(expr: Expr): Set[Symbol] = expr match {
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field) => freeVariables(target) // we do not count fields in...
   case Closure(b) => freeVariables(b) // well, well, well...
-  case Run(s) => freeVariables(s)
+  case Run(s, tpe) => freeVariables(s)
 }
 
 def freeVariables(arg: Argument): Set[Symbol] = arg match {

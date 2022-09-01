@@ -211,7 +211,7 @@ trait ChezScheme {
 
     case Box(b) => toChez(b)
 
-    case Run(s) => run(toChezExpr(s))
+    case Run(s, tpe) => run(toChezExpr(s))
   }
 
   def toChez(p: Pattern): chez.Expr = p match {

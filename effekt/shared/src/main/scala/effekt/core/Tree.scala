@@ -28,7 +28,7 @@ sealed trait Expr extends Tree
 case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt) extends Expr
+case class Run(s: Stmt, tpe: ValueType) extends Expr
 
 /**
  * Pure Expressions (no IO effects, or control effects)
@@ -157,8 +157,8 @@ object Tree {
         case e if expr.isDefinedAt(e) => expr(e)
         case DirectApp(b, targs, args) =>
           DirectApp(rewrite(b), targs, args map rewrite)
-        case Run(s)  => Run(rewrite(s))
-        case p: Pure => rewrite(p)
+        case Run(s, tpe) => Run(rewrite(s), tpe)
+        case p: Pure     => rewrite(p)
       }
 
     def rewrite(e: Stmt): Stmt =
