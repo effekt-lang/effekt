@@ -44,6 +44,7 @@ object Transformer {
         val transformedParams = params.map {
           case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
           case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
+          case lifted.EvidenceParam(_) => ???
         }
         emitDeclaration(Extern(transform(name), transformedParams, transform(functionType.result), body))
         transformToplevel(rest, entryPoint)
@@ -184,12 +185,14 @@ object Transformer {
   def transform(arg: lifted.Argument)(using BlocksParamsContext, Context): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
+    case lifted.Evidence(_) => ???
   }
 
   def transform(block: lifted.Block)(using BlocksParamsContext, Context): Binding[Variable] = block match {
     case lifted.BlockVar(id) =>
       val tpe = Context.blockTypeOf(id)
       pure(Variable(transform(id), transform(tpe)))
+
     case lifted.ScopeAbs(_, lifted.BlockLit(params, body)) =>
       // TODO deal with evidence
       val parameters = params.map(transform);
@@ -197,6 +200,7 @@ object Transformer {
       Binding { k =>
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
+
     case lifted.ScopeApp(b, evidence) => ???
     case lifted.Lifted(s, b) => ???
     case lifted.BlockLit(params, body) => ???
@@ -204,8 +208,6 @@ object Transformer {
     case lifted.Extern(params, body) => ???
     case lifted.Unbox(e) => ???
     case lifted.New(impl) => ???
-    case _ =>
-      Context.abort("Unsupported block: " + block)
   }
 
   def transform(expr: lifted.Expr)(using BlocksParamsContext, Context): Binding[Variable] = expr match {
@@ -306,6 +308,7 @@ object Transformer {
         Variable(transform(name), transform(tpe))
       case lifted.BlockParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
+      case lifted.EvidenceParam(_) => ???
     }
 
   // def transform(scope: lifted.Scope)(implicit C: Context): Variable =
@@ -395,10 +398,12 @@ object Transformer {
     stmt match {
       case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
         findToplevelBlocksParams(rest)
+
       case lifted.Def(blockName, _, lifted.ScopeAbs(scopeName, lifted.BlockLit(params, body)), rest) =>
         // TODO add evidence param
         noteBlockParams(blockName, params.map(transform));
         findToplevelBlocksParams(rest)
+
       case lifted.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
         findToplevelBlocksParams(rest)
