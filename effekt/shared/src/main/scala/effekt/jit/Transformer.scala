@@ -295,12 +295,6 @@ object Transformer {
     }).toMap;
 
     for(ty <- RegisterType.values) {
-      for(i <- 0 until BC.frameDescriptor.locals(ty)) {
-        // drop unused registers
-        if(!todo(ty).values.exists(_==i)) {
-          emit(Drop(ty, RegisterIndex(i)))
-        }
-      }
       var changed = true;
       while(changed) {
         changed = false;
@@ -327,6 +321,12 @@ object Transformer {
           }
         }
         todo(ty).remove(cur_n);
+      }
+      for(i <- 0 until BC.frameDescriptor.locals(ty)) {
+        // drop unused registers
+        if(!newVals.regs(ty).exists({case RegisterIndex(j) => i==j; case _ => false})) {
+          emit(Drop(ty, RegisterIndex(i)))
+        }
       }
     }
   }
