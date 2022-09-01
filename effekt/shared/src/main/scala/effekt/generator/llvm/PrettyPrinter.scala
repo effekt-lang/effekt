@@ -75,6 +75,10 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
+
+    // let us hope that `msg` does not contain e.g. a newline
+    case Comment(msg) =>
+      s"; $msg"
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {
