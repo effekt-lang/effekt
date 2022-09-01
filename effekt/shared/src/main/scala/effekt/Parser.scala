@@ -306,7 +306,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
    * Parameters
    */
   lazy val params: P[List[ValueParam] ~ List[BlockParam]] =
-    ( valueParamsOpt ~ blockParams
+    ( valueParams ~ blockParams
     | valueParams ~ success(List.empty[BlockParam])
     | success(List.empty[ValueParam]) ~ blockParams
     | failure("Expected a parameter list (multiple value parameters or one block parameter)")
@@ -327,8 +327,13 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val valueParamsOptSection: P[List[ValueParam]] =
     `(` ~/> manySep(valueParamOpt, `,`) <~ `)`
 
-  lazy val valueParam: P[ValueParam] =
-    idDef ~ (`:` ~> valueType) ^^ { case id ~ tpe => ValueParam(id, Some(tpe)) }
+  lazy val valueTypeAnnotation : P[ValueType] =
+    ( `:` ~/> valueType
+    | failure("Expected a type annotation")
+    )
+
+  lazy val valueParam : P[ValueParam] =
+    idDef ~ valueTypeAnnotation ^^ { case id ~ tpe => ValueParam(id, Some(tpe)) }
 
   lazy val valueParamOpt: P[ValueParam] =
     idDef ~ (`:` ~> valueType).? ^^ ValueParam.apply
