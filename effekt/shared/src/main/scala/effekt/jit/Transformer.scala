@@ -49,6 +49,7 @@ object Transformer {
         transform(rest)
       }
       case machine.Jump(machine.Label(name, environment)) => {
+        emitSubst(transformParameters(environment), transformArguments(environment)); // TODO: Get rid of this!
         Jump(BlockName(name))
       }
       case machine.Substitute(bindings, rest) => {
@@ -244,9 +245,14 @@ object Transformer {
   def emitSubst(newEnv: Environment, vals: Environment)
                (using ProgC: ProgramContext, BC: BlockContext): Unit = {
     val oldVals = transformArguments(vals);
+    emitSubst(newEnv, oldVals)
+  }
+  def emitSubst(newEnv: Environment, oldVals: RegList)
+               (using ProgC: ProgramContext, BC: BlockContext): Unit = {
     BC.environment = newEnv;
     val newVals = transformArguments(newEnv);
     if (oldVals == newVals) return // nothing to do
+    extendFrameDescriptorTo(newEnv);
     emit(Subst(oldVals))
   }
   def ensureEnvironment(newEnvironment: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
