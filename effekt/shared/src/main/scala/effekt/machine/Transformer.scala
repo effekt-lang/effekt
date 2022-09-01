@@ -270,7 +270,9 @@ object Transformer {
 
     case lifted.Run(stmt) =>
       // TODO find actual type (annotate Run with the type?)
-      val variable = Variable(freshName("x"), Type.Int());
+      val tpe = Type.Int()
+      //System.err.println(s"??? $stmt")
+      val variable = Variable(freshName("x"), tpe)
       Binding { k =>
         PushFrame(Clause(List(variable), k(variable)), transform(stmt))
       }
