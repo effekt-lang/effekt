@@ -3,6 +3,7 @@ package jit
 
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
+import scala.collection.immutable.ListMap
 
 object PrettyPrinter extends ParenPrettyPrinter {
   def toDocument(program: Program): Document = pretty(toDoc(program))
@@ -23,7 +24,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(program: Program): Doc = {
-    jsonObject(Map(
+    jsonObject(ListMap(
       "datatypes" -> jsonList(program.datatypes.map(toDoc)),
       "blocks" -> jsonList(program.blocks.map(toDoc)),
       "frameSize" -> toDoc(program.frameSize),
@@ -34,21 +35,21 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: Type): Option[Doc] = tpe match {
     case Type.Unit() => None
-    case Type.Continuation() => Some(jsonObjectSmall(Map("type" -> "cont")))
-    case Type.Integer() => Some(jsonObjectSmall(Map("type" -> "int")))
-    case Type.Datatype(index) => Some(jsonObjectSmall(Map("type" -> "adt", "index" -> index.toString)))
+    case Type.Continuation() => Some(jsonObjectSmall(ListMap("type" -> "\"cont\"")))
+    case Type.Integer() => Some(jsonObjectSmall(ListMap("type" -> "\"int\"")))
+    case Type.Datatype(index) => Some(jsonObjectSmall(ListMap("type" -> "\"adt\"", "index" -> index.toString)))
   }
 
   def toDoc(block: BasicBlock): Doc = block match {
     case BasicBlock(BlockIndex(idx), frameDescriptor, instructions, terminator) => {
-      jsonObject(Map(
+      jsonObject(ListMap(
         "label" -> idx.toString,
         "frameDescriptor" -> toDoc(frameDescriptor),
         "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
       ))
     }
     case BasicBlock(id, frameDescriptor, instructions, terminator) => {
-      jsonObject(Map(
+      jsonObject(ListMap(
         "label" -> dquotes(id.toString),
         "frameDescriptor" -> toDoc(frameDescriptor),
         "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
@@ -57,7 +58,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(frameDescriptor: FrameDescriptor): Doc = {
-    jsonObjectSmall(Map( // TODO: calculate befor pretty-printing
+    jsonObjectSmall(ListMap( // TODO: calculate befor pretty-printing
       "regs_int" -> frameDescriptor.locals.applyOrElse(RegisterType.Integer, x => 0).toString,
       "regs_cont" -> frameDescriptor.locals.applyOrElse(RegisterType.Continuation, x => 0).toString,
       "regs_adt" -> frameDescriptor.locals.applyOrElse(RegisterType.Datatype, x => 0).toString
@@ -65,47 +66,47 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(instruction: Instruction): Doc = instruction match {
-    case Const(out, value) => jsonObjectSmall(Map("op" -> "\"Const\"", "out" -> toDoc(out), "value" -> value.toString))
-    case PrimOp(name, out, in) => jsonObjectSmall(Map("op" -> "\"PrimOp\"",
+    case Const(out, value) => jsonObjectSmall(ListMap("op" -> "\"Const\"", "out" -> toDoc(out), "value" -> value.toString))
+    case PrimOp(name, out, in) => jsonObjectSmall(ListMap("op" -> "\"PrimOp\"",
       "name" -> dquotes(name),
       "out" -> toDoc(out),
       "in" -> toDoc(in)))
-    case Add(out, in1, in2) => jsonObjectSmall(Map("op" -> "\"Add\"",
+    case Add(out, in1, in2) => jsonObjectSmall(ListMap("op" -> "\"Add\"",
       "out" -> toDoc(out), "in1" -> toDoc(in1), "in2" -> toDoc(in2)))
-    case Mul(out, in1, in2) => jsonObjectSmall(Map("op" -> "\"Mul\"",
+    case Mul(out, in1, in2) => jsonObjectSmall(ListMap("op" -> "\"Mul\"",
       "out" -> toDoc(out), "in1" -> toDoc(in1), "in2" -> toDoc(in2)))
-    case Push(target, args) => jsonObjectSmall(Map("op" -> "\"Push\"",
+    case Push(target, args) => jsonObjectSmall(ListMap("op" -> "\"Push\"",
       "target" -> toDoc(target), "args" -> toDoc(args)))
-    case Shift(out, n) => jsonObjectSmall(Map("op" -> "\"Shift\"",
+    case Shift(out, n) => jsonObjectSmall(ListMap("op" -> "\"Shift\"",
       "out" -> toDoc(out), "n" -> n.toString))
-    case Reset() => jsonObjectSmall(Map("op" -> "\"Reset\""))
-    case Print(arg) => jsonObjectSmall(Map("op" -> "\"Print\"", "arg" -> toDoc(arg)))
-    case IfZero(arg, thenClause) => jsonObjectSmall(Map("op" -> "\"IfZero\"",
+    case Reset() => jsonObjectSmall(ListMap("op" -> "\"Reset\""))
+    case Print(arg) => jsonObjectSmall(ListMap("op" -> "\"Print\"", "arg" -> toDoc(arg)))
+    case IfZero(arg, thenClause) => jsonObjectSmall(ListMap("op" -> "\"IfZero\"",
       "cond" -> toDoc(arg),
       "then" -> toDoc(thenClause)))
-    case IsZero(out, arg) => jsonObjectSmall(Map("op" -> "\"IsZero\"", "out" -> toDoc(out), "arg" -> toDoc(arg)))
-    case Subst(args) => jsonObjectSmall(Map("op" -> "\"Subst\"", "args" -> toDoc(args)))
-    case Construct(out, adt_type, tag, args) => jsonObjectSmall(Map("op" -> "\"Construct\"",
+    case IsZero(out, arg) => jsonObjectSmall(ListMap("op" -> "\"IsZero\"", "out" -> toDoc(out), "arg" -> toDoc(arg)))
+    case Subst(args) => jsonObjectSmall(ListMap("op" -> "\"Subst\"", "args" -> toDoc(args)))
+    case Construct(out, adt_type, tag, args) => jsonObjectSmall(ListMap("op" -> "\"Construct\"",
       "out" -> toDoc(out),
       "type" -> adt_type.toString,
       "tag" -> tag.toString,
       "args" -> toDoc(args)
     ))
-    case NewStack(out, target, args) => jsonObjectSmall(Map("op" -> "\"NewStack\"",
+    case NewStack(out, target, args) => jsonObjectSmall(ListMap("op" -> "\"NewStack\"",
       "out" -> toDoc(out),
       "target" -> toDoc(target),
       "args" -> toDoc(args)
     ))
-    case PushStack(arg) => jsonObjectSmall(Map("op" -> "\"PushStack\"",
+    case PushStack(arg) => jsonObjectSmall(ListMap("op" -> "\"PushStack\"",
       "arg" -> toDoc(arg)
     ))
   }
 
   def toDoc(terminator: Terminator): Doc = terminator match {
-    case Return(args) => jsonObjectSmall(Map("op" -> "\"Return\"", "args" -> toDoc(args)))
-    case Jump(target) => jsonObjectSmall(Map("op" -> "\"Jump\"", "target" -> toDoc(target)))
-    case Resume(cont) => jsonObjectSmall(Map("op" -> "\"Resume\"", "cont" -> toDoc(cont)))
-    case Match(adt_type, scrutinee, clauses) => jsonObjectSmall(Map("op" -> "\"Match\"",
+    case Return(args) => jsonObjectSmall(ListMap("op" -> "\"Return\"", "args" -> toDoc(args)))
+    case Jump(target) => jsonObjectSmall(ListMap("op" -> "\"Jump\"", "target" -> toDoc(target)))
+    case Resume(cont) => jsonObjectSmall(ListMap("op" -> "\"Resume\"", "cont" -> toDoc(cont)))
+    case Match(adt_type, scrutinee, clauses) => jsonObjectSmall(ListMap("op" -> "\"Match\"",
       "type" -> adt_type.toString,
       "scrutinee" -> toDoc(scrutinee),
       "clauses" -> jsonListSmall(clauses.map(toDoc))))
@@ -113,12 +114,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(clause: Clause): Doc = clause match
     case Clause(args, target) => {
-      jsonObjectSmall(Map("target" -> toDoc(target), "args" -> toDoc(args)))
+      jsonObjectSmall(ListMap("target" -> toDoc(target), "args" -> toDoc(args)))
     }
 
   def toDoc(args: RegList): Doc = args match
     case RegList(args) => {
-      jsonObjectSmall(Map(
+      jsonObjectSmall(ListMap(
         "int" -> jsonListSmall(args.applyOrElse(RegisterType.Integer, x => List()).map(toDoc)),
         "cont" -> jsonListSmall(args.applyOrElse(RegisterType.Continuation, x => List()).map(toDoc)),
         "adt" -> jsonListSmall(args.applyOrElse(RegisterType.Datatype, x => List()).map(toDoc))

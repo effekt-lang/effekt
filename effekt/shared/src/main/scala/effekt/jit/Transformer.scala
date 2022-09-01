@@ -58,9 +58,10 @@ object Transformer {
         emitSubst(unchanged ++ newEnv, unchanged ++ oldEnv);
         transform(rest)
       }
-      case machine.Let(machine.Variable(name, typ), tag, environment, rest) => {
-        val Type.Datatype(adtType) = transform(typ);
-        emit(Construct(NamedRegister(name), adtType, tag, transformArguments(environment)))
+      case machine.Let(v, tag, environment, rest) => {
+        val vd = transformArgument(v);
+        val Type.Datatype(adtType) = vd.typ;
+        emit(Construct(vd.id, adtType, tag, transformArguments(environment)))
         transform(rest)
       }
       case machine.Switch(v @ machine.Variable(name, typ), clauses) => {
