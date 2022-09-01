@@ -81,6 +81,14 @@ object Transformer {
           emit(IfZero(transformArgument(v).id, Clause(elseClosesOver, elseBlock.id)));
           emitInlined(thenBlock)
         }
+        case Type.Unit() => {
+          val List(clause) = clauses;
+          val (_ign1, args, block) = transformInline(clause);
+          emitInlined(block)
+        }
+        case Type.Continuation() => {
+          ???
+        }
         }
       }
       case machine.New(v @ machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
