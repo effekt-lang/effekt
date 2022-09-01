@@ -97,6 +97,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       case gen if gen.startsWith("js")   => evalJS(path)
       case gen if gen.startsWith("chez") => evalCS(path)
       case gen if gen.startsWith("llvm") => evalLLVM(path)
+      case gen if gen.startsWith("jit")  => evalJIT(path)
     }
 
   def evalJS(path: String)(implicit C: Context): Unit =
@@ -145,6 +146,8 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       val command = Process(Seq(executableFile))
       C.config.output().emit(command.!!)
     } catch case FatalPhaseError(e) => C.report(e)
+
+  def evalJIT(jitPath: String)(implicit C: Context): Unit = ???
 
   def report(in: Source)(implicit C: Context): Unit =
     report(in, C.messaging.buffer, C.config)
