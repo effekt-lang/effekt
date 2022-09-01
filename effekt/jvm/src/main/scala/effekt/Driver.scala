@@ -17,6 +17,8 @@ import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
 
 import scala.sys.process.Process
 
+import java.io.IOException
+
 /**
  * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
  */
@@ -119,6 +121,14 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       case FatalPhaseError(e) => C.report(e)
     }
 
+  // try a handful of names after finding the program one is looking for
+  private def sniffExec(progs: List[String], args: Seq[String]): String = progs match {
+        case prog :: progs =>
+            try Process(prog +: args).!!
+            catch case ioe: IOException => sniffExec(progs, args)
+        case _ => throw new Exception("sniffExec ran out")
+  }
+
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -130,24 +140,18 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     val LLVM_VERSION = C.config.llvmVersion()
 
     val basePath = llvmPath.stripSuffix(".ll")
-    val optPath = basePath + "_opt.ll"
+    val optPath = basePath + ".opt.ll"
     val objPath = basePath + ".o"
 
     val out = C.config.output()
 
-    // TODO figure out whether "opt" or "opt-VERSION" exist as file
-    //   if not, raise error.
-    // Same for llc
-    val optCommand = Process(Seq(s"opt", llvmPath, "-S", "-O2", "-o", optPath))
-    out.emit(optCommand.!!)
-
-    val llcCommand = Process(Seq(s"llc", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
-    out.emit(llcCommand.!!)
+    out.emit(sniffExec(List("opt", "opt-12", "opt-11"), Seq(llvmPath, "-S", "-O2", "-o", optPath)))
+    out.emit(sniffExec(List("llc", "llc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
 
     val gccMainFile = (C.config.libPath / "main.c").unixPath
     val executableFile = basePath //TODO-LLVM C.codeGenerator.path(mod)
-    val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath))
-    out.emit(gccCommand.!!)
+
+    out.emit(sniffExec(List("gcc", "cc"), Seq(gccMainFile, "-o", executableFile, objPath)))
 
     val command = Process(Seq(executableFile))
     out.emit(command.!!)
