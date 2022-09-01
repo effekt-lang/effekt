@@ -20,7 +20,7 @@ object LLVM extends Backend {
     val mainFile = path(main.mod)
 
     val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main)
-    
+
     // TODO this flatMap is wrong. If LiftInference returns None, then this will not fail but the dep. will be ignored.
     //   future me, or anybody else: if you fix this, also fix in ChezLift
     val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) }
@@ -30,7 +30,7 @@ object LLVM extends Backend {
     }
 
     val llvmDefinitions = Transformer.transform(machineMod)
-    val llvmString = PrettyPrinter.show(llvmDefinitions)
+    val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
     val result = Document(llvmString, emptyLinks)
 
     Some(Compiled(mainFile, Map(mainFile -> result)))

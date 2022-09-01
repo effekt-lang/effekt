@@ -65,7 +65,7 @@ object Transformer {
         // Currently machine is structurally typed, we do not generate definitions
         transformToplevel(rest, entryPoint)
 
-      case lifted.Ret(lifted.UnitLit()) =>
+      case lifted.Return(lifted.UnitLit()) =>
         entryPoint
 
       case _ =>
@@ -74,10 +74,10 @@ object Transformer {
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Statement =
     stmt match {
-      case lifted.Ret(lifted.Run(stmt)) =>
+      case lifted.Return(lifted.Run(stmt)) =>
         transform(stmt)
 
-      case lifted.Ret(expr) =>
+      case lifted.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
       case lifted.Val(id, tpe, bind, rest) =>
@@ -408,7 +408,7 @@ object Transformer {
         findToplevelBlocksParams(rest)
       case lifted.Data(_, _, rest) =>
         findToplevelBlocksParams(rest)
-      case lifted.Ret(lifted.UnitLit()) =>
+      case lifted.Return(lifted.UnitLit()) =>
         ()
       case _ =>
         println("unsupported in finding toplevel blocks " + stmt)
