@@ -288,7 +288,47 @@ object Transformer {
     val newVals = transformArguments(newEnv);
     if (oldVals == newVals) return // nothing to do
     extendFrameDescriptorTo(newEnv);
-    emit(Subst(oldVals))
+    val todo = (for (ty <- RegisterType.values) yield ty -> {
+      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      val news = newVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      HashMap.from(news zip olds)
+    }).toMap;
+
+    for(ty <- RegisterType.values) {
+      for(i <- 0 until BC.frameDescriptor.locals(ty)) {
+        // drop unused registers
+        if(!todo(ty).values.exists(_==i)) {
+          emit(Drop(ty, RegisterIndex(i)))
+        }
+      }
+      var changed = true;
+      while(changed) {
+        changed = false;
+        // cut hairs
+        for ((cur_n, cur_o) <- todo(ty)) {
+          if(!todo(ty).values.exists(_==cur_n)) {
+            changed = true;
+            emit(Mov(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
+            todo(ty)(cur_n) = cur_n
+          }
+        }
+      }
+      // rotate cycles
+      while(todo(ty).nonEmpty) {
+        val (cur_n, cur_o) = todo(ty).head;
+        if(cur_n != cur_o) {
+          emit(Swap(ty, RegisterIndex(cur_n), RegisterIndex(cur_o)));
+        }
+        for((n,o) <- todo(ty)) {
+          if (o == cur_o) {
+            todo(ty)(n) = cur_n
+          } else if (o == cur_n) {
+            todo(ty)(n) = cur_o
+          }
+        }
+        todo(ty).remove(cur_n);
+      }
+    }
   }
   def ensureEnvironment(newEnvironment: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
     emitSubst(newEnvironment, newEnvironment);
