@@ -11,4 +11,4 @@ def count(n: Int): Unit / Console = {
   }
 }
 
-def main() = count(10000000)
+def main() = count(100000)
