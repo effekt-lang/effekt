@@ -52,8 +52,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
-    case Box(b) => parens("box" <+> toDoc(b))
-    case Run(s) => "run" <+> block(toDocStmt(s))
+    case Box(b)      => parens("box" <+> toDoc(b))
+    case Run(s, tpe) => "run" <+> braces(toDoc(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {

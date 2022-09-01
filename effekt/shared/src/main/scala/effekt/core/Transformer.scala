@@ -53,7 +53,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       core.Record(rec, rec.fields, rest())
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      Let(v.symbol, Run(transform(binding)), rest())
+      Let(v.symbol, Run(transform(binding), Context.inferredTypeOf(binding)), rest())
 
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest())
@@ -316,7 +316,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Field =>
         Context.panic("Should have been translated to a select!")
       case f: BlockSymbol if pureOrIO(f) && bargs.forall { pureOrIO } =>
-        Run(App(BlockVar(f), targs, as))
+        Run(App(BlockVar(f), targs, as), Context.functionTypeOf(f).result)
       case f: BlockSymbol =>
         Context.bind(Context.inferredTypeOf(call), App(BlockVar(f), targs, as))
       case f: ValueSymbol =>
@@ -369,7 +369,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
-        case core.Run(core.Return(p)) => rewrite(p)
+        case core.Run(core.Ret(p), _) => rewrite(p)
       }
     }
 
