@@ -121,17 +121,6 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       case FatalPhaseError(e) => C.report(e)
     }
 
-  // try a handful of names for a system executable
-  private def sniffExec(progs0: List[String], args0: Seq[String])(implicit C: Context): String = {
-    def go(progs: List[String]): String = progs match {
-        case prog :: progs =>
-            try Process(prog +: args0).!!
-            catch case ioe: IOException => go(progs)
-        case _ => C.abort(s"missing system executable; searched: ${progs0}")
-    }
-    go(progs0)
-  }
-
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -145,12 +134,14 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
 
     val out = C.config.output()
 
-    out.emit(sniffExec(List("opt", "opt-12", "opt-11"), Seq(path, "-S", "-O2", "-o", optPath)))
-    out.emit(sniffExec(List("llc", "llc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
+    val LLVM_VERSION = C.config.llvmVersion()
+
+    out.emit(discoverExecutable(List("opt", s"opt-${LLVM_VERSION}", "opt-12", "opt-11"), Seq(path, "-S", "-O2", "-o", optPath)))
+    out.emit(discoverExecutable(List("llc", s"llc-${LLVM_VERSION}", "lcc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
 
     val gccMainFile = (C.config.libPath / "main.c").unixPath
     val executableFile = basePath
-    out.emit(sniffExec(List("gcc", "cc"), Seq(gccMainFile, "-o", executableFile, objPath)))
+    out.emit(discoverExecutable(List("gcc", "cc"), Seq(gccMainFile, "-o", executableFile, objPath)))
 
     val command = Process(Seq(executableFile))
     out.emit(command.!!)
@@ -176,4 +167,18 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
    * Originally called by kiama, not used anymore.
    */
   override final def format(m: ModuleDecl): Document = ???
+
+  /**
+   * Try running a handful of names for a system executable
+   */
+  private def discoverExecutable(progs0: List[String], args: Seq[String])(implicit C: Context): String = {
+    def go(progs: List[String]): String = progs match {
+      case prog :: progs =>
+        try Process(prog +: args).!!
+        catch case ioe: IOException => go(progs)
+      case _ => C.abort(s"Missing system executable; searched: ${ progs0 }")
+    }
+
+    go(progs0)
+  }
 }
