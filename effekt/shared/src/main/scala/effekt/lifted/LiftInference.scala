@@ -163,6 +163,19 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.StringLit(value: String) => StringLit(value)
   }
 
+  // apply lifts to the arguments if it is block variables
+  // this is the same as eta expanding them, since then the lifts would be composed for the call
+  def liftArguments(args: List[core.Argument])(using Environment, Context): List[Argument] = args map {
+    case b: core.BlockVar =>
+      val transformed = BlockVar(b.id)
+      env.evidenceFor(b) match {
+        case Here() => transformed
+        case ev     => Lifted(ev, transformed)
+      }
+    case b: core.Block => transform(b)
+    case e: core.Expr  => transform(e)
+  }
+
   /**
    *  [[ (a){f,...} -> b ]] = [ev,ev_f,...](a){f,...} -> b
    */
