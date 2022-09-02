@@ -9,13 +9,10 @@ import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
 
-class ChezSchemeTests extends AnyFunSpec {
-
-  // The sources of all testfiles are stored here:
-  lazy val examplesDir = new File("examples")
+class ChezSchemeTests extends EffektTests {
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
-  lazy val ignored: List[File] = List(
+  override lazy val ignored: List[File] = List(
     examplesDir / "llvm",
 
     examplesDir / "pos" / "arrays.effekt",
@@ -44,49 +41,18 @@ class ChezSchemeTests extends AnyFunSpec {
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt" // doesn't work with lift inference, yet
   )
 
-  runTestsIn(examplesDir)
-
-  def runTestsIn(dir: File): Unit = describe(dir.getName) {
-    dir.listFiles.foreach {
-      case f if f.isDirectory && !ignored.contains(f) =>
-        runTestsIn(f)
-      case f if f.getName.endsWith(".effekt") || f.getName.endsWith(".md") =>
-        val path = f.getParentFile
-        val baseName = f.getName.stripSuffix(".md").stripSuffix(".effekt")
-
-        val checkfile = path / (baseName + ".check")
-
-        if (!checkfile.exists()) {
-          sys error s"Missing checkfile for ${f.getPath}"
-        }
-
-        if (ignored.contains(f)) {
-          ignore(f.getName) { () }
-        } else {
-          it(f.getName + " (callcc)") {
-
-            val out = interpretCS(f, "callcc")
-            if (checkfile.exists()) {
-              assert(IO.read(checkfile).toString == out)
-            }
-          }
-          it(f.getName + " (lift)") {
-
-            val out = interpretCS(f, "lift")
-            if (checkfile.exists()) {
-              assert(IO.read(checkfile).toString == out)
-            }
-          }
-          it(f.getName + " (monadic)") {
-
-            val out = interpretCS(f, "monadic")
-            if (checkfile.exists()) {
-              assert(IO.read(checkfile).toString == out)
-            }
-          }
-        }
-
-      case _ => ()
+  def runTestFor(f: File, expected: String) = {
+    it(f.getName + " (callcc)") {
+      val out = interpretCS(f, "callcc")
+      assert(expected == out)
+    }
+    it(f.getName + " (lift)") {
+      val out = interpretCS(f, "lift")
+      assert(expected == out)
+    }
+    it(f.getName + " (monadic)") {
+      val out = interpretCS(f, "monadic")
+      assert(expected == out)
     }
   }
 
@@ -101,6 +67,6 @@ class ChezSchemeTests extends AnyFunSpec {
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
-    configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "")
+    removeAnsiColors(configs.stringEmitter.result())
   }
 }

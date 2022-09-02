@@ -33,7 +33,7 @@ case class StringLit(value: String) extends Literal[String]
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Closure(b: Block) extends Expr
-case class Run(s: Stmt) extends Expr
+case class Run(s: Stmt, tpe: ValueType) extends Expr
 
 /**
  * Blocks
@@ -81,8 +81,8 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 case object Hole extends Stmt
 
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
-case class Handle(body: Block, handler: List[Handler]) extends Stmt
-// TODO change to Map
+case class Handle(body: Block, answerType: ValueType, handler: List[Handler]) extends Stmt
+
 case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
 
 case class Region(body: Block) extends Stmt
@@ -95,4 +95,56 @@ case class Evidence(scopes: List[EvidenceSymbol]) extends Argument
 def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
+
+def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
+  case Def(id, tpe, block, rest) => (freeVariables(block) ++ freeVariables(rest)) -- Set(id)
+  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
+  case Let(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
+  case Data(id, ctors, rest) => freeVariables(rest)
+  case Record(id, fields, rest) =>freeVariables(rest)
+  case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
+  case While(cond, body) => freeVariables(cond) ++ freeVariables(body)
+  case Return(e) => freeVariables(e)
+  case Match(scrutinee, clauses) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) }
+  case Include(contents, rest) => freeVariables(rest)
+  case Hole => Set.empty
+  case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
+  case Handle(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap {
+    case Handler(id, clauses) => clauses.flatMap { case (operation, lit) => freeVariables(lit) }
+  }
+  case Region(body) => freeVariables(body)
+}
+
+def freeVariables(expr: Expr): Set[Symbol] = expr match {
+  case ValueVar(id) => Set(id)
+  case literal: Literal[_] => Set.empty
+  case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case Select(target, field) => freeVariables(target) // we do not count fields in...
+  case Closure(b) => freeVariables(b) // well, well, well...
+  case Run(s, tpe) => freeVariables(s)
+}
+
+def freeVariables(arg: Argument): Set[Symbol] = arg match {
+  case expr: Expr => freeVariables(expr)
+  case block: Block => freeVariables(block)
+  case ev: Evidence => freeVariables(ev)
+}
+
+def freeVariables(block: Block): Set[Symbol] = block match {
+  case BlockVar(id) => Set(id)
+  case BlockLit(params, body) =>
+    val bound = params.map {
+      case ValueParam(id, tpe) => id
+      case BlockParam(id, tpe) => id
+      case EvidenceParam(id) => id
+    }
+    freeVariables(body) -- bound
+  case Member(b, field) => freeVariables(b)
+  case Extern(params, body) => Set.empty
+  case Unbox(e) => freeVariables(e) // TODO well, well, well...
+  case New(handler) => ??? // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
+}
+
+def freeVariables(ev: Evidence): Set[Symbol] = ev.scopes.toSet
 

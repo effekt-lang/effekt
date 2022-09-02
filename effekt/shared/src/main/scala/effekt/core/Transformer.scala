@@ -53,7 +53,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       core.Record(rec, rec.fields, rest())
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      Let(v.symbol, Run(transform(binding)), rest())
+      Let(v.symbol, Run(transform(binding), Context.inferredTypeOf(binding)), rest())
 
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest())
@@ -233,7 +233,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           })
       }
 
-      Context.bind(Context.inferredTypeOf(tree), Handle(body, handlers map transformHandler))
+      val answerType = Context.inferredTypeOf(tree)
+
+      Context.bind(answerType, Handle(body, answerType, handlers map transformHandler))
 
     case r @ source.Region(name, body) =>
       val sym = r.symbol
@@ -268,8 +270,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
-      val capture = Context.inferredTypeOf(expr) match {
-        case BoxedType(_, c: CaptureSet) => c
+
+      val (funTpe, capture) = Context.inferredTypeOf(expr) match {
+        case BoxedType(s: FunctionType, c: CaptureSet) => (s, c)
         case _ => Context.panic("Should be a boxed function type with a known capture set.")
       }
       val e = transformAsPure(expr)
@@ -278,7 +281,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transformAsBlock)
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
-        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs), funTpe.result)
       } else {
         Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
       }
@@ -316,7 +319,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Field =>
         Context.panic("Should have been translated to a select!")
       case f: BlockSymbol if pureOrIO(f) && bargs.forall { pureOrIO } =>
-        Run(App(BlockVar(f), targs, as))
+        Run(App(BlockVar(f), targs, as), Context.functionTypeOf(f).result)
       case f: BlockSymbol =>
         Context.bind(Context.inferredTypeOf(call), App(BlockVar(f), targs, as))
       case f: ValueSymbol =>
@@ -369,11 +372,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
-        case core.Run(core.Return(p)) => rewrite(p)
+        case core.Run(core.Return(p), _) => rewrite(p)
       }
     }
 
-    // rewrite (Val (Ret e) s) to (Let e s)
+    // rewrite (Val (Return e) s) to (Let e s)
     object directStyleVal extends core.Tree.Rewrite {
       override def stmt = {
         case core.Val(id, tpe, core.Return(expr), body) =>
@@ -475,6 +478,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
       // optimization: remove unnecessary binds
       case (Binding.Val(x, tpe, b), Return(ValueVar(y))) if x == y => b
       case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
+      case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
+      case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
       case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
     }
   }

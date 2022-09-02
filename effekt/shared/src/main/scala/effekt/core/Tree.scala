@@ -28,7 +28,7 @@ sealed trait Expr extends Tree
 case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt) extends Expr
+case class Run(s: Stmt, tpe: ValueType) extends Expr
 
 /**
  * Pure Expressions (no IO effects, or control effects)
@@ -107,7 +107,7 @@ enum Stmt extends Tree {
   case Hole
 
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt)
-  case Handle(body: Block, handler: List[Handler])
+  case Handle(body: Block, answerType: ValueType, handler: List[Handler])
   case Region(body: Block)
 }
 export Stmt.*
@@ -157,8 +157,8 @@ object Tree {
         case e if expr.isDefinedAt(e) => expr(e)
         case DirectApp(b, targs, args) =>
           DirectApp(rewrite(b), targs, args map rewrite)
-        case Run(s)  => Run(rewrite(s))
-        case p: Pure => rewrite(p)
+        case Run(s, tpe) => Run(rewrite(s), tpe)
+        case p: Pure     => rewrite(p)
       }
 
     def rewrite(e: Stmt): Stmt =
@@ -186,8 +186,8 @@ object Tree {
           Include(contents, rewrite(rest))
         case State(id, init, reg, body) =>
           State(id, rewrite(init), reg, rewrite(body))
-        case Handle(body, handler) =>
-          Handle(rewrite(body), handler map rewrite)
+        case Handle(body, tpe, handler) =>
+          Handle(rewrite(body), tpe, handler map rewrite)
         case Region(body) =>
           Region(rewrite(body))
         case Match(scrutinee, clauses) =>

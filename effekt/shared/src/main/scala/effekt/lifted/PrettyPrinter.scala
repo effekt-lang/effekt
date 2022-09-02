@@ -52,7 +52,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Closure(b) => parens("box" <+> toDoc(b))
-    case Run(s)     => "run" <+> block(toDocStmt(s))
+    case Run(s, _)  => "run" <+> block(toDocStmt(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -133,7 +133,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Handle(body, hs) =>
+    case Handle(body, tpe, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
     case State(id, init, region, body) =>

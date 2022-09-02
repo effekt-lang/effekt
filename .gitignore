@@ -9,8 +9,11 @@ node_modules/
 package-lock.json
 bin/effekt.jar
 licenses/
-bin/
 .bsp/
+bin
+.metals/
+.vscode/
+*.tgz
 
 notes/
 artwork/

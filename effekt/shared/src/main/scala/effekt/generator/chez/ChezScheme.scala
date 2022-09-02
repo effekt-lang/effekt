@@ -50,9 +50,9 @@ trait ChezScheme {
    * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
-    C.checkMain(main.mod)
+    val mainSym = C.checkMain(main.mod)
     val deps = dependencies.flatMap { dep => compile(dep) }
-    val chezModule = cleanup(chez.Let(Nil, compilationUnit(main.mod, main.core, deps)))
+    val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core, deps)))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
     Some(Compiled(mainFile, Map(mainFile -> result)))
@@ -70,9 +70,8 @@ trait ChezScheme {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     toChez(in.core)
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
     val defs = toChez(core)
-    val mainSymbol = mod.terms("main").toList.head
     chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
   }
 
@@ -113,7 +112,7 @@ trait ChezScheme {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Handle(body, handler) =>
+    case Handle(body, tpe, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.id)
         chez.Handler(names.constructor, h.clauses.map {
@@ -212,7 +211,7 @@ trait ChezScheme {
 
     case Box(b) => toChez(b)
 
-    case Run(s) => run(toChezExpr(s))
+    case Run(s, tpe) => run(toChezExpr(s))
   }
 
   def toChez(p: Pattern): chez.Expr = p match {

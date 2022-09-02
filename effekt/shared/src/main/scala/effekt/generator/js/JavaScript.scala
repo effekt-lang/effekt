@@ -159,7 +159,7 @@ trait JavaScript extends Backend {
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
     case Box(b) => toJS(b)
-    case Run(s) => monadic.Run(toJSMonadic(s))
+    case Run(s, tpe) => monadic.Run(toJSMonadic(s))
   }
 
   def toJS(handler: core.Handler)(using Context): js.Expr =
@@ -202,7 +202,7 @@ trait JavaScript extends Backend {
     case core.Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Handle(body, hs) =>
+    case core.Handle(body, tpe, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
     case core.Region(body) =>

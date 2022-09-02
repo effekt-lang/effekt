@@ -41,7 +41,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
-    case core.Handle(core.BlockLit(params, body), handler) =>
+    case core.Handle(core.BlockLit(params, body), tpe, handler) =>
 
       // (1) Transform handlers first in unchanged environment.
       val transformedHandler = handler.map { transform }
@@ -64,9 +64,9 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // [[ try { {cap}... => s } with ... ]] = try { [ev]{cap}... => s } with ...
       val transformedBody = transform(body)(using environment, Context) // lift is provided by the handler runtime
 
-      Handle(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), transformedHandler)
+      Handle(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
 
-    case core.Handle(_, _) => Context.panic("Should not happen. Handle always take block literals as body.")
+    case core.Handle(_, _, _) => Context.panic("Should not happen. Handle always take block literals as body.")
 
     // [[ region { {cap}... => s } ]] = region { [ev]{cap}... => s }
     case core.Region(core.BlockLit(params, body)) =>
@@ -140,24 +140,23 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case l: core.Literal[_] =>
       transform(l)
 
-    case core.ValueVar(sym)   =>
+    case core.ValueVar(sym) =>
       ValueVar(sym)
 
     case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>
       PureApp(transform(b), targs, transform(args))
 
-    // TODO also distinguish between pure and io expressions in lift
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs, transform(args))
 
     case core.Select(target, field) =>
       Select(transform(target), field)
 
-    case core.Box(b)                   =>
+    case core.Box(b) =>
       Closure(transform(b))
 
-    case core.Run(s) =>
-      Run(transform(s))
+    case core.Run(s, tpe) =>
+      Run(transform(s), tpe)
   }
 
   def transform[T](tree: core.Literal[T]): Literal[T] = tree match {
@@ -174,7 +173,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def liftBlockLitTo(b: core.BlockLit)(using Environment, Context): BlockLit = b match {
     case core.BlockLit(params, body) =>
       var environment = env
-
+      
       // evidence for the block itself
       val selfEvidence = EvidenceSymbol()
 
