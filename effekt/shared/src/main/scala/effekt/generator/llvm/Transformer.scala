@@ -6,29 +6,28 @@ import effekt.machine.analysis.*
 
 object Transformer {
 
-  def transform(program: machine.Program): List[Definition] =
-    program match {
-      case machine.Program(declarations, statement) =>
-        implicit val MC = ModuleContext();
-        implicit val FC = FunctionContext();
-        implicit val BC = BlockContext();
+  def transform(program: machine.Program): List[Definition] = program match {
+    case machine.Program(declarations, statement) =>
+      given MC: ModuleContext = ModuleContext();
+      given FC: FunctionContext = FunctionContext();
+      given BC: BlockContext = BlockContext();
 
-        // TODO proper initialization of runtime
-        emit(Call("env", envType, malloc, List(ConstantInt(1024))));
-        emit(Call("sp", spType, malloc, List(ConstantInt(1024))));
-        emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
-        pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
+      // TODO proper initialization of runtime
+      emit(Call("env", envType, malloc, List(ConstantInt(1024))));
+      emit(Call("sp", spType, malloc, List(ConstantInt(1024))));
+      emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
+      pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
-        val terminator = transform(statement);
+      val terminator = transform(statement);
 
-        val definitions = MC.definitions; MC.definitions = null;
-        val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
-        val instructions = BC.instructions; BC.instructions = null;
+      val definitions = MC.definitions; MC.definitions = null;
+      val basicBlocks = FC.basicBlocks; FC.basicBlocks = null;
+      val instructions = BC.instructions; BC.instructions = null;
 
-        val entryBlock = BasicBlock("entry", instructions, terminator);
-        val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks);
-        declarations.map(transform) ++ definitions :+ entryFunction
-    }
+      val entryBlock = BasicBlock("entry", instructions, terminator)
+      val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
+      declarations.map(transform) ++ definitions :+ entryFunction
+  }
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
@@ -45,18 +44,18 @@ object Transformer {
 
       case machine.Def(machine.Label(name, environment), body, rest) =>
         defineFunction(name, List(Parameter(envType, "env"), Parameter(spType, "sp"))) {
-          loadEnvironment(initialEnvironmentPointer, environment);
-          eraseValues(environment, freeVariables(body));
-          transform(body);
-        };
+          loadEnvironment(initialEnvironmentPointer, environment)
+          eraseValues(environment, freeVariables(body))
+          transform(body)
+        }
 
         transform(rest)
 
       case machine.Jump(label) =>
-        shareValues(label.environment, Set());
-        storeEnvironment(initialEnvironmentPointer, label.environment);
+        shareValues(label.environment, Set())
+        storeEnvironment(initialEnvironmentPointer, label.environment)
 
-        emit(TailCall(transform(label), List(LocalReference(envType, "env"), getStackPointer())));
+        emit(TailCall(transform(label), List(LocalReference(envType, "env"), getStackPointer())))
         RetVoid()
 
       case machine.Substitute(bindings, rest) =>
@@ -65,23 +64,23 @@ object Transformer {
         }
 
       case machine.Construct(variable, tag, values, rest) =>
-        val obj = produceObject(values, freeVariables(rest));
-        val tmpName = freshName("tmp");
-        emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0));
-        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), obj, 1));
+        val obj = produceObject(values, freeVariables(rest))
+        val tmpName = freshName("tmp")
+        emit(InsertValue(tmpName, ConstantAggregateZero(positiveType), ConstantInt(tag), 0))
+        emit(InsertValue(variable.name, LocalReference(positiveType, tmpName), obj, 1))
 
-        eraseValues(List(variable), freeVariables(rest));
+        eraseValues(List(variable), freeVariables(rest))
         transform(rest)
 
       case machine.Switch(value, clauses) =>
-        shareValues(List(value), freeVariables(clauses));
+        shareValues(List(value), freeVariables(clauses))
 
-        val tagName = freshName("tag");
-        val objName = freshName("obj");
-        emit(ExtractValue(tagName, transform(value), 0));
-        emit(ExtractValue(objName, transform(value), 1));
+        val tagName = freshName("tag")
+        val objName = freshName("obj")
+        emit(ExtractValue(tagName, transform(value), 0))
+        emit(ExtractValue(objName, transform(value), 1))
 
-        val freeInClauses = freeVariables(clauses).toList;
+        val freeInClauses = freeVariables(clauses).toList
 
         val stackPointer = getStackPointer();
         val labels = clauses.map {
@@ -99,7 +98,7 @@ object Transformer {
             val label = freshName("l");
             emit(BasicBlock(label, instructions, terminator));
             label
-        };
+        }
         labels.zipWithIndex match {
           case Nil =>
             // TODO more informative way to end program. Clean up too?
@@ -120,7 +119,7 @@ object Transformer {
           loadEnvironment(initialEnvironmentPointer, clause.parameters);
           eraseValues(clause.parameters, freeVariables(clause.body));
           transform(clause.body);
-        };
+        }
 
         val obj = produceObject(closureEnvironment, freeVariables(rest));
         val tmpName = freshName("tmp");
@@ -162,7 +161,7 @@ object Transformer {
           eraseValues(frame.parameters, freeVariables(frame.body))
 
           transform(frame.body);
-        };
+        }
 
         // TODO cache based on environment
         val sharerName = freshName("sharer");
@@ -171,7 +170,7 @@ object Transformer {
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           emit(TailCall(shareFrames, List(getStackPointer())));
           RetVoid()
-        };
+        }
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
@@ -180,7 +179,7 @@ object Transformer {
           eraseValues(frameEnvironment, Set());
           emit(TailCall(eraseFrames, List(getStackPointer())));
           RetVoid()
-        };
+        }
 
         shareValues(frameEnvironment, freeVariables(rest));
         pushEnvironment(frameEnvironment);
@@ -214,28 +213,24 @@ object Transformer {
           setStackPointer(newStackPointer);
 
           transform(frame.body);
-        };
+        }
 
         // TODO cache based on environment (this is different from other sharers)
         val sharerName = freshName("sharer");
         defineFunction(sharerName, List(Parameter(spType, "sp"))) {
-
           popEnvironment(frameEnvironment);
           shareValues(frameEnvironment, Set.from(frameEnvironment));
           RetVoid()
-
-        };
+        }
 
         // TODO cache based on environment (careful, this is different from other erasers)
         val eraserName = freshName("eraser");
         defineFunction(eraserName, List(Parameter(spType, "sp"))) {
-
           popEnvironment(frameEnvironment);
           eraseValues(frameEnvironment, Set());
           emit(Call("_", VoidType(), free, List(getStackPointer())));
           RetVoid()
-
-        };
+        }
 
         shareValues(frameEnvironment, freeVariables(rest));
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
@@ -340,7 +335,7 @@ object Transformer {
   def initialEnvironmentPointer = LocalReference(envType, "env")
 
   def loadEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    if(environment.isEmpty) {
+    if (environment.isEmpty) {
       ()
     } else {
       val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
@@ -349,7 +344,7 @@ object Transformer {
   }
 
   def storeEnvironment(environmentPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    if(environment.isEmpty) {
+    if (environment.isEmpty) {
       ()
     } else {
       val typedEnvironmentPointer = castEnvironmentPointer(environmentPointer, environment);
@@ -358,7 +353,7 @@ object Transformer {
   }
 
   def produceObject(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
-    if(environment.isEmpty) {
+    if (environment.isEmpty) {
       ConstantNull(objType)
     } else {
       val obj = LocalReference(objType, freshName("obj"));
@@ -373,7 +368,7 @@ object Transformer {
         loadEnvironmentAt(typedEnvironmentPointer, environment);
         eraseValues(environment, Set());
         RetVoid()
-      };
+      }
 
       emit(Call(obj.name, objType, newObject, List(eraser, size)));
       emit(Call(env.name, envType, objectEnvironment, List(obj)));
@@ -384,7 +379,7 @@ object Transformer {
   }
 
   def consumeObject(obj: Operand, environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Unit = {
-    if(environment.isEmpty) {
+    if (environment.isEmpty) {
       ()
     } else {
       val env = LocalReference(envType, freshName("env"));
@@ -400,7 +395,7 @@ object Transformer {
   }
 
   def pushEnvironmentOnto(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
-    if(environment.isEmpty) {
+    if (environment.isEmpty) {
       oldStackPointer
     } else {
       val oldTypedPointer = castEnvironmentPointer(oldStackPointer, environment);
@@ -422,7 +417,7 @@ object Transformer {
   }
 
   def popEnvironmentFrom(oldStackPointer: Operand, environment: machine.Environment)(using ModuleContext, FunctionContext, BlockContext): Operand = {
-    if(environment.isEmpty) {
+    if (environment.isEmpty) {
       oldStackPointer
     } else {
       val oldTypedPointer = castEnvironmentPointer(oldStackPointer, environment);
@@ -595,7 +590,6 @@ object Transformer {
   def underflowStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(FunctionType(stkType,List(stkType))), "uniqueStack");
 
-}
 
   /**
    * Extra info in context
@@ -605,9 +599,8 @@ object Transformer {
     var definitions: List[Definition] = List();
   }
 
-  def emit(definition: Definition)(using C: ModuleContext) = {
+  def emit(definition: Definition)(using C: ModuleContext) =
     C.definitions = C.definitions :+ definition
-  }
 
   def freshName(name: String)(using C: ModuleContext): String = {
     C.counter = C.counter + 1;
@@ -619,9 +612,8 @@ object Transformer {
     var basicBlocks: List[BasicBlock] = List();
   }
 
-  def emit(basicBlock: BasicBlock)(using C: FunctionContext) = {
+  def emit(basicBlock: BasicBlock)(using C: FunctionContext) =
     C.basicBlocks = C.basicBlocks :+ basicBlock
-  }
 
   def withBindings[R](bindings: List[(machine.Variable, machine.Variable)])(prog: () => R)(using C: FunctionContext): R = {
     val substitution = C.substitution;
@@ -631,24 +623,21 @@ object Transformer {
     result
   }
 
-  def substitute(value: machine.Variable)(using C: FunctionContext): machine.Variable = {
+  def substitute(value: machine.Variable)(using C: FunctionContext): machine.Variable =
     C.substitution.toMap.getOrElse(value, value)
-  }
 
   class BlockContext() {
     var stackPointer: Operand = LocalReference(NamedType("Sp"), "sp");
     var instructions: List[Instruction] = List();
   }
 
-  def emit(instruction: Instruction)(using C: BlockContext) = {
+  def emit(instruction: Instruction)(using C: BlockContext) =
     C.instructions = C.instructions :+ instruction
-  }
 
-  def getStackPointer()(using C: BlockContext) = {
+  def getStackPointer()(using C: BlockContext) =
     C.stackPointer
-  }
 
-  def setStackPointer(stackPointer: Operand)(using C: BlockContext) = {
-      C.stackPointer = stackPointer;
-    }
+  def setStackPointer(stackPointer: Operand)(using C: BlockContext) =
+    C.stackPointer = stackPointer;
 
+}

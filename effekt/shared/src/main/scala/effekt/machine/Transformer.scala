@@ -351,32 +351,10 @@ object Transformer {
       Context.abort(s"unsupported type $tpe")
   }
 
-  // case symbols.Record(_, _, _, fields) =>
-  //   if (fields.isEmpty) {
-  //     PrimUnit()
-  //   } else {
-  //     val fieldTypes = fields.map(_.tpe)
-  //     Record(fieldTypes.map(transform(_)))
-  //   }
-  // case symbols.DataType(_, _, variants) =>
-  //   Variant(variants.map(transform))
-  // case symbols.BlockType(_, sections, ret / _) =>
-  //   // TODO do we only use this function on parameter types?
-  //   Stack(evidenceType() :: sections.flatten.map(transform(_)))
-  // case symbols.CapabilityType(UserEffect(_, _, List(op))) =>
-  //   // TODO capability types with multiple operations?
-  //   Stack(evidenceType() :: symbols.paramsToTypes(op.params).flatten.map(transform(_)))
-  // case _: symbols.TypeVar =>
-  //   // TODO this is very wrong, but polymorphism isn't supported!
-  //   PrimUnit()
-
   def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
-
-
-  //   def evidenceType(): Type = Evidence()
 
   def findToplevelBlocksParams(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Unit = {
     stmt match {
