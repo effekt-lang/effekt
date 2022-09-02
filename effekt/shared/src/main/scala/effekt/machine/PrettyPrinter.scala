@@ -17,7 +17,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   implicit def toDoc(v: Label): Doc = string(v.name)
 
   def toDoc(clause: Clause): Doc = clause match {
-    case Clause(parameters, body) => block(space <> toDoc(parameters) <+> toDoc(body))
+    case Clause(parameters, body) => braces(space <> toDoc(parameters) <+> "=>" <> group(nest(line <> toDoc(body)) <> line))
   }
 
   def toDoc(e: Environment): Doc = parens(e map {
@@ -35,7 +35,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(stmt: Statement): Doc = stmt match {
     case Def(label, body, rest) =>
-      "def" <+> label <+> "=" <> block(toDoc(body)) <> ";" <> line <> toDoc(rest)
+      "def" <+> label <+> "=" <+> block(toDoc(body)) <> ";" <> line <> toDoc(rest)
 
     case Jump(label) =>
       "jump" <+> label
@@ -44,13 +44,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "subst" <> ";" <> line <> toDoc(rest)
 
     case Construct(name, tag, arguments, rest) =>
-      "let" <+> name <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 
+    // TODO add tags to variants.
     case Switch(scrutinee, clauses) =>
-      "switch" <+> scrutinee <+> indent(line <> vcat(clauses map toDoc))
+      val cls = clauses.zipWithIndex.map { case (cl, idx) => idx.toString <+> ":" <+> toDoc(cl) }
+      "switch" <+> scrutinee <+> line <> indent(vcat(cls))
 
     case New(name, operations, rest) =>
-      "let" <+> name <+> "new" <> block(operations map toDoc) <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "new" <+> block(operations map toDoc) <> ";" <> line <> toDoc(rest)
 
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)

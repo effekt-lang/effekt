@@ -68,12 +68,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
     if (showIR == "machine") {
       val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
-
-      println(main)
-
       val machineProg = machine.Transformer.transform(main, deps)
-
-      println(machineProg)
 
       publishProduct(source, "machine", "effekt", machine.PrettyPrinter.format(machineProg.program))
     }

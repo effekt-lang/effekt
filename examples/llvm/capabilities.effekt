@@ -17,5 +17,3 @@ def main() = {
     println(n); resume(())
   }
 }
-
-

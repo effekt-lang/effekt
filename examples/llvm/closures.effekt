@@ -11,4 +11,3 @@ def createClosure(n: Int): Int = {
 }
 
 def main() = println(createClosure(2))
-
