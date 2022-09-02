@@ -128,11 +128,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(reg: Register): Doc = reg match {
     case RegisterIndex(index) => index.toString
-    case NamedRegister(name) => dquotes(name.toString) // TODO: throw Error("Internal error: Unexpected named register")
+    case _ => throw Error("Internal error: Unexpected non-index register")
   }
 
   def toDoc(lbl: BlockLabel): Doc = lbl match {
     case BlockIndex(index) => index.toString
-    case BlockName(name) => dquotes(name.toString) // TODO: throw Error("Internal error: Unexpected named block")
+    case _ => throw Error("Internal error: Unexpected non-index block")
   }
 }
