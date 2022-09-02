@@ -5,10 +5,11 @@ import effekt.context.Context
 import effekt.symbols.{BlockSymbol, ValueSymbol}
 import effekt.jit.Analysis.*
 import effekt.machine
+import effekt.machine.analysis
 import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.annotation.targetName
-import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
   def transform(mainSymbol: BlockLabel, program: machine.Program): Program =
@@ -164,7 +165,9 @@ object Transformer {
   def transformInline(clause: machine.Clause)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
     val machine.Clause(parameters, body) = clause;
     val params = transformParameters(parameters);
-    val locals = BC.environment ++ params;
+    val frees = transformArguments(analysis.freeVariables(clause).toList);
+    val reusable = transformArguments(BC.environment) -- frees;
+    val locals = BC.environment.extendedReusing(params, reusable);
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
     val block = transform(new FreshBlockLabel(), locals, body);
     extendFrameDescriptorTo(block.frameDescriptor);
@@ -215,6 +218,26 @@ object Transformer {
     @targetName("extended")
     def ++(vs: Environment): Environment = {
       Environment(RegisterType.values.map(t => t -> (locals.applyOrElse(t, x => List()) ++ vs.locals.applyOrElse(t, x => List()))).toMap)
+    }
+
+    def extendedReusing(by: Environment, reuse: RegList): Environment = {
+      val reuseQ: Map[RegisterType, Queue[Register]] = reuse.regs.view.mapValues(Queue.from(_)).toMap;
+      Environment(RegisterType.values.map(t => t -> {
+        val cur = ListBuffer.from(locals.applyOrElse(t, x => List()));
+        for (vd <- by.locals.applyOrElse(t, x => List())) {
+          if(reuseQ(t).nonEmpty) {
+            val reuseReg = reuseQ(t).dequeue();
+            val idx = reuseReg match {
+              case RegisterIndex(index) => index
+              case _ => cur.indexWhere(vd => vd.id == reuseReg)
+            };
+            cur(idx) = vd
+          } else {
+            cur.addOne(vd)
+          }
+        }
+        cur.toList
+      }).toMap)
     }
 
     def contains(vd: VariableDescriptor): Boolean = {
@@ -276,5 +299,13 @@ object Transformer {
   def extendFrameDescriptorTo(fd: FrameDescriptor)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
     BC.frameDescriptor = max(BC.frameDescriptor, fd);
     ProgC.frameSize = max(ProgC.frameSize, fd);
+  }
+
+  extension(self: RegList) {
+    @targetName("removeAll")
+    def --(other: RegList): RegList = {
+      RegList(RegisterType.values.map(t => t -> (self.regs.applyOrElse(t, t => List())
+        .filterNot(other.regs.applyOrElse(t, t => List()).contains(_)))).toMap)
+    }
   }
 }
