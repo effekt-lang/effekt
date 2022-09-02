@@ -155,8 +155,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Box(b) =>
       Closure(transform(b))
 
-    case core.Run(s) =>
-      Run(transform(s))
+    case core.Run(s, tpe) =>
+      Run(transform(s), tpe)
   }
 
   def transform[T](tree: core.Literal[T]): Literal[T] = tree match {
