@@ -166,12 +166,12 @@ object Transformer {
           })
         }
 
-      case lifted.Handle(lifted.BlockLit(List(ev, id), body), List(handler)) =>
+      case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
         // TODO deal with evidence
         // TODO more than one handler
-        val variable = Variable(freshName("a"), transform(answerTypeOf(handler)));
-        val returnClause = Clause(List(variable), Return(List(variable)));
-        val delimiter = Variable(freshName("returnClause"), Type.Stack());
+        val variable = Variable(freshName("a"), transform(tpe))
+        val returnClause = Clause(List(variable), Return(List(variable)))
+        val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
         NewStack(delimiter, returnClause,
           PushStack(delimiter,
@@ -416,19 +416,6 @@ object Transformer {
         ()
     }
   }
-
-  def answerTypeOf(handler: lifted.Handler)(implicit C: Context): symbols.Type =
-    handler match {
-      case lifted.Handler(_, List((_, lifted.BlockLit(params, _)))) =>
-        // TODO we assume here that resume is the last param
-        C.blockTypeOf(params.last.id) match {
-          case symbols.FunctionType(_, _, _, _, returnType, _) => returnType
-          case _ => ???
-        }
-      case _ =>
-        println(handler)
-        C.abort("can't find answer type of " + handler)
-    }
 
   /**
    * Extra info in context

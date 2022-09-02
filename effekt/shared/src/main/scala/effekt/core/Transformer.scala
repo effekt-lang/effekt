@@ -233,7 +233,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           })
       }
 
-      Context.bind(Context.inferredTypeOf(tree), Handle(body, handlers map transformHandler))
+      val answerType = Context.inferredTypeOf(tree)
+
+      Context.bind(answerType, Handle(body, answerType, handlers map transformHandler))
 
     case r @ source.Region(name, body) =>
       val sym = r.symbol
