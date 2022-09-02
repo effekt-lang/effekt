@@ -61,16 +61,17 @@ object Transformer {
         transform(rest)
       }
       case machine.Let(v, tag, environment, rest) => {
-        val vd = transformArgument(v);
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(v), rest))
+        val vd = transformParameter(v);
         val Type.Datatype(adtType) = vd.typ;
-        emit(Construct(vd.id, adtType, tag, transformArguments(environment)))
-        transform(rest)
+        emit(Construct(outs(RegisterType.Datatype).head, adtType, tag, transformArguments(environment)))
+        emitInlined(restBlock)
       }
       case machine.Switch(v @ machine.Variable(name, typ), clauses) => {
         transform(typ) match {
         case Type.Datatype(adtType) =>
           Match(adtType, transformArgument(v).id, for (clause <- clauses) yield {
-            val (closesOver, args, block) = transformInline(clause);
+            val (closesOver, args, block) = transformInline(clause, reuse=false);
             emit(block);
             Clause(closesOver, block.id)
           })
@@ -162,12 +163,16 @@ object Transformer {
     (frees, args, label)
   }
 
-  def transformInline(clause: machine.Clause)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
+  def transformInline(clause: machine.Clause, reuse: Boolean = true)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
     val machine.Clause(parameters, body) = clause;
     val params = transformParameters(parameters);
-    val frees = transformArguments(analysis.freeVariables(clause).toList);
-    val reusable = transformArguments(BC.environment) -- frees;
-    val locals = BC.environment.extendedReusing(params, reusable);
+    val locals = if (reuse) then {
+      val frees = transformArguments(analysis.freeVariables(clause).toList);
+      val reusable = transformArguments(BC.environment) -- frees;
+      BC.environment.extendedReusing(params, reusable)
+    } else {
+      BC.environment ++ params
+    }
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
     val block = transform(new FreshBlockLabel(), locals, body);
     extendFrameDescriptorTo(block.frameDescriptor);

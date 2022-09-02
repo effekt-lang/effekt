@@ -1,12 +1,16 @@
-type List {
-  Nil();
-  Cons(head: Int)
+type OptionInt {
+  None();
+  Some(head: Int)
 }
 
 def main() = {
-  val x:List = Cons(2);
+  val y:Int = 3;
+  val x:OptionInt = Some(2);
+  val z:Int = 5;
+  println(y);
   x match {
-  case Nil() => println(0);
-  case Cons(h) => println(h);
+  case None() => println(0);
+  case Some(h) => println(h);
   }
+  println(z);
 }
