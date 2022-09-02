@@ -10,7 +10,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  def format(stmt: Statement): String = pretty(toDoc(stmt), 2).layout
+  def format(stmt: Statement): Document = pretty(toDoc(stmt), 2)
 
   implicit def toDoc(v: Variable): Doc = string(v.name)
 

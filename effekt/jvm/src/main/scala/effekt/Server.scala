@@ -42,18 +42,34 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     // don't do anything, if we aren't running as a language server
     if (!C.config.server()) return ;
 
-    val showAnything = settingBool("showCore") || settingBool("showTarget")
-    if (!showAnything) return ;
+    val showIR = settingStr("showIR")
 
-    for ((transformed, js) <- C.compileSeparate(source); liftedCore <- LiftInference.run(transformed)) {
+    if (showIR == "none") {
+      return
+    }
 
-      if (settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
-      }
+    val (transformed, js) = C.compileSeparate(source).getOrElse { return; }
 
-      if (settingBool("showTarget")) {
-        publishProduct(source, "target", "js", js)
-      }
+    if (showIR == "js") {
+      publishProduct(source, "target", "js", js)
+    }
+
+    if (showIR == "core") {
+      publishProduct(source, "core", "effekt", core.PrettyPrinter.format(transformed.core))
+    }
+
+    val liftedCore = LiftInference.run(transformed).getOrElse { return; }
+
+    if (showIR == "lifted-core") {
+      publishProduct(source, "lifted", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
+    }
+
+    if (showIR == "machine") {
+      // TODO the machine-transformation cannot work like this.
+      given TLC: machine.Transformer.ToplevelContext = machine.Transformer.ToplevelContext("main");
+      given BC: machine.Transformer.BlocksParamsContext = machine.Transformer.BlocksParamsContext();
+      val machineRepr = machine.Transformer.transformToplevel(liftedCore.core.defs, machine.Return(Nil))
+      publishProduct(source, "machine", "effekt", machine.PrettyPrinter.format(machineRepr))
     }
   }
 
