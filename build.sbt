@@ -1,6 +1,4 @@
 import sbtcrossproject.CrossProject
-import scalariform.formatter.preferences.AlignSingleLineCaseStatements.MaxArrowIndent
-import scalariform.formatter.preferences._
 
 import scala.sys.process.Process
 
@@ -31,13 +29,7 @@ lazy val commonSettings = Seq(
     "-language:existentials",
     "-language:higherKinds",
     "-language:implicitConversions"
-  ),
-  scalariformPreferences := scalariformPreferences.value
-    .setPreference(AlignSingleLineCaseStatements, true)
-    .setPreference(DoubleIndentClassDeclaration, true)
-    .setPreference(DanglingCloseParenthesis, Force)
-    .setPreference(NewlineAtEndOfFile, true)
-    .setPreference(MaxArrowIndent, 20)
+  )
 )
 
 enablePlugins(ScalaJSPlugin)
