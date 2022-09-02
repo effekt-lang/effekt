@@ -270,8 +270,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
-      val capture = Context.inferredTypeOf(expr) match {
-        case BoxedType(_, c: CaptureSet) => c
+      val (funTpe, capture) = Context.inferredTypeOf(expr) match {
+        case BoxedType(s: FunctionType, c: CaptureSet) => (s, c)
         case _ => Context.panic("Should be a boxed function type with a known capture set.")
       }
       val e = transformAsPure(expr)
@@ -280,7 +280,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transformAsBlock)
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
-        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs), ???)
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs), funTpe.result)
       } else {
         Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
       }
