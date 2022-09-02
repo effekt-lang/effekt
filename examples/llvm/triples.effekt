@@ -29,7 +29,7 @@ def handledTriples(n : Int, s : Int) =
     try {
       val t = triples(n, s);
       println(t.a); println(t.b); println(t.c)
-    } with Fail { () }
+    } with Fail[A] { () }
   } with Flip { resume(true); resume(false) }
 
 def main() = handledTriples(100, 15)
