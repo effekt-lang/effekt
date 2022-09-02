@@ -81,8 +81,8 @@ case class Include(contents: String, rest: Stmt) extends Stmt
 case object Hole extends Stmt
 
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
-case class Handle(body: Block, handler: List[Handler]) extends Stmt
-// TODO change to Map
+case class Handle(body: Block, answerType: ValueType, handler: List[Handler]) extends Stmt
+
 case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
 
 case class Region(body: Block) extends Stmt
@@ -112,7 +112,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case Include(contents, rest) => freeVariables(rest)
   case Hole => Set.empty
   case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
-  case Handle(body, handlers) => freeVariables(body) ++ handlers.flatMap {
+  case Handle(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap {
     case Handler(id, clauses) => clauses.flatMap { case (operation, lit) => freeVariables(lit) }
   }
   case Region(body) => freeVariables(body)

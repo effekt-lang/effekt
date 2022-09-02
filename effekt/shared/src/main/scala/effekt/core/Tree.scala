@@ -107,7 +107,7 @@ enum Stmt extends Tree {
   case Hole
 
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt)
-  case Handle(body: Block, handler: List[Handler])
+  case Handle(body: Block, answerType: ValueType, handler: List[Handler])
   case Region(body: Block)
 }
 export Stmt.*
@@ -186,8 +186,8 @@ object Tree {
           Include(contents, rewrite(rest))
         case State(id, init, reg, body) =>
           State(id, rewrite(init), reg, rewrite(body))
-        case Handle(body, handler) =>
-          Handle(rewrite(body), handler map rewrite)
+        case Handle(body, tpe, handler) =>
+          Handle(rewrite(body), tpe, handler map rewrite)
         case Region(body) =>
           Region(rewrite(body))
         case Match(scrutinee, clauses) =>

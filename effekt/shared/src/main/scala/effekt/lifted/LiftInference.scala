@@ -41,7 +41,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
-    case core.Handle(core.BlockLit(params, body), handler) =>
+    case core.Handle(core.BlockLit(params, body), tpe, handler) =>
 
       // (1) Transform handlers first in unchanged environment.
       val transformedHandler = handler.map { transform }
@@ -64,9 +64,9 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // [[ try { {cap}... => s } with ... ]] = try { [ev]{cap}... => s } with ...
       val transformedBody = transform(body)(using environment, Context) // lift is provided by the handler runtime
 
-      Handle(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), transformedHandler)
+      Handle(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
 
-    case core.Handle(_, _) => Context.panic("Should not happen. Handle always take block literals as body.")
+    case core.Handle(_, _, _) => Context.panic("Should not happen. Handle always take block literals as body.")
 
     // [[ region { {cap}... => s } ]] = region { [ev]{cap}... => s }
     case core.Region(core.BlockLit(params, body)) =>

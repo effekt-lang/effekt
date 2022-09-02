@@ -98,7 +98,7 @@ object ChezSchemeLift extends Backend {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Handle(body, handler) =>
+    case Handle(body, tpe, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.id)
         chez.Handler(names.constructor, h.clauses.map {
