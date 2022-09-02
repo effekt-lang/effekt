@@ -278,7 +278,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transformAsBlock)
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
-        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs), ???)
       } else {
         Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
       }
@@ -369,11 +369,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
-        case core.Run(core.Ret(p), _) => rewrite(p)
+        case core.Run(core.Return(p), _) => rewrite(p)
       }
     }
 
-    // rewrite (Val (Ret e) s) to (Let e s)
+    // rewrite (Val (Return e) s) to (Let e s)
     object directStyleVal extends core.Tree.Rewrite {
       override def stmt = {
         case core.Val(id, tpe, core.Return(expr), body) =>

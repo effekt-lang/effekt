@@ -75,7 +75,7 @@ object Transformer {
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Statement =
     stmt match {
-      case lifted.Ret(lifted.Run(stmt, tpe)) =>
+      case lifted.Return(lifted.Run(stmt, tpe)) =>
         transform(stmt)
 
       case lifted.Return(expr) =>
