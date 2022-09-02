@@ -96,8 +96,6 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-
-
 def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case Def(id, tpe, block, rest) => (freeVariables(block) ++ freeVariables(rest)) -- Set(id)
   case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
@@ -149,3 +147,4 @@ def freeVariables(block: Block): Set[Symbol] = block match {
 }
 
 def freeVariables(ev: Evidence): Set[Symbol] = ev.scopes.toSet
+

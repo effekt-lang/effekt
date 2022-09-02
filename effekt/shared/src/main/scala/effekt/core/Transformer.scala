@@ -270,6 +270,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
+
       val (funTpe, capture) = Context.inferredTypeOf(expr) match {
         case BoxedType(s: FunctionType, c: CaptureSet) => (s, c)
         case _ => Context.panic("Should be a boxed function type with a known capture set.")

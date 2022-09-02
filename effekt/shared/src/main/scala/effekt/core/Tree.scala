@@ -55,6 +55,30 @@ export Pure.*
 export Literal.*
 
 /**
+ * Pure Expressions (no IO effects, or control effects)
+ */
+sealed trait Pure extends Expr with Argument
+object Pure {
+  case class ValueVar(id: ValueSymbol) extends Pure
+
+  enum Literal[T](val value: T) extends Pure {
+    case UnitLit() extends Literal(())
+    case IntLit(v: Int) extends Literal(v)
+    case BooleanLit(v: Boolean) extends Literal(v)
+    case DoubleLit(v: Double) extends Literal(v)
+    case StringLit(v: String) extends Literal(v)
+  }
+
+  // invariant, block b is pure.
+  case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
+  case class Select(target: Pure, field: Symbol) extends Pure
+
+  case class Box(b: Block) extends Pure
+}
+export Pure.*
+export Literal.*
+
+/**
  * Blocks
  */
 
