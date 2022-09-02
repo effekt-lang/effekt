@@ -17,9 +17,21 @@ class LLVMTests extends AnyFunSpec {
     // computes the wrong results
     examplesDir / "llvm" / "generator.effekt",
     examplesDir / "llvm" / "capabilities.effekt",
+    examplesDir / "llvm" / "nested.effekt",
+    examplesDir / "llvm" / "stored.effekt",
 
     // crashes
-    examplesDir / "llvm" / "forking.effekt"
+    examplesDir / "llvm" / "forking.effekt",
+
+    // polymorphic effect operations not supported, yet
+    examplesDir / "llvm" / "choice.effekt",
+    examplesDir / "llvm" / "triples.effekt",
+
+    // mutable state not support, yet
+    examplesDir / "llvm" / "gids.effekt",
+
+    // strings not supported, yet
+    examplesDir / "llvm" / "hello-world.effekt"
   )
 
   def findAllTests(root: File): Unit = describe(root.getName) {

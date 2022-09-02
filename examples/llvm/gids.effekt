@@ -6,13 +6,13 @@ effect GID {
 }
 
 def f(): Int / GID = {
-    gid() + gid()
+    do gid() + do gid()
 }
 def g(): Int / GID = {
     0
 }
 def h(): Int / GID = {
-    gid() + gid() + gid()
+    do gid() + do gid() + do gid()
 }
 
 def main() = {
