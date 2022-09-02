@@ -146,9 +146,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>
       PureApp(transform(b), targs, transform(args))
 
-    // TODO also distinguish between pure and io expressions in lift
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
-      PureApp(transform(b), targs, liftArguments(args))
+      PureApp(transform(b), targs, transform(args))
     case core.Select(target, field) => Select(transform(target), field)
     case core.Box(b)                   => Closure(transform(b))
     case core.Run(s, tpe) =>
@@ -161,19 +160,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.BooleanLit(value: Boolean) => BooleanLit(value)
     case core.DoubleLit(value: Double) => DoubleLit(value)
     case core.StringLit(value: String) => StringLit(value)
-  }
-
-  // apply lifts to the arguments if it is block variables
-  // this is the same as eta expanding them, since then the lifts would be composed for the call
-  def liftArguments(args: List[core.Argument])(using Environment, Context): List[Argument] = args map {
-    case b: core.BlockVar =>
-      val transformed = BlockVar(b.id)
-      env.evidenceFor(b) match {
-        case Here() => transformed
-        case ev     => Lifted(ev, transformed)
-      }
-    case b: core.Block => transform(b)
-    case e: core.Expr  => transform(e)
   }
 
   /**
