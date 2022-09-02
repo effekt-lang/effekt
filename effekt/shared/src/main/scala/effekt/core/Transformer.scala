@@ -477,6 +477,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
       // optimization: remove unnecessary binds
       case (Binding.Val(x, tpe, b), Return(ValueVar(y))) if x == y => b
       case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
+      case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
+      case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
       case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
     }
   }
