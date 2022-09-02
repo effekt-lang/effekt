@@ -48,28 +48,34 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       return
     }
 
-    val (transformed, js) = C.compileSeparate(source).getOrElse { return; }
+    if (List("js", "core", "lifted-core") contains showIR) {
 
-    if (showIR == "js") {
-      publishProduct(source, "target", "js", js)
-    }
+      val (transformed, js) = C.compileSeparate(source).getOrElse { return; }
 
-    if (showIR == "core") {
-      publishProduct(source, "core", "effekt", core.PrettyPrinter.format(transformed.core))
-    }
+      if (showIR == "js") {
+        publishProduct(source, "target", "js", js)
+      }
 
-    val liftedCore = LiftInference.run(transformed).getOrElse { return; }
+      if (showIR == "core") {
+        publishProduct(source, "core", "effekt", core.PrettyPrinter.format(transformed.core))
+      }
 
-    if (showIR == "lifted-core") {
-      publishProduct(source, "lifted", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
+      if (showIR == "lifted-core") {
+        val liftedCore = LiftInference.run(transformed).getOrElse { return; }
+        publishProduct(source, "lifted", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
+      }
     }
 
     if (showIR == "machine") {
-      // TODO the machine-transformation cannot work like this.
-      given TLC: machine.Transformer.ToplevelContext = machine.Transformer.ToplevelContext("main");
-      given BC: machine.Transformer.BlocksParamsContext = machine.Transformer.BlocksParamsContext();
-      val machineRepr = machine.Transformer.transformToplevel(liftedCore.core.defs, machine.Return(Nil))
-      publishProduct(source, "machine", "effekt", machine.PrettyPrinter.format(machineRepr))
+      val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
+
+      println(main)
+
+      val machineProg = machine.Transformer.transform(main, deps)
+
+      println(machineProg)
+
+      publishProduct(source, "machine", "effekt", machine.PrettyPrinter.format(machineProg.program))
     }
   }
 
