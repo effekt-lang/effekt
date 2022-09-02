@@ -52,7 +52,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Closure(b) => parens("box" <+> toDoc(b))
-    case Run(s)     => "run" <+> block(toDocStmt(s))
+    case Run(s, _)  => "run" <+> block(toDocStmt(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
