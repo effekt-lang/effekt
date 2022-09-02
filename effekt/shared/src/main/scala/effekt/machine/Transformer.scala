@@ -307,18 +307,6 @@ object Transformer {
         Variable(transform(name), builtins.Evidence)
     }
 
-  // def transform(scope: lifted.Scope)(implicit C: Context): Variable =
-  //   scope match {
-  //     case lifted.ScopeVar(transform(scopeName)) =>
-  //       Variable(scopeName, Primitive("Evi"))
-  //   }
-  //       case lifted.Here() =>
-  //         EviLit(0)
-  //       case lifted.Nested(scopes) =>
-  //         // TODO optimize non-empty case
-  //         val empty: Arg = EviLit(0);
-  //         scopes.foldRight(empty) { (scope, evi) => EviPlus(transform(scope), evi) }
-
   def transform(tpe: symbols.Type)(using Context): Type = tpe match {
   
     case symbols.builtins.TUnit => builtins.UnitType
