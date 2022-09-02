@@ -7,13 +7,11 @@ import sbt.io.syntax._
 import scala.language.implicitConversions
 import scala.sys.process.Process
 
-class LLVMTests extends AnyFunSpec {
+class LLVMTests extends EffektTests {
 
-  lazy val examplesDir = new File("examples")
+  override lazy val included: List[File] = List(examplesDir / "llvm")
 
-  findAllTests(examplesDir / "llvm")
-
-  lazy val ignored: List[File] = List(
+  override lazy val ignored: List[File] = List(
     // computes the wrong results
     examplesDir / "llvm" / "generator.effekt",
     examplesDir / "llvm" / "capabilities.effekt",
@@ -34,25 +32,13 @@ class LLVMTests extends AnyFunSpec {
     examplesDir / "llvm" / "hello-world.effekt"
   )
 
-  def findAllTests(root: File): Unit = describe(root.getName) {
-    // Reminder: mapping of Scala names to Unix jargon:
-    // `.getName` -> "base"
-    // `.getParentFile` -> "dir"
-    root.listFiles.foreach {
-      case h if h.getName.startsWith(".") => ()
-      case d if d.isDirectory             => findAllTests(d)
-      case e if e.getName.endsWith(".effekt") && !ignored.contains(e) =>
-        val c = e.getParentFile / (e.getName.stripSuffix(".effekt") + ".check")
-        if (!c.exists())
-          sys error s"Missing checkfile for: ${e.getPath}"
-        it(e.getName) {
-          assert(IO.read(c).toString == run(e))
-        }
-      case _ => ()
+  def runTestFor(f: File, expected: String) =
+    it(f.getName + " (llvm)") {
+      val out = runLLVM(f)
+      assert(expected == out)
     }
-  }
 
-  def run(f: File): String = {
+  def runLLVM(f: File): String = {
     // TODO flaky body
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
@@ -62,6 +48,6 @@ class LLVMTests extends AnyFunSpec {
     ))
     configs.verify()
     compiler.compileFile(f.getPath, configs)
-    configs.stringEmitter.result().replaceAll("\u001B\\[[;\\d]*m", "") // XXX this is a hack
+    removeAnsiColors(configs.stringEmitter.result())
   }
 }
