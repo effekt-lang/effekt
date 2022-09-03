@@ -41,7 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "jump" <+> label
 
     case Substitute(bindings, rest) =>
-      "subst" <> ";" <> line <> toDoc(rest)
+      "subst" <+> brackets(bindings map { case (from, to) => from <+> "!->" <+> to }) <> ";" <> line <> toDoc(rest)
 
     case Construct(name, tag, arguments, rest) =>
       "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
