@@ -4,7 +4,7 @@ import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging, PrettyPrinter => GenericPrettyPrinter }
+import effekt.util.{ PlainMessaging }
 import effekt.util.messages.EffektError
 
 import kiama.util.{ Position, Services, Source }
@@ -49,7 +49,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     val showTree = settingBool("showTree")
 
     def publishTree(name: String, tree: Any): Unit =
-      publishProduct(source, name, "scala", GenericPrettyPrinter.format(tree))
+      publishProduct(source, name, "scala", util.PrettyPrinter.format(tree))
 
     def publishIR(name: String, doc: Document): Unit =
       publishProduct(source, name, "ir", doc)
