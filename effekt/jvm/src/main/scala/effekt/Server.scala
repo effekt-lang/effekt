@@ -4,9 +4,12 @@ import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.PlainMessaging
+import effekt.util.{ PlainMessaging, PrettyPrinter => GenericPrettyPrinter }
 import effekt.util.messages.EffektError
+
 import kiama.util.{ Position, Services, Source }
+import kiama.output.PrettyPrinterTypes.Document
+
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind }
 
 /**
@@ -45,11 +48,17 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     val showIR = settingStr("showIR")
     val showTree = settingBool("showTree")
 
+    def publishTree(name: String, tree: Any): Unit =
+      publishProduct(source, name, "scala", GenericPrettyPrinter.format(tree))
+
+    def publishIR(name: String, doc: Document): Unit =
+      publishProduct(source, name, "ir", doc)
+
     if (showIR == "none") { return; }
 
     if (showIR == "source") {
       val tree = C.getAST(source).getOrElse { return; }
-      publishProduct(source, "source", "effekt", util.PrettyPrinter.format(tree))
+      publishTree("source", tree)
     }
 
     if (List("js", "core", "lifted-core") contains showIR) {
@@ -61,20 +70,14 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       }
 
       if (showIR == "core") {
-        val doc =
-          if (showTree) util.PrettyPrinter.format(transformed.core)
-          else core.PrettyPrinter.format(transformed.core)
-
-        publishProduct(source, "core", "ir", doc)
+        if (showTree) publishTree("core", transformed.core)
+        else publishIR("core", core.PrettyPrinter.format(transformed.core))
       }
 
       if (showIR == "lifted-core") {
         val liftedCore = LiftInference.run(transformed).getOrElse { return; }
-        val doc =
-          if (showTree) util.PrettyPrinter.format(liftedCore.core)
-          else lifted.PrettyPrinter.format(liftedCore.core)
-
-        publishProduct(source, "lifted", "ir", doc)
+        if (showTree) publishTree("lifted", liftedCore.core)
+        else publishIR("lifted", lifted.PrettyPrinter.format(liftedCore.core))
       }
     }
 
@@ -82,11 +85,8 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
       val machineProg = machine.Transformer.transform(main, deps)
 
-      val doc =
-        if (showTree) util.PrettyPrinter.format(machineProg.program)
-        else machine.PrettyPrinter.format(machineProg.program)
-
-      publishProduct(source, "machine", "ir", doc)
+      if (showTree) publishTree("machine", machineProg.program)
+      else publishIR("machine", machine.PrettyPrinter.format(machineProg.program))
     }
   }
 
