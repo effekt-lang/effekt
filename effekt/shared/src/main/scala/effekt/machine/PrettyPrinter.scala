@@ -25,6 +25,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   })
 
   def toDoc(tpe: Type): Doc = tpe match {
+    case Positive(List(Nil)) => "Unit"
+    case Positive(List(Nil, Nil)) => "Bool"
     case Positive(alternatives) => brackets(hsep(alternatives map signatureToDoc, ";"))
     case Negative(alternatives) => braces(hsep(alternatives map signatureToDoc, ";"))
     case Type.Stack() => "Stack"
@@ -52,7 +54,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "switch" <+> scrutinee <+> line <> indent(vcat(cls))
 
     case New(name, operations, rest) =>
-      "let" <+> name <+> "new" <+> block(operations map toDoc) <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "=" <+> "new" <+> block(operations map toDoc) <> ";" <> line <> toDoc(rest)
 
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
@@ -67,7 +69,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> name <+> "=" <+> "stack" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
     case PushStack(stack, rest) =>
-      "push" <+> stack <> ";" <> line <> toDoc(rest)
+      "push stack" <+> stack <> ";" <> line <> toDoc(rest)
 
     case PopStack(name, rest) =>
       "let" <+> name <+> "=" <+> "shift0" <> ";" <> line <> toDoc(rest)
