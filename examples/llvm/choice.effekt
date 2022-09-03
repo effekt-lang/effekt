@@ -20,5 +20,3 @@ def handledTriples(n : Int, s : Int) =
   } with Flip { resume(true); resume(false) }
 
 def main() = handledTriples(6, 6)
-
-

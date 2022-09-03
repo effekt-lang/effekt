@@ -42,18 +42,35 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     // don't do anything, if we aren't running as a language server
     if (!C.config.server()) return ;
 
-    val showAnything = settingBool("showCore") || settingBool("showTarget")
-    if (!showAnything) return ;
+    val showIR = settingStr("showIR")
 
-    for ((transformed, js) <- C.compileSeparate(source); liftedCore <- LiftInference.run(transformed)) {
+    if (showIR == "none") {
+      return
+    }
 
-      if (settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
-      }
+    if (List("js", "core", "lifted-core") contains showIR) {
 
-      if (settingBool("showTarget")) {
+      val (transformed, js) = C.compileSeparate(source).getOrElse { return; }
+
+      if (showIR == "js") {
         publishProduct(source, "target", "js", js)
       }
+
+      if (showIR == "core") {
+        publishProduct(source, "core", "effekt", core.PrettyPrinter.format(transformed.core))
+      }
+
+      if (showIR == "lifted-core") {
+        val liftedCore = LiftInference.run(transformed).getOrElse { return; }
+        publishProduct(source, "lifted", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
+      }
+    }
+
+    if (showIR == "machine") {
+      val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
+      val machineProg = machine.Transformer.transform(main, deps)
+
+      publishProduct(source, "machine", "effekt", machine.PrettyPrinter.format(machineProg.program))
     }
   }
 

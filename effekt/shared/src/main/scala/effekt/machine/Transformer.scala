@@ -4,10 +4,26 @@ package machine
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.lifted
+import effekt.lifted.LiftInference
 import effekt.symbols
 import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
 
 object Transformer {
+
+  def transform(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context): Program = {
+
+    val mainSymbol = C.checkMain(main.mod)
+
+    val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main)
+
+    // TODO this flatMap is wrong. If LiftInference returns None, then this will not fail but the dep. will be ignored.
+    //   future me, or anybody else: if you fix this, also fix in ChezLift
+    val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) }
+
+    C.using(module = main.mod) {
+      transform(mainSymbol, liftedMain, liftedDeps)
+    }
+  }
 
   def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl, deps: List[lifted.ModuleDecl])(using C: Context): Program = {
     val stmt = mod.defs;
