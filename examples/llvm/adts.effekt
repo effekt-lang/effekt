@@ -1,11 +1,23 @@
+effect Foo(): Unit
+
+def effectUser() =
+  do Foo()
+
+def effectHandler() =
+  try {
+    effectUser(); ()
+  } with Foo {
+    resume(())
+  }
 
 type OneTwo {
   One(x: Int);
   Two(x: Int, y: Int)
 }
 
-def main() = {
+def main(): Unit / {Console} = {
   val a = Two(5, 9);
+  main();
   a match {
     case One(u) => println(u)
     case Two(v, w) => println(v + w)

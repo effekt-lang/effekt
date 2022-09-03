@@ -43,9 +43,13 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     if (!C.config.server()) return ;
 
     val showIR = settingStr("showIR")
+    val showTree = settingBool("showTree")
 
-    if (showIR == "none") {
-      return
+    if (showIR == "none") { return; }
+
+    if (showIR == "source") {
+      val tree = C.getAST(source).getOrElse { return; }
+      publishProduct(source, "source", "effekt", util.PrettyPrinter.format(tree))
     }
 
     if (List("js", "core", "lifted-core") contains showIR) {
@@ -57,12 +61,20 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       }
 
       if (showIR == "core") {
-        publishProduct(source, "core", "ir", core.PrettyPrinter.format(transformed.core))
+        val doc =
+          if (showTree) util.PrettyPrinter.format(transformed.core)
+          else core.PrettyPrinter.format(transformed.core)
+
+        publishProduct(source, "core", "ir", doc)
       }
 
       if (showIR == "lifted-core") {
         val liftedCore = LiftInference.run(transformed).getOrElse { return; }
-        publishProduct(source, "lifted", "ir", lifted.PrettyPrinter.format(liftedCore.core))
+        val doc =
+          if (showTree) util.PrettyPrinter.format(liftedCore.core)
+          else lifted.PrettyPrinter.format(liftedCore.core)
+
+        publishProduct(source, "lifted", "ir", doc)
       }
     }
 
@@ -70,7 +82,11 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
       val machineProg = machine.Transformer.transform(main, deps)
 
-      publishProduct(source, "machine", "ir", machine.PrettyPrinter.format(machineProg.program))
+      val doc =
+        if (showTree) util.PrettyPrinter.format(machineProg.program)
+        else machine.PrettyPrinter.format(machineProg.program)
+
+      publishProduct(source, "machine", "ir", doc)
     }
   }
 
