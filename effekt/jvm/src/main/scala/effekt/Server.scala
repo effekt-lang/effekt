@@ -57,12 +57,12 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       }
 
       if (showIR == "core") {
-        publishProduct(source, "core", "effekt", core.PrettyPrinter.format(transformed.core))
+        publishProduct(source, "core", "ir", core.PrettyPrinter.format(transformed.core))
       }
 
       if (showIR == "lifted-core") {
         val liftedCore = LiftInference.run(transformed).getOrElse { return; }
-        publishProduct(source, "lifted", "effekt", lifted.PrettyPrinter.format(liftedCore.core))
+        publishProduct(source, "lifted", "ir", lifted.PrettyPrinter.format(liftedCore.core))
       }
     }
 
@@ -70,7 +70,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
       val machineProg = machine.Transformer.transform(main, deps)
 
-      publishProduct(source, "machine", "effekt", machine.PrettyPrinter.format(machineProg.program))
+      publishProduct(source, "machine", "ir", machine.PrettyPrinter.format(machineProg.program))
     }
   }
 
