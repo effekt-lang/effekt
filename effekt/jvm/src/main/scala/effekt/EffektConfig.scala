@@ -38,7 +38,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   val backend: ScallopOption[String] = choice(
-    choices = List("js", "js-lift", "chez-callcc", "chez-monadic", "chez-lift", "llvm"),
+    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
@@ -63,9 +63,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def findStdLib: util.paths.File = {
 
     // 1) in config?
-    stdlibPath.foreach { path =>
-      return path
-    }
+    stdlibPath.foreach { path => return path }
 
     // 2) in PATH
     if (System.getenv.containsKey("EFFEKT_LIB")) {
@@ -74,11 +72,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
     // 3) in PWD
     val pwd = file(".")
-    val localLib = pwd / "libraries" / "js" / "monadic"
-    // TODO also use language config for a better search
+    val localLib = backendStdLibPath(pwd)
+
     if ((localLib / "effekt.effekt").exists) {
-      // here we return the absolute path to avoid problems with LSP
-      return ("libraries" / "js" / "monadic").canonicalPath
+      return localLib
     }
 
     // 4) next to Jar
@@ -89,7 +86,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
         sys.error("Cannot find path to standard library")
     }
 
-    val jarLib = jarPath / ".." / "libraries" / "js" / "monadic"
+    val jarLib = backendStdLibPath(jarPath / "..")
     if ((jarLib / "effekt.effekt").exists) {
       return jarLib
     }
@@ -97,13 +94,27 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     sys.error("Cannot find path to standard library")
   }
 
-  lazy val libPath: File = findStdLib.toFile
+  lazy val libPath: File = findStdLib.canonicalPath.toFile
 
-  def includes() = libPath :: includePath()
+  def includes() = backendIncludes(libPath).map(_.toFile) ++ includePath()
 
   def requiresCompilation(): Boolean = !server()
 
   def interpret(): Boolean = !server() && !compile()
+
+  private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {
+    case "js" => path / "libraries" / "js" / "monadic"
+    case "chez-monadic" => path / "libraries" / "chez" / "monadic"
+    case "chez-callcc" => path / "libraries" / "chez" / "callcc"
+    case "chez-lift" => path / "libraries" / "chez" / "lift"
+    case "llvm" => path / "libraries" / "llvm"
+    case b => sys error s"Unrecognized backend ${ b }"
+  }
+
+  private def backendIncludes(path: util.paths.File): List[util.paths.File] = backend() match {
+    case "chez-monadic" | "chez-callcc" | "chez-lift" => List(path, path / ".." / "common")
+    case b => List(path)
+  }
 
   validateFilesIsDirectory(includePath)
 

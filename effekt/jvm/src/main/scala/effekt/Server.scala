@@ -61,12 +61,17 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       publishTree("source", tree)
     }
 
-    if (List("js", "core", "lifted-core") contains showIR) {
+    if (List("target", "core", "lifted-core") contains showIR) {
 
-      val (transformed, js) = C.compileSeparate(source).getOrElse { return; }
+      val (transformed, out) = C.compileSeparate(source).getOrElse { return; }
 
-      if (showIR == "js") {
-        publishProduct(source, "target", "js", js)
+      if (showIR == "target") {
+        val extension = C.config.backend() match {
+          case "js" => "js"
+          case "chez-monadic" | "chez-callcc" | "chez-lift" => "ss"
+          case "llvm" => "ll"
+        }
+        publishProduct(source, "target", extension, out)
       }
 
       if (showIR == "core") {
