@@ -60,7 +60,7 @@ object Transformer {
         emitSubst(unchanged ++ newEnv, unchanged ++ oldEnv);
         transform(rest)
       }
-      case machine.Let(v, tag, environment, rest) => {
+      case machine.Construct(v, tag, environment, rest) => {
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(v), rest))
         val vd = transformParameter(v);
         val Type.Datatype(adtType) = vd.typ;
@@ -112,19 +112,18 @@ object Transformer {
       case machine.Return(environment) => {
         Return(transformArguments(environment))
       }
-      case machine.Run(machine.CallForeign(name), ins, List(cont)) => {
+      case machine.ForeignCall(out, name, ins, rest) => {
         val in_args = transformArguments(ins);
-        val (_, outs, block) = transformInline(cont);
+        val (_, outs, block) = transformInline(machine.Clause(List(out), rest));
         emit(PrimOp(name, outs, in_args));
         emitInlined(block)
       }
-      case machine.Run(machine.LiteralInt(n), List(), List(cont)) => {
+      case machine.LiteralInt(out, n, rest) => {
         //extendEnvironment(Environment.from(List(transformParameter(out))));
-        val (_, RegList(outs), block) = transformInline(cont);
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
         emit(Const(outs(RegisterType.Integer).head, n));
         emitInlined(block)
       }
-      case machine.Run(name, environment, continuation) => ???
       case machine.NewStack(name, frame, rest) => {
         val (closesOver, _ignored, target) = transformClosure(frame);
         emit(NewStack(transformArgument(name).id, target, closesOver));
@@ -147,8 +146,8 @@ object Transformer {
       case machine.Positive(alternatives) => Type.Datatype(PC.datatypes.indexOfOrInsert(alternatives))
       case machine.Negative(contType :: Nil) => Type.Continuation()
       case machine.Negative(alternatives) => ???
-      case machine.Primitive("Int") => Type.Integer()
-      case machine.Primitive(name) => ???
+      case machine.Type.Int() => Type.Integer()
+      case machine.Type.Stack() => Type.Continuation()
   }
 
   def transformClosure(clause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
