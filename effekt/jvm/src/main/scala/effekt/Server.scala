@@ -33,9 +33,6 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   override def getDefinition(position: Position): Option[Tree] =
     getDefinitionAt(position)(context)
 
-  def maybeExplain(explanation: String): String =
-    if (!settingBool("showExplanations")) "" else explanation.stripMargin('|')
-
   /**
    * Overriding hook to also publish core and target for LSP server
    */
