@@ -1,0 +1,61 @@
+// these are tests for liftinference.
+
+effect Foo {
+  def foo(): Int
+  def bar(): String
+}
+
+extern control def fancy { f: Unit => Int }: Int = "foo"
+
+def toplevel(x: Int, y: Int) = x + y
+
+def foo { f: Unit => Int } = 43
+def bar { g: Unit => Int } = {
+  def h = g;
+  region r {
+    fancy {h}
+  }
+}
+
+def myState { f: () => Int } = {
+  var x = 1;
+  x + x + f()
+}
+
+def outer(n: Int): Boolean = {
+
+  def inner(n: Int): Boolean =
+    if (n <= 0) true else outer(n - 1)
+
+  if (n <= 0) false else region r { inner(n - 1) }
+}
+
+def even(n: Int): Boolean =
+  if (n <= 0) true else odd(n - 1)
+
+def odd(n: Int): Boolean =
+  if (n <= 0) false else even(n - 1)
+
+def usingEffects1() = try {
+  do foo()
+} with Foo {
+  def foo() = resume(1)
+  def bar() = resume("test")
+}
+
+def usingEffects2() = try {
+  do bar();
+  val result = region r { do bar()  };
+  println(result)
+} with Foo {
+  def foo() = resume(1)
+  def bar() = { println("before"); val res = resume("test"); println("after"); res }
+}
+
+def main() = {
+  println(toplevel(1, 2));
+  println(even(13));
+  println(outer(13));
+  println(usingEffects1());
+  usingEffects2()
+}

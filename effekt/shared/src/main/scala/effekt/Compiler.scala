@@ -210,4 +210,7 @@ trait Compiler {
    */
   def compileWhole(source: Source)(implicit C: Context): Option[Compiled] =
     (Frontend andThen Middleend andThen LowerDependencies andThen Backend.whole).apply(source)
+
+  def compileAll(source: Source)(implicit C: Context): Option[CompilationUnit] =
+    (Frontend andThen Middleend andThen LowerDependencies).apply(source)
 }

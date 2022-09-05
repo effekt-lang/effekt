@@ -1,0 +1,3 @@
+Cons(0, Cons(1, Cons(4, Cons(9, Cons(16, Cons(25, Nil()))))))
+---
+Cons(0, Cons(1, Cons(4, Cons(9, Cons(16, Cons(25, Nil()))))))

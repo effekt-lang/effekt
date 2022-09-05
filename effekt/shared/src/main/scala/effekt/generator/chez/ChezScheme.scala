@@ -50,9 +50,9 @@ trait ChezScheme {
    * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
-    C.checkMain(main.mod)
+    val mainSym = C.checkMain(main.mod)
     val deps = dependencies.flatMap { dep => compile(dep) }
-    val chezModule = LetFusion.rewrite(chez.Let(Nil, compilationUnit(main.mod, main.core, deps)))(using ())
+    val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core, deps)))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
     Some(Compiled(mainFile, Map(mainFile -> result)))
@@ -70,9 +70,8 @@ trait ChezScheme {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     toChez(in.core)
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
     val defs = toChez(core)
-    val mainSymbol = mod.terms("main").toList.head
     chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
   }
 
@@ -85,18 +84,18 @@ trait ChezScheme {
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 
-  def toChez(e: core.Argument): chez.Expr = e match {
-    case e: core.Expr  => toChez(e)
-    case b: core.Block => toChez(b)
-  }
-
   def toChez(module: ModuleDecl): List[chez.Def] = {
     toChez(module.defs).definitions // TODO FIXME, once there is a let _ = ... in there, we are doomed!
   }
 
+  def toChez(args: List[Argument]): List[chez.Expr] = args map {
+    case b: Block => toChez(b)
+    case e: Pure => toChez(e)
+  }
+
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Ret(e) => pure(toChez(e))
-    case App(b, targs, args) => chez.Call(toChez(b), args map toChez)
+    case Return(e) => pure(toChez(e))
+    case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
@@ -113,7 +112,7 @@ trait ChezScheme {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Handle(body, handler) =>
+    case Handle(body, tpe, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.id)
         chez.Handler(names.constructor, h.clauses.map {
@@ -132,19 +131,19 @@ trait ChezScheme {
   def toChez(stmt: Stmt): chez.Block = stmt match {
 
     case Def(id, tpe, block, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
+      val chez.Block(defs, exprs, result) = toChez(rest)
       val constDef = chez.Constant(nameDef(id), toChez(block))
-      Block(constDef :: defs, exprs, result)
+      chez.Block(constDef :: defs, exprs, result)
 
     case Data(did, ctors, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
+      val chez.Block(defs, exprs, result) = toChez(rest)
       val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
-      Block(constructors ++ defs, exprs, result)
+      chez.Block(constructors ++ defs, exprs, result)
 
     case Record(did, fields, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
+      val chez.Block(defs, exprs, result) = toChez(rest)
       val constructors = generateConstructor(did, fields)
-      Block(constructors ++ defs, exprs, result)
+      chez.Block(constructors ++ defs, exprs, result)
 
     case Include(contents, rest) =>
       val include = RawDef(contents)
@@ -198,23 +197,21 @@ trait ChezScheme {
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
-    case UnitLit()     => chez.RawExpr("#f")
+    case UnitLit()     => chez.RawValue("#f")
     case StringLit(s)  => ChezString(s)
-    case BooleanLit(b) => if (b) chez.RawExpr("#t") else chez.RawExpr("#f")
-    case l: Literal[t] => chez.RawExpr(l.value.toString)
+    case BooleanLit(b) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case l: Literal[t] => chez.RawValue(l.value.toString)
     case ValueVar(id)  => chez.Variable(nameRef(id))
 
-    case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
-      case e: Expr  => toChez(e)
-      case b: Block => toChez(b)
-    })
+    case DirectApp(b, targs, args) => chez.Call(toChez(b), toChez(args))
+    case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
 
     case Select(b, field) =>
       chez.Call(nameRef(field), toChez(b))
 
     case Box(b) => toChez(b)
 
-    case Run(s) => run(toChezExpr(s))
+    case Run(s, tpe) => run(toChezExpr(s))
   }
 
   def toChez(p: Pattern): chez.Expr = p match {

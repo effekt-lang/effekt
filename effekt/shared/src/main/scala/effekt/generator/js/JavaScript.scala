@@ -119,11 +119,6 @@ trait JavaScript extends Backend {
 
   def toJS(p: Param): JSName = nameDef(p.id)
 
-  def toJS(e: core.Argument)(using Context): js.Expr = e match {
-    case e: core.Expr  => toJS(e)
-    case b: core.Block => toJS(b)
-  }
-
   def toJS(b: core.Block)(using Context): js.Expr = b match {
     case BlockVar(v) =>
       nameRef(v)
@@ -150,15 +145,21 @@ trait JavaScript extends Backend {
 
   def builtin(name: String): js.Expr = js.Member($effekt, JSName(name))
 
+  def toJS(args: List[Argument])(using Context): List[js.Expr] = args map {
+    case b: Block => toJS(b)
+    case e: Expr => toJS(e)
+  }
+
   def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
     case UnitLit() => builtin("unit")
     case StringLit(s) => JsString(s)
     case literal: Literal[_] => js.RawExpr(literal.value.toString)
     case ValueVar(id) => nameRef(id)
+    case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
     case Box(b) => toJS(b)
-    case Run(s) => monadic.Run(toJSMonadic(s))
+    case Run(s, tpe) => monadic.Run(toJSMonadic(s))
   }
 
   def toJS(handler: core.Handler)(using Context): js.Expr =
@@ -190,7 +191,7 @@ trait JavaScript extends Backend {
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
     case core.App(b, targs, args) =>
-      monadic.Call(toJS(b), args map toJS)
+      monadic.Call(toJS(b), toJS(args))
 
     case core.If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
@@ -198,10 +199,10 @@ trait JavaScript extends Backend {
     case core.While(cond, body) =>
       monadic.While(toJSMonadic(cond), toJSMonadic(body))
 
-    case core.Ret(e) =>
+    case core.Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Handle(body, hs) =>
+    case core.Handle(body, tpe, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
     case core.Region(body) =>

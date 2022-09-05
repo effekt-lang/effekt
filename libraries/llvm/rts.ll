@@ -5,25 +5,67 @@
 
 %Env = type i8*
 
+; Reference counts
 %Rc = type i64
+
+; Code to share (bump rc) an environment
 %Sharer = type void (%Env)*
+
+; Code to drop an environment
 %Eraser = type void (%Env)*
+
+; Every heap object starts with a header
 %Header = type {%Rc, %Eraser}
 
+; A heap object is a pointer to a header followed by payload.
+;
+;   +--[ Header ]--+-------------+
+;   | Rc  | Eraser | Payload ... |
+;   +--------------+-------------+
 %Obj = type %Header*
 
+
+; A Frame has the following layout
+;
+;   +-------[ FrameHeader ]-----+--------------+
+;   | RetAdr  | Sharer | Eraser | Payload ...  |
+;   +---------------------------+--------------+
+
+; A stack pointer points to the top-most frame followed by all other frames.
+;
+; For example
+;
+;     +--------------------+   <- Limit
+;     :                    :
+;     :                    :   <- Sp
+;     +--------------------+
+;     | FrameHeader        |
+;     |    z               |
+;     |    y               |
+;     |    x               |
+;     +--------------------+
+;     | ... next frame ... |
+;     +--------------------+
+;     :        ...         :
+;     +--------------------+ <- Base
 %Sp = type i8*
 %Base = type %Sp
 %Limit = type %Sp
-
-%StkVal = type { %Rc, %Sp, %Base, %Limit, %StkVal* }
-
-%Stk = type %StkVal*
-
 %RetAdr = type void (%Env, %Sp)*
 %FrameHeader = type { %RetAdr, %Sharer, %Eraser }
 
+; This is used for two purposes:
+;   - a refied first-class stack (then the last field is null)
+;   - as part of an intrusive linked-list of stacks (meta stack)
+%StkVal = type { %Rc, %Sp, %Base, %Limit, %StkVal* }
+
+; The "meta" stack (a stack of stacks)
+%Stk = type %StkVal*
+
+; Positive data types consist of a tag and a heap object
 %Pos = type {i64, %Obj}
+
+; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {void (%Obj, %Env, %Sp)*, %Obj}
 
 

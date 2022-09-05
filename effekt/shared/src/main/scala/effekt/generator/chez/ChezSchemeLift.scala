@@ -26,17 +26,17 @@ object ChezSchemeLift extends Backend {
     Builtin("$then", binding, chez.Lambda(List(param), body))
 
   def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", chez.Call(chez.Call(main, Variable(ChezName("here"))), Nil))
+    chez.Builtin("run", chez.Call(main, Variable(ChezName("here"))))
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
-    C.checkMain(main.mod)
+    val mainSymbol = C.checkMain(main.mod)
     val deps = dependencies.flatMap { dep => compile(dep) }
 
     LiftInference(main).map { lifted =>
-      val chezModule = chez.Let(Nil, compilationUnit(lifted.mod, lifted.core, deps))
+      val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core, deps))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
       val mainFile = path(main.mod)
       Compiled(mainFile, Map(mainFile -> result))
@@ -55,9 +55,8 @@ object ChezSchemeLift extends Backend {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     LiftInference(in).toList.flatMap { lifted => toChez(lifted.core) }
 
-  def compilationUnit(mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
     val defs = toChez(core)
-    val mainSymbol = mod.terms("main").toList.head
     chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
   }
 
@@ -73,6 +72,7 @@ object ChezSchemeLift extends Backend {
   def toChez(e: Argument): chez.Expr = e match {
     case e: lifted.Expr  => toChez(e)
     case b: lifted.Block => toChez(b)
+    case e: lifted.Evidence => toChez(e)
   }
 
   def toChez(module: ModuleDecl): List[chez.Def] = {
@@ -80,7 +80,7 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Ret(e) => pure(toChez(e))
+    case Return(e) => pure(toChez(e))
     case App(b, targs, args) => chez.Call(toChez(b), args map toChez)
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
@@ -98,7 +98,7 @@ object ChezSchemeLift extends Backend {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Handle(body, handler) =>
+    case Handle(body, tpe, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.id)
         chez.Handler(names.constructor, h.clauses.map {
@@ -180,32 +180,24 @@ object ChezSchemeLift extends Backend {
     case New(Handler(id, clauses)) =>
       val ChezName(name) = nameRef(id)
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case (_, block) => toChez(block) })
-
-    // additional cases for lift
-    case ScopeApp(b, sc) => chez.Call(toChez(b), List(toChez(sc)))
-
-    case ScopeAbs(id, b) => chez.Lambda(List(nameDef(id)), toChez(b))
-
-    case Lifted(ev, b)   => chez.Builtin("lift-block", toChez(b), toChez(ev))
   }
 
-  def toChez(scope: Scope): chez.Expr = scope match {
-    case Here() => Variable(ChezName("here"))
-    case Nested(scopes) =>
-      chez.Builtin("nested", scopes map toChez:_*)
-    case ScopeVar(id) => Variable(nameRef(id))
+  def toChez(scope: Evidence): chez.Expr = scope match {
+    case Evidence(Nil) => Variable(ChezName("here"))
+    case Evidence(scopes) => chez.Builtin("nested", scopes map { s => chez.Variable(nameRef(s)) }:_*)
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
-    case UnitLit()     => chez.RawExpr("#f")
+    case UnitLit()     => chez.RawValue("#f")
     case StringLit(s)  => ChezString(s)
-    case BooleanLit(b) => if (b) chez.RawExpr("#t") else chez.RawExpr("#f")
-    case l: Literal[t] => chez.RawExpr(l.value.toString)
+    case BooleanLit(b) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case l: Literal[t] => chez.RawValue(l.value.toString)
     case ValueVar(id)  => chez.Variable(nameRef(id))
 
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
       case e: Expr  => toChez(e)
       case b: Block => toChez(b)
+      case e: Evidence => toChez(e)
     })
 
     case Select(b, field) =>
@@ -213,7 +205,7 @@ object ChezSchemeLift extends Backend {
 
     case Closure(b) => toChez(b)
 
-    case Run(s) => run(toChezExpr(s))
+    case Run(s, tpe) => run(toChezExpr(s))
   }
 
   def toChez(p: Pattern): chez.Expr = p match {

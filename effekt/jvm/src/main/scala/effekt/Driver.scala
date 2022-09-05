@@ -6,16 +6,18 @@ package effekt
 import effekt.source.{ ModuleDecl, Tree }
 import effekt.symbols.Module
 import effekt.context.{ Context, IOModuleDB }
-import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
+
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.parsing.ParseResult
 import kiama.util.{ IO, Source }
+
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
-
-import effekt.util.paths.file
+import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
 
 import scala.sys.process.Process
+
+import java.io.IOException
 
 /**
  * effekt.Compiler <----- compiles code with  ------ Driver ------ implements UI with -----> kiama.util.Compiler
@@ -106,8 +108,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       val command = Process(Seq("node", "--eval", jsScript))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.report(e)
+      case FatalPhaseError(e) => C.report(e)
     }
 
   /**
@@ -118,34 +119,36 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       val command = Process(Seq("scheme", "--script", path))
       C.config.output().emit(command.!!)
     } catch {
-      case FatalPhaseError(e) =>
-        C.report(e)
+      case FatalPhaseError(e) => C.report(e)
     }
 
-  // build the LLVM source file (`<...>.ll`) and coax it into an executable
-  def evalLLVM(llvmPath: String)(implicit C: Context): Unit = try {
+  /**
+   * Compile the LLVM source file (`<...>.ll`) to an executable
+   *
+   * Requires LLVM and GCC to be installed on the machine.
+   * Assumes [[path]] has the format "SOMEPATH.ll".
+   */
+  def evalLLVM(path: String)(implicit C: Context): Unit = try {
+    val basePath = path.stripSuffix(".ll")
+    val optPath = basePath + ".opt.ll"
+    val objPath = basePath + ".o"
 
-      val LLVM_VERSION = sys.env.get("EFFEKT_LLVM_VERSION").getOrElse("12") // TODO Make global config?
+    val out = C.config.output()
 
-      val path = llvmPath.stripSuffix(".ll")
-      val xPath = (suffix: String) => path + suffix
-      val optPath = xPath("_opt.ll")
-      val objPath = xPath(".o")
+    val LLVM_VERSION = C.config.llvmVersion()
 
-      val optCommand = Process(Seq(s"opt-${LLVM_VERSION}", llvmPath, "-S", "-O2", "-o", optPath))
-      C.config.output().emit(optCommand.!!)
+    out.emit(discoverExecutable(List("opt", s"opt-${LLVM_VERSION}", "opt-12", "opt-11"), Seq(path, "-S", "-O2", "-o", optPath)))
+    out.emit(discoverExecutable(List("llc", s"llc-${LLVM_VERSION}", "lcc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
 
-      val llcCommand = Process(Seq(s"llc-${LLVM_VERSION}", "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath))
-      C.config.output().emit(llcCommand.!!)
+    val gccMainFile = (C.config.libPath / "main.c").unixPath
+    val executableFile = basePath
+    out.emit(discoverExecutable(List("gcc", "cc"), Seq(gccMainFile, "-o", executableFile, objPath)))
 
-      val gccMainFile = (C.config.libPath / "main.c").unixPath
-      val executableFile = path //TODO-LLVM C.codeGenerator.path(mod)
-      val gccCommand = Process(Seq("gcc", gccMainFile, "-o", executableFile, objPath))
-      C.config.output().emit(gccCommand.!!)
-
-      val command = Process(Seq(executableFile))
-      C.config.output().emit(command.!!)
-    } catch case FatalPhaseError(e) => C.report(e)
+    val command = Process(Seq(executableFile))
+    out.emit(command.!!)
+  } catch {
+    case FatalPhaseError(e) => C.report(e)
+  }
 
   def evalJIT(jitPath: String)(implicit C: Context): Unit = {
     val arch = Process(Seq(s"uname", "-m"));
@@ -177,4 +180,18 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
    * Originally called by kiama, not used anymore.
    */
   override final def format(m: ModuleDecl): Document = ???
+
+  /**
+   * Try running a handful of names for a system executable
+   */
+  private def discoverExecutable(progs0: List[String], args: Seq[String])(implicit C: Context): String = {
+    def go(progs: List[String]): String = progs match {
+      case prog :: progs =>
+        try Process(prog +: args).!!
+        catch case ioe: IOException => go(progs)
+      case _ => C.abort(s"Missing system executable; searched: ${ progs0 }")
+    }
+
+    go(progs0)
+  }
 }

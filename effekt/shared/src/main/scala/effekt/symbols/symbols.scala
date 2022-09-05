@@ -107,6 +107,7 @@ package object symbols {
     override lazy val capture: Capture = LexicalRegion(name, tree)
   }
 
+  // TODO rename to Callable
   trait Fun extends BlockSymbol {
     def tparams: List[TypeVar]
     def vparams: List[ValueParam]
@@ -260,10 +261,10 @@ package object symbols {
    *
    * param: The underlying constructor parameter
    */
-  case class Field(name: Name, param: ValueParam, rec: Record) extends Fun with Synthetic {
-    val tparams = rec.tparams
+  case class Field(name: Name, param: ValueParam, record: Record) extends Fun with Synthetic {
+    val tparams = record.tparams
     val tpe = param.tpe.get
-    val vparams = List(ValueParam(rec.name, Some(if (rec.tparams.isEmpty) rec else ValueTypeApp(rec, rec.tparams))))
+    val vparams = List(ValueParam(record.name, Some(if (record.tparams.isEmpty) record else ValueTypeApp(record, record.tparams))))
     val bparams = List.empty[BlockParam]
     def annotatedResult = Some(tpe)
     def annotatedEffects = Some(Effects.Pure)
@@ -412,10 +413,23 @@ package object symbols {
     // establishes the canonical ordering
     def controlEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if !i.builtin => i
-    }.sortBy(f => f.hashCode())
+    }.sortBy(canonicalOrdering)
     def builtinEffects: List[InterfaceType] = effs.collect {
       case i: InterfaceType if i.builtin => i
     }
+  }
+
+  /**
+   * The canonical ordering needs to be stable, but should also distinguish two types, 
+   * if they are different.
+   * 
+   * Bugs with the canonical ordering can lead to runtime errors as observed in ticket #108
+   */
+  def canonicalOrdering(i: InterfaceType): Int = i match {
+    case BlockTypeApp(typeConstructor: Interface, args) => typeConstructor.id + args.map(_.hashCode()).sum
+    case BlockTypeApp(typeConstructor: BuiltinEffect, args) => typeConstructor.id + args.map(_.hashCode()).sum
+    case b : Interface => b.id
+    case b : BuiltinEffect => b.id
   }
 
   /**

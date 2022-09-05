@@ -2,10 +2,14 @@ package effekt
 
 import effekt.context.Context
 import effekt.core.PrettyPrinter
+import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.PlainMessaging
+import effekt.util.{ PlainMessaging }
 import effekt.util.messages.EffektError
+
 import kiama.util.{ Position, Services, Source }
+import kiama.output.PrettyPrinterTypes.Document
+
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind }
 
 /**
@@ -41,18 +45,53 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     // don't do anything, if we aren't running as a language server
     if (!C.config.server()) return ;
 
-    val showAnything = settingBool("showCore") || settingBool("showTarget")
-    if (!showAnything) return ;
+    val showIR = settingStr("showIR")
+    val showTree = settingBool("showTree")
 
-    for ((transformed, js) <- C.compileSeparate(source)) {
+    def publishTree(name: String, tree: Any): Unit =
+      publishProduct(source, name, "scala", util.PrettyPrinter.format(tree))
 
-      if (settingBool("showCore")) {
-        publishProduct(source, "target", "effekt", core.PrettyPrinter.format(transformed.core))
+    def publishIR(name: String, doc: Document): Unit =
+      publishProduct(source, name, "ir", doc)
+
+    if (showIR == "none") { return; }
+
+    if (showIR == "source") {
+      val tree = C.getAST(source).getOrElse { return; }
+      publishTree("source", tree)
+    }
+
+    if (List("target", "core", "lifted-core") contains showIR) {
+
+      val (transformed, out) = C.compileSeparate(source).getOrElse { return; }
+
+      if (showIR == "target") {
+        val extension = C.config.backend() match {
+          case "js" => "js"
+          case "chez-monadic" | "chez-callcc" | "chez-lift" => "ss"
+          case "llvm" => "ll"
+        }
+        publishProduct(source, "target", extension, out)
       }
 
-      if (settingBool("showTarget")) {
-        publishProduct(source, "target", "js", js)
+      if (showIR == "core") {
+        if (showTree) publishTree("core", transformed.core)
+        else publishIR("core", core.PrettyPrinter.format(transformed.core))
       }
+
+      if (showIR == "lifted-core") {
+        val liftedCore = LiftInference.run(transformed).getOrElse { return; }
+        if (showTree) publishTree("lifted", liftedCore.core)
+        else publishIR("lifted", lifted.PrettyPrinter.format(liftedCore.core))
+      }
+    }
+
+    if (showIR == "machine") {
+      val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
+      val machineProg = machine.Transformer.transform(main, deps)
+
+      if (showTree) publishTree("machine", machineProg.program)
+      else publishIR("machine", machine.PrettyPrinter.format(machineProg.program))
     }
   }
 

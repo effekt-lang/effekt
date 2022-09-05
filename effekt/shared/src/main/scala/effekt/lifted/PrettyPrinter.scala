@@ -1,5 +1,5 @@
 package effekt
-package core
+package lifted
 
 import kiama.output.ParenPrettyPrinter
 
@@ -41,24 +41,29 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()                 => "()"
-    case StringLit(s)              => "\"" + s + "\""
-    case l: Literal[t]             => l.value.toString
-    case ValueVar(id)              => id.name.toString
+    case UnitLit()               => "()"
+    case StringLit(s)            => "\"" + s + "\""
+    case l: Literal[t]           => l.value.toString
+    case ValueVar(id)            => id.name.toString
 
-    case PureApp(b, targs, args)   => toDoc(b) <> parens(hsep(args map argToDoc, comma))
-    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
-    case Box(b)      => parens("box" <+> toDoc(b))
-    case Run(s, tpe) => "run" <+> braces(toDoc(s))
+    case Closure(b) => parens("box" <+> toDoc(b))
+    case Run(s, _)  => "run" <+> block(toDocStmt(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
+    case e: Expr     => toDoc(e)
+    case b: Block    => toDoc(b)
+    case e: Evidence => toDoc(e)
+  }
+
+  def toDoc(e: Evidence): Doc = e match {
+    case Evidence(Nil)  => "<>"
+    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev.name) }, ","))
   }
 
   def toDoc(s: Stmt): Doc =
@@ -68,10 +73,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDocStmt(s)
 
   def toDoc(p: Pattern): Doc = p match {
-    case IgnorePattern()           => "_"
-    case Pattern.LiteralPattern(l) => toDoc(l)
-    case AnyPattern()              => "*"
-    case TagPattern(id, patterns)  => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
+    case IgnorePattern()          => "_"
+    case LiteralPattern(l)        => toDoc(l)
+    case AnyPattern()             => "*"
+    case TagPattern(id, patterns) => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
   }
 
   def toDoc(handler: Handler): Doc = {

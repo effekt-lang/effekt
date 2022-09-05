@@ -116,9 +116,11 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, alias)
 
-    case source.EffectDef(id, effs) =>
+    case source.EffectDef(id, tparams, effs) =>
+      val tps = Context scoped { tparams map resolve }
       val alias = Context scoped {
-        EffectAlias(Context.nameFor(id), Nil, resolve(effs))
+        tps.foreach { t => Context.bind(t) }
+        EffectAlias(Context.nameFor(id), tps, resolve(effs))
       }
       Context.define(id, alias)
 
@@ -263,7 +265,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       if (isEffect) effectSym.ops.foreach { op => Context.bind(op) }
 
     case source.TypeDef(id, tparams, tpe) => ()
-    case source.EffectDef(id, effs)       => ()
+    case source.EffectDef(id, tparams, effs)       => ()
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
