@@ -38,7 +38,7 @@ case class Print(arg: Register) extends Instruction
 case class IfZero(arg: Register, thenClause: Clause) extends Instruction
 case class IsZero(out: Register, arg: Register) extends Instruction
 case class Subst(args: RegList) extends Instruction
-case class Mov(tpe: RegisterType, from: Register, to: Register) extends Instruction
+case class Copy(tpe: RegisterType, from: Register, to: Register) extends Instruction
 case class Drop(tpe: RegisterType, reg: Register) extends Instruction
 case class Swap(tpe: RegisterType, a: Register, b: Register) extends Instruction
 

@@ -302,7 +302,7 @@ object Transformer {
         for ((cur_n, cur_o) <- todo(ty)) {
           if(!todo(ty).values.exists(_==cur_n)) {
             changed = true;
-            emit(Mov(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
+            emit(Copy(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
             todo(ty)(cur_n) = cur_n
           }
         }

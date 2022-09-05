@@ -92,7 +92,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "then" -> toDoc(thenClause)))
     case IsZero(out, arg) => jsonObjectSmall(ListMap("op" -> "\"IsZero\"", "out" -> toDoc(out), "arg" -> toDoc(arg)))
     case Subst(args) => jsonObjectSmall(ListMap("op" -> "\"Subst\"", "args" -> toDoc(args)))
-    case Mov(tpe, from, to) => jsonObjectSmall(ListMap("op" -> "\"Mov\"",
+    case Copy(tpe, from, to) => jsonObjectSmall(ListMap("op" -> "\"Copy\"",
       "type" -> toDoc(tpe),
       "from" -> toDoc(from), "to" -> toDoc(to)
     ))
