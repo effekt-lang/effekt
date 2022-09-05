@@ -9,6 +9,7 @@ import effekt.machine.analysis
 import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.annotation.targetName
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
@@ -288,43 +289,50 @@ object Transformer {
     val newVals = transformArguments(newEnv);
     if (oldVals == newVals) return // nothing to do
     extendFrameDescriptorTo(newEnv);
-    val todo = (for (ty <- RegisterType.values) yield ty -> {
-      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
-      val news = newVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
-      HashMap.from(news zip olds)
-    }).toMap;
 
     for(ty <- RegisterType.values) {
+      // initialize graph structure
+      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      val news = newVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      //val todo = HashMap.from((news zip olds));
+
+      val todo: mutable.HashMap[Int, mutable.HashSet[Int]] = mutable.HashMap();
+      // generate graph structure
+      for ((o, n) <- (olds zip news)) {
+        todo(o) = todo.applyOrElse(o, x => mutable.HashSet()).addOne(n);
+      }
+
+      // cut hairs
       var changed = true;
       while(changed) {
         changed = false;
-        // cut hairs
-        for ((cur_n, cur_o) <- todo(ty)) {
-          if(!todo(ty).values.exists(_==cur_n)) {
-            changed = true;
-            emit(Copy(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
-            todo(ty)(cur_n) = cur_n
+        for (cur_o <- todo.keys) {
+          for(cur_n <- todo(cur_o)) {
+            if(!todo.contains(cur_n)) {
+              changed = true;
+              emit(Copy(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
+              todo(cur_o).remove(cur_n)
+              if(todo(cur_o).isEmpty) todo.remove(cur_o)
+            }
           }
         }
       }
+      //assert(todo.forall(_._2.size == 1));
+
       // rotate cycles
-      while(todo(ty).nonEmpty) {
-        val (cur_n, cur_o) = todo(ty).head;
+      while(todo.nonEmpty) {
+        val cur_o = todo.keys.head;
+        val cur_n = todo(cur_o).head;
         if(cur_n != cur_o) {
           emit(Swap(ty, RegisterIndex(cur_n), RegisterIndex(cur_o)));
         }
-        for((n,o) <- todo(ty)) {
-          if (o == cur_o) {
-            todo(ty)(n) = cur_n
-          } else if (o == cur_n) {
-            todo(ty)(n) = cur_o
-          }
-        }
-        todo(ty).remove(cur_n);
+        todo(cur_o) = todo(cur_n);
+        todo.remove(cur_n);
       }
+
+      // drop unused registers
       for(i <- 0 until BC.frameDescriptor.locals(ty)) {
-        // drop unused registers
-        if(!newVals.regs(ty).exists({case RegisterIndex(j) => i==j; case _ => false})) {
+        if(!news.contains(i)) {
           emit(Drop(ty, RegisterIndex(i)))
         }
       }
