@@ -41,7 +41,7 @@ lazy val replDependencies = Seq(
 
 lazy val lspDependencies = Seq(
   "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.12.0",
-  "com.google.code.gson" % "gson" % "2.8.2"
+  "com.google.code.gson" % "gson" % "2.8.9"
 )
 
 lazy val testingDependencies = Seq(
