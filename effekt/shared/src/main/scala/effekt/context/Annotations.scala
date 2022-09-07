@@ -263,6 +263,18 @@ object Annotations {
     "SelfRegion",
     "the region corresponding to a lexical scope"
   )
+
+  /**
+   * The [[source.Def]] which is a parent of this [[source.Unbox]] node
+   * provided that the [[source.Unbox]] was synthesized by the compiler.
+   *
+   * Introduced by the pretyper.
+   * Used by typer in order to display a more precise error message.
+   */
+  val UnboxParentDef = Annotation[source.Unbox, source.Def](
+    "UnboxParentDef",
+    "the parent definition of an Unbox if it was synthesized"
+  )
 }
 
 
