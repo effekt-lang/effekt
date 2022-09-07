@@ -151,11 +151,12 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
   }
 
   def evalJIT(jitPath: String)(implicit C: Context): Unit = {
-    val arch = Process(Seq(s"uname", "-m"));
-    val platform = (arch.!!).trim;
-    val platforms = List("x86_64");
+    val arch = Process(Seq(s"uname", "-m")).!!.trim;
+    val os = Process(Seq(s"uname", "-s")).!!.trim;
+    val platform = "%s-%s".format(arch,os);
+    val platforms = List("x86_64-Linux", "arm64-Darwin");
     if (!platforms.contains(platform)) {
-      C.error(s"Unsupported platform ${platform}. Currently supported platforms; ${platforms.mkString(", ")}");
+      C.error(s"Unsupported platform ${platform}. Currently supported platforms: ${platforms.mkString(", ")}");
       return
     }
     val runCommand = Process(Seq(s"./bin/${platform}/rpyeffect-jit", jitPath)) // TODO use path independent of cwd

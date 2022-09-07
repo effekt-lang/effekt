@@ -130,9 +130,21 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     downloadJITBinary := {
       import scala.util.matching.Regex
       val log = sbt.Keys.streams.value.log
-      val bindir =  (ThisBuild / baseDirectory).value / "bin" / "x86_64"
+
+      // determine OS and architecture
+      var arch = ""
+      var os = ""
+      Process("uname -m").!(sys.process.ProcessLogger({x => arch=x}))
+      Process("uname -s").!(sys.process.ProcessLogger({x => os=x}))
+
+      // Try downloading binary
+      log.info("Downloading binary for %s-%s".format(arch,os))
+      val bindir =  (ThisBuild / baseDirectory).value / "bin" / ("%s-%s".format(arch,os))
+      val binname = bindir / "rpyeffect-jit"
+
+      // Give (hopefully) useful error messages
       val ghEC = try {
-        Process("gh release download -R se-tuebingen/jitting-effects latest -p rpyeffect-jit").!
+        Process("gh release download -R se-tuebingen/jitting-effects latest -p rpyeffect-jit-%s-%s".format(arch, os)).!
       } catch {
         case e: java.io.IOException => {
           if(e.getCause.isInstanceOf[java.io.IOException]
@@ -151,11 +163,14 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
             log.error("Downloading it requires a GitHub personal access token in GH_TOKEN. " +
               "Alternatively, run `gh auth login` first.")
           }
+          case _ => {
+            log.error("Download failed (error=%d)".format(ghEC))
+          }
         }
       } else {
         Process("mkdir -p " + bindir).!
-        Process("mv rpyeffect-jit " + bindir / "rpyeffect-jit").!
-        Process("chmod +x " + bindir / "rpyeffect-jit").!
+        Process("mv rpyeffect-jit-%s-%s ".format(arch,os) + binname).!
+        Process("chmod +x " + binname).!
       }
     },
 
