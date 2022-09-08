@@ -1,3 +1,4 @@
-[error] examples/neg/def_instead_of_val.effekt:3:13: Unbox requires a boxed type, but got Int. Maybe try `val` if you're defining a value
+[error] examples/neg/def_instead_of_val.effekt:3:13: Expected the right-hand side of a `def` binding to be a block, but got a value of type Int.
+Maybe try `val` if you're defining a value.
 def three = addOne(2)
             ^

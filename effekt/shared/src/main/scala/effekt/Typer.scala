@@ -408,7 +408,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 // Since this `unbox` was synthesized by the compiler from `def foo = E`,
                 // it's possible that the user simply doesn't know that they should have used the `val` keyword to specify a value
                 // instead of using `def`; see [issue #130](https://github.com/effekt-lang/effekt/issues/130) for more details
-                Context.abort(pretty"Unbox requires a boxed type, but got $vtpe. Maybe try `val` if you're defining a value")
+                Context.abort(pretty"Expected the right-hand side of a `def` binding to be a block, but got a value of type $vtpe.\nMaybe try `val` if you're defining a value.")
               case _ =>
                 Context.abort(pretty"Unbox requires a boxed type, but got $vtpe.")
             }
