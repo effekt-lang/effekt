@@ -28,15 +28,6 @@ class BoxUnboxInference {
   }
 
   /**
-   * See [[Annotations.UnboxParentDef]] for more details about this annotation.
-   */
-  private def annotateUnboxParent(unbox: Unbox, parentDefOpt: Option[Def])(using C: Context): Unbox =
-    for {
-      pd <- parentDefOpt
-    } yield C.annotate(Annotations.UnboxParentDef, unbox, pd)
-    unbox
-
-  /**
    * There are only a few limited constructors for blocks:
    *
    * - identifiers (e.g., `f`)
@@ -44,22 +35,17 @@ class BoxUnboxInference {
    * - object literals (e.g. `new T {}`)
    * - selection (e.g., `f.m.n`)
    */
-  def rewriteAsBlock(e: Term, parentDef: Option[Def])(using C: Context): Term = visit(e) {
+  def rewriteAsBlock(e: Term)(using C: Context): Term = visit(e) {
     case v: Var => v.definition match {
-      case sym: (ValueSymbol | symbols.VarBinder) =>
-        val unbox = Unbox(v).inheritPosition(v)
-        annotateUnboxParent(unbox, parentDef)
+      case sym: (ValueSymbol | symbols.VarBinder) => Unbox(v).inheritPosition(v)
       case sym: BlockSymbol => v
     }
 
     case Unbox(t) => Unbox(rewriteAsExpr(t))
     case New(impl) => New(rewrite(impl))
     case BlockLiteral(tps, vps, bps, body) => BlockLiteral(tps, vps, bps, rewrite(body))
-    case other =>
-      val unbox = Unbox(rewriteAsExpr(other))
-      annotateUnboxParent(unbox, parentDef)
+    case other => Unbox(rewriteAsExpr(other))
   }
-  def rewriteAsBlock(e: Term)(using C: Context): Term = rewriteAsBlock(e, None)
 
   def rewriteAsExpr(e: Term)(using C: Context): Term = visit(e) {
 
@@ -159,7 +145,16 @@ class BoxUnboxInference {
       VarDef(id, annot, region, rewrite(binding))
 
     case DefDef(id, annot, binding) =>
-      DefDef(id, annot, rewriteAsBlock(binding, Some(t)))
+      val block = rewriteAsBlock(binding)
+      (binding, block) match {
+        case (Unbox(_), _) => ()
+        // If the binding wasn't an `Unbox` and now it is, it means that the compiler synthesized it.
+        // We therefore annotate the new `Unbox` expression with its original definition.
+        // See [[Annotations.UnboxParentDef]] for more details about this annotation.
+        case (_, u @ Unbox(_)) => C.annotate(Annotations.UnboxParentDef, u, t)
+        case (_, _) => ()
+      }
+      DefDef(id, annot, block)
 
     case d: InterfaceDef        => d
     case d: DataDef       => d
