@@ -145,7 +145,16 @@ class BoxUnboxInference {
       VarDef(id, annot, region, rewrite(binding))
 
     case DefDef(id, annot, binding) =>
-      DefDef(id, annot, rewriteAsBlock(binding))
+      val block = rewriteAsBlock(binding)
+      (binding, block) match {
+        case (Unbox(_), _) => ()
+        // If the binding wasn't an `Unbox` and now it is, it means that the compiler synthesized it.
+        // We therefore annotate the new `Unbox` expression with its original definition.
+        // See [[Annotations.UnboxParentDef]] for more details about this annotation.
+        case (_, u @ Unbox(_)) => C.annotate(Annotations.UnboxParentDef, u, t)
+        case (_, _) => ()
+      }
+      DefDef(id, annot, block)
 
     case d: InterfaceDef        => d
     case d: DataDef       => d
