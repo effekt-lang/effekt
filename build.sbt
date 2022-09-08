@@ -8,7 +8,7 @@ lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads a
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
-
+lazy val downloadJITBinary = taskKey[Unit]("Downloads the current JIT binaries to bin")
 
 lazy val effektVersion = "0.1.16"
 
@@ -125,6 +125,53 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       IO.delete(binary)
       IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
+    },
+
+    downloadJITBinary := {
+      import scala.util.matching.Regex
+      val log = sbt.Keys.streams.value.log
+
+      // determine OS and architecture
+      var arch = ""
+      var os = ""
+      Process("uname -m").!(sys.process.ProcessLogger({x => arch=x}))
+      Process("uname -s").!(sys.process.ProcessLogger({x => os=x}))
+
+      // Try downloading binary
+      log.info("Downloading binary for %s-%s".format(arch,os))
+      val bindir =  (ThisBuild / baseDirectory).value / "bin" / ("%s-%s".format(arch,os))
+      val binname = bindir / "rpyeffect-jit"
+
+      // Give (hopefully) useful error messages
+      val ghEC = try {
+        Process("gh release download -R se-tuebingen/jitting-effects latest -p rpyeffect-jit-%s-%s".format(arch, os)).!
+      } catch {
+        case e: java.io.IOException => {
+          if(e.getCause.isInstanceOf[java.io.IOException]
+            && "error=2,.*".r.findPrefixMatchOf(e.getCause.getMessage).isDefined) {
+            2
+          } else throw e
+        }
+      }
+      if (ghEC != 0) {
+        ghEC match {
+          case 2 => {
+            log.error("Downloading the JIT binary requires the `gh` cli tool (see cli.github.com).")
+          }
+          case 4 => {
+            log.error("As of now, the JIT binary is only available for members of the se-tuebingen org. ")
+            log.error("Downloading it requires a GitHub personal access token in GH_TOKEN. " +
+              "Alternatively, run `gh auth login` first.")
+          }
+          case _ => {
+            log.error("Download failed (error=%d)".format(ghEC))
+          }
+        }
+      } else {
+        Process("mkdir -p " + bindir).!
+        Process("mv rpyeffect-jit-%s-%s ".format(arch,os) + binname).!
+        Process("chmod +x " + binname).!
+      }
     },
 
     deploy := {

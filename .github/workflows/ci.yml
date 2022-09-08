@@ -28,6 +28,11 @@ jobs:
       with:
         node-version: '10.x'
 
+    - name: Download JIT binary
+      env:
+        GH_TOKEN: ${{ secrets.JITTING_EFFECTS_GH_TOKEN }}
+      run: sbt effektJVM/downloadJITBinary
+
     - name: Run tests
       run: sbt clean test
 
