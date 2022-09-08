@@ -182,9 +182,9 @@ object Transformer {
     Environment.from(params.map(transformParameter))
   @targetName("transformMachineArguments")
   def transformArguments(args: List[machine.Variable])(using ProgramContext, BlockContext): RegList =
-    RegList(args.map(transformArgument).filter(_.typ.registerType.isDefined).groupMap(_.typ.registerType.get)(_.id))
+    RegList(args.map(transformArgument).filterNot(_.typ.registerType.isErased).groupMap(_.typ.registerType)(_.id))
   def transformArguments(args: List[VariableDescriptor])(using ProgramContext, BlockContext): RegList =
-    RegList(args.map(transformArgument).filter(_.typ.registerType.isDefined).groupMap(_.typ.registerType.get)(_.id))
+    RegList(args.map(transformArgument).filterNot(_.typ.registerType.isErased).groupMap(_.typ.registerType)(_.id))
   def transformArguments(args: Environment)(using ProgramContext, BlockContext): RegList =
     RegList(args.locals.view.mapValues(_.map(transformArgument(_).id)).toMap)
 
@@ -215,8 +215,8 @@ object Transformer {
   case class Environment(locals: Map[RegisterType, List[VariableDescriptor]]) {
     def registerIndex(vd: VariableDescriptor): Register = {
       vd.typ.registerType match {
-        case None => ErasedRegister()
-        case Some(t) => RegisterIndex(locals.applyOrElse(t,t=>List()).indexOf(vd))
+        case RegisterType.Erased => ErasedRegister()
+        case t => RegisterIndex(locals.applyOrElse(t,t=>List()).indexOf(vd))
       }
     }
     @targetName("extended")
@@ -254,7 +254,7 @@ object Transformer {
   }
   object Environment {
     def from(vs: List[VariableDescriptor]): Environment = {
-      Environment(vs.filter(_.typ.registerType.isDefined).groupBy(_.typ.registerType.get))
+      Environment(vs.filterNot(_.typ.registerType.isErased).groupBy(_.typ.registerType))
     }
   }
 

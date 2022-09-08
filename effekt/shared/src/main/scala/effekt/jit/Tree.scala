@@ -55,11 +55,11 @@ enum Type extends Tree {
   case Integer()
   case Datatype(index: Int)
 
-  def registerType: Option[RegisterType] = this match {
-    case Unit() => None
-    case Continuation() => Some(RegisterType.Continuation)
-    case Integer() => Some(RegisterType.Integer)
-    case Datatype(index) => Some(RegisterType.Datatype)
+  def registerType: RegisterType = this match {
+    case Unit() => RegisterType.Erased
+    case Continuation() => RegisterType.Continuation
+    case Integer() => RegisterType.Integer
+    case Datatype(index) => RegisterType.Datatype
   }
 }
 
