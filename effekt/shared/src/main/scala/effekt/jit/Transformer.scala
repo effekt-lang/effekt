@@ -9,6 +9,7 @@ import effekt.machine.analysis
 import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.annotation.targetName
+import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
@@ -288,7 +289,54 @@ object Transformer {
     val newVals = transformArguments(newEnv);
     if (oldVals == newVals) return // nothing to do
     extendFrameDescriptorTo(newEnv);
-    emit(Subst(oldVals))
+
+    for(ty <- RegisterType.values) {
+      // initialize graph structure
+      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      val news = newVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      //val todo = HashMap.from((news zip olds));
+
+      val todo: mutable.HashMap[Int, mutable.HashSet[Int]] = mutable.HashMap();
+      // generate graph structure
+      for ((o, n) <- (olds zip news)) {
+        todo(o) = todo.applyOrElse(o, x => mutable.HashSet()).addOne(n);
+      }
+
+      // cut hairs
+      var changed = true;
+      while(changed) {
+        changed = false;
+        for (cur_o <- todo.keys) {
+          for(cur_n <- todo(cur_o)) {
+            if(!todo.contains(cur_n)) {
+              changed = true;
+              emit(Copy(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
+              todo(cur_o).remove(cur_n)
+              if(todo(cur_o).isEmpty) todo.remove(cur_o)
+            }
+          }
+        }
+      }
+      //assert(todo.forall(_._2.size == 1));
+
+      // rotate cycles
+      while(todo.nonEmpty) {
+        val cur_o = todo.keys.head;
+        val cur_n = todo(cur_o).head;
+        if(cur_n != cur_o) {
+          emit(Swap(ty, RegisterIndex(cur_n), RegisterIndex(cur_o)));
+        }
+        todo(cur_o) = todo(cur_n);
+        todo.remove(cur_n);
+      }
+
+      // drop unused registers
+      for(i <- 0 until BC.frameDescriptor.locals(ty)) {
+        if(!news.contains(i)) {
+          emit(Drop(ty, RegisterIndex(i)))
+        }
+      }
+    }
   }
   def ensureEnvironment(newEnvironment: Environment)(using ProgC: ProgramContext, BC: BlockContext): Unit = {
     emitSubst(newEnvironment, newEnvironment);

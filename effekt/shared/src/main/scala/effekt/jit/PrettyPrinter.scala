@@ -40,6 +40,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Datatype(index) => Some(jsonObjectSmall(ListMap("type" -> "\"adt\"", "index" -> index.toString)))
   }
 
+  def toDoc(rtpe: RegisterType): Doc = rtpe match {
+    case RegisterType.Integer => "\"int\""
+    case RegisterType.Continuation => "\"cont\""
+    case RegisterType.Datatype => "\"adt\""
+  }
+
   def toDoc(block: BasicBlock): Doc = block match {
     case BasicBlock(BlockIndex(idx), frameDescriptor, instructions, terminator) => {
       jsonObject(ListMap(
@@ -86,6 +92,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "then" -> toDoc(thenClause)))
     case IsZero(out, arg) => jsonObjectSmall(ListMap("op" -> "\"IsZero\"", "out" -> toDoc(out), "arg" -> toDoc(arg)))
     case Subst(args) => jsonObjectSmall(ListMap("op" -> "\"Subst\"", "args" -> toDoc(args)))
+    case Copy(tpe, from, to) => jsonObjectSmall(ListMap("op" -> "\"Copy\"",
+      "type" -> toDoc(tpe),
+      "from" -> toDoc(from), "to" -> toDoc(to)
+    ))
+    case Drop(tpe, reg) => jsonObjectSmall(ListMap("op" -> "\"Drop\"",
+      "type" -> toDoc(tpe), "reg" -> toDoc(reg)
+    ))
+    case Swap(tpe, a, b) => jsonObjectSmall(ListMap("op" -> "\"Swap\"",
+      "type" -> toDoc(tpe), "a" -> toDoc(a), "b" -> toDoc(b)
+    ))
     case Construct(out, adt_type, tag, args) => jsonObjectSmall(ListMap("op" -> "\"Construct\"",
       "out" -> toDoc(out),
       "type" -> adt_type.toString,
