@@ -3,10 +3,9 @@ package jit
 
 import effekt.context.Context
 import effekt.symbols.{BlockSymbol, ValueSymbol}
-import effekt.jit.Analysis.*
+import effekt.jit.BlockNumbering.*
 import effekt.machine
 import effekt.machine.analysis
-import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.annotation.targetName
 import scala.collection.mutable
@@ -283,6 +282,8 @@ object Transformer {
     val oldVals = transformArguments(vals);
     emitSubst(newEnv, oldVals)
   }
+
+  // TODO add ASCII art explaining how we generate substitutions.
   def emitSubst(newEnv: Environment, oldVals: RegList)
                (using ProgC: ProgramContext, BC: BlockContext): Unit = {
     BC.environment = newEnv;
@@ -290,49 +291,63 @@ object Transformer {
     if (oldVals == newVals) return // nothing to do
     extendFrameDescriptorTo(newEnv);
 
-    for(ty <- RegisterType.values) {
+    for (ty <- RegisterType.values) {
       // initialize graph structure
-      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
-      val news = newVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map { case RegisterIndex(i) => i; case _ => -1 }
+      val news = newVals.regs.applyOrElse(ty, ty => List()).map { case RegisterIndex(i) => i; case _ => -1 }
       //val todo = HashMap.from((news zip olds));
 
-      val todo: mutable.HashMap[Int, mutable.HashSet[Int]] = mutable.HashMap();
+      // A graph where
+      //   nodes represent registers
+      //   edges represent data flow
+      //     source: register to move from
+      //     sink: register to move to
+      //
+      // In the representation of graphs,
+      //   keys (Int) are sources
+      //   values (mutable.HashSet[Int]) are all targets
+      val todo: mutable.HashMap[Int, mutable.HashSet[Int]] = mutable.HashMap()
+
       // generate graph structure
-      for ((o, n) <- (olds zip news)) {
-        todo(o) = todo.applyOrElse(o, x => mutable.HashSet()).addOne(n);
+      for ((source, target) <- olds zip news) {
+        val targets = todo.getOrElse(source, mutable.HashSet())
+        todo(source) = targets.addOne(target);
       }
 
       // cut hairs
       var changed = true;
-      while(changed) {
+      while (changed) {
         changed = false;
-        for (cur_o <- todo.keys) {
-          for(cur_n <- todo(cur_o)) {
-            if(!todo.contains(cur_n)) {
-              changed = true;
-              emit(Copy(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
-              todo(cur_o).remove(cur_n)
-              if(todo(cur_o).isEmpty) todo.remove(cur_o)
-            }
-          }
+        for (source <- todo.keys; target <- todo(source); if !todo.contains(target)) {
+
+          emit(Copy(ty, RegisterIndex(source), RegisterIndex(target)));
+          todo(source).remove(target)
+          changed = true
+
+          // no targets left for this source, drop it.
+          if (todo(source).isEmpty) todo.remove(source)
         }
       }
-      //assert(todo.forall(_._2.size == 1));
 
       // rotate cycles
-      while(todo.nonEmpty) {
-        val cur_o = todo.keys.head;
-        val cur_n = todo(cur_o).head;
-        if(cur_n != cur_o) {
-          emit(Swap(ty, RegisterIndex(cur_n), RegisterIndex(cur_o)));
+      while (todo.nonEmpty) {
+
+        // get a "random" source from the graph
+        val (source, targets) = todo.head
+
+        assert(targets.size == 1)
+        val target = targets.head;
+
+        if (target != source) {
+          emit(Swap(ty, RegisterIndex(target), RegisterIndex(source)));
         }
-        todo(cur_o) = todo(cur_n);
-        todo.remove(cur_n);
+        todo(source) = todo(target);
+        todo.remove(target);
       }
 
       // drop unused registers
-      for(i <- 0 until BC.frameDescriptor.locals(ty)) {
-        if(!news.contains(i)) {
+      for (i <- 0 until BC.frameDescriptor.locals(ty)) {
+        if (!news.contains(i)) {
           emit(Drop(ty, RegisterIndex(i)))
         }
       }
@@ -353,7 +368,23 @@ object Transformer {
     ProgC.frameSize = max(ProgC.frameSize, fd);
   }
 
-  extension(self: RegList) {
+  extension[T] (b: mutable.ListBuffer[T]) {
+    /**
+     * Get the index of the given element or insert at end
+     *
+     * @return The index of `el` in the `ListBuffer`
+     */
+    def indexOfOrInsert(el: T): Int = {
+      var index = b.indexOf(el);
+      if (index == -1) {
+        index = b.length;
+        b.addOne(el);
+      }
+      index
+    }
+  }
+
+  extension (self: RegList) {
     @targetName("removeAll")
     def --(other: RegList): RegList = {
       RegList(RegisterType.values.map(t => t -> (self.regs.applyOrElse(t, t => List())

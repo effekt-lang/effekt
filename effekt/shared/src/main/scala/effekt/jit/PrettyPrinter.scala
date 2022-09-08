@@ -44,6 +44,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case RegisterType.Integer => "\"int\""
     case RegisterType.Continuation => "\"cont\""
     case RegisterType.Datatype => "\"adt\""
+    case _ => sys error "Cannot print erased register type"
   }
 
   def toDoc(block: BasicBlock): Doc = block match {
