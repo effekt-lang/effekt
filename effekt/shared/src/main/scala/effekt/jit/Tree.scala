@@ -13,7 +13,7 @@ case class Program(
 ) extends Tree
 
 case class BasicBlock(
-  id: BlockLabel,
+  id: String,
   frameDescriptor: FrameDescriptor,
   instructions: List[Instruction],
   terminator: Terminator) extends Tree // TODO: frame descriptor
@@ -90,6 +90,3 @@ sealed trait BlockLabel
 case class BlockName(name: String) extends BlockLabel
 
 case class BlockIndex(index: Int) extends BlockLabel
-
-// TODO remove
-class FreshBlockLabel() extends BlockLabel

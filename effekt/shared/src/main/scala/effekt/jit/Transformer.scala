@@ -12,22 +12,22 @@ import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
-  def transform(mainSymbol: BlockLabel, program: machine.Program): Program =
+  def transform(mainSymbol: String, program: machine.Program): Program =
     program match {
       case machine.Program(declarations, main) =>
         implicit val ProgC: ProgramContext = new ProgramContext();
 
         val freeVars = List();//machine.freeVariables(main).toList;
 
-        val entryBlock = transform(mainSymbol, freeVars, main);
+        val entryBlock = transform("?entrypoint", freeVars, main);
 
         val datatypes = ProgC.datatypes.map(tpe => tpe.map(pars => pars.map(transform))).toList;
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, ProgC.frameSize);
-        numberBlocks(compiledProgram)
+        numberBlocks(ProgC.symbols.toMap, compiledProgram)
     }
 
-  def transform(label: BlockLabel, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
+  def transform(label: String, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val frameDescriptor = env.frameDescriptor;
 
     implicit val BC: BlockContext = new BlockContext(frameDescriptor, env);
@@ -38,7 +38,7 @@ object Transformer {
 
     BasicBlock(label, BC.frameDescriptor, instructions, terminator)
   }
-  def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
+  def transform(label: String, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val env = transformParameters(locals);
     transform(label, env, body)
   }
@@ -46,7 +46,7 @@ object Transformer {
   def transform(stmt: machine.Statement)(using ProgC: ProgramContext, BC: BlockContext): Terminator = {
     stmt match
       case machine.Def(machine.Label(name, environment), body, rest) => {
-        emit(transform(BlockName(name), environment, body));
+        emitNamed(name, transform(name, environment, body));
         transform(rest)
       }
       case machine.Jump(machine.Label(name, environment)) => {
@@ -72,15 +72,15 @@ object Transformer {
         case Type.Datatype(adtType) =>
           Match(adtType, transformArgument(v).id, for (clause <- clauses) yield {
             val (closesOver, params, block) = transformInline(clause, reuse=false);
-            emit(block);
-            Clause(params, block.id)
+            val label = emit(block);
+            Clause(params, label)
           })
         case Type.Integer() => {
           val List(elseClause, thenClause) = clauses;
           val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);
           val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause)
-          emit(elseBlock);
-          emit(IfZero(transformArgument(v).id, Clause(elseArgs, elseBlock.id)));
+          val elseLabel = emit(elseBlock);
+          emit(IfZero(transformArgument(v).id, Clause(elseArgs, elseLabel)));
           emitInlined(thenBlock)
         }
         case Type.Unit() => {
@@ -153,12 +153,11 @@ object Transformer {
   def transformClosure(clause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
     val machine.Clause(parameters, body) = clause;
     val freeVars = transformParameters(machine.analysis.freeVariables(clause).toList);
-    val label = new FreshBlockLabel();
     val frees = transformArguments(freeVars);
     val params = transformParameters(parameters);
     val locals = freeVars ++ params;
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    emit(transform(label, locals, body));
+    val label = emit(transform("?generated", locals, body));
     (frees, args, label)
   }
 
@@ -173,7 +172,7 @@ object Transformer {
       BC.environment ++ params
     }
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val block = transform(new FreshBlockLabel(), locals, body);
+    val block = transform("?generated", locals, body);
     extendFrameDescriptorTo(block.frameDescriptor);
     (transformArguments(BC.environment), args, block)
   }
@@ -204,12 +203,21 @@ object Transformer {
 
   class ProgramContext() {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
-    val datatypes: ListBuffer[List[machine.Signature]] = ListBuffer();
+    val datatypes: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
     var frameSize: jit.FrameDescriptor = FrameDescriptor(Map());
+    var symbols: mutable.HashMap[String, BlockIndex] = mutable.HashMap();
   }
 
-  def emit(block: BasicBlock)(using ProgC: ProgramContext): Unit = {
+  def emit(block: BasicBlock)(using ProgC: ProgramContext): BlockIndex = {
     ProgC.basicBlocks.addOne(block)
+    // This is the correct index since the entry block is missing in [[ProgC.basicBlocks]]
+    BlockIndex(ProgC.basicBlocks.size)
+  }
+
+  def emitNamed(name: String, block: BasicBlock)(using ProgC: ProgramContext): Unit = {
+    ProgC.basicBlocks.addOne(block)
+    // This is the correct index since the entry block is missing in [[ProgC.basicBlocks]]
+    ProgC.symbols.addOne(name, BlockIndex(ProgC.basicBlocks.size))
   }
 
   case class Environment(locals: Map[RegisterType, List[VariableDescriptor]]) {

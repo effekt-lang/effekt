@@ -48,16 +48,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(block: BasicBlock): Doc = block match {
-    case BasicBlock(BlockIndex(idx), frameDescriptor, instructions, terminator) => {
-      jsonObject(ListMap(
-        "label" -> idx.toString,
-        "frameDescriptor" -> toDoc(frameDescriptor),
-        "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
-      ))
-    }
     case BasicBlock(id, frameDescriptor, instructions, terminator) => {
       jsonObject(ListMap(
-        "label" -> dquotes(id.toString),
+        "label" -> dquotes(id),
         "frameDescriptor" -> toDoc(frameDescriptor),
         "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
       ))
