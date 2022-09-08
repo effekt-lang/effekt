@@ -311,6 +311,13 @@ object Transformer {
       //     source: register to move from
       //     sink: register to move to
       //
+      // Example graph
+      //
+      //   ┌►1─┐      ┌────3◄────┐
+      //   │   │      │          │
+      //   │   │      ▼          │
+      //   └─2◄┘      4─────────►5─────►6─────►7
+      //
       // In the representation of graphs,
       //   keys (Int) are sources
       //   values (mutable.HashSet[Int]) are all targets
@@ -322,11 +329,18 @@ object Transformer {
         todo(source) = targets.addOne(target);
       }
 
-      // cut hairs
+      // 1. cut hairs (with COPYs)
       var changed = true;
       while (changed) {
         changed = false;
         for (source <- todo.keys; target <- todo(source); if !todo.contains(target)) {
+          //                                                                               generate COPY
+          //   ┌►1─┐      ┌────3◄────┐                          ┌►1─┐      ┌────3◄────┐      and remove
+          //   │   │      │          │                          │   │      │          │         |
+          //   │   │      ▼          │                 ~~~>     │   │      ▼          │         v
+          //   └─2◄┘      4─────────►5─────►6─────►7            └─2◄┘      4─────────►5─────►6──/──►7
+          //                                ^      ^                                         ^      ^
+          //                             source   target                                  source   target
 
           emit(Copy(ty, RegisterIndex(source), RegisterIndex(target)));
           todo(source).remove(target)
@@ -337,8 +351,18 @@ object Transformer {
         }
       }
 
-      // rotate cycles
+      // 2. rotate cycles (with SWAPs)
       while (todo.nonEmpty) {
+        //
+        //  ┌►1─┐      ┌────3◄────┐            ┌►1─┐      ┌────3◄────┐
+        //  │   │      │          │            │   │      │    ▲     │
+        //  │   │      ▼          │    ~~~>    │   │      ▼    │     │
+        //  └─2◄┘      4─────────►5            └─2◄┘      4────┴─/──►5
+        //             ^          ^                       ^    ^     ^
+        //          source      target                 source  |  target
+        //                                                     |
+        //                                                generate SWAP
+        //                                            and change edge target
 
         // get a "random" source from the graph
         val (source, targets) = todo.head
@@ -353,7 +377,7 @@ object Transformer {
         todo.remove(target);
       }
 
-      // drop unused registers
+      // 3. drop unused registers (with DROPs)
       for (i <- 0 until BC.frameDescriptor.locals(ty)) {
         if (!news.contains(i)) {
           emit(Drop(ty, RegisterIndex(i)))
