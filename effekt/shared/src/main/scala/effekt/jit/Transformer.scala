@@ -72,16 +72,16 @@ object Transformer {
         transform(typ) match {
         case Type.Datatype(adtType) =>
           Match(adtType, transformArgument(v).id, for (clause <- clauses) yield {
-            val (closesOver, args, block) = transformInline(clause, reuse=false);
+            val (closesOver, params, block) = transformInline(clause, reuse=false);
             emit(block);
-            Clause(closesOver, block.id)
+            Clause(params, block.id)
           })
         case Type.Integer() => {
           val List(elseClause, thenClause) = clauses;
           val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);
           val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause)
           emit(elseBlock);
-          emit(IfZero(transformArgument(v).id, Clause(elseClosesOver, elseBlock.id)));
+          emit(IfZero(transformArgument(v).id, Clause(elseArgs, elseBlock.id)));
           emitInlined(thenBlock)
         }
         case Type.Unit() => {
