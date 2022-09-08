@@ -4,22 +4,19 @@ package jit
 import effekt.context.Context
 import effekt.symbols.{BlockSymbol, Symbol, ValueSymbol}
 
-sealed trait Tree extends Product {
-  def inheritPosition(from: source.Tree)(implicit C: Context): this.type = {
-    C.positions.dupPos(from, this);
-    this
-  }
-}
+sealed trait Tree
 
-case class Program(blocks: List[BasicBlock],
-                   datatypes: List[List[List[Type]]],
-                   frameSize: FrameDescriptor
-                  ) extends Tree
+case class Program(
+  blocks: List[BasicBlock],
+  datatypes: List[List[List[Type]]],
+  frameSize: FrameDescriptor
+) extends Tree
 
-case class BasicBlock(id: BlockLabel,
-                      frameDescriptor: FrameDescriptor,
-                      instructions: List[Instruction],
-                      terminator: Terminator) extends Tree // TODO: frame descriptor
+case class BasicBlock(
+  id: String,
+  frameDescriptor: FrameDescriptor,
+  instructions: List[Instruction],
+  terminator: Terminator) extends Tree // TODO: frame descriptor
 
 case class VariableDescriptor(typ: Type, id: Register) extends Tree
 case class FrameDescriptor(locals: Map[RegisterType, Int]) extends Tree
@@ -52,22 +49,28 @@ case class Jump(target: BlockLabel) extends Terminator
 case class Resume(cont: Register) extends Terminator
 case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause]) extends Terminator
 
-sealed trait Type extends Tree
-object Type {
-  case class Unit() extends Type
-  case class Continuation() extends Type
-  case class Integer() extends Type
-  case class Datatype(index: Int) extends Type
+enum Type extends Tree {
+  case Unit()
+  case Continuation()
+  case Integer()
+  case Datatype(index: Int)
 
-  extension(self: Type) def registerType: Option[RegisterType] = {
-    self match
-      case Unit() => None
-      case Continuation() => Some(RegisterType.Continuation)
-      case Integer() => Some(RegisterType.Integer)
-      case Datatype(index) => Some(RegisterType.Datatype)
+  def registerType: RegisterType = this match {
+    case Unit() => RegisterType.Erased
+    case Continuation() => RegisterType.Continuation
+    case Integer() => RegisterType.Integer
+    case Datatype(index) => RegisterType.Datatype
   }
 }
-enum RegisterType { case Integer, Continuation, Datatype }
+
+enum RegisterType {
+  case Integer, Continuation, Datatype, Erased
+
+  def isErased: Boolean = this match {
+    case Erased => true
+    case _ => false
+  }
+}
 
 type ConstructorTag = Int
 
@@ -77,6 +80,13 @@ case class RegisterIndex(index: Int) extends Register
 case class ErasedRegister() extends Register
 
 sealed trait BlockLabel
+
+/**
+ * Are used to represent named blocks from machine [[machine.Def]]; can potentially
+ * model forward references (during transformation).
+ *
+ * Invariant: After post-processing ([[BlockNumbering]]) all block names are replaced by their indices ([[BlockIndex]])
+ */
 case class BlockName(name: String) extends BlockLabel
+
 case class BlockIndex(index: Int) extends BlockLabel
-class FreshBlockLabel() extends BlockLabel

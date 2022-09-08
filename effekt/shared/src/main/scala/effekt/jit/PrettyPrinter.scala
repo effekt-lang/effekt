@@ -44,19 +44,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case RegisterType.Integer => "\"int\""
     case RegisterType.Continuation => "\"cont\""
     case RegisterType.Datatype => "\"adt\""
+    case _ => sys error "Cannot print erased register type"
   }
 
   def toDoc(block: BasicBlock): Doc = block match {
-    case BasicBlock(BlockIndex(idx), frameDescriptor, instructions, terminator) => {
-      jsonObject(ListMap(
-        "label" -> idx.toString,
-        "frameDescriptor" -> toDoc(frameDescriptor),
-        "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
-      ))
-    }
     case BasicBlock(id, frameDescriptor, instructions, terminator) => {
       jsonObject(ListMap(
-        "label" -> dquotes(id.toString),
+        "label" -> dquotes(id),
         "frameDescriptor" -> toDoc(frameDescriptor),
         "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
       ))

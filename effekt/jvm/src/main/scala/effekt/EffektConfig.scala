@@ -108,6 +108,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     case "chez-callcc" => path / "libraries" / "chez" / "callcc"
     case "chez-lift" => path / "libraries" / "chez" / "lift"
     case "llvm" => path / "libraries" / "llvm"
+    case "jit" => path / "libraries" / "jit"
     case b => sys error s"Unrecognized backend ${ b }"
   }
 

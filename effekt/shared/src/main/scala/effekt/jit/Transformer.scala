@@ -3,32 +3,31 @@ package jit
 
 import effekt.context.Context
 import effekt.symbols.{BlockSymbol, ValueSymbol}
-import effekt.jit.Analysis.*
+import effekt.jit.BlockNumbering.*
 import effekt.machine
 import effekt.machine.analysis
-import effekt.jit.Analysis.indexOfOrInsert
 
 import scala.annotation.targetName
 import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
-  def transform(mainSymbol: BlockLabel, program: machine.Program): Program =
+  def transform(mainSymbol: String, program: machine.Program): Program =
     program match {
       case machine.Program(declarations, main) =>
         implicit val ProgC: ProgramContext = new ProgramContext();
 
         val freeVars = List();//machine.freeVariables(main).toList;
 
-        val entryBlock = transform(mainSymbol, freeVars, main);
+        val entryBlock = transform("?entrypoint", freeVars, main);
 
         val datatypes = ProgC.datatypes.map(tpe => tpe.map(pars => pars.map(transform))).toList;
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, ProgC.frameSize);
-        numberBlocks(compiledProgram)
+        numberBlocks(ProgC.symbols.toMap, compiledProgram)
     }
 
-  def transform(label: BlockLabel, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
+  def transform(label: String, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val frameDescriptor = env.frameDescriptor;
 
     implicit val BC: BlockContext = new BlockContext(frameDescriptor, env);
@@ -39,7 +38,7 @@ object Transformer {
 
     BasicBlock(label, BC.frameDescriptor, instructions, terminator)
   }
-  def transform(label: BlockLabel, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
+  def transform(label: String, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
     val env = transformParameters(locals);
     transform(label, env, body)
   }
@@ -47,7 +46,7 @@ object Transformer {
   def transform(stmt: machine.Statement)(using ProgC: ProgramContext, BC: BlockContext): Terminator = {
     stmt match
       case machine.Def(machine.Label(name, environment), body, rest) => {
-        emit(transform(BlockName(name), environment, body));
+        emitNamed(name, transform(name, environment, body));
         transform(rest)
       }
       case machine.Jump(machine.Label(name, environment)) => {
@@ -73,15 +72,15 @@ object Transformer {
         case Type.Datatype(adtType) =>
           Match(adtType, transformArgument(v).id, for (clause <- clauses) yield {
             val (closesOver, params, block) = transformInline(clause, reuse=false);
-            emit(block);
-            Clause(params, block.id)
+            val label = emit(block);
+            Clause(params, label)
           })
         case Type.Integer() => {
           val List(elseClause, thenClause) = clauses;
           val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);
           val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause)
-          emit(elseBlock);
-          emit(IfZero(transformArgument(v).id, Clause(elseArgs, elseBlock.id)));
+          val elseLabel = emit(elseBlock);
+          emit(IfZero(transformArgument(v).id, Clause(elseArgs, elseLabel)));
           emitInlined(thenBlock)
         }
         case Type.Unit() => {
@@ -154,12 +153,11 @@ object Transformer {
   def transformClosure(clause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
     val machine.Clause(parameters, body) = clause;
     val freeVars = transformParameters(machine.analysis.freeVariables(clause).toList);
-    val label = new FreshBlockLabel();
     val frees = transformArguments(freeVars);
     val params = transformParameters(parameters);
     val locals = freeVars ++ params;
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    emit(transform(label, locals, body));
+    val label = emit(transform("?generated", locals, body));
     (frees, args, label)
   }
 
@@ -174,7 +172,7 @@ object Transformer {
       BC.environment ++ params
     }
     val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val block = transform(new FreshBlockLabel(), locals, body);
+    val block = transform("?generated", locals, body);
     extendFrameDescriptorTo(block.frameDescriptor);
     (transformArguments(BC.environment), args, block)
   }
@@ -183,9 +181,9 @@ object Transformer {
     Environment.from(params.map(transformParameter))
   @targetName("transformMachineArguments")
   def transformArguments(args: List[machine.Variable])(using ProgramContext, BlockContext): RegList =
-    RegList(args.map(transformArgument).filter(_.typ.registerType.isDefined).groupMap(_.typ.registerType.get)(_.id))
+    RegList(args.map(transformArgument).filterNot(_.typ.registerType.isErased).groupMap(_.typ.registerType)(_.id))
   def transformArguments(args: List[VariableDescriptor])(using ProgramContext, BlockContext): RegList =
-    RegList(args.map(transformArgument).filter(_.typ.registerType.isDefined).groupMap(_.typ.registerType.get)(_.id))
+    RegList(args.map(transformArgument).filterNot(_.typ.registerType.isErased).groupMap(_.typ.registerType)(_.id))
   def transformArguments(args: Environment)(using ProgramContext, BlockContext): RegList =
     RegList(args.locals.view.mapValues(_.map(transformArgument(_).id)).toMap)
 
@@ -205,19 +203,28 @@ object Transformer {
 
   class ProgramContext() {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
-    val datatypes: ListBuffer[List[machine.Signature]] = ListBuffer();
+    val datatypes: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
     var frameSize: jit.FrameDescriptor = FrameDescriptor(Map());
+    var symbols: mutable.HashMap[String, BlockIndex] = mutable.HashMap();
   }
 
-  def emit(block: BasicBlock)(using ProgC: ProgramContext): Unit = {
+  def emit(block: BasicBlock)(using ProgC: ProgramContext): BlockIndex = {
     ProgC.basicBlocks.addOne(block)
+    // This is the correct index since the entry block is missing in [[ProgC.basicBlocks]]
+    BlockIndex(ProgC.basicBlocks.size)
+  }
+
+  def emitNamed(name: String, block: BasicBlock)(using ProgC: ProgramContext): Unit = {
+    ProgC.basicBlocks.addOne(block)
+    // This is the correct index since the entry block is missing in [[ProgC.basicBlocks]]
+    ProgC.symbols.addOne(name, BlockIndex(ProgC.basicBlocks.size))
   }
 
   case class Environment(locals: Map[RegisterType, List[VariableDescriptor]]) {
     def registerIndex(vd: VariableDescriptor): Register = {
       vd.typ.registerType match {
-        case None => ErasedRegister()
-        case Some(t) => RegisterIndex(locals.applyOrElse(t,t=>List()).indexOf(vd))
+        case RegisterType.Erased => ErasedRegister()
+        case t => RegisterIndex(locals.applyOrElse(t,t=>List()).indexOf(vd))
       }
     }
     @targetName("extended")
@@ -255,7 +262,7 @@ object Transformer {
   }
   object Environment {
     def from(vs: List[VariableDescriptor]): Environment = {
-      Environment(vs.filter(_.typ.registerType.isDefined).groupBy(_.typ.registerType.get))
+      Environment(vs.filterNot(_.typ.registerType.isErased).groupBy(_.typ.registerType))
     }
   }
 
@@ -283,6 +290,8 @@ object Transformer {
     val oldVals = transformArguments(vals);
     emitSubst(newEnv, oldVals)
   }
+
+  // TODO add ASCII art explaining how we generate substitutions.
   def emitSubst(newEnv: Environment, oldVals: RegList)
                (using ProgC: ProgramContext, BC: BlockContext): Unit = {
     BC.environment = newEnv;
@@ -290,49 +299,87 @@ object Transformer {
     if (oldVals == newVals) return // nothing to do
     extendFrameDescriptorTo(newEnv);
 
-    for(ty <- RegisterType.values) {
+    for (ty <- RegisterType.values) {
       // initialize graph structure
-      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
-      val news = newVals.regs.applyOrElse(ty, ty => List()).map({case RegisterIndex(i) => i; case _ => -1});
+      val olds = oldVals.regs.applyOrElse(ty, ty => List()).map { case RegisterIndex(i) => i; case _ => -1 }
+      val news = newVals.regs.applyOrElse(ty, ty => List()).map { case RegisterIndex(i) => i; case _ => -1 }
       //val todo = HashMap.from((news zip olds));
 
-      val todo: mutable.HashMap[Int, mutable.HashSet[Int]] = mutable.HashMap();
+      // A graph where
+      //   nodes represent registers
+      //   edges represent data flow
+      //     source: register to move from
+      //     sink: register to move to
+      //
+      // Example graph
+      //
+      //   ┌►1─┐      ┌────3◄────┐
+      //   │   │      │          │
+      //   │   │      ▼          │
+      //   └─2◄┘      4─────────►5─────►6─────►7
+      //
+      // In the representation of graphs,
+      //   keys (Int) are sources
+      //   values (mutable.HashSet[Int]) are all targets
+      val todo: mutable.HashMap[Int, mutable.HashSet[Int]] = mutable.HashMap()
+
       // generate graph structure
-      for ((o, n) <- (olds zip news)) {
-        todo(o) = todo.applyOrElse(o, x => mutable.HashSet()).addOne(n);
+      for ((source, target) <- olds zip news) {
+        val targets = todo.getOrElse(source, mutable.HashSet())
+        todo(source) = targets.addOne(target);
       }
 
-      // cut hairs
+      // 1. cut hairs (with COPYs)
       var changed = true;
-      while(changed) {
+      while (changed) {
         changed = false;
-        for (cur_o <- todo.keys) {
-          for(cur_n <- todo(cur_o)) {
-            if(!todo.contains(cur_n)) {
-              changed = true;
-              emit(Copy(ty, RegisterIndex(cur_o), RegisterIndex(cur_n)));
-              todo(cur_o).remove(cur_n)
-              if(todo(cur_o).isEmpty) todo.remove(cur_o)
-            }
-          }
+        for (source <- todo.keys; target <- todo(source); if !todo.contains(target)) {
+          //                                                                               generate COPY
+          //   ┌►1─┐      ┌────3◄────┐                          ┌►1─┐      ┌────3◄────┐      and remove
+          //   │   │      │          │                          │   │      │          │         |
+          //   │   │      ▼          │                 ~~~>     │   │      ▼          │         v
+          //   └─2◄┘      4─────────►5─────►6─────►7            └─2◄┘      4─────────►5─────►6──/──►7
+          //                                ^      ^                                         ^      ^
+          //                             source   target                                  source   target
+
+          emit(Copy(ty, RegisterIndex(source), RegisterIndex(target)));
+          todo(source).remove(target)
+          changed = true
+
+          // no targets left for this source, drop it.
+          if (todo(source).isEmpty) todo.remove(source)
         }
       }
-      //assert(todo.forall(_._2.size == 1));
 
-      // rotate cycles
-      while(todo.nonEmpty) {
-        val cur_o = todo.keys.head;
-        val cur_n = todo(cur_o).head;
-        if(cur_n != cur_o) {
-          emit(Swap(ty, RegisterIndex(cur_n), RegisterIndex(cur_o)));
+      // 2. rotate cycles (with SWAPs)
+      while (todo.nonEmpty) {
+        //
+        //  ┌►1─┐      ┌────3◄────┐            ┌►1─┐      ┌────3◄────┐
+        //  │   │      │          │            │   │      │    ▲     │
+        //  │   │      ▼          │    ~~~>    │   │      ▼    │     │
+        //  └─2◄┘      4─────────►5            └─2◄┘      4────┴─/──►5
+        //             ^          ^                       ^    ^     ^
+        //          source      target                 source  |  target
+        //                                                     |
+        //                                                generate SWAP
+        //                                            and change edge target
+
+        // get a "random" source from the graph
+        val (source, targets) = todo.head
+
+        assert(targets.size == 1)
+        val target = targets.head;
+
+        if (target != source) {
+          emit(Swap(ty, RegisterIndex(target), RegisterIndex(source)));
         }
-        todo(cur_o) = todo(cur_n);
-        todo.remove(cur_n);
+        todo(source) = todo(target);
+        todo.remove(target);
       }
 
-      // drop unused registers
-      for(i <- 0 until BC.frameDescriptor.locals(ty)) {
-        if(!news.contains(i)) {
+      // 3. drop unused registers (with DROPs)
+      for (i <- 0 until BC.frameDescriptor.locals(ty)) {
+        if (!news.contains(i)) {
           emit(Drop(ty, RegisterIndex(i)))
         }
       }
@@ -353,7 +400,23 @@ object Transformer {
     ProgC.frameSize = max(ProgC.frameSize, fd);
   }
 
-  extension(self: RegList) {
+  extension[T] (b: mutable.ListBuffer[T]) {
+    /**
+     * Get the index of the given element or insert at end
+     *
+     * @return The index of `el` in the `ListBuffer`
+     */
+    def indexOfOrInsert(el: T): Int = {
+      var index = b.indexOf(el);
+      if (index == -1) {
+        index = b.length;
+        b.addOne(el);
+      }
+      index
+    }
+  }
+
+  extension (self: RegList) {
     @targetName("removeAll")
     def --(other: RegList): RegList = {
       RegList(RegisterType.values.map(t => t -> (self.regs.applyOrElse(t, t => List())
