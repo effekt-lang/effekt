@@ -94,16 +94,16 @@ object Transformer {
         }
       }
       case machine.New(v @ machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
-        val (args, _, target) = transformClosure(clause); // TODO
+        val (args, _, target) = transformClosure(clause);
         emit(NewStack(transformArgument(v).id, target, args));
         transform(rest)
       }
-      case machine.New(name, clauses, rest) => ???
+      case machine.New(name, clauses, rest) => ??? // TODO Implement codata
       case machine.Invoke(v @ machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
         ensureEnvironment(transformParameters(args));
         Resume(transformArgument(v).id)
       }
-      case machine.Invoke(value, tag, environment) => ???
+      case machine.Invoke(value, tag, environment) => ??? // TODO Implement codata
       case machine.PushFrame(frame, rest) => {
         val (args, _, target) = transformClosure(frame);
         emit(Push(target, args));
@@ -145,7 +145,7 @@ object Transformer {
       case machine.Positive(List(List(),List())) => Type.Integer() // Boolean
       case machine.Positive(alternatives) => Type.Datatype(PC.datatypes.indexOfOrInsert(alternatives))
       case machine.Negative(contType :: Nil) => Type.Continuation()
-      case machine.Negative(alternatives) => ???
+      case machine.Negative(alternatives) => ??? // TODO Implement codata
       case machine.Type.Int() => Type.Integer()
       case machine.Type.Stack() => Type.Continuation()
   }
@@ -291,7 +291,6 @@ object Transformer {
     emitSubst(newEnv, oldVals)
   }
 
-  // TODO add ASCII art explaining how we generate substitutions.
   def emitSubst(newEnv: Environment, oldVals: RegList)
                (using ProgC: ProgramContext, BC: BlockContext): Unit = {
     BC.environment = newEnv;
