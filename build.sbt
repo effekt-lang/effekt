@@ -182,6 +182,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     install := {
       assembleBinary.value
+      downloadJITBinary.value
       Process("npm pack").!!
       Process(s"npm install -g effekt-${effektVersion}.tgz").!!
     },
