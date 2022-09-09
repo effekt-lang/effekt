@@ -159,7 +159,9 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       C.error(s"Unsupported platform ${platform}. Currently supported platforms: ${platforms.mkString(", ")}");
       return
     }
-    val runCommand = Process(Seq(s"./bin/${platform}/rpyeffect-jit", jitPath)) // TODO use path independent of cwd
+    val jitBinary = C.config.findJITBinary(platform)
+
+    val runCommand = Process(Seq(jitBinary.unixPath, jitPath)) // TODO use path independent of cwd
     C.config.output().emit(runCommand.!!)
   }
 

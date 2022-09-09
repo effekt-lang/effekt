@@ -37,6 +37,12 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     required = false
   )
 
+  val jitBinaryPath: ScallopOption[File] = opt[File](
+    "jit-binary",
+    descr = "Path to JIT binary to be used",
+    required = false
+  )
+
   val backend: ScallopOption[String] = choice(
     choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "jit"),
     name = "backend",
@@ -92,6 +98,41 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     }
 
     sys.error("Cannot find path to standard library")
+  }
+
+  /**
+   * Tries to find the path to the JIT binary. Proceeds in the following order:
+   * 1) specified as part of the settings arg `jit-binary`
+   * 2) specified in an environment variable `EFFEKT_JIT_BIN`
+   * 3) relative to the current working directory
+   * 4) relative to the executed JAR file (effekt.jar)
+   */
+  def findJITBinary(platform: String): effekt.util.paths.File = {
+    import effekt.util.paths.file
+
+    val binaryName = s"${platform}/rpyeffect-jit";
+
+    // 1) in config
+    jitBinaryPath.foreach( path => return path )
+
+    // 2) iin Environment variable EFFEKT_BIN
+    if (System.getenv.containsKey("EFFEKT_JIT_BIN")) {
+      return System.getenv("EFFEKT_JIT_BIN")
+    }
+
+    // 3) in PWD
+    val pwd = file(".")
+    if((pwd / "bin" / binaryName).exists) {
+      return (pwd / "bin" / binaryName)
+    }
+
+    // 4) next to JAR
+    val jarPath = effekt.util.paths.file(getClass.getProtectionDomain.getCodeSource.getLocation.toURI).parent;
+    if((jarPath / binaryName).exists) {
+      return (jarPath / binaryName)
+    }
+
+    sys error "Cannot find path to the JIT binary"
   }
 
   lazy val libPath: File = findStdLib.canonicalPath.toFile
