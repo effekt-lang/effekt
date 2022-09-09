@@ -89,7 +89,7 @@ object Transformer {
           emitInlined(block)
         }
         case Type.Continuation() => {
-          ???
+          sys error "Fatal error: Trying to match on continuation"
         }
         }
       }
