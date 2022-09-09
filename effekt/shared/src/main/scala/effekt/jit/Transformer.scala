@@ -150,29 +150,29 @@ object Transformer {
       case machine.Type.Stack() => Type.Continuation()
   }
 
-  def transformClosure(clause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
-    val machine.Clause(parameters, body) = clause;
-    val freeVars = transformParameters(machine.analysis.freeVariables(clause).toList);
-    val frees = transformArguments(freeVars);
-    val params = transformParameters(parameters);
-    val locals = freeVars ++ params;
-    val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val label = emit(transform("?generated", locals, body));
-    (frees, args, label)
+  def transformClosure(machineClause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {
+    val machine.Clause(machineParams, machineBody) = machineClause;
+    val freeParams = transformParameters(machine.analysis.freeVariables(machineClause).toList);
+    val freeArgs = transformArguments(freeParams);
+    val jitParams = transformParameters(machineParams);
+    val locals = freeParams ++ jitParams;
+    val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
+    val label = emit(transform("?generated", locals, machineBody));
+    (freeArgs, args, label)
   }
 
-  def transformInline(clause: machine.Clause, reuse: Boolean = true)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
-    val machine.Clause(parameters, body) = clause;
-    val params = transformParameters(parameters);
+  def transformInline(machineClause: machine.Clause, reuse: Boolean = true)(using ProgC: ProgramContext, BC: BlockContext): (RegList, RegList, BasicBlock) = {
+    val machine.Clause(machineParams, machineBody) = machineClause;
+    val jitParams = transformParameters(machineParams);
     val locals = if (reuse) then {
-      val frees = transformArguments(analysis.freeVariables(clause).toList);
+      val frees = transformArguments(analysis.freeVariables(machineClause).toList);
       val reusable = transformArguments(BC.environment) -- frees;
-      BC.environment.extendedReusing(params, reusable)
+      BC.environment.extendedReusing(jitParams, reusable)
     } else {
-      BC.environment ++ params
+      BC.environment ++ jitParams
     }
-    val args = RegList(params.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
-    val block = transform("?generated", locals, body);
+    val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
+    val block = transform("?generated", locals, machineBody);
     extendFrameDescriptorTo(block.frameDescriptor);
     (transformArguments(BC.environment), args, block)
   }
