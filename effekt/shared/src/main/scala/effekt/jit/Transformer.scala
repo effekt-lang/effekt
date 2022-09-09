@@ -12,7 +12,7 @@ import scala.collection.mutable
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
-  def transform(mainSymbol: String, program: machine.Program): Program =
+  def transform(program: machine.Program): Program =
     program match {
       case machine.Program(declarations, main) =>
         implicit val ProgC: ProgramContext = new ProgramContext();

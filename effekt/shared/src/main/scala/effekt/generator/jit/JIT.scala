@@ -27,8 +27,7 @@ object JIT extends Backend {
       machine.Transformer.transform(mainSymbol, liftedMod, liftedDeps)
     };
 
-    val jitProgram = effekt.jit.Transformer.transform("?main", machineMod);
-
+    val jitProgram = effekt.jit.Transformer.transform(machineMod);
     val doc = effekt.jit.PrettyPrinter.toDocument(jitProgram);
 
     Some(Compiled(mainFile, Map(mainFile -> doc)))
