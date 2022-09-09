@@ -71,6 +71,9 @@ enum RegisterType {
     case _ => false
   }
 }
+object RegisterType {
+  def valuesNonErased = RegisterType.values.filterNot(_.isErased)
+}
 
 type ConstructorTag = Int
 

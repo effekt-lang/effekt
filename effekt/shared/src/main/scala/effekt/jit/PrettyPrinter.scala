@@ -40,12 +40,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Datatype(index) => Some(jsonObjectSmall(ListMap("type" -> "\"adt\"", "index" -> index.toString)))
   }
 
-  def toDoc(rtpe: RegisterType): Doc = rtpe match {
-    case RegisterType.Integer => "\"int\""
-    case RegisterType.Continuation => "\"cont\""
-    case RegisterType.Datatype => "\"adt\""
-    case _ => sys error "Cannot print erased register type"
+  extension(rtpe: RegisterType) {
+    def name: String = rtpe match {
+      case RegisterType.Integer => "int"
+      case RegisterType.Continuation => "cont"
+      case RegisterType.Datatype => "adt"
+      case _ => sys error "Cannot print erased register type"
+    }
   }
+  def toDoc(rtpe: RegisterType): String = "\"%s\"".format(rtpe.name)
 
   def toDoc(block: BasicBlock): Doc = block match {
     case BasicBlock(id, frameDescriptor, instructions, terminator) => {
@@ -54,15 +57,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
         "frameDescriptor" -> toDoc(frameDescriptor),
         "instructions" -> jsonList(instructions.map(toDoc) ++ List(toDoc(terminator)))
       ))
-    } // TODO: throw Error("Internal error: Unnumbered BasicBlock")
+    }
   }
 
   def toDoc(frameDescriptor: FrameDescriptor): Doc = {
-    jsonObjectSmall(ListMap( // TODO: calculate befor pretty-printing
-      "regs_int" -> frameDescriptor.locals.applyOrElse(RegisterType.Integer, x => 0).toString,
-      "regs_cont" -> frameDescriptor.locals.applyOrElse(RegisterType.Continuation, x => 0).toString,
-      "regs_adt" -> frameDescriptor.locals.applyOrElse(RegisterType.Datatype, x => 0).toString
-    ))
+    jsonObjectSmall(RegisterType.valuesNonErased.map(ty => ("regs_%s".format(ty.name)) ->
+      (frameDescriptor.locals.getOrElse(ty, 0).toString: Doc)
+    ).toMap)
   }
 
   def toDoc(instruction: Instruction): Doc = instruction match {
@@ -129,11 +130,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(args: RegList): Doc = args match
     case RegList(args) => {
-      jsonObjectSmall(ListMap(
-        "int" -> jsonListSmall(args.applyOrElse(RegisterType.Integer, x => List()).map(toDoc)),
-        "cont" -> jsonListSmall(args.applyOrElse(RegisterType.Continuation, x => List()).map(toDoc)),
-        "adt" -> jsonListSmall(args.applyOrElse(RegisterType.Datatype, x => List()).map(toDoc))
-      ))
+      jsonObjectSmall(RegisterType.valuesNonErased.map(ty => ty.name ->
+        jsonListSmall(args.getOrElse(ty, List()).map(toDoc))
+      ).toMap)
     }
 
   def toDoc(reg: Register): Doc = reg match {
