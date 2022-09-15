@@ -2,19 +2,18 @@ module effekt
 
 extern include "rts.ll"
 
-extern include "primitives.ll"
 
-
-// // Console ops
-// // ===========
+// I/O primitives
+// ==============
 
 extern effect Console
+extern include "primitives.ll"
 
 extern pure def println(n: Int): Unit / Console =
-  "call void @printInt_impl(%Int %n) ret %Pos zeroinitializer"
+  "call void @c_println_int64(i64 %n)   ret %Pos zeroinitializer"
 
-// extern pure def println(b: Boolean): Unit / Console =
-//   "call void @printBoolean_impl(%Boolean %b) ret %Pos zeroinitializer"
+extern pure def println(b: Boolean): Unit / Console =
+  "call void @c_println_pos_boolean(%Pos %b)   ret %Pos zeroinitializer"
 
 
 // integer primitives
