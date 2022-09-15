@@ -293,9 +293,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     }
 
   lazy val externBody: P[String] =
-    ( """\"([^\"\n]*)\"""".r            // single line strings
-    | """\"\"\"([^\"\"\"]*)\"\"\"""".r  // multi line strings
-    | failure("Expected an extern definition, which can either be a single line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
+    ( """\"([^\"\n]*)\"""".r        // single-line strings
+    | """(?s)\"\"\"[\t\n\r ]*(.*?)[\t\n\r ]*\"\"\"""".r  // multi-line strings (leading and traling whitespace is discarded ; `(?s)` sets multi-line mode, `.*?` is non-greedy)
+    | failure("Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
     )
 
   lazy val externFlag: P[ExternFlag.Purity] =
