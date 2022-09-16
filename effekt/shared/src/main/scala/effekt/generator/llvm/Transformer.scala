@@ -269,6 +269,10 @@ object Transformer {
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
+      case machine.LiteralDouble(machine.Variable(name, _), x, rest) =>
+        emit(Add(name, ConstantDouble(x), ConstantDouble(0)));
+        transform(rest)
+
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
@@ -303,6 +307,7 @@ object Transformer {
     case machine.Positive(_)      => positiveType
     case machine.Negative(_)      => negativeType
     case machine.Type.Int()       => NamedType("Int")
+    case machine.Type.Double()    => NamedType("Double")
     case machine.Type.Stack()     => stkType
   }
 
@@ -314,6 +319,7 @@ object Transformer {
       case machine.Positive(_)      => 16
       case machine.Negative(_)      => 16
       case machine.Type.Int()       => 8 // TODO Make fat?
+      case machine.Type.Double()    => 8 // TODO Make fat?
       case machine.Type.Stack()     => 8 // TODO Make fat?
     }
 
@@ -492,19 +498,21 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_)  => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
-      case machine.Negative(_)  => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
-      case machine.Type.Stack() => emit(Call("_", VoidType(), shareStack, List(transform(value))))
-      case machine.Type.Int()   => ()
+      case machine.Positive(_)   => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
+      case machine.Negative(_)   => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
+      case machine.Type.Stack()  => emit(Call("_", VoidType(), shareStack, List(transform(value))))
+      case machine.Type.Int()    => ()
+      case machine.Type.Double() => ()
     }
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_)  => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
-      case machine.Negative(_)  => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
-      case machine.Type.Stack() => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
-      case machine.Type.Int()   => ()
+      case machine.Positive(_)   => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
+      case machine.Negative(_)   => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
+      case machine.Type.Stack()  => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
+      case machine.Type.Int()    => ()
+      case machine.Type.Double() => ()
     }
   }
 
