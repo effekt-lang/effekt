@@ -6,7 +6,7 @@
 
 struct Pos {
     uint64_t tag; // type-local tag
-    void *obj; // heap object
+    void *obj; // pointer into the heap
 };
 
 typedef int64_t Int;
@@ -54,23 +54,5 @@ void c_println_Buffer(const struct Pos pos) {
     printf("]\n");
 }
 
-
-// buffer (TODO It may be performance-advantageous to implement the following in LLVM.)
-
-#define ASSERT_NON_NULL(PTR) if ((PTR) == NULL) { \
-    fprintf(stderr, "*** MALLOC PANIC\n"); \
-    fflush(stderr); \
-    exit(1); }
-
-struct Pos c_buffer_heapify(const uint32_t len, const uint8_t *utf8) {
-    uint8_t *buf = malloc(len * sizeof *buf);
-    ASSERT_NON_NULL(buf)
-    for (uint32_t j = 0; j != len; ++j)
-        buf[j] = utf8[j];
-    return (struct Pos) {
-        .tag = (((uint64_t) len) << 32) | ((uint64_t) len),
-        .obj = buf,
-    };
-}
 
 #endif
