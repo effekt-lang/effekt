@@ -29,6 +29,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Negative(name) => name
     case Type.Int()     => "Int"
     case Type.Double()  => "Double"
+    case Type.String()  => "String"
     case Type.Stack()   => "Stack"
   }
 
@@ -79,6 +80,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralDouble(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDoc(rest)
+
+    case LiteralUTF8String(name, utf8, rest) => ???
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))
