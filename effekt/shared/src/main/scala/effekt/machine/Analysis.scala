@@ -41,6 +41,8 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) - name
     case LiteralDouble(name, value, rest) =>
       freeVariables(rest) - name
+    case LiteralUTF8String(name, utf8, rest) =>
+      freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
       arguments.toSet ++ freeVariables(rest) - name
   }
@@ -68,5 +70,6 @@ def substitute(subst: Substitution, stmt: Statement): Statement = stmt match {
   case PopStack(name, rest) => ???
   case LiteralInt(name, value, rest) => ???
   case LiteralDouble(name, value, rest) => ???
+  case LiteralUTF8String(name, utf8, rest) => ???
   case ForeignCall(name, builtin, arguments, rest) => ???
 }

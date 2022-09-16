@@ -127,7 +127,7 @@ enum Statement {
   case PushStack(stack: Variable, rest: Statement)
 
   /**
-   * e.g. let k = shift0; s  
+   * e.g. let k = shift0; s
    */
   case PopStack(name: Variable, rest: Statement)
 
@@ -142,6 +142,7 @@ enum Statement {
   case LiteralInt(name: Variable, value: Int, rest: Statement)
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
+  case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 }
 export Statement.*
 
@@ -155,6 +156,7 @@ enum Type {
   case Stack()
   case Int()
   case Double()
+  case String()
 }
 export Type.{ Positive, Negative }
 

@@ -29,6 +29,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Positive(List(Nil, Nil)) => "Bool"
     case Type.Int()               => "Int"
     case Type.Double()            => "Double"
+    case Type.String()            => "String"
     case Positive(alternatives)   => brackets(hsep(alternatives map signatureToDoc, ";"))
     case Negative(alternatives)   => braces(hsep(alternatives map signatureToDoc, ";"))
     case Type.Stack()             => "Stack"
@@ -83,6 +84,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralDouble(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDoc(rest)
+
+    case LiteralUTF8String(name, utf8, rest) => ???
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

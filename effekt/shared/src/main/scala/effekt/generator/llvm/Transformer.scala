@@ -273,6 +273,10 @@ object Transformer {
         emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));
         transform(rest)
 
+      case machine.LiteralUTF8String(machine.Variable(bind, _), utf8, rest) =>
+        emit(HeapifyUTF8String(bind, utf8))
+        transform(rest)
+
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
@@ -308,6 +312,7 @@ object Transformer {
     case machine.Negative(_)      => negativeType
     case machine.Type.Int()       => NamedType("Int")
     case machine.Type.Double()    => NamedType("Double")
+    case machine.Type.String()    => positiveType
     case machine.Type.Stack()     => stkType
   }
 
@@ -320,6 +325,7 @@ object Transformer {
       case machine.Negative(_)      => 16
       case machine.Type.Int()       => 8 // TODO Make fat?
       case machine.Type.Double()    => 8 // TODO Make fat?
+      case machine.Type.String()    => 8 // TODO Should this not really be a `Positive()`?
       case machine.Type.Stack()     => 8 // TODO Make fat?
     }
 
@@ -503,6 +509,7 @@ object Transformer {
       case machine.Type.Stack()  => emit(Call("_", VoidType(), shareStack, List(transform(value))))
       case machine.Type.Int()    => ()
       case machine.Type.Double() => ()
+      case machine.Type.String() => () // TODO: All strings are small (!) and thus are ruthlessly copied.
     }
   }
 
@@ -513,6 +520,7 @@ object Transformer {
       case machine.Type.Stack()  => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
       case machine.Type.Int()    => ()
       case machine.Type.Double() => ()
+      case machine.Type.String() => ??? // TODO emit(Call("_", VoidType(), freeString, ???))
     }
   }
 

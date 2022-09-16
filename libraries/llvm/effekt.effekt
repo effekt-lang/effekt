@@ -32,6 +32,9 @@ extern io def println(b: Boolean): Unit / Console =
 extern io def println(x: Double): Unit / Console =
   "%unit = call %Pos @c_println_Double(%Double %x)   ret %Pos %unit"
 
+extern io def println(str: String): Unit / Console =
+    "call void @c_println_String(%Pos %str)   ret %Pos zeroinitializer ; Unit"
+
 
 // integer arithmetic
 

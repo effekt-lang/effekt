@@ -83,6 +83,19 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
+    case HeapifyUTF8String(target: String, utf8: Array[Byte]) =>
+      //val escaped = utf8.map(b => f"\$b%02x").mkString;
+      val escaped = utf8.map(b => f"i8 $b").mkString(", ");
+      val t = s"[${utf8.size} x i8]"
+      val lit1 = localName(target + "lit")
+      val lit2 = localName(target + "lit2")
+      s"""
+$lit1 = alloca $t
+store $t [$escaped], $t* $lit1
+$lit2 = bitcast $t* $lit1 to i8*
+${localName(target)} = call %Pos @c_buffer_heapify(i32 ${utf8.size}, i8* $lit2)
+"""
+
     // let us hope that `msg` does not contain e.g. a newline
     case Comment(msg) =>
       s"; $msg"

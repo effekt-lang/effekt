@@ -27,9 +27,6 @@ class LLVMTests extends EffektTests {
 
     // mutable state not support, yet
     examplesDir / "llvm" / "gids.effekt",
-
-    // strings not supported, yet
-    examplesDir / "llvm" / "hello-world.effekt"
   )
 
   def runTestFor(f: File, expected: String) =
