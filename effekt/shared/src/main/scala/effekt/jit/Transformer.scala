@@ -114,8 +114,8 @@ object Transformer {
       }
       case machine.New(name, clauses, rest) => ??? // TODO Implement codata
       case machine.Invoke(v @ machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
-        ensureEnvironment(transformParameters(args));
-        Resume(transformArgument(v).id)
+        emit(PushStack(transformArgument(v).id))
+        Return(transformArguments(args))
       }
       case machine.Invoke(value, tag, environment) => ??? // TODO Implement codata
       case machine.PushFrame(frame, rest) => {
