@@ -63,9 +63,17 @@ object Transformer {
       case machine.Construct(v, tag, environment, rest) => {
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(v), rest))
         val vd = transformParameter(v);
-        val Type.Datatype(adtType) = vd.typ;
-        emit(Construct(outs(RegisterType.Datatype).head, adtType, tag, transformArguments(environment)))
-        emitInlined(restBlock)
+        vd.typ match {
+          case Type.Datatype(adtType) => {
+              emit(Construct(outs(RegisterType.Datatype).head, adtType, tag, transformArguments(environment)))
+              emitInlined(restBlock)
+          }
+          case Type.Unit() => {
+            val ErasedRegister() = vd.id;
+            transform(rest)
+          }
+          case _ => ???
+        }
       }
       case machine.Switch(v @ machine.Variable(name, typ), clauses) => {
         transform(typ) match {
