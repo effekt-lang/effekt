@@ -135,8 +135,11 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     install := {
       assembleBinary.value
-      Process("npm pack").!!
-      Process(s"npm install -g effekt-${effektVersion}.tgz").!!
+
+      val npm = if (platform.value == "windows") "npm.cmd" else "npm"
+
+      Process(s"$npm pack").!!
+      Process(s"$npm install -g effekt-${effektVersion}.tgz").!!
     },
 
     generateLicenses := {
@@ -161,6 +164,16 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
+
+
+lazy val platform = Def.task {
+  val platformString = System.getProperty("os.name").toLowerCase
+  if (platformString.contains("win")) "windows"
+  else if (platformString.contains("mac")) "macos"
+  else if (platformString.contains("linux")) "linux"
+  else sys error s"Unknown platform ${platformString}"
+}
+
 
 lazy val versionGenerator = Def.task {
   val sourceDir = (Compile / sourceManaged).value
