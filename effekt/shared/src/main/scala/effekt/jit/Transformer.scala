@@ -70,7 +70,11 @@ object Transformer {
           }
           case Type.Unit() => {
             val ErasedRegister() = vd.id;
-            transform(rest)
+            emitInlined(restBlock)
+          }
+          case Type.Integer() => {
+            emit(Const(outs(RegisterType.Integer).head, tag))
+            emitInlined(restBlock)
           }
           case _ => ???
         }
