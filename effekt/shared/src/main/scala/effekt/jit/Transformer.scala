@@ -95,8 +95,10 @@ object Transformer {
       }
       case machine.New(v @ machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
         val (args, _, target) = transformClosure(clause);
-        emit(NewStack(transformArgument(v).id, target, args));
-        transform(rest)
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(v), rest));
+        val out = outs(RegisterType.Continuation).head
+        emit(NewStack(out, target, args));
+        emitInlined(restBlock)
       }
       case machine.New(name, clauses, rest) => ??? // TODO Implement codata
       case machine.Invoke(v @ machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
@@ -125,17 +127,21 @@ object Transformer {
         emitInlined(block)
       }
       case machine.NewStack(name, frame, rest) => {
-        val (closesOver, _ignored, target) = transformClosure(frame);
-        emit(NewStack(transformArgument(name).id, target, closesOver));
-        transform(rest)
+        val (closesOver, _, target) = transformClosure(frame);
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
+        val out = outs(RegisterType.Continuation).head
+        emit(NewStack(out, target, closesOver));
+        emitInlined(restBlock)
       }
       case machine.PushStack(value, rest) => {
         emit(PushStack(transformArgument(value).id));
         transform(rest)
       }
       case machine.PopStack(name, rest) => {
-        emit(Shift(transformArgument(name).id, 1));
-        transform(rest)
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
+        val out = outs(RegisterType.Continuation).head;
+        emit(Shift(out, 1));
+        emitInlined(block)
       }
   }
 
