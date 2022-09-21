@@ -61,7 +61,7 @@ enum Statement extends Term {
 enum Block extends Term {
   case BlockVar(name: Name, annotatedType: BlockType, annotatedCapt: Captures)
   case BlockLit(tparams: List[ValueType.FreeVar], vparams: List[(Name, ValueType)], bparams: List[(Name, BlockType)], body: Statement)
-  case Member(receiver: Block, selector: Name)
+  case Member(receiver: Block, selector: Name, annotatedType: BlockType)
 
   // New(interface: Interface, targs: List[ValueType], ...)
   case New(operations: List[(Name, Block)])
@@ -88,7 +88,7 @@ sealed trait Type
 
 enum BlockType extends Type {
   case Function(tpeArity: Int, vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
-  case Interface(tpeArity: Int, operations: Map[Name, BlockType])
+  case Interface(symbol: TypeSymbol, targs: List[ValueType])
 }
 object BlockType {
   def Function(tparams: List[ValueType.FreeVar], vparams: List[(Name, ValueType)], bparams: List[(Name, BlockType)], result: ValueType): BlockType.Function =
@@ -171,9 +171,9 @@ object typing {
     // recursive types???
     case Block.New(ops) => ???
 
-    case Block.Member(recv, sel) =>
-      val tpe = recv.tpe.asInstanceOf[BlockType.Interface] // TODO could be an applied type...
-      tpe.operations(sel)
+    case Block.Member(recv, sel, tpe) => tpe
+      //      val tpe = recv.tpe.asInstanceOf[BlockType.Interface] // TODO could be an applied type...
+      //      tpe.operations(sel)
 
     case Block.Extern(tparams, vparams, bparams, result, capture, body) =>
       BlockType.Function(tparams, vparams, bparams, result)
@@ -183,7 +183,7 @@ object typing {
 
   def inferCapt(block: Block): Captures = block match {
     case Block.BlockVar(name, tpe, capt) => capt
-    case Block.Member(recv, sel) => recv.capt
+    case Block.Member(recv, sel, tpe) => recv.capt
     case Block.BlockLit(tparams, vparams, bparams, body) => body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
     case Block.Unbox(expr) => expr.tpe.asInstanceOf[ValueType.Boxed].capt
     case b: Block.Extern => b.capture
@@ -196,6 +196,8 @@ object typing {
     case f : ValueType.FreeVar if typeVars.contains(f) =>
       ValueType.BoundVar(level, typeVars.indexOf(f))
 
+    case f: ValueType.FreeVar => f
+
     // bump all other bound var
     case ValueType.BoundVar(level, index) =>
       ValueType.BoundVar(level + 1, index)
@@ -203,7 +205,11 @@ object typing {
     case ValueType.Boxed(tpe, capt) =>
       ValueType.Boxed(close(tpe, typeVars, blockVars, level), close(capt, blockVars, level))
 
-    case _ => tpe
+    case ValueType.Builtin(name, targs) =>
+      ValueType.Builtin(name, targs map { tpe => close(tpe, typeVars, blockVars, level) })
+
+    case ValueType.DataType(name, targs) =>
+      ValueType.DataType(name, targs map { tpe => close(tpe, typeVars, blockVars, level) })
   }
 
   def close(tpe: BlockType, typeVars: List[ValueType.FreeVar], blockVars: List[Name], level: Int): BlockType = tpe match {
@@ -212,10 +218,9 @@ object typing {
         vparams map { tpe => close(tpe, typeVars, blockVars, level + 1) },
         bparams map { tpe => close(tpe, typeVars, blockVars, level + 1) },
         close(result, typeVars, blockVars, level + 1))
-    case BlockType.Interface(tpeArity, operations) =>
-      BlockType.Interface(tpeArity, operations.map { case (name, tpe) =>
-        name -> close(tpe, typeVars, blockVars, level + 1)
-      })
+
+    case BlockType.Interface(name, targs) =>
+      BlockType.Interface(name, targs map { tpe => close(tpe, typeVars, blockVars, level) })
   }
 
   def close(capt: Captures, blockVars: List[Name], level: Int): Captures = capt map {
