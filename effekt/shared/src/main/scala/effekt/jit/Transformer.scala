@@ -100,8 +100,8 @@ object Transformer {
           val (_ign1, args, block) = transformInline(clause);
           emitInlined(block)
         }
-        case Type.Continuation() => {
-          sys error "Fatal error: Trying to match on continuation"
+        case Type.Continuation() | Type.Double() => {
+          sys error "Fatal error: Trying to match on non-datatype"
         }
         }
       }
