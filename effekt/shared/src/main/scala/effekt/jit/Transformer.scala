@@ -132,7 +132,6 @@ object Transformer {
         val in_args = transformArguments(ins);
         val (_, outs, block) = transformInline(machine.Clause(List(out), rest));
         val normalizedName = suffixPattern.replaceAllIn(name, "")
-        println((name, normalizedName))
         emit(PrimOp(normalizedName, outs, in_args));
         emitInlined(block)
       }
