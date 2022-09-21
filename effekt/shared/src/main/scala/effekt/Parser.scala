@@ -287,10 +287,16 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> """\"([^\"]*)\"""".r) ^^ {
+    `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
         ExternFun(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
+
+  lazy val externBody: P[String] =
+    ( """\"([^\"\n]*)\"""".r            // single line strings
+    | """\"\"\"([^\"\"\"]*)\"\"\"""".r  // multi line strings
+    | failure("Expected an extern definition, which can either be a single line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
+    )
 
   lazy val externFlag: P[ExternFlag.Purity] =
     ( `pure` ^^^ ExternFlag.Pure

@@ -109,7 +109,8 @@ class LanguageServer extends Intelligence {
       mainOutputPath
     } catch {
       case FatalPhaseError(msg) =>
-        throw js.JavaScriptException(msg)
+        val formattedError = context.messaging.formatMessage(msg)
+        throw js.JavaScriptException(formattedError)
     }
   }
 

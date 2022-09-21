@@ -27,6 +27,19 @@ object LLVM extends Backend {
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
 
-  // apparently only used by the LSP; currently unsupported
-  def compileSeparate(input: CoreTransformed)(implicit C: Context): Option[Document] = ???
+  /**
+   * Only used by LSP to show the generated LLVM code in VSCode.
+   *
+   * Right now, we use the same mechanism as for [[compileWhole]].
+   * This could be optimized in the future to (for instance) not show the standard library
+   * and the prelude.
+   */
+  def compileSeparate(main: CoreTransformed)(implicit C: Context): Option[Document] = {
+    val machine.Program(decls, prog) = machine.Transformer.transform(main, Nil)
+
+    // we don't print declarations here.
+    val llvmDefinitions = Transformer.transform(machine.Program(Nil, prog))
+    val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
+    Some(Document(llvmString, emptyLinks))
+  }
 }

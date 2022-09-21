@@ -41,7 +41,7 @@ lazy val replDependencies = Seq(
 
 lazy val lspDependencies = Seq(
   "org.eclipse.lsp4j" % "org.eclipse.lsp4j" % "0.12.0",
-  "com.google.code.gson" % "gson" % "2.8.2"
+  "com.google.code.gson" % "gson" % "2.8.9"
 )
 
 lazy val testingDependencies = Seq(
@@ -183,8 +183,11 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     install := {
       assembleBinary.value
       downloadJITBinary.value
-      Process("npm pack").!!
-      Process(s"npm install -g effekt-${effektVersion}.tgz").!!
+
+      val npm = if (platform.value == "windows") "npm.cmd" else "npm"
+
+      Process(s"$npm pack").!!
+      Process(s"$npm install -g effekt-${effektVersion}.tgz").!!
     },
 
     generateLicenses := {
@@ -209,6 +212,16 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
+
+
+lazy val platform = Def.task {
+  val platformString = System.getProperty("os.name").toLowerCase
+  if (platformString.contains("win")) "windows"
+  else if (platformString.contains("mac")) "macos"
+  else if (platformString.contains("linux")) "linux"
+  else sys error s"Unknown platform ${platformString}"
+}
+
 
 lazy val versionGenerator = Def.task {
   val sourceDir = (Compile / sourceManaged).value
