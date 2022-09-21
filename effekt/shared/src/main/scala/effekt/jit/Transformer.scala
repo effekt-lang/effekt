@@ -140,7 +140,7 @@ object Transformer {
       }
       case machine.LiteralDouble(out, value, rest) => {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
-        emit(ConstDouble(outs(RegisterType.Integer).head, value));
+        emit(ConstDouble(outs(RegisterType.Double).head, value));
         emitInlined(block)
       }
       case machine.NewStack(name, frame, rest) => {
