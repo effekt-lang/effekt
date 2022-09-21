@@ -127,9 +127,13 @@ object Transformer {
         Return(transformArguments(environment))
       }
       case machine.ForeignCall(out, name, ins, rest) => {
+        import scala.util.matching.Regex
+        val suffixPattern = "[_$][0-9_]*$$".r
         val in_args = transformArguments(ins);
         val (_, outs, block) = transformInline(machine.Clause(List(out), rest));
-        emit(PrimOp(name, outs, in_args));
+        val normalizedName = suffixPattern.replaceAllIn(name, "")
+        println((name, normalizedName))
+        emit(PrimOp(normalizedName, outs, in_args));
         emitInlined(block)
       }
       case machine.LiteralInt(out, n, rest) => {
