@@ -3,13 +3,42 @@ package core
 package typed
 
 import effekt.core.typed.ValueType.Boxed
+import effekt.lifted.BlockLit
 
-// TODO forbid local datatype and effect declarations.
+
+// TODO add
+// - Match
+// - State
+// - Region
+// - Hole
 
 type Name = String
 
 // A unique type symbol
 type TypeSymbol = String
+
+// TODO TBD
+// TODO forbid local datatype, effect, and extern declarations in source.
+
+type Declaration = Unit
+
+case class Module(
+  declarations: Map[TypeSymbol, Declaration],
+  externals: List[Extern],
+  definitions: List[Definition]
+)
+
+enum Extern {
+  case Include(contents: String)
+  case Function(
+    name: Name,
+    tparams: List[ValueType.FreeVar],
+    vparams: List[(Name, ValueType)],
+    bparams: List[(Name, BlockType)],
+    result: ValueType,
+    capture: Captures,
+    body: String)
+}
 
 sealed trait Term
 
@@ -18,7 +47,7 @@ sealed trait Expression extends Term {
   val capt: Captures = typing.inferCapt(this)
 }
 object Expression {
-  // invariant: block b and all bargs have capt {io}.
+  // invariant: block `callee` and all bargs have capt {io}.
   case class DirectApp(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expression
 
   // invariant: only inserted by the transformer if stmt is pure / io
@@ -40,13 +69,38 @@ case class Definition(name: Name, binding: Block) {
   val capt = binding.capt
 }
 
+/**
+ * Implementation of a method / effect operation.
+ *
+ * Note that this is very similar to [[Definition]], but at the moment we restrict
+ * implementations to be block literals. The reason is, that when implemented as
+ * part of an effect handler, an effect operation can capture the continuation.
+ *
+ * The backends thus make assumptions about the shape of the implementation to
+ * provide the additional continuation argument.
+ */
+case class Operation(name: Name, implementation: Block.BlockLit) {
+  val tpe = implementation.tpe
+  val capt = implementation.capt
+}
+
+/**
+ * An instance of type [[interface]], concretely implementing the operations.
+ *
+ * Used to represent handlers / capabilities, and objects / modules.
+ */
+case class Instance(interface: BlockType.Interface, operations: List[Operation]) {
+  val tpe = interface
+  val capt = operations.flatMap(_.capt).toSet
+}
+
 enum Statement extends Term {
   case Val(name: Name, binding: Statement, body: Statement)
   case If(cond: Pure, thn: Statement, els: Statement)
   case While(cond: Statement, body: Statement)
   case Scope(bindings: List[Definition], body: Statement)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
-  case Try(body: Block.BlockLit)
+  case Try(body: Block.BlockLit, handlers: List[Instance])
   case Return(expr: Pure)
 
   val tpe: ValueType = typing.inferType(this)
@@ -57,26 +111,12 @@ enum Block extends Term {
   case BlockVar(name: Name, annotatedType: BlockType, annotatedCapt: Captures)
   case BlockLit(tparams: List[ValueType.FreeVar], vparams: List[(Name, ValueType)], bparams: List[(Name, BlockType)], body: Statement)
   case Member(receiver: Block, selector: Name, annotatedType: BlockType)
-
-  // New(interface: Interface, targs: List[ValueType], ...)
-  case New(operations: List[(Name, Block)])
+  case New(instance: Instance)
   case Unbox(expr: Pure)
-
-  // TODO should extern defs be allowed to close over anything, or can they be placed toplevel?
-  case Extern(
-    tparams: List[ValueType.FreeVar],
-    vparams: List[(Name, ValueType)],
-    bparams: List[(Name, BlockType)],
-    result: ValueType,
-    capture: Captures,
-    body: String)
 
   val tpe: BlockType = typing.inferType(this)
   val capt: Captures = typing.inferCapt(this)
 }
-
-
-
 
 
 sealed trait Type
@@ -116,7 +156,12 @@ enum Capture {
 }
 type Captures = Set[Capture]
 
-
+/**
+ * This is NOT a type checker. It simply *infers* the type of a given expression, statement, ...
+ *
+ * The big difference is, that if a transformation generates ill-typed core terms, then this
+ * inference will NOT discover it.
+ */
 object typing {
 
   def inferType(expr: Expression): ValueType = expr match {
@@ -143,7 +188,7 @@ object typing {
     case Statement.While(cond, body) => body.tpe // TODO should always be TUnit
     case Statement.App(callee, targs, vargs, bargs) =>
       instantiate(callee.tpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    case Statement.Try(body) =>
+    case Statement.Try(body, handlers) =>
       body.tpe.asInstanceOf[BlockType.Function].result
   }
 
@@ -154,7 +199,7 @@ object typing {
     case Statement.If(cond, thn, els) => thn.capt ++ els.capt
     case Statement.While(cond, body) => cond.capt ++ body.capt
     case Statement.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
-    case Statement.Try(body) => body.capt // TODO also capt of all handlers
+    case Statement.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
   }
 
   def inferType(block: Block): BlockType = block match {
@@ -162,16 +207,11 @@ object typing {
     case Block.BlockLit(tparams, vparams, bparams, body) =>
       BlockType.Function(tparams, vparams, bparams, body.tpe)
 
-    // what's the type system for negative records???
-    // recursive types???
-    case Block.New(ops) => ???
+    case Block.New(instance) => instance.tpe
 
     case Block.Member(recv, sel, tpe) => tpe
       //      val tpe = recv.tpe.asInstanceOf[BlockType.Interface] // TODO could be an applied type...
       //      tpe.operations(sel)
-
-    case Block.Extern(tparams, vparams, bparams, result, capture, body) =>
-      BlockType.Function(tparams, vparams, bparams, result)
 
     case Block.Unbox(expr) => expr.tpe.asInstanceOf[ValueType.Boxed].tpe
   }
@@ -181,8 +221,7 @@ object typing {
     case Block.Member(recv, sel, tpe) => recv.capt
     case Block.BlockLit(tparams, vparams, bparams, body) => body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
     case Block.Unbox(expr) => expr.tpe.asInstanceOf[ValueType.Boxed].capt
-    case b: Block.Extern => b.capture
-    case b: Block.New => ???
+    case Block.New(instance) => instance.capt
   }
 
   // Tooling...
