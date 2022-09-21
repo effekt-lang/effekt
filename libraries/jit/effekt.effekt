@@ -11,6 +11,8 @@ extern effect Console
 
 extern pure def println(n: Int): Unit / Console = ""
 
+extern pure def println(n: Double): Unit / Console = ""
+
 extern pure def println(b: Boolean): Unit / Console = ""
 
 // integer primitives
@@ -22,6 +24,13 @@ extern pure def infixDiv(x: Int, y: Int): Int = ""
 extern pure def infixSub(x: Int, y: Int): Int = ""
 extern pure def mod(x: Int, y: Int): Int = ""
 
+// double primitives
+// =================
+extern pure def infixAdd(x: Double, y: Double): Double = ""
+extern pure def infixMul(x: Double, y: Double): Double = ""
+extern pure def infixDiv(x: Double, y: Double): Double = ""
+extern pure def infixSub(x: Double, y: Double): Double = ""
+
 // ordering on signed integers
 // ===========================
 
@@ -31,6 +40,16 @@ extern pure def infixLt(x: Int, y: Int): Boolean = ""
 extern pure def infixLte(x: Int, y: Int): Boolean = ""
 extern pure def infixGt(x: Int, y: Int): Boolean = ""
 extern pure def infixGte(x: Int, y: Int): Boolean = ""
+
+// ordering on doubles
+// ===================
+
+extern pure def infixEq(x: Double, y: Double): Boolean = ""
+extern pure def infixNeq(x: Double, y: Double): Boolean = ""
+extern pure def infixLt(x: Double, y: Double): Boolean = ""
+extern pure def infixLte(x: Double, y: Double): Boolean = ""
+extern pure def infixGt(x: Double, y: Double): Boolean = ""
+extern pure def infixGte(x: Double, y: Double): Boolean = ""
 
 // boolean algebra
 // ===============
