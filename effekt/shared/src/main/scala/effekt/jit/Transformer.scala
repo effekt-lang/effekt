@@ -138,6 +138,11 @@ object Transformer {
         emit(Const(outs(RegisterType.Integer).head, n));
         emitInlined(block)
       }
+      case machine.LiteralDouble(out, value, rest) => {
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
+        emit(ConstDouble(outs(RegisterType.Integer).head, value));
+        emitInlined(block)
+      }
       case machine.NewStack(name, frame, rest) => {
         val (closesOver, _, target) = transformClosure(frame);
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
@@ -165,6 +170,7 @@ object Transformer {
       case machine.Negative(contType :: Nil) => Type.Continuation()
       case machine.Negative(alternatives) => ??? // TODO Implement codata
       case machine.Type.Int() => Type.Integer()
+      case machine.Type.Double() => Type.Double()
       case machine.Type.Stack() => Type.Continuation()
   }
 
