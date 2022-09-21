@@ -28,28 +28,23 @@ object Expression {
 enum Pure extends Expression {
   case ValueVar(name: Name, annotatedType: ValueType)
   case Literal(value: Any, annotatedType: ValueType)
-  case Box(block: Block)
+  case Box(block: Block, annotatedCapture: Captures)
   case PureApp(callee: Block, targs: List[ValueType], vargs: List[Pure])
 }
 
 /**
  * Definitions that can be mutually recursive
  */
-enum Definition extends Term {
-  case BlockDef()
-  case DataDef()
-//  case Data(id: Symbol, ctors: List[Symbol], rest: Stmt)
-//  case Record(id: Symbol, fields: List[Symbol], rest: Stmt)
-
-  case InterfaceDef()
+case class Definition(name: Name, binding: Block) {
+  val tpe = binding.tpe
+  val capt = binding.capt
 }
 
 enum Statement extends Term {
   case Val(name: Name, binding: Statement, body: Statement)
-  case Def(name: Name, binding: Block, body: Statement)
   case If(cond: Pure, thn: Statement, els: Statement)
   case While(cond: Statement, body: Statement)
-  // case Scope(bindings: List[Definition], body: Statement)
+  case Scope(bindings: List[Definition], body: Statement)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
   case Try(body: Block.BlockLit)
   case Return(expr: Pure)
@@ -129,7 +124,7 @@ object typing {
     case Expression.Run(s) => s.tpe
     case Pure.ValueVar(name, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
-    case Pure.Box(block) => ValueType.Boxed(block.tpe, block.capt)
+    case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
     case Pure.PureApp(callee, targs, vargs) => instantiate(callee.tpe.asInstanceOf, targs, Nil).result
   }
 
@@ -143,7 +138,7 @@ object typing {
   def inferType(stmt: Statement): ValueType = stmt match {
     case Statement.Return(expr) => expr.tpe
     case Statement.Val(name, binding, body) => body.tpe
-    case Statement.Def(name, binding, body) => body.tpe
+    case Statement.Scope(defs, body) => body.tpe
     case Statement.If(cond, thn, els) => thn.tpe // TODO join.
     case Statement.While(cond, body) => body.tpe // TODO should always be TUnit
     case Statement.App(callee, targs, vargs, bargs) =>
@@ -155,7 +150,7 @@ object typing {
   def inferCapt(stmt: Statement): Captures = stmt match {
     case Statement.Return(expr) => Set.empty
     case Statement.Val(name, binding, body) => binding.capt ++ body.capt
-    case Statement.Def(name, binding, body) => binding.capt ++ body.capt
+    case Statement.Scope(defs, body) => defs.flatMap(_.capt).toSet ++ body.capt
     case Statement.If(cond, thn, els) => thn.capt ++ els.capt
     case Statement.While(cond, body) => cond.capt ++ body.capt
     case Statement.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
