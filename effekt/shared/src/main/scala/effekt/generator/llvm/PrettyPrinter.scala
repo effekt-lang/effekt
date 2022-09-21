@@ -66,8 +66,12 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case BitCast(result, operand, tpe) =>
       s"${localName(result)} = bitcast ${show(operand)} to ${show(tpe)}"
 
+    // TODO: Require `operand0` to be of integer type. It is currently hackily typed dependent on its right operand's type which ought to be a constant.
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
+    // TODO: Require `operand0` to be of floating-point type. It is currently hackily typed dependent on its right operand's type which ought to be a constant.
+    case Add(result, operand0, ConstantDouble(x)) =>
+      s"${localName(result)} = fadd ${show(operand0)}, $x"
     case Add(_, _, operand1) => C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
 
     case InsertValue(result, aggregate, element, index) =>
@@ -95,6 +99,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case LocalReference(tpe, name)  => s"${show(tpe)} ${localName(name)}"
     case ConstantGlobal(tpe, name)  => s"${show(tpe)} ${globalName(name)}"
     case ConstantInt(n)             => s"i64 $n"
+    case ConstantDouble(n)          => s"double $n"
     case ConstantAggregateZero(tpe) => s"${show(tpe)} zeroinitializer"
     case ConstantNull(tpe)          => s"${show(tpe)} null"
   }
