@@ -20,7 +20,7 @@ static const struct Pos BooleanTrue = (struct Pos) { .tag = 1, .obj = NULL, };
 // i/o
 
 struct Pos c_println_Int(const Int n) {
-    printf("%ld\n", n);
+    printf("%" PRId64 "\n", n);
     return Unit;
 }
 
