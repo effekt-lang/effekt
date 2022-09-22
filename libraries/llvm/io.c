@@ -16,9 +16,9 @@ void c_io_println_Double(const Double x) {
     printf("%g\n", x);
 }
 
-void c_io_println_String(String buffer) {
-    for (uint64_t j = 0; j < c_buffer_length(buffer); ++j)
-        putchar(c_buffer_bytes(buffer)[j]);
+void c_io_println_String(String text) {
+    for (uint64_t j = 0; j < c_buffer_length(text); ++j)
+        putchar(c_buffer_bytes(text)[j]);
     putchar('\n');
 }
 
@@ -45,7 +45,7 @@ String c_io_command_line_argument(const Int k) {
 
 // environment variables
 
-String c_io_getenv(const struct Pos key) {
+String c_io_getenv(const String key) {
     char *key_nt = c_buffer_as_null_terminated_string(key);
     // NOTE: value_nt must not be freed (its memory is managed by the kernel)
     const char *value_nt = getenv(key_nt);
