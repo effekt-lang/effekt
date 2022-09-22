@@ -70,9 +70,12 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
     // TODO: Require `operand0` to be of floating-point type. It is currently hackily typed dependent on its right operand's type which ought to be a constant.
-    case Add(result, operand0, ConstantDouble(x)) =>
+    case Add(_, _, operand1) =>
+      C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
+    case FAdd(result, operand0, ConstantDouble(x)) =>
       s"${localName(result)} = fadd ${show(operand0)}, $x"
-    case Add(_, _, operand1) => C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
+    case FAdd(_, _, operand1) =>
+      C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
 
     case InsertValue(result, aggregate, element, index) =>
       s"${localName(result)} = insertvalue ${show(aggregate)}, ${show(element)}, $index"

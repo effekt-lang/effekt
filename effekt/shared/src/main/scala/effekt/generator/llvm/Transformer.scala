@@ -270,7 +270,7 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralDouble(machine.Variable(name, _), x, rest) =>
-        emit(Add(name, ConstantDouble(x), ConstantDouble(0)));
+        emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));
         transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>

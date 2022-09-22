@@ -24,6 +24,7 @@ enum Instruction {
   case GetElementPtr(result: String, address: Operand, indices: List[Int])
   case BitCast(result: String, operand: Operand, typ: Type)
   case Add(result: String, operand0: Operand, operand1: Operand)
+  case FAdd(result: String, operand0: Operand, operand1: Operand)
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
 
