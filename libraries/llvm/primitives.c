@@ -35,23 +35,12 @@ struct Pos c_println_Double(const Double x) {
 }
 
 void c_println_String(const struct Pos pos) {
-    const uint32_t len = pos.tag & 0xffffffff;
+    const uint64_t len = pos.tag;
     const uint8_t *buf = (uint8_t *) pos.obj;
 
-    for (uint32_t j = 0; j != len; ++j)
+    for (uint64_t j = 0; j < len; ++j)
         putchar(buf[j]);
     putchar('\n');
-}
-
-// TODO consider
-void c_println_Buffer(const struct Pos pos) {
-    const uint32_t len = pos.tag & 0xffffffff;
-    const uint8_t *buf = (uint8_t *) pos.obj;
-
-    printf("[");
-    for (uint32_t j = 0; j != len; ++j)
-        printf("0x%02X, ", (int) buf[j]);
-    printf("]\n");
 }
 
 

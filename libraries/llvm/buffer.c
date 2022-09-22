@@ -7,21 +7,46 @@
 // inline.
 
 
-#define ASSERT_NON_NULL(PTR) if ((PTR) == NULL) { \
-    fprintf(stderr, "*** MALLOC PANIC\n"); \
-    fflush(stderr); \
-    exit(1); }
 
 
-struct Pos c_buffer_heapify(const uint32_t len, const uint8_t *utf8) {
-    uint8_t *buf = malloc(len * sizeof *buf);
+// Eight bytes for the reference counter.
+// E.g. capacity could also be stored left of the data.
+#define BUFFER_METADATA_WIDTH (8)
+
+struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
+    uint8_t *buf = malloc(BUFFER_METADATA_WIDTH + n * sizeof *buf);
     ASSERT_NON_NULL(buf)
-    for (uint32_t j = 0; j != len; ++j)
-        buf[j] = utf8[j];
+
+    // reference count (a reference count of zero means one sole owner)
+    for (uint64_t j = 0; j < BUFFER_METADATA_WIDTH; ++j)
+        buf[j] = 0;
+
+    // data
+    for (uint64_t j = 0; j < n; ++j)
+        buf[BUFFER_METADATA_WIDTH + j] = data[j];
+
     return (struct Pos) {
-        .tag = (((uint64_t) len) << 32) | ((uint64_t) len),
-        .obj = buf,
+        .tag = n,
+        .obj = BUFFER_METADATA_WIDTH + buf,
     };
+}
+
+void c_buffer_destruct(const struct Pos buffer) {
+    free(buffer.obj - BUFFER_METADATA_WIDTH);
+}
+
+// NOTE: This assumes a homogenous byte order.
+uint64_t* c_buffer_refcount(const struct Pos buffer) {
+    return (uint64_t*) (buffer.obj - 8);
+}
+
+void c_buffer_refcount_increment(const struct Pos buffer) {
+    (*c_buffer_refcount(buffer))++;
+}
+
+void c_buffer_refcount_decrement(const struct Pos buffer) {
+    if (!(*c_buffer_refcount(buffer))--)
+        c_buffer_destruct(buffer);
 }
 
 

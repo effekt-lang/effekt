@@ -93,7 +93,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 $lit1 = alloca $t
 store $t [$escaped], $t* $lit1
 $lit2 = bitcast $t* $lit1 to i8*
-${localName(target)} = call %Pos @c_buffer_heapify(i32 ${utf8.size}, i8* $lit2)
+${localName(target)} = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* $lit2)
 """
 
     // let us hope that `msg` does not contain e.g. a newline
