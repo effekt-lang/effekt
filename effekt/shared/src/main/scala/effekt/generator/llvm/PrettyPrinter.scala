@@ -83,10 +83,9 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
-
-    // let us hope that `msg` does not contain e.g. a newline
     case Comment(msg) =>
-      s"; $msg"
+      val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
+      s"; $sanitized"
 
     case RawLLVM(llvm: String) => llvm
   }
