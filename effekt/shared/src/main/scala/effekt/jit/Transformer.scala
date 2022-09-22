@@ -5,17 +5,24 @@ import effekt.context.Context
 import effekt.symbols.{BlockSymbol, ValueSymbol}
 import effekt.jit.BlockNumbering.*
 import effekt.machine
-import effekt.machine.analysis
+import effekt.machine.{Declaration, analysis}
 
 import scala.annotation.targetName
 import scala.collection.mutable
+import scala.collection.immutable
 import scala.collection.mutable.{HashMap, ListBuffer, Queue}
 
 object Transformer {
   def transform(program: machine.Program): Program =
     program match {
       case machine.Program(declarations, main) =>
-        implicit val ProgC: ProgramContext = new ProgramContext();
+        val primitives = declarations.flatMap({
+          case Declaration.Extern(name, parameters, returnType, body) =>
+            List(name -> body)
+          case Declaration.Include(contents) => ???
+        }).toMap
+
+        implicit val ProgC: ProgramContext = new ProgramContext(primitives);
 
         val freeVars = List();//machine.freeVariables(main).toList;
 
@@ -24,7 +31,7 @@ object Transformer {
         val datatypes = ProgC.datatypes.map(tpe => tpe.map(pars => pars.map(transform))).toList;
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, ProgC.frameSize);
-        numberBlocks(ProgC.symbols.toMap, compiledProgram)
+        numberBlocks(ProgC.blockSymbols.toMap, compiledProgram)
     }
 
   def transform(label: String, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
@@ -128,10 +135,9 @@ object Transformer {
       }
       case machine.ForeignCall(out, name, ins, rest) => {
         import scala.util.matching.Regex
-        val suffixPattern = "[_$][0-9_]*$$".r
         val in_args = transformArguments(ins);
         val (_, outs, block) = transformInline(machine.Clause(List(out), rest));
-        val normalizedName = suffixPattern.replaceAllIn(name, "")
+        val normalizedName = ProgC.primitives(name)
         emit(PrimOp(normalizedName, outs, in_args));
         emitInlined(block)
       }
@@ -228,11 +234,11 @@ object Transformer {
     transformArgument(transformParameter(v))
   }
 
-  class ProgramContext() {
+  class ProgramContext(val primitives: immutable.Map[String, String]) {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
     val datatypes: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
     var frameSize: jit.FrameDescriptor = FrameDescriptor(Map());
-    var symbols: mutable.HashMap[String, BlockIndex] = mutable.HashMap();
+    var blockSymbols: mutable.HashMap[String, BlockIndex] = mutable.HashMap();
   }
 
   def emit(block: BasicBlock)(using ProgC: ProgramContext): BlockIndex = {
@@ -244,7 +250,7 @@ object Transformer {
   def emitNamed(name: String, block: BasicBlock)(using ProgC: ProgramContext): Unit = {
     ProgC.basicBlocks.addOne(block)
     // This is the correct index since the entry block is missing in [[ProgC.basicBlocks]]
-    ProgC.symbols.addOne(name, BlockIndex(ProgC.basicBlocks.size))
+    ProgC.blockSymbols.addOne(name, BlockIndex(ProgC.basicBlocks.size))
   }
 
   case class Environment(locals: Map[RegisterType, List[VariableDescriptor]]) {

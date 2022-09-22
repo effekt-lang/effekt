@@ -2,64 +2,63 @@ module effekt
 
 // Side effection ops
 // ==================
-extern io def random(): Int = ""
+extern io def random(): Int = "random(): Int"
 
 // Console ops
 // ===========
 
 extern effect Console
 
-extern pure def println(n: Int): Unit / Console = ""
-
-extern pure def println(n: Double): Unit / Console = ""
-
-extern pure def println(b: Boolean): Unit / Console = ""
+extern io def println(n: Int): Unit / Console = "println(Int): Unit / Console"
+extern io def println(n: Double): Unit / Console = "println(Double): Unit / Console"
+extern io def println(b: Boolean): Unit / Console = "println(Boolean): Unit / Console"
+extern io def readInt(): Int / Console = "readInt(): Int / Console"
 
 // integer primitives
 // ==================
 
-extern pure def infixAdd(x: Int, y: Int): Int = ""
-extern pure def infixMul(x: Int, y: Int): Int = ""
-extern pure def infixDiv(x: Int, y: Int): Int = ""
-extern pure def infixSub(x: Int, y: Int): Int = ""
-extern pure def mod(x: Int, y: Int): Int = ""
+extern pure def infixAdd(x: Int, y: Int): Int = "infixAdd(Int, Int): Int"
+extern pure def infixMul(x: Int, y: Int): Int = "infixMul(Int, Int): Int"
+extern pure def infixDiv(x: Int, y: Int): Int = "infixDiv(Int, Int): Int"
+extern pure def infixSub(x: Int, y: Int): Int = "infixSub(Int, Int): Int"
+extern pure def mod(x: Int, y: Int): Int = "mod(Int, Int): Int"
 
 // double primitives
 // =================
-extern pure def infixAdd(x: Double, y: Double): Double = ""
-extern pure def infixMul(x: Double, y: Double): Double = ""
-extern pure def infixDiv(x: Double, y: Double): Double = ""
-extern pure def infixSub(x: Double, y: Double): Double = ""
+extern pure def infixAdd(x: Double, y: Double): Double = "infixAdd(Double, Double): Double"
+extern pure def infixMul(x: Double, y: Double): Double = "infixMul(Double, Double): Double"
+extern pure def infixDiv(x: Double, y: Double): Double = "infixDiv(Double, Double): Double"
+extern pure def infixSub(x: Double, y: Double): Double = "infixSub(Double, Double): Double"
 
 // ordering on signed integers
 // ===========================
 
-extern pure def infixEq(x: Int, y: Int): Boolean = ""
-extern pure def infixNeq(x: Int, y: Int): Boolean = ""
-extern pure def infixLt(x: Int, y: Int): Boolean = ""
-extern pure def infixLte(x: Int, y: Int): Boolean = ""
-extern pure def infixGt(x: Int, y: Int): Boolean = ""
-extern pure def infixGte(x: Int, y: Int): Boolean = ""
+extern pure def infixEq(x: Int, y: Int): Boolean = "infixEq(Int, Int): Boolean"
+extern pure def infixNeq(x: Int, y: Int): Boolean = "infixNeq(Int, Int): Boolean"
+extern pure def infixLt(x: Int, y: Int): Boolean = "infixLt(Int, Int): Boolean"
+extern pure def infixLte(x: Int, y: Int): Boolean = "infixLte(Int, Int): Boolean"
+extern pure def infixGt(x: Int, y: Int): Boolean = "infixGt(Int, Int): Boolean"
+extern pure def infixGte(x: Int, y: Int): Boolean = "infixGte(Int, Int): Boolean"
 
 // ordering on doubles
 // ===================
 
-extern pure def infixEq(x: Double, y: Double): Boolean = ""
-extern pure def infixNeq(x: Double, y: Double): Boolean = ""
-extern pure def infixLt(x: Double, y: Double): Boolean = ""
-extern pure def infixLte(x: Double, y: Double): Boolean = ""
-extern pure def infixGt(x: Double, y: Double): Boolean = ""
-extern pure def infixGte(x: Double, y: Double): Boolean = ""
+extern pure def infixEq(x: Double, y: Double): Boolean = "infixEq(Double, Double): Boolean"
+extern pure def infixNeq(x: Double, y: Double): Boolean = "infixNeq(Double, Double): Boolean"
+extern pure def infixLt(x: Double, y: Double): Boolean = "infixLt(Double, Double): Boolean"
+extern pure def infixLte(x: Double, y: Double): Boolean = "infixLte(Double, Double): Boolean"
+extern pure def infixGt(x: Double, y: Double): Boolean = "infixGt(Double, Double): Boolean"
+extern pure def infixGte(x: Double, y: Double): Boolean = "infixGte(Double, Double): Boolean"
 
 // boolean algebra
 // ===============
 
-extern pure def infixEq(x: Boolean, y: Boolean): Boolean = ""
-extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = ""
-extern pure def not(b: Boolean): Boolean = ""
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean = ""
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = ""
+extern pure def infixEq(x: Boolean, y: Boolean): Boolean = "infixEq(Boolean, Boolean): Boolean"
+extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = "infixNeq(Boolean, Boolean): Boolean"
+extern pure def not(b: Boolean): Boolean = "not(Boolean): Boolean"
+extern pure def infixOr(x: Boolean, y: Boolean): Boolean = "infixOr(Boolean, Boolean): Boolean"
+extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = "infixAnd(Boolean, Boolean): Boolean"
 
 // Benchmarking
 // ============
-extern io def currentTimeNanos(): Int = "" // TODO: should be control?, not io
+extern io def currentTimeNanos(): Int = "currentTimeNanos(): Int"
