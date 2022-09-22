@@ -3,6 +3,7 @@ module effekt
 // Side effection ops
 // ==================
 extern io def random(): Int = "random(): Int"
+extern io def random(): Double = "random(): Double"
 
 // Console ops
 // ===========
@@ -12,6 +13,7 @@ extern effect Console
 extern io def println(n: Int): Unit / Console = "println(Int): Unit / Console"
 extern io def println(n: Double): Unit / Console = "println(Double): Unit / Console"
 extern io def println(b: Boolean): Unit / Console = "println(Boolean): Unit / Console"
+extern io def println(b: Unit): Unit / Console = "println(Unit): Unit / Console"
 extern io def readInt(): Int / Console = "readInt(): Int / Console"
 
 // integer primitives
@@ -22,6 +24,7 @@ extern pure def infixMul(x: Int, y: Int): Int = "infixMul(Int, Int): Int"
 extern pure def infixDiv(x: Int, y: Int): Int = "infixDiv(Int, Int): Int"
 extern pure def infixSub(x: Int, y: Int): Int = "infixSub(Int, Int): Int"
 extern pure def mod(x: Int, y: Int): Int = "mod(Int, Int): Int"
+extern pure def abs(x: Int): Int = "abs(Int): Int"
 
 // double primitives
 // =================
@@ -29,6 +32,34 @@ extern pure def infixAdd(x: Double, y: Double): Double = "infixAdd(Double, Doubl
 extern pure def infixMul(x: Double, y: Double): Double = "infixMul(Double, Double): Double"
 extern pure def infixDiv(x: Double, y: Double): Double = "infixDiv(Double, Double): Double"
 extern pure def infixSub(x: Double, y: Double): Double = "infixSub(Double, Double): Double"
+extern pure def mod(x: Double, y: Double): Double = "mod(Double, Double): Double"
+extern pure def abs(x: Double): Double = "abs(Double): Double"
+
+extern pure def cos(x: Double): Double = "cos(Double): Double"
+extern pure def acos(x: Double): Double = "acos(Double): Double"
+extern pure def sin(x: Double): Double = "sin(Double): Double"
+extern pure def asin(x: Double): Double = "asin(Double): Double"
+extern pure def tan(x: Double): Double = "tan(Double): Double"
+extern pure def atan(x: Double): Double = "atan(Double): Double"
+extern pure def atan2(x: Double, y: Double): Double = "atan2(Double, Double): Double"
+
+extern pure def cosh(x: Double): Double = "cosh(Double): Double"
+extern pure def acosh(x: Double): Double = "acosh(Double): Double"
+extern pure def sinh(x: Double): Double = "sinh(Double): Double"
+extern pure def asinh(x: Double): Double = "asinh(Double): Double"
+extern pure def tanh(x: Double): Double = "tanh(Double): Double"
+extern pure def atanh(x: Double): Double = "atanh(Double): Double"
+
+extern pure def sqrt(x: Double): Double = "sqrt(Double): Double"
+extern pure def log(x: Double): Double = "log(Double): Double"
+extern pure def log1p(x: Double): Double = "log1p(Double): Double"
+extern pure def log10(x: Double): Double = "log10(Double): Double"
+extern pure def exp(x: Double, y: Double): Double = "exp(Double, Double): Double"
+
+extern pure def floor(x: Double): Double = "floor(Double): Double"
+extern pure def ceil(x: Double): Double = "ceil(Double): Double"
+extern pure def toInt(x: Double): Int = "toInt(Double): Int"
+extern pure def toDouble(x: Int): Double = "toDouble(Int): Double"
 
 // ordering on signed integers
 // ===========================
