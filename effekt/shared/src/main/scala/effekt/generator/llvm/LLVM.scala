@@ -14,17 +14,19 @@ import effekt.context.assertions.*
 import effekt.util.paths.*
 
 object LLVM extends Backend {
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context): Option[Compiled] = {
+  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using Context): Option[Compiled] = {
     val mainFile = path(main.mod)
     val machineMod = machine.Transformer.transform(main, dependencies)
     val llvmDefinitions = Transformer.transform(machineMod)
+
     val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
+
     val result = Document(llvmString, emptyLinks)
 
     Some(Compiled(mainFile, Map(mainFile -> result)))
   }
 
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
 
   /**
@@ -34,12 +36,14 @@ object LLVM extends Backend {
    * This could be optimized in the future to (for instance) not show the standard library
    * and the prelude.
    */
-  def compileSeparate(main: CoreTransformed)(implicit C: Context): Option[Document] = {
+  def compileSeparate(main: CoreTransformed)(using Context): Option[Document] = {
     val machine.Program(decls, prog) = machine.Transformer.transform(main, Nil)
 
     // we don't print declarations here.
     val llvmDefinitions = Transformer.transform(machine.Program(Nil, prog))
+
     val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
+
     Some(Document(llvmString, emptyLinks))
   }
 }

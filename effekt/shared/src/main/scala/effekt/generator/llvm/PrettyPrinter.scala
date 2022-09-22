@@ -6,10 +6,10 @@ object PrettyPrinter {
 
   type LLVMString = String
 
-  def show(definitions: List[Definition])(using C: Context): LLVMString =
+  def show(definitions: List[Definition])(using Context): LLVMString =
     definitions.map(show).mkString("\n\n")
 
-  def show(definition: Definition)(using C: Context): LLVMString = definition match {
+  def show(definition: Definition)(using Context): LLVMString = definition match {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
 define fastcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
@@ -26,7 +26,7 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
     case Verbatim(content) => content
   }
 
-  def show(basicBlock: BasicBlock)(using C: Context): LLVMString = basicBlock match {
+  def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
     case BasicBlock(name, instructions, terminator) =>
       s"""
 ${name}:
@@ -83,22 +83,12 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
-    case LiteralUTF8String(bind: String, utf8: Array[Byte]) =>
-      //val escaped = utf8.map(b => f"\$b%02x").mkString;
-      val escaped = utf8.map(b => f"i8 $b").mkString(", ");
-      val t = s"[${utf8.size} x i8]"
-      val lit1 = localName(bind + "lit")
-      val lit2 = localName(bind + "lit2")
-      s"""
-$lit1 = alloca $t
-store $t [$escaped], $t* $lit1
-$lit2 = bitcast $t* $lit1 to i8*
-${localName(bind)} = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* $lit2)
-"""
 
     // let us hope that `msg` does not contain e.g. a newline
     case Comment(msg) =>
       s"; $msg"
+
+    case RawLLVM(llvm: String) => llvm
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {

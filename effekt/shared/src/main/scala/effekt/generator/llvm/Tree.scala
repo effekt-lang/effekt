@@ -28,8 +28,8 @@ enum Instruction {
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
 
-  case LiteralUTF8String(bind: String, utf8: Array[Byte])
   case Comment(msg: String)
+  case RawLLVM(llvm: String)
 }
 export Instruction.*
 
