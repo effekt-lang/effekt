@@ -124,6 +124,7 @@ sealed trait Type
 enum BlockType extends Type {
   case Function(tpeArity: Int, vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
   case Interface(symbol: TypeSymbol, targs: List[ValueType])
+  // TODO what about builtin blocktypes???
 }
 object BlockType {
   def Function(tparams: List[ValueType.FreeVar], vparams: List[(Name, ValueType)], bparams: List[(Name, BlockType)], result: ValueType): BlockType.Function =
