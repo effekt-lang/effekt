@@ -28,9 +28,7 @@ enum Instruction {
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
 
-  // TODO Potentially remove in favor of an representation within existing `Instruction`s.
-  case HeapifyUTF8String(target: String/*TODO dirty hack*/, utf8: Array[Byte])
-
+  case LiteralUTF8String(bind: String, utf8: Array[Byte])
   case Comment(msg: String)
 }
 export Instruction.*

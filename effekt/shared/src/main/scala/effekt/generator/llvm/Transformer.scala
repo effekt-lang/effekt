@@ -274,7 +274,7 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(machine.Variable(bind, _), utf8, rest) =>
-        emit(HeapifyUTF8String(bind, utf8))
+        emit(LiteralUTF8String(bind, utf8))
         transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
