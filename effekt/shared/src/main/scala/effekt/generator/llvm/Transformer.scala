@@ -1,5 +1,4 @@
-package effekt
-package llvm
+package effekt.llvm
 
 import effekt.machine
 import effekt.machine.analysis.*
@@ -26,8 +25,12 @@ object Transformer {
 
       val entryBlock = BasicBlock("entry", instructions, terminator)
       val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions :+ entryFunction
+      declarations.map(transform) ++ definitions ++ staticTextDefinitions(MC.staticText) :+ entryFunction
   }
+
+  private def staticTextDefinitions(staticText: Map[String, Array[Byte]]): List[Definition] = staticText.map { (global, bytes) =>
+    val escaped = bytes.map(b => f"\$b%02x").mkString;
+    Verbatim(s"@$global = private constant [${bytes.length} x i8] c\"$escaped\"") }.toList
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
@@ -39,7 +42,7 @@ object Transformer {
         Verbatim(content)
     }
 
-  def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
+  def transform(statement: machine.Statement)(using MC: ModuleContext)(using FunctionContext, BlockContext): Terminator =
     statement match {
 
       case machine.Def(machine.Label(name, environment), body, rest) =>
@@ -274,7 +277,11 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(machine.Variable(bind, _), utf8, rest) =>
-        emit(LiteralUTF8String(bind, utf8))
+        MC.staticText += s"$bind.lit" -> utf8
+        emit(RawLLVM(s"""
+%$bind.lit.decayed = bitcast [${utf8.length} x i8]* @$bind.lit to i8*
+%$bind = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* %$bind.lit.decayed)
+"""))
         transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
@@ -613,6 +620,7 @@ object Transformer {
   class ModuleContext() {
     var counter = 0;
     var definitions: List[Definition] = List();
+    var staticText: Map[String, Array[Byte]] = Map();
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =

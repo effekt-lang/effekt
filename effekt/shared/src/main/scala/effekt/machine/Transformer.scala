@@ -253,7 +253,7 @@ object Transformer {
       }
 
     case lifted.StringLit(javastring) =>
-        val literal_binding = Variable(freshName("string_literal"), Type.String());
+        val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
         Binding { k =>
           LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding)) }
 
