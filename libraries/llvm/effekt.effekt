@@ -1,7 +1,7 @@
 module effekt
 
 extern include "rts.ll"
-extern include "primitives.ll"
+extern include "forward-declare-c.ll"
 
 
 // Effekt-closed stdlib facilities
@@ -24,16 +24,16 @@ def abs(n: Int): Int =
 extern effect Console
 
 extern io def println(n: Int): Unit / Console =
-  "call void @c_println_Int(%Int %n)   ret %Pos zeroinitializer ; Unit"
+  "call void @c_io_println_Int(%Int %n)   ret %Pos zeroinitializer ; Unit"
 
 extern io def println(b: Boolean): Unit / Console =
-  "call void @c_println_Boolean(%Pos %b)   ret %Pos zeroinitializer ; Unit"
+  "call void @c_io_println_Boolean(%Pos %b)   ret %Pos zeroinitializer ; Unit"
 
 extern io def println(x: Double): Unit / Console =
-  "call void @c_println_Double(%Double %x)   ret %Pos zeroinitializer ; Unit"
+  "call void @c_io_println_Double(%Double %x)   ret %Pos zeroinitializer ; Unit"
 
 extern io def println(str: String): Unit / Console =
-  "call void @c_println_String(%Pos %str)   ret %Pos zeroinitializer ; Unit"
+  "call void @c_io_println_String(%Pos %str)   ret %Pos zeroinitializer ; Unit"
 
 
 // integer arithmetic
