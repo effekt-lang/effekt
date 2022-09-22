@@ -35,28 +35,4 @@ struct Pos c_println_Double(const Double x) {
 }
 
 
-// arithmetic
-
-#define C_OP(T, OP_NAME, OP) \
-    T c_ ## OP_NAME ## _ ## T ## _ ## T (const T x, const T y) { \
-        return x OP y; }
-
-// integer arithmetic
-C_OP(Int, add, +)
-C_OP(Int, sub, -)
-C_OP(Int, mul, *)
-C_OP(Int, div, /)
-C_OP(Int, mod, %)
-
-// floating-point arithmetic
-C_OP(Double, add, +)
-C_OP(Double, sub, -)
-C_OP(Double, mul, *)
-C_OP(Double, div, /)
-// NOTE: requires linking against `-lm` and `#include <math.h>`
-Double c_mod_Double_Double(Double x, Double y) { return fmod(x, y); }
-
-#undef C_OP
-
-
 #endif
