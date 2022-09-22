@@ -1,8 +1,9 @@
 #include <inttypes.h>
-#include <stdbool.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "sanity.c"
 #include "primitives.c"
 #include "buffer.c"
 
