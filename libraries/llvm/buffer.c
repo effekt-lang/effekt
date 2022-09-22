@@ -95,15 +95,5 @@ struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
     return c_buffer_construct(n, (uint8_t *) data_nt);
 }
 
-struct Pos c_String_getenv(const struct Pos key) {
-    char *key_nt = c_buffer_as_null_terminated_string(key);
-    // NOTE: value_nt must not be freed (its memory is managed by the kernel)
-    const char *value_nt = getenv(key_nt);
-    ASSERT_NON_NULL(value_nt);
-    free(key_nt);
-
-    return c_buffer_construct_from_null_terminated_string(value_nt);
-}
-
 
 #endif
