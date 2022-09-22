@@ -39,6 +39,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Continuation() => Some(jsonObjectSmall(ListMap("type" -> "\"cont\"")))
     case Type.Integer() => Some(jsonObjectSmall(ListMap("type" -> "\"int\"")))
     case Type.Double() => Some(jsonObjectSmall(ListMap("type" -> "\"double\"")))
+    case Type.String() => Some(jsonObjectSmall(ListMap("type" -> "\"string\"")))
     case Type.Codata(index) => Some(jsonObjectSmall(ListMap("type" -> "\"codata\"", "index" -> index.toString)))
     case Type.Datatype(index) => Some(jsonObjectSmall(ListMap("type" -> "\"adt\"", "index" -> index.toString)))
   }
@@ -48,6 +49,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case RegisterType.Integer => "int"
       case RegisterType.Continuation => "cont"
       case RegisterType.Double => "double"
+      case RegisterType.String => "string"
       case RegisterType.Datatype => "adt"
       case RegisterType.Codata => "codata"
       case _ => sys error "Cannot print erased register type"
@@ -76,6 +78,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "type" -> toDoc(RegisterType.Integer), "out" -> toDoc(out), "value" -> value.toString))
     case ConstDouble(out, value) => jsonObjectSmall(ListMap("op" -> "\"Const\"",
       "type" -> toDoc(RegisterType.Double), "out" -> toDoc(out), "value" -> value.toString))
+    case ConstString(out, value) => jsonObjectSmall(ListMap("op" -> "\"Const\"",
+      "type" -> toDoc(RegisterType.String), "out" -> toDoc(out), "value" -> "\"%s\"".format(value)))
     case PrimOp(name, out, in) => jsonObjectSmall(ListMap("op" -> "\"PrimOp\"",
       "name" -> dquotes(name),
       "out" -> toDoc(out),

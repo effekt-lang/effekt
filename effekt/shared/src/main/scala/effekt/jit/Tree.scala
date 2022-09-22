@@ -27,6 +27,7 @@ case class Clause(params: RegList, target: BlockLabel)
 sealed trait Instruction extends Tree
 case class Const(out: Register, value: Int) extends Instruction
 case class ConstDouble(out: Register, value: scala.Double) extends Instruction
+case class ConstString(out: Register, value: String) extends Instruction
 case class PrimOp(name: String, out: RegList, in: RegList) extends Instruction
 case class Add(out: Register, in1: Register, in2: Register) extends Instruction
 case class Mul(out: Register, in1: Register, in2: Register) extends Instruction
@@ -58,6 +59,7 @@ enum Type extends Tree {
   case Continuation()
   case Integer()
   case Double()
+  case String()
   case Datatype(index: Int)
   case Codata(index: Int)
 
@@ -66,13 +68,14 @@ enum Type extends Tree {
     case Continuation() => RegisterType.Continuation
     case Integer() => RegisterType.Integer
     case Double() => RegisterType.Double
+    case String() => RegisterType.String
     case Codata(index) => RegisterType.Codata
     case Datatype(index) => RegisterType.Datatype
   }
 }
 
 enum RegisterType {
-  case Integer, Double, Continuation, Codata, Datatype, Erased
+  case Integer, Double, String, Continuation, Codata, Datatype, Erased
 
   def isErased: Boolean = this match {
     case Erased => true

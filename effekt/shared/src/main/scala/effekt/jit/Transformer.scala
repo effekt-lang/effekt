@@ -108,7 +108,7 @@ object Transformer {
           val (_ign1, args, block) = transformInline(clause);
           emitInlined(block)
         }
-        case Type.Continuation() | Type.Double() | Type.Codata(_) => {
+        case Type.Continuation() | Type.Double() | Type.String() |  Type.Codata(_) => {
           sys error "Fatal error: Trying to match on non-datatype"
         }
         }
