@@ -7,11 +7,23 @@
 // inline.
 
 
-
-
 // Eight bytes for the reference counter.
 // E.g. capacity could also be stored left of the data.
 #define BUFFER_METADATA_WIDTH (8)
+
+uint64_t c_buffer_length(const struct Pos buffer) {
+    return buffer.tag;
+}
+
+// NOTE: This assumes a homogenously used byte order.
+uint64_t *c_buffer_refcount(const struct Pos buffer) {
+    return (uint64_t *) (buffer.obj - 8);
+}
+
+uint8_t *c_buffer_bytes(const struct Pos buffer) {
+    return buffer.obj;
+}
+
 
 struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
     uint8_t *buf = malloc(BUFFER_METADATA_WIDTH + n * sizeof *buf);
@@ -35,10 +47,6 @@ void c_buffer_destruct(const struct Pos buffer) {
     free(buffer.obj - BUFFER_METADATA_WIDTH);
 }
 
-// NOTE: This assumes a homogenous byte order.
-uint64_t* c_buffer_refcount(const struct Pos buffer) {
-    return (uint64_t*) (buffer.obj - 8);
-}
 
 void c_buffer_refcount_increment(const struct Pos buffer) {
     (*c_buffer_refcount(buffer))++;
@@ -50,101 +58,52 @@ void c_buffer_refcount_decrement(const struct Pos buffer) {
 }
 
 
-/*
-#define MAX_BUFFER_GROWTH (4096)
-
-struct Buffer {
-    uint32_t len;
-    uint32_t cap;
-    uint8_t *buf;
-};
-
-
-bool c_buffer_is_valid(const struct Buffer *buffer) {
-    return buffer->len <= buffer->cap && buffer->buf != NULL;
+struct Pos c_buffer_copy(const struct Pos buffer) {
+    return c_buffer_construct(c_buffer_length(buffer), c_buffer_bytes(buffer));
 }
 
-struct Buffer c_buffer_heapify(const uint32_t len, const char *text) {
-    uint8_t *buf = (uint8_t *) malloc(len * sizeof *text);
-    if (buf == NULL)
-        return (struct Buffer) {};
-    for (uint32_t j = 0; j != len; ++j)
-        buf[j] = text[j];
-    return (struct Buffer) {
-        .len = len,
-        .cap = len,
-        .buf = buf,
-    };
-}
 
-struct Buffer c_buffer_copy(const struct Buffer *buffer) {
-    return c_buffer_heapify(buffer->len, buffer->buf);
-}
+// incurs a malloc: the returned pointer needs to be managed
+char *c_buffer_as_null_terminated_string(const struct Pos buffer) {
+    // Zero runes are represented as non-minimal utf8 in the null-terminated
+    // string. As such, a count reveals the necessary number of bytes.
+    uint64_t zero_runes = 0;
+    for (uint64_t j = 0; j < c_buffer_length(buffer); ++j)
+        zero_runes += !c_buffer_bytes(buffer)[j];
 
-bool c_buffer_grow(struct Buffer *buffer) {
-    const uint32_t growth = buffer->cap <= MAX_BUFFER_GROWTH
-        ? buffer->cap : MAX_BUFFER_GROWTH;
-    uint8_t *buf = (uint8_t *) realloc(buffer->buf, buffer->cap+growth);
-    if (buf == NULL)
-        return false;
+    const uint64_t n = c_buffer_length(buffer) + zero_runes;
+    uint8_t *buf = (uint8_t *) malloc((n+1) * sizeof *buf);
+    ASSERT_NON_NULL(buf)
 
-    buffer->cap += growth;
-    buffer->buf = buf;
-    return true;
-}
-
-bool c_buffer_grow_to(struct Buffer *buffer, const uint32_t mincap) {
-    while (buffer->cap < mincap) {
-        if (!c_buffer_grow(buffer))
-            return false;
+    uint64_t i = 0;
+    for (uint64_t j = 0; j < c_buffer_length(buffer); ++j) {
+        buf[i++] = c_buffer_bytes(buffer)[j];
+        if (!buf[i]) {
+            buf[i]   = 0xc0; // 0b110.00000
+            buf[i++] = 0x80; // 0b10.000000
+        }
     }
-    return true;
+
+    // null-terminated
+    buf[n] = '\00';
 }
 
-bool c_buffer_grow_to_exactly_fit(struct Buffer *buffer, const uint32_t cap) {
-    if (buffer->cap <= cap)
-        return true;
+struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
+    uint64_t n = 0;
+    while (data_nt[n++]);
 
-    uint8_t *buf = (uint8_t *) realloc(buffer->buf, cap);
-    if (buf == NULL)
-        return false;
-
-    buffer->cap = cap;
-    buffer->buf = buf;
-    return true;
+    return c_buffer_construct(n, (uint8_t *) data_nt);
 }
 
-bool c_buffer_set_len(struct Buffer *buffer, const uint32_t len) {
-    if (!c_buffer_grow_to_exactly_fit(buffer, len))
-        return false;
-    buffer->len = len;
-    return true;
+struct Pos c_String_getenv(const struct Pos key) {
+    char *key_nt = c_buffer_as_null_terminated_string(key);
+    // NOTE: value_nt must not be freed (its memory is managed by the kernel)
+    const char *value_nt = getenv(key_nt);
+    ASSERT_NON_NULL(value_nt);
+    free(key_nt);
+
+    return c_buffer_construct_from_null_terminated_string(value_nt);
 }
-
-bool c_buffer_getenv(const struct Buffer *key, struct Buffer *value) {
-    if (key->len >= 0xffffffff)
-        return false;
-    char *key_zt = (char *) malloc((key->len+1) * sizeof *key_zt);
-    for (uint32_t j = 0; j < key->len; ++j)
-        key_zt[j] = key->buf[j];
-    key_zt[key->len] = '\00';
-
-    const char *value_zt = getenv(key_zt);
-    if (value_zt == NULL)
-        return false;
-
-    uint32_t value_len = 0;
-    for (; value_zt[value_len] != '\00'; ++value_len)
-        ;
-
-    if (!c_buffer_set_len(value, value_len))
-        return false;
-    for (uint32_t j = 0; j < value->len; ++j)
-        value->buf[j] = value_zt[j];
-
-    return true;
-}
-*/
 
 
 #endif
