@@ -28,6 +28,11 @@ object Transformer {
       declarations.map(transform) ++ definitions ++ staticTextDefinitions(MC.staticText) :+ entryFunction
   }
 
+  // context getters
+  private def MC(using MC: ModuleContext): ModuleContext = MC
+  private def FC(using FC: FunctionContext): FunctionContext = FC
+  private def BC(using BC: BlockContext): BlockContext = BC
+
   private def staticTextDefinitions(staticText: Map[String, Array[Byte]]): List[Definition] =
       staticText.map { (global, bytes) =>
         val escaped = bytes.map(b => f"\$b%02x").mkString;
@@ -279,8 +284,7 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
-        def MC()(using MC: ModuleContext) = MC
-        MC().staticText += s"$bind.lit" -> utf8
+        MC.staticText += s"$bind.lit" -> utf8
         emit(RawLLVM(s"""
 %$bind.lit.decayed = bitcast [${utf8.length} x i8]* @$bind.lit to i8*
 %$bind = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* %$bind.lit.decayed)
