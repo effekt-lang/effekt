@@ -25,12 +25,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
   })
 
   def toDoc(tpe: Type): Doc = tpe match {
-    case Positive(List(Nil)) => "Unit"
+    case Positive(List(Nil))      => "Unit"
     case Positive(List(Nil, Nil)) => "Bool"
-    case Positive(alternatives) => brackets(hsep(alternatives map signatureToDoc, ";"))
-    case Negative(alternatives) => braces(hsep(alternatives map signatureToDoc, ";"))
-    case Type.Stack() => "Stack"
-    case Type.Int() => "Int"
+    case Type.Int()               => "Int"
+    case Type.Double()            => "Double"
+    case Positive(alternatives)   => brackets(hsep(alternatives map signatureToDoc, ";"))
+    case Negative(alternatives)   => braces(hsep(alternatives map signatureToDoc, ";"))
+    case Type.Stack()             => "Stack"
   }
 
   def signatureToDoc(sig: Signature): Doc = parens(sig map toDoc)
@@ -78,6 +79,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 
     case LiteralInt(name, value, rest) =>
+      "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDoc(rest)
+
+    case LiteralDouble(name, value, rest) =>
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDoc(rest)
   }
 

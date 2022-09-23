@@ -1,3 +1,5 @@
 ; forward-declared from primitives.c
-declare void @c_println_pos_boolean(%Pos)
-declare void @c_println_int64(i64)
+
+declare %Pos @c_println_Boolean(%Pos)
+declare %Pos @c_println_Int(%Int)
+declare %Pos @c_println_Double(%Double)

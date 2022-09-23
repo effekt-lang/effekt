@@ -62,8 +62,10 @@
 ; The "meta" stack (a stack of stacks)
 %Stk = type %StkVal*
 
-; Positive data types consist of a tag and a heap object
+; Positive data types consist of a (type-local) tag and a heap object
 %Pos = type {i64, %Obj}
+%Boolean = type %Pos
+%Unit = type %Pos
 
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {void (%Obj, %Env, %Sp)*, %Obj}
@@ -414,5 +416,6 @@ define fastcc void @topLevelEraser(%Env %env) {
 ; Primitive Types
 
 %Int = type i64
+%Double = type double
 
 %Evi = type i64

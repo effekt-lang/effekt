@@ -8,24 +8,24 @@ case class Variable(name: String, tpe: Type)
 
 /**
  * An environment is an ordered list of type-annotated variable names.
- * 
+ *
  * Used to represent contexts, free variables, parameters, ...
  */
 type Environment = List[Variable]
 
 /**
  * Labels
- * 
+ *
  *   def l = { s1 }; s2
- * 
+ *
  * Here l is the label and [[environment]] is the list of free variables of s1.
  * It thus can be understood as the type of the label.
  */
 case class Label(name: String, environment: Environment)
 
 /**
- * Applying a substitution 
- *  
+ * Applying a substitution
+ *
  *    List(x -> y)
  *
  * will replace all occurrences of x by y. Here x is a binding occurrence 
@@ -140,6 +140,8 @@ enum Statement {
    * let x = 42; s
    */
   case LiteralInt(name: Variable, value: Int, rest: Statement)
+
+  case LiteralDouble(name: Variable, value: Double, rest: Statement)
 }
 export Statement.*
 
@@ -152,6 +154,7 @@ enum Type {
   case Negative(alternatives: List[Signature])
   case Stack()
   case Int()
+  case Double()
 }
 export Type.{ Positive, Negative }
 
