@@ -311,10 +311,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.error("Duplicate definitions of operations")
 
       clauses foreach Context.withFocus {
-        case _ @ source.OpClause(op, tparams, params, Some(ret), body, resumeId) =>
-          // TODO: Can we somehow use the return type provided by the user?
-          Context.abort(pretty"Unexpected type annotation on operation ${op}.")
-        case d @ source.OpClause(op, tparams, params, None, body, resume) =>
+        case d @ source.OpClause(op, tparams, params, retAnnotation, body, resume) =>
           val declaration = d.definition
 
           val declaredType = Context.lookupFunctionType(declaration)
@@ -358,10 +355,25 @@ object Typer extends Phase[NameResolved, Typechecked] {
           }
 
           val Result(_, effs) = continuationDetails match {
-            // no answer type, just check body
-            case None => body checkAgainst tpe
+            case None => retAnnotation match
+
+              case Some(ret) => // TODO: what about the effects?
+                body checkAgainst tpe
+                ??? // matchExpected(ret.tpe, tpe)
+                // TODO: fix this ^^^^^^
+              case None =>
+                // no answer type, no annotation, just check body
+                body checkAgainst tpe
+
             case Some(ret, continuationCapt) =>
               // answer type, we have a continuation!
+
+              // if there is a return type annotation from the user, report an error
+              // see PR #148 for more details
+              retAnnotation.foreach { _ =>
+                // TODO: Can we somehow use the return type provided by the user?
+                Context.abort(pretty"Unexpected type annotation on operation ${op}.")
+              }
 
               // (4) synthesize type of continuation
               val resumeType = if (otherEffs.nonEmpty) {
