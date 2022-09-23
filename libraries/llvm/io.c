@@ -1,5 +1,5 @@
-#ifndef EFFEKT_ARGS_C
-#define EFFEKT_ARGS_C
+#ifndef EFFEKT_IO_C
+#define EFFEKT_IO_C
 
 
 // println
