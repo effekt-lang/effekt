@@ -49,12 +49,24 @@ void c_buffer_destruct(const struct Pos buffer) {
 
 
 void c_buffer_refcount_increment(const struct Pos buffer) {
-    if (DEBUG_REFCOUNT) { fprintf(stderr, "c_buffer_refcount_increment((struct Pos) { .tag = %" PRIu64 ", .obj = %p })\n", buffer.tag, buffer.obj); fflush(stderr); }
+    if (DEBUG_REFCOUNT) {
+        fprintf(stderr, "c_buffer_refcount_increment((struct Pos) "
+            "{ .tag = %" PRIu64 ", .obj = %p }): from %" PRIu64 "\n",
+            buffer.tag, buffer.obj, *(c_buffer_refcount(buffer)));
+        fflush(stderr);
+    }
+
     (*c_buffer_refcount(buffer))++;
 }
 
 void c_buffer_refcount_decrement(const struct Pos buffer) {
-    if (DEBUG_REFCOUNT) { fprintf(stderr, "c_buffer_refcount_decrement((struct Pos) { .tag = %" PRIu64 ", .obj = %p })\n", buffer.tag, buffer.obj); fflush(stderr); }
+    if (DEBUG_REFCOUNT) {
+        fprintf(stderr, "c_buffer_refcount_decrement((struct Pos) "
+            "{ .tag = %" PRIu64 ", .obj = %p }): from %" PRIu64 "\n",
+            buffer.tag, buffer.obj, *(c_buffer_refcount(buffer)));
+        fflush(stderr);
+    }
+
     if (!(*c_buffer_refcount(buffer))--)
         c_buffer_destruct(buffer);
 }

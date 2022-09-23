@@ -28,9 +28,11 @@ object Transformer {
       declarations.map(transform) ++ definitions ++ staticTextDefinitions(MC.staticText) :+ entryFunction
   }
 
-  private def staticTextDefinitions(staticText: Map[String, Array[Byte]]): List[Definition] = staticText.map { (global, bytes) =>
-    val escaped = bytes.map(b => f"\$b%02x").mkString;
-    Verbatim(s"@$global = private constant [${bytes.length} x i8] c\"$escaped\"") }.toList
+  private def staticTextDefinitions(staticText: Map[String, Array[Byte]]): List[Definition] =
+      staticText.map { (global, bytes) =>
+        val escaped = bytes.map(b => f"\$b%02x").mkString;
+        Verbatim(s"@$global = private constant [${bytes.length} x i8] c\"$escaped\"")
+      }.toList
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
@@ -42,7 +44,7 @@ object Transformer {
         Verbatim(content)
     }
 
-  def transform(statement: machine.Statement)(using MC: ModuleContext)(using FunctionContext, BlockContext): Terminator =
+  def transform(statement: machine.Statement)(using ModuleContext, FunctionContext, BlockContext): Terminator =
     statement match {
 
       case machine.Def(machine.Label(name, environment), body, rest) =>
@@ -277,7 +279,8 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
-        MC.staticText += s"$bind.lit" -> utf8
+        def MC()(using MC: ModuleContext) = MC
+        MC().staticText += s"$bind.lit" -> utf8
         emit(RawLLVM(s"""
 %$bind.lit.decayed = bitcast [${utf8.length} x i8]* @$bind.lit to i8*
 %$bind = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* %$bind.lit.decayed)
@@ -334,7 +337,7 @@ object Transformer {
       case machine.Negative(_)      => 16
       case machine.Type.Int()       => 8 // TODO Make fat?
       case machine.Type.Double()    => 8 // TODO Make fat?
-      case machine.Type.String()    => 8 // TODO Should this not really be a `Positive()`?
+      case machine.Type.String()    => 16
       case machine.Type.Stack()     => 8 // TODO Make fat?
     }
 
@@ -518,7 +521,7 @@ object Transformer {
       case machine.Type.Stack()  => emit(Call("_", VoidType(), shareStack, List(transform(value))))
       case machine.Type.Int()    => ()
       case machine.Type.Double() => ()
-      case machine.Type.String() => () // TODO: All strings are small (!) and thus are ruthlessly copied.
+      case machine.Type.String() => emit(Call("_", VoidType(), shareString, List(transform(value))))
     }
   }
 
@@ -602,6 +605,7 @@ object Transformer {
   def shareNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "shareNegative");
   def shareStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "shareStack");
   def shareFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "shareFrames");
+  def shareString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_increment");
 
   def eraseObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseObject");
   def erasePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "erasePositive");
