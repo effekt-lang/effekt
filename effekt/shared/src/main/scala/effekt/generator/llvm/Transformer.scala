@@ -276,13 +276,15 @@ object Transformer {
         emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));
         transform(rest)
 
-      case machine.LiteralUTF8String(machine.Variable(bind, _), utf8, rest) =>
+      case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
         MC.staticText += s"$bind.lit" -> utf8
         emit(RawLLVM(s"""
 %$bind.lit.decayed = bitcast [${utf8.length} x i8]* @$bind.lit to i8*
 %$bind = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* %$bind.lit.decayed)
 """))
-        transform(rest)
+        val transformed = transform(rest)
+        eraseValue(v) // TODO Is this the correct point in time to decrease the ref count by one?
+        transformed
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
@@ -527,7 +529,7 @@ object Transformer {
       case machine.Type.Stack()  => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
       case machine.Type.Int()    => ()
       case machine.Type.Double() => ()
-      case machine.Type.String() => ??? // TODO emit(Call("_", VoidType(), freeString, ???))
+      case machine.Type.String() => emit(Call("_", VoidType(), eraseString, List(transform(value))))
     }
   }
 
@@ -606,6 +608,7 @@ object Transformer {
   def eraseNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "eraseNegative");
   def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "eraseStack");
   def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
+  def eraseString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_decrement");
 
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
