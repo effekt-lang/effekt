@@ -5,7 +5,6 @@ extern include "primitives.ll"
 
 
 // Effekt-closed stdlib facilities
-// ===============================
 
 def min(n: Int, m: Int): Int =
     if (n < m) n else m
@@ -20,6 +19,8 @@ def abs(n: Int): Int =
     max(n, neg(n))
 
 
+// i/o
+
 extern effect Console
 
 extern io def println(n: Int): Unit / Console =
@@ -30,7 +31,6 @@ extern io def println(b: Boolean): Unit / Console =
 
 extern io def println(x: Double): Unit / Console =
   "%unit = call %Pos @c_println_Double(%Double %x)   ret %Pos %unit"
-
 
 
 // integer arithmetic
