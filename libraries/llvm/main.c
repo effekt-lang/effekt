@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define DEBUG_REFCOUNT (true)
+#define DEBUG_REFCOUNT (false)
 
 #include "sanity.c"
 #include "types.c"
