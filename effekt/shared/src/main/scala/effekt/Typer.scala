@@ -311,7 +311,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.error("Duplicate definitions of operations")
 
       clauses foreach Context.withFocus {
-        case d @ source.OpClause(op, tparams, params, body, resume) =>
+        case _ @ source.OpClause(op, tparams, params, Some(ret), body, resumeId) =>
+          // TODO: Can we somehow use the return type provided by the user?
+          Context.abort(pretty"Unexpected type annotation on operation ${op}.")
+        case d @ source.OpClause(op, tparams, params, None, body, resume) =>
           val declaration = d.definition
 
           val declaredType = Context.lookupFunctionType(declaration)
