@@ -6,9 +6,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-// **only** for strerror
-#include <string.h>
-
 #define DEBUG_REFCOUNT (true)
 
 #include "sanity.c"
@@ -20,6 +17,5 @@
 extern void effektMain();
 
 int main(int argc, char *argv[]) {
-    c_io_prepare_command_line_arguments(argc, argv);
     effektMain();
 }
