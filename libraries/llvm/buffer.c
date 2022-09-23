@@ -69,6 +69,8 @@ struct Pos c_buffer_construct_zeroed(const uint64_t n) {
 }
 
 void c_buffer_truncate(struct Pos buffer, const uint64_t n) {
+    if (n > c_buffer_length(buffer))
+        return;
     buffer.tag = n;
 }
 
