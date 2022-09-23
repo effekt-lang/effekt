@@ -8,6 +8,7 @@ declare void @c_io_println_String(%Pos)
 declare %Pos @c_buffer_construct(i64, i8*)
 declare void @c_buffer_refcount_increment(%Pos)
 declare void @c_buffer_refcount_decrement(%Pos)
+declare %Pos @c_buffer_concatenate(%Pos, %Pos)
 
 declare %Int @c_io_number_of_command_line_arguments()
 declare %Pos @c_io_command_line_argument(%Int)

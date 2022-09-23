@@ -41,6 +41,12 @@ extern io def write(fd: Int, buffer: String): Unit =
   "call void @c_io_write(%Int %fd, %Pos %buffer)   ret %Pos zeroinitializer ; Unit"
 
 
+// strings
+
+extern pure def infixAdd(s: String, z: String): String =
+  "%spz = call %Pos @c_buffer_concatenate(%Pos %s, %Pos %z)   ret %Pos %spz"
+
+
 // integer arithmetic
 
 extern pure def infixAdd(x: Int, y: Int): Int = "%z = add  %Int %x, %y ret %Int %z"
