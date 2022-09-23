@@ -44,19 +44,6 @@ extern io def println(str: String): Unit / Console = """
 """
 
 
-// i/o (file descriptor level)
-
-extern io def read(fd: Int): String = """
-    %buffer = call %Pos @c_io_read(%Int %fd)
-    ret %Pos %buffer
-"""
-
-extern io def write(fd: Int, buffer: String): Unit = """
-    call void @c_io_write(%Int %fd, %Pos %buffer)
-    ret %Pos zeroinitializer ; Unit
-"""
-
-
 // strings
 
 extern pure def infixAdd(s: String, z: String): String = """
