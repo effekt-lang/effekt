@@ -1,7 +1,10 @@
 #include <inttypes.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#define DEBUG_REFCOUNT (true)
 
 #include "sanity.c"
 #include "types.c"
