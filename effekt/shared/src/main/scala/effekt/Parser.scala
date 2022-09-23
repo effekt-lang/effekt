@@ -6,6 +6,7 @@ import effekt.util.{ SourceTask, VirtualSource }
 import effekt.util.messages.ParseError
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Range, Source }
+import scala.util.matching.Regex
 
 import scala.language.implicitConversions
 
@@ -292,11 +293,17 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         ExternFun(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
 
+  // Delimiter for multiline strings
+  val multi = "\"\"\""
+
   lazy val externBody: P[String] =
-    ( """\"([^\"\n]*)\"""".r            // single line strings
-    | """\"\"\"([^\"\"\"]*)\"\"\"""".r  // multi line strings
-    | failure("Expected an extern definition, which can either be a single line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
+    ( multilineString
+    | s"(?!${multi})\"([^\"\n]*)\"".r // single-line strings
+    | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
+
+  // multi-line strings `(?s)` sets multi-line mode.
+  lazy val multilineString: P[String] = matchRegex(s"(?s)${multi}[\t\n\r ]*(.*?)[\t\n\r ]*${multi}".r) ^^ { m => m.group(1) }
 
   lazy val externFlag: P[ExternFlag.Purity] =
     ( `pure` ^^^ ExternFlag.Pure

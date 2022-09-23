@@ -1,0 +1,5 @@
+extern io def jsPrintNoop(): Unit = """
+  console.log("no-op")
+"""
+
+def main() = jsPrintNoop()
