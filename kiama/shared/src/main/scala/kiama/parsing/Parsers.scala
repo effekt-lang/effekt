@@ -50,6 +50,7 @@ class ParsersBase(positions: Positions) {
   import scala.language.implicitConversions
   import scala.util.DynamicVariable
   import scala.util.matching.Regex
+  import scala.util.matching.Regex.Match
 
   /**
    * Record lack of success so that we can nicely handle the case where a phrase
@@ -730,6 +731,22 @@ class ParsersBase(positions: Positions) {
             Success(s.substring(0, m.end), Input(in.source, in.offset + m.end))
           case None =>
             Failure(s"string matching regex '$r' expected but ${in.found} found", in)
+        }
+    }
+
+  /**
+   * A parser that matches a regex string after skipping any whitespace.
+   * The form of the latter is defined by the `whitespace` parser.
+   */
+  def matchRegex(r: Regex): Parser[Match] =
+    Parser {
+      in =>
+        val s = in.source.content.substring(in.offset)
+        r.findPrefixMatchOf(s) match {
+          case Some(m) =>
+            Success(m, Input(in.source, in.offset + m.end))
+          case None =>
+            Failure(s"string matching regex '$r' expected but ${ in.found } found", in)
         }
     }
 
