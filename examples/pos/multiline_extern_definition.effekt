@@ -1,7 +1,5 @@
-// bugged in: https://github.com/effekt-lang/effekt/blob/b9b56fa12a0d4b2552818e9180182e38367aec43/effekt/shared/src/main/scala/effekt/Parser.scala#L297
-
-extern def jsPrintNoop(): Unit = """
-console.out.println("no-op");
+extern io def jsPrintNoop(): Unit = """
+  console.log("no-op")
 """
 
-main() = jsPrintNoop
+def main() = jsPrintNoop()

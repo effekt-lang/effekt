@@ -1,7 +1,5 @@
-// bugged in: https://github.com/effekt-lang/effekt/blob/b9b56fa12a0d4b2552818e9180182e38367aec43/effekt/shared/src/main/scala/effekt/Parser.scala#L297
-
 extern def jsPrintThree(): Unit = """
-console.out.println(3);
+  console.log(3)
 "
 
-main() = jsPrintThree
+def main() = jsPrintThree()
