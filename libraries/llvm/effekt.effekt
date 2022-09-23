@@ -1,42 +1,42 @@
 module effekt
 
 extern include "rts.ll"
-
-
-// I/O primitives
-// ==============
-
-extern effect Console
 extern include "primitives.ll"
 
-extern pure def println(n: Int): Unit / Console =
-  "call void @c_println_int64(i64 %n)   ret %Pos zeroinitializer"
 
-extern pure def println(b: Boolean): Unit / Console =
-  "call void @c_println_pos_boolean(%Pos %b)   ret %Pos zeroinitializer"
+// i/o
+
+extern effect Console
+
+extern io def println(n: Int): Unit / Console =
+  "%unit = call %Pos @c_println_Int(%Int %n)   ret %Pos %unit"
+
+extern io def println(b: Boolean): Unit / Console =
+  "%unit = call %Pos @c_println_Boolean(%Pos %b)   ret %Pos %unit"
+
+extern io def println(x: Double): Unit / Console =
+  "%unit = call %Pos @c_println_Double(%Double %x)   ret %Pos %unit"
 
 
-// integer primitives
-// ==================
+// integer arithmetic
 
-extern pure def infixAdd(x: Int, y: Int): Int =
-  "%z = add %Int %x, %y ret %Int %z"
+extern pure def infixAdd(x: Int, y: Int): Int = "%z = add  %Int %x, %y ret %Int %z"
+extern pure def infixSub(x: Int, y: Int): Int = "%z = sub  %Int %x, %y ret %Int %z"
+extern pure def infixMul(x: Int, y: Int): Int = "%z = mul  %Int %x, %y ret %Int %z"
+extern pure def infixDiv(x: Int, y: Int): Int = "%z = sdiv %Int %x, %y ret %Int %z"
 
-extern pure def infixMul(x: Int, y: Int): Int =
-  "%z = mul %Int %x, %y ret %Int %z"
+extern pure def mod     (x: Int, y: Int): Int = "%z = srem %Int %x, %y ret %Int %z"
 
-extern pure def infixDiv(x: Int, y: Int): Int =
-  "%z = sdiv %Int %x, %y ret %Int %z"
 
-extern pure def infixSub(x: Int, y: Int): Int =
-  "%z = sub %Int %x, %y ret %Int %z"
+// floating-point arithmetic
 
-extern pure def mod(x: Int, y: Int): Int =
-  "%z = srem %Int %x, %y ret %Int %z"
+extern pure def infixAdd(x: Double, y: Double): Double = "%z = fadd %Double %x, %y ret %Double %z"
+extern pure def infixSub(x: Double, y: Double): Double = "%z = fsub %Double %x, %y ret %Double %z"
+extern pure def infixMul(x: Double, y: Double): Double = "%z = fmul %Double %x, %y ret %Double %z"
+extern pure def infixDiv(x: Double, y: Double): Double = "%z = fdiv %Double %x, %y ret %Double %z"
 
 
 // ordering on signed integers
-// ===========================
 
 extern pure def infixEq(x: Int, y: Int): Boolean =
   "%z = icmp eq %Int %x, %y   %fat_z = zext i1 %z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"
@@ -59,7 +59,6 @@ extern pure def infixGte(x: Int, y: Int): Boolean =
 
 
 // boolean algebra
-// ===============
 
 extern pure def infixEq(x: Boolean, y: Boolean): Boolean =
   "%slim_x = extractvalue %Pos %x, 0   %slim_y = extractvalue %Pos %y, 0   %slim_z = icmp eq i64 %slim_x, %slim_y   %fat_z = zext i1 %slim_z to i64   %adt_boolean = insertvalue %Pos zeroinitializer, i64 %fat_z, 0   ret %Pos %adt_boolean"

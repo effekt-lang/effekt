@@ -86,7 +86,7 @@ object Transformer {
         entryPoint
 
       case _ =>
-        Context.abort("Unsupported declaration: " + stmt)
+        Context.abort(s"Unsupported declaration: $stmt")
     }
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Statement =
@@ -147,7 +147,7 @@ object Transformer {
                 Return(values))
             }
           case _ =>
-            Context.abort("Unsupported blocksymbol: " + id)
+            Context.abort(s"Unsupported blocksymbol: $id")
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id), op), List(), args) =>
@@ -159,7 +159,7 @@ object Transformer {
               Invoke(Variable(transform(id), transform(tpe)), 0, values)
             }
           case _ =>
-            Context.abort("Unsupported blocksymbol: " + id)
+            Context.abort(s"Unsupported blocksymbol: $id")
         }
 
       case lifted.If(cond, thenStmt, elseStmt) =>
@@ -195,7 +195,7 @@ object Transformer {
               transform(body))))
 
       case _ =>
-        Context.abort("Unsupported statement: " + stmt)
+        Context.abort(s"Unsupported statement: $stmt")
     }
 
   def transform(arg: lifted.Argument)(using BlocksParamsContext, Context): Binding[Variable] = arg match {
@@ -246,6 +246,12 @@ object Transformer {
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
+    case lifted.DoubleLit(v) =>
+      val literal_binding = Variable(freshName("x"), Type.Double());
+      Binding { k =>
+        LiteralDouble(literal_binding, v, k(literal_binding))
+      }
+
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
       val variable = Variable(freshName("x"), transform(blockName.result))
       transform(args).flatMap { values =>
@@ -267,7 +273,7 @@ object Transformer {
 
         case symbol => Context.abort(s"application to an unknown symbol: $symbol")
       }
-      
+
       transform(args).flatMap { values =>
         Binding { k =>
           Construct(variable, tag, values, k(variable))
@@ -291,7 +297,7 @@ object Transformer {
       }
 
     case _ =>
-      Context.abort(s"Unsupported expression: ${expr}")
+      Context.abort(s"Unsupported expression: $expr")
   }
 
   def transform(args: List[lifted.Argument])(using BlocksParamsContext, Context): Binding[List[Variable]] =
@@ -309,7 +315,7 @@ object Transformer {
           PopStack(Variable(transform(resume).name, Type.Stack()),
             transform(body))))
       case _ =>
-        Context.abort("Unsupported handler " + handler)
+        Context.abort(s"Unsupported handler $handler")
     }
   }
 
@@ -324,12 +330,14 @@ object Transformer {
     }
 
   def transform(tpe: symbols.Type)(using Context): Type = tpe match {
-  
+
     case symbols.builtins.TUnit => builtins.UnitType
 
     case symbols.builtins.TInt => Type.Int()
 
     case symbols.builtins.TBoolean => builtins.BooleanType
+
+    case symbols.builtins.TDouble => Type.Double()
 
     case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) =>
       // TODO block params too

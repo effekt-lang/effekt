@@ -19,11 +19,11 @@ object builtins {
 
   private def name(s: String) = Name.qualified(s, prelude)
 
-  val TInt = BuiltinType(name("Int"), Nil)
-  val TBoolean = BuiltinType(name("Boolean"), Nil)
   val TUnit = BuiltinType(name("Unit"), Nil)
-  val TString = BuiltinType(name("String"), Nil)
+  val TBoolean = BuiltinType(name("Boolean"), Nil)
+  val TInt = BuiltinType(name("Int"), Nil)
   val TDouble = BuiltinType(name("Double"), Nil)
+  val TString = BuiltinType(name("String"), Nil)
 
   val TTop = BuiltinType(name("⊤"), Nil)
   val TBottom = BuiltinType(name("⊥"), Nil)
@@ -51,11 +51,11 @@ object builtins {
   val TRegion = Interface(Name.local("Region"), Nil, Nil)
 
   val rootTypes: Map[String, TypeSymbol] = Map(
-    "Int" -> TInt,
-    "Boolean" -> TBoolean,
     "Unit" -> TUnit,
-    "String" -> TString,
+    "Boolean" -> TBoolean,
+    "Int" -> TInt,
     "Double" -> TDouble,
+    "String" -> TString,
     "IO" -> IOEffect,
     "Region" -> TRegion
   )
