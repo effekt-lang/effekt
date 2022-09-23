@@ -1,0 +1,9 @@
+interface Foo { def foo(): Int }
+
+def main() = {
+  val obj = new Foo {
+    def foo(): Int = 42
+  }
+  println(obj.foo())
+  ()
+}
