@@ -1,7 +1,6 @@
 module effekt
 
 extern include "rts.ll"
-extern include "primitives.ll"
 
 
 // Effekt-closed stdlib facilities
@@ -20,17 +19,11 @@ def abs(n: Int): Int =
     max(n, neg(n))
 
 
-// Console ops
-// ===========
-
 extern effect Console
+extern include "primitives.ll"
 
 extern pure def println(n: Int): Unit / Console =
-  "call void @printInt_impl(%Int %n) ret %Pos zeroinitializer"
-
-// TODO
-// extern pure def println(b: Boolean): Unit / Console =
-//   "call void @printBoolean_impl(%Boolean %b) ret %Pos zeroinitializer"
+  "call void @c_println_int64(i64 %n)   ret %Pos zeroinitializer"
 
 
 // integer primitives

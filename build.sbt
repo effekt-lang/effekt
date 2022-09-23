@@ -10,7 +10,7 @@ lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
 
 
-lazy val effektVersion = "0.1.16"
+lazy val effektVersion = "0.2.0"
 
 lazy val noPublishSettings = Seq(
   publish := {},
@@ -135,12 +135,13 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     install := {
       assembleBinary.value
-      Process("npm pack").!!
-      Process(s"npm install -g effekt-${effektVersion}.tgz").!!
+
+      Process(s"${npm.value} pack").!!
+      Process(s"${npm.value} install -g effekt-${effektVersion}.tgz").!!
     },
 
     generateLicenses := {
-      Process("mvn license:download-licenses license:add-third-party").!!
+      Process(s"${mvn.value} license:download-licenses license:add-third-party").!!
 
       val kiamaFolder = (ThisBuild / baseDirectory).value / "kiama"
       val licenseFolder = (ThisBuild / baseDirectory).value / "licenses"
@@ -149,8 +150,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     },
 
     updateVersions := {
-      Process(s"npm version ${effektVersion} --no-git-tag-version --allow-same-version").!!
-      Process(s"mvn versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
+      Process(s"${npm.value} version ${effektVersion} --no-git-tag-version --allow-same-version").!!
+      Process(s"${mvn.value} versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
     },
 
     Compile / sourceGenerators += versionGenerator.taskValue
@@ -161,6 +162,24 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
     // include all resource files in the virtual file system
     Compile / sourceGenerators += stdLibGenerator.taskValue
   )
+
+
+lazy val platform = Def.task {
+  val platformString = System.getProperty("os.name").toLowerCase
+  if (platformString.contains("win")) "windows"
+  else if (platformString.contains("mac")) "macos"
+  else if (platformString.contains("linux")) "linux"
+  else sys error s"Unknown platform ${platformString}"
+}
+
+lazy val npm = Def.task {
+  if (platform.value == "windows") "npm.cmd" else "npm"
+}
+
+lazy val mvn = Def.task {
+  if (platform.value == "windows") "mvn.cmd" else "mvn"
+}
+
 
 lazy val versionGenerator = Def.task {
   val sourceDir = (Compile / sourceManaged).value
