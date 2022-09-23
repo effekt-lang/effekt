@@ -110,4 +110,16 @@ struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
 }
 
 
+struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
+    const struct Pos concatenated = c_buffer_construct_zeroed(
+        c_buffer_length(left) + c_buffer_length(right));
+    for (uint64_t j = 0; j < c_buffer_length(concatenated); ++j)
+        c_buffer_bytes(concatenated)[j]
+            = j < c_buffer_length(left)
+            ? c_buffer_bytes(left)[j]
+            : c_buffer_bytes(right)[j - c_buffer_length(left)];
+    return concatenated;
+}
+
+
 #endif
