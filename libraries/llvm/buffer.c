@@ -60,6 +60,18 @@ void c_buffer_refcount_decrement(const struct Pos buffer) {
 }
 
 
+struct Pos c_buffer_construct_zeroed(const uint64_t n) {
+    uint8_t *zeroes = calloc(n, sizeof *zeroes);
+    ASSERT_NON_NULL(zeroes)
+    const struct Pos buffer = c_buffer_construct(n, zeroes);
+    free(zeroes);
+    return buffer;
+}
+
+void c_buffer_truncate(struct Pos buffer, const uint64_t n) {
+    buffer.tag = n;
+}
+
 struct Pos c_buffer_copy(const struct Pos buffer) {
     return c_buffer_construct(c_buffer_length(buffer), c_buffer_bytes(buffer));
 }

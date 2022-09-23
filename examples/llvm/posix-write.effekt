@@ -1,0 +1,3 @@
+def main(): Unit / Console = {
+    write(1, "I greet you, stdout!");
+}
