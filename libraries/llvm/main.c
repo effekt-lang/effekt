@@ -1,8 +1,13 @@
+#include <errno.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+
+// **only** for strerror
+#include <string.h>
 
 #define DEBUG_REFCOUNT (true)
 

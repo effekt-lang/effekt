@@ -23,6 +23,29 @@ void c_io_println_String(String text) {
 }
 
 
+#define IO_CHUNK_SIZE (4096)
+
+struct Pos c_io_read(const Int fd) {
+    const struct Pos buffer = c_buffer_construct_zeroed(IO_CHUNK_SIZE);
+    const int64_t n = read((int) fd, c_buffer_bytes(buffer), IO_CHUNK_SIZE);
+    if (n == -1) {
+        fprintf(stderr, "*** IO ERROR ENCOUNTERED: read: %s\n", strerror(errno));
+        fflush(stderr);
+        c_buffer_truncate(buffer, 0);
+    }
+    c_buffer_truncate(buffer, n);
+    return buffer;
+}
+
+void c_io_write(const Int fd, const struct Pos buffer) {
+    const int64_t n = write((int) fd, c_buffer_bytes(buffer), c_buffer_length(buffer));
+    if (n == -1) {
+        fprintf(stderr, "*** IO ERROR ENCOUNTERED: write: %s\n", strerror(errno));
+        fflush(stderr);
+    }
+}
+
+
 // command-line arguments
 
 static int c_io_argc;
@@ -38,7 +61,7 @@ Int c_io_number_of_command_line_arguments() {
 
 String c_io_command_line_argument(const Int k) {
     if (k < 0 || k >= c_io_argc)
-        return c_buffer_construct(0, NULL);
+        return c_buffer_construct_zeroed(0);
     return c_buffer_construct_from_null_terminated_string(c_io_argv[k]);
 }
 
