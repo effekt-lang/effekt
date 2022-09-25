@@ -33,7 +33,7 @@ object Transformer {
   private def FC(using FC: FunctionContext): FunctionContext = FC
   private def BC(using BC: BlockContext): BlockContext = BC
 
-  private def staticTextDefinitions(staticText: Map[String, Array[Byte]]): List[Definition] =
+  private def staticTextDefinitions(using MC: ModuleContext): List[Definition] =
       staticText.map { (global, bytes) =>
         val escaped = bytes.map(b => f"\$b%02x").mkString;
         Verbatim(s"@$global = private constant [${bytes.length} x i8] c\"$escaped\"")
