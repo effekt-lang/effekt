@@ -2,15 +2,20 @@ package effekt
 package core
 package typed
 
-import effekt.core.typed.ValueType.Boxed
-import effekt.lifted.BlockLit
+
+// We dropped Hole. Instead we will model it as a builtin: builtin.Hole[T]()
+//
+// TODO we use BlockLit quite often. This is convenient since we can reuse the treatment
+//   for name binding. However:
+//   - we always need to establish the invariant across transformations that a blocklit stays a blocklit
+//   - we sometimes need to cast to extract the (type of the) body
+//
+//   Discussion: is this the way we want to do things?
+//
+// TODO Match and If should compute the join of the different branches. Instead, we could also annotate
+//   the join in order to avoid computing it.
 
 
-// TODO add
-// - Match
-// - State
-// - Region
-// - Hole
 
 type Name = String
 
@@ -18,8 +23,6 @@ type Name = String
 type TypeSymbol = String
 
 // TODO TBD
-// TODO forbid local datatype, effect, and extern declarations in source.
-
 type Declaration = Unit
 
 case class Module(
@@ -94,14 +97,32 @@ case class Instance(interface: BlockType.Interface, operations: List[Operation])
   val capt = operations.flatMap(_.capt).toSet
 }
 
+enum Pattern {
+  case IgnorePattern()
+  case AnyPattern()
+  case TagPattern(tag: Name, patterns: List[Pattern])
+  case LiteralPattern(l: Pure.Literal)
+}
+export Pattern.*
+
+
 enum Statement extends Term {
+
+  // Group 1. Fine-grain CBV
+  case Return(expr: Pure)
   case Val(name: Name, binding: Statement, body: Statement)
-  case If(cond: Pure, thn: Statement, els: Statement)
-  case While(cond: Statement, body: Statement)
   case Scope(bindings: List[Definition], body: Statement)
   case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+
+  // Group 2. Local control flow
+  case If(cond: Pure, thn: Statement, els: Statement)
+  case While(cond: Statement, body: Statement)
+  case Match(scrutinee: Pure, clauses: List[(Pattern, Block.BlockLit)])
+
+  // Group 3. Non-local control flow
   case Try(body: Block.BlockLit, handlers: List[Instance])
-  case Return(expr: Pure)
+  case State(name: Name, init: Pure, region: Block.BlockVar, body: Statement)
+  case Region(body: Block.BlockLit)
 
   val tpe: ValueType = typing.inferType(this)
   val capt: Captures = typing.inferCapt(this)
@@ -166,12 +187,12 @@ type Captures = Set[Capture]
 object typing {
 
   def inferType(expr: Expression): ValueType = expr match {
-    case Expression.DirectApp(callee, targs, vargs, bargs) => instantiate(callee.tpe.asInstanceOf, targs, bargs.map(_.capt)).result
+    case Expression.DirectApp(callee, targs, vargs, bargs) => instantiate(callee.functionType, targs, bargs.map(_.capt)).result
     case Expression.Run(s) => s.tpe
     case Pure.ValueVar(name, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
     case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
-    case Pure.PureApp(callee, targs, vargs) => instantiate(callee.tpe.asInstanceOf, targs, Nil).result
+    case Pure.PureApp(callee, targs, vargs) => instantiate(callee.functionType, targs, Nil).result
   }
 
   // invariant: can only be {} or {io}
@@ -187,10 +208,15 @@ object typing {
     case Statement.Scope(defs, body) => body.tpe
     case Statement.If(cond, thn, els) => thn.tpe // TODO join.
     case Statement.While(cond, body) => body.tpe // TODO should always be TUnit
+    case Statement.Match(scrutinee, clauses) => clauses match {
+      case (pattern, block) :: _ => block.returnType // TODO join.
+      case _ => ???
+    }
     case Statement.App(callee, targs, vargs, bargs) =>
-      instantiate(callee.tpe.asInstanceOf, targs, bargs.map(_.capt)).result
-    case Statement.Try(body, handlers) =>
-      body.tpe.asInstanceOf[BlockType.Function].result
+      instantiate(callee.functionType, targs, bargs.map(_.capt)).result
+    case Statement.Try(body, handlers) => body.returnType
+    case Statement.State(name, init, region, body) => body.tpe
+    case Statement.Region(body) => body.returnType
   }
 
   def inferCapt(stmt: Statement): Captures = stmt match {
@@ -199,8 +225,11 @@ object typing {
     case Statement.Scope(defs, body) => defs.flatMap(_.capt).toSet ++ body.capt
     case Statement.If(cond, thn, els) => thn.capt ++ els.capt
     case Statement.While(cond, body) => cond.capt ++ body.capt
+    case Statement.Match(scrutinee, clauses) => clauses.flatMap { case (p, b) => b.capt }.toSet
     case Statement.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
     case Statement.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
+    case Statement.State(name, init, region, body) => body.capt ++ region.capt
+    case Statement.Region(body) => body.capt
   }
 
   def inferType(block: Block): BlockType = block match {
@@ -209,11 +238,7 @@ object typing {
       BlockType.Function(tparams, vparams, bparams, body.tpe)
 
     case Block.New(instance) => instance.tpe
-
     case Block.Member(recv, sel, tpe) => tpe
-      //      val tpe = recv.tpe.asInstanceOf[BlockType.Interface] // TODO could be an applied type...
-      //      tpe.operations(sel)
-
     case Block.Unbox(expr) => expr.tpe.asInstanceOf[ValueType.Boxed].tpe
   }
 
@@ -226,6 +251,11 @@ object typing {
   }
 
   // Tooling...
+
+  extension (block: Block) {
+    def returnType: ValueType = block.functionType.result
+    def functionType: BlockType.Function = block.tpe.asInstanceOf
+  }
 
   def close(tpe: ValueType, typeVars: List[ValueType.FreeVar], blockVars: List[Name], level: Int): ValueType = tpe match {
     case f : ValueType.FreeVar if typeVars.contains(f) =>
@@ -303,7 +333,8 @@ object typing {
         bparams map { tpe => substitute(tpe, vsubst, csubst, level + 1) },
         substitute(result, vsubst, csubst, level + 1))
 
-    case b : BlockType.Interface => ???
+    case BlockType.Interface(name, targs) =>
+      BlockType.Interface(name, targs map { tpe => substitute(tpe, vsubst, csubst, level) })
   }
 }
 
