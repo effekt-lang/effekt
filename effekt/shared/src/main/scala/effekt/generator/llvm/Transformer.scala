@@ -25,7 +25,7 @@ object Transformer {
 
       val entryBlock = BasicBlock("entry", instructions, terminator)
       val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions ++ staticTextDefinitions(MC.staticText) :+ entryFunction
+      declarations.map(transform) ++ definitions ++ staticTextDefinitions :+ entryFunction
   }
 
   // context getters
@@ -34,7 +34,7 @@ object Transformer {
   private def BC(using BC: BlockContext): BlockContext = BC
 
   private def staticTextDefinitions(using MC: ModuleContext): List[Definition] =
-      staticText.map { (global, bytes) =>
+      MC.staticText.map { (global, bytes) =>
         val escaped = bytes.map(b => f"\$b%02x").mkString;
         Verbatim(s"@$global = private constant [${bytes.length} x i8] c\"$escaped\"")
       }.toList
