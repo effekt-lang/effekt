@@ -136,4 +136,45 @@ struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
 }
 
 
+uint8_t c_buffer_bytes_index(const struct Pos buffer, const uint64_t idx) {
+    if (idx < 0 || idx >= c_buffer_length(buffer))
+        return 0x00;
+    return c_buffer_bytes(buffer)[idx];
+}
+
+// ref. https://www.rfc-editor.org/rfc/rfc4648#section-4
+struct Pos c_buffer_base64decode(const struct Pos encoded) {
+    const uint64_t n = c_buffer_length(encoded);
+    struct Pos decoded = c_buffer_construct_zeroed(
+        n / 4 * 3
+        - !!(n >= 1 && c_buffer_bytes(encoded)[n-1] == '=')
+        - !!(n >= 2 && c_buffer_bytes(encoded)[n-2] == '='));
+
+    uint16_t bits = 0;
+    int bitslen = 0;
+    uint64_t i = 0;
+    for (uint64_t j = 0; j < c_buffer_length(decoded); ++j) {
+        while (bitslen < 8) {
+            int sixlet = -1;
+            while (sixlet == -1 && i < c_buffer_length(encoded)) {
+                const uint8_t e = c_buffer_bytes(encoded)[i++];
+                sixlet = 'A' <= e && e <= 'Z' ?  0 + e - 'A' \
+                       : 'a' <= e && e <= 'z' ? 26 + e - 'a' \
+                       : '0' <= e && e <= '9' ? 52 + e - '0' \
+                       : e == '+' || e == '-' ? 62 \
+                       : e == '/' || e == '_' ? 63 \
+                       : -1;
+            }
+            bits = (bits << 6) | sixlet;
+            bitslen += 6;
+        }
+        bitslen -= 8;
+        c_buffer_bytes(decoded)[j] = (bits >> bitslen) & 0xff;
+        bits &= (1U << bitslen) - 1;
+    }
+
+    return decoded;
+}
+
+
 #endif

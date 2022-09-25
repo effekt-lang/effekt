@@ -51,6 +51,11 @@ extern pure def infixAdd(s: String, z: String): String = """
     ret %Pos %spz
 """
 
+extern pure def base64decode(encoded: String): String = """
+    %decoded = call %Pos @c_buffer_base64decode(%Pos %encoded)
+    ret %Pos %decoded
+"""
+
 
 // integer arithmetic
 

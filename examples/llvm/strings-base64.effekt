@@ -1,0 +1,3 @@
+def main(): Unit / Console = {
+    println(base64decode("YmFzZTY0"));
+}
