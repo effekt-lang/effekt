@@ -253,9 +253,10 @@ object Transformer {
       }
 
     case lifted.StringLit(javastring) =>
-        val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
-        Binding { k =>
-          LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding)) }
+      val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
+      Binding { k =>
+        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+      }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
       val variable = Variable(freshName("x"), transform(blockName.result))
