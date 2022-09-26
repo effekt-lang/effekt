@@ -5,11 +5,13 @@
 // TODO It may be performance-advantageous to implement this C file's semantics
 // in LLVM, since the linker cannot realistically be asked to satisfactorily
 // inline.
+// Alternatively, one could drop gcc and combine Effekt-compiler-generated LLVM
+// with clang-generated LLVM from this file's entire translation unit.
 
 
 // Eight bytes for the reference counter.
-// E.g. capacity could also be stored left of the data.
-#define BUFFER_METADATA_WIDTH (8)
+// E.g. capacity could later also be stored in the header.
+#define BUFFER_HEADER_WIDTH (8)
 
 uint64_t c_buffer_length(const struct Pos buffer) {
     return buffer.tag;
@@ -17,34 +19,34 @@ uint64_t c_buffer_length(const struct Pos buffer) {
 
 // NOTE: This assumes a homogenously used byte order.
 uint64_t *c_buffer_refcount(const struct Pos buffer) {
-    return (uint64_t *) (buffer.obj - 8);
+    return (uint64_t *) (buffer.obj + 0);
 }
 
 uint8_t *c_buffer_bytes(const struct Pos buffer) {
-    return buffer.obj;
+    return (uint8_t *) (buffer.obj + BUFFER_HEADER_WIDTH);
 }
 
 
 struct Pos c_buffer_construct(const uint64_t n, const uint8_t *data) {
-    uint8_t *buf = malloc(BUFFER_METADATA_WIDTH + n * sizeof *buf);
-    ASSERT_NON_NULL(buf)
+    uint8_t *obj = malloc(BUFFER_HEADER_WIDTH + n * sizeof *obj);
+    ASSERT_NON_NULL(obj)
 
     // reference count (a reference count of zero means one sole owner)
-    for (uint64_t j = 0; j < BUFFER_METADATA_WIDTH; ++j)
-        buf[j] = 0;
+    for (uint64_t j = 0; j < BUFFER_HEADER_WIDTH; ++j)
+        obj[j] = 0;
 
     // data
     for (uint64_t j = 0; j < n; ++j)
-        buf[BUFFER_METADATA_WIDTH + j] = data[j];
+        obj[BUFFER_HEADER_WIDTH + j] = data[j];
 
     return (struct Pos) {
         .tag = n,
-        .obj = BUFFER_METADATA_WIDTH + buf,
+        .obj = obj,
     };
 }
 
 void c_buffer_destruct(const struct Pos buffer) {
-    free(buffer.obj - BUFFER_METADATA_WIDTH);
+    free(buffer.obj);
 }
 
 
