@@ -43,12 +43,14 @@ case class Swap(tpe: RegisterType, a: Register, b: Register) extends Instruction
 case class Construct(out: Register, adt_type: Int, tag: ConstructorTag, args: RegList) extends Instruction
 case class PushStack(arg: Register) extends Instruction
 case class NewStack(out: Register, target: BlockLabel, args: RegList) extends Instruction
+case class New(out: Register, targets: List[BlockLabel], args: RegList) extends Instruction
 
 sealed trait Terminator extends Tree
 case class Return(args: RegList) extends Terminator
 case class Jump(target: BlockLabel) extends Terminator
 case class Resume(cont: Register) extends Terminator
 case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause]) extends Terminator
+case class Invoke(receiver: Register, tag: MethodTag, args: RegList) extends Terminator
 
 enum Type extends Tree {
   case Unit()
@@ -56,18 +58,20 @@ enum Type extends Tree {
   case Integer()
   case Double()
   case Datatype(index: Int)
+  case Codata(index: Int)
 
   def registerType: RegisterType = this match {
     case Unit() => RegisterType.Erased
     case Continuation() => RegisterType.Continuation
     case Integer() => RegisterType.Integer
     case Double() => RegisterType.Double
+    case Codata(index) => RegisterType.Codata
     case Datatype(index) => RegisterType.Datatype
   }
 }
 
 enum RegisterType {
-  case Integer, Double, Continuation, Datatype, Erased
+  case Integer, Double, Continuation, Codata, Datatype, Erased
 
   def isErased: Boolean = this match {
     case Erased => true
@@ -79,6 +83,7 @@ object RegisterType {
 }
 
 type ConstructorTag = Int
+type MethodTag = Int
 
 sealed trait Register extends Tree
 case class NamedRegister(name: String) extends Register

@@ -38,6 +38,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Continuation() => Some(jsonObjectSmall(ListMap("type" -> "\"cont\"")))
     case Type.Integer() => Some(jsonObjectSmall(ListMap("type" -> "\"int\"")))
     case Type.Double() => Some(jsonObjectSmall(ListMap("type" -> "\"double\"")))
+    case Type.Codata(index) => Some(jsonObjectSmall(ListMap("type" -> "\"codata\"", "index" -> index.toString)))
     case Type.Datatype(index) => Some(jsonObjectSmall(ListMap("type" -> "\"adt\"", "index" -> index.toString)))
   }
 
@@ -47,6 +48,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case RegisterType.Continuation => "cont"
       case RegisterType.Double => "double"
       case RegisterType.Datatype => "adt"
+      case RegisterType.Codata => "codata"
       case _ => sys error "Cannot print erased register type"
     }
   }
@@ -116,6 +118,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case PushStack(arg) => jsonObjectSmall(ListMap("op" -> "\"PushStack\"",
       "arg" -> toDoc(arg)
     ))
+    case New(out, targets, args) => jsonObjectSmall(ListMap("op" -> "\"New\"",
+      "out" -> toDoc(out),
+      "targets" -> jsonListSmall(targets.map(toDoc)),
+      "args" -> toDoc(args)
+    ))
   }
 
   def toDoc(terminator: Terminator): Doc = terminator match {
@@ -126,6 +133,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "type" -> adt_type.toString,
       "scrutinee" -> toDoc(scrutinee),
       "clauses" -> jsonListSmall(clauses.map(toDoc))))
+    case Invoke(receiver, tag, args) => jsonObjectSmall(ListMap("op" -> "\"Invoke\"",
+      "receiver" -> toDoc(receiver),
+      "tag" -> tag.toString,
+      "args" -> toDoc(args)
+    ))
   }
 
   def toDoc(clause: Clause): Doc = clause match

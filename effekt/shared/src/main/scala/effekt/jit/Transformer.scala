@@ -38,11 +38,11 @@ object Transformer {
     val frameDescriptor = env.frameDescriptor;
 
     implicit val BC: BlockContext = new BlockContext(frameDescriptor, env);
-    extendFrameDescriptorTo(frameDescriptor);
 
     val terminator = transform(body);
     var instructions = BC.instructions.toList;
 
+    extendFrameDescriptorTo(BC.frameDescriptor);
     BasicBlock(label, BC.frameDescriptor, instructions, terminator)
   }
   def transform(label: String, locals: machine.Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
@@ -107,24 +107,25 @@ object Transformer {
           val (_ign1, args, block) = transformInline(clause);
           emitInlined(block)
         }
-        case Type.Continuation() | Type.Double() => {
+        case Type.Continuation() | Type.Double() | Type.Codata(_) => {
           sys error "Fatal error: Trying to match on non-datatype"
         }
         }
       }
-      case machine.New(v @ machine.Variable(name, machine.Negative(List(fnTyp))), List(clause), rest) => {
-        val (args, _, target) = transformClosure(clause);
-        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(v), rest));
-        val out = outs(RegisterType.Continuation).head
-        emit(NewStack(out, target, args));
+      case machine.New(name, clauses, rest) => {
+        val transformedClauses = clauses.map({
+          case machine.Clause(parameters, body) => transformInline(machine.Clause(machine.Variable("???", machine.Type.Int()) :: parameters, body), false)
+        });
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
+        val out = outs(RegisterType.Codata).head
+        val targets = transformedClauses.map({case (_,_,block) => emit(block)})
+        val env = transformArguments(BC.environment)
+        emit(New(out, targets, env))
         emitInlined(restBlock)
       }
-      case machine.New(name, clauses, rest) => ??? // TODO Implement codata
-      case machine.Invoke(v @ machine.Variable(name, machine.Negative(List(contTyp))), 0, args) => {
-        emit(PushStack(transformArgument(v).id))
-        Return(transformArguments(args))
+      case machine.Invoke(value, tag, environment) => {
+        Invoke(transformArgument(value).id, tag, transformArguments(environment))
       }
-      case machine.Invoke(value, tag, environment) => ??? // TODO Implement codata
       case machine.PushFrame(frame, rest) => {
         val (args, _, target) = transformClosure(frame);
         emit(Push(target, args));
@@ -176,8 +177,7 @@ object Transformer {
       case machine.Positive(List(List())) => Type.Unit()
       case machine.Positive(List(List(),List())) => Type.Integer() // Boolean
       case machine.Positive(alternatives) => Type.Datatype(PC.datatypes.indexOfOrInsert(alternatives))
-      case machine.Negative(contType :: Nil) => Type.Continuation()
-      case machine.Negative(alternatives) => ??? // TODO Implement codata
+      case machine.Negative(alternatives) => Type.Codata(PC.codatas.indexOfOrInsert(alternatives))
       case machine.Type.Int() => Type.Integer()
       case machine.Type.Double() => Type.Double()
       case machine.Type.Stack() => Type.Continuation()
@@ -237,6 +237,7 @@ object Transformer {
   class ProgramContext(val primitives: immutable.Map[String, String]) {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
     val datatypes: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
+    val codatas: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
     var frameSize: jit.FrameDescriptor = FrameDescriptor(Map());
     var blockSymbols: mutable.HashMap[String, BlockIndex] = mutable.HashMap();
   }
