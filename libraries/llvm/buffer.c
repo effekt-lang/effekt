@@ -100,7 +100,7 @@ char *c_buffer_as_null_terminated_string(const struct Pos buffer) {
         zero_runes += !c_buffer_bytes(buffer)[j];
 
     const uint64_t n = c_buffer_length(buffer) + zero_runes;
-    uint8_t *buf = (uint8_t *) malloc((n+1) * sizeof *buf);
+    char *buf = (char *) malloc((n+1) * sizeof *buf);
     ASSERT_NON_NULL(buf)
 
     uint64_t i = 0;
@@ -114,6 +114,8 @@ char *c_buffer_as_null_terminated_string(const struct Pos buffer) {
 
     // null-terminated
     buf[n] = '\00';
+
+    return buf;
 }
 
 struct Pos c_buffer_construct_from_null_terminated_string(const char *data_nt) {
