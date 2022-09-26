@@ -285,13 +285,15 @@ object Transformer {
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
         MC.staticText += s"$bind.lit" -> utf8
-        emit(RawLLVM(s"""
-%$bind.lit.decayed = bitcast [${utf8.length} x i8]* @$bind.lit to i8*
-%$bind = call %Pos @c_buffer_construct(i64 ${utf8.size}, i8* %$bind.lit.decayed)
-"""))
-        val transformed = transform(rest)
-        eraseValue(v) // TODO Is this the correct point in time to decrease the ref count by one?
-        transformed
+        emit(BitCast(s"$bind.lit.decayed", ConstantGlobal(PointerType(ArrayType(utf8.length, IntegerType8())), s"$bind.lit"), PointerType(IntegerType8())))
+
+        val res = positiveType
+        val args = List(ConstantInt(utf8.size), LocalReference(PointerType(IntegerType8()), s"$bind.lit.decayed"))
+        val argsT = List(IntegerType64(), PointerType(IntegerType8())) // TODO: argsT = args.map { ??? }
+        emit(Call(bind, res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
+
+        eraseValues(List(v), freeVariables(rest));
+        transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?

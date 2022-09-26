@@ -86,8 +86,6 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Comment(msg) =>
       val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
       s"; $sanitized"
-
-    case RawLLVM(llvm: String) => llvm
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {
@@ -111,13 +109,14 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
   def show(tpe: Type): LLVMString = tpe match {
     case VoidType() => "void"
-    case IntegerType64() => "i64"
-    case IntegerType8() => "i8" // required for `void*` (which only exists as `i8*` in LLVM)
     case IntegerType1() => "i1"
-    case NamedType(name) => localName(name)
+    case IntegerType8() => "i8"
+    case IntegerType64() => "i64"
     case PointerType(referentType) => s"${show(referentType)}*"
+    case ArrayType(size, of) => s"[$size x ${show(of)}]"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(show))}}"
     case FunctionType(returnType, argumentTypes) => s"${show(returnType)} (${commaSeparated(argumentTypes.map(show))})"
+    case NamedType(name) => localName(name)
   }
 
   def show(parameter: Parameter): LLVMString = parameter match {

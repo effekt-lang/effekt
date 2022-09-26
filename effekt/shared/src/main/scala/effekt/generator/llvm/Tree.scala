@@ -27,9 +27,7 @@ enum Instruction {
   case FAdd(result: String, operand0: Operand, operand1: Operand)
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
-
   case Comment(msg: String)
-  case RawLLVM(llvm: String)
 }
 export Instruction.*
 
@@ -60,12 +58,13 @@ export Operand.*
  */
 enum Type {
   case VoidType()
-  case IntegerType64()
-  case IntegerType8()
   case IntegerType1()
+  case IntegerType8() // required for `void*` (which only exists as `i8*` in LLVM) and `char*`
+  case IntegerType64()
+  case PointerType(pointerReferent: Type)
+  case ArrayType(size: Int, of: Type)
   case StructureType(elementTypes: List[Type])
   case FunctionType(resultType: Type, argumentTypes: List[Type])
-  case PointerType(pointerReferent: Type)
   case NamedType(name: String)
 }
 export Type.*
