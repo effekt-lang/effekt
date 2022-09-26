@@ -150,16 +150,14 @@ export Statement.*
  * Types
  */
 enum Type {
-  case Positive(alternatives: List[Signature])
-  case Negative(alternatives: List[Signature])
+  case Positive()
+  case Negative()
   case Stack()
   case Int()
   case Double()
 }
 export Type.{ Positive, Negative }
 
-
-type Signature = List[Type]
 
 object builtins {
 
@@ -171,11 +169,11 @@ object builtins {
   val Apply: Tag = 0
 
   val Unit: Tag = 0
-  val UnitType = Positive(List(List()))
+  val UnitType = Positive()
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive(List(List(), List()))
+  val BooleanType = Positive()
 
   val SingletonRecord: Tag = 0
 }

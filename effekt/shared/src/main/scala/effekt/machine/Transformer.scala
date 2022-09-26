@@ -212,7 +212,7 @@ object Transformer {
     case lifted.BlockLit(params, body) =>
       // TODO deal with evidence
       val parameters = params.map(transform);
-      val variable = Variable(freshName("g"), Negative(List(parameters.map(_.tpe))))
+      val variable = Variable(freshName("g"), Negative())
       Binding { k =>
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
@@ -229,7 +229,7 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.UnitLit() =>
-      val variable = Variable(freshName("x"), Positive(List(List())));
+      val variable = Variable(freshName("x"), Positive());
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
@@ -241,7 +241,7 @@ object Transformer {
       }
 
     case lifted.BooleanLit(value: Boolean) =>
-      val variable = Variable(freshName("x"), Positive(List(List(), List())))
+      val variable = Variable(freshName("x"), Positive())
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
@@ -339,36 +339,13 @@ object Transformer {
 
     case symbols.builtins.TDouble => Type.Double()
 
-    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) =>
-      // TODO block params too
-      Negative(List(vparams.map(transform)))
+    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative()
 
-    case symbols.Interface(_, List(), ops) =>
-      val opsSignatures = ops.map {
-        case symbols.Operation(_, List(), vparams, _, _, _) =>
-          // TODO why is field type in param optional?
-          vparams.map { param => transform(param.tpe.get) }
-        // TODO
-        case op => throw new Exception("not yet supported: polymorphic operations")
-      };
-      Negative(opsSignatures)
+    case symbols.Interface(_, List(), ops) => Negative()
 
-    case symbols.DataType(_, List(), records) =>
-      val recSignatures = records.map {
-        case symbols.Record(_, List(), _, fields) =>
-          fields.map {
-            case symbols.Field(_, symbols.ValueParam(_, Some(tpe)), _) =>
-              transform(tpe)
-            // TODO
-            case _ => ???
-          }
-        // TODO
-        case _ => throw new Exception("not yet supported: polymorphic records")
-      }
-      Positive(recSignatures)
+    case symbols.DataType(_, List(), records) => Positive()
 
-    case symbols.Record(_, List(), tpe, fields) =>
-      Positive(List(fields.map { field => transform(field.tpe) }))
+    case symbols.Record(_, List(), tpe, fields) => Positive()
 
     case _ =>
       System.err.println(s"UNSUPPORTED TYPE: getClass($tpe) = ${tpe.getClass}")
