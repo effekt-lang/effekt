@@ -77,6 +77,15 @@ object messages {
   }
 
   trait EffektMessaging extends BufferedMessaging[EffektError] {
+
+    /**
+     * To allow uniform testing on all platforms, we homogenize the paths to Unix-style.
+     *
+     * This way the negative tests look the same on Windows and Linux
+     */
+    def homogenizePath(label: String): String =
+      label.replace('\\', '/')
+
     def message(range: Option[Range], content: String, severity: Severity): EffektError = PlainTextError(content, range, severity)
   }
 
