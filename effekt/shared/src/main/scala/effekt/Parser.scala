@@ -116,8 +116,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     "at", "box", "unbox", "return", "region", "new"
   )
 
-  def keyword(s: String): Parser[String] =
-    s // todo check suffix
+  def keyword(kw: String): Parser[String] =
+    (s"$kw(?!$nameRest)").r
 
   lazy val anyKeyword =
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
