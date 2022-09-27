@@ -357,10 +357,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val Result(_, effs) = continuationDetails match {
             case None => retAnnotation match
 
-              case Some(ret) => // TODO: what about the effects?
-                body checkAgainst tpe
-                ??? // matchExpected(ret.tpe, tpe)
-                // TODO: fix this ^^^^^^
+              case Some(_) =>
+                // if there is a return type annotation from the user, report an error
+                // see PR #148 for more details
+                // TODO: Can we somehow use the return type provided by the user?
+                Context.abort(pretty"Unexpected type annotation on operation ${op}.")
+
               case None =>
                 // no answer type, no annotation, just check body
                 body checkAgainst tpe
