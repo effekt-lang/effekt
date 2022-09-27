@@ -15,6 +15,8 @@ class ChezSchemeTests extends EffektTests {
   override lazy val ignored: List[File] = List(
     examplesDir / "llvm",
 
+    examplesDir / "ml",
+
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "maps.effekt",
 
