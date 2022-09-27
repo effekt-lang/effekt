@@ -25,11 +25,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   })
 
   def toDoc(tpe: Type): Doc = tpe match {
-    case Positive()    => "Positive"
-    case Negative()    => "Negative"
-    case Type.Int()    => "Int"
-    case Type.Double() => "Double"
-    case Type.Stack()  => "Stack"
+    case Positive(name) => name
+    case Negative(name) => name
+    case Type.Int()     => "Int"
+    case Type.Double()  => "Double"
+    case Type.Stack()   => "Stack"
   }
 
   def toDoc(stmt: Statement): Doc = stmt match {

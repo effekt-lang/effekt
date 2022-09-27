@@ -150,8 +150,8 @@ export Statement.*
  * Types
  */
 enum Type {
-  case Positive()
-  case Negative()
+  case Positive(name: String)
+  case Negative(name: String)
   case Stack()
   case Int()
   case Double()
@@ -169,11 +169,11 @@ object builtins {
   val Apply: Tag = 0
 
   val Unit: Tag = 0
-  val UnitType = Positive()
+  val UnitType = Positive("Unit")
 
   val True: Tag = 1
   val False: Tag = 0
-  val BooleanType = Positive()
+  val BooleanType = Positive("Boolean")
 
   val SingletonRecord: Tag = 0
 }

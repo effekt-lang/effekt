@@ -21,7 +21,7 @@ object Transformer {
     val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) }
 
     C.using(module = main.mod) {
-      transform(mainSymbol, liftedMain, liftedDeps)
+      transform(mainSymbol, liftedMain, liftedDeps);
     }
   }
 
@@ -212,7 +212,7 @@ object Transformer {
     case lifted.BlockLit(params, body) =>
       // TODO deal with evidence
       val parameters = params.map(transform);
-      val variable = Variable(freshName("g"), Negative())
+      val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
@@ -229,7 +229,7 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.UnitLit() =>
-      val variable = Variable(freshName("x"), Positive());
+      val variable = Variable(freshName("x"), Positive("Unit"));
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
@@ -241,7 +241,7 @@ object Transformer {
       }
 
     case lifted.BooleanLit(value: Boolean) =>
-      val variable = Variable(freshName("x"), Positive())
+      val variable = Variable(freshName("x"), Positive("Boolean"))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
@@ -339,13 +339,13 @@ object Transformer {
 
     case symbols.builtins.TDouble => Type.Double()
 
-    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative()
+    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative("<function>")
 
-    case symbols.Interface(_, List(), ops) => Negative()
+    case symbols.Interface(name, List(), _) => Negative(name.name)
 
-    case symbols.DataType(_, List(), records) => Positive()
+    case symbols.DataType(name, List(), _) => Positive(name.name)
 
-    case symbols.Record(_, List(), tpe, fields) => Positive()
+    case symbols.Record(name, List(), _, _) => Positive(name.name)
 
     case _ =>
       System.err.println(s"UNSUPPORTED TYPE: getClass($tpe) = ${tpe.getClass}")
