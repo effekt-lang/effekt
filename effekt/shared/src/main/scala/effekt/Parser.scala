@@ -510,6 +510,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | handleExpr
     | regionExpr
     | lambdaExpr
+    | boxedExpr
     | unboxExpr
     | newExpr
     | primExpr
@@ -610,6 +611,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
+
+  lazy val boxedExpr: P[Box] =
+    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
 
   lazy val lambdaExpr: P[Box] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
