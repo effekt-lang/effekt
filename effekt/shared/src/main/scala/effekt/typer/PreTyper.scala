@@ -193,8 +193,8 @@ class BoxUnboxInference {
   }
 
   def rewrite(h: OpClause)(using Context): OpClause = visit(h) {
-    case OpClause(id, tparams, params, body, resume) =>
-      OpClause(id, tparams, params, rewrite(body), resume)
+    case OpClause(id, tparams, params, ret, body, resume) =>
+      OpClause(id, tparams, params, ret, rewrite(body), resume)
   }
 
   def rewrite(c: MatchClause)(using Context): MatchClause = visit(c) {

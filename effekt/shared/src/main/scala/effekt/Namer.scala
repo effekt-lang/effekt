@@ -347,7 +347,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       val eff: Interface = Context.at(interface) { extractControlEffect(resolve(interface)) }
 
       clauses.foreach {
-        case source.OpClause(op, tparams, params, body, resumeId) =>
+        case source.OpClause(op, tparams, params, ret, body, resumeId) =>
 
           // try to find the operation in the handled effect:
           eff.ops.find { o => o.name.toString == op.name } map { opSym =>

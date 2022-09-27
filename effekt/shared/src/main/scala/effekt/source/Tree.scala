@@ -358,7 +358,10 @@ case class New(impl: Implementation) extends Term
 
 
 // TODO also allow block params and add a check in TryHandle to rule out continuation capture and block params.
-case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], body: Stmt, resume: IdDef) extends Reference {
+
+// `ret` is an optional user-provided type annotation for the return type
+// currently the annotation is rejected by [[Typer]] -- after that phase, `ret` should always be `None`
+case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], ret: Option[Effectful], body: Stmt, resume: IdDef) extends Reference {
   type symbol = symbols.Operation
 }
 
@@ -639,8 +642,8 @@ object Tree {
     }
 
     def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
-      case OpClause(id, tparams, params, body, resume) =>
-        OpClause(id, tparams, params, rewrite(body), resume)
+      case OpClause(id, tparams, params, ret, body, resume) =>
+        OpClause(id, tparams, params, ret, rewrite(body), resume)
     }
 
     def rewrite(c: MatchClause)(using C: Context): MatchClause = visit(c) {
@@ -790,7 +793,7 @@ object Tree {
     }
 
     def query(h: OpClause)(using Context, Ctx): Res = visit(h) {
-      case OpClause(id, tparams, params, body, resume) =>
+      case OpClause(id, tparams, params, ret, body, resume) =>
         scoped { query(body) }
     }
 
