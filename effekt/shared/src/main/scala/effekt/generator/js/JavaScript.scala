@@ -67,7 +67,7 @@ trait JavaScript extends Backend {
   // Names
   // -----
 
-  val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this")
+  val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this", "default")
 
   def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
