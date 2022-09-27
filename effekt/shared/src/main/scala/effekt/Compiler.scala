@@ -159,6 +159,7 @@ trait Compiler {
     case "chez-monadic" => effekt.generator.chez.ChezSchemeMonadic
     case "chez-lift"    => effekt.generator.chez.ChezSchemeLift
     case "llvm"         => effekt.generator.llvm.LLVM
+    case "ml"           => effekt.generator.ml.ML
   }
 
   object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {

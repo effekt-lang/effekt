@@ -38,7 +38,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   val backend: ScallopOption[String] = choice(
-    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm"),
+    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
@@ -47,7 +47,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
-    descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",
+    descr = "the llvm version that shou" +
+     "ld be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",
     default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "12")),
     noshort = true
   )
@@ -108,6 +109,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     case "chez-callcc" => path / "libraries" / "chez" / "callcc"
     case "chez-lift" => path / "libraries" / "chez" / "lift"
     case "llvm" => path / "libraries" / "llvm"
+    case "ml" => path / "libraries" / "ml"
     case b => sys error s"Unrecognized backend ${ b }"
   }
 

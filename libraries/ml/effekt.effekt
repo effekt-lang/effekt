@@ -1,0 +1,27 @@
+module effekt
+
+extern include "effekt.sml"
+
+extern io def println(msg: String): Unit = "print msg"
+extern io def println(msg: Int): Unit = "print (Int.toString msg)"
+
+
+// Math ops
+// ========
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "x + y"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  "x * y"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  "x - y"
+
+extern pure def infixAdd(x: Double, y: Double): Double =
+  "x + y"
+
+extern pure def infixMul(x: Double, y: Double): Double =
+  "x * y"
+
+extern pure def infixSub(x: Double, y: Double): Double =
+  "x - y"

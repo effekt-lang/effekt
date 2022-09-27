@@ -99,6 +99,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       case gen if gen.startsWith("js")   => evalJS(path)
       case gen if gen.startsWith("chez") => evalCS(path)
       case gen if gen.startsWith("llvm") => evalLLVM(path)
+      case gen if gen.startsWith("ml") => evalML(path)
     }
 
   def evalJS(path: String)(implicit C: Context): Unit =
@@ -117,6 +118,18 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     try {
       val command = Process(Seq("scheme", "--script", path))
       C.config.output().emit(command.!!)
+    } catch {
+      case FatalPhaseError(e) => C.report(e)
+    }
+
+  def evalML(path: String)(implicit C: Context): Unit =
+    try {
+      // needs to be two steps:
+      // 1. compile with mlton
+      // 2. run resulting binary
+      val out = C.config.output()
+      out.emit(Process(Seq("./mlton-experiments/bin/mlton", "-output", "main", path)).!!)
+      out.emit(Process(Seq("./main")).!!)
     } catch {
       case FatalPhaseError(e) => C.report(e)
     }
