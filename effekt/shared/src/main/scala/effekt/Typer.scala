@@ -890,7 +890,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val methods = sym match {
       // an overloaded call target
-      case CallTarget(name, syms) => syms.flatten.asInstanceOf[List[Operation]]
+      case CallTarget(name, syms) => syms.flatten.collect { case op: Operation => op }
       // already resolved by a previous attempt to typecheck
       case sym: Operation => List(sym)
       case s => Context.panic(s"Not a valid method: ${s} : ${s.getClass.getSimpleName}")
