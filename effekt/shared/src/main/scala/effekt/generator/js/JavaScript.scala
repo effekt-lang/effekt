@@ -67,7 +67,24 @@ trait JavaScript extends Backend {
   // Names
   // -----
 
-  val reserved = List("get", "set", "yield", "delete", "new", "catch", "in", "finally", "switch", "case", "this", "default")
+  val reserved = List(
+    // reserved words (according to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#keywords)
+    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export",
+    "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return",
+    "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+
+    // future reserved words
+    "enum", "implements", "interface", "package", "private", "protected", "public",
+
+    // identifiers with special meanings
+    "get", "set", "arguments", "async", "eval",
+
+    // special names in CommonJS module systems
+    "module", "exports", "require",
+
+    // other special names
+    "window", "document", "alert", "console", "this"
+  )
 
   def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
