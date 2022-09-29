@@ -82,7 +82,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDoc(rest)
 
     case LiteralUTF8String(name, utf8, rest) =>
-      "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => f"\x$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => "\\" + f"$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))
