@@ -125,6 +125,17 @@ object Transformer {
         noteBlockParams(id, allParams)
         Def(Label(transform(id), allParams), transform(body), transform(rest))
 
+      case lifted.Def(id, tpe, block @ lifted.New(impl), rest) =>
+        // TODO freeParams?
+        // TODO deal with evidenve?
+        // TODO canonically order clauses
+        val implTransformed = impl.clauses.map({
+          case (operationName, lifted.BlockLit(params, body)) =>
+            // TODO we assume that there are no block params in methods
+            Clause(params.map(transform), transform(body))
+        })
+        New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, transform(rest))
+
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
@@ -152,15 +163,11 @@ object Transformer {
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id), op), List(), args) =>
-        id match {
-          case symbols.BlockParam(_, tpe) =>
-            transform(args).run { values =>
-              // TODO find correct operation tag for [[op]]
-              //   we currently only support singleton effect operations (or calling the first one, for that matter)
-              Invoke(Variable(transform(id), transform(tpe)), 0, values)
-            }
-          case _ =>
-            Context.abort(s"Unsupported blocksymbol: $id")
+        val tpe = Context.blockTypeOf(id)
+        transform(args).run { values =>
+          // TODO find correct operation tag for [[op]]
+          //   we currently only support singleton effect operations (or calling the first one, for that matter)
+          Invoke(Variable(transform(id), transform(tpe)), 0, values)
         }
 
       case lifted.If(cond, thenStmt, elseStmt) =>
