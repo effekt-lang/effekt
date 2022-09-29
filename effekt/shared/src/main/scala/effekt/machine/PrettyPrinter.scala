@@ -41,7 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "jump" <+> label
 
     case Substitute(bindings, rest) =>
-      "subst" <+> brackets(bindings map { case (to, from) => from <+> "!->" <+> to }) <> ";" <> line <> toDoc(rest)
+      "subst" <+> brackets(bindings map { case (left, right) => left <+> "!->" <+> right }) <> ";" <> line <> toDoc(rest)
 
     case Construct(name, tag, arguments, rest) =>
       "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
@@ -82,7 +82,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "let" <+> name <+> "=" <+> value.toString <> ";" <> line <> toDoc(rest)
 
     case LiteralUTF8String(name, utf8, rest) =>
-      "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => f"\$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
+      "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => f"\x$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

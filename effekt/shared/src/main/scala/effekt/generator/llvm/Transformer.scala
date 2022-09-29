@@ -25,19 +25,13 @@ object Transformer {
 
       val entryBlock = BasicBlock("entry", instructions, terminator)
       val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
-      declarations.map(transform) ++ definitions ++ staticTextDefinitions :+ entryFunction
+      declarations.map(transform) ++ definitions :+ entryFunction
   }
 
   // context getters
   private def MC(using MC: ModuleContext): ModuleContext = MC
   private def FC(using FC: FunctionContext): FunctionContext = FC
   private def BC(using BC: BlockContext): BlockContext = BC
-
-  private def staticTextDefinitions(using MC: ModuleContext): List[Definition] =
-      MC.staticText.map { (global, bytes) =>
-        val escaped = bytes.map(b => f"\$b%02x").mkString;
-        Verbatim(s"@$global = private constant [${bytes.length} x i8] c\"$escaped\"")
-      }.toList
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
@@ -284,7 +278,8 @@ object Transformer {
         transform(rest)
 
       case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
-        MC.staticText += s"$bind.lit" -> utf8
+        emit(GlobalVariableArray(s"$bind.lit", IntegerType8(), ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+
         emit(BitCast(s"$bind.lit.decayed", ConstantGlobal(PointerType(ArrayType(utf8.length, IntegerType8())), s"$bind.lit"), PointerType(IntegerType8())))
 
         val res = positiveType
@@ -633,7 +628,6 @@ object Transformer {
   class ModuleContext() {
     var counter = 0;
     var definitions: List[Definition] = List();
-    var staticText: Map[String, Array[Byte]] = Map();
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =

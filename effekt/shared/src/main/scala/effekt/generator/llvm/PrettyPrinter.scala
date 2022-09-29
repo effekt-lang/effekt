@@ -9,7 +9,7 @@ object PrettyPrinter {
   def show(definitions: List[Definition])(using Context): LLVMString =
     definitions.map(show).mkString("\n\n")
 
-  def show(definition: Definition)(using Context): LLVMString = definition match {
+  def show(definition: Definition)(using C: Context): LLVMString = definition match {
     case Function(returnType, name, parameters, basicBlocks) =>
       s"""
 define fastcc ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(show))}) {
@@ -24,6 +24,12 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
 }
 """
     case Verbatim(content) => content
+
+    case GlobalVariableArray(name, IntegerType8(), ConstantArray(IntegerType8(), members)) =>
+      val bytes = members.map { ini => ini match { case ConstantInteger8(b) => b; case _ => ??? } }
+      val escaped = bytes.map(b => f"\$b%02x").mkString;
+      s"@$name = private constant [${bytes.length} x i8] c\"$escaped\""
+    case GlobalVariableArray(name, typ, initializer) => C.abort(s"cannot compile non-i8 constant array: $name = [ x ${typ}] ${initializer}")
   }
 
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
@@ -99,12 +105,14 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   }
 
   def show(operand: Operand): LLVMString = operand match {
-    case LocalReference(tpe, name)  => s"${show(tpe)} ${localName(name)}"
-    case ConstantGlobal(tpe, name)  => s"${show(tpe)} ${globalName(name)}"
-    case ConstantInt(n)             => s"i64 $n"
-    case ConstantDouble(n)          => s"double $n"
-    case ConstantAggregateZero(tpe) => s"${show(tpe)} zeroinitializer"
-    case ConstantNull(tpe)          => s"${show(tpe)} null"
+    case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
+    case ConstantGlobal(tpe, name)          => s"${show(tpe)} ${globalName(name)}"
+    case ConstantInt(n)                     => s"i64 $n"
+    case ConstantDouble(n)                  => s"double $n"
+    case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
+    case ConstantNull(tpe)                  => s"${show(tpe)} null"
+    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}]"
+    case ConstantInteger8(b)                => s"i8 $b"
   }
 
   def show(tpe: Type): LLVMString = tpe match {
