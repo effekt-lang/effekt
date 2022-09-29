@@ -1,0 +1,3 @@
+[warning] examples/pos/capture/optimizing_unbox.effekt:3:14: Handling effects that are not used: Yield
+def main() = try {
+             ^
