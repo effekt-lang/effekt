@@ -9,5 +9,5 @@ def f(x: String): Unit / Console = {
 def main(): Unit / Console = {
     val x = "ycks";
     f(x);
-    f(x);
+    f(x + x);
 }

@@ -293,6 +293,7 @@ object Transformer {
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
+        shareValues(values, freeVariables(rest));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, foreign), values.map(transform)));
         transform(rest)
     }

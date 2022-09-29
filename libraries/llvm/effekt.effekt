@@ -40,6 +40,7 @@ extern io def println(x: Double): Unit / Console = """
 
 extern io def println(str: String): Unit / Console = """
     call void @c_io_println_String(%Pos %str)
+    call void @c_buffer_refcount_decrement(%Pos %str)
     ret %Pos zeroinitializer ; Unit
 """
 
@@ -48,6 +49,8 @@ extern io def println(str: String): Unit / Console = """
 
 extern pure def infixAdd(s: String, z: String): String = """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s, %Pos %z)
+    call void @c_buffer_refcount_decrement(%Pos %s)
+    call void @c_buffer_refcount_decrement(%Pos %z)
     ret %Pos %spz
 """
 
