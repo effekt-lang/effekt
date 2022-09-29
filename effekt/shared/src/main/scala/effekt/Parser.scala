@@ -6,6 +6,7 @@ import effekt.util.{ SourceTask, VirtualSource }
 import effekt.util.messages.ParseError
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
 import kiama.util.{ Position, Positions, Range, Source }
+import scala.util.matching.Regex
 
 import scala.language.implicitConversions
 
@@ -51,7 +52,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   // === Lexing ===
 
-  lazy val nameFirst = """[a-zA-Z$_]""".r
+  lazy val nameFirst = """[a-zA-Z_]""".r
   lazy val nameRest = """[a-zA-Z0-9$_]""".r
   lazy val name = "%s(%s)*\\b".format(nameFirst, nameRest).r
   lazy val moduleName = "%s([/]%s)*\\b".format(name, name).r
@@ -115,8 +116,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     "at", "box", "unbox", "return", "region", "new"
   )
 
-  def keyword(s: String): Parser[String] =
-    s // todo check suffix
+  def keyword(kw: String): Parser[String] =
+    (s"$kw(?!$nameRest)").r
 
   lazy val anyKeyword =
     keywords("[^a-zA-Z0-9]".r, keywordStrings)
@@ -292,11 +293,17 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         ExternFun(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
 
+  // Delimiter for multiline strings
+  val multi = "\"\"\""
+
   lazy val externBody: P[String] =
-    ( """\"([^\"\n]*)\"""".r            // single line strings
-    | """\"\"\"([^\"\"\"]*)\"\"\"""".r  // multi line strings
-    | failure("Expected an extern definition, which can either be a single line string (e.g., \"x + y\") or a multi-line string (e.g., \"\"\"...\"\"\")")
+    ( multilineString
+    | s"(?!${multi})\"([^\"\n]*)\"".r // single-line strings
+    | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
     )
+
+  // multi-line strings `(?s)` sets multi-line mode.
+  lazy val multilineString: P[String] = matchRegex(s"(?s)${multi}[\t\n\r ]*(.*?)[\t\n\r ]*${multi}".r) ^^ { m => m.group(1) }
 
   lazy val externFlag: P[ExternFlag.Purity] =
     ( `pure` ^^^ ExternFlag.Pure
@@ -503,6 +510,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | handleExpr
     | regionExpr
     | lambdaExpr
+    | boxedExpr
     | unboxExpr
     | newExpr
     | primExpr
@@ -556,13 +564,13 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
       case effect ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
         val synthesizedId = IdRef(effect.id.name)
-        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, body, resume) withPositionOf effect))
+        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf effect))
       }
     )
 
   lazy val defClause: P[OpClause] =
-    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ implicitResume ~ (`=` ~/> functionBody)  ^^ {
-      case id ~ tparams ~ vparams ~ resume ~ body => OpClause(id, tparams, vparams, body, resume)
+    (`def` ~/> idRef) ~ maybeTypeParams ~ valueParamsOpt ~ (`:` ~/> effectful).? ~ implicitResume ~ (`=` ~/> functionBody) ^^ {
+      case id ~ tparams ~ vparams ~ ret ~ resume ~ body => OpClause(id, tparams, vparams, ret, body, resume)
     }
 
   lazy val clause: P[MatchClause] =
@@ -603,6 +611,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val literals: P[Literal[_]] =
     double | int | bool | unit | string
+
+  lazy val boxedExpr: P[Box] =
+    `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
 
   lazy val lambdaExpr: P[Box] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }

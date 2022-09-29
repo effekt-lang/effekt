@@ -207,8 +207,11 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
       CaptureSet.empty
 
     case source.Unbox(term) =>
-      query(term)
-      CaptureSet.empty
+      val capt = Context.inferredTypeOption(term) match {
+        case Some(BoxedType(_, capture: CaptureSet)) => capture
+        case _ => Context.panic(pp"Should have an inferred a concrete capture set for ${term}")
+      }
+      query(term) ++ capt
 
     case t @ source.Do(effect, op, targs, vargs) =>
       val cap = Context.annotation(Annotations.CapabilityReceiver, t)

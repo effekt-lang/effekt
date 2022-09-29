@@ -38,7 +38,9 @@ class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "infer",
 
     examplesDir / "pos" / "lambdas",
-    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt" // doesn't work with lift inference, yet
+    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
+
+    examplesDir / "pos" / "multiline_extern_definition.effekt" // the test is specific to JS
   )
 
   def runTestFor(f: File, expected: String) = {

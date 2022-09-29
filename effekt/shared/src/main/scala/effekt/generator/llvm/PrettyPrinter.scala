@@ -53,6 +53,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case Load(result, LocalReference(PointerType(tpe), name)) =>
       s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}"
     case Load(_, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
+
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
     case Store(address, value) =>
       s"store ${show(value)}, ${show(address)}"
@@ -69,10 +70,13 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     // TODO: Require `operand0` to be of integer type. It is currently hackily typed dependent on its right operand's type which ought to be a constant.
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
-    // TODO: Require `operand0` to be of floating-point type. It is currently hackily typed dependent on its right operand's type which ought to be a constant.
-    case Add(result, operand0, ConstantDouble(x)) =>
+    case Add(_, _, operand1) =>
+      C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
+
+    case FAdd(result, operand0, ConstantDouble(x)) =>
       s"${localName(result)} = fadd ${show(operand0)}, $x"
-    case Add(_, _, operand1) => C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
+    case FAdd(_, _, operand1) =>
+      C.abort(s"WIP: currently only right-constant floating-point additions are supported, not: $operand1")
 
     case InsertValue(result, aggregate, element, index) =>
       s"${localName(result)} = insertvalue ${show(aggregate)}, ${show(element)}, $index"

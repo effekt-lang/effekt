@@ -1,0 +1,5 @@
+extern def jsPrintThree(): Unit = """
+  console.log(3)
+"
+
+def main() = jsPrintThree()

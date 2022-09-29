@@ -142,7 +142,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
 
     val gccMainFile = (C.config.libPath / "main.c").unixPath
     val executableFile = basePath
-    out.emit(discoverExecutable(List("cc", "clang", "gcc"), Seq(gccMainFile, "-o", executableFile, objPath, "-lm" /* link math, has to be the last argument */)))
+    out.emit(discoverExecutable(List("cc", "clang", "gcc"), Seq(gccMainFile, "-o", executableFile, objPath)))
 
     val command = Process(Seq(executableFile))
     out.emit(command.!!)
