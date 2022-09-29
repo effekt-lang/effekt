@@ -164,10 +164,13 @@ object Transformer {
 
       case lifted.App(lifted.Member(lifted.BlockVar(id), op), List(), args) =>
         val tpe = Context.blockTypeOf(id)
+        val opTag = {
+          tpe match
+            case symbols.InterfaceType(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
+            case _ => Context.abort(s"Unsupported receiver type $tpe")
+        }
         transform(args).run { values =>
-          // TODO find correct operation tag for [[op]]
-          //   we currently only support singleton effect operations (or calling the first one, for that matter)
-          Invoke(Variable(transform(id), transform(tpe)), 0, values)
+          Invoke(Variable(transform(id), transform(tpe)), opTag, values)
         }
 
       case lifted.If(cond, thenStmt, elseStmt) =>
@@ -319,19 +322,19 @@ object Transformer {
     }
 
   def transform(handler: lifted.Handler)(using BlocksParamsContext, Context): List[Clause] = {
-    handler match {
-      case lifted.Handler(_, List((operationName, lifted.BlockLit(params :+ resume, body)))) =>
+    // TODO canonical ordering of operations
+    handler.clauses.map({
+      case (operationName, lifted.BlockLit(params :+ resume, body))=>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
         // TODO actually use evidence to determine number of stacks popped
         val ev = Variable(freshName("evidence"), builtins.Evidence)
-        List(Clause(ev +: params.map(transform),
+        Clause(ev +: params.map(transform),
           PopStack(Variable(transform(resume).name, Type.Stack()),
-            transform(body))))
-      case _ =>
-        Context.abort(s"Unsupported handler $handler")
-    }
+            transform(body)))
+      case _ => Context.abort(s"Unsupported handler: $handler")
+    })
   }
 
   def transform(param: lifted.Param)(using Context): Variable =
