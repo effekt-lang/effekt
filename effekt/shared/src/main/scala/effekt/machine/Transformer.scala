@@ -322,8 +322,10 @@ object Transformer {
     }
 
   def transform(handler: lifted.Handler)(using BlocksParamsContext, Context): List[Clause] = {
-    // TODO canonical ordering of operations
-    handler.clauses.map({
+    handler.clauses.sortBy[Int]({
+      case (operationName, _) =>
+        handler.id.ops.indexOf(operationName)
+    }).map({
       case (operationName, lifted.BlockLit(params :+ resume, body))=>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
