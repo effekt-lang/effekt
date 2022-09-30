@@ -143,8 +143,9 @@ object Transformer {
             // TODO currently only scoped resumptions are supported
             // TODO assuming first parameter is evidence TODO actually use evidence?
             transform(args).run { values =>
+              val (evidence :: returnedValues) = values;
               PushStack(Variable(transform(id), Type.Stack()),
-                Return(values.tail))
+                Return(returnedValues))
             }
           case _ =>
             Context.abort(s"Unsupported blocksymbol: $id")
