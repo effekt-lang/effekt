@@ -114,7 +114,7 @@ object Transformer {
       }
       case machine.New(name, clauses, rest) => {
         val transformedClauses = clauses.map({
-          case machine.Clause(parameters, body) => transformInline(machine.Clause(machine.Variable("???", machine.Type.Int()) :: parameters, body), false)
+          case machine.Clause(parameters, body) => transformInline(machine.Clause(parameters, body), false)
         });
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
         val out = outs(RegisterType.Codata).head
