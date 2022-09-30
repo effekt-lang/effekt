@@ -13,13 +13,7 @@ class LLVMTests extends EffektTests {
 
   override lazy val ignored: List[File] = List(
     // computes the wrong results
-    examplesDir / "llvm" / "generator.effekt",
-    examplesDir / "llvm" / "capabilities.effekt",
     examplesDir / "llvm" / "nested.effekt",
-    examplesDir / "llvm" / "stored.effekt",
-
-    // crashes
-    examplesDir / "llvm" / "forking.effekt",
 
     // polymorphic effect operations not supported, yet
     examplesDir / "llvm" / "choice.effekt",
