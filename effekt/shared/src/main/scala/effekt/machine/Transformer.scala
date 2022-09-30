@@ -312,7 +312,7 @@ object Transformer {
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
         // TODO actually use evidence to determine number of stacks popped
-        val ev = Variable("evidence", builtins.Evidence)
+        val ev = Variable(freshName("evidence"), builtins.Evidence)
         List(Clause(ev +: params.map(transform),
           PopStack(Variable(transform(resume).name, Type.Stack()),
             transform(body))))
