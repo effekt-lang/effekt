@@ -127,7 +127,6 @@ object Transformer {
 
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
-        // TODO deal with evidence
         id match {
           case symbols.UserFunction(_, _, _, _, _, _, _) =>
             // TODO this is a hack, values is in general shorter than environment
@@ -142,9 +141,11 @@ object Transformer {
             }
           case symbols.ResumeParam(_) =>
             // TODO currently only scoped resumptions are supported
+            // TODO assuming first parameter is evidence TODO actually use evidence?
             transform(args).run { values =>
+              val (evidence :: returnedValues) = values;
               PushStack(Variable(transform(id), Type.Stack()),
-                Return(values))
+                Return(returnedValues))
             }
           case _ =>
             Context.abort(s"Unsupported blocksymbol: $id")
@@ -183,7 +184,6 @@ object Transformer {
         }
 
       case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
-        // TODO deal with evidence
         // TODO more than one handler
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
@@ -311,7 +311,10 @@ object Transformer {
       case lifted.Handler(_, List((operationName, lifted.BlockLit(params :+ resume, body)))) =>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
-        List(Clause(params.map(transform),
+        // TODO we assume that evidence has to be passed as first param
+        // TODO actually use evidence to determine number of stacks popped
+        val ev = Variable(freshName("evidence"), builtins.Evidence)
+        List(Clause(ev +: params.map(transform),
           PopStack(Variable(transform(resume).name, Type.Stack()),
             transform(body))))
       case _ =>
