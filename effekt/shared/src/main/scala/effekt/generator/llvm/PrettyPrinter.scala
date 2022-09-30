@@ -26,10 +26,15 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
     case Verbatim(content) => content
 
     case GlobalVariableArray(name, IntegerType8(), ConstantArray(IntegerType8(), members)) =>
-      val bytes = members.map { ini => ini match { case ConstantInteger8(b) => b; case _ => ??? } }
+      val bytes = members.map { ini => ini match {
+        case ConstantInteger8(b) => b
+        case _ => ???
+      }}
       val escaped = bytes.map(b => "\\" + f"$b%02x").mkString;
       s"@$name = private constant [${bytes.length} x i8] c\"$escaped\""
-    case GlobalVariableArray(name, typ, initializer) => C.abort(s"cannot compile non-i8 constant array: $name = [ x ${typ}] ${initializer}")
+
+    case GlobalVariableArray(name, typ, initializer) =>
+        C.abort(s"cannot compile non-i8 constant array: $name = [ x ${typ}] ${initializer}")
   }
 
   def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {

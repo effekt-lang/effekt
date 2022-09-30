@@ -284,7 +284,7 @@ object Transformer {
 
         val res = positiveType
         val args = List(ConstantInt(utf8.size), LocalReference(PointerType(IntegerType8()), s"$bind.lit.decayed"))
-        val argsT = List(IntegerType64(), PointerType(IntegerType8())) // TODO: argsT = args.map { ??? }
+        val argsT = List(IntegerType64(), PointerType(IntegerType8()))
         emit(Call(bind, res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
 
         eraseValues(List(v), freeVariables(rest));
@@ -671,5 +671,4 @@ object Transformer {
 
   def setStackPointer(stackPointer: Operand)(using C: BlockContext) =
     C.stackPointer = stackPointer;
-
 }
