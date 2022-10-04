@@ -1,6 +1,7 @@
 package effekt.llvm
 
 import effekt.context.Context
+import effekt.llvm.Operand.LocalReference
 
 object PrettyPrinter {
 
@@ -80,6 +81,9 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
 
     case Add(result, operand0, ConstantInt(n)) =>
       s"${localName(result)} = add ${show(operand0)}, $n"
+    case Add(result, LocalReference(t1, s1), LocalReference(t2, s2)) =>
+      assert(t1 == t2)
+      s"${localName(result)} = add ${show(t1)} ${localName(s1)}, ${localName(s2)}"
     case Add(_, _, operand1) =>
       C.abort(s"WIP: currently only right-constant additions are supported, not: $operand1")
 

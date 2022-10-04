@@ -72,6 +72,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case PopStack(name, rest) =>
       "let" <+> name <+> "=" <+> "shift0" <> ";" <> line <> toDoc(rest)
 
+    case PopStacks(name, n, rest) =>
+      "let" <+> name <+> "=" <+> "shift0" <+> n <> ";" <> line <> toDoc(rest)
+
     case ForeignCall(name, builtin, arguments, rest) =>
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 
@@ -83,6 +86,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralUTF8String(name, utf8, rest) =>
       "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => "\\" + f"$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
+
+    case EviAdd(name, x, y, rest) =>
+      "let" <+> name <+> "=" <+> x <+> "+" <+> y <> ";" <> line <> toDoc(rest)
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

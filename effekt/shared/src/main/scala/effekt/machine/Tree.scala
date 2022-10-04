@@ -132,6 +132,11 @@ enum Statement {
   case PopStack(name: Variable, rest: Statement)
 
   /**
+   * e.g. let k = shift0 n; s
+   */
+  case PopStacks(name: Variable, n: Variable, rest: Statement)
+
+  /**
    * let x = #infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
@@ -143,6 +148,8 @@ enum Statement {
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
+
+  case EviAdd(name: Variable, s1: Variable, s2: Variable, rest: Statement)
 }
 export Statement.*
 
