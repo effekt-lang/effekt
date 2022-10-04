@@ -190,7 +190,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
-        LiteralInt(transform(ev), builtins.Here,
+        LiteralInt(transform(ev), 1,
           NewStack(delimiter, returnClause,
             PushStack(delimiter,
               New(transform(id), transform(handler),
