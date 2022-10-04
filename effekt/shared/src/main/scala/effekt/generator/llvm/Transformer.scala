@@ -292,10 +292,6 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
-      case machine.ComposeEvidence(machine.Variable(name, _), x, y, rest) =>
-        emit(Add(name, transform(x), transform(y)));
-        transform(rest)
-
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));

@@ -204,12 +204,17 @@ object Transformer {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
+      val addSymbol = Context.module.dependencies.find(_.name.name == "effekt").get.terms("infixAdd").find({
+        s =>
+          import symbols.builtins.TInt
+          Context.typeOf(s) == FunctionType(List(), List(), List(TInt, TInt), List(), TInt, symbols.Effects.Pure)
+      }).get
       scopes.map({ scope =>
         Variable(transform(scope), builtins.Evidence)
       }).foldRight(transform(lifted.IntLit(builtins.Here)))({(evi, acc) =>
         val res = Variable(freshName("ev_acc"), builtins.Evidence)
         acc.flatMap({acc => Binding { k =>
-          ComposeEvidence(res, evi, acc, k(res));
+          ForeignCall(res, transform(addSymbol), List(evi, acc), k(res));
         }})
       })
     }
