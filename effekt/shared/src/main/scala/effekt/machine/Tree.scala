@@ -127,11 +127,6 @@ enum Statement {
   case PushStack(stack: Variable, rest: Statement)
 
   /**
-   * e.g. let k = shift0; s
-   */
-  case PopStack(name: Variable, rest: Statement)
-
-  /**
    * e.g. let k = shift0 n; s
    */
   case PopStacks(name: Variable, n: Variable, rest: Statement)

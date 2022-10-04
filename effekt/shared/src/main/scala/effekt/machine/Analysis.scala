@@ -35,8 +35,6 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ (freeVariables(rest) -- Set(name))
     case PushStack(value, rest) =>
       Set(value) ++ freeVariables(rest)
-    case PopStack(name, rest) =>
-      freeVariables(rest) -- Set(name)
     case PopStacks(name, n, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(n)
     case LiteralInt(name, value, rest) =>

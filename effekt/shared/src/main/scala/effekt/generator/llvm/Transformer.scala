@@ -257,18 +257,6 @@ object Transformer {
         setStackPointer(LocalReference(spType, newStackPointerName));
         transform(rest)
 
-      case machine.PopStack(variable, rest) =>
-        val newStackPointerName = freshName("sp");
-        val tmpName = freshName("tmp");
-        val tmpReference = LocalReference(StructureType(List(stkType, spType)), tmpName);
-        emit(Call(tmpName, StructureType(List(stkType, spType)), popStack, List(getStackPointer())));
-        emit(ExtractValue(variable.name, tmpReference, 0));
-        emit(ExtractValue(newStackPointerName, tmpReference, 1));
-        setStackPointer(LocalReference(spType, newStackPointerName));
-
-        eraseValues(List(variable), freeVariables(rest));
-        transform(rest)
-
       case machine.PopStacks(variable, n, rest) =>
         // TODO Handle n (number of stacks to pop)
         val newStackPointerName = freshName("sp");

@@ -69,9 +69,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case PushStack(stack, rest) =>
       "push stack" <+> stack <> ";" <> line <> toDoc(rest)
 
-    case PopStack(name, rest) =>
-      "let" <+> name <+> "=" <+> "shift0" <> ";" <> line <> toDoc(rest)
-
     case PopStacks(name, n, rest) =>
       "let" <+> name <+> "=" <+> "shift0" <+> n <> ";" <> line <> toDoc(rest)
 
