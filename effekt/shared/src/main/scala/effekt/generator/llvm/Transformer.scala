@@ -1,5 +1,4 @@
-package effekt
-package llvm
+package effekt.llvm
 
 import effekt.machine
 import effekt.machine.analysis.*
@@ -28,6 +27,11 @@ object Transformer {
       val entryFunction = Function(VoidType(), "effektMain", List(), entryBlock :: basicBlocks)
       declarations.map(transform) ++ definitions :+ entryFunction
   }
+
+  // context getters
+  private def MC(using MC: ModuleContext): ModuleContext = MC
+  private def FC(using FC: FunctionContext): FunctionContext = FC
+  private def BC(using BC: BlockContext): BlockContext = BC
 
   def transform(declaration: machine.Declaration): Definition =
     declaration match {
@@ -273,9 +277,23 @@ object Transformer {
         emit(FAdd(name, ConstantDouble(x), ConstantDouble(0)));
         transform(rest)
 
+      case machine.LiteralUTF8String(v@machine.Variable(bind, _), utf8, rest) =>
+        emit(GlobalVariableArray(s"$bind.lit", IntegerType8(), ConstantArray(IntegerType8(), utf8.map { b => ConstantInteger8(b) }.toList)))
+
+        emit(BitCast(s"$bind.lit.decayed", ConstantGlobal(PointerType(ArrayType(utf8.length, IntegerType8())), s"$bind.lit"), PointerType(IntegerType8())))
+
+        val res = positiveType
+        val args = List(ConstantInt(utf8.size), LocalReference(PointerType(IntegerType8()), s"$bind.lit.decayed"))
+        val argsT = List(IntegerType64(), PointerType(IntegerType8()))
+        emit(Call(bind, res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
+
+        eraseValues(List(v), freeVariables(rest));
+        transform(rest)
+
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>
         // TODO careful with calling convention?!?
         val functionType = PointerType(FunctionType(transform(resultType), values.map { case machine.Variable(_, tpe) => transform(tpe) }));
+        shareValues(values, freeVariables(rest));
         emit(Call(resultName, transform(resultType), ConstantGlobal(functionType, foreign), values.map(transform)));
         transform(rest)
     }
@@ -308,6 +326,7 @@ object Transformer {
     case machine.Negative(_)   => negativeType
     case machine.Type.Int()    => NamedType("Int")
     case machine.Type.Double() => NamedType("Double")
+    case machine.Type.String() => positiveType
     case machine.Type.Stack()  => stkType
   }
 
@@ -316,11 +335,12 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive(_)   => 16
-      case machine.Negative(_)   => 16
-      case machine.Type.Int()    => 8 // TODO Make fat?
-      case machine.Type.Double() => 8 // TODO Make fat?
-      case machine.Type.Stack()  => 8 // TODO Make fat?
+      case machine.Positive(_)      => 16
+      case machine.Negative(_)      => 16
+      case machine.Type.Int()       => 8 // TODO Make fat?
+      case machine.Type.Double()    => 8 // TODO Make fat?
+      case machine.Type.String()    => 16
+      case machine.Type.Stack()     => 8 // TODO Make fat?
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -503,6 +523,7 @@ object Transformer {
       case machine.Type.Stack()  => emit(Call("_", VoidType(), shareStack, List(transform(value))))
       case machine.Type.Int()    => ()
       case machine.Type.Double() => ()
+      case machine.Type.String() => emit(Call("_", VoidType(), shareString, List(transform(value))))
     }
   }
 
@@ -513,6 +534,7 @@ object Transformer {
       case machine.Type.Stack()  => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
       case machine.Type.Int()    => ()
       case machine.Type.Double() => ()
+      case machine.Type.String() => emit(Call("_", VoidType(), eraseString, List(transform(value))))
     }
   }
 
@@ -585,12 +607,14 @@ object Transformer {
   def shareNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "shareNegative");
   def shareStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "shareStack");
   def shareFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "shareFrames");
+  def shareString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_increment");
 
   def eraseObject = ConstantGlobal(PointerType(FunctionType(VoidType(),List(objType))), "eraseObject");
   def erasePositive = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "erasePositive");
   def eraseNegative = ConstantGlobal(PointerType(FunctionType(VoidType(),List(negativeType))), "eraseNegative");
   def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "eraseStack");
   def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
+  def eraseString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_decrement");
 
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
@@ -647,5 +671,4 @@ object Transformer {
 
   def setStackPointer(stackPointer: Operand)(using C: BlockContext) =
     C.stackPointer = stackPointer;
-
 }

@@ -1,6 +1,7 @@
 package effekt
 package llvm
 
+
 /**
  *  see: https://hackage.haskell.org/package/llvm-hs-pure-9.0.0/docs/LLVM-AST.html#t:Definition
  */
@@ -8,6 +9,7 @@ enum Definition {
   case Function(returnType: Type, name: String, parameters: List[Parameter], basicBlocks: List[BasicBlock])
   case VerbatimFunction(returnType: Type, name: String, parameters: List[Parameter], body: String)
   case Verbatim(content: String)
+  case GlobalVariableArray(name: String, typ: Type, initializer: Operand) // initializer should be constant
 }
 export Definition.*
 
@@ -27,7 +29,6 @@ enum Instruction {
   case FAdd(result: String, operand0: Operand, operand1: Operand)
   case InsertValue(result: String, aggregate: Operand, element: Operand, index: Int)
   case ExtractValue(result: String, aggregate: Operand, index: Int)
-
   case Comment(msg: String)
 }
 export Instruction.*
@@ -41,8 +42,8 @@ export Terminator.*
 
 case class Parameter(typ: Type, name: String)
 
-// Operands cannot be an enum since we use the more specific types massively. Scala 3 will perform widening way
-// too often.
+// Operands cannot be an enum since we use the more specific types massively.
+// Scala 3 will perform widening way too often.
 sealed trait Operand
 object Operand {
   case class LocalReference(tpe: Type, name: String) extends Operand
@@ -51,6 +52,8 @@ object Operand {
   case class ConstantAggregateZero(typ: Type) extends Operand
   case class ConstantGlobal(tpe: Type, name: String) extends Operand
   case class ConstantNull(tpe: Type) extends Operand
+  case class ConstantArray(memberType: Type, members: List[Operand]) extends Operand // members should be homogeneous
+  case class ConstantInteger8(b: Byte) extends Operand
 }
 export Operand.*
 
@@ -59,12 +62,13 @@ export Operand.*
  */
 enum Type {
   case VoidType()
-  case IntegerType64()
-  case IntegerType8()
   case IntegerType1()
+  case IntegerType8() // required for `void*` (which only exists as `i8*` in LLVM) and `char*`
+  case IntegerType64()
+  case PointerType(pointerReferent: Type)
+  case ArrayType(size: Int, of: Type)
   case StructureType(elementTypes: List[Type])
   case FunctionType(resultType: Type, argumentTypes: List[Type])
-  case PointerType(pointerReferent: Type)
   case NamedType(name: String)
 }
 export Type.*
