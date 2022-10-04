@@ -116,6 +116,7 @@ object Transformer {
           case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
           case id: symbols.BlockParam  => Variable(transform(id), transform(Context.blockTypeOf(id)))
           case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+          case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
           // we ignore functions since we do not "close" over them.
 
           // TODO
@@ -189,10 +190,11 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
-        NewStack(delimiter, returnClause,
-          PushStack(delimiter,
-            New(transform(id), transform(handler),
-              transform(body))))
+        LiteralInt(transform(ev), builtins.Here,
+          NewStack(delimiter, returnClause,
+            PushStack(delimiter,
+              New(transform(id), transform(handler),
+                transform(body)))))
 
       case _ =>
         Context.abort(s"Unsupported statement: $stmt")
@@ -201,7 +203,16 @@ object Transformer {
   def transform(arg: lifted.Argument)(using BlocksParamsContext, Context): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
-    case lifted.Evidence(_) => transform(lifted.IntLit(0)) // TODO implement
+    case lifted.Evidence(scopes) => {
+      scopes.map({ scope =>
+        Variable(transform(scope), builtins.Evidence)
+      }).foldRight(transform(lifted.IntLit(builtins.Here)))({(evi, acc) =>
+        val res = Variable(freshName("ev_acc"), builtins.Evidence)
+        acc.flatMap({acc => Binding { k =>
+          EviAdd(res, evi, acc, k(res));
+        }})
+      })
+    }
   }
 
   def transform(block: lifted.Block)(using BlocksParamsContext, Context): Binding[Variable] = block match {
@@ -320,7 +331,7 @@ object Transformer {
         // TODO actually use evidence to determine number of stacks popped
         val ev = Variable(freshName("evidence"), builtins.Evidence)
         List(Clause(ev +: params.map(transform),
-          PopStack(Variable(transform(resume).name, Type.Stack()),
+          PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
             transform(body))))
       case _ =>
         Context.abort(s"Unsupported handler $handler")

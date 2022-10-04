@@ -171,6 +171,7 @@ export Type.{ Positive, Negative }
 object builtins {
 
   val Evidence = Type.Int()
+  val Here = 0
 
   /**
    * Blocks types are interfaces with a single operation.
