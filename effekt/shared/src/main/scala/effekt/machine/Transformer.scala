@@ -66,8 +66,6 @@ object Transformer {
         transformToplevel(rest, entryPoint)
 
       case lifted.Def(id, _, lifted.BlockLit(params, body), rest) =>
-        // TODO top-level definitions don't need evidence, or do they?
-        // some of the params are now evidence params... TODO handle evidence.
         Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, entryPoint))
 
       case lifted.Include(content, rest) =>
@@ -110,7 +108,6 @@ object Transformer {
         }
 
       case lifted.Def(id, tpe, block @ lifted.BlockLit(params, body), rest) =>
-        // TODO deal with evidence
         // TODO does not work for mutually recursive local definitions
         val freeParams = lifted.freeVariables(block).toList.collect {
           case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
@@ -226,7 +223,6 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.BlockLit(params, body) =>
-      // TODO deal with evidence
       val parameters = params.map(transform);
       val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
@@ -333,7 +329,6 @@ object Transformer {
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
-        // TODO actually use evidence to determine number of stacks popped
         val ev = Variable(freshName("evidence"), builtins.Evidence)
         List(Clause(ev +: params.map(transform),
           PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
@@ -386,7 +381,6 @@ object Transformer {
         findToplevelBlocksParams(rest)
 
       case lifted.Def(blockName, _, lifted.BlockLit(params, body), rest) =>
-        // TODO add evidence param
         noteBlockParams(blockName, params.map(transform));
         findToplevelBlocksParams(rest)
 
