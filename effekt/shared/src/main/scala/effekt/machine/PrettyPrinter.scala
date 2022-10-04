@@ -84,7 +84,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case LiteralUTF8String(name, utf8, rest) =>
       "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => "\\" + f"$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
 
-    case EviAdd(name, x, y, rest) =>
+    case ComposeEvidence(name, x, y, rest) =>
       "let" <+> name <+> "=" <+> x <+> "+" <+> y <> ";" <> line <> toDoc(rest)
   }
 

@@ -144,7 +144,7 @@ enum Statement {
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
 
-  case EviAdd(name: Variable, s1: Variable, s2: Variable, rest: Statement)
+  case ComposeEvidence(name: Variable, s1: Variable, s2: Variable, rest: Statement)
 }
 export Statement.*
 

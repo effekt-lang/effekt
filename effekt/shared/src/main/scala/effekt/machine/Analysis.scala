@@ -45,6 +45,6 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) - name
     case ForeignCall(name, builtin, arguments, rest) =>
       arguments.toSet ++ freeVariables(rest) - name
-    case EviAdd(name, x, y, rest) =>
+    case ComposeEvidence(name, x, y, rest) =>
       freeVariables(rest) -- Set(name) ++ Set(x,y)
   }

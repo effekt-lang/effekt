@@ -209,7 +209,7 @@ object Transformer {
       }).foldRight(transform(lifted.IntLit(builtins.Here)))({(evi, acc) =>
         val res = Variable(freshName("ev_acc"), builtins.Evidence)
         acc.flatMap({acc => Binding { k =>
-          EviAdd(res, evi, acc, k(res));
+          ComposeEvidence(res, evi, acc, k(res));
         }})
       })
     }

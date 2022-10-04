@@ -292,7 +292,7 @@ object Transformer {
         eraseValues(List(v), freeVariables(rest));
         transform(rest)
 
-      case machine.EviAdd(machine.Variable(name, _), x, y, rest) =>
+      case machine.ComposeEvidence(machine.Variable(name, _), x, y, rest) =>
         emit(Add(name, transform(x), transform(y)));
         transform(rest)
 
