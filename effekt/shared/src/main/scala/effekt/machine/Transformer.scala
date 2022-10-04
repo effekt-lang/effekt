@@ -60,7 +60,7 @@ object Transformer {
         val transformedParams = params.map {
           case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
           case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
-          case lifted.EvidenceParam(_) => ???
+          case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
         }
         emitDeclaration(Extern(transform(name), transformedParams, transform(functionType.result), body))
         transformToplevel(rest, entryPoint)
