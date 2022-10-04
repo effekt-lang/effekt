@@ -128,10 +128,9 @@ object Transformer {
       case lifted.Def(id, tpe, block @ lifted.New(impl), rest) =>
         // TODO freeParams?
         // TODO deal with evidenve?
-        val interface = tpe.asInstanceOf[symbols.InterfaceType].typeConstructor
-        val implTransformed = impl.clauses.sortBy[Int]({
-          case (operationName, _) =>
-            interface.ops.indexOf(operationName)
+        val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe : @unchecked
+        val implTransformed = interfaceOps.map({ op =>
+          impl.clauses.find(_._1 == op).get
         }).map({
           case (_, lifted.BlockLit(params, body)) =>
             // TODO we assume that there are no block params in methods
