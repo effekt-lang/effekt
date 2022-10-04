@@ -204,7 +204,7 @@ object Transformer {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
-      val addSymbol = Context.module.dependencies.find(_.name.name == "effekt").get.terms("infixAdd").find({
+      val addSymbol = Context.module.findPrelude.terms("infixAdd").find({
         s =>
           import symbols.builtins.TInt
           Context.typeOf(s) == FunctionType(List(), List(), List(TInt, TInt), List(), TInt, symbols.Effects.Pure)
