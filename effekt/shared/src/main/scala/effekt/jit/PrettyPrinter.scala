@@ -92,6 +92,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "target" -> toDoc(target), "args" -> toDoc(args)))
     case Shift(out, n) => jsonObjectSmall(ListMap("op" -> "\"Shift\"",
       "out" -> toDoc(out), "n" -> n.toString))
+    case ShiftDyn(out, n) => jsonObjectSmall(ListMap("op" -> "\"ShiftDyn\"",
+      "out" -> toDoc(out), "n" -> toDoc(n)))
     case Reset() => jsonObjectSmall(ListMap("op" -> "\"Reset\""))
     case Print(arg) => jsonObjectSmall(ListMap("op" -> "\"Print\"", "arg" -> toDoc(arg)))
     case IfZero(arg, thenClause) => jsonObjectSmall(ListMap("op" -> "\"IfZero\"",

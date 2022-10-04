@@ -32,7 +32,8 @@ case class PrimOp(name: String, out: RegList, in: RegList) extends Instruction
 case class Add(out: Register, in1: Register, in2: Register) extends Instruction
 case class Mul(out: Register, in1: Register, in2: Register) extends Instruction
 case class Push(target: BlockLabel, args: RegList) extends Instruction
-case class Shift(out: Register, n: Int) extends Instruction // TODO n from reg
+case class Shift(out: Register, n: Int) extends Instruction
+case class ShiftDyn(out: Register, n: Register) extends Instruction
 case class Reset() extends Instruction
 case class Print(arg: Register) extends Instruction
 case class IfZero(arg: Register, thenClause: Clause) extends Instruction
