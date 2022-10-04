@@ -12,8 +12,8 @@ object Transformer {
       given BC: BlockContext = BlockContext();
 
       // TODO proper initialization of runtime
-      emit(Call("env", envType, malloc, List(ConstantInt(1024))));
-      emit(Call("sp", spType, malloc, List(ConstantInt(1024))));
+      emit(Call("env", envType, malloc, List(ConstantInt(1024 * 1024))));
+      emit(Call("sp", spType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
