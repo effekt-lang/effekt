@@ -304,11 +304,11 @@ object Transformer {
   def stkType = NamedType("Stk");
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive(_)      => positiveType
-    case machine.Negative(_)      => negativeType
-    case machine.Type.Int()       => NamedType("Int")
-    case machine.Type.Double()    => NamedType("Double")
-    case machine.Type.Stack()     => stkType
+    case machine.Positive(_)   => positiveType
+    case machine.Negative(_)   => negativeType
+    case machine.Type.Int()    => NamedType("Int")
+    case machine.Type.Double() => NamedType("Double")
+    case machine.Type.Stack()  => stkType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -316,11 +316,11 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive(_)      => 16
-      case machine.Negative(_)      => 16
-      case machine.Type.Int()       => 8 // TODO Make fat?
-      case machine.Type.Double()    => 8 // TODO Make fat?
-      case machine.Type.Stack()     => 8 // TODO Make fat?
+      case machine.Positive(_)   => 16
+      case machine.Negative(_)   => 16
+      case machine.Type.Int()    => 8 // TODO Make fat?
+      case machine.Type.Double() => 8 // TODO Make fat?
+      case machine.Type.Stack()  => 8 // TODO Make fat?
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
