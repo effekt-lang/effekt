@@ -6,7 +6,7 @@ object PrettyPrinter {
 
   type LLVMString = String
 
-  def show(definitions: List[Definition])(using C: Context): LLVMString =
+  def show(definitions: List[Definition])(using Context): LLVMString =
     definitions.map(show).mkString("\n\n")
 
   def show(definition: Definition)(using C: Context): LLVMString = definition match {
@@ -24,9 +24,20 @@ define ${show(returnType)} ${globalName(name)}(${commaSeparated(parameters.map(s
 }
 """
     case Verbatim(content) => content
+
+    case GlobalVariableArray(name, IntegerType8(), ConstantArray(IntegerType8(), members)) =>
+      val bytes = members.map { ini => ini match {
+        case ConstantInteger8(b) => b
+        case _ => ???
+      }}
+      val escaped = bytes.map(b => "\\" + f"$b%02x").mkString;
+      s"@$name = private constant [${bytes.length} x i8] c\"$escaped\""
+
+    case GlobalVariableArray(name, typ, initializer) =>
+        C.abort(s"cannot compile non-i8 constant array: $name = [ x ${typ}] ${initializer}")
   }
 
-  def show(basicBlock: BasicBlock)(using C: Context): LLVMString = basicBlock match {
+  def show(basicBlock: BasicBlock)(using Context): LLVMString = basicBlock match {
     case BasicBlock(name, instructions, terminator) =>
       s"""
 ${name}:
@@ -84,9 +95,9 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case ExtractValue(result, aggregate, index) =>
       s"${localName(result)} = extractvalue ${show(aggregate)}, $index"
 
-    // let us hope that `msg` does not contain e.g. a newline
     case Comment(msg) =>
-      s"; $msg"
+      val sanitized = msg.map((c: Char) => if (' ' <= c && c != '\\' && c <= '~') c else '?').mkString
+      s"; $sanitized"
   }
 
   def show(terminator: Terminator): LLVMString = terminator match {
@@ -100,23 +111,26 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
   }
 
   def show(operand: Operand): LLVMString = operand match {
-    case LocalReference(tpe, name)  => s"${show(tpe)} ${localName(name)}"
-    case ConstantGlobal(tpe, name)  => s"${show(tpe)} ${globalName(name)}"
-    case ConstantInt(n)             => s"i64 $n"
-    case ConstantDouble(n)          => s"double $n"
-    case ConstantAggregateZero(tpe) => s"${show(tpe)} zeroinitializer"
-    case ConstantNull(tpe)          => s"${show(tpe)} null"
+    case LocalReference(tpe, name)          => s"${show(tpe)} ${localName(name)}"
+    case ConstantGlobal(tpe, name)          => s"${show(tpe)} ${globalName(name)}"
+    case ConstantInt(n)                     => s"i64 $n"
+    case ConstantDouble(n)                  => s"double $n"
+    case ConstantAggregateZero(tpe)         => s"${show(tpe)} zeroinitializer"
+    case ConstantNull(tpe)                  => s"${show(tpe)} null"
+    case ConstantArray(memberType, members) => s"[${members.length} x ${show(memberType)}]"
+    case ConstantInteger8(b)                => s"i8 $b"
   }
 
   def show(tpe: Type): LLVMString = tpe match {
     case VoidType() => "void"
-    case IntegerType64() => "i64"
-    case IntegerType8() => "i8" // required for `void*` (which only exists as `i8*` in LLVM)
     case IntegerType1() => "i1"
-    case NamedType(name) => localName(name)
+    case IntegerType8() => "i8"
+    case IntegerType64() => "i64"
     case PointerType(referentType) => s"${show(referentType)}*"
+    case ArrayType(size, of) => s"[$size x ${show(of)}]"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(show))}}"
     case FunctionType(returnType, argumentTypes) => s"${show(returnType)} (${commaSeparated(argumentTypes.map(show))})"
+    case NamedType(name) => localName(name)
   }
 
   def show(parameter: Parameter): LLVMString = parameter match {

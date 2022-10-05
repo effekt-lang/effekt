@@ -7,6 +7,7 @@ import effekt.jit.BlockNumbering.*
 import effekt.machine
 import effekt.machine.{Declaration, analysis}
 
+import java.nio.charset.StandardCharsets
 import scala.annotation.targetName
 import scala.collection.mutable
 import scala.collection.immutable
@@ -108,7 +109,7 @@ object Transformer {
           val (_ign1, args, block) = transformInline(clause);
           emitInlined(block)
         }
-        case Type.Continuation() | Type.Double() | Type.Codata(_) => {
+        case Type.Continuation() | Type.Double() | Type.String() |  Type.Codata(_) => {
           sys error "Fatal error: Trying to match on non-datatype"
         }
         }
@@ -154,6 +155,11 @@ object Transformer {
         emit(ConstDouble(outs(RegisterType.Double).head, value));
         emitInlined(block)
       }
+      case machine.LiteralUTF8String(out, value, rest) => {
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(out), rest));
+        emit(ConstString(outs(RegisterType.String).head, new String(value, StandardCharsets.UTF_8))); // TODO: Escape or encode somehow
+        emitInlined(block)
+      }
       case machine.NewStack(name, frame, rest) => {
         val (closesOver, _, target) = transformClosure(frame);
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
@@ -181,6 +187,7 @@ object Transformer {
       case machine.Negative(name) => Type.Codata(PC.codatas.indexOfOrInsert(name))
       case machine.Type.Int() => Type.Integer()
       case machine.Type.Double() => Type.Double()
+      case machine.Type.String() => Type.String()
       case machine.Type.Stack() => Type.Continuation()
   }
 

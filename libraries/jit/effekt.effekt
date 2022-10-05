@@ -14,6 +14,8 @@ extern io def println(n: Int): Unit / Console = "println(Int): Unit / Console"
 extern io def println(n: Double): Unit / Console = "println(Double): Unit / Console"
 extern io def println(b: Boolean): Unit / Console = "println(Boolean): Unit / Console"
 extern io def println(b: Unit): Unit / Console = "println(Unit): Unit / Console"
+extern io def println(s: String): Unit / Console = "println(String): Unit / Console"
+extern io def readLn(): String / Console = "readLn(): String / Console"
 extern io def readInt(): Int / Console = "readInt(): Int / Console"
 
 // integer primitives
@@ -89,6 +91,16 @@ extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = "infixNeq(Boolean, B
 extern pure def not(b: Boolean): Boolean = "not(Boolean): Boolean"
 extern pure def infixOr(x: Boolean, y: Boolean): Boolean = "infixOr(Boolean, Boolean): Boolean"
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = "infixAnd(Boolean, Boolean): Boolean"
+
+// operations on strings
+// =====================
+extern pure def infixConcat(s1: String, s2: String): String = "infixConcat(String, String): String"
+extern pure def show(value: Int): String = "show(Int): String"
+extern pure def read(s: String): Int = "read(String): Int"
+extern pure def show(value: Double): String = "show(Double): String"
+extern pure def read(s: String): Double = "read(String): Double"
+extern pure def show(value: Boolean): String = "show(Boolean): String"
+extern pure def read(s: String): Boolean = "read(String): Boolean"
 
 // Benchmarking
 // ============
