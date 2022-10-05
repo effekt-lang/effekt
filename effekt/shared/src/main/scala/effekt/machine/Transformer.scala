@@ -330,9 +330,18 @@ object Transformer {
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
         val ev = Variable(freshName("evidence"), builtins.Evidence)
+        val one = Variable(freshName("one"), builtins.Evidence)
+        val shiftBy = Variable(freshName("shiftby"), builtins.Evidence)
+        val addSymbol = Context.module.findPrelude.terms("infixAdd").find({
+          s =>
+            import symbols.builtins.TInt
+            Context.typeOf(s) == FunctionType(List(), List(), List(TInt, TInt), List(), TInt, symbols.Effects.Pure)
+        }).get
         List(Clause(ev +: params.map(transform),
-          PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
-            transform(body))))
+          LiteralInt(one, 1,
+            ForeignCall(shiftBy, transform(addSymbol), List(ev, one),
+              PopStacks(Variable(transform(resume).name, Type.Stack()), shiftBy,
+                transform(body))))))
       case _ =>
         Context.abort(s"Unsupported handler $handler")
     }
