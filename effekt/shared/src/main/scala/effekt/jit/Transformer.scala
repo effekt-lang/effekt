@@ -29,8 +29,9 @@ object Transformer {
         val entryBlock = transform("?entrypoint", freeVars, main);
 
         val datatypes = ProgC.datatypes.toList;
+        val codatatypes = ProgC.codatas.toList;
 
-        val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, ProgC.frameSize);
+        val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, codatatypes, ProgC.frameSize);
         numberBlocks(ProgC.blockSymbols.toMap, compiledProgram)
     }
 

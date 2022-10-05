@@ -7,7 +7,7 @@ import effekt.symbols.{Symbol, ValueSymbol, BlockSymbol}
 object BlockNumbering {
 
   def numberBlocks(numbers: Map[String, BlockIndex], prog: Program): Program = {
-    Program(prog.blocks.map(numberBlocks(numbers)), prog.datatypes, prog.frameSize)
+    Program(prog.blocks.map(numberBlocks(numbers)), prog.datatypes, prog.codatatypes, prog.frameSize)
   }
   def numberBlocks(blockIndices: Map[String, BlockIndex])(block: BasicBlock): BasicBlock = block match {
     case BasicBlock(id, frameDescriptor, instructions, terminator) =>
