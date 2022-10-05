@@ -28,7 +28,7 @@ object Transformer {
 
         val entryBlock = transform("?entrypoint", freeVars, main);
 
-        val datatypes = ProgC.datatypes.map(tpe => tpe.map(pars => pars.map(transform))).toList;
+        val datatypes = ProgC.datatypes.toList;
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, ProgC.frameSize);
         numberBlocks(ProgC.blockSymbols.toMap, compiledProgram)
@@ -174,10 +174,10 @@ object Transformer {
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
     typ match
-      case machine.Positive(List(List())) => Type.Unit()
-      case machine.Positive(List(List(),List())) => Type.Integer() // Boolean
-      case machine.Positive(alternatives) => Type.Datatype(PC.datatypes.indexOfOrInsert(alternatives))
-      case machine.Negative(alternatives) => Type.Codata(PC.codatas.indexOfOrInsert(alternatives))
+      case machine.Positive("Unit") => Type.Unit()
+      case machine.Positive("Boolean") => Type.Integer() // Boolean
+      case machine.Positive(name) => Type.Datatype(PC.datatypes.indexOfOrInsert(name))
+      case machine.Negative(name) => Type.Codata(PC.codatas.indexOfOrInsert(name))
       case machine.Type.Int() => Type.Integer()
       case machine.Type.Double() => Type.Double()
       case machine.Type.Stack() => Type.Continuation()
@@ -236,8 +236,8 @@ object Transformer {
 
   class ProgramContext(val primitives: immutable.Map[String, String]) {
     val basicBlocks: ListBuffer[BasicBlock] = ListBuffer();
-    val datatypes: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
-    val codatas: ListBuffer[List[machine.Signature]] = mutable.ListBuffer();
+    val datatypes: ListBuffer[String] = mutable.ListBuffer();
+    val codatas: ListBuffer[String] = mutable.ListBuffer();
     var frameSize: jit.FrameDescriptor = FrameDescriptor(Map());
     var blockSymbols: mutable.HashMap[String, BlockIndex] = mutable.HashMap();
   }

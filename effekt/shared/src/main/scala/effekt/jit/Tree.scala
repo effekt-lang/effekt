@@ -8,7 +8,7 @@ sealed trait Tree
 
 case class Program(
   blocks: List[BasicBlock],
-  datatypes: List[List[List[Type]]],
+  datatypes: List[String],
   frameSize: FrameDescriptor
 ) extends Tree
 
