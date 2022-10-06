@@ -12,6 +12,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def format(stmt: Statement): Document = pretty(toDoc(stmt), 2)
 
+  def evidenceToDoc(value: Evidence): Doc = value match {
+    case builtins.Here => "Here"
+    case builtins.There(ev) => "There(" <> evidenceToDoc(ev) <> ")"
+  }
+
   implicit def toDoc(v: Variable): Doc = string(v.name)
 
   implicit def toDoc(v: Label): Doc = string(v.name)
@@ -72,6 +77,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case PopStacks(name, n, rest) =>
       "let" <+> name <+> "=" <+> "shift0" <+> n <> ";" <> line <> toDoc(rest)
 
+    case ComposeEvidence(name, ev1, ev2, rest) =>
+      "let" <+> name <+> "=" <+> ev1 <+> "+" <+> ev2 <> ";" <> line <> toDoc(rest)
+
     case ForeignCall(name, builtin, arguments, rest) =>
       "let" <+> name <+> "=" <+> builtin <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 
@@ -83,6 +91,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case LiteralUTF8String(name, utf8, rest) =>
       "let" <+> name <+> "=" <+> ("\"" + (utf8.map { b => "\\" + f"$b%02x" }).mkString + "\"") <> ";" <> line <> toDoc(rest)
+
+    case LiteralEvidence(name, evidence, rest) =>
+      "let" <+> name <+> "=" <+> evidenceToDoc(evidence) <> ";" <> line <> toDoc(rest)
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

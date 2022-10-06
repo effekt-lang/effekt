@@ -1,5 +1,6 @@
 package effekt.llvm
 
+import effekt.llvm.Operand.LocalReference
 import effekt.machine
 import effekt.machine.analysis.*
 
@@ -258,7 +259,7 @@ object Transformer {
         transform(rest)
 
       case machine.PopStacks(variable, n, rest) =>
-        // TODO Handle n (number of stacks to pop)
+        // TODO Handle n (n+1 = number of stacks to pop)
         val newStackPointerName = freshName("sp");
         val tmpName = freshName("tmp");
         val tmpReference = LocalReference(StructureType(List(stkType, spType)), tmpName);
@@ -270,6 +271,9 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
 
+      case machine.ComposeEvidence(machine.Variable(name, _), ev1, ev2, rest) =>
+        emit(Add(name, transform(ev1), transform(ev2)))
+        transform(rest)
 
       case machine.LiteralInt(machine.Variable(name, _), n, rest) =>
         emit(Add(name, ConstantInt(n), ConstantInt(0)));
@@ -290,6 +294,10 @@ object Transformer {
         emit(Call(bind, res, ConstantGlobal(FunctionType(res, argsT), "c_buffer_construct"), args))
 
         eraseValues(List(v), freeVariables(rest));
+        transform(rest)
+
+      case machine.LiteralEvidence(machine.Variable(name, _), n, rest) =>
+        emit(Add(name, ConstantInt(n), ConstantInt(0)));
         transform(rest)
 
       case machine.ForeignCall(machine.Variable(resultName, resultType), foreign, values, rest) =>

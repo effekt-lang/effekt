@@ -187,7 +187,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
-        LiteralInt(transform(ev), 1,
+        LiteralEvidence(transform(ev), builtins.There(builtins.Here),
           NewStack(delimiter, returnClause,
             PushStack(delimiter,
               New(transform(id), transform(handler),
@@ -201,17 +201,17 @@ object Transformer {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
-      val addSymbol = Context.module.findPrelude.terms("infixAdd").find({
-        s =>
-          import symbols.builtins.TInt
-          Context.typeOf(s) == FunctionType(List(), List(), List(TInt, TInt), List(), TInt, symbols.Effects.Pure)
-      }).get
       scopes.map({ scope =>
         Variable(transform(scope), builtins.Evidence)
-      }).foldRight(transform(lifted.IntLit(builtins.Here)))({(evi, acc) =>
+      }).foldRight({
+        val res = Variable(freshName("ev_zero"), builtins.Evidence)
+        Binding { k =>
+          LiteralEvidence(res, builtins.Here, k(res))
+        }: Binding[Variable]
+      })({(evi, acc) =>
         val res = Variable(freshName("ev_acc"), builtins.Evidence)
-        acc.flatMap({acc => Binding { k =>
-          ForeignCall(res, transform(addSymbol), List(evi, acc), k(res));
+        acc.flatMap({accV => Binding { k =>
+          ComposeEvidence(res, evi, accV, k(res))
         }})
       })
     }
@@ -330,18 +330,9 @@ object Transformer {
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
         val ev = Variable(freshName("evidence"), builtins.Evidence)
-        val one = Variable(freshName("one"), builtins.Evidence)
-        val shiftBy = Variable(freshName("shiftby"), builtins.Evidence)
-        val addSymbol = Context.module.findPrelude.terms("infixAdd").find({
-          s =>
-            import symbols.builtins.TInt
-            Context.typeOf(s) == FunctionType(List(), List(), List(TInt, TInt), List(), TInt, symbols.Effects.Pure)
-        }).get
         List(Clause(ev +: params.map(transform),
-          LiteralInt(one, 1,
-            ForeignCall(shiftBy, transform(addSymbol), List(ev, one),
-              PopStacks(Variable(transform(resume).name, Type.Stack()), shiftBy,
-                transform(body))))))
+              PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
+                transform(body))))
       case _ =>
         Context.abort(s"Unsupported handler $handler")
     }
