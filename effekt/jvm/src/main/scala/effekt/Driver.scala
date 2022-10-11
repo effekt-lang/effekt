@@ -128,7 +128,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       // 1. compile with mlton
       // 2. run resulting binary
       val out = C.config.output()
-      out.emit(Process(Seq("./mlton-experiments/bin/mlton", "-output", "main", path)).!!)
+      out.emit(Process(Seq("mlton", "-output", "main", path)).!!)
       out.emit(Process(Seq("./main")).!!)
     } catch {
       case FatalPhaseError(e) => C.report(e)
