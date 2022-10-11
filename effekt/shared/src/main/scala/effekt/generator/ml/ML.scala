@@ -76,7 +76,7 @@ object ML extends Backend {
   }
 
   def toML(module: ModuleDecl): List[ml.Def] = {
-    toML(module.defs).definitions // TODO FIXME, once there is a let _ = ... in there, we are doomed!
+    toML(module.defs).definitions
   }
 
   def toMLExpr(stmt: Stmt): ml.Expr = stmt match {

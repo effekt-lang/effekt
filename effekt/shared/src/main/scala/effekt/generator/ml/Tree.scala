@@ -13,7 +13,7 @@ case class Handler(constructorName: MLName, operations: List[Operation])
 case class Operation(name: MLName, params: List[MLName], k: MLName, body: Expr)
 
 /**
- * This file defines the syntax of Chez Scheme as it is the image of our translation.
+ * This file defines the syntax of ML as it is the image of our translation.
  */
 enum Expr {
 
