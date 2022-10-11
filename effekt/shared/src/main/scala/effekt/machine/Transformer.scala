@@ -21,7 +21,7 @@ object Transformer {
     val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) }
 
     C.using(module = main.mod) {
-      transform(mainSymbol, liftedMain, liftedDeps)
+      transform(mainSymbol, liftedMain, liftedDeps);
     }
   }
 
@@ -127,7 +127,6 @@ object Transformer {
 
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
-        // TODO deal with evidence
         id match {
           case symbols.UserFunction(_, _, _, _, _, _, _) =>
             // TODO this is a hack, values is in general shorter than environment
@@ -142,9 +141,11 @@ object Transformer {
             }
           case symbols.ResumeParam(_) =>
             // TODO currently only scoped resumptions are supported
+            // TODO assuming first parameter is evidence TODO actually use evidence?
             transform(args).run { values =>
+              val (evidence :: returnedValues) = values;
               PushStack(Variable(transform(id), Type.Stack()),
-                Return(values))
+                Return(returnedValues))
             }
           case _ =>
             Context.abort(s"Unsupported blocksymbol: $id")
@@ -183,7 +184,6 @@ object Transformer {
         }
 
       case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
-        // TODO deal with evidence
         // TODO more than one handler
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
@@ -212,7 +212,7 @@ object Transformer {
     case lifted.BlockLit(params, body) =>
       // TODO deal with evidence
       val parameters = params.map(transform);
-      val variable = Variable(freshName("g"), Negative(List(parameters.map(_.tpe))))
+      val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
@@ -229,7 +229,7 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.UnitLit() =>
-      val variable = Variable(freshName("x"), Positive(List(List())));
+      val variable = Variable(freshName("x"), Positive("Unit"));
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
@@ -241,7 +241,7 @@ object Transformer {
       }
 
     case lifted.BooleanLit(value: Boolean) =>
-      val variable = Variable(freshName("x"), Positive(List(List(), List())))
+      val variable = Variable(freshName("x"), Positive("Boolean"))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
@@ -250,6 +250,12 @@ object Transformer {
       val literal_binding = Variable(freshName("x"), Type.Double());
       Binding { k =>
         LiteralDouble(literal_binding, v, k(literal_binding))
+      }
+
+    case lifted.StringLit(javastring) =>
+      val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
+      Binding { k =>
+        LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
@@ -311,7 +317,10 @@ object Transformer {
       case lifted.Handler(_, List((operationName, lifted.BlockLit(params :+ resume, body)))) =>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
-        List(Clause(params.map(transform),
+        // TODO we assume that evidence has to be passed as first param
+        // TODO actually use evidence to determine number of stacks popped
+        val ev = Variable(freshName("evidence"), builtins.Evidence)
+        List(Clause(ev +: params.map(transform),
           PopStack(Variable(transform(resume).name, Type.Stack()),
             transform(body))))
       case _ =>
@@ -339,40 +348,18 @@ object Transformer {
 
     case symbols.builtins.TDouble => Type.Double()
 
-    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) =>
-      // TODO block params too
-      Negative(List(vparams.map(transform)))
+    case symbols.builtins.TString => Type.String()
 
-    case symbols.Interface(_, List(), ops) =>
-      val opsSignatures = ops.map {
-        case symbols.Operation(_, List(), vparams, _, _, _) =>
-          // TODO why is field type in param optional?
-          vparams.map { param => transform(param.tpe.get) }
-        // TODO
-        case op => throw new Exception("not yet supported: polymorphic operations")
-      };
-      Negative(opsSignatures)
+    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative("<function>")
 
-    case symbols.DataType(_, List(), records) =>
-      val recSignatures = records.map {
-        case symbols.Record(_, List(), _, fields) =>
-          fields.map {
-            case symbols.Field(_, symbols.ValueParam(_, Some(tpe)), _) =>
-              transform(tpe)
-            // TODO
-            case _ => ???
-          }
-        // TODO
-        case _ => throw new Exception("not yet supported: polymorphic records")
-      }
-      Positive(recSignatures)
+    case symbols.Interface(name, List(), _) => Negative(name.name)
 
-    case symbols.Record(_, List(), tpe, fields) =>
-      Positive(List(fields.map { field => transform(field.tpe) }))
+    case symbols.DataType(name, List(), _) => Positive(name.name)
+
+    case symbols.Record(name, List(), _, _) => Positive(name.name)
 
     case _ =>
-      System.err.println(s"UNSUPPORTED TYPE: getClass($tpe) = ${tpe.getClass}")
-      Context.abort(s"unsupported type $tpe")
+      Context.abort(s"unsupported type: $tpe (class = ${tpe.getClass})")
   }
 
   def transform(id: Symbol): String =

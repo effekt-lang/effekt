@@ -150,7 +150,7 @@ trait Intelligence {
       SymbolInfo(c, s"Constructor of data type `${c.tpe}`", Some(DeclPrinter(c)), Some(ex))
 
     case c: BlockParam =>
-      val signature = C.functionTypeOption(c).map { tpe => s"{ ${c.name}: ${tpe} }" }
+      val signature = C.functionTypeOption(c).map { tpe => pp"{ ${c.name}: ${tpe} }" }
 
       val ex =
         s"""|Blocks, like `${c.name}`, are similar to functions in other languages.

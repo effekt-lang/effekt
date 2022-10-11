@@ -140,7 +140,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sig = h.definition
 
       New(Handler(sig, sig.ops.map(clauses.apply).map {
-        case op @ source.OpClause(id, tparams, vparams, body, resume) =>
+        case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
           val vps = vparams map transform
           // currently the operations don't take block params
           val opBlock: BlockLit = BlockLit(vps, transform(body))
@@ -222,7 +222,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
           Handler(h.definition, h.definition.ops.map(clauses.apply).map {
-            case op @ source.OpClause(id, tps, vps, body, resume) =>
+            case op @ source.OpClause(id, tps, vps, ret, body, resume) =>
               val ps = vps map transform
 
               // introduce a block parameter for resume

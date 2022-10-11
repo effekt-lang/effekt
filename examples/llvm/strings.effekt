@@ -1,0 +1,3 @@
+def main(): Unit / Console = {
+    println("left>" + ">right");
+}
