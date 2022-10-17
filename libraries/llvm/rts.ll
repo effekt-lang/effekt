@@ -53,10 +53,14 @@
 %RetAdr = type void (%Env, %Sp)*
 %FrameHeader = type { %RetAdr, %Sharer, %Eraser }
 
+; Pointers for a heap allocated stack
+%Mem = type { %Rc, %Sp, %Base, %Limit }
+
 ; This is used for two purposes:
 ;   - a refied first-class stack (then the last field is null)
 ;   - as part of an intrusive linked-list of stacks (meta stack)
-%StkVal = type { %Rc, %Sp, %Base, %Limit, %StkVal* }
+; This contains pointers for the stack and the arena for the current region.
+%StkVal = type { %Mem, %Mem, %StkVal* }
 
 ; The "meta" stack (a stack of stacks)
 %Stk = type %StkVal*
@@ -181,17 +185,17 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 define %Stk @newStack() alwaysinline {
 
     ; TODO find actual size of stack
-    %stkmem = call i8* @malloc(i64 40)
+    %stkmem = call i8* @malloc(i64 72)
     %stk = bitcast i8* %stkmem to %Stk
 
     ; TODO initialize to zero and grow later
     %sp = call %Sp @malloc(i64 1024)
 
-    %stk.0 = insertvalue %StkVal undef, %Rc 0, 0
-    %stk.1 = insertvalue %StkVal %stk.0, %Sp %sp, 1
-    %stk.2 = insertvalue %StkVal %stk.1, %Base %sp, 2
-    %stk.3 = insertvalue %StkVal %stk.2, %Limit null, 3
-    %stk.4 = insertvalue %StkVal %stk.3, %Stk null, 4
+    %stk.0 = insertvalue %StkVal undef, %Rc 0, 0, 0
+    %stk.1 = insertvalue %StkVal %stk.0, %Sp %sp, 0, 1
+    %stk.2 = insertvalue %StkVal %stk.1, %Base %sp, 0, 2
+    %stk.3 = insertvalue %StkVal %stk.2, %Limit null, 0, 3
+    %stk.4 = insertvalue %StkVal %stk.3, %Stk null, 2
 
     store %StkVal %stk.4, %Stk %stk
 
@@ -200,12 +204,12 @@ define %Stk @newStack() alwaysinline {
 
 define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 0
     ; assert %stkrc == null
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
@@ -234,11 +238,11 @@ define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
     %stk = load %StkVal*, %StkVal** @rest
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 0
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
 
     ; %newrc = load %Rc, %Rc* %stkrc
     %newsp = load %Sp, %Sp* %stksp
@@ -269,11 +273,11 @@ define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 define %Sp @underflowStack(%Sp %sp) alwaysinline {
     %stk = load %Stk, %Stk* @rest
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 0
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
 
     ; %newrc = load %Rc, %Rc* %stkrc
     %newsp = load %Sp, %Sp* %stksp
@@ -293,15 +297,15 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
 
 define %Stk @uniqueStack(%Stk %stk) alwaysinline {
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 0
     %rc = load %Rc, %Rc* %stkrc
     switch %Rc %rc, label %next [%Rc 0, label %done]
 
     next:
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 4
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 1
+    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 2
+    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 3
+    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
 
     %sp = load %Sp, %Sp* %stksp
     %base = load %Base, %Base* %stkbase
@@ -315,11 +319,11 @@ define %Stk @uniqueStack(%Stk %stk) alwaysinline {
     %size = sub i64 %intlimit, %intbase
 
     %newstk = call %Stk @newStack()
-    %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
-    %newstksp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1
-    %newstkbase = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2
-    %newstklimit = getelementptr %StkVal, %Stk %newstk, i64 0, i32 3
-    %newstkrest = getelementptr %StkVal, %Stk %newstk, i64 0, i32 4
+    %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0, i32 0
+    %newstksp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0, i32 1
+    %newstkbase = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0, i32 2
+    %newstklimit = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0, i32 3
+    %newstkrest = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2
 
     %newbase = load %Base, %Base* %newstkbase
     %intnewbase = ptrtoint %Base %newbase to i64
@@ -347,7 +351,7 @@ define %Stk @uniqueStack(%Stk %stk) alwaysinline {
 }
 
 define void @shareStack(%Stk %stk) alwaysinline {
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 0
     %rc = load %Rc, %Rc* %stkrc
     %rc.1 = add %Rc %rc, 1
     store %Rc %rc.1, %Rc* %stkrc
@@ -355,7 +359,7 @@ define void @shareStack(%Stk %stk) alwaysinline {
 }
 
 define void @eraseStack(%Stk %stk) alwaysinline {
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 0
     %rc = load %Rc, %Rc* %stkrc
     switch %Rc %rc, label %decr [%Rc 0, label %free]
 
@@ -365,7 +369,7 @@ define void @eraseStack(%Stk %stk) alwaysinline {
     ret void
 
     free:
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1
+    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0, i32 1
     %sp = load %Sp, %Sp* %stksp
     call fastcc void @eraseFrames(%Sp %sp)
     %stkuntyped = bitcast %Stk %stk to i8*
