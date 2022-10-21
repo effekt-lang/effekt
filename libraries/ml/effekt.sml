@@ -1,19 +1,13 @@
-(* The effekt program should be wrapped in a handle that prints the message *)
-exception Panic of string;
+fun bind (m f k) = m (fn a => f a k);
 
-fun bind m f k =
-    m (fn (a) => f a k);
+fun pure (a k) = k a;
 
-fun pure a k =
-    k a;
+fun lift (m k1 k2) = m (fn a => k1 a k2);
 
-fun lift m k1 k2 =
-    m (fn a => k1 a k2);
+fun reset m = m pure;
 
-fun reset m =
-    m pure;
+fun run m = m (fn a => a);
 
-fun run (m) =
-    m (fn a => a);
+fun here x = x;
 
-fun here (x) = x;
+val newline = "\n";

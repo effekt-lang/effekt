@@ -11,7 +11,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
 
-  val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
+  //val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
 
   def toDoc(name: MLName): Doc = name.name
 
@@ -25,10 +25,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Call(callee, arguments) => parens(toDoc(callee) <+> group(align(hsep(arguments map toDoc, line))))
     case RawExpr(raw)            => string(raw)
     case RawValue(raw)           => string(raw)
-    case Let(bindings, body)     => parens("let" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
+    case Let(Nil, body)          => toDoc(body)
+    case Let(bindings, body)     => parens("let" <+> align(vcat(bindings map toDoc)) <+> "in" <+> toDoc(body) <+> "end")
     case Let_*(bindings, body)   => parens("let*" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
-    case Lambda(params, body)    => parens("lambda" <+> parens(params.map(toDoc)) <> toDoc(body))
-    case If(cond, thn, els)      => parens("if" <+> toDoc(cond) <> nest(line <> toDoc(thn)) <> nest(line <> toDoc(els)))
+    case Lambda(param :: Nil, body) => parens("fn" <+> toDoc(param) <+> "=>" <+> toDoc(body))
+    case Lambda(params, body)    => parens("fn" <+> arguments(params map toDoc) <+> "=>" <+> toDoc(body))
+    case If(cond, thn, els)      => parens("if" <+> toDoc(cond) <+> "then" <+> nest(line <> toDoc(thn)) <+> "else" <+> nest(line <> toDoc(els)))
     case Variable(name)          => toDoc(name)
     case Match(sc, clauses) => parens("pattern-match" <+> toDoc(sc) <> nest(line <> parens(align(vcat(clauses.map {
       case (pattern, branch) => brackets(toDoc(pattern) <+> toDoc(branch))
@@ -37,9 +39,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(definition: Def): Doc = definition match {
-    case Def.Constant(name, value) => parens("define" <+> toDoc(name) <+> toDoc(value))
-    case Def.Function(name, Nil, body) => parens("define" <+> parens(toDoc(name)) <> toDoc(body))
-    case Def.Function(name, params, body) => parens("define" <+> parens(toDoc(name) <+> hsep(params map toDoc)) <> toDoc(body))
+    case Def.Constant(name, value) => "val" <+> toDoc(name) <+> "=" <+> toDoc(value) <> ";"
+    case Def.Function(name, Nil, body) =>
+      "fun" <+> toDoc(name) <+> "()" <+> "=" <+> toDoc(body) <> ";"
+    case Def.Function(name, param :: Nil, body) =>
+      "fun" <+> toDoc(name) <+> toDoc(param) <+> "=" <+> toDoc(body) <> ";"
+    case Def.Function(name, params, body) =>
+      "fun" <+> toDoc(name) <+> arguments(params map toDoc) <+> "=" <> toDoc(body) <> ";"
     case RawDef(raw) => string(raw)
 
     case Record(typeName, constructorName, predicateName, uid, fields) =>
@@ -51,11 +57,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(block: Block): Doc = block match {
     case Block(Nil, Nil, result) => nest(line <> toDoc(result))
     case Block(definitions, expressions, result) =>
+      "let" <>
       nest(line <>
-        vsep(definitions map toDoc, line) <>
-        vcat(expressions map toDoc) <>
-        line <>
-        toDoc(result))
+        vsep(definitions map toDoc, line)
+      ) <> line <>
+      "in" <>
+      nest(line <>
+        vsep((expressions :+ result) map toDoc, ";" <> line)
+      ) <> line <>
+      "end" <> ";"
   }
 
   def toDoc(h: Handler): Doc = h match {
