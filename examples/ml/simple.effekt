@@ -1,1 +1,1 @@
-def main() = println("test")
+def main() = println("hello")
