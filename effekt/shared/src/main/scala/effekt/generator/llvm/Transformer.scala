@@ -164,9 +164,12 @@ object Transformer {
         ???
 
       // TODO store evidence & offset as a pair
-      case machine.Alloc(name, rest) =>
-        emit(Call(name.name, IntegerType64(), alloc, List(ConstantInt(typeSize(name.tpe)))));
+      case machine.Alloc(machine.Variable(name, machine.Type.Pointer(tpe)), rest) =>
+        emit(Call(name, ptrType, alloc, List(ConstantInt(typeSize(tpe)))));
         transform(rest);
+
+      case machine.Alloc(_, _) =>
+        ???
 
       case machine.Load(name, ref, rest) =>
         val ptr = freshName("ptr");
@@ -365,14 +368,16 @@ object Transformer {
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
   def stkType = NamedType("Stk");
+  def ptrType = NamedType("Ptr");
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive(_)   => positiveType
-    case machine.Negative(_)   => negativeType
-    case machine.Type.Int()    => NamedType("Int")
-    case machine.Type.Double() => NamedType("Double")
-    case machine.Type.String() => positiveType
-    case machine.Type.Stack()  => stkType
+    case machine.Positive(_)     => positiveType
+    case machine.Negative(_)     => negativeType
+    case machine.Type.Int()      => NamedType("Int")
+    case machine.Type.Double()   => NamedType("Double")
+    case machine.Type.String()   => positiveType
+    case machine.Type.Stack()    => stkType
+    case machine.Type.Pointer(_) => ptrType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -380,12 +385,13 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Positive(_)      => 16
-      case machine.Negative(_)      => 16
-      case machine.Type.Int()       => 8 // TODO Make fat?
-      case machine.Type.Double()    => 8 // TODO Make fat?
-      case machine.Type.String()    => 16
-      case machine.Type.Stack()     => 8 // TODO Make fat?
+      case machine.Positive(_)     => 16
+      case machine.Negative(_)     => 16
+      case machine.Type.Int()      => 8 // TODO Make fat?
+      case machine.Type.Double()   => 8 // TODO Make fat?
+      case machine.Type.String()   => 16
+      case machine.Type.Stack()    => 8 // TODO Make fat?
+      case machine.Type.Pointer(_) => 8
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -563,23 +569,25 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_)   => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
-      case machine.Negative(_)   => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
-      case machine.Type.Stack()  => emit(Call("_", VoidType(), shareStack, List(transform(value))))
-      case machine.Type.Int()    => ()
-      case machine.Type.Double() => ()
-      case machine.Type.String() => emit(Call("_", VoidType(), shareString, List(transform(value))))
+      case machine.Positive(_)     => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
+      case machine.Negative(_)     => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
+      case machine.Type.Stack()    => emit(Call("_", VoidType(), shareStack, List(transform(value))))
+      case machine.Type.Int()      => ()
+      case machine.Type.Double()   => ()
+      case machine.Type.String()   => emit(Call("_", VoidType(), shareString, List(transform(value))))
+      case machine.Type.Pointer(_) => ()
     }
   }
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Positive(_)   => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
-      case machine.Negative(_)   => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
-      case machine.Type.Stack()  => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
-      case machine.Type.Int()    => ()
-      case machine.Type.Double() => ()
-      case machine.Type.String() => emit(Call("_", VoidType(), eraseString, List(transform(value))))
+      case machine.Positive(_)     => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
+      case machine.Negative(_)     => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
+      case machine.Type.Stack()    => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
+      case machine.Type.Int()      => ()
+      case machine.Type.Double()   => ()
+      case machine.Type.String()   => emit(Call("_", VoidType(), eraseString, List(transform(value))))
+      case machine.Type.Pointer(_) => ()
     }
   }
 
@@ -661,8 +669,8 @@ object Transformer {
   def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
   def eraseString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_decrement");
 
-  def alloc = ConstantGlobal(PointerType(FunctionType(IntegerType64(), List())), "alloc")
-  def getPtr = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "getPtr")
+  def alloc = ConstantGlobal(PointerType(FunctionType(ptrType, List())), "alloc")
+  def getPtr = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(ptrType))), "getPtr")
 
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");

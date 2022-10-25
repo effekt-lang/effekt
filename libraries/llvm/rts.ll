@@ -73,6 +73,8 @@
 ; Negative types (codata) consist of a vtable and a heap object
 %Neg = type {void (%Obj, %Env, %Sp)*, %Obj}
 
+; Pointer types consist of the offset from the arena base
+%Ptr = type i64
 
 ; Global locations
 
@@ -182,7 +184,7 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define i64 @alloc(i64 %size) alwaysinline {
+define %Ptr @alloc(i64 %size) alwaysinline {
     %spp = getelementptr %Mem, %Mem* @arena, i64 0, i32 0
     %sp = load %Sp, %Sp* %spp
     %basep = getelementptr %Mem, %Mem* @arena, i64 0, i32 1
@@ -194,13 +196,13 @@ define i64 @alloc(i64 %size) alwaysinline {
     %spval = ptrtoint %Sp %sp to i64
     %baseval = ptrtoint %Base %base to i64
     %offset = sub i64 %spval, %baseval
-    ret i64 %offset
+    ret %Ptr %offset
 }
 
-define i8* @getPtr(i64 %offset) alwaysinline {
+define i8* @getPtr(%Ptr %offset) alwaysinline {
     %basep = getelementptr %Mem, %Mem* @arena, i64 0, i32 1
     %base = load %Base, %Base* %basep
-    %ptr = getelementptr i8, %Base %base, i64 %offset
+    %ptr = getelementptr i8, %Base %base, %Ptr %offset
     ret i8* %ptr
 }
 

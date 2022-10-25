@@ -206,6 +206,7 @@ enum Type {
   case Int()
   case Double()
   case String()
+  case Pointer(tpe: Type)
 }
 export Type.{ Positive, Negative }
 
