@@ -13,7 +13,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   //val prelude = "#!/usr/local/bin/scheme --script\n\n(import (chezscheme))\n\n"
 
-  def toDoc(name: MLName): Doc = name.name
+  def toDoc(name: MLName): Doc = text(name.name)
 
   def toDoc(toplevel: Toplevel): Doc = {
     val Toplevel(bindings, body) = toplevel
@@ -28,7 +28,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "val" <+> toDoc(name) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
     case FunBind(name, params, body) =>
-      "fun" <+> toDoc(name) <> arguments(params map toDoc) <+>
+      "fun" <+> toDoc(name) <> argList(params map toDoc) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
     case RawBind(raw) =>
       string(raw)
@@ -36,7 +36,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(expr: Expr): Doc = expr match {
     case Expr.Call(callee, args) =>
-      toDoc(callee) <> arguments(args map toDoc)
+      toDoc(callee) <> argList(args map toDoc)
     case Expr.RawValue(raw) =>
       string(raw)
     case Expr.RawExpr(raw) =>
@@ -50,11 +50,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
       ) <> line <>
       "end"
     case Expr.Lambda(params, body) =>
-      "fn" <+> arguments(params map toDoc) <+> "=>" <+> toDoc(body)
+      "fn" <+> argList(params map toDoc) <+> "=>" <+> toDoc(body)
     case Expr.If(cond, thn, els) =>
       "if" <+> toDoc(cond) <+> "then" <+> toDoc(thn) <+> "else" <+> toDoc(els)
     case Expr.Variable(name) => toDoc(name)
   }
+
+  def argList(args: Seq[Doc]): Doc = arguments(args, identity)
 //    expr match {
 //    case Call(callee, Nil)       => parens(toDoc(callee))
 //    case Call(callee, arguments) => parens(toDoc(callee) <+> group(align(hsep(arguments map toDoc, line))))

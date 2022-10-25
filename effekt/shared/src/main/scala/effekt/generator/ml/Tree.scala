@@ -3,7 +3,9 @@ package generator
 package ml
 
 // TODO choose appropriate representation and apply conversions
-case class MLName(name: String)
+class MLName(n: String) {
+  val name: String = n.replace('$', '\'')
+}
 
 sealed trait Binding
 case class ValBind(name: MLName, body: Expr) extends Binding
@@ -81,4 +83,4 @@ def Lambda(params: MLName*)(body: Expr): Lambda = Expr.Lambda(params.toList, bod
 
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")
 
-def Builtin(name: String)(args: Expr*): Expr = Call(Variable(MLName(name)), args.toList)
+//def Builtin(name: String)(args: Expr*): Expr = Call(Variable(MLName(name)), args.toList)
