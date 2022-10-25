@@ -163,6 +163,32 @@ object Transformer {
       case machine.Invoke(value, tag, values) =>
         ???
 
+      // TODO store evidence & offset as a pair
+      case machine.Alloc(name, rest) =>
+        emit(Call(name.name, IntegerType64(), alloc, List(ConstantInt(typeSize(name.tpe)))));
+        transform(rest);
+
+      case machine.Load(name, ref, rest) =>
+        val ptr = freshName("ptr");
+        emit(Call(ptr, PointerType(IntegerType8()), getPtr, List(transform(ref))))
+
+        val typedPtr = freshName("typed_ptr");
+        emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(transform(name.tpe))))
+
+        emit(Load(name.name, LocalReference(transform(name.tpe), typedPtr)))
+        transform(rest)
+
+      case machine.Store(ref, value, rest) =>
+        val tpe = transform(value.tpe)
+        val ptr = freshName("ptr");
+        emit(Call(ptr, PointerType(IntegerType8()), getPtr, List(transform(ref))))
+
+        val typedPtr = freshName("typed_ptr");
+        emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(tpe)))
+
+        emit(Store(LocalReference(PointerType(tpe), typedPtr), LocalReference(tpe, value.name)))
+        transform(rest)
+
       case machine.PushFrame(frame, rest) =>
         val frameEnvironment = freeVariables(frame).toList;
 
@@ -634,6 +660,9 @@ object Transformer {
   def eraseStack = ConstantGlobal(PointerType(FunctionType(VoidType(),List(stkType))), "eraseStack");
   def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
   def eraseString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_decrement");
+
+  def alloc = ConstantGlobal(PointerType(FunctionType(IntegerType64(), List())), "alloc")
+  def getPtr = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "getPtr")
 
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");

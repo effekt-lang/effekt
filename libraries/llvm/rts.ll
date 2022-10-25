@@ -79,6 +79,7 @@
 @base = private global %Base null
 @limit = private global %Limit null
 @rest = private global %Stk undef
+@arena = private global %Mem undef
 
 
 ; Foreign imports
@@ -180,7 +181,42 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 }
 
 
+; Arena management
+define i64 @alloc(i64 %size) alwaysinline {
+    %spp = getelementptr %Mem, %Mem* @arena, i64 0, i32 0
+    %sp = load %Sp, %Sp* %spp
+    %basep = getelementptr %Mem, %Mem* @arena, i64 0, i32 1
+    %base = load %Base, %Base* %basep
+
+    %newsp = getelementptr i8, i8* %sp, i64 %size
+    store %Sp %newsp, %Sp* %spp
+
+    %spval = ptrtoint %Sp %sp to i64
+    %baseval = ptrtoint %Base %base to i64
+    %offset = sub i64 %spval, %baseval
+    ret i64 %offset
+}
+
+define i8* @getPtr(i64 %offset) alwaysinline {
+    %basep = getelementptr %Mem, %Mem* @arena, i64 0, i32 1
+    %base = load %Base, %Base* %basep
+    %ptr = getelementptr i8, %Base %base, i64 %offset
+    ret i8* %ptr
+}
+
+
 ; Meta-stack management
+
+define %Mem @newMem() alwaysinline {
+    %sp = call %Sp @malloc(i64 1024)
+    %limit = getelementptr i8, i8* %sp, i64 1024
+
+    %mem.0 = insertvalue %Mem undef, %Sp %sp, 0
+    %mem.1 = insertvalue %Mem %mem.0, %Base %sp, 1
+    %mem.2 = insertvalue %Mem %mem.1, %Limit %limit, 2
+
+    ret %Mem %mem.2
+}
 
 define %Stk @newStack() alwaysinline {
 
@@ -190,14 +226,15 @@ define %Stk @newStack() alwaysinline {
 
     ; TODO initialize to zero and grow later
     %sp = call %Sp @malloc(i64 1024)
+    %stackmem = call %Mem @newMem()
+    %arenamem = call %Mem @newMem()
 
     %stk.0 = insertvalue %StkVal undef, %Rc 0, 0
-    %stk.1 = insertvalue %StkVal %stk.0, %Sp %sp, 1, 0
-    %stk.2 = insertvalue %StkVal %stk.1, %Base %sp, 1, 1
-    %stk.3 = insertvalue %StkVal %stk.2, %Limit null, 1, 2
-    %stk.4 = insertvalue %StkVal %stk.3, %Stk null, 3
+    %stk.1 = insertvalue %StkVal %stk.0, %Mem %stackmem, 1
+    %stk.2 = insertvalue %StkVal %stk.1, %Mem %arenamem, 2
+    %stk.3 = insertvalue %StkVal %stk.2, %Stk null, 3
 
-    store %StkVal %stk.4, %Stk %stk
+    store %StkVal %stk.3, %Stk %stk
 
     ret %Stk %stk
 }
@@ -209,26 +246,31 @@ define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
     %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
     %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
+    %stkarena = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
 
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
     %newlimit = load %Limit, %Limit* %stklimit
+    %newarena = load %Mem, %Mem* %stkarena
     ; %newrest = load %Stk, %Stk* %stkrest
     ; assert %newrest == null
 
     %oldbase = load %Base, %Base* @base
     %oldlimit = load %Limit, %Limit* @limit
     %oldrest = load %Stk, %Stk* @rest
+    %oldarena = load %Mem, %Mem* @arena
 
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
+    store %Mem %newarena, %Mem* @arena
     store %Stk %stk, %Stk* @rest
 
     store %Rc 0, %Rc* %stkrc
     store %Sp %oldsp, %Sp* %stksp
     store %Base %oldbase, %Base* %stkbase
     store %Limit %oldlimit, %Limit* %stklimit
+    store %Mem %oldarena, %Mem* %stkarena
     store %Stk %oldrest, %Stk* %stkrest
 
     ret %Sp %newsp
@@ -242,26 +284,31 @@ define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
     %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
     %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
+    %stkarena = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
 
     ; %newrc = load %Rc, %Rc* %stkrc
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
     %newlimit = load %Limit, %Limit* %stklimit
+    %newarena = load %Mem, %Mem* %stkarena
     %newrest = load %Stk, %Stk* %stkrest
 
     %oldbase = load %Base, %Base* @base
     %oldlimit = load %Limit, %Limit* @limit
+    %oldarena = load %Mem, %Mem* @arena
     ; %oldrest = load %Stk, %Stk* @rest
 
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
+    store %Mem %newarena, %Mem* @arena
     store %Stk %newrest, %Stk* @rest
 
     store %Rc 0, %Rc* %stkrc
     store %Sp %oldsp, %Sp* %stksp
     store %Base %oldbase, %Base* %stkbase
     store %Limit %oldlimit, %Limit* %stklimit
+    store %Mem %oldarena, %Mem* %stkarena
     store %Stk null, %Stk* %stkrest
 
     %ret.0 = insertvalue {%StkVal*, %Sp} undef, %Stk %stk, 0
@@ -272,25 +319,31 @@ define {%StkVal*, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
 define %Sp @underflowStack(%Sp %sp) alwaysinline {
     %stk = load %Stk, %Stk* @rest
+    %arenabase = getelementptr %Mem, %Mem* @arena, i64 0, i32 1
+    %arenaptr = load %Base, %Base* %arenabase
 
     %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
     %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
     %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
+    %stkarena = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
 
     ; %newrc = load %Rc, %Rc* %stkrc
     %newsp = load %Sp, %Sp* %stksp
     %newbase = load %Base, %Base* %stkbase
     %newlimit = load %Limit, %Limit* %stklimit
+    %newarena = load %Mem, %Mem* %stkarena
     %newrest = load %Stk, %Stk* %stkrest
 
     store %Base %newbase, %Base* @base
     store %Limit %newlimit, %Limit* @limit
+    store %Mem %newarena, %Mem* @arena
     store %Stk %newrest, %Stk* @rest
 
     %stkpuntyped = bitcast %Stk %stk to i8*
     call void @free(%Sp %sp)
+    call void @free(%Base %arenaptr)
     call void @free(i8* %stkpuntyped)
     ret %Sp %newsp
 }
@@ -305,11 +358,17 @@ define %Stk @uniqueStack(%Stk %stk) alwaysinline {
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
     %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
     %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
+    %stkarenasp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2, i32 0
+    %stkarenabase = getelementptr %StkVal, %Stk %stk, i64 0, i32 2, i32 1
+    %stkarenalimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 2, i32 2
     %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
 
     %sp = load %Sp, %Sp* %stksp
     %base = load %Base, %Base* %stkbase
     %limit = load %Limit, %Limit* %stklimit
+    %arenasp = load %Sp, %Sp* %stkarenasp
+    %arenabase = load %Base, %Base* %stkarenabase
+    %arenalimit = load %Limit, %Limit* %stkarenalimit
     %rest = load %Stk, %Stk* %stkrest
 
     %intsp = ptrtoint %Sp %sp to i64
@@ -318,11 +377,20 @@ define %Stk @uniqueStack(%Stk %stk) alwaysinline {
     %used = sub i64 %intsp, %intbase
     %size = sub i64 %intlimit, %intbase
 
+    %intarenasp = ptrtoint %Sp %arenasp to i64
+    %intarenabase = ptrtoint %Base %arenabase to i64
+    %intarenalimit = ptrtoint %Limit %arenalimit to i64
+    %arenaused = sub i64 %intsp, %intarenabase
+    %arenasize = sub i64 %intlimit, %intarenabase
+
     %newstk = call %Stk @newStack()
     %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
     %newstksp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1, i32 0
     %newstkbase = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1, i32 1
     %newstklimit = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1, i32 2
+    %newstkarenasp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2, i32 0
+    %newstkarenabase = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2, i32 1
+    %newstkarenalimit = getelementptr %StkVal, %Stk %newstk, i64 0, i32 2, i32 2
     %newstkrest = getelementptr %StkVal, %Stk %newstk, i64 0, i32 3
 
     %newbase = load %Base, %Base* %newstkbase
@@ -332,13 +400,24 @@ define %Stk @uniqueStack(%Stk %stk) alwaysinline {
     %newsp = inttoptr i64 %intnewsp to %Sp
     %newlimit = inttoptr i64 %intnewlimit to %Limit
 
+    %newarenabase = load %Base, %Base* %newstkarenabase
+    %intnewarenabase = ptrtoint %Base %newarenabase to i64
+    %intnewarenasp = add i64 %intnewarenabase, %arenaused
+    %intnewarenalimit = add i64 %intnewarenabase, %arenasize
+    %newarenasp = inttoptr i64 %intnewarenasp to %Sp
+    %newarenalimit = inttoptr i64 %intnewarenalimit to %Limit
+
     call void @memcpy(i8* %newbase, i8* %base, i64 %used)
+    call void @memcpy(i8* %newarenabase, i8* %arenabase, i64 %arenaused)
     call fastcc void @shareFrames(%Sp %newsp)
 
     store %Rc 0, %Rc* %stkrc
     store %Sp %newsp, %Sp* %newstksp
     store %Base %newbase, %Base* %newstkbase
     store %Limit %newlimit, %Limit* %newstklimit
+    store %Sp %newarenasp, %Sp* %newstkarenasp
+    store %Base %newarenabase, %Base* %newstkarenabase
+    store %Limit %newarenalimit, %Limit* %newstkarenalimit
     store %Stk null, %Stk* %newstkrest
 
     %newoldrc = sub %Rc %rc, 1

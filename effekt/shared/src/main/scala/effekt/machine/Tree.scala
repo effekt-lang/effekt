@@ -133,6 +133,21 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
+  *  e.g. Int *x; s
+  */
+  case Alloc(name: Variable, rest: Statement)
+
+  /**
+  * e.g. y = *x; s
+  */
+  case Load(name: Variable, ref: Variable, rest: Statement)
+
+  /**
+  * e.g. *x = 42; s
+  */
+  case Store(ref: Variable, value: Variable, rest: Statement)
+
+  /**
    * e.g. push { (x, ...) => s }; s
    */
   case PushFrame(frame: Clause, rest: Statement)
