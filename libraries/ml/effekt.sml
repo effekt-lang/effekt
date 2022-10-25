@@ -9,5 +9,3 @@ fun reset(m) = m(pure);
 fun run(m) = m(fn a => a);
 
 fun here(x) = x;
-
-val newLine = "\n";

@@ -54,9 +54,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.If(cond, thn, els) =>
       "if" <+> toDoc(cond) <+> "then" <+> toDoc(thn) <+> "else" <+> toDoc(els)
     case Expr.Variable(name) => toDoc(name)
+    case Expr.Sequence(head, rest) => parens(toDoc(head) <> ";" <@> toDoc(rest))
   }
 
   def argList(args: Seq[Doc]): Doc = arguments(args, identity)
+
 //    expr match {
 //    case Call(callee, Nil)       => parens(toDoc(callee))
 //    case Call(callee, arguments) => parens(toDoc(callee) <+> group(align(hsep(arguments map toDoc, line))))

@@ -12,10 +12,13 @@ extern include "effekt.sml"
 // Side effecting ops
 // ==================
 extern io def println(value: String): Unit =
-  "print(value ^ newLine)"
+  """print(value ^ "\n")"""
 
 extern io def println(value: Int): Unit =
-  "print(Int.toString(value) ^ newLine)"
+  """print(Int.toString(value) ^ "\n")"""
+
+extern io def println(value: Boolean): Unit =
+  """print(Bool.toString(value) ^ "\n")"""
 
 // // TODO: more println types
 
@@ -117,20 +120,20 @@ extern pure def mod(x: Int, y: Int): Int =
 // // extern pure def infixEq[R](x: R, y: R): Boolean =
 // //   "equals$impl(x, y)"
 
-// // extern pure def infixNeq[R](x: R, y: R): Boolean =
-// //   "!equals$impl(x, y)"
+// extern pure def infixNeq[R](x: R, y: R): Boolean =
+//   "!equals$impl(x, y)"
 
-// extern pure def infixLt(x: Int, y: Int): Boolean =
-//   "(x < y)"
+extern pure def infixLt(x: Int, y: Int): Boolean =
+  "x < y"
 
-// extern pure def infixLte(x: Int, y: Int): Boolean =
-//   "(x <= y)"
+extern pure def infixLte(x: Int, y: Int): Boolean =
+  "x <= y"
 
-// extern pure def infixGt(x: Int, y: Int): Boolean =
-//   "(x > y)"
+extern pure def infixGt(x: Int, y: Int): Boolean =
+  "x > y"
 
-// extern pure def infixGte(x: Int, y: Int): Boolean =
-//   "(x >= y)"
+extern pure def infixGte(x: Int, y: Int): Boolean =
+  "x >= y"
 
 // // extern pure def infixLt(x: Double, y: Double): Boolean =
 // //   "x < y"

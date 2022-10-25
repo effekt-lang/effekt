@@ -34,6 +34,8 @@ enum Expr {
   // Sequential Scoping
   case Let(bindings: List[Binding], body: Expr)
 
+  case Sequence(head: Expr, rest: Expr)
+
 //  // e.g. (let* ([x 42] [y x]) (+ x y))
 //  case Let_*(bindings: List[Binding], body: Block)
 
@@ -83,4 +85,4 @@ def Lambda(params: MLName*)(body: Expr): Lambda = Expr.Lambda(params.toList, bod
 
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")
 
-//def Builtin(name: String)(args: Expr*): Expr = Call(Variable(MLName(name)), args.toList)
+def Builtin(name: String)(args: Expr*): Expr = Call(Variable(MLName(name)), args.toList)

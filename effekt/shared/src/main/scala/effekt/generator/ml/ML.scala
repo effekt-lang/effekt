@@ -17,7 +17,7 @@ import kiama.output.PrettyPrinterTypes.Document
  */
 object ML extends Backend {
 
-//  def run(expr: ml.Expr): ml.Expr = ml.Builtin("run")(expr)
+  def run(expr: ml.Expr): ml.Expr = ml.Builtin("run")(expr)
 //  def pure(expr: ml.Expr): ml.Expr = ml.Builtin("pure")(expr)
 
 //  // TODO we use the $then variant, for now, since the `then` variant is a macro and would
@@ -84,7 +84,7 @@ object ML extends Backend {
 
   def toMLExpr(stmt: Stmt): ml.Expr = stmt match {
     case Return(e) => toML(e) //pure(toML(e))
-    case App(b, targs, args) => ??? // ml.Call(toML(b))(args map toML: _*)
+    case App(b, targs, args) => Expr.Call(toML(b), args map toML)
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) => ??? // bind(toMLExpr(binding), nameDef(id), toML(body))
     case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
@@ -115,17 +115,8 @@ object ML extends Backend {
     case Region(body) => ???
 //      ml.Builtin("with-region")(toML(body))
 
-    case Let(Wildcard(_), tpe, binding, body) => ???
-    //      toML(binding) match {
-    //        // drop the binding altogether, if it is of the form:
-    //        //   let _ = myVariable; BODY
-    //        // since this might lead to invalid scheme code.
-    //        case _: ml.Variable => toML(body)
-    //        case _ => toML(body) match {
-    //          case ml.Block(Nil, exprs, result) => ml.Block(Nil, toML(binding) :: exprs, result)
-    //          case b => ml.Block(Nil, toML(binding) :: Nil, ml.Let(Nil, b))
-    //        }
-    //      }
+    case Let(Wildcard(_), tpe, binding, body) =>
+      ml.Sequence(toML(binding), toMLExpr(body))
 
     case Let(id, tpe, binding, body) =>
       ml.Let(List(createBinder(id, binding)), toMLExpr(body))
@@ -218,11 +209,11 @@ object ML extends Backend {
 //      ml.Call(Variable(MLName(s"make-${name}")), clauses.map { case (_, block) => toML(block) })
   }
 
-  def toML(scope: Evidence): ml.Expr = ???
-//    scope match {
-//    case Evidence(Nil) => Variable(MLName("here"))
-//    case Evidence(scopes) => ml.Builtin("nested", scopes map { s => ml.Variable(nameRef(s)) }:_*)
-//  }
+  def toML(scope: Evidence): ml.Expr = scope match {
+    case Evidence(Nil) => Variable(MLName("here"))
+    case Evidence(ev :: Nil) => Variable(nameRef(ev))
+    case Evidence(scopes) => println(scopes); ??? //ml.Builtin("nested", scopes map { s => ml.Variable(nameRef(s)) }:_*)
+  }
 
   def toML(expr: Expr): ml.Expr = expr match {
     case UnitLit()     => Constants.unitVal
@@ -242,7 +233,7 @@ object ML extends Backend {
 
     case Closure(b) => toML(b)
 
-    case Run(s, tpe) => ??? // run(toMLExpr(s))
+    case Run(s, tpe) => run(toMLExpr(s))
   }
 
   def toML(p: Pattern): ml.Expr = ???
