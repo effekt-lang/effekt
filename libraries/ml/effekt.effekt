@@ -12,10 +12,10 @@ extern include "effekt.sml"
 // Side effecting ops
 // ==================
 extern io def println(value: String): Unit =
-  "(print(value ^ newLine))"
+  "print(value ^ newLine)"
 
 extern io def println(value: Int): Unit =
-  "(print(Int.toString(value) ^ newLine))"
+  "print(Int.toString(value) ^ newLine)"
 
 // // TODO: more println types
 
@@ -33,37 +33,37 @@ extern io def println(value: Int): Unit =
 // // extern pure def show[R](value: R): String =
 // //   "show$impl(value)"
 
-// extern pure def infixConcat(s1: String, s2: String): String =
-//   "(s1 ^ s2)"
+extern pure def infixConcat(s1: String, s2: String): String =
+  "s1 ^ s2"
 
-// // Math ops
-// // ========
-// extern pure def infixAdd(x: Int, y: Int): Int =
+// Math ops
+// ========
+extern pure def infixAdd(x: Int, y: Int): Int =
+  "x + y"
+
+extern pure def infixMul(x: Int, y: Int): Int =
+  "x * y"
+
+extern pure def infixDiv(x: Int, y: Int): Int =
+  "x div y"
+
+extern pure def infixSub(x: Int, y: Int): Int =
+  "(x - y)"
+
+extern pure def mod(x: Int, y: Int): Int =
+  "(x mod y)"
+
+// extern pure def infixAdd(x: Double, y: Double): Double =
 //   "(x + y)"
 
-// extern pure def infixMul(x: Int, y: Int): Int =
+// extern pure def infixMul(x: Double, y: Double): Double =
 //   "(x * y)"
 
-// extern pure def infixDiv(x: Int, y: Int): Int =
-//   "(x div y)"
-
-// extern pure def infixSub(x: Int, y: Int): Int =
+// extern pure def infixSub(x: Double, y: Double): Double =
 //   "(x - y)"
 
-// extern pure def mod(x: Int, y: Int): Int =
-//   "(x mod y)"
-
-// // extern pure def infixAdd(x: Double, y: Double): Double =
-// //   "(x + y)"
-
-// // extern pure def infixMul(x: Double, y: Double): Double =
-// //   "(x * y)"
-
-// // extern pure def infixSub(x: Double, y: Double): Double =
-// //   "(x - y)"
-
-// // extern pure def infixDiv(x: Double, y: Double): Double =
-// //   "(x / y)"
+// extern pure def infixDiv(x: Double, y: Double): Double =
+//   "(x / y)"
 
 
 // // extern pure def cos(x: Double): Double =

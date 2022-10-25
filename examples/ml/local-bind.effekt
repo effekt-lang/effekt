@@ -1,4 +1,0 @@
-def main() = {
-    val s = "hello";
-    println(s)
-}
