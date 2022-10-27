@@ -71,7 +71,7 @@ object Consts {
   val pure: Expr = Variable(MLName("pure"))
   val lif: Expr = Variable(MLName("lift"))
   val reset: Expr = Variable(MLName("reset"))
-  val run: Expr = Variable(MLName("reset"))
+  val run: Expr = Variable(MLName("run"))
   val nested: Expr = Variable(MLName("nested"))
   val here: Expr = Variable(MLName("here"))
 
