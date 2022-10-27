@@ -3,9 +3,19 @@ def main() = {
     println(3 <= 3);
     println(31 < 2);
     println(15 >= 15);
+
     println("");
+
     println("a" < "aa");
     println("b" <= "b");
     println("asdf" > "b");
-    println("qq" >= "q")
+    println("qq" >= "q");
+
+    println("");
+
+    println(1.4 < 2.1);
+    println(3.2 <= 3.2);
+    println(31.5 < 2.123);
+    println(15.9 >= 15.7);
+
 }

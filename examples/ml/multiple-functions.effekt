@@ -1,5 +1,5 @@
 
-def inc(x: Int): Int = x+1
+def inc(x: Int): Int = x + 1
 
 def main() = {
     val n = inc(2);

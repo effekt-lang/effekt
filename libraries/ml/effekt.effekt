@@ -1,5 +1,4 @@
 // Based on libraries\js\monadic\effekt.effekt
-// TODO: ignoring double for now
 
 module effekt
 
@@ -17,22 +16,24 @@ extern io def println(value: String): Unit =
 extern io def println(value: Int): Unit =
   """print ((Int.toString value) ^ "\n")"""
 
+extern io def println(value: Double): Unit =
+  """print ((Real.toString value) ^ "\n")"""
+
 extern io def println(value: Boolean): Unit =
   """print ((Bool.toString value) ^ "\n")"""
 
 // // TODO: more println types
 
 // // TODO: random
-// // extern io def random(): Double =
+// // extern io def random(): Int =
 // //   "Math.random()"
 
 // // TODO: js is milliseconds (which need 64 bit)
 // extern io def timestamp(): Int =
 //   "(Time.toSeconds(Time.now()))"
 
-// // String ops
-// // ==========
-// // TODO: show
+// String ops
+// ==========
 // // extern pure def show[R](value: R): String =
 // //   "show$impl(value)"
 
@@ -42,77 +43,79 @@ extern pure def infixConcat(s1: String, s2: String): String =
 // Math ops
 // ========
 extern pure def infixAdd(x: Int, y: Int): Int =
-  "x + y"
+  "(x: int) + y"
 
 extern pure def infixMul(x: Int, y: Int): Int =
-  "x * y"
+  "(x: int) * y"
 
 extern pure def infixDiv(x: Int, y: Int): Int =
-  "x div y"
+  "(x: int) div y"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "x - y"
+  "(x: int) - y"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "x mod y"
+  "(x: int) mod y"
 
-// extern pure def infixAdd(x: Double, y: Double): Double =
-//   "(x + y)"
+extern pure def infixAdd(x: Double, y: Double): Double =
+  "(x: real) + y"
 
-// extern pure def infixMul(x: Double, y: Double): Double =
-//   "(x * y)"
+extern pure def infixMul(x: Double, y: Double): Double =
+  "(x: real) * y"
 
-// extern pure def infixSub(x: Double, y: Double): Double =
-//   "(x - y)"
+extern pure def infixSub(x: Double, y: Double): Double =
+  "(x: real) - y"
 
-// extern pure def infixDiv(x: Double, y: Double): Double =
-//   "(x / y)"
+extern pure def infixDiv(x: Double, y: Double): Double =
+  "(x: real) / y"
 
+// trig
+// ====
 
-// // extern pure def cos(x: Double): Double =
-// //   "Math.cos(x)"
+extern pure def cos(x: Double): Double =
+  "Math.cos x"
 
-// // extern pure def sin(x: Double): Double =
-// //   "Math.sin(x)"
+extern pure def sin(x: Double): Double =
+  "Math.sin x"
 
-// // extern pure def atan(x: Double): Double =
-// //   "Math.atan(x)"
+extern pure def atan(x: Double): Double =
+  "Math.atan x"
 
-// // extern pure def tan(x: Double): Double =
-// //   "Math.tan(x)"
+extern pure def tan(x: Double): Double =
+  "Math.tan x"
 
-// // extern pure def sqrt(x: Double): Double =
-// //   "Math.sqrt(x)"
+extern pure def sqrt(x: Double): Double =
+  "Math.sqrt x"
 
-// // extern pure def square(x: Double): Double =
-// //   "(x * x)"
+extern pure def square(x: Double): Double =
+  "(x: real) * x"
 
-// // extern pure def log(x: Double): Double =
-// //   "Math.log(x)"
+extern pure def log(x: Double): Double =
+  "Math.ln x"
 
-// // extern pure def log1p(x: Double): Double =
-// //   "Math.log1p(x)"
+extern pure def log1p(x: Double): Double =
+  "Math.ln (x + 1.0)"
 
-// // extern pure def exp(x: Double): Double =
-// //   "Math.exp(x)"
+extern pure def exp(x: Double): Double =
+  "Math.exp x"
 
-// // // since we do not have "extern val", yet
-// // extern pure def _pi(): Double =
-// //   "Math.PI"
+// since we do not have "extern val", yet
+extern pure def _pi(): Double =
+  "Math.pi"
 
-// // val PI: Double = _pi()
+val PI: Double = _pi()
 
-// // extern pure def toInt(d: Double): Int =
-// //   "Math.round(d)"
+extern pure def toInt(d: Double): Int =
+  "Real.round d"
 
-// // extern pure def toDouble(d: Int): Double =
-// //   "d"
+extern pure def toDouble(d: Int): Double =
+  "Real.fromInt d"
 
-// // extern pure def floor(d: Double): Int =
-// //   "Math.floor(d)"
+extern pure def floor(d: Double): Int =
+  "Real.floor d"
 
-// // extern pure def ceil(d: Double): Int =
-// //   "Math.ceil(d)"
+extern pure def ceil(d: Double): Int =
+  "Real.ceil d"
 
 
 // Comparison ops
@@ -124,28 +127,28 @@ extern pure def mod(x: Int, y: Int): Int =
 //   "!equals$impl(x, y)"
 
 extern pure def infixLt(x: Int, y: Int): Boolean =
-  "x < y"
+  "(x: int) < y"
 
 extern pure def infixLte(x: Int, y: Int): Boolean =
-  "x <= y"
+  "(x: int) <= y"
 
 extern pure def infixGt(x: Int, y: Int): Boolean =
-  "x > y"
+  "(x: int) > y"
 
 extern pure def infixGte(x: Int, y: Int): Boolean =
-  "x >= y"
+  "(x: int) >= y"
 
-// // extern pure def infixLt(x: Double, y: Double): Boolean =
-// //   "x < y"
+extern pure def infixLt(x: Double, y: Double): Boolean =
+  "(x: real) < y"
 
-// // extern pure def infixLte(x: Double, y: Double): Boolean =
-// //   "x <= y"
+extern pure def infixLte(x: Double, y: Double): Boolean =
+  "(x: real) <= y"
 
-// // extern pure def infixGt(x: Double, y: Double): Boolean =
-// //   "x > y"
+extern pure def infixGt(x: Double, y: Double): Boolean =
+  "(x: real) > y"
 
-// // extern pure def infixGte(x: Double, y: Double): Boolean =
-// //   "x >= y"
+extern pure def infixGte(x: Double, y: Double): Boolean =
+  "(x: real) >= y"
 
 extern pure def infixLt(x: String, y: String): Boolean =
   "(x: string) < y"

@@ -4,7 +4,11 @@ package ml
 
 // TODO choose appropriate representation and apply conversions
 class MLName(n: String) {
-  val name: String = n.replace('$', '\'')
+  private def fixName(nn: String): String = {
+    val tmp = nn.replace('$', '\'')
+    if (tmp.startsWith("_")) "f" + tmp else tmp
+  }
+  val name: String = fixName(n)
 }
 
 sealed trait Binding
@@ -37,7 +41,7 @@ enum Expr {
   // Sequential Scoping
   case Let(bindings: List[Binding], body: Expr)
 
-  case Sequence(head: Expr, rest: Expr)
+  case Sequence(exps: List[Expr], rest: Expr)
 
   //  // e.g. (let* ([x 42] [y x]) (+ x y))
   //  case Let_*(bindings: List[Binding], body: Block)

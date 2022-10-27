@@ -112,13 +112,17 @@ object ML extends Backend {
     //      ml.Builtin("with-region")(toML(body))
 
     case Let(Wildcard(_), tpe, binding, body) =>
-      ml.Sequence(toML(binding), toMLExpr(body))
+      val mlBinding = toML(binding)
+      toMLExpr(body) match {
+        case ml.Sequence(exps, rest) => ml.Sequence(mlBinding :: exps, rest)
+        case mlbody => ml.Sequence(List(mlBinding), mlbody)
+      }
 
     case Let(id, tpe, binding, body) =>
       val mlBinding = createBinder(id, binding)
       toMLExpr(body) match {
         case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
-        case _ => ml.Let(List(mlBinding), toMLExpr(body))
+        case mlbody => ml.Let(List(mlBinding), mlbody)
       }
 
     case other => println(other); ???
@@ -163,17 +167,7 @@ object ML extends Backend {
       val include = RawBind(contents)
       include :: defs
 
-    case Let(Wildcard(_), tpe, binding, body) => ???
-    //      toML(binding) match {
-    //        // drop the binding altogether, if it is of the form:
-    //        //   let _ = myVariable; BODY
-    //        // since this might lead to invalid scheme code.
-    //        case _: ml.Variable => toML(body)
-    //        case _ => toML(body) match {
-    //          case ml.Block(Nil, exprs, result) => ml.Block(Nil, toML(binding) :: exprs, result)
-    //          case b => ml.Block(Nil, toML(binding) :: Nil, ml.Let(Nil, b))
-    //        }
-    //      }
+    case Let(Wildcard(_), tpe, binding, body) => Nil
 
     case Let(id, tpe, binding, body) =>
       val defs = toML(body)
