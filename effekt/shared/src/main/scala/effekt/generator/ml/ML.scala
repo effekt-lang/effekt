@@ -206,9 +206,9 @@ object ML extends Backend {
   }
 
   def toML(scope: Evidence): ml.Expr = scope match {
-    case Evidence(Nil) => Variable(MLName("here"))
+    case Evidence(Nil) => Consts.here
     case Evidence(ev :: Nil) => Variable(nameRef(ev))
-    case Evidence(scopes) => println(scopes); ??? //ml.Builtin("nested", scopes map { s => ml.Variable(nameRef(s)) }:_*)
+    case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(nameRef(s)) }:_*)
   }
 
   def toML(expr: Expr): ml.Expr = expr match {
