@@ -120,11 +120,11 @@ extern pure def ceil(d: Double): Int =
 
 // Comparison ops
 // ==============
-// extern pure def infixEq[R](x: R, y: R): Boolean =
-//   "equals$impl(x, y)"
+extern pure def infixEq[R](x: R, y: R): Boolean =
+  "x = y"
 
-// extern pure def infixNeq[R](x: R, y: R): Boolean =
-//   "!equals$impl(x, y)"
+extern pure def infixNeq[R](x: R, y: R): Boolean =
+  "not (x = y)"
 
 extern pure def infixLt(x: Int, y: Int): Boolean =
   "(x: int) < y"
