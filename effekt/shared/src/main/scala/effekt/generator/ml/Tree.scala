@@ -8,8 +8,11 @@ class MLName(n: String) {
 }
 
 sealed trait Binding
+
 case class ValBind(name: MLName, body: Expr) extends Binding
+
 case class FunBind(name: MLName, params: List[MLName], body: Expr) extends Binding
+
 case class RawBind(raw: String) extends Binding
 
 case class Toplevel(bindings: List[Binding], body: Expr)
@@ -36,8 +39,8 @@ enum Expr {
 
   case Sequence(head: Expr, rest: Expr)
 
-//  // e.g. (let* ([x 42] [y x]) (+ x y))
-//  case Let_*(bindings: List[Binding], body: Block)
+  //  // e.g. (let* ([x 42] [y x]) (+ x y))
+  //  case Let_*(bindings: List[Binding], body: Block)
 
   // e.g. (fn (x y) => body)
   case Lambda(params: List[MLName], body: Expr)
@@ -48,19 +51,30 @@ enum Expr {
   // e.g x
   case Variable(name: MLName)
 
-//  // match and handle are both macros, stable across Chez variants, so we add them to the language.
-//  case Match(scrutinee: Expr, clauses: List[(Expr, Expr)])
+  //  // match and handle are both macros, stable across Chez variants, so we add them to the language.
+  //  case Match(scrutinee: Expr, clauses: List[(Expr, Expr)])
 
-//  case Handle(handlers: List[Handler], body: Expr)
+  //  case Handle(handlers: List[Handler], body: Expr)
 }
+
 export Expr.*
 
-object Constants {
-  
+object Consts {
+
   val unitVal: Expr = RawValue("()")
   val trueVal: Expr = RawValue("true")
   val falseVal: Expr = RawValue("false")
-  
+  val id: Expr = ml.Lambda(MLName("x"))(Variable(MLName("x")))
+
+  // from effekt.sml
+  val bind: Expr = Variable(MLName("bind"))
+  val pure: Expr = Variable(MLName("pure"))
+  val lif: Expr = Variable(MLName("lift"))
+  val reset: Expr = Variable(MLName("reset"))
+  val run: Expr = Variable(MLName("reset"))
+  val nested: Expr = Variable(MLName("nested"))
+  val here: Expr = Variable(MLName("here"))
+
 }
 
 //enum Def {
@@ -79,10 +93,8 @@ object Constants {
 // smart constructors
 def Call(name: MLName)(args: Expr*): Expr = Expr.Call(Variable(name), args.toList)
 
+def Call(expr: Expr)(args: Expr*): Expr = Expr.Call(expr, args.toList)
+
 def Lambda(params: MLName*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
 
-//def Function(name: MLName)(params: MLName*)(body: Expr): Function = Expr.Function(name, params.toList, body)
-
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")
-
-def Builtin(name: String)(args: Expr*): Expr = Call(Variable(MLName(name)), args.toList)

@@ -17,18 +17,22 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(toplevel: Toplevel): Doc = {
     val Toplevel(bindings, body) = toplevel
-    vsep(bindings map toDoc, line) <> line <> line <> toDoc(body) <> ";"
+    toDoc(bindings) <> line <> line <> toDoc(body) <> ";"
   }
 
-  def format(defs: List[Binding]): Document =
-    pretty(vsep(defs map toDoc, line <> line))
+  def toDoc(bindings: List[Binding]): Doc = {
+    vsep(bindings map toDoc, line <> line)
+  }
+
+  def format(doc: Doc): Document =
+    pretty(doc)
 
   def toDoc(binding: Binding): Doc = binding match {
     case ValBind(name, body) =>
       "val" <+> toDoc(name) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
     case FunBind(name, params, body) =>
-      "fun" <+> toDoc(name) <> argList(params map toDoc) <+>
+      "fun" <+> toDoc(name) <+> hsep(params map toDoc) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
     case RawBind(raw) =>
       string(raw)
@@ -36,28 +40,35 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(expr: Expr): Doc = expr match {
     case Expr.Call(callee, args) =>
-      toDoc(callee) <> argList(args map toDoc)
+      val call = toDoc(callee) <+> hsep(args map toDoc)
+      parens(call)
     case Expr.RawValue(raw) =>
       string(raw)
     case Expr.RawExpr(raw) =>
-      string(raw)
+      val expr = string(raw)
+      parens(expr)
     case Expr.Let(bindings, body) =>
-      "let" <> nest(line <>
-        vsep(bindings map toDoc)
-      ) <> line <>
-      "in" <> nest(line <>
-        toDoc(body)
-      ) <> line <>
-      "end"
+      val let =
+        "let" <> nest(line <>
+          vsep(bindings map toDoc)
+        ) <> line <>
+        "in" <> nest(line <>
+          toDoc(body)
+        ) <> line <>
+        "end"
+      parens(let)
     case Expr.Lambda(params, body) =>
-      "fn" <+> argList(params map toDoc) <+> "=>" <+> toDoc(body)
+      val lambda = "fn" <+> hsep(params map toDoc) <+> "=>" <+> toDoc(body)
+      parens(lambda)
     case Expr.If(cond, thn, els) =>
-      "if" <+> toDoc(cond) <+> "then" <+> toDoc(thn) <+> "else" <+> toDoc(els)
-    case Expr.Variable(name) => toDoc(name)
-    case Expr.Sequence(head, rest) => parens(toDoc(head) <> ";" <@> toDoc(rest))
+      val ifs = "if" <+> toDoc(cond) <+> "then" <+> toDoc(thn) <+> "else" <+> toDoc(els)
+      parens(ifs)
+    case Expr.Variable(name) =>
+      toDoc(name)
+    case Expr.Sequence(head, rest) =>
+      val seq = toDoc(head) <> ";" <@> toDoc(rest)
+      parens(seq)
   }
-
-  def argList(args: Seq[Doc]): Doc = arguments(args, identity)
 
 //    expr match {
 //    case Call(callee, Nil)       => parens(toDoc(callee))

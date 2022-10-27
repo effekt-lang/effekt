@@ -12,13 +12,13 @@ extern include "effekt.sml"
 // Side effecting ops
 // ==================
 extern io def println(value: String): Unit =
-  """print(value ^ "\n")"""
+  """print (value ^ "\n")"""
 
 extern io def println(value: Int): Unit =
-  """print(Int.toString(value) ^ "\n")"""
+  """print ((Int.toString value) ^ "\n")"""
 
 extern io def println(value: Boolean): Unit =
-  """print(Bool.toString(value) ^ "\n")"""
+  """print ((Bool.toString value) ^ "\n")"""
 
 // // TODO: more println types
 
@@ -51,10 +51,10 @@ extern pure def infixDiv(x: Int, y: Int): Int =
   "x div y"
 
 extern pure def infixSub(x: Int, y: Int): Int =
-  "(x - y)"
+  "x - y"
 
 extern pure def mod(x: Int, y: Int): Int =
-  "(x mod y)"
+  "x mod y"
 
 // extern pure def infixAdd(x: Double, y: Double): Double =
 //   "(x + y)"
