@@ -1,9 +1,5 @@
 def main() = {
     val one = 1;
     val two = 2;
-    println(mod(1 + 2 * 3 / 4 + 6,  7));
-    println(1 < 2);
-    println(3 <= 3);
-    println(31 > 2);
-    println(15 >= 15)
+    println(mod(1 + 2 * 3 / 4 + 6,  7))
 }

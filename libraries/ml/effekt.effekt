@@ -115,10 +115,10 @@ extern pure def mod(x: Int, y: Int): Int =
 // //   "Math.ceil(d)"
 
 
-// // Comparison ops
-// // ==============
-// // extern pure def infixEq[R](x: R, y: R): Boolean =
-// //   "equals$impl(x, y)"
+// Comparison ops
+// ==============
+// extern pure def infixEq[R](x: R, y: R): Boolean =
+//   "equals$impl(x, y)"
 
 // extern pure def infixNeq[R](x: R, y: R): Boolean =
 //   "!equals$impl(x, y)"
@@ -159,16 +159,16 @@ extern pure def infixGte(x: Int, y: Int): Boolean =
 // extern pure def infixGte(x: String, y: String): Boolean =
 //   "(x >= y)"
 
-// // Boolean ops
-// // ===========
-// extern pure def not(b: Boolean): Boolean =
-//   "(not b)"
+// Boolean ops
+// ===========
+extern pure def not(b: Boolean): Boolean =
+  "not b"
 
-// extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
-//   "(x orelse y)"
+extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
+  "x orelse y"
 
-// extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
-//   "(x andalso y)"
+extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
+  "x andalso y"
 
 // // Pairs
 // // =====
