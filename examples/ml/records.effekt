@@ -1,0 +1,6 @@
+record MyRecord(field: Int)
+
+def main() = {
+    val r = MyRecord(32)
+    println(r.field)
+}
