@@ -147,17 +147,17 @@ extern pure def infixGte(x: Int, y: Int): Boolean =
 // // extern pure def infixGte(x: Double, y: Double): Boolean =
 // //   "x >= y"
 
-// extern pure def infixLt(x: String, y: String): Boolean =
-//   "(x < y)"
+extern pure def infixLt(x: String, y: String): Boolean =
+  "(x: string) < y"
 
-// extern pure def infixLte(x: String, y: String): Boolean =
-//   "(x <= y)"
+extern pure def infixLte(x: String, y: String): Boolean =
+  "(x: string) <= y"
 
-// extern pure def infixGt(x: String, y: String): Boolean =
-//   "(x > y)"
+extern pure def infixGt(x: String, y: String): Boolean =
+  "(x: string) > y"
 
-// extern pure def infixGte(x: String, y: String): Boolean =
-//   "(x >= y)"
+extern pure def infixGte(x: String, y: String): Boolean =
+  "(x: string) >= y"
 
 // Boolean ops
 // ===========

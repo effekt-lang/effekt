@@ -2,5 +2,10 @@ def main() = {
     println(1 < 2);
     println(3 <= 3);
     println(31 < 2);
-    println(15 >= 15)
+    println(15 >= 15);
+    println("");
+    println("a" < "aa");
+    println("b" <= "b");
+    println("asdf" > "b");
+    println("qq" >= "q")
 }
