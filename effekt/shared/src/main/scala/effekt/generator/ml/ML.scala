@@ -115,7 +115,11 @@ object ML extends Backend {
       ml.Sequence(toML(binding), toMLExpr(body))
 
     case Let(id, tpe, binding, body) =>
-      ml.Let(List(createBinder(id, binding)), toMLExpr(body))
+      val mlBinding = createBinder(id, binding)
+      toMLExpr(body) match {
+        case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
+        case _ => ml.Let(List(mlBinding), toMLExpr(body))
+      }
 
     case other => println(other); ???
   }

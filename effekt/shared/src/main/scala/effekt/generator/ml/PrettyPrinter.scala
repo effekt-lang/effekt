@@ -17,7 +17,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(toplevel: Toplevel): Doc = {
     val Toplevel(bindings, body) = toplevel
-    toDoc(bindings) <> line <> line <> toDoc(body) <> ";"
+    toDoc(bindings) <> line <> line <> toDoc(body) <> ";" <> line
   }
 
   def toDoc(bindings: List[Binding]): Doc = {
