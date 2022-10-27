@@ -65,6 +65,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
       parens(ifs)
     case Expr.Variable(name) =>
       toDoc(name)
+    case Expr.FieldLookup(record, field) =>
+      val lookup = "#" <> toDoc(field) <+> toDoc(record)
+      parens(lookup)
+    case Expr.MakeRecord(fields) =>
+      val fieldAssignments = fields.map((name, exp) => toDoc(name) <+> "=" <+> toDoc(exp))
+      "{" <> hsep(fieldAssignments, ", ")  <> "}"
     case Expr.Sequence(exps, rest) =>
       val seq = vsep(exps map toDoc, "; ") <> ";" <@> toDoc(rest)
       parens(seq)
@@ -81,21 +87,4 @@ object PrettyPrinter extends ParenPrettyPrinter {
     }
   }
 
-  //    expr match {
-  //    case Call(callee, Nil)       => parens(toDoc(callee))
-  //    case Call(callee, arguments) => parens(toDoc(callee) <+> group(align(hsep(arguments map toDoc, line))))
-  //    case RawExpr(raw)            => string(raw)
-  //    case RawValue(raw)           => string(raw)
-  //    case Let(Nil, body)          => toDoc(body)
-  //    case Let(bindings, body)     => parens("let" <+> align(vcat(bindings map toDoc)) <+> "in" <+> toDoc(body) <+> "end")
-  //    case Let_*(bindings, body)   => parens("let*" <+> parens(align(vcat(bindings map toDoc))) <> toDoc(body))
-  //    case Lambda(param :: Nil, body) => parens("fn" <+> toDoc(param) <+> "=>" <+> toDoc(body))
-  //    case Lambda(params, body)    => parens("fn" <+> arguments(params map toDoc) <+> "=>" <+> toDoc(body))
-  //    case If(cond, thn, els)      => parens("if" <+> toDoc(cond) <+> "then" <+> nest(line <> toDoc(thn)) <+> "else" <+> nest(line <> toDoc(els)))
-  //    case Variable(name)          => toDoc(name)
-  //    case Match(sc, clauses) => parens("pattern-match" <+> toDoc(sc) <> nest(line <> parens(align(vcat(clauses.map {
-  //      case (pattern, branch) => brackets(toDoc(pattern) <+> toDoc(branch))
-  //    })))))
-  //    case Handle(handlers, body) => parens("handle" <+> parens(align(vcat(handlers map toDoc))) <+> nest(line <> toDoc(body)))
-  //  }
 }

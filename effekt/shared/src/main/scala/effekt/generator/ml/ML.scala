@@ -56,7 +56,7 @@ object ML extends Backend {
 
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[ml.Binding])(implicit C: Context): ml.Toplevel = {
     val defs = toML(core)
-    ml.Toplevel(dependencies ++ defs, runMain(nameRef(mainSymbol)))
+    ml.Toplevel(dependencies ++ defs, runMain(name(mainSymbol)))
   }
 
   /**
@@ -66,7 +66,7 @@ object ML extends Backend {
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".sml"
 
 
-  def toML(p: Param): MLName = nameDef(p.id)
+  def toML(p: Param): MLName = name(p.id)
 
   def toML(e: Argument): ml.Expr = e match {
     case e: lifted.Expr => toML(e)
@@ -84,7 +84,7 @@ object ML extends Backend {
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) => ??? // bind(toMLExpr(binding), nameDef(id), toML(body))
     case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
-    case Match(scrutinee, clauses) => ???
+    case Match(scrutinee, clauses) => println(stmt); ???
     //      ml.Match(toML(scrutinee), clauses.map { case (pattern, branch) =>
     //        (toML(pattern), curry(toML(branch)))
     //      })
@@ -131,48 +131,47 @@ object ML extends Backend {
   def createBinder(id: Symbol, binding: Expr): Binding = binding match {
     case Closure(b) => createBinder(id, b)
     case _ =>
-      ml.ValBind(nameDef(id), toML(binding))
+      ml.ValBind(name(id), toML(binding))
   }
 
   def createBinder(id: Symbol, binding: Block): Binding = {
     binding match {
       case BlockLit(params, body) =>
-        ml.FunBind(nameDef(id), params map toML, toMLExpr(body))
+        ml.FunBind(name(id), params map toML, toMLExpr(body))
       case Extern(params, body) =>
-        ml.FunBind(nameDef(id), params map (p => MLName(p.id.name.name)), RawExpr(body))
+        ml.FunBind(name(id), params map (p => MLName(p.id.name.name)), RawExpr(body))
       case _ =>
-        ml.ValBind(nameDef(id), toML(binding))
+        ml.ValBind(name(id), toML(binding))
     }
   }
 
   def toML(stmt: Stmt): List[ml.Binding] = stmt match {
 
     case Def(id, tpe, block, rest) =>
-      val defs = toML(rest)
       val constDef = createBinder(id, block)
-      constDef :: defs
+      constDef :: toML(rest)
 
     case Data(did, ctors, rest) => ???
     //      val defs = toML(rest)
     //      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
     //      Block(constructors ++ defs, exprs, result)
 
-    case Record(did, fields, rest) => ???
-    //      val Block(defs, exprs, result) = toML(rest)
-    //      val constructors = generateConstructor(did, fields)
-    //      Block(constructors ++ defs, exprs, result)
+    case Record(did, fields, rest) =>
+      val fieldNames = fields map name
+      val rec = ml.MakeRecord(fieldNames.map(name => (name, Variable(name))))
+      val constructor = ml.FunBind(name(did), fieldNames, rec)
+      constructor :: toML(rest) // use the native record types
 
     case Include(contents, rest) =>
-      val defs = toML(rest)
       val include = RawBind(contents)
-      include :: defs
+      include :: toML(rest)
 
-    case Let(Wildcard(_), tpe, binding, body) => Nil
+    case Let(Wildcard(_), tpe, binding, body) =>
+      Nil
 
     case Let(id, tpe, binding, body) =>
-      val defs = toML(body)
       val constant = createBinder(id, binding)
-      constant :: defs
+      constant :: toML(body)
 
     case other => Nil
   }
@@ -184,13 +183,13 @@ object ML extends Backend {
 
   def toML(block: Block): ml.Expr = block match {
     case BlockVar(id) =>
-      Variable(nameRef(id))
+      Variable(name(id))
 
     case b@BlockLit(_, _) =>
       toML(b)
 
-    case Member(b, field) => ???
-    //      ml.Call(Variable(nameRef(field)))(List(toML(b)))
+    case Member(b, field) =>
+      ml.FieldLookup(toML(b), name(field))
 
     case Extern(params, body) =>
       ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
@@ -205,8 +204,8 @@ object ML extends Backend {
 
   def toML(scope: Evidence): ml.Expr = scope match {
     case Evidence(Nil) => Consts.here
-    case Evidence(ev :: Nil) => Variable(nameRef(ev))
-    case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(nameRef(s)) }:_*)
+    case Evidence(ev :: Nil) => Variable(name(ev))
+    case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(name(s)) }:_*)
   }
 
   def toML(expr: Expr): ml.Expr = expr match {
@@ -214,7 +213,7 @@ object ML extends Backend {
     case StringLit(s) => MLString(s)
     case BooleanLit(b) => if (b) Consts.trueVal else Consts.falseVal
     case l: Literal[t] => ml.RawValue(l.value.toString)
-    case ValueVar(id) => ml.Variable(nameRef(id))
+    case ValueVar(id) => ml.Variable(name(id))
 
     case PureApp(b, targs, args) => ml.Call(toML(b), args map {
       case e: Expr => toML(e)
@@ -223,7 +222,7 @@ object ML extends Backend {
     })
 
     case Select(b, field) =>
-      ml.Call(nameRef(field))(toML(b))
+      ml.FieldLookup(toML(b), name(field))
 
     case Closure(b) => toML(b)
 

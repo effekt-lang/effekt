@@ -55,6 +55,10 @@ enum Expr {
   // e.g x
   case Variable(name: MLName)
 
+  case FieldLookup(record: Expr, field: MLName)
+  
+  case MakeRecord(fields: List[(MLName, Expr)])
+
   //  // match and handle are both macros, stable across Chez variants, so we add them to the language.
   //  case Match(scrutinee: Expr, clauses: List[(Expr, Expr)])
 
