@@ -29,7 +29,7 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(clauses) ++ (freeVariables(rest) -- Set(name))
     case Invoke(value, tag, values) =>
       Set(value) ++ Set.from(values)
-    case Alloc(name, rest) =>
+    case Allocate(name, rest) =>
       freeVariables(rest) -- Set(name)
     case Load(name, ref, rest) =>
       Set(ref) ++ freeVariables(rest) -- Set(name)
