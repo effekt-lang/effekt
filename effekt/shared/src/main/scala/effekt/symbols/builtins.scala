@@ -69,6 +69,7 @@ object builtins {
 
   val rootCaptures: Map[String, Capture] = Map(
     "io" -> IOCapability.capture,
-    "control" -> ControlCapability.capture
+    "control" -> ControlCapability.capture,
+    "global" -> globalRegion.capture
   )
 }
