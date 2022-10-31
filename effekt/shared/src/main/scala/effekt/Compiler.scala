@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.Transformer
+import effekt.core.{ Optimizer, Transformer }
 import effekt.lifted.LiftInference
 import effekt.namer.Namer
 import effekt.source.{ Elaborator, ModuleDecl }
@@ -149,7 +149,8 @@ trait Compiler {
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
      */
-    Transformer
+    Transformer andThen // transforms a source tree to a core tree (establishing some form of ANF)
+    Optimizer // some optimizations from Core -> Core
   }
 
   /**
