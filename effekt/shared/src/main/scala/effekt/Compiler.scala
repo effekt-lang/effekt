@@ -238,7 +238,8 @@ trait Compiler[Executable] {
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
      */
-    Transformer
+    Transformer andThen // transforms a source tree to a core tree (establishing some form of ANF)
+    Optimizer // some optimizations from Core -> Core
   }
 
   def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
