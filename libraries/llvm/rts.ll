@@ -82,6 +82,9 @@
 @limit = private global %Limit null
 @rest = private global %Stk undef
 @arena = private global %Mem undef
+@arenasp = private alias %Sp, %Sp* getelementptr (%Mem, %Mem* @arena, i64 0, i32 0)
+@arenabase = private alias %Base, %Base* getelementptr (%Mem, %Mem* @arena, i64 0, i32 1)
+@arenalimit = private alias %Limit, %Limit* getelementptr (%Mem, %Mem* @arena, i64 0, i32 2)
 
 
 ; Foreign imports
@@ -483,6 +486,8 @@ define fastcc void @eraseFrames(%Sp %sp) alwaysinline {
 define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
     %base = load %Base, %Base* @base
     call void @free(i8* %base)
+    %arenabase = load %Base, %Base* @arenabase
+    call void @free(i8* %arenabase)
     call void @free(i8* %env)
     ret void
 }

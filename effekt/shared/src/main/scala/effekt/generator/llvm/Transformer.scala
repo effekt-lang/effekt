@@ -16,6 +16,9 @@ object Transformer {
       emit(Call("env", envType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Call("sp", spType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
+      emit(Call("arenasp", spType, malloc, List(ConstantInt(1024))));
+      emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "arenasp"), LocalReference(spType, "arenasp")));
+      emit(Store(ConstantGlobal(PointerType(NamedType("Base")), "arenabase"), LocalReference(spType, "arenasp")));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
       val terminator = transform(statement);
