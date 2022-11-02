@@ -204,7 +204,7 @@ enum Stmt extends Tree {
   // Effects
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?
   case Try(body: Block, answerType: ValueType, handler: List[Implementation])
-  case Region(body: Block)
+  case Region(body: Block, answerType: ValueType)
 
   // Others
   case Hole
@@ -292,8 +292,8 @@ object Tree {
           State(id, rewrite(init), reg, rewrite(body))
         case Try(body, tpe, handler) =>
           Try(rewrite(body), tpe, handler map rewrite)
-        case Region(body) =>
-          Region(rewrite(body))
+        case Region(body, tpe) =>
+          Region(rewrite(body), tpe)
         case Match(scrutinee, clauses, default) =>
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
