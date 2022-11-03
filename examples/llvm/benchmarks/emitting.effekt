@@ -1,0 +1,21 @@
+
+effect Emit(a: Int): Unit
+
+def emitRange(l: Int, h: Int): Unit / Emit =
+  if(l <= h) {
+    do Emit(l);
+    emitRange(l + 1, h)
+  } else {
+    ()
+  }
+
+def main() =
+  try {
+    emitRange(0, 10000000)
+  } with Emit { (a: Int) =>
+    if(mod(a, 1000000) == 0) {
+      println(a); resume(())
+    } else {
+      resume(())
+    }
+  }

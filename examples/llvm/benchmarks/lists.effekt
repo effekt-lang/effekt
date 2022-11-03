@@ -1,0 +1,23 @@
+type List {
+  Nil();
+  Con(head: Int, tail: List)
+}
+
+def range(l: Int, h: Int): List =
+  if (l >= h) { Nil() } else { Con(l, range(l + 1, h)) }
+
+def map(xs : List) { f : Int => Int }: List =
+  xs match {
+    case Nil() => Nil()
+    case Con(y, ys) => Con(f(y), map(ys){f})
+  }
+
+def sum(xs: List): Int =
+  xs match {
+    case Nil() => 0
+    case Con(y, ys) => y + sum(ys)
+  }
+
+def main() =
+  println(sum(map(range(0, 100000)) { a =>  a + 1 } ))
+
