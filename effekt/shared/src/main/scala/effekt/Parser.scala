@@ -218,7 +218,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // format: OFF
 
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
+      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
+      case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
+    }
     | failure("Required at least one top-level function or effect definition")
     )
 

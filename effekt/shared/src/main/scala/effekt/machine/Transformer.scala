@@ -289,7 +289,7 @@ object Transformer {
     case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
       val fieldIndex = field.record.fields.indexOf(field)
       val variables = field.record.fields.map { f => Variable(freshName("n"), transform(f.tpe)) }
-      transform(target).flatMap { value =>
+      transform(target).flatMap { value => 
         Binding { k =>
           Switch(value, List(Clause(variables, k(variables(fieldIndex)))))
         }

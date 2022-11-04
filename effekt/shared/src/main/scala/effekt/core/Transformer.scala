@@ -33,7 +33,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val optimized = optimize(transformed)
 
-    ModuleDecl(path, mod.imports.map { _.path }, optimized, exports)
+    ModuleDecl(path, imports.map { _.path }, optimized, exports)
   }
 
   /**

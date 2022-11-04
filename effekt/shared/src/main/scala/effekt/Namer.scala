@@ -43,20 +43,13 @@ object Namer extends Phase[Parsed, NameResolved] {
   def resolve(decl: ModuleDecl)(using Context): ModuleDecl = {
     var scope: Scope = toplevel(builtins.rootTerms, builtins.rootTypes, builtins.rootCaptures)
 
-    def processDependency(path: String) =
-      val modImport = Context.moduleOf(path)
-      scope.defineAll(modImport.terms, modImport.types, Map.empty)
-      modImport
-
-    // process the prelude (but don't if we are processing the prelude already)
-    val preludes = Context.config.prelude()
-    val processedPreludes = if (!preludes.contains(decl.path)) {
-      preludes.map(processDependency)
-    } else { Nil }
-
     // process all imports, updating the terms and types in scope
     val imports = decl.imports map {
-      case im @ source.Import(path) => Context.at(im) { processDependency(path) }
+      case im @ source.Import(path) => Context.at(im) {
+        val modImport = Context.moduleOf(path)
+        scope.defineAll(modImport.terms, modImport.types, Map.empty)
+        modImport
+      }
     }
 
     // create new scope for the current module
@@ -66,7 +59,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     resolveGeneric(decl)
 
-    Context.module.exports(processedPreludes ++ imports, scope.terms.toMap, scope.types.toMap)
+    Context.module.exports(imports, scope.terms.toMap, scope.types.toMap)
     decl
   }
 
