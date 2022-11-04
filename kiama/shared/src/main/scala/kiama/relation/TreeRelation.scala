@@ -14,6 +14,7 @@ package relation
 import kiama.relation.Relation.emptyImage
 import kiama.util.Memoiser
 import kiama.util.Memoiser.makeIdMemoiser
+import scala.util.control.NonLocalReturns.*
 
 /**
  * A tree relation is a binary relation on tree nodes with an extra property
@@ -74,14 +75,14 @@ object TreeRelation {
   /**
    * Return whether this node is a leaf node or not.
    */
-  def isLeaf[T <: Product](t: T): Boolean = {
+  def isLeaf[T <: Product](t: T): Boolean = returning {
     for (desc <- t.productIterator) {
       desc match {
         case _: Option[_] | _: Either[_, _] | _: Tuple1[_] |
           _: Tuple2[_, _] | _: Tuple3[_, _, _] | _: Tuple4[_, _, _, _] =>
         // Do nothing
         case _: Product =>
-          return false
+          throwReturn(false)
         case _ =>
         // Do nothing
       }
