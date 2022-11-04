@@ -1,6 +1,5 @@
 package effekt
 
-import java.io.{ ByteArrayInputStream, File }
 import kiama.util.StringConsole
 
 class ReplTests extends munit.FunSuite {
@@ -8,14 +7,6 @@ class ReplTests extends munit.FunSuite {
   val inputs = List("1 + 1")
 
   def runRepl(input: String): String = {
-    // this resets the caches before each test:
-    // effekt.util.Task.reset()
-
-    val oldIn: java.io.InputStream = System.in
-
-    val mockIn = new ByteArrayInputStream("1 + 1\n".getBytes());
-    System.setIn(mockIn);
-
     val compiler = new effekt.Driver {}
 
     val configs = compiler.createConfig(Seq(
