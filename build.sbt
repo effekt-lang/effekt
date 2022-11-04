@@ -45,8 +45,8 @@ lazy val lspDependencies = Seq(
 )
 
 lazy val testingDependencies = Seq(
-  "org.scala-sbt" %% "io" % "1.6.0" % "test",
-  "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+  "org.scala-sbt" %% "io" % "1.6.0" % Test,
+  "org.scalameta" %% "munit" % "0.7.29" % Test
 )
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))

@@ -5,11 +5,9 @@ import java.io.File
 import sbt.io._
 import sbt.io.syntax._
 
-import org.scalatest.funspec.AnyFunSpec
-
 import scala.language.implicitConversions
 
-class ChezSchemeTests extends EffektTests {
+abstract class ChezSchemeTests extends EffektTests {
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
   override lazy val ignored: List[File] = List(
@@ -45,21 +43,6 @@ class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "io", // async io is only implemented for monadic JS
   )
 
-  def runTestFor(f: File, expected: String) = {
-    it(f.getName + " (callcc)") {
-      val out = interpretCS(f, "callcc")
-      assert(expected == out)
-    }
-    it(f.getName + " (lift)") {
-      val out = interpretCS(f, "lift")
-      assert(expected == out)
-    }
-    it(f.getName + " (monadic)") {
-      val out = interpretCS(f, "monadic")
-      assert(expected == out)
-    }
-  }
-
   def interpretCS(file: File, variant: String): String = {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
@@ -71,6 +54,32 @@ class ChezSchemeTests extends EffektTests {
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
-    removeAnsiColors(configs.stringEmitter.result())
+    configs.stringEmitter.result()
+  }
+}
+
+class ChezSchemeMonadicTests extends ChezSchemeTests {
+  def runTestFor(input: File, check: File, expected: String): Unit = {
+    test(input.getPath + " (monadic)") {
+      val out = interpretCS(input, "monadic")
+      assertNoDiff(out, expected)
+    }
+  }
+}
+
+class ChezSchemeCallCCTests extends ChezSchemeTests {
+  def runTestFor(input: File, check: File, expected: String): Unit = {
+    test(input.getPath + " (callcc)") {
+      val out = interpretCS(input, "callcc")
+      assertNoDiff(out, expected)
+    }
+  }
+}
+class ChezSchemeLiftTests extends ChezSchemeTests {
+  def runTestFor(input: File, check: File, expected: String): Unit = {
+    test(input.getPath + " (lift)") {
+      val out = interpretCS(input, "lift")
+      assertNoDiff(out, expected)
+    }
   }
 }
