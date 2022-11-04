@@ -100,7 +100,7 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def compileFile(path: String): String = {
-    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
       throw js.JavaScriptException(s"Cannot compile ${path}")
     }
     try {
@@ -116,7 +116,7 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def showCore(path: String): String = {
-    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
       return null
     }
     core.PrettyPrinter.format(mainCore.core.defs)
@@ -124,11 +124,11 @@ class LanguageServer extends Intelligence {
 
   @JSExport
   def showLiftedCore(path: String): String = {
-    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElse {
+    val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
       return null
     }
 
-    val liftedCore = LiftInference.run(mainCore).getOrElse {
+    val liftedCore = LiftInference.run(mainCore).getOrElseAborting {
       return null
     }
 
