@@ -3,7 +3,7 @@ package effekt
 import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
 import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
-import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource }
+import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
 import kiama.util.{ Console, REPL, Source, StringSource, Range }
@@ -188,7 +188,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       val output = config.output()
 
       context.setup(config)
-      val src = context.findSource(i.path).getOrElse {
+
+      val src = context.findSource(i.path).getOrElseAborting {
         output.emitln(s"Cannot find source for import ${i.path}")
         return
       }

@@ -11,6 +11,7 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
 import effekt.util.messages.*
+import effekt.util.foreachAborting
 
 import scala.language.implicitConversions
 
@@ -342,7 +343,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // TODO we need to do something with bidirectional effects and region checking here.
           //  probably change instantiation to also take capture args.
           val (rigids, crigids, FunctionType(tps, cps, vps, Nil, tpe, otherEffs)) =
-            Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap)))
+            Context.instantiate(declaredType, targs ++ existentials, cparams.map(cap => CaptureSet(cap))) : @unchecked
 
           // (3) check parameters
           if (vps.size != params.size)
@@ -973,7 +974,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     failures: List[(BlockSymbol, EffektMessages)]
   )(using Context): Result[ValueType] = {
 
-    successes foreach {
+    successes foreachAborting {
       // continue in outer scope
       case Nil => ()
 
