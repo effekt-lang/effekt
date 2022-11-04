@@ -33,6 +33,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val optimized = optimize(transformed)
 
+    // We use the imports on the symbol (since they include the prelude)
     ModuleDecl(path, mod.imports.map { _.path }, optimized, exports)
   }
 

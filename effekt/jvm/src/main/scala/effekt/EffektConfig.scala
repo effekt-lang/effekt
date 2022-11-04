@@ -52,10 +52,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     noshort = true
   )
 
-  val prelude: ScallopOption[List[String]] = opt[List[String]](
+  val preludePath: ScallopOption[List[String]] = opt[List[String]](
     "prelude",
     descr = "Modules to be automatically imported in every file.",
-    default = Some(List("effekt")),
+    default = None,
     noshort = true
   )
 
@@ -103,7 +103,9 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   lazy val libPath: File = findStdLib.canonicalPath.toFile
 
-  def includes() = backendIncludes(libPath).map(_.toFile) ++ includePath()
+  def includes(): List[File] = backendIncludes(libPath).map(_.toFile) ++ includePath()
+
+  def prelude(): List[String] = preludePath.getOrElse(backendPrelude())
 
   def requiresCompilation(): Boolean = !server()
 
@@ -121,6 +123,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   private def backendIncludes(path: util.paths.File): List[util.paths.File] = backend() match {
     case "chez-monadic" | "chez-callcc" | "chez-lift" => List(path, path / ".." / "common")
     case b => List(path)
+  }
+
+  private def backendPrelude() = backend() match {
+    case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
+      List("effekt", "immutable/option", "immutable/list")
+    case b =>
+      List("effekt")
   }
 
   validateFilesIsDirectory(includePath)

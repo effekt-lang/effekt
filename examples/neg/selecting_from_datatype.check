@@ -1,3 +1,3 @@
-[error] examples/neg/selecting_from_datatype.effekt:8:27: Expected Bar but got MyList.
-def foo(l: MyList) = head(l)
-                          ^
+[error] examples/neg/selecting_from_datatype.effekt:8:29: Expected Bar but got MyList.
+def foo(l: MyList) = myHead(l)
+                            ^

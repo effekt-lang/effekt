@@ -1,5 +1,7 @@
 module immutable/cslist
 
+import immutable/list
+
 // a chez scheme cons list
 extern type CSList[A]
 extern pure def cons[A](el: A, rest: CSList[A]): CSList[A] =
@@ -18,3 +20,12 @@ extern pure def head[A](l: CSList[A]): A =
 // unsafe!
 extern pure def tail[A](l: CSList[A]): CSList[A] =
   "(cdr l)"
+
+
+def toChez[A](l: List[A]): CSList[A] = l match {
+  case Nil() => nil()
+  case Cons(a, rest) => cons(a, rest.toChez)
+}
+
+def fromChez[A](l: CSList[A]): List[A] =
+  if (l.isEmpty) Nil() else Cons(l.head, l.tail.fromChez)

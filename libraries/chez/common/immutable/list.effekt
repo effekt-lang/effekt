@@ -1,7 +1,7 @@
 module immutable/list
 
+import effekt
 import immutable/option
-import immutable/cslist
 
 type List[A] {
   Nil();
@@ -85,12 +85,3 @@ def headOption[A](l: List[A]): Option[A] = l match {
   case Nil() => None()
   case Cons(a, rest) => Some(a)
 }
-
-
-def toChez[A](l: List[A]): CSList[A] = l match {
-  case Nil() => nil()
-  case Cons(a, rest) => cons(a, rest.toChez)
-}
-
-def fromChez[A](l: CSList[A]): List[A] =
-  if (l.isEmpty) Nil() else Cons(l.head, l.tail.fromChez)
