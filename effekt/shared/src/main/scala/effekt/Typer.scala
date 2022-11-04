@@ -55,8 +55,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
           given Captures = CaptureSet()
 
           // bring builtins into scope
-          // TODO clean up!
-          Context.bind(builtins.globalRegion, TRegion)
+          builtins.rootTerms.values.foreach {
+            case term: BlockParam => Context.bind(term, term.tpe)
+            case term => Context.panic(s"Cannot bind builtin term: ${term}")
+          }
 
           // We split the type-checking of definitions into "pre-check" and "check"
           // to allow mutually recursive defs
