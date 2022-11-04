@@ -6,7 +6,7 @@ import effekt.util.paths.file
 import kiama.util.REPLConfig
 
 import org.rogach.scallop.ScallopOption
-import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter }
+import org.rogach.scallop.{ fileConverter, fileListConverter, stringConverter, stringListConverter }
 
 class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
@@ -49,6 +49,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     "llvm-version",
     descr = "the llvm version that should be used to compile the generated programs (only necessary if backend is llvm, defaults to 12)",
     default = Some(sys.env.getOrElse("EFFEKT_LLVM_VERSION", "12")),
+    noshort = true
+  )
+
+  val prelude: ScallopOption[List[String]] = opt[List[String]](
+    "prelude",
+    descr = "Modules to be automatically imported in every file.",
+    default = Some(List("effekt")),
     noshort = true
   )
 
