@@ -37,4 +37,15 @@ case class MarkdownSource(source: Source) extends Source {
 case class VirtualSource(virtualModule: ModuleDecl, input: Source) extends Source {
   val name = input.name
   val content = input.content
+
+
+  // For purposes of caching, we have to use object identity to compare the virtual modules.
+  // Later compiler phases also use object identity to attach symbols etc. Not using
+  // object identity, will result in problems as observed in #77
+  override def equals(obj: Any): Boolean = obj match {
+    case VirtualSource(otherModule, otherInput) => (otherModule eq virtualModule) && (otherInput == input)
+    case _ => false
+  }
+
+  override def hashCode(): Int = super.hashCode() + System.identityHashCode(virtualModule)
 }
