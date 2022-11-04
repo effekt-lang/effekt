@@ -14,7 +14,7 @@ object Transformer {
 
     val mainSymbol = C.checkMain(main.mod)
 
-    val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main)
+    val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main) : @unchecked
 
     // TODO this flatMap is wrong. If LiftInference returns None, then this will not fail but the dep. will be ignored.
     //   future me, or anybody else: if you fix this, also fix in ChezLift
@@ -143,7 +143,7 @@ object Transformer {
             // TODO currently only scoped resumptions are supported
             // TODO assuming first parameter is evidence TODO actually use evidence?
             transform(args).run { values =>
-              val (evidence :: returnedValues) = values;
+              val (evidence :: returnedValues) = values: @unchecked;
               PushStack(Variable(transform(id), Type.Stack()),
                 Return(returnedValues))
             }

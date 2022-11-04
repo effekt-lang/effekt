@@ -159,7 +159,7 @@ package object control {
   private[control] case class FramesCont[-A, B, +C](frames: List[Frame[Any, Any]], tail: MetaCont[B, C]) extends MetaCont[A, C] {
 
     final def apply(a: A): Result[C] = {
-      val first :: rest = frames
+      val first :: rest = frames : @unchecked
       val result = first.asInstanceOf[Frame[A, B]](a)
       if (rest.isEmpty) {
         Impure(result, tail)

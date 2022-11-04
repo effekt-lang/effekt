@@ -3,6 +3,7 @@ package typer
 
 import effekt.symbols.*
 import effekt.util.messages.{ ErrorReporter, ErrorMessageReifier }
+import effekt.util.foreachAborting
 
 // Auxiliary Definitions
 // ---------------------
@@ -391,7 +392,7 @@ class Constraints(
   private def propagateLower(bounds: Set[Capture], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
 
-    captSubstitution.get(x) foreach {
+    captSubstitution.get(x) foreachAborting {
       // we already have fixed the capture set, check equality
       case CaptureSet(capt) =>
         checkEquality(capt, bounds)
@@ -412,7 +413,7 @@ class Constraints(
   private def propagateUpper(bounds: Set[Capture], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
 
-    captSubstitution.get(x) foreach {
+    captSubstitution.get(x) foreachAborting {
       // we already have fixed the capture set, check equality
       case CaptureSet(capt) =>
         checkEquality(capt, bounds)
