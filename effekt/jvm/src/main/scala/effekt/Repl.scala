@@ -310,7 +310,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       val body = Return(expr)
 
-      ModuleDecl("interactive", Import("effekt") :: imports,
+      ModuleDecl("interactive", imports,
         definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,
           body))
     }

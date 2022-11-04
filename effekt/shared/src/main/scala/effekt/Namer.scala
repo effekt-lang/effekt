@@ -50,13 +50,16 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // process the prelude (but don't if we are processing the prelude already)
     val preludes = Context.config.prelude()
-    val processedPreludes = if (!preludes.contains(decl.path)) {
+    val isPrelude = preludes.contains(decl.path)
+
+    val processedPreludes = if (!isPrelude) {
       preludes.map(processDependency)
     } else { Nil }
 
     // process all imports, updating the terms and types in scope
-    val imports = decl.imports map {
-      case im @ source.Import(path) => Context.at(im) { processDependency(path) }
+    val imports = decl.imports collect {
+      case im @ source.Import(path) =>
+        Context.at(im) { processDependency(path) }
     }
 
     // create new scope for the current module
@@ -66,7 +69,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     resolveGeneric(decl)
 
-    Context.module.exports(processedPreludes ++ imports, scope.terms.toMap, scope.types.toMap)
+    // We only want to import each dependency once.
+    val allImports = (processedPreludes ++ imports).distinct
+    Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap)
     decl
   }
 

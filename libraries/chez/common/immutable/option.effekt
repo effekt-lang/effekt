@@ -1,5 +1,7 @@
 module immutable/option
 
+import effekt
+
 type Option[A] {
   None();
   Some(value: A)

@@ -2,11 +2,11 @@ module mutable/heap
 
 extern type Ref[T]
 
-extern pure def fresh[T](init: T): Ref[T] =
+extern io def fresh[T](init: T): Ref[T] =
     "(box init)"
 
-extern pure def put[T](ref: Ref[T])(value: T): Unit =
+extern io def put[T](ref: Ref[T])(value: T): Unit =
     "(set-box! ref value)"
 
-extern pure def get[T](ref: Ref[T]): T =
+extern io def get[T](ref: Ref[T]): T =
     "(unbox ref)"

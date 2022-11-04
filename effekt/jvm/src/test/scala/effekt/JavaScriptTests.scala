@@ -62,8 +62,10 @@ object TestUtils {
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
           val out = interpretJS(f)
-          // save checkfile in source folder (e.g. examples/)
-          IO.write(checkfile, out)
+
+          // Save checkfile in source folder (e.g. examples/)
+          // We remove ansi colors to make check files human-readable.
+          IO.write(checkfile, removeAnsiColors(out))
         }
       case _ => ()
     }
@@ -72,4 +74,6 @@ object TestUtils {
   def generateCheckFiles(regenerateAll: Boolean = false): Unit = {
     generateCheckFilesIn(examplesDir, regenerateAll)
   }
+
+  def removeAnsiColors(text: String): String = text.replaceAll("\u001B\\[[;\\d]*m", "")
 }
