@@ -57,7 +57,11 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           // bring builtins into scope
           builtins.rootTerms.values.foreach {
-            case term: BlockParam => Context.bind(term, term.tpe)
+            case term: BlockParam =>
+              Context.bind(term, term.tpe)
+              Context.bind(term, CaptureSet(term.capture))
+            case term: Fun =>
+              Context.bind(term, term.toType)
             case term => Context.panic(s"Cannot bind builtin term: ${term}")
           }
 

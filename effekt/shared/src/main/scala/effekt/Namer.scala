@@ -166,7 +166,11 @@ object Namer extends Phase[Parsed, NameResolved] {
         val tps = tparams map resolve
         val vps = vparams map resolve
         val bps = bparams map resolve
-        val (tpe, eff) = resolve(ret)
+
+        val (tpe, eff) = Context scoped {
+          Context.bindBlocks(bps)
+          resolve(ret)
+        }
         BuiltinFunction(name, tps, vps, bps, tpe, eff, pure, body)
       })
     }
