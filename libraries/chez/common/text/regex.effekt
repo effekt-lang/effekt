@@ -2,6 +2,7 @@ module text/regex
 
 import immutable/option
 import immutable/cslist
+import mutable/array
 
 extern include "pregexp.scm"
 
@@ -27,3 +28,6 @@ extern pure def unsafeMatchString(reg: Regex)(str: String): String =
 
 extern pure def split(reg: Regex)(str: String): CSList[String] =
   "(pregexp-split reg str)"
+
+def split(str: String)(sep: String): Array[String] =
+  sep.regex.split(str).toArray

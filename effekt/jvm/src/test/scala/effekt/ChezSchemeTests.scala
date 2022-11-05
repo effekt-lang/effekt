@@ -9,6 +9,12 @@ import scala.language.implicitConversions
 
 abstract class ChezSchemeTests extends EffektTests {
 
+  override def included: List[File] = List(
+    examplesDir / "pos",
+    examplesDir / "casestudies",
+    examplesDir / "chez"
+  )
+
   // Test files which are to be ignored (since features are missing or known bugs exist)
   override def ignored: List[File] = List(
     examplesDir / "llvm",

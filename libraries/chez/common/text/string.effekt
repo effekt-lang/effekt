@@ -1,8 +1,6 @@
 module text/string
 
 import immutable/option
-import mutable/array
-import text/regex
 
 // def charAt(str: String)(index: Int): Option[String] =
 //     str.unsafeCharAt(index).undefinedToOption
@@ -28,6 +26,3 @@ def toInt(str: String): Option[Int] =
 // returns #f if not a number
 extern pure def unsafeToInt(str: String): Int =
   "(string->number str)"
-
-def split(str: String)(sep: String): Array[String] =
-  sep.regex.split(str).toArray

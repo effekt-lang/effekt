@@ -12,9 +12,13 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends EffektTests {
 
-  override lazy val ignored: List[File] = List(
-    examplesDir / "llvm"
+  override def included: List[File] = List(
+    examplesDir / "pos",
+    examplesDir / "neg",
+    examplesDir / "casestudies"
   )
+
+  override lazy val ignored: List[File] = List()
 
   def runTestFor(input: File, check: File, expected: String): Unit =
     test(input.getPath) {

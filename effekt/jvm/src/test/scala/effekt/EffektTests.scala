@@ -16,7 +16,7 @@ trait EffektTests extends munit.FunSuite {
   def ignored: List[File] = List()
 
   // Folders to discover and run tests in
-  def included: List[File] = List(examplesDir)
+  def included: List[File] = List()
 
   def runTestFor(input: File, check: File, expectedResult: String): Unit
 
