@@ -143,10 +143,10 @@ def render(scene: Scene, image: Buffer) = {
   def storeAt(color: Color, x: Int, y: Int): Unit = {
     val opaque = 255;
     val index = x * 4 + y * width * 4;
-    image.put(index + 0, color.red);
-    image.put(index + 1, color.green);
-    image.put(index + 2, color.blue);
-    image.put(index + 3, opaque)
+    put(image, index + 0, color.red);
+    put(image, index + 1, color.green);
+    put(image, index + 2, color.blue);
+    put(image, index + 3, opaque)
   }
 
   // now this is a real stress-test of backtrackable state

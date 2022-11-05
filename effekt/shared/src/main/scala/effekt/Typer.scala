@@ -60,7 +60,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case term: BlockParam =>
               Context.bind(term, term.tpe)
               Context.bind(term, CaptureSet(term.capture))
-            case term: Fun =>
+            case term: Callable =>
               Context.bind(term, term.toType)
             case term => Context.panic(s"Cannot bind builtin term: ${term}")
           }

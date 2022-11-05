@@ -101,36 +101,36 @@ we automatically get access to the continuation in the implementation of
 `add`, `mul` and `exp`. We thus do not have to use `shift` and `reset`.
 Otherwise the implementation closely follows the one by Wang et al.
 ```
-record NumB(value: Double, d: Ref[Double])
+record NumB(value: Double, d: HeapRef[Double])
 def backwards(in: Double) { prog: NumB => NumB / AD[NumB] }: Double = {
   // the representation of our input
   val input = NumB(in, fresh(0.0))
 
   // a helper function to update the derivative of a given number by adding v
-  def push(n: NumB, v: Double): Unit = n.d.put(n.d.get + v)
+  def push(n: NumB, v: Double): Unit = put(n.d, get(n.d) + v)
 
   try { prog(input).push(1.0) } with AD[NumB] {
     def num(v) = resume(NumB(v, fresh(0.0)))
     def add(x, y) = {
       val z = NumB(x.value + y.value, fresh(0.0))
       resume(z)
-      x.push(z.d.get);
-      y.push(z.d.get)
+      x.push(get(z.d));
+      y.push(get(z.d))
     }
     def mul(x, y) = {
       val z = NumB(x.value * y.value, fresh(0.0))
       resume(z)
-      x.push(y.value * z.d.get);
-      y.push(x.value * z.d.get)
+      x.push(y.value * get(z.d));
+      y.push(x.value * get(z.d))
     }
     def exp(x) = {
       val z = NumB(mathExp(x.value), fresh(0.0))
       resume(z)
-      x.push(mathExp(x.value) * z.d.get)
+      x.push(mathExp(x.value) * get(z.d))
     }
   }
   // the derivative of `prog` at `in` is stored in the mutable reference
-  input.d.get
+  get(input.d)
 }
 ```
 
