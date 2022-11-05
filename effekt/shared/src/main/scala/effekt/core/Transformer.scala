@@ -308,7 +308,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     sym match {
       case f: BuiltinFunction if f.purity == ExternFlag.Pure =>
-        if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
+        // if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
         PureApp(BlockVar(f), targs, vargsT)
       case f: BuiltinFunction if f.purity == ExternFlag.IO =>
         DirectApp(BlockVar(f), targs, as)

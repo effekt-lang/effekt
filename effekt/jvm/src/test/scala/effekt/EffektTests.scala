@@ -13,10 +13,10 @@ trait EffektTests extends munit.FunSuite {
   lazy val examplesDir = new File("examples")
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
-  lazy val ignored: List[File] = List()
+  def ignored: List[File] = List()
 
   // Folders to discover and run tests in
-  lazy val included: List[File] = List(examplesDir)
+  def included: List[File] = List(examplesDir)
 
   def runTestFor(input: File, check: File, expectedResult: String): Unit
 
