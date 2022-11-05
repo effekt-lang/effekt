@@ -165,12 +165,6 @@ object Namer extends Phase[Parsed, NameResolved] {
         BuiltinType(Context.nameFor(id), tps)
       })
 
-    case source.ExternEffect(id, tparams) =>
-      Context.define(id, Context scoped {
-        val tps = tparams map resolve
-        BuiltinEffect(Context.nameFor(id), tps)
-      })
-
     case source.ExternFun(pure, id, tparams, vparams, bparams, ret, body) => {
       val name = Context.freshNameFor(id)
       Context.define(id, Context scoped {
@@ -303,7 +297,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       record.fields = resolveFields(fields, record)
 
     case source.ExternType(id, tparams) => ()
-    case source.ExternEffect(id, tparams) => ()
     case source.ExternFun(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternInclude(path) => ()
 
@@ -350,10 +343,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       def extractControlEffect(e: InterfaceType): Interface = e match {
         case BlockTypeApp(e: Interface, args) => extractControlEffect(e)
         case e: Interface          => e
-        case b: BuiltinEffect =>
-          Context.abort(pretty"Cannot handle built in effects like ${b}")
-        case BlockTypeApp(b: BuiltinEffect, args) =>
-          Context.abort(pretty"Cannot handle built in effects like ${b}")
       }
 
       val eff: Interface = Context.at(interface) { extractControlEffect(resolve(interface)) }
@@ -620,8 +609,6 @@ object Namer extends Phase[Parsed, NameResolved] {
           val targs = args.map(resolve)
           val subst = (tparams zip targs).toMap
           effs.toList.map(subst.substitute)
-        case b @ BuiltinEffect(name, tparams) =>
-          List(BlockTypeApp(b, args.map(resolve)))
         case _ => List(resolve(tpe))
       }
       case source.InterfaceVar(id) => Context.resolveType(id) match {
@@ -630,7 +617,6 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got none.")
           }
           effs.toList
-        case b: BuiltinEffect => List(b)
         case _ => List(resolve(tpe))
       }
     }

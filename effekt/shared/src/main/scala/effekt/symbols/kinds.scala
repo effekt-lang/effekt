@@ -29,7 +29,6 @@ package object kinds {
   }
 
   def wellformedEffect(eff: InterfaceType)(implicit C: Context): Unit = eff match {
-    case BuiltinEffect(_, tparams) => Kind.BFun(tparams map { p => Kind.VType })
     case i: InterfaceType          => wellformed(i)
   }
 
@@ -94,8 +93,6 @@ package object kinds {
       args foreach { a => wellformed(a) }
       res
     case Interface(_, tparams, _) =>
-      Kind.BFun(tparams map { p => Kind.VType })
-    case BuiltinEffect(_, tparams) =>
       Kind.BFun(tparams map { p => Kind.VType })
   }
 

@@ -31,7 +31,6 @@ class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]
   def filterNot(p: InterfaceType => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
   def controlEffects: List[InterfaceType] = effects.controlEffects
-  def builtinEffects: List[InterfaceType] = effects.builtinEffects
 
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
@@ -98,13 +97,11 @@ private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
     vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
   case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
   case t: Interface => true
-  case b: BuiltinEffect => true
 }
 private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 
 private def isConcreteEffect(eff: InterfaceType): Boolean = eff match {
   case t: Interface => true
-  case t: BuiltinEffect => true
   case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
 }
 private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteEffect)

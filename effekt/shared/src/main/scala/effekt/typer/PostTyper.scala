@@ -218,8 +218,6 @@ object Wellformedness extends Visit[WFContext] {
     def checkEffect(eff: InterfaceType): Unit = eff match {
       case e: Interface => checkInterface(e)
       case BlockTypeApp(e: Interface, args) => checkInterface(e)
-      case b: BuiltinEffect => ()
-      case BlockTypeApp(b: BuiltinEffect, args) => ()
     }
 
     effects.toList foreach checkEffect

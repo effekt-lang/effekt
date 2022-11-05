@@ -28,10 +28,10 @@ object builtins {
   val TTop = BuiltinType(name("⊤"), Nil)
   val TBottom = BuiltinType(name("⊥"), Nil)
 
-  val IOEffect = BuiltinEffect(name("IO"), Nil)
+  val IOEffect = Interface(Name.local("IO"), Nil, Nil)
   val IOCapability = BlockParam(name("io"), IOEffect)
 
-  val ControlEffect = BuiltinEffect(name("Control"), Nil)
+  val ControlEffect = Interface(Name.local("Control"), Nil, Nil)
   val ControlCapability = BlockParam(name("control"), ControlEffect)
 
   object TState {

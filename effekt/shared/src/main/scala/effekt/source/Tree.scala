@@ -31,7 +31,6 @@ import effekt.symbols.Symbol
  *   |  |- TypeDef
  *   |  |- EffectDef
  *   |  |- ExternType
- *   |  |- ExternEffect
  *   |  |- ExternFun
  *   |  |- ExternInclude
  *   |
@@ -210,9 +209,6 @@ case class EffectDef(id: IdDef, tparams: List[Id], effs: Effects) extends Def {
 // only valid on the toplevel!
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinType
-}
-case class ExternEffect(id: IdDef, tparams: List[Id]) extends Def {
-  type symbol = symbols.BuiltinEffect
 }
 
 object ExternFlag extends Enumeration {
@@ -610,7 +606,6 @@ object Tree {
       case d: EffectDef     => d
 
       case d: ExternType    => d
-      case d: ExternEffect  => d
       case d: ExternFun     => d
       case d: ExternInclude => d
     }
@@ -762,7 +757,6 @@ object Tree {
       case d: EffectDef     => empty
 
       case d: ExternType    => empty
-      case d: ExternEffect  => empty
       case d: ExternFun     => empty
       case d: ExternInclude => empty
     }

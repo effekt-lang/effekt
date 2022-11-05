@@ -297,8 +297,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
       val (effectSymbol, targs) = tpe match {
         case BlockTypeApp(eff: Interface, args) => (eff, args)
         case eff: Interface => (eff, Nil)
-        case BlockTypeApp(b: BuiltinEffect, args) => Context.abort("Cannot implement builtin effect")
-        case b: BuiltinEffect => Context.abort("Cannot implement builtin effect")
       }
 
       // (3) check all operations are covered

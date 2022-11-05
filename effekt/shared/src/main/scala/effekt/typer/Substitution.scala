@@ -70,7 +70,6 @@ case class Substitutions(
   def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
   def substitute(t: InterfaceType): InterfaceType = t match {
     case t: Interface => t
-    case t: BuiltinEffect => t
     case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
   }
 

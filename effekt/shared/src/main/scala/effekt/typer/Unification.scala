@@ -346,7 +346,6 @@ trait TypeInstantiator { self: Unification =>
   def instantiate(t: InterfaceType)(using Instantiation): InterfaceType = t match {
     case b: Interface           => b
     case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map instantiate)
-    case b: BuiltinEffect => b
   }
 
   def instantiate(t: FunctionType)(using i: Instantiation): FunctionType = t match {

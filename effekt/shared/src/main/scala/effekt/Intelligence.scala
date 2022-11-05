@@ -105,14 +105,6 @@ trait Intelligence {
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
 
-    case f: BuiltinEffect =>
-      val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
-                   |but cannot be handled with `try { ... } with ${f.name} { ... }`. The return type
-                   |of the main function can still have unhandled builtin effects.
-                   |""".stripMargin
-
-      SymbolInfo(f, "Builtin Effect", None, Some(ex))
-
     case f: Operation =>
       val ex =
         pp"""|Effect operations, like `${f.name}` allow to express non-local control flow.

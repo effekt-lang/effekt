@@ -279,7 +279,6 @@ package object symbols {
    *      |
    *      |- [[BlockTypeApp]]
    *      |- [[Interface]]
-   *      |- [[BuiltinEffect]]
    *
    * Effects are a
    *   list of [[InterfaceType]]
@@ -307,8 +306,7 @@ package object symbols {
   //    builtins: List[InterfaceType]
   //  ) extends BlockType {
   //    def controlEffects = capabilities.map { _._1 }
-  //    def builtinEffects = builtins
-  //    def effects: Effects = Effects(controlEffects ++ builtinEffects)
+  //    def effects: Effects = Effects(controlEffects)
   //  }
 
 
@@ -325,13 +323,11 @@ package object symbols {
   /** Effects */
 
   sealed trait InterfaceType extends BlockType {
-    def builtin: Boolean
     def name: Name
   }
 
-  case class BlockTypeApp(typeConstructor: Interface | BuiltinEffect, args: List[ValueType]) extends InterfaceType {
+  case class BlockTypeApp(typeConstructor: Interface, args: List[ValueType]) extends InterfaceType {
     override def toString = s"${typeConstructor}[${args.map { _.toString }.mkString(", ")}]"
-    def builtin = typeConstructor.builtin
     def name = typeConstructor.name
   }
 
@@ -349,8 +345,6 @@ package object symbols {
   def interfaceOf(tpe: InterfaceType)(using C: ErrorReporter): Interface = tpe match {
     case BlockTypeApp(i: Interface, args) => i
     case i: Interface => i
-    case BlockTypeApp(b: BuiltinEffect, args) => C.abort(s"Required a concrete interface but got a builtin effect: ${b}")
-    case b: BuiltinEffect => C.abort(s"Required a concrete interface but got a builtin effect: ${b}")
   }
 
     /**
@@ -387,7 +381,6 @@ package object symbols {
     def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
     lazy val controlEffects: List[InterfaceType] = effects.controlEffects
-    lazy val builtinEffects: List[InterfaceType] = effects.builtinEffects
 
     def distinct: Effects = Effects(effects.distinct)
 
@@ -411,25 +404,18 @@ package object symbols {
 
   extension(effs: List[InterfaceType]) {
     // establishes the canonical ordering
-    def controlEffects: List[InterfaceType] = effs.collect {
-      case i: InterfaceType if !i.builtin => i
-    }.sortBy(canonicalOrdering)
-    def builtinEffects: List[InterfaceType] = effs.collect {
-      case i: InterfaceType if i.builtin => i
-    }
+    def controlEffects: List[InterfaceType] = effs.sortBy(canonicalOrdering)
   }
 
   /**
-   * The canonical ordering needs to be stable, but should also distinguish two types, 
+   * The canonical ordering needs to be stable, but should also distinguish two types,
    * if they are different.
-   * 
+   *
    * Bugs with the canonical ordering can lead to runtime errors as observed in ticket #108
    */
   def canonicalOrdering(i: InterfaceType): Int = i match {
     case BlockTypeApp(typeConstructor: Interface, args) => typeConstructor.id + args.map(_.hashCode()).sum
-    case BlockTypeApp(typeConstructor: BuiltinEffect, args) => typeConstructor.id + args.map(_.hashCode()).sum
     case b : Interface => b.id
-    case b : BuiltinEffect => b.id
   }
 
   /**
@@ -518,9 +504,6 @@ package object symbols {
   }
 
   case class BuiltinType(name: Name, tparams: List[TypeVar]) extends ValueType, TypeSymbol, Builtin
-
-  // Builtin effects take the role of built in block types, while BuiltinType plays the role of a builtin value type
-  case class BuiltinEffect(name: Name, tparams: List[TypeVar] = Nil) extends InterfaceType, TypeSymbol, Builtin
 
   def isBuiltin(e: Symbol): Boolean = e.builtin
 }

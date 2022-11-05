@@ -49,10 +49,6 @@ object DeclPrinter extends ParenPrettyPrinter {
     case f: BuiltinFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
-    case BuiltinEffect(name, tparams) =>
-      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
-      s"extern effect ${name}$tps"
-
     case BuiltinType(name, tparams) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       s"extern type ${name}$tps"

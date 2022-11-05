@@ -81,8 +81,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest())
 
-    case d: source.ExternEffect => rest()
-
     case d: source.ExternType => rest()
 
     case d : source.TypeDef => rest()

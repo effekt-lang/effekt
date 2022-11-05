@@ -50,7 +50,6 @@ object TypePrinter extends ParenPrettyPrinter {
 
     case BlockTypeApp(tpe, args)       => toDoc(tpe) <> typeParams(args)
     case Interface(name, tparams, ops) => name
-    case BuiltinEffect(name, tparams)  => name
   }
 
   def toDoc(t: TypeConstructor): Doc = t match {

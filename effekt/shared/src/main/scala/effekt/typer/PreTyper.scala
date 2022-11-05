@@ -163,7 +163,6 @@ class BoxUnboxInference {
     case d: EffectDef     => d
 
     case d: ExternType    => d
-    case d: ExternEffect  => d
     case d: ExternFun     => d
     case d: ExternInclude => d
   }
