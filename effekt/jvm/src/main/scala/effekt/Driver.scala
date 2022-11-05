@@ -60,18 +60,26 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     implicit val C = context
     C.setup(config)
 
-    val Compiled(main, outputFiles) = C.compileWhole(src).getOrElseAborting { return }
-
-    outputFiles.foreach {
-      case (filename, doc) =>
-        saveOutput(filename, doc.layout)
+    def compile(): Option[String] = C.compileWhole(src) map {
+      case Compiled(main, outputFiles) =>
+        outputFiles.foreach {
+          case (filename, doc) =>
+            saveOutput(filename, doc.layout)
+        }
+        main
     }
 
-    if (config.interpret()) {
-      // type check single file -- `mod` is necessary for positions in error reporting.
-      val mod = C.runFrontend(src).getOrElseAborting { return }
-      C.at(mod.decl) { C.checkMain(mod); eval(main) }
+    // type check single file -- `mod` is necessary for positions in error reporting.
+    def typecheck(): Option[Module] = C.runFrontend(src)
+
+    def run(main: String): Unit = typecheck() foreach {
+      case mod => C.at(mod.decl) { C.checkMain(mod); eval(main) }
     }
+
+    // we are in one of three exclusive modes: LSPServer, Compile, Run
+    if (config.server()) { typecheck() }
+    else if (config.interpret()) { compile() foreach run }
+    else if (config.compile()) { compile() }
   } catch {
     case FatalPhaseError(msg) => context.report(msg)
   } finally {
