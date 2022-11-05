@@ -2,16 +2,16 @@ module text/string
 
 import immutable/option
 
-// def charAt(str: String)(index: Int): Option[String] =
+// def charAt(str: String, index: Int): Option[String] =
 //     str.unsafeCharAt(index).undefinedToOption
 
 extern pure def length(str: String): Int =
   "(string-length str)"
 
-extern pure def repeat(str: String)(n: Int): String =
+extern pure def repeat(str: String, n: Int): String =
   "(letrec ([repeat (lambda (n acc) (if (<= n 0) acc (repeat (- n 1) (string-append acc str))))]) (repeat n (list->string '())))"
 
-extern pure def substring(str: String)(from: Int): String =
+extern pure def substring(str: String, from: Int): String =
   "(substring str from (string-length str))"
 
 // extern pure def trim(str: String): String =
@@ -20,7 +20,7 @@ extern pure def substring(str: String)(from: Int): String =
 def toInt(str: String): Option[Int] =
   str.unsafeToInt.undefinedToOption
 
-// extern pure def unsafeCharAt(str: String)(n: Int): String =
+// extern pure def unsafeCharAt(str: String, n: Int): String =
 //   "str[n]"
 
 // returns #f if not a number
