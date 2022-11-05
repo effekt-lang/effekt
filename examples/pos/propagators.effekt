@@ -20,7 +20,7 @@ effect Net {
   def unknown[R](): Cell[R]
   def make[R](value: R): Cell[R]
 
-  def learn[A](cell: Cell[A])(value: A): Unit
+  def learn[A](cell: Cell[A], value: A): Unit
 
   // this really needs to be Cell[A] and { A => Unit / Net } since
   // the updater needs to be run "in parallel". In particular it should
@@ -38,7 +38,7 @@ def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net, Console } =
 
 // establishes a connection between cellA and cellB
 // will run f once the value of cellA is available to update cellB
-def connect[A, B](cellA: Cell[A])(cellB: Cell[B]) { f: A => B }: Unit / { Net, Console } =
+def connect[A, B](cellA: Cell[A], cellB: Cell[B]) { f: A => B }: Unit / { Net, Console } =
   cellA.watch { a  => do learn(cellB, f(a)) }
 
 def connect[A, B, C](cellA: Cell[A], cellB: Cell[B], cellC: Cell[C]) { f: (A, B) => C }: Unit / { Net, Console } = {
@@ -46,13 +46,13 @@ def connect[A, B, C](cellA: Cell[A], cellB: Cell[B], cellC: Cell[C]) { f: (A, B)
   cellB.watch { b => do subscribe(cellA).foreach { a => do learn(cellC, f(a, b)) } }
 }
 
-def sumOf(res: Cell[Int])(arg1: Cell[Int], arg2: Cell[Int]) = {
+def sumOf(res: Cell[Int], arg1: Cell[Int], arg2: Cell[Int]) = {
   connect(arg1, arg2, res) { (a, b) => a + b }
   connect(res, arg2, arg1) { (a, b) => a - b }
   connect(res, arg1, arg2) { (a, b) => a - b }
 }
 
-def negated(that: Cell[Int])(inverse: Cell[Int]) = {
+def negated(that: Cell[Int], inverse: Cell[Int]) = {
   that.connect(inverse) { x => (0 - x) }
   inverse.connect(that) { x => (0 - x) }
 }
@@ -103,7 +103,7 @@ def propagators { net: => Unit / Net }: Unit / Console = {
       resume(fresh((None(), Nil())))
     def make[R](value) =
       resume(fresh((Some(value), Nil())))
-    def learn[A](cell)(value) = (cell.get) match {
+    def learn[A](cell, value) = (cell.get) match {
       case (None(), k) =>
         // update network with new information
         cell.put((Some(value), Nil()));

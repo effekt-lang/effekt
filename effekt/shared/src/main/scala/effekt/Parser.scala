@@ -326,15 +326,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     some(`{` ~/> blockParam <~ `}`)
 
   lazy val valueParams: P[List[ValueParam]] =
-    some(valueParamSection) ^^ { _.flatten }
-
-  lazy val valueParamsOpt: P[List[ValueParam]] =
-    some(valueParamsOptSection) ^^ { _.flatten }
-
-  lazy val valueParamSection: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
 
-  lazy val valueParamsOptSection: P[List[ValueParam]] =
+  lazy val valueParamsOpt: P[List[ValueParam]] =
     `(` ~/> manySep(valueParamOpt, `,`) <~ `)`
 
   lazy val valueTypeAnnotation : P[ValueType] =

@@ -51,7 +51,7 @@ def check[R](dq: Dequeue[R]): Dequeue[R] = dq match {
         }
 }
 
-def pushFront[R](dq: Dequeue[R])(el: R): Dequeue[R] = dq match {
+def pushFront[R](dq: Dequeue[R], el: R): Dequeue[R] = dq match {
     case Dequeue(f, fs, r, rs) => Dequeue(Cons(el, f), fs + 1, r, rs).check
 }
 
@@ -64,7 +64,7 @@ def popFront[R](dq: Dequeue[R]): Option[(R, Dequeue[R])] = dq match {
         Some((x, Dequeue(rest, fs - 1, r, rs).check))
 }
 
-def pushBack[R](dq: Dequeue[R])(el: R): Dequeue[R] = dq match {
+def pushBack[R](dq: Dequeue[R], el: R): Dequeue[R] = dq match {
     case Dequeue(f, fs, r, rs) => Dequeue(f, fs, Cons(el, r), rs + 1).check
 }
 

@@ -8,4 +8,4 @@ extern io def cont[A, B] { r: A => B / {} }: Cont[A, B] = "r"
 
 // This is unsafe if the continuation left the scope of the
 // capabilities it closed over
-extern control def apply[A, B](k: Cont[A, B])(a: A): B / {} = "k(a)"
+extern control def apply[A, B](k: Cont[A, B], a: A): B / {} = "k(a)"
