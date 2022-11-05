@@ -84,14 +84,14 @@ class ReplTests extends munit.FunSuite {
          |Imported Types
          |==============
          |type Color {
-         |  def Red: Color / {}
-         |  def Green: Color / {}
-         |  def Blue: Color / {}
+         |  def Red(): Color / {}
+         |  def Green(): Color / {}
+         |  def Blue(): Color / {}
          |}
          |
          |Imported Functions
          |==================
-         |def main: Unit / {}
+         |def main(): Unit / {}
          |""".stripMargin
 
     assertNoDiff(runRepl("import examples/pos/builtins"), expected)

@@ -73,11 +73,13 @@ object DeclPrinter extends ParenPrettyPrinter {
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
     val bps = f.bparams.map { b => pp"{ ${b.name}: ${b.tpe} }" }.mkString("")
 
+    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
+
     val returnType = for {
       tpe <- result
       eff <- effects
     } yield pp": $tpe / $eff"
 
-    s"$kw ${f.name}$tps$vps$bps${returnType.getOrElse("")}"
+    s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
   }
 }
