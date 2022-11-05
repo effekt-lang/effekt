@@ -1,5 +1,5 @@
 
-def factorial(n: Int): Int / Console = {
+def factorial(n: Int): Int = {
   def go(n: Int, a: Int): Int = {
     if(n < 1) {
       a
@@ -11,4 +11,3 @@ def factorial(n: Int): Int / Console = {
 }
 
 def main() = println(factorial(10))
-

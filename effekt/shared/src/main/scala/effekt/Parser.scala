@@ -249,7 +249,6 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | dataDef
     | recordDef
     | externType
-    | externEffect
     | externFun
     | externInclude
     | failure("Expected a definition")
@@ -280,9 +279,6 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
-
-  lazy val externEffect: P[Def] =
-    `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect.apply
 
   lazy val externFun: P[Def] =
     `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {

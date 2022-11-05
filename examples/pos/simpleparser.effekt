@@ -18,7 +18,7 @@ def handledExample() = try { perhapsAdd() } with Fail[A] { (msg) => println(msg)
 
 effect Next(): String
 
-def print3(): Unit / { Next, Console} = {
+def print3(): Unit / { Next } = {
   println(do Next());
   println(do Next());
   println(do Next())

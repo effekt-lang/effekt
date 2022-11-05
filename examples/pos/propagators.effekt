@@ -31,17 +31,17 @@ effect Net {
   def abort(): Unit
 }
 
-def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net, Console } =
+def watch[A](cell: Cell[A]) { f: A => Unit }: Unit / { Net } =
   do subscribe(cell).foreach { a =>
     println("received a " ++ a.show);
     f(a); do abort() } // this abort seems to abort also other subscribers?
 
 // establishes a connection between cellA and cellB
 // will run f once the value of cellA is available to update cellB
-def connect[A, B](cellA: Cell[A], cellB: Cell[B]) { f: A => B }: Unit / { Net, Console } =
+def connect[A, B](cellA: Cell[A], cellB: Cell[B]) { f: A => B }: Unit / { Net } =
   cellA.watch { a  => do learn(cellB, f(a)) }
 
-def connect[A, B, C](cellA: Cell[A], cellB: Cell[B], cellC: Cell[C]) { f: (A, B) => C }: Unit / { Net, Console } = {
+def connect[A, B, C](cellA: Cell[A], cellB: Cell[B], cellC: Cell[C]) { f: (A, B) => C }: Unit / { Net } = {
   cellA.watch { a => do subscribe(cellB).foreach { b => do learn(cellC, f(a, b)) } }
   cellB.watch { b => do subscribe(cellA).foreach { a => do learn(cellC, f(a, b)) } }
 }
@@ -78,7 +78,7 @@ def example() = {
 }
 
 // cells must not leave the propagator!
-def propagators { net: => Unit / Net }: Unit / Console = {
+def propagators { net: => Unit / Net }: Unit = {
 
   val noop = cont[Unit, Unit] { _ => () }
 

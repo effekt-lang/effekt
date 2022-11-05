@@ -1,7 +1,5 @@
 module effekt
 
-extern effect Console
-
 extern include "../common/effekt_primitives.ss"
 extern include "effekt.ss"
 extern include "../common/effekt_matching.ss"
@@ -18,7 +16,7 @@ extern pure def infixConcat(s1: String, s2: String): String =
 extern pure def show[R](value: R): String =
   "(show_impl value)"
 
-extern io def println[R](r: R): Unit / Console =
+extern io def println[R](r: R): Unit =
   "(println_impl r)"
 
 extern io def error[R](msg: String): R =
@@ -169,7 +167,7 @@ def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception, msg) = panic(msg) }
 
 // reports exceptions of (static) type E to the console
-def report[E] { prog: => Unit / Exception[E] }: Unit / Console =
+def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception, msg) = println(msg) }
 
 // ignores exceptions of (static) type E
@@ -181,5 +179,5 @@ def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
 // Benchmarking
 // ============
 // should only be used with pure blocks
-extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit / Console =
+extern control def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit =
   "(delayed (display (measure (lambda () (run ((block here)))) warmup iterations)))"
