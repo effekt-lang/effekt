@@ -60,6 +60,10 @@ object DeclPrinter extends ParenPrettyPrinter {
     case c: Fun =>
       val tpe = context.functionTypeOption(c)
       format("def", c, tpe.map { _.result }, tpe.map { _.effects })
+
+    case d: DefBinder =>
+      val tpe = context.blockTypeOption(d).getOrElse { d.tpe.get }
+      pp"def ${ d.name }: ${ tpe }"
   }
 
   def format(kw: String, f: Fun, result: Option[ValueType], effects: Option[Effects]): Doc = {

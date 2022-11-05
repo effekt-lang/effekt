@@ -224,7 +224,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
           case Some(v: ValueSymbol) =>
             Some(context.valueTypeOf(v))
           case Some(b: BlockSymbol) =>
-            Some(context.functionTypeOf(b))
+            Some(context.blockTypeOf(b))
           case t =>
             None
         }) map { tpe =>

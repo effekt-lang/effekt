@@ -63,6 +63,19 @@ class ReplTests extends munit.FunSuite {
     assertNoDiff(runRepl(in), out)
   }
 
+  test("Regression: toplevel block definitions") {
+    val in =
+      """|interface Foo {}
+         |def f = new Foo {}
+         |""".stripMargin
+
+    val out =
+      """|f: Foo
+         |""".stripMargin
+
+    assertNoDiff(runRepl(in), out)
+  }
+
   test("Imports") {
 
     val expected =
