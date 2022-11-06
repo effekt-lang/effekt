@@ -327,7 +327,7 @@ trait TypeInstantiator { self: Unification =>
 
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {
-    case ValueTypeRef(x: TypeVar) =>
+    case ValueTypeRef(x) =>
       valueInstantiations.getOrElse(x, t)
     case ValueTypeApp(t, args) =>
       ValueTypeApp(t, args.map { instantiate })

@@ -126,7 +126,7 @@ object Wellformedness extends Visit[WFContext] {
       scoped { query(body) }
   }
 
-  override def defn(using Context, WFContext) = {
+  override def defn(using C: Context, WF: WFContext) = {
     /**
      * For functions we check that the self region does not leave as part of the return type.
      */
@@ -146,8 +146,7 @@ object Wellformedness extends Visit[WFContext] {
      * Interface definitions bring an effect in scope that can be handled
      */
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      val effectDecl = d.symbol
-      withEffect(effectDecl)
+      WF.addEffect(d.symbol)
   }
 
   def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, WFContext): Unit = {
@@ -215,22 +214,14 @@ object Wellformedness extends Visit[WFContext] {
     visitor(t)
   }
 
-  def effectsInScope(using ctx: WFContext) = ctx.effectsInScope
-
-  def withEffect(e: Interface)(using ctx: WFContext): Unit =
-    ctx.addEffect(e)
-
   // TODO extend check to also check in value types
   //   (now that we have first class functions, they could mention effects).
-  def wellscoped(effects: Effects)(using Context, WFContext): Unit = {
-    def checkInterface(eff: Interface): Unit =
-      if (!(effectsInScope contains eff)) Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
-
-    def checkEffect(eff: InterfaceType): Unit = eff match {
-      case InterfaceType(e, args) => checkInterface(e)
-    }
-
-    effects.toList foreach checkEffect
+  def wellscoped(effects: Effects)(using C: Context, WF: WFContext): Unit = {
+//    def checkEffect(eff: InterfaceType): Unit =
+//      if (!(WF.effectsInScope contains eff.typeConstructor))
+//        Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
+//
+//    effects.toList foreach checkEffect
   }
 
   def extractInterfaces(e: List[InterfaceType]): List[Interface] = e.map(_.typeConstructor).distinct

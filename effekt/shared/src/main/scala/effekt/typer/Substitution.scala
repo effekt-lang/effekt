@@ -58,7 +58,7 @@ case class Substitutions(
   }
 
   def substitute(t: ValueType): ValueType = t match {
-    case ValueTypeRef(x: TypeVar) =>
+    case ValueTypeRef(x) =>
       values.getOrElse(x, t)
     case ValueTypeApp(t, args) =>
       ValueTypeApp(t, args.map { substitute })

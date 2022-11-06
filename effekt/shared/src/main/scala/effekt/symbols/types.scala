@@ -88,7 +88,6 @@ case class FunctionType(
 /** Interfaces */
 
 case class InterfaceType(typeConstructor: Interface, args: List[ValueType]) extends BlockType {
-  override def toString = s"${typeConstructor}[${args.map { _.toString }.mkString(", ")}]"
   def name = typeConstructor.name
 }
 

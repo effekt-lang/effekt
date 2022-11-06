@@ -26,6 +26,7 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: ValueType): Doc = tpe match {
     case BoxedType(tpe, capture)    => toDoc(tpe) <+> "at" <+> toDoc(capture)
+    case ValueTypeApp(tpe, Nil)     => toDoc(tpe)
     case ValueTypeApp(tpe, args)    => toDoc(tpe) <> brackets(hsep(args.map(toDoc), comma))
     case ValueTypeRef(x)            => toDoc(x)
   }
@@ -50,6 +51,7 @@ object TypePrinter extends ParenPrettyPrinter {
       val eff = if (effects.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
       tps <> ps <+> "=>" <+> ret <> eff
 
+    case InterfaceType(tpe, Nil)  => toDoc(tpe)
     case InterfaceType(tpe, args) => toDoc(tpe) <> typeParams(args)
   }
 
