@@ -58,9 +58,9 @@ case class Module(
   lazy val dependencies: List[Module] = imports.flatMap { im => im.dependencies :+ im }.distinct
 
   // toplevel declared effects
-  def effects: Effects = Effects(types.values.collect {
-    case e: InterfaceType => e
-  })
+  def effects: List[Interface] = types.values.toList.collect {
+    case e: Interface => e
+  }
 
   /**
    * It is actually possible, that exports is invoked on a single module multiple times:

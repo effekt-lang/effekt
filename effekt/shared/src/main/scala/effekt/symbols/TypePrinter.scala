@@ -26,8 +26,8 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: ValueType): Doc = tpe match {
     case BoxedType(tpe, capture)    => toDoc(tpe) <+> "at" <+> toDoc(capture)
-    case ValueTypeApp(tpe, Nil)     => toDoc(tpe)
-    case ValueTypeApp(tpe, args)    => toDoc(tpe) <> brackets(hsep(args.map(toDoc), comma))
+    case ValueTypeApp(tpe, Nil)     => tpe.name
+    case ValueTypeApp(tpe, args)    => tpe.name <> brackets(hsep(args.map(toDoc), comma))
     case ValueTypeRef(x)            => toDoc(x)
   }
 
@@ -63,7 +63,9 @@ object TypePrinter extends ParenPrettyPrinter {
     case BuiltinType(name, tparams) => name
   }
 
-  def toDoc(eff: Effects): Doc = if (eff.isEmpty) "{}" else braces(space <> hsep(eff.effects.map(toDoc), comma) <> space)
+  def toDoc(eff: Effects): Doc =
+    if (eff.isEmpty) "{}" else
+    braces(space <> hsep(eff.effects.map(toDoc), comma) <> space)
 
   def toDoc(c: Captures): Doc = c match {
     case CaptureSet(captures)  => braces { hsep(captures.toList.map(toDoc), comma) }

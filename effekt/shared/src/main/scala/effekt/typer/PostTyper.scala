@@ -39,11 +39,11 @@ object Wellformedness extends Visit[WFContext] {
 
     // Effects that are lexically in scope at the top level
     // We use dependencies instead of imports, since types might mention effects of transitive imports.
-    val toplevelEffects = mod.dependencies.foldLeft(mod.effects.toList) { case (effs, mod) =>
-      effs ++ mod.effects.toList
+    val toplevelEffects = mod.dependencies.foldLeft(mod.effects) { case (effs, mod) =>
+      effs ++ mod.effects
     }
 
-    given WFContext = WFContext(extractInterfaces(toplevelEffects))
+    given WFContext = WFContext(toplevelEffects.distinct)
 
     query(tree)
   }
@@ -217,11 +217,11 @@ object Wellformedness extends Visit[WFContext] {
   // TODO extend check to also check in value types
   //   (now that we have first class functions, they could mention effects).
   def wellscoped(effects: Effects)(using C: Context, WF: WFContext): Unit = {
-//    def checkEffect(eff: InterfaceType): Unit =
-//      if (!(WF.effectsInScope contains eff.typeConstructor))
-//        Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
-//
-//    effects.toList foreach checkEffect
+    def checkEffect(eff: InterfaceType): Unit =
+      if (!(WF.effectsInScope contains eff.typeConstructor))
+        Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
+
+    effects.toList foreach checkEffect
   }
 
   def extractInterfaces(e: List[InterfaceType]): List[Interface] = e.map(_.typeConstructor).distinct
