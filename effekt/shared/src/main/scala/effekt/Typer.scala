@@ -246,7 +246,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
         // TODO only issue warning if they are not bound to capabilities in source
         if (unusedEffects.nonEmpty)
-          Context.warning("Handling effects that are not used: " + unusedEffects)
+          Context.warning(pp"Handling effects that are not used: ${unusedEffects}")
 
         // The captures of the handler continue flowing into the outer scope
         usingCapture(continuationCapt)

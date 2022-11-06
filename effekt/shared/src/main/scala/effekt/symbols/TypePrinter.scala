@@ -2,6 +2,7 @@ package effekt
 package symbols
 
 import effekt.symbols.builtins.*
+import effekt.typer.ConcreteEffects
 import kiama.output.ParenPrettyPrinter
 
 import scala.language.implicitConversions
@@ -91,6 +92,7 @@ implicit class ErrorMessageInterpolator(private val sc: StringContext) extends A
     case t: Capture      => TypePrinter.show(t)
     case t: Captures     => TypePrinter.show(t)
     case t: Effects      => TypePrinter.show(t)
+    case t: ConcreteEffects => TypePrinter.show(t.toEffects)
     case other           => other.toString
   }: _*)
 }
