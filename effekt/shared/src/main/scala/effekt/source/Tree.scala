@@ -282,7 +282,7 @@ case class Select(receiver: Term, id: IdRef) extends Term, Reference {
  * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
  * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
  */
-case class Do(effect: Option[InterfaceType], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference {
+case class Do(effect: Option[BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference {
   type symbol = symbols.Operation
 }
 
@@ -335,7 +335,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: InterfaceType, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: BlockTypeRef, clauses: List[OpClause]) extends Reference {
   def id = interface.id
   type symbol = symbols.Interface
 }
@@ -415,7 +415,7 @@ sealed trait Resolvable extends Tree {
  *
  * TODO generalize to blocks that can take blocks
  */
-sealed trait Type extends Tree with Resolvable {
+sealed trait Type extends Tree, Resolvable {
   type resolved <: symbols.Type
   def resolve(implicit C: Context) = C.resolvedType(this)
 }
@@ -428,7 +428,7 @@ sealed trait ValueType extends Type {
 }
 
 /**
- * Trees that represent inferred or synthesized types
+ * Trees that represent inferred or synthesized types (not present in the source)
  */
 case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
 
@@ -437,11 +437,12 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
  */
 case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
 
-// Used for both binding and bound vars
-case class TypeVar(id: IdRef) extends ValueType with Reference {
+// Used for bindings
+case class TypeVar(id: IdDef) extends ValueType, Definition {
   type symbol = symbols.Symbol with symbols.ValueType
 }
-case class ValueTypeApp(id: IdRef, args: List[ValueType]) extends ValueType with Reference {
+// Bound occurrences (args can be empty)
+case class ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference {
   // can be applied to type aliases or data types
   type symbol = symbols.TypeSymbol
 }
@@ -451,7 +452,9 @@ case class ValueTypeApp(id: IdRef, args: List[ValueType]) extends ValueType with
  */
 sealed trait BlockType extends Type
 
-// not userdefinable, only for inferred type arguments
+/**
+ * Trees that represent inferred or synthesized types (not present in the source)
+ */
 case class BlockTypeTree(eff: symbols.BlockType) extends BlockType {
   type resolved = symbols.BlockType
 }
@@ -460,30 +463,23 @@ case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Ef
   type resolved = symbols.FunctionType
 }
 
-sealed trait InterfaceType extends BlockType {
-  def id: IdRef
-  type resolved <: symbols.InterfaceType
-}
-
-case class BlockTypeApp(id: IdRef, args: List[ValueType]) extends InterfaceType with Reference {
+case class BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference {
   type symbol = symbols.TypeSymbol
-}
-
-/**
- * **Reference** to an interface type (like an effect)
- */
-case class InterfaceVar(id: IdRef) extends InterfaceType with Resolvable {
-  type resolved = symbols.Interface
+  type resolved <: symbols.InterfaceType
 }
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
 
-case class Effects(effs: List[InterfaceType]) extends Tree
+/**
+ * Represents an annotated set of effects. Before name resolution, we cannot know
+ * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
+ */
+case class Effects(effs: List[BlockTypeRef]) extends Tree
 object Effects {
   val Pure: Effects = Effects()
-  def apply(effs: InterfaceType*): Effects = Effects(effs.toSet)
-  def apply(effs: Set[InterfaceType]): Effects = Effects(effs.toList)
+  def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
+  def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
 }
 
 case class CaptureSet(captures: List[IdRef]) extends Resolvable {

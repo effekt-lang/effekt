@@ -65,7 +65,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
-      val tpe = getStateType(sym)
+      val tpe = TState.extractType(Context.blockTypeOf(sym))
       insertBindings {
         val b = Context.bind(tpe, transform(binding))
         State(sym, b, sym.region, rest())
@@ -155,10 +155,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case _ =>
       transformUnbox(tree)
   }
-  def getStateType(v: VarBinder)(implicit C: Context): ValueType = C.blockTypeOf(v) match {
-    case BlockTypeApp(TState.interface, List(tpe)) => tpe
-    case _ => C.panic("Not a mutable variable")
-  }
 
   def transformAsPure(tree: source.Term)(using Context): Pure = transformAsExpr(tree) match {
     case p: Pure => p
@@ -244,7 +240,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Continuations cannot be regions")
       }
       val cap = core.BlockParam(sym, tpe)
-      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), transform(body))))
+      Context.bind(Context.inferredTypeOf(tree), core.Region(BlockLit(List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)

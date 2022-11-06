@@ -195,7 +195,7 @@ class Constraints(
     }
 
     y match {
-      case y: UnificationVar => connectNodes(getNode(x), getNode(y))
+      case ValueTypeRef(y: UnificationVar) => connectNodes(getNode(x), getNode(y))
       case tpe => learnType(getNode(x), tpe)
     }
   }

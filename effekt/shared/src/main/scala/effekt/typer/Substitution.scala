@@ -58,19 +58,17 @@ case class Substitutions(
   }
 
   def substitute(t: ValueType): ValueType = t match {
-    case x: TypeVar =>
-      values.getOrElse(x, x)
+    case ValueTypeRef(x: TypeVar) =>
+      values.getOrElse(x, t)
     case ValueTypeApp(t, args) =>
       ValueTypeApp(t, args.map { substitute })
     case BoxedType(tpe, capt) =>
       BoxedType(substitute(tpe), substitute(capt))
-    case other => other
   }
 
   def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
   def substitute(t: InterfaceType): InterfaceType = t match {
-    case t: Interface => t
-    case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
+    case InterfaceType(cons, args) => InterfaceType(cons, args.map(substitute))
   }
 
   def substitute(t: BlockType): BlockType = t match {

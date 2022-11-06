@@ -26,11 +26,13 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: ValueType): Doc = tpe match {
     case BoxedType(tpe, capture)    => toDoc(tpe) <+> "at" <+> toDoc(capture)
-    case typeVar: UnificationVar    => typeVar.toString
-    case typeVar: TypeVar           => typeVar.name
     case ValueTypeApp(tpe, args)    => toDoc(tpe) <> brackets(hsep(args.map(toDoc), comma))
-    case c: TypeConstructor         => c.name
-    case BuiltinType(name, tparams) => name
+    case ValueTypeRef(x)            => toDoc(x)
+  }
+
+  def toDoc(tpe: TypeVar): Doc = tpe match {
+    case typeVar: UnificationVar => typeVar.toString
+    case typeVar: TypeVar => typeVar.name
   }
 
   def toDoc(tpe: BlockType): Doc = tpe match {
@@ -48,13 +50,15 @@ object TypePrinter extends ParenPrettyPrinter {
       val eff = if (effects.isEmpty) emptyDoc else space <> "/" <+> toDoc(effects)
       tps <> ps <+> "=>" <+> ret <> eff
 
-    case BlockTypeApp(tpe, args)       => toDoc(tpe) <> typeParams(args)
-    case Interface(name, tparams, ops) => name
+    case InterfaceType(tpe, args) => toDoc(tpe) <> typeParams(args)
   }
+
+  def toDoc(interface: Interface): Doc = interface.name
 
   def toDoc(t: TypeConstructor): Doc = t match {
     case DataType(name, tparams, variants)  => name <> typeParams(tparams)
     case Record(name, tparams, tpe, fields) => name <> typeParams(tparams)
+    case BuiltinType(name, tparams) => name
   }
 
   def toDoc(eff: Effects): Doc = if (eff.isEmpty) "{}" else braces(space <> hsep(eff.effects.map(toDoc), comma) <> space)
@@ -68,7 +72,10 @@ object TypePrinter extends ParenPrettyPrinter {
 
   implicit def toDoc(name: Name): Doc = name.name
 
-  def typeParams(tparams: List[ValueType]): Doc = brackets(hsep(tparams.map(toDoc), comma))
+  def typeParams(tparams: List[ValueType | TypeVar]): Doc = brackets(hsep(tparams.map {
+    case tpe: ValueType => toDoc(tpe)
+    case tpe: TypeVar => toDoc(tpe)
+  }, comma))
 
 }
 

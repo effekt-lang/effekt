@@ -106,11 +106,12 @@ object Wellformedness extends Visit[WFContext] {
 
       scoped { query(body) }
 
-    case tree @ source.Match(scrutinee, clauses) =>
+    case tree @ source.Match(scrutinee, clauses) => Context.at(tree) {
       val tpe = Context.inferredTypeOf(scrutinee)
-      Context.at(tree) { checkExhaustivity(tpe, clauses.map { _.pattern }) }
+      checkExhaustivity(tpe, clauses.map { _.pattern })
       query(scrutinee)
       clauses foreach { cl => scoped { query(cl) }}
+    }
 
     case tree @ source.BlockLiteral(tps, vps, bps, body) =>
       val selfRegion = Context.getSelfRegion(tree)
@@ -149,11 +150,17 @@ object Wellformedness extends Visit[WFContext] {
       withEffect(effectDecl)
   }
 
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, WFContext): Unit = sc match {
+    case BoxedType(tpe, capture) => Context.error(pp"Cannot match on boxed type ${ tpe }.")
+    case ValueTypeRef(tvar) => Context.error(pp"Cannot match on type variable ${ tvar }.")
+    case ValueTypeApp(constructor, args) => checkExhaustivity(constructor, cls)
+  }
+
   /**
    * This is a quick and dirty implementation of coverage checking. Both performance, and error reporting
    * can be improved a lot.
    */
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, WFContext): Unit = {
+  def checkExhaustivity(sc: TypeConstructor, cls: List[MatchPattern])(using Context, WFContext): Unit = {
     import source.{ MatchPattern, AnyPattern, IgnorePattern, TagPattern }
 
     val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
@@ -162,12 +169,12 @@ object Wellformedness extends Visit[WFContext] {
       return ;
 
     sc match {
-      case TypeConstructor(t: DataType) =>
+      case t: DataType =>
         t.variants.foreach { variant =>
           checkExhaustivity(variant, cls)
         }
 
-      case TypeConstructor(t: Record) =>
+      case t: Record =>
         val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
           case p if p.definition == t => Left(p.patterns)
           case p => Right(p)
@@ -180,16 +187,11 @@ object Wellformedness extends Visit[WFContext] {
         (t.fields.map { f => f.tpe } zip related.transpose) foreach {
           case (t, ps) => checkExhaustivity(t, ps)
         }
-      case other =>
+
+      // it is not possible to match on builtins
+      case b: Builtin =>
         ()
     }
-  }
-
-  object TypeConstructor {
-    def unapply(tpe: ValueType): Option[TypeConstructor] = tpe match
-      case ValueTypeApp(TypeConstructor(tpe), args) => Some(tpe)
-      case constructor: TypeConstructor => Some(constructor)
-      case _ => None
   }
 
   override def scoped(action: => Unit)(using C: Context, ctx: WFContext): Unit = {
@@ -216,17 +218,13 @@ object Wellformedness extends Visit[WFContext] {
       if (!(effectsInScope contains eff)) Context.abort(pp"Effect ${eff} leaves its defining lexical scope as part of the inferred type.")
 
     def checkEffect(eff: InterfaceType): Unit = eff match {
-      case e: Interface => checkInterface(e)
-      case BlockTypeApp(e: Interface, args) => checkInterface(e)
+      case InterfaceType(e, args) => checkInterface(e)
     }
 
     effects.toList foreach checkEffect
   }
 
-  def extractInterfaces(e: List[InterfaceType]): List[Interface] = e.collect {
-    case i: Interface => i
-    case BlockTypeApp(i: Interface, _) => i
-  }.distinct
+  def extractInterfaces(e: List[InterfaceType]): List[Interface] = e.map(_.typeConstructor).distinct
 
   // Can only compute free capture on concrete sets
   def freeCapture(o: Any): Set[Capture] = o match {

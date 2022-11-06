@@ -268,17 +268,7 @@ object Transformer {
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.Record), List(), args) =>
       val variable = Variable(freshName("x"), transform(blockName.tpe));
-      val tag = blockName.tpe match {
-        case symbols.DataType(name, Nil, variants) => variants.indexOf(blockName)
-        // TODO
-        case symbols.DataType(name, tparams, variants) => Context.abort("not yet supported: (data) type polymorphism")
-
-        case symbols.Record(name, Nil, tpe, fields) => builtins.SingletonRecord
-        // TODO
-        case symbols.Record(name, tparams, tpe, fields) => Context.abort("not yet supported: record polymorphism")
-
-        case symbol => Context.abort(s"application to an unknown symbol: $symbol")
-      }
+      val tag = getTagFor(blockName)
 
       transform(args).flatMap { values =>
         Binding { k =>
@@ -305,6 +295,18 @@ object Transformer {
     case _ =>
       Context.abort(s"Unsupported expression: $expr")
   }
+
+  def getTagFor(record: symbols.Record)(using Context): Int = record.tpe match {
+      case symbols.ValueTypeApp(symbols.DataType(name, Nil, variants), _) => variants.indexOf(record)
+      // TODO
+      case symbols.ValueTypeApp(symbols.DataType(name, tparams, variants), _) => Context.abort("not yet supported: (data) type polymorphism")
+
+      case symbols.ValueTypeApp(symbols.Record(name, Nil, tpe, fields), _) => builtins.SingletonRecord
+      // TODO
+      case symbols.ValueTypeApp(symbols.Record(name, tparams, tpe, fields), _) => Context.abort("not yet supported: record polymorphism")
+
+      case symbol => Context.abort(s"application to an unknown symbol: $symbol")
+    }
 
   def transform(args: List[lifted.Argument])(using BlocksParamsContext, Context): Binding[List[Variable]] =
     args match {
@@ -352,11 +354,9 @@ object Transformer {
 
     case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative("<function>")
 
-    case symbols.Interface(name, List(), _) => Negative(name.name)
+    case symbols.InterfaceType(interface, List()) => Negative(interface.name.name)
 
-    case symbols.DataType(name, List(), _) => Positive(name.name)
-
-    case symbols.Record(name, List(), _, _) => Positive(name.name)
+    case symbols.ValueTypeApp(typeConstructor, List()) => Positive(typeConstructor.name.name)
 
     case _ =>
       Context.abort(s"unsupported type: $tpe (class = ${tpe.getClass})")

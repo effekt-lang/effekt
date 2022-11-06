@@ -32,6 +32,7 @@ trait TypeUnifier {
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity) match {
     case (t, s, _) if t == s => ()
 
+
     case (_, TTop, Covariant) => ()
     case (TBottom, _, Covariant) => ()
 
@@ -50,7 +51,7 @@ trait TypeUnifier {
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
 
-      unifyValueTypes(t1, t2, ErrorContext.TypeConstructor(ctx))
+      unifyTypeConstructors(t1, t2, ErrorContext.TypeConstructor(ctx))
 
       if (args1.size != args2.size)
         abort(pp"Argument count does not match $t1 vs. $t2", ctx) // TODO add to context
@@ -66,6 +67,9 @@ trait TypeUnifier {
       error(t, s, ctx)
   }
 
+  def unifyTypeConstructors(tpe1: TypeConstructor, tpe2: TypeConstructor, ctx: ErrorContext): Unit =
+    if (tpe1 != tpe2) error(ValueTypeApp(tpe1, Nil), ValueTypeApp(tpe2, Nil), ctx)
+
   def unifyBlockTypes(tpe1: BlockType, tpe2: BlockType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
     case (t: FunctionType, s: FunctionType) => unifyFunctionTypes(t, s, ctx)
     case (t: InterfaceType, s: InterfaceType) => unifyInterfaceTypes(t, s, ctx)
@@ -73,20 +77,14 @@ trait TypeUnifier {
   }
 
   def unifyInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType, ctx: ErrorContext): Unit = (tpe1, tpe2) match {
-    case (t1: Interface, t2: Interface) => if (t1 != t2) error(t1, t2, ctx)
     // for now block type constructors are invariant
-    case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
-      unifyInterfaceTypes(c1, c2, ErrorContext.TypeConstructor(ctx))
+    case (InterfaceType(c1, targs1), InterfaceType(c2, targs2)) =>
+      unifyInterface(c1, c2, ErrorContext.TypeConstructor(ctx))
       (targs1 zip targs2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
-    case _ => error(pp"Kind mismatch between ${tpe1} and ${tpe2}", ctx)
   }
 
-  def unifyEffect(eff1: InterfaceType, eff2: InterfaceType, ctx: ErrorContext): Unit = (eff1, eff2) match {
-    case (e1, e2) if e1 == e2 => ()
-    case (BlockTypeApp(cons1, args1), BlockTypeApp(cons2, args2)) if cons1 == cons2 =>
-      (args1 zip args2) foreach { case (t1, t2) => unifyValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
-    case _ => error(eff1, eff2, ctx)
-  }
+  def unifyInterface(tpe1: Interface, tpe2: Interface, ctx: ErrorContext): Unit =
+    if (tpe1 != tpe2) error(InterfaceType(tpe1, Nil), InterfaceType(tpe2, Nil), ctx)
 
   def unifyEffects(eff1: Effects, eff2: Effects, ctx: ErrorContext): Unit =
     if (eff1.toList.toSet != eff2.toList.toSet) error(pp"${eff2} is not equal to ${eff1}", ctx)
@@ -108,7 +106,9 @@ trait TypeUnifier {
       if (cparams1.size != cparams2.size)
         abort(pp"Capture parameter count does not match $f1 vs. $f2", ctx)
 
-      val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+      val targs1 = tparams1.map(ValueTypeRef.apply)
+
+      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)
@@ -185,16 +185,16 @@ trait TypeMerger extends TypeUnifier {
   }
 
   def mergeInterfaceTypes(tpe1: InterfaceType, tpe2: InterfaceType, ctx: ErrorContext): InterfaceType = (tpe1, tpe2) match {
-    case (t1: Interface, t2: Interface) =>
-      if (t1 != t2) abort(pp"The two types ${t1} and ${t2} are not compatible", ctx)
-      else t1
     // for now block type constructors are invariant
-    case (BlockTypeApp(c1, targs1), BlockTypeApp(c2, targs2)) =>
-      unifyInterfaceTypes(c1, c2, ErrorContext.TypeConstructor(ctx))
+    case (InterfaceType(c1, targs1), InterfaceType(c2, targs2)) =>
+      val mergedConstructor = mergeInterfaces(c1, c2, ErrorContext.TypeConstructor(ctx))
       val mergedArgs = (targs1 zip targs2) map { case (t1, t2) => mergeValueTypes(t1, t2, ErrorContext.TypeConstructorArgument(ctx)) }
-      BlockTypeApp(c1, mergedArgs)
-    case _ => abort(pp"Kind mismatch between ${tpe1} and ${tpe2}", ctx)
+      InterfaceType(mergedConstructor, mergedArgs)
   }
+
+  def mergeInterfaces(tpe1: Interface, tpe2: Interface, ctx: ErrorContext): Interface =
+    if (tpe1 != tpe2) abort(pp"The two types ${ tpe1 } and ${ tpe2 } are not compatible", ctx)
+    else tpe1
 
   def mergeFunctionTypes(tpe1: FunctionType, tpe2: FunctionType, ctx: ErrorContext): FunctionType = (tpe1, tpe2) match {
     case (
@@ -215,7 +215,9 @@ trait TypeMerger extends TypeUnifier {
         abort(pp"Capture parameter count does not match $f1 vs. $f2", ctx)
 
       // TODO potentially share code with unifyFunctionTypes and instantiate
-      val subst = Substitutions(tparams2 zip tparams1, cparams2 zip cparams1.map(c => CaptureSet(c)))
+
+      val targs1 = tparams1.map(ValueTypeRef.apply)
+      val subst = Substitutions(tparams2 zip targs1, cparams2 zip cparams1.map(c => CaptureSet(c)))
       val substVParams2 = vparams2 map subst.substitute
       val substBParams2 = bparams2 map subst.substitute
       val substRet2 = subst.substitute(ret2)

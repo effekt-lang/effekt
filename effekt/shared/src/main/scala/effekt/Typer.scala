@@ -178,7 +178,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
+        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected, None)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
@@ -291,13 +291,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       var handlerEffects: ConcreteEffects = Pure
 
-      val tpe = interface.resolve
-
       // Extract interface and type arguments from annotated effect
-      val (effectSymbol, targs) = tpe match {
-        case BlockTypeApp(eff: Interface, args) => (eff, args)
-        case eff: Interface => (eff, Nil)
-      }
+      val tpe @ InterfaceType(effectSymbol, targs) = interface.resolve
 
       // (3) check all operations are covered
       val covered = clauses.map { _.definition }
@@ -320,7 +315,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           // Create fresh type parameters for existentials.
           //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
           // The parameters C, D, ... are existentials
-          val existentials: List[TypeVar] = tparams.map(_.symbol.asTypeVar)
+          val existentials: List[ValueType] = tparams.map {
+            tparam => ValueTypeRef(tparam.symbol.asTypeVar)
+          }
 
           val expectedTypeParams = declaredType.tparams.size - targs.size
 
@@ -698,7 +695,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case Some(t) => binding checkAgainst t
           case None    => checkStmt(binding, None)
         }
-        val stTpe = BlockTypeApp(TState.interface, List(tpeBind))
+        val stTpe = TState(tpeBind)
 
         // to allocate into the region, it needs to be live...
         usingCapture(stCapt)
@@ -756,7 +753,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (3) Substitute type parameters
       val typeParams = tparams.map { p => p.symbol.asTypeVar }
-      val typeSubst = (tps zip typeParams).toMap
+      val typeSubst = (tps zip typeParams.map { p => ValueTypeRef(p) }).toMap
 
       // (4) Check type annotations against declaration
       val valueTypes = (vparams zip vps) map {
@@ -899,7 +896,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val Result(recvTpe, recvEffs) = checkExprAsBlock(receiver, None)
 
-    val interface = interfaceOf(recvTpe.asInterfaceType)
+    val interface = recvTpe.asInterfaceType.typeConstructor
     // filter out operations that do not fit the receiver
     val candidates = methods.filter(op => op.effect == interface)
 
