@@ -173,7 +173,7 @@ class Constraints(
   def learn(x: UnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit = {
 
     def learnType(x: Node, tpe: ValueType): Unit = {
-      assert(!tpe.isInstanceOf[UnificationVar])
+      // tpe should not be a reference to a unification variable
       typeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
       typeSubstitution = typeSubstitution.updated(x, tpe)
       updateSubstitution()

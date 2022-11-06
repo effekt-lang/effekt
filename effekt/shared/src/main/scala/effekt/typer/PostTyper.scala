@@ -150,10 +150,19 @@ object Wellformedness extends Visit[WFContext] {
       withEffect(effectDecl)
   }
 
-  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, WFContext): Unit = sc match {
-    case BoxedType(tpe, capture) => Context.error(pp"Cannot match on boxed type ${ tpe }.")
-    case ValueTypeRef(tvar) => Context.error(pp"Cannot match on type variable ${ tvar }.")
-    case ValueTypeApp(constructor, args) => checkExhaustivity(constructor, cls)
+  def checkExhaustivity(sc: ValueType, cls: List[MatchPattern])(using Context, WFContext): Unit = {
+    import source.{ AnyPattern, IgnorePattern }
+
+    val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
+
+    if (catchall)
+      return;
+
+    sc match {
+      case BoxedType(tpe, capture) => Context.error(pp"Cannot match on boxed type ${ tpe }.")
+      case ValueTypeRef(tvar) => Context.error(pp"Cannot match on type variable ${ tvar }.")
+      case ValueTypeApp(constructor, args) => checkExhaustivity(constructor, cls)
+    }
   }
 
   /**

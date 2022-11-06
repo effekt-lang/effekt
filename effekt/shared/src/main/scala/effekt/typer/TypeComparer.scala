@@ -32,21 +32,20 @@ trait TypeUnifier {
   def unifyValueTypes(tpe1: ValueType, tpe2: ValueType, ctx: ErrorContext): Unit = (tpe1, tpe2, ctx.polarity) match {
     case (t, s, _) if t == s => ()
 
-
     case (_, TTop, Covariant) => ()
     case (TBottom, _, Covariant) => ()
 
     case (TTop, _, Contravariant) => ()
     case (_, TBottom, Contravariant) => ()
 
-    case (s: UnificationVar, t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
-    case (s: ValueType, t: UnificationVar, Covariant) => requireLowerBound(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Covariant) => requireUpperBound(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Covariant) => requireLowerBound(t, s, ctx)
 
-    case (s: UnificationVar, t: ValueType, Contravariant) => requireLowerBound(s, t, ctx)
-    case (s: ValueType, t: UnificationVar, Contravariant) => requireUpperBound(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Contravariant) => requireLowerBound(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Contravariant) => requireUpperBound(t, s, ctx)
 
-    case (s: UnificationVar, t: ValueType, Invariant) => requireEqual(s, t, ctx)
-    case (s: ValueType, t: UnificationVar, Invariant) => requireEqual(t, s, ctx)
+    case (ValueTypeRef(s: UnificationVar), t: ValueType, Invariant) => requireEqual(s, t, ctx)
+    case (s: ValueType, ValueTypeRef(t: UnificationVar), Invariant) => requireEqual(t, s, ctx)
 
     // For now, we treat all type constructors as invariant.
     case (ValueTypeApp(t1, args1), ValueTypeApp(t2, args2), _) =>
@@ -152,9 +151,9 @@ trait TypeMerger extends TypeUnifier {
 
       // reuses the type unifier implementation (will potentially register new constraints)
       // TODO we need to create a fresh unification variable here!
-      case (x: UnificationVar, tpe: ValueType, p) =>
+      case (x @ ValueTypeRef(_: UnificationVar), tpe: ValueType, p) =>
         unifyValueTypes(x, tpe, ctx); x
-      case (tpe: ValueType, x: UnificationVar, p) =>
+      case (tpe: ValueType, x @ ValueTypeRef(_: UnificationVar), p) =>
         unifyValueTypes(tpe, x, ctx); x
 
       case (ValueTypeApp(cons1, args1), ValueTypeApp(cons2, args2), _) =>
