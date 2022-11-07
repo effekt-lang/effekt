@@ -276,22 +276,24 @@ sealed trait CaptVar extends TypeSymbol
  * Can be either
  * - [[LexicalRegion]] to model self regions of functions
  */
-trait Capture extends CaptVar
+enum Capture extends CaptVar {
 
-/**
- * Capture parameters introduced by block parameters (they count as `control`, since they can close over arbitrary capabilities)
- */
-case class CaptureParam(name: Name) extends Capture
+  /**
+   * Capture parameters introduced by block parameters (they count as `control`, since they can close over arbitrary capabilities)
+   */
+  case CaptureParam(name: Name)
 
-/**
- * Self region of functions and handlers (they count in as `io` when considering direct style)
- */
-case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+  /**
+   * Self region of functions and handlers (they count in as `io` when considering direct style)
+   */
+  case LexicalRegion(name: Name, tree: source.Tree)
 
-/**
- * Represents external resources (they count in as `io` when considering direct style)
- */
-case class Resource(name: Name) extends Capture
+  /**
+   * Represents external resources (they count in as `io` when considering direct style)
+   */
+  case Resource(name: Name)
+}
+export Capture.*
 
 case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar {
   val name = Name.local("?C")
