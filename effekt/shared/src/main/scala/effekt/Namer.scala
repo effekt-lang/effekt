@@ -176,6 +176,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       })
     }
 
+    case source.ExternResource(id, tpe) =>
+      val name = Context.freshNameFor(id)
+      val btpe = resolve(tpe)
+      val sym = BlockParam(name, btpe)
+      Context.define(id, sym)
+      Context.bindBlock(sym)
+
     case d @ source.ExternInclude(path) =>
       d.contents = Context.contentsOf(path).getOrElse {
         Context.abort(s"Missing include: ${path}")
@@ -297,6 +304,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.ExternType(id, tparams) => ()
     case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
+    case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path) => ()
 
     case source.If(cond, thn, els) =>
@@ -478,7 +486,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val tpe = resolve(p.tpe)
     val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym

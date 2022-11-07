@@ -214,6 +214,11 @@ case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
 case class ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
+
+case class ExternResource(id: IdDef, tpe: BlockType) extends Def {
+  type symbol = symbols.BlockParam
+}
+
 case class ExternInclude(path: String) extends Def {
   def id = IdDef("includes don't have names")
   // Namer resolves the path and loads the contents
@@ -588,15 +593,16 @@ object Tree {
       case DefDef(id, annot, block) =>
         DefDef(id, annot, rewrite(block))
 
-      case d: InterfaceDef        => d
-      case d: DataDef       => d
-      case d: RecordDef     => d
-      case d: TypeDef       => d
-      case d: EffectDef     => d
+      case d: InterfaceDef   => d
+      case d: DataDef        => d
+      case d: RecordDef      => d
+      case d: TypeDef        => d
+      case d: EffectDef      => d
 
-      case d: ExternType    => d
-      case d: ExternDef     => d
-      case d: ExternInclude => d
+      case d: ExternType     => d
+      case d: ExternDef      => d
+      case d: ExternResource => d
+      case d: ExternInclude  => d
     }
 
     def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
@@ -739,15 +745,16 @@ object Tree {
       case DefDef(id, annot, block) =>
         scoped { query(block) }
 
-      case d: InterfaceDef  => empty
-      case d: DataDef       => empty
-      case d: RecordDef     => empty
-      case d: TypeDef       => empty
-      case d: EffectDef     => empty
+      case d: InterfaceDef   => empty
+      case d: DataDef        => empty
+      case d: RecordDef      => empty
+      case d: TypeDef        => empty
+      case d: EffectDef      => empty
 
-      case d: ExternType    => empty
-      case d: ExternDef     => empty
-      case d: ExternInclude => empty
+      case d: ExternType     => empty
+      case d: ExternDef      => empty
+      case d: ExternResource => empty
+      case d: ExternInclude  => empty
     }
 
     def query(t: Stmt)(using C: Context, ctx: Ctx): Res = visit(t) {

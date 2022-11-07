@@ -80,6 +80,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest())
 
+    // For now we forget about all of the following definitions in core:
+    case d: source.ExternResource => rest()
+
     case d: source.ExternType => rest()
 
     case d : source.TypeDef => rest()

@@ -542,6 +542,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }
 
+    case d @ source.ExternResource(id, tpe) =>
+      Context.bind(d.symbol)
+
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       d.symbol.ops.foreach { op =>
         if (op.otherEffects.toList contains op.appliedEffect) {

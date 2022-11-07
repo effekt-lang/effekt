@@ -107,6 +107,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `unbox` = keyword("unbox")
   lazy val `return` = keyword("return")
   lazy val `region` = keyword("region")
+  lazy val `resource` = keyword("resource")
   lazy val `new` = keyword("new")
 
   def keywordStrings: List[String] = List(
@@ -250,6 +251,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | recordDef
     | externType
     | externFun
+    | externResource
     | externInclude
     | failure("Expected a definition")
     )
@@ -285,6 +287,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
         ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
+
+  lazy val externResource: P[Def] =
+    (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   // Delimiter for multiline strings
   val multi = "\"\"\""
