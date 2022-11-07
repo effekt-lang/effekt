@@ -1,6 +1,8 @@
 package effekt
 package symbols
 
+import TypeVar.*
+
 /**
  * Types
  */
