@@ -88,13 +88,18 @@ case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with Val
 // TODO everywhere else the two universes are called "value" and "block"
 
 sealed trait TrackedParam extends Param with BlockSymbol {
-  // every block parameter gives rise to a capture parameter
-  lazy val capture: Capture = CaptureParam(name)
+  def capture: Capture
 }
-case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
+case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam {
+  // every block parameter gives rise to a capture parameter
+  val capture: Capture = CaptureParam(name)
+}
 
 // to be fair, resume is not tracked anymore, but transparent.
-case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
+case class ResumeParam(module: Module) extends TrackedParam {
+  val name = Name.local("resume")
+  def capture = ???
+}
 
 /**
  * Term-level representation of the current region.
@@ -283,8 +288,21 @@ sealed trait CaptVar extends TypeSymbol
  * - [[LexicalRegion]] to model self regions of functions
  */
 trait Capture extends CaptVar
-case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+
+/**
+ * Capture parameters introduced by block parameters (they count as `control`, since they can close over arbitrary capabilities)
+ */
 case class CaptureParam(name: Name) extends Capture
+
+/**
+ * Self region of functions and handlers (they count in as `io` when considering direct style)
+ */
+case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+
+/**
+ * Represents external resources (they count in as `io` when considering direct style)
+ */
+case class Resource(name: Name) extends Capture
 
 case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar {
   val name = Name.local("?C")
@@ -352,8 +370,10 @@ case class BuiltinFunction(
   def annotatedEffects = Some(effects)
 }
 
-case class BuiltinResource(name: Name, tpe: BlockType) extends TrackedParam, Builtin
+case class BuiltinResource(name: Name, tpe: BlockType) extends TrackedParam, Builtin {
+  // every block parameter gives rise to a capture parameter
+  val capture: Capture = Resource(name)
+}
 
 case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
-
 case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Builtin

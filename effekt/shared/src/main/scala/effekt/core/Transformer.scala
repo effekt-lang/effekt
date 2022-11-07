@@ -407,7 +407,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     c =>
       def isIO = c == builtins.IOCapability.capture
       def isMutableState = c.isInstanceOf[LexicalRegion]
-      isIO || isMutableState
+      def isResource = c.isInstanceOf[Resource]
+      def isControl = c == builtins.ControlCapability.capture
+      !isControl && (isIO || isMutableState || isResource)
   }
 }
 
