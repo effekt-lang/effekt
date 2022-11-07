@@ -300,8 +300,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val externCapture: P[CaptureSet] =
     ( `pure` ^^^ CaptureSet(Nil)
-    | `io` ^^^ CaptureSet(List(IdRef("io")))
-    | `control` ^^^ CaptureSet(List(IdRef("control")))
+    | idRef ^^ { id => CaptureSet(List(id)) }
+    | captureSet
     | success(CaptureSet(List(IdRef("io"))))
     )
 
