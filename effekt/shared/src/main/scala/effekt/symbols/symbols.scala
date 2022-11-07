@@ -250,7 +250,11 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
 }
 
 
-case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeSymbol
+sealed trait BlockTypeConstructor extends BlockTypeSymbol {
+  def tparams: List[TypeParam]
+}
+
+case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeConstructor
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
@@ -349,3 +353,4 @@ case class BuiltinFunction(
 
 case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
 
+case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeSymbol, Builtin

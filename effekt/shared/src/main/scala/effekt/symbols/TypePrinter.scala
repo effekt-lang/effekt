@@ -56,7 +56,9 @@ object TypePrinter extends ParenPrettyPrinter {
     case InterfaceType(tpe, args) => toDoc(tpe) <> typeParams(args)
   }
 
-  def toDoc(interface: Interface): Doc = interface.name
+  def toDoc(t: BlockTypeConstructor): Doc = t match {
+    case Interface(name, tparams, ops) => name
+  }
 
   def toDoc(t: TypeConstructor): Doc = t match {
     case DataType(name, tparams, constructors)  => name <> typeParams(tparams)

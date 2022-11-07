@@ -291,16 +291,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
   def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
-    case source.Implementation(interface, clauses) =>
+    case source.Implementation(sig, clauses) =>
 
       var handlerEffects: ConcreteEffects = Pure
 
       // Extract interface and type arguments from annotated effect
-      val tpe @ InterfaceType(effectSymbol, targs) = interface.resolve
+      val tpe @ InterfaceType(constructor, targs) = sig.resolve
+      val interface = constructor.asInterface // can only implement concrete interfaces
 
       // (3) check all operations are covered
       val covered = clauses.map { _.definition }
-      val notCovered = effectSymbol.ops.toSet -- covered.toSet
+      val notCovered = interface.ops.toSet -- covered.toSet
 
       if (notCovered.nonEmpty) {
         val explanation = notCovered.map { op => pp"${op.name} of interface ${op.effect.name}" }.mkString(", ")

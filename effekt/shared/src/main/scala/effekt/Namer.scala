@@ -348,7 +348,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Implementation(interface, clauses) =>
 
 
-      val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor }
+      val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
         case source.OpClause(op, tparams, params, ret, body, resumeId) =>
@@ -851,7 +851,8 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     val syms = eff match {
       case Some(tpe) =>
-        val operations = tpe.typeConstructor.ops.filter { op => op.name.name == id.name }
+        val interface = tpe.typeConstructor.asInterface
+        val operations = interface.ops.filter { op => op.name.name == id.name }
         if (operations.isEmpty) Nil else List(operations.toSet)
       case None => scope.lookupEffectOp(id.name)
     }

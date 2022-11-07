@@ -74,7 +74,7 @@ package object kinds {
   }
 
   private def wellformedInterfaceType(e: InterfaceType)(using C: Context): Kind = e match {
-    case InterfaceType(eff, args) => wellformedInterface(eff) match {
+    case InterfaceType(eff, args) => wellformedBlockTypeConstructor(eff) match {
       case Kind.Fun(params, res) if args.isEmpty && params.nonEmpty =>
         C.abort(s"Wrong number of type arguments. Interface ${eff} expects ${params.size} parameters, but no arguments were provided.")
       case Kind.Fun(params, res) if args.size != params.size =>
@@ -85,7 +85,7 @@ package object kinds {
     }
   }
 
-  private def wellformedInterface(e: Interface)(using Context): Kind.Fun = e match {
+  private def wellformedBlockTypeConstructor(e: BlockTypeConstructor)(using Context): Kind.Fun = e match {
     case Interface(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.BType)
   }
 }
