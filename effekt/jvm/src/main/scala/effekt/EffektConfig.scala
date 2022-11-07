@@ -69,7 +69,9 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def findStdLib: util.paths.File = {
 
     // 1) in config?
-    stdlibPath.foreach { path => return path }
+    if (stdlibPath.isDefined) {
+      return stdlibPath()
+    }
 
     // 2) in PATH
     if (System.getenv.containsKey("EFFEKT_LIB")) {

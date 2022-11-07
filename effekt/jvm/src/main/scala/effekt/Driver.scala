@@ -13,7 +13,7 @@ import kiama.util.{ IO, Source }
 
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
 import effekt.util.paths.file
-import effekt.util.{ AnsiColoredMessaging, MarkdownSource }
+import effekt.util.{ AnsiColoredMessaging, MarkdownSource, getOrElseAborting }
 
 import scala.sys.process.Process
 
@@ -60,7 +60,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     implicit val C = context
     C.setup(config)
 
-    val Compiled(main, outputFiles) = C.compileWhole(src).getOrElse { return }
+    val Compiled(main, outputFiles) = C.compileWhole(src).getOrElseAborting { return }
 
     outputFiles.foreach {
       case (filename, doc) =>
@@ -69,7 +69,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
 
     if (config.interpret()) {
       // type check single file -- `mod` is necessary for positions in error reporting.
-      val mod = C.runFrontend(src).getOrElse { return }
+      val mod = C.runFrontend(src).getOrElseAborting { return }
       C.at(mod.decl) { C.checkMain(mod); eval(main) }
     }
   } catch {
