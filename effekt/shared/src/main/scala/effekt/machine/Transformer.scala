@@ -125,6 +125,19 @@ object Transformer {
         noteBlockParams(id, allParams)
         Def(Label(transform(id), allParams), transform(body), transform(rest))
 
+      case lifted.Def(id, tpe, block @ lifted.New(impl), rest) =>
+        // TODO freeParams?
+        // TODO deal with evidenve?
+        val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe : @unchecked
+        val implTransformed = interfaceOps.map({ op =>
+          impl.clauses.find(_._1 == op).get
+        }).map({
+          case (_, lifted.BlockLit(params, body)) =>
+            // TODO we assume that there are no block params in methods
+            Clause(params.map(transform), transform(body))
+        })
+        New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, transform(rest))
+
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
@@ -152,15 +165,14 @@ object Transformer {
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id), op), List(), args) =>
-        id match {
-          case symbols.BlockParam(_, tpe) =>
-            transform(args).run { values =>
-              // TODO find correct operation tag for [[op]]
-              //   we currently only support singleton effect operations (or calling the first one, for that matter)
-              Invoke(Variable(transform(id), transform(tpe)), 0, values)
-            }
-          case _ =>
-            Context.abort(s"Unsupported blocksymbol: $id")
+        val tpe = Context.blockTypeOf(id)
+        val opTag = {
+          tpe match
+            case symbols.InterfaceType(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
+            case _ => Context.abort(s"Unsupported receiver type $tpe")
+        }
+        transform(args).run { values =>
+          Invoke(Variable(transform(id), transform(tpe)), opTag, values)
         }
 
       case lifted.If(cond, thenStmt, elseStmt) =>
@@ -312,19 +324,21 @@ object Transformer {
     }
 
   def transform(handler: lifted.Handler)(using BlocksParamsContext, Context): List[Clause] = {
-    handler match {
-      case lifted.Handler(_, List((operationName, lifted.BlockLit(params :+ resume, body)))) =>
+    handler.clauses.sortBy[Int]({
+      case (operationName, _) =>
+        handler.id.ops.indexOf(operationName)
+    }).map({
+      case (operationName, lifted.BlockLit(params :+ resume, body))=>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
         // TODO actually use evidence to determine number of stacks popped
         val ev = Variable(freshName("evidence"), builtins.Evidence)
-        List(Clause(ev +: params.map(transform),
+        Clause(ev +: params.map(transform),
           PopStack(Variable(transform(resume).name, Type.Stack()),
-            transform(body))))
-      case _ =>
-        Context.abort(s"Unsupported handler $handler")
-    }
+            transform(body)))
+      case _ => Context.abort(s"Unsupported handler: $handler")
+    })
   }
 
   def transform(param: lifted.Param)(using Context): Variable =
