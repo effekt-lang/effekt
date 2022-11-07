@@ -240,12 +240,16 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
 }
 
 
-sealed trait BlockTypeConstructor extends BlockTypeSymbol {
+enum BlockTypeConstructor extends BlockTypeSymbol {
   def tparams: List[TypeParam]
-}
 
-case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeConstructor
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
+  case Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil)
+  case ExternInterface(name: Name, tparams: List[TypeParam])
+}
+export BlockTypeConstructor.*
+
+
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: BlockTypeConstructor.Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
   def annotatedResult: Option[ValueType] = Some(resultType)
@@ -355,9 +359,6 @@ case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam {
   // every block parameter gives rise to a capture parameter
   val capture: Capture = Resource(name)
 }
-
-
-case class ExternInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor
 
 /**
  * Extension method for LSP to filter out synthetically generated symbols
