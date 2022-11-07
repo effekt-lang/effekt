@@ -1,8 +1,8 @@
 extern resource foo: IO
-extern {foo} def bar(): Unit = ""
+extern {foo} def bar(): Int = "42"
 def user() = bar()
 
 def main() = {
-  val f: () => Unit at {foo} = user;
+  val f: () => Int at {foo} = user;
   ()
 }
