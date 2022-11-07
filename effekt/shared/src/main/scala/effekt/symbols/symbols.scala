@@ -217,12 +217,15 @@ case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) exten
  * - [[Record]]
  * - [[ExternType]]
  */
-sealed trait TypeConstructor extends TypeSymbol {
+enum TypeConstructor extends TypeSymbol {
   def tparams: List[TypeParam]
-}
 
-case class DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil) extends TypeConstructor
-case class Record(name: Name, tparams: List[TypeParam], var constructor: Constructor) extends TypeConstructor
+  case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil)
+  case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor)
+  case ExternType(name: Name, tparams: List[TypeParam])
+}
+export TypeConstructor.*
+
 
 case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
@@ -362,7 +365,7 @@ case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam {
   val capture: Capture = Resource(name)
 }
 
-case class ExternType(name: Name, tparams: List[TypeParam]) extends TypeConstructor
+
 case class ExternInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor
 
 /**
