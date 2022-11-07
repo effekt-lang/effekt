@@ -73,10 +73,6 @@ object assertions {
       case t: Type => t
       case _ => reporter.abort("Expected a type")
     }
-    def asEffect: InterfaceType = s match {
-      case t: InterfaceType => t
-      case t => reporter.abort("Expected an effect")
-    }
     def asInterface: Interface = s match {
       case t: Interface => t
       case t => reporter.abort("Expected an interface")

@@ -32,7 +32,7 @@ case class RecordNames(sym: Symbol) {
   val typeName = ChezName(basename + "$Type" + id)
   val predicate = ChezName(name + "?")
   val constructor = sym match {
-    case _: effekt.symbols.InterfaceType => ChezName(s"make-${name}")
+    case _: effekt.symbols.Interface => ChezName(s"make-${name}")
     case _ => uid
   }
 }

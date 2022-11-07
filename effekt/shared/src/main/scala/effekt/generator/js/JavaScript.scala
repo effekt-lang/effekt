@@ -111,7 +111,7 @@ trait JavaScript extends Backend {
     id match {
       case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => ref(id.name.toString + "_" + id.id)
       case _: symbols.Operation => ref("op$" + id.name.toString)
-      case _: symbols.InterfaceType => ref(id.name.name)
+      case _: symbols.Interface => ref(id.name.name)
       case _: symbols.Field => ref(id.name.name)
       case _ => id.name match {
         case LocalName(name) => ref(name)

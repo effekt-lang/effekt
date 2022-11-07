@@ -599,7 +599,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   /**
    * Resolves an interface type, potentially with effect aliases on the top level
    */
-  def resolveAsEffect(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
+  def resolveAsInterfaceType(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     tpe match {
       case source.BlockTypeRef(id, args) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
@@ -615,7 +615,7 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveAsEffect).toSeq: _*) // TODO this otherwise is calling the wrong apply
+    Effects(tpe.effs.flatMap(resolveAsInterfaceType).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))

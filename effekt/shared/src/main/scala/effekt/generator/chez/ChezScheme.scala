@@ -137,7 +137,9 @@ trait ChezScheme {
 
     case Data(did, ctors, rest) =>
       val chez.Block(defs, exprs, result) = toChez(rest)
-      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
+      val constructors = ctors.flatMap { ctor =>
+        generateConstructor(ctor.asInstanceOf[effekt.symbols.Record])
+      }
       chez.Block(constructors ++ defs, exprs, result)
 
     case Record(did, fields, rest) =>
