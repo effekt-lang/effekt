@@ -8,15 +8,13 @@ extern io def random(): Double = "random(): Double"
 // Console ops
 // ===========
 
-extern effect Console
-
-extern io def println(n: Int): Unit / Console = "println(Int): Unit / Console"
-extern io def println(n: Double): Unit / Console = "println(Double): Unit / Console"
-extern io def println(b: Boolean): Unit / Console = "println(Boolean): Unit / Console"
-extern io def println(b: Unit): Unit / Console = "println(Unit): Unit / Console"
-extern io def println(s: String): Unit / Console = "println(String): Unit / Console"
-extern io def readLn(): String / Console = "readLn(): String / Console"
-extern io def readInt(): Int / Console = "readInt(): Int / Console"
+extern io def println(n: Int): Unit = "println(Int): Unit / Console"
+extern io def println(n: Double): Unit = "println(Double): Unit / Console"
+extern io def println(b: Boolean): Unit = "println(Boolean): Unit / Console"
+extern io def println(b: Unit): Unit = "println(Unit): Unit / Console"
+extern io def println(s: String): Unit = "println(String): Unit / Console"
+extern io def readLn(): String = "readLn(): String / Console"
+extern io def readInt(): Int = "readInt(): Int / Console"
 
 // integer primitives
 // ==================
