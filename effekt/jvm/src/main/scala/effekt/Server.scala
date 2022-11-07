@@ -158,7 +158,11 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   def getSymbolKind(sym: Symbol): Option[SymbolKind] =
     sym match {
       case _: Module =>
-        Some(SymbolKind.Class)
+        Some(SymbolKind.Module)
+      case _: Interface | _: BuiltinInterface =>
+        Some(SymbolKind.Interface)
+      case _: DataType | _: BuiltinType | _: TypeAlias =>
+        Some(SymbolKind.Enum)
       case _: Callable =>
         Some(SymbolKind.Method)
       case _: Param | _: ValBinder | _: VarBinder =>

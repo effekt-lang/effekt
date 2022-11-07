@@ -11,6 +11,11 @@ extern resource stack: StackLocal
 extern interface Array[T]
 extern {stack} def makeArray[T](size: Int): Array[T] at {stack} = "size"
 
+def parameter[T] {a: Array[T]} = {
+  val f: Array[T] at {a} = box a;
+  ()
+}
+
 def main() = {
   val f: () => Int at {foo} = user;
   val arr = makeArray[Int](10);
