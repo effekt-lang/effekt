@@ -16,9 +16,7 @@ object Transformer {
       emit(Call("env", envType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Call("sp", spType, malloc, List(ConstantInt(1024 * 1024))));
       emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "base"), LocalReference(spType, "sp")));
-      emit(Call("arenasp", spType, malloc, List(ConstantInt(1024))));
-      emit(Store(ConstantGlobal(PointerType(NamedType("Sp")), "arenasp"), LocalReference(spType, "arenasp")));
-      emit(Store(ConstantGlobal(PointerType(NamedType("Base")), "arenabase"), LocalReference(spType, "arenasp")));
+      emit(Call("_", VoidType(), initRegion, List()));
       pushReturnAddress("topLevel", "topLevelSharer", "topLevelEraser");
 
       val terminator = transform(statement);
@@ -281,7 +279,9 @@ object Transformer {
         shareValues(frameEnvironment, freeVariables(rest));
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
         val oldStackPointer = LocalReference(spType, freshName("stksp"));
-        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 1, 0)));
+        val stkvar = freshName(variable.name)
+        emit(ExtractValue(stkvar, LocalReference(stkType, variable.name), 0))
+        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), stkvar), List(0, 1, 0)));
         emit(Load(oldStackPointer.name, stackPointerPointer));
         val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, returnAddressName, sharerName, eraserName);
@@ -370,7 +370,7 @@ object Transformer {
   def envType = NamedType("Env");
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
-  def stkType = NamedType("Stk");
+  def stkType = NamedType("DetachedStk");
   def ptrType = NamedType("Ptr");
 
   def transform(tpe: machine.Type): Type = tpe match {
@@ -393,7 +393,7 @@ object Transformer {
       case machine.Type.Int()        => 8 // TODO Make fat?
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
-      case machine.Type.Stack()      => 8 // TODO Make fat?
+      case machine.Type.Stack()      => 32 // TODO Make fat?
       case machine.Type.Reference(_) => 8
     }
 
@@ -651,6 +651,8 @@ object Transformer {
 
     newStackPointer
   }
+
+  def initRegion = ConstantGlobal(PointerType(FunctionType(VoidType(), List())), "initRegion");
 
   def malloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(IntegerType64()))), "malloc");
   def free = ConstantGlobal(PointerType(FunctionType(VoidType(), List(PointerType(IntegerType8())))), "free");
