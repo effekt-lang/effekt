@@ -202,8 +202,8 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
       if (targs.size == tparams.size) targs
       else tparams map { t => ValueTypeRef(fresh(UnificationVar.TypeVariableInstantiation(t, position))) }
 
-    if (cparams.size != (bparams.size + eff.controlEffects.size)) {
-      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.controlEffects.size}.\n  ${tpe}"
+    if (cparams.size != (bparams.size + eff.canonical.size)) {
+      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
     }
 
     val captRigids =

@@ -569,7 +569,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
 
       val effs = resolve(effects).distinct
-      effs.controlEffects.foreach { eff =>
+      effs.canonical.foreach { eff =>
         val cap = CaptureParameter(eff.name)
         cps = cps :+ cap
       }

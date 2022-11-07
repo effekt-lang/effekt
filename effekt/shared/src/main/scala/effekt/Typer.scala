@@ -326,7 +326,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
           // of bidirectional effects and capture polymorphism (still has to be tested).
-          val cparams = declaredType.effects.controlEffects.map { tpe => CaptureParameter(tpe.name) }
+          val cparams = declaredType.effects.canonical.map { tpe => CaptureParameter(tpe.name) }
 
           // (1) Instantiate block type of effect operation
           // Bidirectional example:
@@ -542,7 +542,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       Context.bind(fun, fun.toType, cap)
-      if (fun.effects.controlEffects.nonEmpty) {
+      if (fun.effects.canonical.nonEmpty) {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }
 
@@ -609,7 +609,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               case Some(annotated) =>
                 // the declared effects are considered as bound
                 val bound: ConcreteEffects = annotated.effects
-                val capabilities = bound.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+                val capabilities = bound.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
                 val captures = capabilities.map { _.capture }
 
                 // block parameters and capabilities for effects are assumed bound
@@ -638,7 +638,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
                 }
 
                 // We do no longer use the order annotated on the function, but always the canonical ordering.
-                val capabilities = effs.controlEffects.map { caps.apply }
+                val capabilities = effs.canonical.map { caps.apply }
                 val captures = capabilities.map(_.capture)
 
                 Context.bindCapabilities(d, capabilities)
@@ -781,7 +781,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (4) Bind capabilities for all effects "handled" by this function
       val effects: ConcreteEffects = typeSubst substitute effs
-      val capabilities = effects.controlEffects.map { tpe => Context.freshCapabilityFor(tpe) }
+      val capabilities = effects.canonical.map { tpe => Context.freshCapabilityFor(tpe) }
 
       // (5) Substitute capture params
       val captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
@@ -837,7 +837,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       // The order of effects annotated to the function is the canonical ordering for capabilities
-      val capabilities = effs.controlEffects.map { caps.apply }
+      val capabilities = effs.canonical.map { caps.apply }
       Context.bindCapabilities(arg, capabilities)
 
       val cps = (bparams.map(_.symbol) ++ capabilities).map(_.capture)
@@ -1060,7 +1060,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // This is important since
     //   [A, B](): Unit / { State[A], State[B] }
     // with A := Int and B := Int requires us to pass two capabilities.
-    val capabilities = Context.provideCapabilities(call, retEffs.controlEffects.map(Context.unification.apply))
+    val capabilities = Context.provideCapabilities(call, retEffs.canonical.map(Context.unification.apply))
 
     val captParams = captArgs.drop(bargs.size)
     (captParams zip capabilities) foreach { case (param, cap) =>
@@ -1210,7 +1210,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         effects = effs.distinct
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        capt = effects.controlEffects.map { tpe => CaptureParameter(tpe.name) }
+        capt = effects.canonical.map { tpe => CaptureParameter(tpe.name) }
       } yield toType(ret, effects, capt)
   }
   //</editor-fold>

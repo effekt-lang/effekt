@@ -121,15 +121,9 @@ case class Effects(effects: List[InterfaceType]) {
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
 
-  lazy val controlEffects: List[InterfaceType] = effects.controlEffects
+  lazy val canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
 
   def distinct: Effects = Effects(effects.distinct)
-
-  override def toString: String = toList match {
-    case Nil        => "{}"
-    case eff :: Nil => eff.toString
-    case effs       => s"{ ${effs.mkString(", ")} }"
-  }
 }
 object Effects {
 
@@ -143,17 +137,27 @@ object Effects {
   val Pure = empty
 }
 
-extension(effs: List[InterfaceType]) {
-  // establishes the canonical ordering
-  def controlEffects: List[InterfaceType] = effs.sortBy(canonicalOrdering)
-}
-
 /**
  * The canonical ordering needs to be stable, but should also distinguish two types,
  * if they are different.
  *
  * Bugs with the canonical ordering can lead to runtime errors as observed in ticket #108
  */
-def canonicalOrdering(i: InterfaceType): Int = i match {
-  case InterfaceType(typeConstructor: Interface, args) => typeConstructor.id + args.map(_.hashCode()).sum
+object CanonicalOrdering extends Ordering[InterfaceType] {
+  def compare(tpe1: InterfaceType, tpe2: InterfaceType): Int = compareStructural(tpe1, tpe2)
+
+  def compareStructural(tpe1: Any, tpe2: Any): Int = (tpe1, tpe2) match {
+    case (sym1: Symbol, sym2: Symbol) =>
+      sym1.id - sym2.id
+    case (p1: Product, p2: Product) if p1.getClass == p2.getClass =>
+      (p1.productIterator zip p2.productIterator).collectFirst {
+        case (child1, child2) if compareStructural(child1, child2) != 0 => compareStructural(child1, child2)
+      }.getOrElse(fallback(tpe1, tpe2))
+    case _ =>
+      fallback(tpe1, tpe2)
+  }
+
+  def fallback(tpe1: Any, tpe2: Any): Int = tpe1.hashCode - tpe2.hashCode
 }
+
+

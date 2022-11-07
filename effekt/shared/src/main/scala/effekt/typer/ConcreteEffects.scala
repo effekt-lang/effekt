@@ -30,12 +30,10 @@ class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]
 
   def filterNot(p: InterfaceType => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
-  def controlEffects: List[InterfaceType] = effects.controlEffects
+  def canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
 
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
-
-  override def toString = toEffects.toString
 }
 object ConcreteEffects {
   // unsafe, doesn't perform check
