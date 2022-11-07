@@ -587,24 +587,18 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolve(tpe: source.BlockTypeRef)(using Context): InterfaceType = resolvingType(tpe) {
-    case source.BlockTypeRef(id, args) =>
-      InterfaceType(resolveIdAsInterface(id), args.map(resolve))
-  }
-
-  // no effect aliases are allowed
-  def resolveIdAsInterface(id: IdRef)(using Context): Interface = Context.at(id) {
-    Context.resolveType(id) match {
-      case i: Interface => i
-      case i: EffectAlias => Context.abort("Expected a single interface type; no effect aliases are allowed.")
-      case o =>  Context.abort(pretty"Expected a single interface type. Got ${o}")
+  def resolve(tpe: source.BlockTypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
+    resolveWithAliases(tpe) match {
+      case Nil => Context.abort("Expected a single interface type, not an empty effect set.")
+      case resolved :: Nil => resolved
+      case _ => Context.abort("Expected a single interface type, arbitrary effect aliases are not allowed.")
     }
   }
 
   /**
    * Resolves an interface type, potentially with effect aliases on the top level
    */
-  def resolveAsInterfaceType(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
+  def resolveWithAliases(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     tpe match {
       case source.BlockTypeRef(id, args) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
@@ -614,13 +608,14 @@ object Namer extends Phase[Parsed, NameResolved] {
           val targs = args.map(resolve)
           val subst = Substitutions.types(tparams, targs)
           effs.toList.map(subst.substitute)
-        case _ => List(resolve(tpe))
+        case i: Interface => List(InterfaceType(i, args.map(resolve)))
+        case _ => Context.abort("Expected an interface type.")
       }
     }
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveAsInterfaceType).toSeq: _*) // TODO this otherwise is calling the wrong apply
+    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))

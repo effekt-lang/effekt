@@ -16,6 +16,12 @@ def bar(): Unit / { Foo, Bar, Pure } = {
   println("hello")
 }
 
+interface Parametric[R] { def get(): R }
+
+effect Single[S] = Parametric[S]
+
+def cap {s: Single[Int]}: Int = s.get()
+
 def main(): Unit = try {
   foo()
 } with Console {}
