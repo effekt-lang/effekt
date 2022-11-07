@@ -74,7 +74,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       core.Record(d.symbol, ops.map { e => e.symbol }, rest())
 
-    case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
+    case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
       Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
 

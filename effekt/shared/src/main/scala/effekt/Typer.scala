@@ -534,7 +534,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(d.symbol, tpe) }
 
-    case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
+    case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
       val fun = d.symbol
       val cap = pure match {
         case effekt.source.ExternFlag.Pure => CaptureSet.empty
@@ -711,7 +711,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(d.symbol, t, inferredCapture)
         Result((), effBinding)
 
-      case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
+      case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
         Result((), Pure)

@@ -283,7 +283,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val externFun: P[Def] =
     `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
-        ExternFun(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
 
   // Delimiter for multiline strings

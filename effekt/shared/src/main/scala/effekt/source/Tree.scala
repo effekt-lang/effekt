@@ -218,7 +218,7 @@ object ExternFlag extends Enumeration {
   def directStyle(p: Purity): Boolean = p == Pure || p == IO
 }
 
-case class ExternFun(purity: ExternFlag.Purity, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
+case class ExternDef(purity: ExternFlag.Purity, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {
@@ -602,7 +602,7 @@ object Tree {
       case d: EffectDef     => d
 
       case d: ExternType    => d
-      case d: ExternFun     => d
+      case d: ExternDef     => d
       case d: ExternInclude => d
     }
 
@@ -753,7 +753,7 @@ object Tree {
       case d: EffectDef     => empty
 
       case d: ExternType    => empty
-      case d: ExternFun     => empty
+      case d: ExternDef     => empty
       case d: ExternInclude => empty
     }
 
