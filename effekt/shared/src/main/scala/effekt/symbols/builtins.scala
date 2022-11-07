@@ -48,9 +48,9 @@ object builtins {
 
   object TState {
     val S = TypeParam(Name.local("S"))
-    val interface = Interface(Name.local("$State"), List(S), Nil)
-    val get = Operation(name("get"), Nil, Nil, ValueTypeRef(S), Effects.Pure, interface)
-    val put = Operation(name("put"), Nil, List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), TUnit, Effects.Pure, interface)
+    val interface = Interface(Name.local("Ref"), List(S), Nil)
+    val get = Operation(name("get"), List(S), Nil, ValueTypeRef(S), Effects.Pure, interface)
+    val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), TUnit, Effects.Pure, interface)
     interface.ops = List(get, put)
 
     def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))
@@ -72,14 +72,16 @@ object builtins {
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,
     "IO" -> IOSymbol,
-    "Region" -> RegionSymbol
+    "Region" -> RegionSymbol,
+    "Ref" -> TState.interface
   )
 
   lazy val globalRegion = BlockParam(name("global"), TRegion)
 
-  // it is a set, because terms can be overloaded...
   val rootTerms: Map[String, TermSymbol] = Map(
-    "global" -> globalRegion
+    "global" -> globalRegion,
+    "get" -> TState.get,
+    "put" -> TState.put
   )
 
   val rootCaptures: Map[String, Capture] = Map(

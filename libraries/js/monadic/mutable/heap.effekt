@@ -2,13 +2,13 @@ module mutable/heap
 
 extern include "heap_include.js"
 
-extern type Ref[T]
+extern type HeapRef[T]
 
-extern def fresh[T](init: T): Ref[T] =
+extern io def fresh[T](init: T): HeapRef[T] =
     "fresh$impl(init)"
 
-extern def put[T](ref: Ref[T], value: T): Unit =
+extern io def put[T](ref: HeapRef[T], value: T): Unit =
     "put$impl(ref, value)"
 
-extern def get[T](ref: Ref[T]): T =
+extern io def get[T](ref: HeapRef[T]): T =
     "get$impl(ref)"
