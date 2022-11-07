@@ -114,7 +114,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
-    "at", "box", "unbox", "return", "region", "new"
+    "at", "box", "unbox", "return", "region", "new", "resource"
   )
 
   def keyword(kw: String): Parser[String] =
