@@ -236,7 +236,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = r.symbol
       val tpe = sym match {
         case b: BlockParam => b.tpe
-        case b: SelfParam => b.tpe
+        case b: SelfParam => builtins.TRegion
         case _ => Context.panic("Continuations cannot be regions")
       }
       val cap = core.BlockParam(sym, tpe)

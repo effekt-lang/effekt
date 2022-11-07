@@ -78,28 +78,23 @@ case class Module(
 sealed trait Param extends TermSymbol
 case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
 
-sealed trait TrackedParam extends Param with BlockSymbol {
-  def capture: Capture
-}
-case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam {
-  // every block parameter gives rise to a capture parameter
-  val capture: Capture = CaptureParam(name)
-}
+enum TrackedParam(val name: Name) extends Param, BlockSymbol {
 
-// to be fair, resume is not tracked anymore, but transparent.
-case class ResumeParam(module: Module) extends TrackedParam {
-  val name = Name.local("resume")
-  def capture = ???
-}
+  case BlockParam(n: Name, tpe: BlockType) extends TrackedParam(n)
+  case ResumeParam(module: Module) extends TrackedParam(Name.local("resume"))
+  case SelfParam(tree: source.Tree) extends TrackedParam(Name.local("this"))
+  case ExternResource(n: Name, tpe: BlockType) extends TrackedParam(n)
 
-/**
- * Term-level representation of the current region.
- */
-case class SelfParam(tree: source.Tree) extends TrackedParam {
-  val name = Name.local("this")
-  def tpe = builtins.TRegion
-  override lazy val capture: Capture = LexicalRegion(name, tree)
+  // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
+  lazy val capture: Capture = this match {
+    case b: BlockParam => CaptureParam(b.name)
+    case r: ResumeParam => ???
+    case s: SelfParam => LexicalRegion(name, s.tree)
+    case r: ExternResource => Resource(name)
+  }
 }
+export TrackedParam.*
+
 
 trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
@@ -355,11 +350,6 @@ case class ExternFunction(
 ) extends Callable with BlockSymbol {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
-}
-
-case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam {
-  // every block parameter gives rise to a capture parameter
-  val capture: Capture = Resource(name)
 }
 
 /**

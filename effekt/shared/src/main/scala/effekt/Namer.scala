@@ -493,7 +493,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
+    val sym: BlockParam = BlockParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym
   }

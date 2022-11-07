@@ -1323,9 +1323,11 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private [typer] def freshCapabilityFor(tpe: InterfaceType): symbols.BlockParam =
     val capName = tpe.name.rename(_ + "$capability")
-    val param = new BlockParam(capName, tpe) {
-      override def synthetic = true
-    }
+    val param: BlockParam = BlockParam(capName, tpe)
+    // TODO FIXME -- generated capabilities need to be ignored in LSP!
+//     {
+//      override def synthetic = true
+//    }
     bind(param, tpe)
     param
 
@@ -1396,7 +1398,7 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
-    case s : SelfParam => bind(s, s.tpe, CaptureSet(s.capture))
+    case s : SelfParam => bind(s, builtins.TRegion, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
   }
 
