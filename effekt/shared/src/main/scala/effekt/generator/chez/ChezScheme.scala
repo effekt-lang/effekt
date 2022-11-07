@@ -137,8 +137,9 @@ trait ChezScheme {
 
     case Data(did, ctors, rest) =>
       val chez.Block(defs, exprs, result) = toChez(rest)
-      val constructors = ctors.flatMap { ctor =>
-        generateConstructor(ctor.asInstanceOf[effekt.symbols.Record])
+      val constructors = ctors.flatMap {
+        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
+        case other => sys error s"Wrong type, expected constructor but got: ${other}"
       }
       chez.Block(constructors ++ defs, exprs, result)
 

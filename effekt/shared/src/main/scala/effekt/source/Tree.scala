@@ -186,7 +186,7 @@ case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) exten
   type symbol = symbols.DataType
 }
 case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition {
-  type symbol = symbols.Record
+  type symbol = symbols.Constructor
 }
 case class RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam]) extends Def {
   type symbol = symbols.Record
@@ -385,7 +385,7 @@ case class AnyPattern(id: IdDef) extends MatchPattern with Definition { type sym
  *   case Cons(a, as) => ...
  */
 case class TagPattern(id: IdRef, patterns: List[MatchPattern]) extends MatchPattern with Reference {
-  type symbol = symbols.Record
+  type symbol = symbols.Constructor
 }
 
 /**

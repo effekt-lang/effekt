@@ -37,12 +37,17 @@ case class RecordNames(sym: Symbol) {
   }
 }
 
-def generateConstructor(ctor: effekt.symbols.Record): List[chez.Def] =
-  generateConstructor(ctor, ctor.fields)
-
 // https://www.scheme.com/csug8/objects.html
 // https://scheme.com/tspl4/records.html
-def generateConstructor(did: Symbol, fields: List[Symbol]): List[chez.Def] = {
+def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
+
+  val did = id match {
+    case c: symbols.Constructor => c
+    case r: symbols.Record => r.constructor
+    // right now, we also use core.Records to represent capabilities
+    case i: symbols.Interface => i
+    case other => sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
+  }
 
   val names = RecordNames(did)
 

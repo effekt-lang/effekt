@@ -302,7 +302,7 @@ trait JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  def generateConstructor(ctor: symbols.Record): js.Stmt =
+  def generateConstructor(ctor: symbols.Constructor): js.Stmt =
     generateConstructor(ctor, ctor.fields)
 
   def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt =

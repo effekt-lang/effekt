@@ -6,7 +6,7 @@ import effekt.context.Context
 import effekt.lifted
 import effekt.lifted.LiftInference
 import effekt.symbols
-import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, BuiltinType, DataType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
 
 object Transformer {
 
@@ -266,8 +266,8 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Record), List(), args) =>
-      val variable = Variable(freshName("x"), transform(blockName.tpe));
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Constructor), List(), args) =>
+      val variable = Variable(freshName("x"), transform(blockName.returnType));
       val tag = getTagFor(blockName)
 
       transform(args).flatMap { values =>
@@ -277,8 +277,9 @@ object Transformer {
       }
 
     case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
-      val fieldIndex = field.record.fields.indexOf(field)
-      val variables = field.record.fields.map { f => Variable(freshName("n"), transform(f.tpe)) }
+      val fields = field.constructor.fields
+      val fieldIndex = fields.indexOf(field)
+      val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }
       transform(target).flatMap { value =>
         Binding { k =>
           Switch(value, List(Clause(variables, k(variables(fieldIndex)))))
@@ -296,17 +297,13 @@ object Transformer {
       Context.abort(s"Unsupported expression: $expr")
   }
 
-  def getTagFor(record: symbols.Record)(using Context): Int = record.tpe match {
-      case symbols.ValueTypeApp(symbols.DataType(name, Nil, variants), _) => variants.indexOf(record)
-      // TODO
-      case symbols.ValueTypeApp(symbols.DataType(name, tparams, variants), _) => Context.abort("not yet supported: (data) type polymorphism")
-
-      case symbols.ValueTypeApp(symbols.Record(name, Nil, tpe, fields), _) => builtins.SingletonRecord
-      // TODO
-      case symbols.ValueTypeApp(symbols.Record(name, tparams, tpe, fields), _) => Context.abort("not yet supported: record polymorphism")
-
-      case symbol => Context.abort(s"application to an unknown symbol: $symbol")
-    }
+  def getTagFor(constructor: symbols.Constructor)(using Context): Int = constructor.tpe match {
+    case symbols.DataType(name, Nil, constructors) => constructors.indexOf(constructor)
+    case symbols.DataType(name, tparams, constructors) => Context.abort("Not yet supported: (data) type polymorphism")
+    case symbols.Record(name, Nil, constructor) => builtins.SingletonRecord
+    case symbols.Record(name, tparams, constructor) => Context.abort("Not yet supported: (data) type polymorphism")
+    case t @ symbols.BuiltinType(name, tparams) => Context.abort(s"Application to an unknown symbol: $t")
+  }
 
   def transform(args: List[lifted.Argument])(using BlocksParamsContext, Context): Binding[List[Variable]] =
     args match {

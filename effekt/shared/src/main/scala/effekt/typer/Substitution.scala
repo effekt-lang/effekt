@@ -93,9 +93,6 @@ case class Substitutions(
 object Substitutions {
   val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[CaptVar, Captures])
   def apply(values: List[(TypeVar, ValueType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, captures.toMap)
+  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty)
+  def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap)
 }
-
-// TODO Mostly for backwards compat
-implicit def typeMapToSubstitution(values: Map[TypeVar, ValueType]): Substitutions = Substitutions(values, Map.empty[CaptVar, Captures])
-implicit def captMapToSubstitution(captures: Map[CaptVar, Captures]): Substitutions = Substitutions(Map.empty[TypeVar, ValueType], captures)
-

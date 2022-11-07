@@ -123,7 +123,10 @@ object ChezSchemeLift extends Backend {
 
     case Data(did, ctors, rest) =>
       val Block(defs, exprs, result) = toChez(rest)
-      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
+      val constructors = ctors.flatMap {
+        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
+        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
+      }
       Block(constructors ++ defs, exprs, result)
 
     case Record(did, fields, rest) =>

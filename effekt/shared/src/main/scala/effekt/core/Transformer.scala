@@ -51,7 +51,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      core.Record(rec, rec.fields, rest())
+      core.Record(rec, rec.constructor.fields, rest())
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       Let(v.symbol, Run(transform(binding), Context.inferredTypeOf(binding)), rest())
@@ -306,7 +306,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         PureApp(BlockVar(f), targs, vargsT)
       case f: BuiltinFunction if f.purity == ExternFlag.IO =>
         DirectApp(BlockVar(f), targs, as)
-      case r: Record =>
+      case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
         PureApp(BlockVar(r), targs, vargsT)
       case f: Operation =>

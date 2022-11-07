@@ -6,7 +6,7 @@ package namer
  */
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
-import effekt.typer.{ Substitutions, typeMapToSubstitution }
+import effekt.typer.Substitutions
 import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
@@ -152,12 +152,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         // later in the file
         Record(Context.nameFor(id), tps, null)
       }
-      sym.tpe = ValueTypeApp(sym, sym.tparams map ValueTypeRef.apply)
-
-      // define constructor
-      Context.define(id, sym: TermSymbol)
-      // define record type
-      Context.define(id, sym: TypeSymbol)
+      Context.define(id, sym)
 
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
@@ -275,26 +270,25 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // The type itself has already been resolved, now resolve constructors
     case d @ source.DataDef(id, tparams, ctors) =>
-      val typ = d.symbol
-      typ.variants = ctors map {
+      val data = d.symbol
+      data.constructors = ctors map {
         case source.Constructor(id, ps) =>
           val name = Context.freshNameFor(id)
-          val ctorRet = ValueTypeApp(typ, typ.tparams map ValueTypeRef.apply)
-          val record = Record(name, typ.tparams, ctorRet)
-          // define constructor
-          Context.define(id, record: TermSymbol)
-          // define record type
-          Context.define(id, record: TypeSymbol)
-
-          // now also resolve fields
-          record.fields = resolveFields(ps, record)
-          record
+          val constructor = Constructor(name, data.tparams, null, data)
+          Context.define(id, constructor)
+          constructor.fields = resolveFields(ps, constructor)
+          constructor
       }
 
     // The record has been resolved as part of the preresolution step
-    case d @ source.RecordDef(id, tparams, fields) =>
+    case d @ source.RecordDef(id, tparams, fs) =>
       val record = d.symbol
-      record.fields = resolveFields(fields, record)
+      val name = Context.freshNameFor(id)
+      val constructor = Constructor(name, record.tparams, null, record)
+      // we define the constructor on a copy to avoid confusion with symbols
+      Context.define(id.clone, constructor)
+      record.constructor = constructor
+      constructor.fields = resolveFields(fs, constructor)
 
     case source.ExternType(id, tparams) => ()
     case source.ExternFun(pure, id, tps, vps, bps, ret, body) => ()
@@ -431,10 +425,10 @@ object Namer extends Phase[Parsed, NameResolved] {
   }
 
   // TODO move away
-  def resolveFields(params: List[source.ValueParam], record: Record)(using Context): List[Field] = {
+  def resolveFields(params: List[source.ValueParam], constructor: Constructor)(using Context): List[Field] = {
     val paramSyms = Context scoped {
       // Bind the type parameters
-      record.tparams.foreach { t => Context.bind(t) }
+      constructor.tparams.foreach { t => Context.bind(t) }
       params map resolve
     }
 
@@ -442,7 +436,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       case (paramSym, paramTree) =>
         val fieldId = paramTree.id.clone
         val name = Context.freshNameFor(fieldId)
-        val fieldSym = Field(name, paramSym, record)
+        val fieldSym = Field(name, paramSym, constructor)
         Context.define(fieldId, fieldSym)
         fieldSym
     }
@@ -524,8 +518,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         if (tparams.size != targs.size) {
           Context.abort(pretty"Type alias ${name} expects ${tparams.size} type arguments, but got ${targs.size}.")
         }
-        val subst = (tparams zip targs).toMap
-        subst.substitute(tpe)
+        Substitutions.types(tparams, targs).substitute(tpe)
       case other => Context.abort(pretty"Expected a value type, but got ${other}")
     }
     case source.TypeVar(id) => Context.resolveType(id) match {
@@ -607,7 +600,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             Context.abort(pretty"Effect alias ${name} expects ${tparams.size} type arguments, but got ${args.size}.")
           }
           val targs = args.map(resolve)
-          val subst = (tparams zip targs).toMap
+          val subst = Substitutions.types(tparams, targs)
           effs.toList.map(subst.substitute)
         case _ => List(resolve(tpe))
       }

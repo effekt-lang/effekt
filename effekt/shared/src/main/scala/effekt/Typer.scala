@@ -157,7 +157,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         // (2a) compute substitution for inferred type arguments
         val typeArgs = Context.annotatedTypeArgs(c)
         val operation = c.definition
-        val subst = (operation.tparams zip typeArgs).toMap
+        val subst = Substitutions.types(operation.tparams, typeArgs)
 
         // (2b) substitute into effect type of operation
         val effect = subst.substitute(operation.appliedEffect)
@@ -316,7 +316,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           //     effect E[A, B, ...] { def op[C, D, ...]() = ... }  !--> op[A, B, ..., C, D, ...]
           // The parameters C, D, ... are existentials
           val existentials: List[ValueType] = tparams.map {
-            tparam => ValueTypeRef(tparam.symbol.asTypeVar)
+            tparam => ValueTypeRef(tparam.symbol.asTypeParam)
           }
 
           val expectedTypeParams = declaredType.tparams.size - targs.size
@@ -465,10 +465,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     case p @ source.TagPattern(id, patterns) =>
 
       // symbol of the constructor we match against
-      val sym: Record = Context.symbolOf(id) match {
-        case c: Record => c
-        case _         => Context.abort("Can only match on constructors")
-      }
+      val sym: Constructor = p.definition
 
       // (4) Compute blocktype of this constructor with rigid type vars
       // i.e. Cons : `(?t1, List[?t1]) => List[?t1]`
@@ -558,21 +555,19 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
     case source.DataDef(id, tparams, ctors) =>
-      ctors.foreach { ctor =>
-        val sym = ctor.symbol
-        Context.bind(sym, sym.toType, CaptureSet())
-
-        sym.fields.foreach { field =>
+      ctors.foreach { c =>
+        val constructor = c.symbol
+        Context.bind(constructor, constructor.toType, CaptureSet())
+        constructor.fields.foreach { field =>
           val tpe = field.toType
           wellformed(tpe)
-          Context.bind(field, tpe, CaptureSet())
         }
       }
 
     case d @ source.RecordDef(id, tparams, fields) =>
-      val rec = d.symbol
-      Context.bind(rec, rec.toType, CaptureSet())
-      rec.fields.foreach { field =>
+      val constructor = d.symbol.constructor
+      Context.bind(constructor, constructor.toType, CaptureSet())
+      constructor.fields.foreach { field =>
         val tpe = field.toType
         wellformed(tpe)
         Context.bind(field, tpe, CaptureSet())
@@ -752,8 +747,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.abort(s"Wrong number of block arguments, given ${bparams.size}, but function expects ${bps.size}.")
 
       // (3) Substitute type parameters
-      val typeParams = tparams.map { p => p.symbol.asTypeVar }
-      val typeSubst = (tps zip typeParams.map { p => ValueTypeRef(p) }).toMap
+      val typeParams = tparams.map { p => p.symbol.asTypeParam }
+      val typeSubst = Substitutions.types(tps, typeParams.map { p => ValueTypeRef(p) })
 
       // (4) Check type annotations against declaration
       val valueTypes = (vparams zip vps) map {
@@ -785,10 +780,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (5) Substitute capture params
       val captParams = (bparams.map(_.symbol) ++ capabilities).map { p => p.capture }
-      val captSubst = (cps zip (captParams.map { p => CaptureSet(p) })).toMap[CaptVar, Captures]
+      val captSubst = Substitutions.captures(cps, captParams.map { p => CaptureSet(p) })
 
       // (6) Substitute both types and captures into expected return type
-      val subst = Substitutions(typeSubst, captSubst)
+      val subst = typeSubst ++ captSubst
 
       val expectedReturn = subst substitute tpe1
 
@@ -810,7 +805,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def inferFunctionArgument(arg: source.BlockLiteral)(using Context, Captures): Result[BlockType] = Context.focusing(arg) {
     case arg @ source.BlockLiteral(tparams, vparams, bparams, body) => Context in {
-      val tps = tparams.map { p => p.symbol.asTypeVar }
+      val tps = tparams.map { p => p.symbol.asTypeParam }
       val vps = vparams.map { p =>
         val param = p.symbol
         val tpe = p.symbol.tpe.getOrElse {
@@ -1028,6 +1023,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     // (2) check return type
     expected.foreach { expected => matchExpected(ret, expected) }
+
+    val typeSubst = Substitutions.types(funTpe.tparams, typeArgs)
 
     var effs: ConcreteEffects = Pure
 

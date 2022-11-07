@@ -55,7 +55,7 @@ package object kinds {
 
   private def wellformedTypeConstructor(tpe: TypeConstructor)(using C: Context): Kind.Fun = tpe match {
     case DataType(_, tparams, _)  => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
-    case Record(_, tparams, _, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
+    case Record(_, tparams, _) => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
     case BuiltinType(_, tparams)  => Kind.Fun(tparams map { p => Kind.VType }, Kind.VType)
   }
 

@@ -76,7 +76,7 @@ sealed trait BlockType extends Type
 
 
 case class FunctionType(
-  tparams: List[TypeVar],
+  tparams: List[TypeParam],
   cparams: List[Capture],
   vparams: List[ValueType],
   bparams: List[BlockType],

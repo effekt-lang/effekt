@@ -133,7 +133,7 @@ trait Intelligence {
     case t: TypeAlias =>
       SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
-    case c: Record =>
+    case c: Constructor =>
       val ex = pp"""|Instances of data types like `${c.tpe}` can only store
                     |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
                     |value parameter lists, not block parameters.

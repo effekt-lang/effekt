@@ -6,7 +6,6 @@ import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.{ Def, ExprTarget, IdTarget, MatchPattern, Tree }
 import effekt.source.Tree.{ Query, Visit }
-import effekt.typer.typeMapToSubstitution
 
 object PostTyper extends Phase[Typechecked, Typechecked] {
 
@@ -83,7 +82,7 @@ object Wellformedness extends Visit[WFContext] {
         scoped { query(h) }
 
         h.clauses.foreach { cl =>
-          val existentials = cl.tparams.map(_.symbol.asTypeVar)
+          val existentials = cl.tparams.map(_.symbol.asTypeParam)
           existentials.foreach { t =>
             if (typesInEffects.contains(t)) {
               Context.error(pp"Type variable ${t} escapes its scope as part of the effect types: ${usedEffects}")
@@ -160,36 +159,38 @@ object Wellformedness extends Visit[WFContext] {
    * can be improved a lot.
    */
   def checkExhaustivity(sc: TypeConstructor, cls: List[MatchPattern])(using Context, WFContext): Unit = {
+    sc match {
+      case t: DataType =>
+        t.constructors.foreach { variant => checkExhaustivity(variant, cls) }
+
+      case t: Record =>
+        checkExhaustivity(t.constructor, cls)
+
+      // it is not possible to match on builtins
+      case b: Builtin =>
+        ()
+    }
+  }
+
+  def checkExhaustivity(sc: Constructor, cls: List[MatchPattern])(using Context, WFContext): Unit = {
     import source.{ MatchPattern, AnyPattern, IgnorePattern, TagPattern }
 
     val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
 
     if (catchall)
-      return ;
+      return;
 
-    sc match {
-      case t: DataType =>
-        t.variants.foreach { variant =>
-          checkExhaustivity(variant, cls)
-        }
+    val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
+      case p if p.definition == sc => Left(p.patterns)
+      case p => Right(p)
+    }
 
-      case t: Record =>
-        val (related, unrelated) = cls.collect { case p: TagPattern => p }.partitionMap {
-          case p if p.definition == t => Left(p.patterns)
-          case p => Right(p)
-        }
+    if (related.isEmpty) {
+      Context.error(s"Non exhaustive pattern matching, missing case for ${ sc }")
+    }
 
-        if (related.isEmpty) {
-          Context.error(s"Non exhaustive pattern matching, missing case for ${sc}")
-        }
-
-        (t.fields.map { f => f.tpe } zip related.transpose) foreach {
-          case (t, ps) => checkExhaustivity(t, ps)
-        }
-
-      // it is not possible to match on builtins
-      case b: Builtin =>
-        ()
+    (sc.fields.map { f => f.returnType } zip related.transpose) foreach {
+      case (t, ps) => checkExhaustivity(t, ps)
     }
   }
 

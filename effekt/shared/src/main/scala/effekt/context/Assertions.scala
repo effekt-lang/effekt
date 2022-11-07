@@ -13,9 +13,9 @@ object assertions {
    * in one place
    */
   extension(s: Symbol)(using reporter: ErrorReporter) {
-    def asTypeVar: TypeVar = s match {
-      case t: TypeVar => t
-      case _ => reporter.abort("Expected a type variable")
+    def asTypeParam: TypeParam = s match {
+      case t: TypeParam => t
+      case _ => reporter.abort("Expected a type parameter")
     }
     def asValueParam: ValueParam = s match {
       case t: ValueParam => t
@@ -41,8 +41,8 @@ object assertions {
       case t: BuiltinFunction => t
       case _ => reporter.abort("Expected a builtin function")
     }
-    def asConstructor: Record = s match {
-      case t: Record => t
+    def asConstructor: Constructor = s match {
+      case t: Constructor => t
       case _ => reporter.abort("Expected a constructor")
     }
     def asDataType: DataType = s match {

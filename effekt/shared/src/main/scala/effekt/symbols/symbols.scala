@@ -24,6 +24,9 @@ sealed trait TermSymbol extends Symbol
 trait ValueSymbol extends TermSymbol
 trait BlockSymbol extends TermSymbol
 
+/**
+ * Marker trait for LSP to filter out synthetically generated symbols
+ */
 sealed trait Synthetic extends Symbol {
   override def synthetic = true
 }
@@ -103,7 +106,7 @@ case class SelfParam(tree: source.Tree) extends TrackedParam {
 }
 
 trait Callable extends BlockSymbol {
-  def tparams: List[TypeVar]
+  def tparams: List[TypeParam]
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
   def annotatedResult: Option[ValueType]
@@ -112,7 +115,7 @@ trait Callable extends BlockSymbol {
 
 case class UserFunction(
   name: Name,
-  tparams: List[TypeVar],
+  tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
   annotatedResult: Option[ValueType],
@@ -206,10 +209,10 @@ case class UnificationVar(role: UnificationVar.Role) extends TypeVar {
 }
 object UnificationVar {
   sealed trait Role
-  case class TypeVariableInstantiation(underlying: TypeVar, call: source.Tree) extends Role
+  case class TypeVariableInstantiation(underlying: TypeParam, call: source.Tree) extends Role
 }
 
-case class TypeAlias(name: Name, tparams: List[TypeVar], tpe: ValueType) extends ValueTypeSymbol
+case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) extends ValueTypeSymbol
 
 /**
  * Types that _can_ be used in type constructor position. e.g. >>>List<<<[T]
@@ -218,41 +221,36 @@ case class TypeAlias(name: Name, tparams: List[TypeVar], tpe: ValueType) extends
  * - [[Record]]
  * - [[BuiltinType]]
  */
-sealed trait TypeConstructor extends TypeSymbol
+sealed trait TypeConstructor extends TypeSymbol {
+  def tparams: List[TypeParam]
+}
 
-case class DataType(name: Name, tparams: List[TypeVar], var variants: List[Record] = Nil) extends TypeConstructor
+case class DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil) extends TypeConstructor
+case class Record(name: Name, tparams: List[TypeParam], var constructor: Constructor) extends TypeConstructor
 
-  /**
- * Structures are also function symbols to represent the constructor
- */
-case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Callable with Synthetic {
-  // Parameter and return type of the constructor:
-  lazy val vparams = fields.map { f => f.param }
-  val bparams = List.empty[BlockParam]
+case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable, Synthetic {
+  // Parameters and return type of the constructor
+  lazy val vparams: List[ValueParam] = fields.map { f => f.param }
+  val bparams: List[BlockParam] = Nil
 
-  def annotatedResult = Some(tpe)
-
+  val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
+  def annotatedResult = Some(returnType)
   def annotatedEffects = Some(Effects.Pure)
 }
 
-/**
- * The record symbols is _both_ a type (record type) _and_ a term symbol (constructor).
- *
- * param: The underlying constructor parameter
- */
-case class Field(name: Name, param: ValueParam, record: Record) extends Callable with Synthetic {
-  val tparams = record.tparams
-  val tpe = param.tpe.get
-  val vparams = List(ValueParam(record.name, Some(ValueTypeApp(record, record.tparams map ValueTypeRef.apply))))
+case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable, Synthetic {
+  val tparams = constructor.tparams
+  val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
   val bparams = List.empty[BlockParam]
 
-  def annotatedResult = Some(tpe)
+  val returnType = param.tpe.get
+  def annotatedResult = Some(returnType)
   def annotatedEffects = Some(Effects.Pure)
 }
 
 
-case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends BlockTypeSymbol
-case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
+case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeSymbol
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
   def annotatedResult = Some(resultType)
@@ -263,7 +261,7 @@ case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValuePara
 /**
  * Effect aliases are *not* block types; they cannot be used for example in `def foo { f : Alias }`.
  */
-case class EffectAlias(name: Name, tparams: List[TypeVar], effs: Effects) extends BlockTypeSymbol
+case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects) extends BlockTypeSymbol
 
 
 /**
@@ -337,7 +335,7 @@ sealed trait Builtin extends Symbol {
 
 case class BuiltinFunction(
   name: Name,
-  tparams: List[TypeVar],
+  tparams: List[TypeParam],
   vparams: List[ValueParam],
   bparams: List[BlockParam],
   result: ValueType,
@@ -349,5 +347,5 @@ case class BuiltinFunction(
   def annotatedEffects = Some(effects)
 }
 
-case class BuiltinType(name: Name, tparams: List[TypeVar]) extends TypeConstructor, Builtin
+case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
 
