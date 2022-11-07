@@ -178,7 +178,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           case _ => Context.abort("Cannot infer function type for callee.")
         }
 
-        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected, None)
+        val Result(t, eff) = checkCallTo(c, "function", tpe, targs map { _.resolve }, vargs, bargs, expected)
         Result(t, eff ++ funEffs)
 
       // precondition: PreTyper translates all uniform-function calls to `Call`.
