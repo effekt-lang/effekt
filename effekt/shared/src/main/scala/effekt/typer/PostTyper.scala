@@ -216,8 +216,6 @@ object Wellformedness extends Visit[WFContext] {
     effects.toList foreach checkEffect
   }
 
-  def extractInterfaces(e: List[InterfaceType]): List[Interface] = e.map(_.typeConstructor).distinct
-
   // Can only compute free capture on concrete sets
   def freeCapture(o: Any): Set[Capture] = o match {
     case t: symbols.Capture   => Set(t)

@@ -156,15 +156,17 @@ class BoxUnboxInference {
       }
       DefDef(id, annot, block)
 
-    case d: InterfaceDef        => d
-    case d: DataDef       => d
-    case d: RecordDef     => d
-    case d: TypeDef       => d
-    case d: EffectDef     => d
+    case d: InterfaceDef   => d
+    case d: DataDef        => d
+    case d: RecordDef      => d
+    case d: TypeDef        => d
+    case d: EffectDef      => d
 
-    case d: ExternType    => d
-    case d: ExternFun     => d
-    case d: ExternInclude => d
+    case d: ExternType     => d
+    case d: ExternDef      => d
+    case d: ExternResource => d
+    case d: ExternInterface => d
+    case d: ExternInclude  => d
   }
 
   def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {

@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, ExternFlag, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -88,13 +88,18 @@ case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with Val
 // TODO everywhere else the two universes are called "value" and "block"
 
 sealed trait TrackedParam extends Param with BlockSymbol {
-  // every block parameter gives rise to a capture parameter
-  lazy val capture: Capture = CaptureParam(name)
+  def capture: Capture
 }
-case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
+case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam {
+  // every block parameter gives rise to a capture parameter
+  val capture: Capture = CaptureParam(name)
+}
 
 // to be fair, resume is not tracked anymore, but transparent.
-case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
+case class ResumeParam(module: Module) extends TrackedParam {
+  val name = Name.local("resume")
+  def capture = ???
+}
 
 /**
  * Term-level representation of the current region.
@@ -250,7 +255,11 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
 }
 
 
-case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeSymbol
+sealed trait BlockTypeConstructor extends BlockTypeSymbol {
+  def tparams: List[TypeParam]
+}
+
+case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeConstructor
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
@@ -260,7 +269,8 @@ case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValuePa
 }
 
 /**
- * Effect aliases are *not* block types; they cannot be used for example in `def foo { f : Alias }`.
+ * Effect aliases are *not* block types, or block type constructors. They have to be dealiased by [[Namer]]
+ * before usage.
  */
 case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects) extends BlockTypeSymbol
 
@@ -278,8 +288,21 @@ sealed trait CaptVar extends TypeSymbol
  * - [[LexicalRegion]] to model self regions of functions
  */
 trait Capture extends CaptVar
-case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+
+/**
+ * Capture parameters introduced by block parameters (they count as `control`, since they can close over arbitrary capabilities)
+ */
 case class CaptureParam(name: Name) extends Capture
+
+/**
+ * Self region of functions and handlers (they count in as `io` when considering direct style)
+ */
+case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+
+/**
+ * Represents external resources (they count in as `io` when considering direct style)
+ */
+case class Resource(name: Name) extends Capture
 
 case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar {
   val name = Name.local("?C")
@@ -340,12 +363,17 @@ case class BuiltinFunction(
   bparams: List[BlockParam],
   result: ValueType,
   effects: Effects,
-  purity: ExternFlag.Purity = ExternFlag.Pure,
+  capture: CaptureSet,
   body: String = ""
 ) extends Callable with BlockSymbol with Builtin {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }
 
-case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
+case class BuiltinResource(name: Name, tpe: BlockType) extends TrackedParam, Builtin {
+  // every block parameter gives rise to a capture parameter
+  val capture: Capture = Resource(name)
+}
 
+case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
+case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Builtin
