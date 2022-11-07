@@ -3,7 +3,7 @@ module examples/pos/bidirectional/pingpong
 effect Ping(): Unit / { Pong }
 effect Pong(): Unit / { Ping }
 
-def pinger(i: Int, N: Int) : Unit / { Ping, Console } = {
+def pinger(i: Int, N: Int) : Unit / { Ping } = {
   println("enter pinger")
 
   println(i)
@@ -21,7 +21,7 @@ def pinger(i: Int, N: Int) : Unit / { Ping, Console } = {
   }
 }
 
-def ponger(): Unit / { Pong, Console } = {
+def ponger(): Unit / { Pong } = {
   println("enter ponger")
   try {
     do Pong()

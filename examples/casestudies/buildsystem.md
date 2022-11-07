@@ -49,7 +49,7 @@ spreadsheet:
 | **2**  | 20 | B1 * 2  |
 
 ```
-def example1(key: Key): Val / { Need, NeedInput, Console } = {
+def example1(key: Key): Val / { Need, NeedInput } = {
     println(key);
     key match {
         case "B1" => do Need("A1") + do Need("A2")

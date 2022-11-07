@@ -1,0 +1,30 @@
+module mutable/dict
+
+import immutable/option
+
+// https://cisco.github.io/ChezScheme/csug9.5/compat.html#g148
+extern type Dict[K, V]
+
+extern io def emptyDict[K, V](): Dict[K, V] =
+    "(make-eq-hashtable)"
+
+extern io def emptyWeakDict[K, V](): Dict[K, V] =
+    "(make-hash-table #t)"
+
+extern io def put[K, V](d: Dict[K, V], key: K, value: V): Unit =
+    "(put-hash-table! d key value)"
+
+extern io def get[K, V](d: Dict[K, V], key: K, default: V): V =
+    "(hashtable-ref d key default)"
+
+extern io def unsafeGet[K, V](d: Dict[K, V], key: K): V =
+    "(hashtable-ref d key #f)"
+
+extern io def contains[K, V](d: Dict[K, V], key: K): Boolean =
+    "(hashtable-contains? d key)"
+
+extern io def remove[K, V](d: Dict[K, V], key: K): Unit =
+    "(remove-hash-table! d key)"
+
+def get[K, V](d: Dict[K, V], key: K): Option[V] =
+    undefinedToOption(unsafeGet(d, key))

@@ -12,9 +12,13 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends EffektTests {
 
-  override lazy val ignored: List[File] = List(
-    examplesDir / "llvm"
+  override def included: List[File] = List(
+    examplesDir / "pos",
+    examplesDir / "neg",
+    examplesDir / "casestudies"
   )
+
+  override lazy val ignored: List[File] = List()
 
   def runTestFor(input: File, check: File, expected: String): Unit =
     test(input.getPath) {
@@ -62,8 +66,10 @@ object TestUtils {
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
           val out = interpretJS(f)
-          // save checkfile in source folder (e.g. examples/)
-          IO.write(checkfile, out)
+
+          // Save checkfile in source folder (e.g. examples/)
+          // We remove ansi colors to make check files human-readable.
+          IO.write(checkfile, removeAnsiColors(out))
         }
       case _ => ()
     }
@@ -72,4 +78,6 @@ object TestUtils {
   def generateCheckFiles(regenerateAll: Boolean = false): Unit = {
     generateCheckFilesIn(examplesDir, regenerateAll)
   }
+
+  def removeAnsiColors(text: String): String = text.replaceAll("\u001B\\[[;\\d]*m", "")
 }

@@ -10,16 +10,16 @@ def emptyArray[T](): Array[T] = emptyArray(0)
 extern pure def emptyArray[T](initialSize: Int): Array[T] =
   "(new Array(initialSize))"
 
-def get[T](arr: Array[T])(index: Int): Option[T] =
+def get[T](arr: Array[T], index: Int): Option[T] =
     arr.unsafeGet(index).undefinedToOption
 
 extern pure def size[T](arr: Array[T]): Int =
     "arr.length"
 
-extern pure def unsafeGet[T](arr: Array[T])(index: Int): T =
+extern pure def unsafeGet[T](arr: Array[T], index: Int): T =
     "arr[index]"
 
-extern io def put[T](arr: Array[T])(index: Int, value: T): Unit =
+extern io def put[T](arr: Array[T], index: Int, value: T): Unit =
     "(function() { arr[index] = value; return $effekt.unit })()"
 
 extern pure def copy[T](arr: Array[T]): Array[T] =

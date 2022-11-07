@@ -101,7 +101,7 @@ type Predicate {
   InLoveWith(p: Person)
   Woman()
 }
-def loves(lover: Person)(loved: Person) = Is(lover, InLoveWith(loved))
+def loves(lover: Person, loved: Person) = Is(lover, InLoveWith(loved))
 ```
 
 We can now construct sentences like
@@ -135,7 +135,7 @@ def said(p: Person) { s: => Sentence / Speaker }: Sentence / {} =
 Here is another definition of `said`, that does _not_ handle the speaker effect, corresponding
 to omitting the quotationmarks:
 ```
-def said(p: Person)(s: Sentence): Sentence =
+def said(p: Person, s: Sentence): Sentence =
   Say(p, s)
 ```
 

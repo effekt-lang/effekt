@@ -159,7 +159,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     sym match {
       case _: Module =>
         Some(SymbolKind.Class)
-      case _: Fun =>
+      case _: Callable =>
         Some(SymbolKind.Method)
       case _: Param | _: ValBinder | _: VarBinder =>
         Some(SymbolKind.Variable)

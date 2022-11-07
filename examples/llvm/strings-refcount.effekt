@@ -2,11 +2,11 @@ def g(x: String): String = {
     x
 }
 
-def f(x: String): Unit / Console = {
+def f(x: String): Unit = {
     println(g(x));
 }
 
-def main(): Unit / Console = {
+def main(): Unit = {
     val x = "ycks";
     f(x);
     f(x + x);

@@ -1,7 +1,5 @@
 module effekt
 
-extern effect Console
-
 // Runtime
 extern include "effekt_runtime.js"
 
@@ -206,7 +204,7 @@ def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = panic(msg) }
 
 // reports exceptions of (static) type E to the console
-def report[E] { prog: => Unit / Exception[E] }: Unit / Console =
+def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = println(msg) }
 
 // ignores exceptions of (static) type E
@@ -247,7 +245,7 @@ def timed { block: => Unit }: Int = {
   after - before
 }
 
-def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit / Console = {
+def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
   def run(n: Int, report: Boolean): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };

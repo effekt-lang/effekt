@@ -1,7 +1,7 @@
 module immutable/list
 
+import effekt
 import immutable/option
-import immutable/cslist
 
 type List[A] {
   Nil();
@@ -28,7 +28,7 @@ def size[A](l: List[A]): Int = l match {
 }
 
 def reverse[A](l: List[A]): List[A] = {
-  def reverseWith(l: List[A])(acc: List[A]): List[A] = l match {
+  def reverseWith(l: List[A], acc: List[A]): List[A] = l match {
     case Nil() => acc
     case Cons(a, rest) => rest.reverseWith(Cons(a, acc))
   }
@@ -37,7 +37,7 @@ def reverse[A](l: List[A]): List[A] = {
 
 // [1,2,3].reverseOnto([4,5,6])
 // [3,2,1,4,5,6]
-def reverseOnto[A](l: List[A])(other: List[A]): List[A] = l match {
+def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
   case Nil() => other
   case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
 }
@@ -45,11 +45,11 @@ def reverseOnto[A](l: List[A])(other: List[A]): List[A] = l match {
 // [1,2,3].append([4,5,6])
 // [3,2,1].reverseOnto([4,5,6])
 // [1,2,3,4,5,6]
-def append[A](l: List[A])(other: List[A]): List[A] =
+def append[A](l: List[A], other: List[A]): List[A] =
   l.reverse.reverseOnto(other)
 
 // gracefully fails
-def take[A](l: List[A])(n: Int): List[A] =
+def take[A](l: List[A], n: Int): List[A] =
   if (n == 0) {
     Nil()
   } else l match {
@@ -57,7 +57,7 @@ def take[A](l: List[A])(n: Int): List[A] =
     case Cons(a, rest) => Cons(a, rest.take(n - 1))
   }
 
-def drop[A](l: List[A])(n: Int): List[A] =
+def drop[A](l: List[A], n: Int): List[A] =
   if (n == 0) {
     l
   } else l match {
@@ -85,12 +85,3 @@ def headOption[A](l: List[A]): Option[A] = l match {
   case Nil() => None()
   case Cons(a, rest) => Some(a)
 }
-
-
-def toChez[A](l: List[A]): CSList[A] = l match {
-  case Nil() => nil()
-  case Cons(a, rest) => cons(a, rest.toChez)
-}
-
-def fromChez[A](l: CSList[A]): List[A] =
-  if (l.isEmpty) Nil() else Cons(l.head, l.tail.fromChez)

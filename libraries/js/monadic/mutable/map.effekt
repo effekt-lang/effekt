@@ -8,11 +8,11 @@ extern type Map[K, V]
 extern pure def emptyMap[K, V](): Map[K, V] =
     "new Map()"
 
-def get[K, V](m: Map[K, V])(key: K): Option[V] =
+def get[K, V](m: Map[K, V], key: K): Option[V] =
     m.unsafeGet(key).undefinedToOption
 
-extern pure def unsafeGet[K, V](m: Map[K, V])(key: K): V =
+extern pure def unsafeGet[K, V](m: Map[K, V], key: K): V =
     "m.get(key)"
 
-extern io def update[K, V](m: Map[K, V])(key: K, value: V): Unit =
+extern io def update[K, V](m: Map[K, V], key: K, value: V): Unit =
     "(function() { m.set(key, value); return $effekt.unit })()"

@@ -1,4 +1,4 @@
 hello
-[warning] examples/pos/defdef.effekt:10:14: Handling effects that are not used: Test
+[warning] examples/pos/defdef.effekt:10:14: Handling effects that are not used: { Test }
 def main() = try {
              ^

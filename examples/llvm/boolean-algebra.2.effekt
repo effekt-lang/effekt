@@ -1,7 +1,7 @@
 // Jonathan Frech, 2022-08-17
 
 
-def output(p: Boolean): Unit / Console = {
+def output(p: Boolean): Unit = {
   if (p) { println(1) } else { println(0) }
 }
 

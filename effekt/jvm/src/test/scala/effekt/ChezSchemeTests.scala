@@ -9,8 +9,14 @@ import scala.language.implicitConversions
 
 abstract class ChezSchemeTests extends EffektTests {
 
+  override def included: List[File] = List(
+    examplesDir / "pos",
+    examplesDir / "casestudies",
+    examplesDir / "chez"
+  )
+
   // Test files which are to be ignored (since features are missing or known bugs exist)
-  override lazy val ignored: List[File] = List(
+  override def ignored: List[File] = List(
     examplesDir / "llvm",
 
     examplesDir / "pos" / "arrays.effekt",
@@ -36,7 +42,6 @@ abstract class ChezSchemeTests extends EffektTests {
     examplesDir / "pos" / "infer",
 
     examplesDir / "pos" / "lambdas",
-    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
 
     examplesDir / "pos" / "multiline_extern_definition.effekt", // the test is specific to JS
 
@@ -76,6 +81,12 @@ class ChezSchemeCallCCTests extends ChezSchemeTests {
   }
 }
 class ChezSchemeLiftTests extends ChezSchemeTests {
+  override def ignored: List[File] = super.ignored ++ List(
+    // known issues:
+    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt", // doesn't work with lift inference, yet
+    examplesDir / "pos" / "capture" / "ffi_blocks.effekt" // ffi is passed evidecen, which it does not need
+  )
+
   def runTestFor(input: File, check: File, expected: String): Unit = {
     test(input.getPath + " (lift)") {
       val out = interpretCS(input, "lift")

@@ -49,31 +49,33 @@ object DeclPrinter extends ParenPrettyPrinter {
     case f: BuiltinFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
-    case BuiltinEffect(name, tparams) =>
-      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
-      s"extern effect ${name}$tps"
-
     case BuiltinType(name, tparams) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       s"extern type ${name}$tps"
 
-    case c: Fun =>
+    case c: Callable =>
       val tpe = context.functionTypeOption(c)
       format("def", c, tpe.map { _.result }, tpe.map { _.effects })
+
+    case d: DefBinder =>
+      val tpe = context.blockTypeOption(d).getOrElse { d.tpe.get }
+      pp"def ${ d.name }: ${ tpe }"
   }
 
-  def format(kw: String, f: Fun, result: Option[ValueType], effects: Option[Effects]): Doc = {
+  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
 
     val valueParams = f.vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")
     val vps = if valueParams.isEmpty then "" else s"($valueParams)"
     val bps = f.bparams.map { b => pp"{ ${b.name}: ${b.tpe} }" }.mkString("")
 
+    val ps = if (vps.isEmpty && bps.isEmpty) "()" else s"$vps$bps"
+
     val returnType = for {
       tpe <- result
       eff <- effects
     } yield pp": $tpe / $eff"
 
-    s"$kw ${f.name}$tps$vps$bps${returnType.getOrElse("")}"
+    s"$kw ${f.name}$tps$ps${returnType.getOrElse("")}"
   }
 }
