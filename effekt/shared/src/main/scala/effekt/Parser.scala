@@ -107,13 +107,14 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `unbox` = keyword("unbox")
   lazy val `return` = keyword("return")
   lazy val `region` = keyword("region")
+  lazy val `resource` = keyword("resource")
   lazy val `new` = keyword("new")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
-    "at", "box", "unbox", "return", "region", "new"
+    "at", "box", "unbox", "return", "region", "new", "resource"
   )
 
   def keyword(kw: String): Parser[String] =
@@ -249,7 +250,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | dataDef
     | recordDef
     | externType
+    | externInterface
     | externFun
+    | externResource
     | externInclude
     | failure("Expected a definition")
     )
@@ -280,11 +283,17 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
 
+  lazy val externInterface: P[Def] =
+    `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
+
   lazy val externFun: P[Def] =
-    `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
-        ExternFun(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
+
+  lazy val externResource: P[Def] =
+    (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   // Delimiter for multiline strings
   val multi = "\"\"\""
@@ -298,10 +307,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // multi-line strings `(?s)` sets multi-line mode.
   lazy val multilineString: P[String] = matchRegex(s"(?s)${multi}[\t\n\r ]*(.*?)[\t\n\r ]*${multi}".r) ^^ { m => m.group(1) }
 
-  lazy val externFlag: P[ExternFlag.Purity] =
-    ( `pure` ^^^ ExternFlag.Pure
-    | `io` ^^^ ExternFlag.IO
-    | `control` ^^^ ExternFlag.Control
+  lazy val externCapture: P[CaptureSet] =
+    ( `pure` ^^^ CaptureSet(Nil)
+    | idRef ^^ { id => CaptureSet(List(id)) }
+    | captureSet
+    | success(CaptureSet(List(IdRef("io"))))
     )
 
   lazy val externInclude: P[Def] =

@@ -133,6 +133,15 @@ trait Intelligence {
     case t: TypeAlias =>
       SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
+    case t: BuiltinType =>
+      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None)
+
+    case t: BuiltinInterface =>
+      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None)
+
+    case t: BuiltinResource =>
+      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None)
+
     case c: Constructor =>
       val ex = pp"""|Instances of data types like `${c.tpe}` can only store
                     |_values_, not _blocks_. Hence, constructors like `${c.name}` only have

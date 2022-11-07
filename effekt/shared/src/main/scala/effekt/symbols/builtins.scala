@@ -41,10 +41,10 @@ object builtins {
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
-  val IOCapability = BlockParam(name("io"), InterfaceType(IOSymbol, Nil))
+  val IOCapability = BuiltinResource(name("io"), InterfaceType(IOSymbol, Nil))
 
   val ControlSymbol = Interface(Name.local("Control"), Nil, Nil)
-  val ControlCapability = BlockParam(name("control"), InterfaceType(ControlSymbol, Nil))
+  val ControlCapability = BuiltinResource(name("control"), InterfaceType(ControlSymbol, Nil))
 
   object TState {
     val S = TypeParam(Name.local("S"))
@@ -76,7 +76,7 @@ object builtins {
     "Ref" -> TState.interface
   )
 
-  lazy val globalRegion = BlockParam(name("global"), TRegion)
+  lazy val globalRegion = BuiltinResource(name("global"), TRegion)
 
   val rootTerms: Map[String, TermSymbol] = Map(
     "global" -> globalRegion,

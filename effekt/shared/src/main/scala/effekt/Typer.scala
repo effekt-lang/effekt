@@ -60,6 +60,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case term: BlockParam =>
               Context.bind(term, term.tpe)
               Context.bind(term, CaptureSet(term.capture))
+            case term: BuiltinResource =>
+              Context.bind(term, term.tpe)
+              Context.bind(term, CaptureSet(term.capture))
             case term: Callable =>
               Context.bind(term, term.toType)
             case term => Context.panic(s"Cannot bind builtin term: ${term}")
@@ -291,16 +294,17 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * The [[continuationDetails]] are only provided, if a continuation is captured (that is for implementations as part of effect handlers).
    */
   def checkImplementation(impl: source.Implementation, continuationDetails: Option[(ValueType, CaptUnificationVar)])(using Context, Captures): Result[InterfaceType] = Context.focusing(impl) {
-    case source.Implementation(interface, clauses) =>
+    case source.Implementation(sig, clauses) =>
 
       var handlerEffects: ConcreteEffects = Pure
 
       // Extract interface and type arguments from annotated effect
-      val tpe @ InterfaceType(effectSymbol, targs) = interface.resolve
+      val tpe @ InterfaceType(constructor, targs) = sig.resolve
+      val interface = constructor.asInterface // can only implement concrete interfaces
 
       // (3) check all operations are covered
       val covered = clauses.map { _.definition }
-      val notCovered = effectSymbol.ops.toSet -- covered.toSet
+      val notCovered = interface.ops.toSet -- covered.toSet
 
       if (notCovered.nonEmpty) {
         val explanation = notCovered.map { op => pp"${op.name} of interface ${op.effect.name}" }.mkString(", ")
@@ -534,18 +538,16 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(d.symbol, tpe) }
 
-    case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
+    case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body) =>
       val fun = d.symbol
-      val cap = pure match {
-        case effekt.source.ExternFlag.Pure => CaptureSet.empty
-        case effekt.source.ExternFlag.IO => CaptureSet(builtins.IOCapability.capture)
-        case effekt.source.ExternFlag.Control => CaptureSet(builtins.ControlCapability.capture)
-      }
 
-      Context.bind(fun, fun.toType, cap)
+      Context.bind(fun, fun.toType, fun.capture)
       if (fun.effects.canonical.nonEmpty) {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }
+
+    case d @ source.ExternResource(id, tpe) =>
+      Context.bind(d.symbol)
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       d.symbol.ops.foreach { op =>
@@ -711,7 +713,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         Context.bind(d.symbol, t, inferredCapture)
         Result((), effBinding)
 
-      case d @ source.ExternFun(pure, id, tps, vps, bps, tpe, body) =>
+      case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
         d.symbol.vparams foreach Context.bind
         d.symbol.bparams foreach Context.bind
         Result((), Pure)
@@ -1393,6 +1395,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s @ BuiltinResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s : SelfParam => bind(s, s.tpe, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
   }

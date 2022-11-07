@@ -87,7 +87,7 @@ case class FunctionType(
 
 /** Interfaces */
 
-case class InterfaceType(typeConstructor: Interface, args: List[ValueType]) extends BlockType {
+case class InterfaceType(typeConstructor: BlockTypeConstructor, args: List[ValueType]) extends BlockType {
   def name = typeConstructor.name
 }
 

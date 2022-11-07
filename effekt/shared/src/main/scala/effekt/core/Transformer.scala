@@ -6,7 +6,6 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
-import effekt.source.ExternFlag
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -74,17 +73,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       core.Record(d.symbol, ops.map { e => e.symbol }, rest())
 
-    case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
+    case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
       Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest())
 
+    // For now we forget about all of the following definitions in core:
+    case d: source.ExternResource => rest()
     case d: source.ExternType => rest()
-
-    case d : source.TypeDef => rest()
-
+    case d: source.ExternInterface => rest()
+    case d: source.TypeDef => rest()
     case d: source.EffectDef => rest()
   }
 
@@ -301,10 +301,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val as = vargsT ++ bargsT
 
     sym match {
-      case f: BuiltinFunction if f.purity == ExternFlag.Pure =>
+      case f: BuiltinFunction if isPure(f.capture) =>
         // if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
         PureApp(BlockVar(f), targs, vargsT)
-      case f: BuiltinFunction if f.purity == ExternFlag.IO =>
+      case f: BuiltinFunction if pureOrIO(f.capture) =>
         DirectApp(BlockVar(f), targs, as)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
@@ -407,7 +407,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     c =>
       def isIO = c == builtins.IOCapability.capture
       def isMutableState = c.isInstanceOf[LexicalRegion]
-      isIO || isMutableState
+      def isResource = c.isInstanceOf[Resource]
+      def isControl = c == builtins.ControlCapability.capture
+      !isControl && (isIO || isMutableState || isResource)
   }
 }
 

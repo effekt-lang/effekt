@@ -160,8 +160,15 @@ object Namer extends Phase[Parsed, NameResolved] {
         BuiltinType(Context.nameFor(id), tps)
       })
 
-    case source.ExternFun(pure, id, tparams, vparams, bparams, ret, body) => {
+    case source.ExternInterface(id, tparams) =>
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        BuiltinInterface(Context.nameFor(id), tps)
+      })
+
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
       val name = Context.freshNameFor(id)
+      val capt = resolve(capture)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -171,9 +178,16 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        BuiltinFunction(name, tps, vps, bps, tpe, eff, pure, body)
+        BuiltinFunction(name, tps, vps, bps, tpe, eff, capt, body)
       })
     }
+
+    case source.ExternResource(id, tpe) =>
+      val name = Context.freshNameFor(id)
+      val btpe = resolve(tpe)
+      val sym = BuiltinResource(name, btpe)
+      Context.define(id, sym)
+      Context.bindBlock(sym)
 
     case d @ source.ExternInclude(path) =>
       d.contents = Context.contentsOf(path).getOrElse {
@@ -295,7 +309,9 @@ object Namer extends Phase[Parsed, NameResolved] {
       constructor.fields = resolveFields(fs, constructor)
 
     case source.ExternType(id, tparams) => ()
-    case source.ExternFun(pure, id, tps, vps, bps, ret, body) => ()
+    case source.ExternInterface(id, tparams) => ()
+    case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
+    case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path) => ()
 
     case source.If(cond, thn, els) =>
@@ -339,7 +355,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.Implementation(interface, clauses) =>
 
 
-      val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor }
+      val eff: Interface = Context.at(interface) { resolve(interface).typeConstructor.asInterface }
 
       clauses.foreach {
         case source.OpClause(op, tparams, params, ret, body, resumeId) =>
@@ -477,7 +493,6 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val tpe = resolve(p.tpe)
     val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym
@@ -579,24 +594,18 @@ object Namer extends Phase[Parsed, NameResolved] {
     }
   }
 
-  def resolve(tpe: source.BlockTypeRef)(using Context): InterfaceType = resolvingType(tpe) {
-    case source.BlockTypeRef(id, args) =>
-      InterfaceType(resolveIdAsInterface(id), args.map(resolve))
-  }
-
-  // no effect aliases are allowed
-  def resolveIdAsInterface(id: IdRef)(using Context): Interface = Context.at(id) {
-    Context.resolveType(id) match {
-      case i: Interface => i
-      case i: EffectAlias => Context.abort("Expected a single interface type; no effect aliases are allowed.")
-      case o =>  Context.abort(pretty"Expected a single interface type. Got ${o}")
+  def resolve(tpe: source.BlockTypeRef)(using Context): InterfaceType = resolvingType(tpe) { tpe =>
+    resolveWithAliases(tpe) match {
+      case Nil => Context.abort("Expected a single interface type, not an empty effect set.")
+      case resolved :: Nil => resolved
+      case _ => Context.abort("Expected a single interface type, arbitrary effect aliases are not allowed.")
     }
   }
 
   /**
    * Resolves an interface type, potentially with effect aliases on the top level
    */
-  def resolveAsInterfaceType(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
+  def resolveWithAliases(tpe: source.BlockTypeRef)(using Context): List[InterfaceType] = Context.at(tpe) {
     tpe match {
       case source.BlockTypeRef(id, args) => Context.resolveType(id) match {
         case EffectAlias(name, tparams, effs) =>
@@ -606,13 +615,14 @@ object Namer extends Phase[Parsed, NameResolved] {
           val targs = args.map(resolve)
           val subst = Substitutions.types(tparams, targs)
           effs.toList.map(subst.substitute)
-        case _ => List(resolve(tpe))
+        case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolve)))
+        case _ => Context.abort("Expected an interface type.")
       }
     }
   }
 
   def resolve(tpe: source.Effects)(using Context): Effects =
-    Effects(tpe.effs.flatMap(resolveAsInterfaceType).toSeq: _*) // TODO this otherwise is calling the wrong apply
+    Effects(tpe.effs.flatMap(resolveWithAliases).toSeq: _*) // TODO this otherwise is calling the wrong apply
 
   def resolve(e: source.Effectful)(using Context): (ValueType, Effects) =
     (resolve(e.tpe), resolve(e.eff))
@@ -848,7 +858,8 @@ trait NamerOps extends ContextOps { Context: Context =>
 
     val syms = eff match {
       case Some(tpe) =>
-        val operations = tpe.typeConstructor.ops.filter { op => op.name.name == id.name }
+        val interface = tpe.typeConstructor.asInterface
+        val operations = interface.ops.filter { op => op.name.name == id.name }
         if (operations.isEmpty) Nil else List(operations.toSet)
       case None => scope.lookupEffectOp(id.name)
     }
