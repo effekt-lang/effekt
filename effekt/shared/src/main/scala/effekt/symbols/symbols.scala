@@ -352,6 +352,8 @@ case class BuiltinFunction(
   def annotatedEffects = Some(effects)
 }
 
+case class BuiltinResource(name: Name, tpe: BlockType) extends TrackedParam, Builtin
+
 case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
 
 case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Builtin

@@ -3,6 +3,12 @@ extern resource foo: MyResource
 extern {foo} def bar(): Int = "42"
 def user() = bar()
 
+extern interface StackLocal
+extern resource stack: StackLocal
+
+extern interface Array[T]
+extern {stack} def makeArray[T](size: Int): Array[T] at {stack} = "0"
+
 def main() = {
   val f: () => Int at {foo} = user;
   ()

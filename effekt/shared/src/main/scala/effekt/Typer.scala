@@ -1392,6 +1392,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s @ BuiltinResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s : SelfParam => bind(s, s.tpe, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
   }

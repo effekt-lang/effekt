@@ -185,7 +185,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternResource(id, tpe) =>
       val name = Context.freshNameFor(id)
       val btpe = resolve(tpe)
-      val sym = BlockParam(name, btpe)
+      val sym = BuiltinResource(name, btpe)
       Context.define(id, sym)
       Context.bindBlock(sym)
 
