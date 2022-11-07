@@ -230,13 +230,13 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   val bparams: List[BlockParam] = Nil
 
   val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
-  def annotatedResult = Some(returnType)
-  def annotatedEffects = Some(Effects.Pure)
+  def annotatedResult: Option[ValueType] = Some(returnType)
+  def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
-  val tparams = constructor.tparams
+  val tparams: List[TypeParam] = constructor.tparams
   val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
   val bparams = List.empty[BlockParam]
 
@@ -254,9 +254,9 @@ case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operati
 case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
-  def annotatedResult = Some(resultType)
-  def annotatedEffects = Some(Effects(otherEffects.toList))
-  def appliedEffect = InterfaceType(effect, effect.tparams map ValueTypeRef.apply)
+  def annotatedResult: Option[ValueType] = Some(resultType)
+  def annotatedEffects: Option[Effects] = Some(Effects(otherEffects.toList))
+  def appliedEffect: InterfaceType = InterfaceType(effect, effect.tparams map ValueTypeRef.apply)
 }
 
 /**

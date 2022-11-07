@@ -49,14 +49,6 @@ object assertions {
       case t: DataType => t
       case _ => reporter.abort("Expected a data type")
     }
-    def asValueType: ValueType = s match {
-      case t: ValueType => t
-      case _ => reporter.abort("Expected a value type")
-    }
-    def asFunctionType: FunctionType = s match {
-      case t: FunctionType => t
-      case _ => reporter.abort("Expected a block type")
-    }
     def asValBinder: ValBinder = s match {
       case t: ValBinder => t
       case _ => reporter.abort("Expected a value binder")
@@ -68,10 +60,6 @@ object assertions {
     def asBinder: Binder = s match {
       case t: Binder => t
       case _ => reporter.abort("Expected a binder")
-    }
-    def asType: Type = s match {
-      case t: Type => t
-      case _ => reporter.abort("Expected a type")
     }
     def asInterface: Interface = s match {
       case t: Interface => t

@@ -541,7 +541,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       case other => Context.abort(pretty"Expected a value type, but got ${other}")
     }
     case source.TypeVar(id) => Context.resolveType(id) match {
-      case x: ValueType => x
       case TypeAlias(name, tparams, tpe) =>
         if (tparams.nonEmpty) Context.abort(pretty"Type alias ${name.name} expects ${tparams.size} type arguments, but got none.") else tpe
       case other => Context.abort(pretty"Expected a value type, but got ${other}")
