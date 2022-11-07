@@ -21,15 +21,8 @@ import effekt.util.messages.ErrorReporter
 sealed trait TermSymbol extends Symbol
 
 // the two universes of values and blocks
-trait ValueSymbol extends TermSymbol
-trait BlockSymbol extends TermSymbol
-
-/**
- * Marker trait for LSP to filter out synthetically generated symbols
- */
-sealed trait Synthetic extends Symbol {
-  override def synthetic = true
-}
+sealed trait ValueSymbol extends TermSymbol
+sealed trait BlockSymbol extends TermSymbol
 
 /**
  * The result of running the frontend on a module.
@@ -83,32 +76,25 @@ case class Module(
 }
 
 sealed trait Param extends TermSymbol
-case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
+case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSymbol
 
-// TODO everywhere else the two universes are called "value" and "block"
+enum TrackedParam(val name: Name) extends Param, BlockSymbol {
 
-sealed trait TrackedParam extends Param with BlockSymbol {
-  def capture: Capture
-}
-case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam {
-  // every block parameter gives rise to a capture parameter
-  val capture: Capture = CaptureParam(name)
-}
+  case BlockParam(n: Name, tpe: BlockType) extends TrackedParam(n)
+  case ResumeParam(module: Module) extends TrackedParam(Name.local("resume"))
+  case SelfParam(tree: source.Tree) extends TrackedParam(Name.local("this"))
+  case ExternResource(n: Name, tpe: BlockType) extends TrackedParam(n)
 
-// to be fair, resume is not tracked anymore, but transparent.
-case class ResumeParam(module: Module) extends TrackedParam {
-  val name = Name.local("resume")
-  def capture = ???
+  // Every tracked block gives rise to a capture parameter (except resumptions, they are transparent)
+  lazy val capture: Capture = this match {
+    case b: BlockParam => CaptureParam(b.name)
+    case r: ResumeParam => ???
+    case s: SelfParam => LexicalRegion(name, s.tree)
+    case r: ExternResource => Resource(name)
+  }
 }
+export TrackedParam.*
 
-/**
- * Term-level representation of the current region.
- */
-case class SelfParam(tree: source.Tree) extends TrackedParam {
-  val name = Name.local("this")
-  def tpe = builtins.TRegion
-  override lazy val capture: Capture = LexicalRegion(name, tree)
-}
 
 trait Callable extends BlockSymbol {
   def tparams: List[TypeParam]
@@ -136,7 +122,7 @@ sealed trait Anon extends TermSymbol {
   def decl: source.Tree
 }
 
-case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable with Anon {
+case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
   // Lambdas currently do not have an annotated return type
   def annotatedResult = None
   def annotatedEffects = None
@@ -150,20 +136,23 @@ case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: so
  *
  * They also store a reference to the original defition in the source code
  */
-sealed trait Binder extends TermSymbol {
+enum Binder extends TermSymbol {
   def tpe: Option[Type]
   def decl: Def
+
+  case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
+  case VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder, BlockSymbol
+  case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
-case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder with ValueSymbol
-case class VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder with BlockSymbol
-case class DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder with BlockSymbol
+export Binder.*
+
 
 /**
  * Synthetic symbol representing potentially multiple call targets
  *
  * Refined by typer.
  */
-case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
+case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
 
 /**
  * Introduced by Transformer
@@ -192,30 +181,21 @@ sealed trait BlockTypeSymbol extends TypeSymbol
  * - [[TypeParam]] type variables in user programs
  * - [[UnificationVar]] type variables inserted by the type checker.
  */
-sealed trait TypeVar extends ValueTypeSymbol
+enum TypeVar(val name: Name) extends ValueTypeSymbol {
 
-/**
- * Type parameters that show up in user programs
- */
-case class TypeParam(name: Name) extends TypeVar
+  /**
+   * Type parameters that show up in user programs
+   */
+  case TypeParam(n: Name) extends TypeVar(n)
 
-/**
- * Introduced when instantiating type schemes
- *
- * Should neither occur in source programs, nor in inferred types
- */
-case class UnificationVar(role: UnificationVar.Role) extends TypeVar {
-  val name = Name.local("?")
-
-  override def toString = role match {
-    case UnificationVar.TypeVariableInstantiation(underlying, _) => "?" + underlying.toString + id
-    case _ => "?" + id
-  }
+  /**
+   * Introduced when instantiating type schemes
+   *
+   * Should neither occur in source programs, nor in inferred types
+   */
+  case UnificationVar(underlying: TypeVar.TypeParam, call: source.Tree) extends TypeVar(underlying.name)
 }
-object UnificationVar {
-  sealed trait Role
-  case class TypeVariableInstantiation(underlying: TypeParam, call: source.Tree) extends Role
-}
+export TypeVar.*
 
 case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) extends ValueTypeSymbol
 
@@ -224,28 +204,31 @@ case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) exten
  *
  * - [[DataType]]
  * - [[Record]]
- * - [[BuiltinType]]
+ * - [[ExternType]]
  */
-sealed trait TypeConstructor extends TypeSymbol {
+enum TypeConstructor extends TypeSymbol {
   def tparams: List[TypeParam]
+
+  case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil)
+  case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor)
+  case ExternType(name: Name, tparams: List[TypeParam])
 }
+export TypeConstructor.*
 
-case class DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil) extends TypeConstructor
-case class Record(name: Name, tparams: List[TypeParam], var constructor: Constructor) extends TypeConstructor
 
-case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable, Synthetic {
+case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
   lazy val vparams: List[ValueParam] = fields.map { f => f.param }
   val bparams: List[BlockParam] = Nil
 
   val returnType: ValueType = ValueTypeApp(tpe, tparams map ValueTypeRef.apply)
-  def annotatedResult = Some(returnType)
-  def annotatedEffects = Some(Effects.Pure)
+  def annotatedResult: Option[ValueType] = Some(returnType)
+  def annotatedEffects: Option[Effects] = Some(Effects.Pure)
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
-case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable, Synthetic {
-  val tparams = constructor.tparams
+case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
+  val tparams: List[TypeParam] = constructor.tparams
   val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
   val bparams = List.empty[BlockParam]
 
@@ -255,17 +238,21 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
 }
 
 
-sealed trait BlockTypeConstructor extends BlockTypeSymbol {
+enum BlockTypeConstructor extends BlockTypeSymbol {
   def tparams: List[TypeParam]
-}
 
-case class Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil) extends BlockTypeConstructor
-case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
+  case Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil)
+  case ExternInterface(name: Name, tparams: List[TypeParam])
+}
+export BlockTypeConstructor.*
+
+
+case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: BlockTypeConstructor.Interface) extends Callable {
   val bparams = List.empty[BlockParam]
 
-  def annotatedResult = Some(resultType)
-  def annotatedEffects = Some(Effects(otherEffects.toList))
-  def appliedEffect = InterfaceType(effect, effect.tparams map ValueTypeRef.apply)
+  def annotatedResult: Option[ValueType] = Some(resultType)
+  def annotatedEffects: Option[Effects] = Some(Effects(otherEffects.toList))
+  def appliedEffect: InterfaceType = InterfaceType(effect, effect.tparams map ValueTypeRef.apply)
 }
 
 /**
@@ -287,22 +274,24 @@ sealed trait CaptVar extends TypeSymbol
  * Can be either
  * - [[LexicalRegion]] to model self regions of functions
  */
-trait Capture extends CaptVar
+enum Capture extends CaptVar {
 
-/**
- * Capture parameters introduced by block parameters (they count as `control`, since they can close over arbitrary capabilities)
- */
-case class CaptureParam(name: Name) extends Capture
+  /**
+   * Capture parameters introduced by block parameters (they count as `control`, since they can close over arbitrary capabilities)
+   */
+  case CaptureParam(name: Name)
 
-/**
- * Self region of functions and handlers (they count in as `io` when considering direct style)
- */
-case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
+  /**
+   * Self region of functions and handlers (they count in as `io` when considering direct style)
+   */
+  case LexicalRegion(name: Name, tree: source.Tree)
 
-/**
- * Represents external resources (they count in as `io` when considering direct style)
- */
-case class Resource(name: Name) extends Capture
+  /**
+   * Represents external resources (they count in as `io` when considering direct style)
+   */
+  case Resource(name: Name)
+}
+export Capture.*
 
 case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar {
   val name = Name.local("?C")
@@ -350,13 +339,9 @@ object CaptureSet {
 }
 
 /**
- * Builtins
+ * FFI
  */
-sealed trait Builtin extends Symbol {
-  override def builtin = true
-}
-
-case class BuiltinFunction(
+case class ExternFunction(
   name: Name,
   tparams: List[TypeParam],
   vparams: List[ValueParam],
@@ -365,15 +350,17 @@ case class BuiltinFunction(
   effects: Effects,
   capture: CaptureSet,
   body: String = ""
-) extends Callable with BlockSymbol with Builtin {
+) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }
 
-case class BuiltinResource(name: Name, tpe: BlockType) extends TrackedParam, Builtin {
-  // every block parameter gives rise to a capture parameter
-  val capture: Capture = Resource(name)
+/**
+ * Extension method for LSP to filter out synthetically generated symbols
+ */
+extension (s: Symbol) {
+  def isSynthetic: Boolean = s match {
+    case _: Field | _: Constructor | _: CallTarget | _: Wildcard | _: Tmp | _: ResumeParam => true
+    case s => s.synthetic
+  }
 }
-
-case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
-case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Builtin

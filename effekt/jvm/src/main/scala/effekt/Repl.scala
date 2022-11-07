@@ -2,7 +2,7 @@ package effekt
 
 import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
 import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
@@ -198,14 +198,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         output.emitln(s"Successfully imported ${i.path}\n")
         output.emitln(s"Imported Types\n==============")
         cu.types.toList.sortBy { case (n, _) => n }.collect {
-          case (name, sym) if !sym.synthetic =>
+          case (name, sym) if !sym.isSynthetic =>
             outputCode(DeclPrinter(sym), config)
         }
         output.emitln(s"\nImported Functions\n==================")
         cu.terms.toList.sortBy { case (n, _) => n }.foreach {
           case (name, syms) =>
             syms.collect {
-              case sym if !sym.synthetic =>
+              case sym if !sym.isSynthetic =>
                 outputCode(DeclPrinter(sym), config)
             }
         }

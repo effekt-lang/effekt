@@ -28,11 +28,6 @@ trait Symbol {
   lazy val id: Int = Symbol.fresh.next()
 
   /**
-   * Does this symbol denote a builtin?
-   */
-  def builtin = false
-
-  /**
    * Is this symbol synthesized? (e.g. a constructor or field access)
    */
   def synthetic = false

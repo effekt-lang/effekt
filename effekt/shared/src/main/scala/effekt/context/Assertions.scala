@@ -37,8 +37,8 @@ object assertions {
       case t: UserFunction => t
       case _ => reporter.abort("Expected a user defined function")
     }
-    def asBuiltinFunction: BuiltinFunction = s match {
-      case t: BuiltinFunction => t
+    def asBuiltinFunction: ExternFunction = s match {
+      case t: ExternFunction => t
       case _ => reporter.abort("Expected a builtin function")
     }
     def asConstructor: Constructor = s match {
@@ -48,14 +48,6 @@ object assertions {
     def asDataType: DataType = s match {
       case t: DataType => t
       case _ => reporter.abort("Expected a data type")
-    }
-    def asValueType: ValueType = s match {
-      case t: ValueType => t
-      case _ => reporter.abort("Expected a value type")
-    }
-    def asFunctionType: FunctionType = s match {
-      case t: FunctionType => t
-      case _ => reporter.abort("Expected a block type")
     }
     def asValBinder: ValBinder = s match {
       case t: ValBinder => t
@@ -68,10 +60,6 @@ object assertions {
     def asBinder: Binder = s match {
       case t: Binder => t
       case _ => reporter.abort("Expected a binder")
-    }
-    def asType: Type = s match {
-      case t: Type => t
-      case _ => reporter.abort("Expected a type")
     }
     def asInterface: Interface = s match {
       case t: Interface => t

@@ -1,16 +1,12 @@
 package effekt
 package symbols
 
+import TypeVar.*
+
 /**
  * Types
  */
 sealed trait Type
-
-/**
- * like Params but without name binders
- */
-type Sections = List[Type]
-
 
 /**
  * Value Types
@@ -22,23 +18,24 @@ type Sections = List[Type]
  *   |- [[BoxedType]] boxed block types
  */
 
-sealed trait ValueType extends Type
+enum ValueType extends Type {
 
-/**
- * Types of first-class functions
- */
-case class BoxedType(tpe: BlockType, capture: Captures) extends ValueType
+  /**
+   * Types of first-class functions
+   */
+  case BoxedType(tpe: BlockType, capture: Captures)
 
-/**
- * Reference to a type variable (we don't have type constructor polymorphism, so variables do not take arguments)
- */
-case class ValueTypeRef(tvar: TypeVar) extends ValueType
+  /**
+   * Reference to a type variable (we don't have type constructor polymorphism, so variables do not take arguments)
+   */
+  case ValueTypeRef(tvar: TypeVar)
 
-/**
- * Reference to a type constructor with optional type arguments
- */
-case class ValueTypeApp(constructor: TypeConstructor, args: List[ValueType]) extends ValueType
-
+  /**
+   * Reference to a type constructor with optional type arguments
+   */
+  case ValueTypeApp(constructor: TypeConstructor, args: List[ValueType])
+}
+export ValueType.*
 
 /**
  * [[BlockType]]
@@ -46,52 +43,30 @@ case class ValueTypeApp(constructor: TypeConstructor, args: List[ValueType]) ext
  *   |- [[FunctionType]]
  *   |- [[InterfaceType]]
  *
- * Effects are a
- *   list of [[InterfaceType]]
+ * Effects are a list of [[InterfaceType]]
  *
  * Outside of the hierarchy are
  *   [[EffectAlias]]
  * which are resolved by [[Namer]] to a list of [[InterfaceType]]s
  */
-sealed trait BlockType extends Type
+enum BlockType extends Type {
 
-// TODO new function type draft:
-//   example
-//     FunctionType(Nil, List(Cf), Nil, Nil, List((Exc -> Cf)), BoxedType(Exc, Cf), List(Console))
-//   instantiated:
-//     FunctionType(Nil, Nil, Nil, Nil, List((Exc -> ?C1)), BoxedType(Exc, ?C1), List(Console))
-//  case class FunctionType(
-//    tparams: List[TypeVar],
-//    cparams: List[Capture],
-//    vparams: List[ValueType],
-//    // (S -> C) corresponds to { f :^C S }, that is a block parameter with capture C
-//    bparams: List[(BlockType, Captures)],
-//    capabilities: List[(InterfaceType, Captures)],
-//    result: ValueType,
-//    builtins: List[InterfaceType]
-//  ) extends BlockType {
-//    def controlEffects = capabilities.map { _._1 }
-//    def effects: Effects = Effects(controlEffects)
-//  }
+  case FunctionType(
+    tparams: List[TypeParam],
+    cparams: List[Capture],
+    vparams: List[ValueType],
+    bparams: List[BlockType],
+    result: ValueType,
+    effects: Effects
+  )
 
-
-case class FunctionType(
-  tparams: List[TypeParam],
-  cparams: List[Capture],
-  vparams: List[ValueType],
-  bparams: List[BlockType],
-  result: ValueType,
-  effects: Effects
-) extends BlockType
-
-
-/** Interfaces */
-
-case class InterfaceType(typeConstructor: BlockTypeConstructor, args: List[ValueType]) extends BlockType {
-  def name = typeConstructor.name
+  case InterfaceType(typeConstructor: BlockTypeConstructor, args: List[ValueType])
 }
+export BlockType.*
 
-
+extension (i: BlockType.InterfaceType) {
+  def name: Name = i.typeConstructor.name
+}
 
 /**
  * Represents effect sets on function types.
@@ -105,10 +80,10 @@ case class InterfaceType(typeConstructor: BlockTypeConstructor, args: List[Value
  * For instances { State[S], State[T] }[S -> Int, T -> Int] then becomes { State[Int], State[Int] }.
  * This is important since we need to pass two capabilities in this case.
  *
- * Method [[controlEffects]] computes the canonical ordering of capabilities for this set of effects.
+ * Member [[canonical]] computes the canonical ordering of capabilities for this set of effects.
  * Disjointness needs to be ensured manually when constructing effect sets (for instance via [[typer.ConcreteEffects]]).
  */
-case class Effects(effects: List[InterfaceType]) {
+case class Effects(effects: List[BlockType.InterfaceType]) {
 
   lazy val toList: List[InterfaceType] = effects.distinct
 

@@ -167,7 +167,7 @@ object Wellformedness extends Visit[WFContext] {
         checkExhaustivity(t.constructor, cls)
 
       // it is not possible to match on builtins
-      case b: Builtin =>
+      case b: ExternType =>
         ()
     }
   }
