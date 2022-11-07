@@ -89,10 +89,6 @@ sealed trait TrackedParam extends Param with BlockSymbol {
   lazy val capture: Capture = CaptureParameter(name)
 }
 case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
-//  case class CapabilityParam(name: Name, tpe: CapabilityType) extends TrackedParam with Capability {
-//    def effect = tpe.eff
-//    override def toString = s"@${tpe.eff.name}"
-//  }
 
 // to be fair, resume is not tracked anymore, but transparent.
 case class ResumeParam(module: Module) extends TrackedParam { val name = Name.local("resume") }
@@ -106,8 +102,7 @@ case class SelfParam(tree: source.Tree) extends TrackedParam {
   override lazy val capture: Capture = LexicalRegion(name, tree)
 }
 
-// TODO rename to Callable
-trait Fun extends BlockSymbol {
+trait Callable extends BlockSymbol {
   def tparams: List[TypeVar]
   def vparams: List[ValueParam]
   def bparams: List[BlockParam]
@@ -123,7 +118,7 @@ case class UserFunction(
   annotatedResult: Option[ValueType],
   annotatedEffects: Option[Effects],
   decl: FunDef
-) extends Fun
+) extends Callable
 
 /**
  * Anonymous symbols used to represent scopes / regions in the region checker
@@ -133,7 +128,7 @@ sealed trait Anon extends TermSymbol {
   def decl: source.Tree
 }
 
-case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Fun with Anon {
+case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable with Anon {
   // Lambdas currently do not have an annotated return type
   def annotatedResult = None
   def annotatedEffects = None
@@ -230,7 +225,7 @@ case class DataType(name: Name, tparams: List[TypeVar], var variants: List[Recor
   /**
  * Structures are also function symbols to represent the constructor
  */
-case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Fun with Synthetic {
+case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fields: List[Field] = Nil) extends TypeConstructor with Callable with Synthetic {
   // Parameter and return type of the constructor:
   lazy val vparams = fields.map { f => f.param }
   val bparams = List.empty[BlockParam]
@@ -245,27 +240,24 @@ case class Record(name: Name, tparams: List[TypeVar], var tpe: ValueType, var fi
  *
  * param: The underlying constructor parameter
  */
-case class Field(name: Name, param: ValueParam, record: Record) extends Fun with Synthetic {
+case class Field(name: Name, param: ValueParam, record: Record) extends Callable with Synthetic {
   val tparams = record.tparams
   val tpe = param.tpe.get
   val vparams = List(ValueParam(record.name, Some(ValueTypeApp(record, record.tparams map ValueTypeRef.apply))))
   val bparams = List.empty[BlockParam]
 
   def annotatedResult = Some(tpe)
-
   def annotatedEffects = Some(Effects.Pure)
 }
 
 
 case class Interface(name: Name, tparams: List[TypeVar], var ops: List[Operation] = Nil) extends BlockTypeSymbol
-case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Fun {
+case class Operation(name: Name, tparams: List[TypeVar], vparams: List[ValueParam], resultType: ValueType, otherEffects: Effects, effect: Interface) extends Callable {
   val bparams = List.empty[BlockParam]
+
   def annotatedResult = Some(resultType)
   def annotatedEffects = Some(Effects(otherEffects.toList))
-
   def appliedEffect = InterfaceType(effect, effect.tparams map ValueTypeRef.apply)
-
-  def isBidirectional: Boolean = otherEffects.nonEmpty
 }
 
 /**
@@ -324,8 +316,6 @@ object CaptUnificationVar {
 sealed trait Captures
 
 case class CaptureSet(captures: Set[Capture]) extends Captures {
-  override def toString = s"{${captures.mkString(", ")}}"
-
   // This is a very simple form of subtraction, make sure that all constraints have been solved before using it!
   def --(other: CaptureSet): CaptureSet = CaptureSet(captures -- other.captures)
   def ++(other: CaptureSet): CaptureSet = CaptureSet(captures ++ other.captures)
@@ -344,7 +334,6 @@ object CaptureSet {
 sealed trait Builtin extends Symbol {
   override def builtin = true
 }
-def isBuiltin(e: Symbol): Boolean = e.builtin
 
 case class BuiltinFunction(
   name: Name,
@@ -355,7 +344,7 @@ case class BuiltinFunction(
   effects: Effects,
   purity: ExternFlag.Purity = ExternFlag.Pure,
   body: String = ""
-) extends Fun with BlockSymbol with Builtin {
+) extends Callable with BlockSymbol with Builtin {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }

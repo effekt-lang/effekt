@@ -1192,7 +1192,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
    * Helper methods on function symbols to retreive its type
    * either from being annotated or by looking it up (if already typechecked...)
    */
-  extension (fun: Fun)(using Context) {
+  extension (fun: Callable)(using Context) {
     // invariant: only works if ret is defined!
     def toType: FunctionType =
       annotatedType.get

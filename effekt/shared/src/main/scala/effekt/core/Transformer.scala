@@ -22,7 +22,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val exports = mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym: Fun if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
+        case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
       }
     }.toList
