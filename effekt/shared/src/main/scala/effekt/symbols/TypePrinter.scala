@@ -19,6 +19,7 @@ object TypePrinter extends ParenPrettyPrinter {
   def show(t: Capture): String = pretty(toDoc(t), 80).layout
   def show(t: Captures): String = pretty(toDoc(t), 80).layout
   def show(t: Effects): String = pretty(toDoc(t), 80).layout
+  def show(t: List[ValueType | TypeVar]): String = pretty(maybeTypeParams(t), 80).layout
 
   def toDoc(m: Type): Doc = m match {
     case tpe: ValueType => toDoc(tpe)
@@ -85,6 +86,8 @@ object TypePrinter extends ParenPrettyPrinter {
     case tpe: TypeVar => toDoc(tpe)
   }, comma))
 
+  def maybeTypeParams(tparams: List[ValueType | TypeVar]): Doc =
+    if (tparams.isEmpty) "" else typeParams(tparams)
 }
 
 implicit class ErrorMessageInterpolator(private val sc: StringContext) extends AnyVal {
