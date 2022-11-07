@@ -60,14 +60,12 @@ object Transformer {
         val transformedParams = params.map {
           case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
           case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
-          case lifted.EvidenceParam(_) => ???
+          case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
         }
         emitDeclaration(Extern(transform(name), transformedParams, transform(functionType.result), body))
         transformToplevel(rest, entryPoint)
 
       case lifted.Def(id, _, lifted.BlockLit(params, body), rest) =>
-        // TODO top-level definitions don't need evidence, or do they?
-        // some of the params are now evidence params... TODO handle evidence.
         Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, entryPoint))
 
       case lifted.Include(content, rest) =>
@@ -110,12 +108,12 @@ object Transformer {
         }
 
       case lifted.Def(id, tpe, block @ lifted.BlockLit(params, body), rest) =>
-        // TODO deal with evidence
         // TODO does not work for mutually recursive local definitions
         val freeParams = lifted.freeVariables(block).toList.collect {
           case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
           case id: symbols.BlockParam  => Variable(transform(id), transform(Context.blockTypeOf(id)))
           case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+          case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
           // we ignore functions since we do not "close" over them.
 
           // TODO
@@ -201,10 +199,11 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
-        NewStack(delimiter, returnClause,
-          PushStack(delimiter,
-            New(transform(id), transform(handler),
-              transform(body))))
+        LiteralEvidence(transform(ev), builtins.There,
+          NewStack(delimiter, returnClause,
+            PushStack(delimiter,
+              New(transform(id), transform(handler),
+                transform(body)))))
 
       case _ =>
         Context.abort(s"Unsupported statement: $stmt")
@@ -213,7 +212,21 @@ object Transformer {
   def transform(arg: lifted.Argument)(using BlocksParamsContext, Context): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
-    case lifted.Evidence(_) => transform(lifted.IntLit(0)) // TODO implement
+    case lifted.Evidence(scopes) => {
+      scopes.map({ scope =>
+        Variable(transform(scope), builtins.Evidence)
+      }).foldRight({
+        val res = Variable(freshName("ev_zero"), builtins.Evidence)
+        Binding { k =>
+          LiteralEvidence(res, builtins.Here, k(res))
+        }: Binding[Variable]
+      })({(evi, acc) =>
+        val res = Variable(freshName("ev_acc"), builtins.Evidence)
+        acc.flatMap({accV => Binding { k =>
+          ComposeEvidence(res, evi, accV, k(res))
+        }})
+      })
+    }
   }
 
   def transform(block: lifted.Block)(using BlocksParamsContext, Context): Binding[Variable] = block match {
@@ -222,7 +235,6 @@ object Transformer {
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.BlockLit(params, body) =>
-      // TODO deal with evidence
       val parameters = params.map(transform);
       val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
@@ -332,12 +344,12 @@ object Transformer {
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
-        // TODO actually use evidence to determine number of stacks popped
         val ev = Variable(freshName("evidence"), builtins.Evidence)
         Clause(ev +: params.map(transform),
-          PopStack(Variable(transform(resume).name, Type.Stack()),
+          PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
             transform(body)))
-      case _ => Context.abort(s"Unsupported handler: $handler")
+      case _ =>
+        Context.abort(s"Unsupported handler $handler")
     })
   }
 
@@ -384,7 +396,6 @@ object Transformer {
         findToplevelBlocksParams(rest)
 
       case lifted.Def(blockName, _, lifted.BlockLit(params, body), rest) =>
-        // TODO add evidence param
         noteBlockParams(blockName, params.map(transform));
         findToplevelBlocksParams(rest)
 
