@@ -343,8 +343,6 @@ object CaptureSet {
 /**
  * FFI
  */
-sealed trait Extern extends Symbol
-
 case class ExternFunction(
   name: Name,
   tparams: List[TypeParam],
@@ -354,18 +352,18 @@ case class ExternFunction(
   effects: Effects,
   capture: CaptureSet,
   body: String = ""
-) extends Callable with BlockSymbol with Extern {
+) extends Callable with BlockSymbol {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }
 
-case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam, Extern {
+case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam {
   // every block parameter gives rise to a capture parameter
   val capture: Capture = Resource(name)
 }
 
-case class ExternType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Extern
-case class ExternInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Extern
+case class ExternType(name: Name, tparams: List[TypeParam]) extends TypeConstructor
+case class ExternInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor
 
 /**
  * Extension method for LSP to filter out synthetically generated symbols
