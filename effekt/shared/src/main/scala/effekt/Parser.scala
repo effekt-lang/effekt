@@ -281,7 +281,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
         ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
@@ -298,10 +298,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // multi-line strings `(?s)` sets multi-line mode.
   lazy val multilineString: P[String] = matchRegex(s"(?s)${multi}[\t\n\r ]*(.*?)[\t\n\r ]*${multi}".r) ^^ { m => m.group(1) }
 
-  lazy val externFlag: P[ExternFlag.Purity] =
-    ( `pure` ^^^ ExternFlag.Pure
-    | `io` ^^^ ExternFlag.IO
-    | `control` ^^^ ExternFlag.Control
+  lazy val externCapture: P[CaptureSet] =
+    ( `pure` ^^^ CaptureSet(Nil)
+    | `io` ^^^ CaptureSet(List(IdRef("io")))
+    | `control` ^^^ CaptureSet(List(IdRef("control")))
+    | success(CaptureSet(List(IdRef("io"))))
     )
 
   lazy val externInclude: P[Def] =

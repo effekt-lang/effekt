@@ -1,7 +1,7 @@
 package effekt
 package symbols
 
-import effekt.source.{ DefDef, Def, ExternFlag, FunDef, ModuleDecl, ValDef, VarDef }
+import effekt.source.{ DefDef, Def, FunDef, ModuleDecl, ValDef, VarDef }
 import effekt.context.Context
 import kiama.util.Source
 import effekt.context.assertions.*
@@ -340,7 +340,7 @@ case class BuiltinFunction(
   bparams: List[BlockParam],
   result: ValueType,
   effects: Effects,
-  purity: ExternFlag.Purity = ExternFlag.Pure,
+  capture: CaptureSet,
   body: String = ""
 ) extends Callable with BlockSymbol with Builtin {
   def annotatedResult = Some(result)

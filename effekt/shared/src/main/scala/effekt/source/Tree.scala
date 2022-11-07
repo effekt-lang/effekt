@@ -211,14 +211,7 @@ case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
   type symbol = symbols.BuiltinType
 }
 
-object ExternFlag extends Enumeration {
-  type Purity = Value
-  // Probably these three are not enough, yet.
-  val Pure, IO, Control = Value
-  def directStyle(p: Purity): Boolean = p == Pure || p == IO
-}
-
-case class ExternDef(purity: ExternFlag.Purity, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
+case class ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
   type symbol = symbols.BuiltinFunction
 }
 case class ExternInclude(path: String) extends Def {

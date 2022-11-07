@@ -534,15 +534,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
       // (2) Store the annotated type (important for (mutually) recursive and out-of-order definitions)
       fun.annotatedType.foreach { tpe => Context.bind(d.symbol, tpe) }
 
-    case d @ source.ExternDef(pure, id, tps, vps, bps, tpe, body) =>
+    case d @ source.ExternDef(cap, id, tps, vps, bps, tpe, body) =>
       val fun = d.symbol
-      val cap = pure match {
-        case effekt.source.ExternFlag.Pure => CaptureSet.empty
-        case effekt.source.ExternFlag.IO => CaptureSet(builtins.IOCapability.capture)
-        case effekt.source.ExternFlag.Control => CaptureSet(builtins.ControlCapability.capture)
-      }
 
-      Context.bind(fun, fun.toType, cap)
+      Context.bind(fun, fun.toType, fun.capture)
       if (fun.effects.canonical.nonEmpty) {
         Context.abort("Unhandled control effects on extern defs not allowed")
       }

@@ -160,8 +160,9 @@ object Namer extends Phase[Parsed, NameResolved] {
         BuiltinType(Context.nameFor(id), tps)
       })
 
-    case source.ExternDef(pure, id, tparams, vparams, bparams, ret, body) => {
+    case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
       val name = Context.freshNameFor(id)
+      val capt = resolve(capture)
       Context.define(id, Context scoped {
         val tps = tparams map resolve
         val vps = vparams map resolve
@@ -171,7 +172,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        BuiltinFunction(name, tps, vps, bps, tpe, eff, pure, body)
+        BuiltinFunction(name, tps, vps, bps, tpe, eff, capt, body)
       })
     }
 
