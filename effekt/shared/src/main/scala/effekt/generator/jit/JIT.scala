@@ -19,7 +19,7 @@ object JIT extends Backend {
     val mainSymbol = C.checkMain(main.mod);
     val mainFile = path(main.mod);
 
-    val Some(liftedMod) = LiftInference(main).map(_.core);
+    val Some(liftedMod) = LiftInference(main).map(_.core) : @unchecked
     // TODO this flatmap is wrong, or?
     val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) };
 

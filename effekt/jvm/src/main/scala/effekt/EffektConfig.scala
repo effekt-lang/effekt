@@ -115,7 +115,9 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     val binaryName = s"${platform}/rpyeffect-jit";
 
     // 1) in config
-    jitBinaryPath.foreach( path => return path )
+    if(jitBinaryPath.isDefined) {
+      return jitBinaryPath()
+    }
 
     // 2) iin Environment variable EFFEKT_BIN
     if (System.getenv.containsKey("EFFEKT_JIT_BIN")) {

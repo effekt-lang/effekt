@@ -78,7 +78,7 @@ object Transformer {
               emitInlined(restBlock)
           }
           case Type.Unit() => {
-            val ErasedRegister() = vd.id;
+            val ErasedRegister() = vd.id : @unchecked
             emitInlined(restBlock)
           }
           case Type.Integer() => {
