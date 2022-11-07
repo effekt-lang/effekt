@@ -21,8 +21,8 @@ import effekt.util.messages.ErrorReporter
 sealed trait TermSymbol extends Symbol
 
 // the two universes of values and blocks
-trait ValueSymbol extends TermSymbol
-trait BlockSymbol extends TermSymbol
+sealed trait ValueSymbol extends TermSymbol
+sealed trait BlockSymbol extends TermSymbol
 
 /**
  * The result of running the frontend on a module.
@@ -76,7 +76,7 @@ case class Module(
 }
 
 sealed trait Param extends TermSymbol
-case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
+case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param, ValueSymbol
 
 enum TrackedParam(val name: Name) extends Param, BlockSymbol {
 
@@ -122,7 +122,7 @@ sealed trait Anon extends TermSymbol {
   def decl: source.Tree
 }
 
-case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable with Anon {
+case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: source.Tree) extends Callable, Anon {
   // Lambdas currently do not have an annotated return type
   def annotatedResult = None
   def annotatedEffects = None
@@ -136,13 +136,16 @@ case class Lambda(vparams: List[ValueParam], bparams: List[BlockParam], decl: so
  *
  * They also store a reference to the original defition in the source code
  */
-sealed trait Binder extends TermSymbol {
+enum Binder extends TermSymbol {
   def tpe: Option[Type]
   def decl: Def
+
+  case ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder, ValueSymbol
+  case VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder, BlockSymbol
+  case DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder, BlockSymbol
 }
-case class ValBinder(name: Name, tpe: Option[ValueType], decl: ValDef) extends Binder with ValueSymbol
-case class VarBinder(name: Name, tpe: Option[ValueType], region: BlockSymbol, decl: VarDef) extends Binder with BlockSymbol
-case class DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends Binder with BlockSymbol
+export Binder.*
+
 
 /**
  * Synthetic symbol representing potentially multiple call targets
@@ -347,7 +350,7 @@ case class ExternFunction(
   effects: Effects,
   capture: CaptureSet,
   body: String = ""
-) extends Callable with BlockSymbol {
+) extends Callable {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }
