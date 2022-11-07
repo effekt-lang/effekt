@@ -7,7 +7,7 @@ def run(): Unit / Emit = {
     do emit(3)
 }
 
-def main(): Unit / Console = {
+def main(): Unit = {
   try {
     run()
   } with Emit {
