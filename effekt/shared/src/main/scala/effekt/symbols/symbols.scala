@@ -25,13 +25,6 @@ trait ValueSymbol extends TermSymbol
 trait BlockSymbol extends TermSymbol
 
 /**
- * Marker trait for LSP to filter out synthetically generated symbols
- */
-sealed trait Synthetic extends Symbol {
-  override def synthetic = true
-}
-
-/**
  * The result of running the frontend on a module.
  * Symbols and types are stored globally in CompilerContext.
  */
@@ -84,8 +77,6 @@ case class Module(
 
 sealed trait Param extends TermSymbol
 case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with ValueSymbol
-
-// TODO everywhere else the two universes are called "value" and "block"
 
 sealed trait TrackedParam extends Param with BlockSymbol {
   def capture: Capture
@@ -163,7 +154,7 @@ case class DefBinder(name: Name, tpe: Option[BlockType], decl: DefDef) extends B
  *
  * Refined by typer.
  */
-case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Synthetic with BlockSymbol
+case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends BlockSymbol
 
 /**
  * Introduced by Transformer
@@ -233,7 +224,7 @@ sealed trait TypeConstructor extends TypeSymbol {
 case class DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil) extends TypeConstructor
 case class Record(name: Name, tparams: List[TypeParam], var constructor: Constructor) extends TypeConstructor
 
-case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable, Synthetic {
+case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Field], tpe: TypeConstructor) extends Callable {
   // Parameters and return type of the constructor
   lazy val vparams: List[ValueParam] = fields.map { f => f.param }
   val bparams: List[BlockParam] = Nil
@@ -244,7 +235,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
 }
 
 // TODO maybe split into Field (the symbol) and Selector (the synthetic function)
-case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable, Synthetic {
+case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable {
   val tparams = constructor.tparams
   val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
   val bparams = List.empty[BlockParam]
@@ -352,9 +343,7 @@ object CaptureSet {
 /**
  * FFI
  */
-sealed trait Extern extends Symbol {
-  override def builtin = true
-}
+sealed trait Extern extends Symbol
 
 case class ExternFunction(
   name: Name,
@@ -377,3 +366,13 @@ case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam, Exte
 
 case class ExternType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Extern
 case class ExternInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Extern
+
+/**
+ * Extension method for LSP to filter out synthetically generated symbols
+ */
+extension (s: Symbol) {
+  def isSynthetic: Boolean = s match {
+    case _: Field | _: Constructor | _: CallTarget | _: Wildcard | _: Tmp | _: ResumeParam => true
+    case s => s.synthetic
+  }
+}
