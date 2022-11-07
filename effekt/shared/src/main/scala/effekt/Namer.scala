@@ -160,6 +160,12 @@ object Namer extends Phase[Parsed, NameResolved] {
         BuiltinType(Context.nameFor(id), tps)
       })
 
+    case source.ExternInterface(id, tparams) =>
+      Context.define(id, Context scoped {
+        val tps = tparams map resolve
+        BuiltinInterface(Context.nameFor(id), tps)
+      })
+
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
       val name = Context.freshNameFor(id)
       val capt = resolve(capture)
@@ -303,6 +309,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       constructor.fields = resolveFields(fs, constructor)
 
     case source.ExternType(id, tparams) => ()
+    case source.ExternInterface(id, tparams) => ()
     case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path) => ()
@@ -608,7 +615,7 @@ object Namer extends Phase[Parsed, NameResolved] {
           val targs = args.map(resolve)
           val subst = Substitutions.types(tparams, targs)
           effs.toList.map(subst.substitute)
-        case i: Interface => List(InterfaceType(i, args.map(resolve)))
+        case i: BlockTypeConstructor => List(InterfaceType(i, args.map(resolve)))
         case _ => Context.abort("Expected an interface type.")
       }
     }

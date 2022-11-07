@@ -219,6 +219,10 @@ case class ExternResource(id: IdDef, tpe: BlockType) extends Def {
   type symbol = symbols.BlockParam
 }
 
+case class ExternInterface(id: IdDef, tparams: List[Id]) extends Def {
+  type symbol = symbols.BuiltinInterface
+}
+
 case class ExternInclude(path: String) extends Def {
   def id = IdDef("includes don't have names")
   // Namer resolves the path and loads the contents
@@ -602,6 +606,7 @@ object Tree {
       case d: ExternType     => d
       case d: ExternDef      => d
       case d: ExternResource => d
+      case d: ExternInterface => d
       case d: ExternInclude  => d
     }
 
@@ -754,6 +759,7 @@ object Tree {
       case d: ExternType     => empty
       case d: ExternDef      => empty
       case d: ExternResource => empty
+      case d: ExternInterface => empty
       case d: ExternInclude  => empty
     }
 

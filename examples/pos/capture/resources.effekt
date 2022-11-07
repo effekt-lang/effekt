@@ -1,4 +1,5 @@
-extern resource foo: IO
+extern interface MyResource
+extern resource foo: MyResource
 extern {foo} def bar(): Int = "42"
 def user() = bar()
 

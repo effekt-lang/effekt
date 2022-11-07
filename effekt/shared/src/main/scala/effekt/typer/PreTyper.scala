@@ -165,6 +165,7 @@ class BoxUnboxInference {
     case d: ExternType     => d
     case d: ExternDef      => d
     case d: ExternResource => d
+    case d: ExternInterface => d
     case d: ExternInclude  => d
   }
 

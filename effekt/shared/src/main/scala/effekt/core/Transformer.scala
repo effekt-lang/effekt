@@ -82,11 +82,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // For now we forget about all of the following definitions in core:
     case d: source.ExternResource => rest()
-
     case d: source.ExternType => rest()
-
-    case d : source.TypeDef => rest()
-
+    case d: source.ExternInterface => rest()
+    case d: source.TypeDef => rest()
     case d: source.EffectDef => rest()
   }
 

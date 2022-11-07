@@ -264,7 +264,8 @@ case class Operation(name: Name, tparams: List[TypeParam], vparams: List[ValuePa
 }
 
 /**
- * Effect aliases are *not* block types; they cannot be used for example in `def foo { f : Alias }`.
+ * Effect aliases are *not* block types, or block type constructors. They have to be dealiased by [[Namer]]
+ * before usage.
  */
 case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects) extends BlockTypeSymbol
 
@@ -353,4 +354,4 @@ case class BuiltinFunction(
 
 case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
 
-case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeSymbol, Builtin
+case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Builtin
