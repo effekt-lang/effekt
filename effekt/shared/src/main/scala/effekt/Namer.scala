@@ -556,14 +556,14 @@ object Namer extends Phase[Parsed, NameResolved] {
       val bps = bparams.map {
         case (id, tpe) =>
           val name = id.map(Name.local).getOrElse(NoName)
-          val cap = CaptureParameter(name)
+          val cap = CaptureParam(name)
           cps = cps :+ cap
           resolve(tpe)
       }
 
       val effs = resolve(effects).distinct
       effs.canonical.foreach { eff =>
-        val cap = CaptureParameter(eff.name)
+        val cap = CaptureParam(eff.name)
         cps = cps :+ cap
       }
 

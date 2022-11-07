@@ -326,7 +326,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           // create the capture parameters for bidirectional effects -- this is necessary for a correct interaction
           // of bidirectional effects and capture polymorphism (still has to be tested).
-          val cparams = declaredType.effects.canonical.map { tpe => CaptureParameter(tpe.name) }
+          val cparams = declaredType.effects.canonical.map { tpe => CaptureParam(tpe.name) }
 
           // (1) Instantiate block type of effect operation
           // Bidirectional example:
@@ -379,7 +379,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
               val resumeType = if (otherEffs.nonEmpty) {
                 // resume { e }
                 val resumeType = FunctionType(Nil, cparams, Nil, Nil, tpe, otherEffs)
-                val resumeCapt = CaptureParameter(Name.local("resumeBlock"))
+                val resumeCapt = CaptureParam(Name.local("resumeBlock"))
                 FunctionType(Nil, List(resumeCapt), Nil, List(resumeType), ret, Effects.Pure)
               } else {
                 // resume(v)
@@ -1207,7 +1207,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         effects = effs.distinct
         // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
         //   in the future namer needs to annotate the function with the capture parameters it introduced.
-        capt = effects.canonical.map { tpe => CaptureParameter(tpe.name) }
+        capt = effects.canonical.map { tpe => CaptureParam(tpe.name) }
       } yield toType(ret, effects, capt)
   }
   //</editor-fold>

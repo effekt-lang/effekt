@@ -89,7 +89,7 @@ case class ValueParam(name: Name, tpe: Option[ValueType]) extends Param with Val
 
 sealed trait TrackedParam extends Param with BlockSymbol {
   // every block parameter gives rise to a capture parameter
-  lazy val capture: Capture = CaptureParameter(name)
+  lazy val capture: Capture = CaptureParam(name)
 }
 case class BlockParam(name: Name, tpe: BlockType) extends TrackedParam
 
@@ -238,6 +238,7 @@ case class Constructor(name: Name, tparams: List[TypeParam], var fields: List[Fi
   def annotatedEffects = Some(Effects.Pure)
 }
 
+// TODO maybe split into Field (the symbol) and Selector (the synthetic function)
 case class Field(name: Name, param: ValueParam, constructor: Constructor) extends Callable, Synthetic {
   val tparams = constructor.tparams
   val vparams = List(ValueParam(constructor.name, Some(constructor.returnType)))
@@ -267,21 +268,20 @@ case class EffectAlias(name: Name, tparams: List[TypeParam], effs: Effects) exte
 /**
  * Something that can be substituted by a capture set
  */
-sealed trait CaptVar
+sealed trait CaptVar extends TypeSymbol
 
 /**
- * "Tracked" capture parameters. Like [[TypeVar]] used to abstract
+ * "Tracked" capture parameters. Like [[TypeParam]] used to abstract
  * over capture. Also see [[BlockParam.capture]].
  *
  * Can be either
  * - [[LexicalRegion]] to model self regions of functions
  */
-trait Capture extends TypeSymbol, CaptVar
+trait Capture extends CaptVar
 case class LexicalRegion(name: Name, tree: source.Tree) extends Capture
-case class CaptureParameter(name: Name) extends Capture
+case class CaptureParam(name: Name) extends Capture
 
-
-case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar, TypeSymbol {
+case class CaptUnificationVar(role: CaptUnificationVar.Role) extends Captures, CaptVar {
   val name = Name.local("?C")
   override def toString = role match {
     case CaptUnificationVar.VariableInstantiation(underlying, _) => "?" + underlying.toString + id
