@@ -1,7 +1,6 @@
 package effekt
 
 import java.io.File
-import org.scalatest.funspec.AnyFunSpec
 import sbt.io._
 import sbt.io.syntax._
 import scala.language.implicitConversions
@@ -23,11 +22,12 @@ class LLVMTests extends EffektTests {
     examplesDir / "llvm" / "gids.effekt",
   )
 
-  def runTestFor(f: File, expected: String) =
-    it(f.getName + " (llvm)") {
-      val out = runLLVM(f)
-      assert(expected == out)
+  def runTestFor(input: File, check: File, expected: String): Unit = {
+    test(input.getPath + " (llvm)") {
+      val out = runLLVM(input)
+      assertNoDiff(out, expected)
     }
+  }
 
   def runLLVM(f: File): String = {
     // TODO flaky body
@@ -39,6 +39,6 @@ class LLVMTests extends EffektTests {
     ))
     configs.verify()
     compiler.compileFile(f.getPath, configs)
-    removeAnsiColors(configs.stringEmitter.result())
+    configs.stringEmitter.result()
   }
 }

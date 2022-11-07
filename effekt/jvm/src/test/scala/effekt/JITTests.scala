@@ -1,6 +1,5 @@
 package effekt
 
-import org.scalatest.funspec.AnyFunSpec
 import sbt.io.*
 import sbt.io.syntax.*
 
@@ -18,10 +17,10 @@ class JITTests extends EffektTests {
   )
 
 
-  def runTestFor(f: File, expected: String) =
-    it(f.getName + " (jit)") {
-      val out = runJIT(f)
-      assert(expected == out)
+  def runTestFor(input: File, check: File, expected: String) =
+    test(input.getName + " (jit)") {
+      val out = runJIT(input)
+      assertNoDiff(out, expected)
     }
 
   def runJIT(f: File): String = {
@@ -34,6 +33,6 @@ class JITTests extends EffektTests {
     ))
     configs.verify()
     compiler.compileFile(f.getPath, configs)
-    removeAnsiColors(configs.stringEmitter.result())
+    configs.stringEmitter.result()
   }
 }

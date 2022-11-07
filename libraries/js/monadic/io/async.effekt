@@ -1,0 +1,28 @@
+module io/async
+
+extern include "async.js"
+
+extern type Promise[T]
+
+interface AsyncIO {
+  def read(path: String): Promise[String]
+  def await[T](p: Promise[T]): T
+}
+
+def asyncIO[R](p: () => R / AsyncIO at {io}): R = try {
+  p()
+} with AsyncIO {
+  def read(path) = resume(readPromise(path))
+  def await[T](p) = awaitPromise(p, resume)
+}
+
+def block[T](p: Promise[T]) = do await(p)
+
+extern io def readPromise(path: String): Promise[String] =
+  "fsPromises.readFile(path, 'utf8')"
+
+extern io def awaitPromise[T, R](p: Promise[T], cont: T => R at {io}): R =
+  "p.then(res => cont(res).run())"
+
+extern io def fork(process: () => Unit at {io}): Unit =
+  "setTimeout(() => process().run(), 0)"

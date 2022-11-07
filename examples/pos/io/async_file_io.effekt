@@ -1,0 +1,27 @@
+import io/async
+
+def program(path1: String, path2: String) =  {
+  val f1 = do read(path1)
+  val f2 = do read(path2)
+
+  val results1 = f1.block()
+  val results2 = f2.block()
+
+  println(results1)
+  println(results2)
+}
+
+def main() = {
+  println("Running program")
+
+  def path(file: String) = "examples/pos/io/" ++ file
+
+  fork(box {
+    asyncIO(box {
+      program(path("demo_file1.txt"), path("demo_file2.js"))
+      println("done reading files.")
+    })
+  })
+
+  println("Done")
+}

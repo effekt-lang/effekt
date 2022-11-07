@@ -214,14 +214,15 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     case d: Def =>
       val extendedDefs = module + d
       val decl = extendedDefs.make(UnitLit())
+
       runFrontend(source, decl, config) { cu =>
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        (context.symbolOf(d) match {
-          case v: ValueSymbol =>
+        (context.symbolOption(d.id) match {
+          case Some(v: ValueSymbol) =>
             Some(context.valueTypeOf(v))
-          case b: BlockSymbol =>
+          case Some(b: BlockSymbol) =>
             Some(context.functionTypeOf(b))
           case t =>
             None

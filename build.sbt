@@ -45,8 +45,8 @@ lazy val lspDependencies = Seq(
 )
 
 lazy val testingDependencies = Seq(
-  "org.scala-sbt" %% "io" % "1.6.0" % "test",
-  "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+  "org.scala-sbt" %% "io" % "1.6.0" % Test,
+  "org.scalameta" %% "munit" % "0.7.29" % Test
 )
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
@@ -123,7 +123,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       // prepend shebang to make jar file executable
       val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
-      IO.append(binary, "#! /usr/bin/env java -jar\n")
+      IO.append(binary, "#! /usr/bin/env -S java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
     },
 
