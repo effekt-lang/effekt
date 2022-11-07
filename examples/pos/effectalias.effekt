@@ -2,6 +2,8 @@ module effectalias
 
 effect Pure = {}
 
+interface Console {}
+
 effect Foo = Console
 
 effect Bar = { Foo, Foo }
@@ -14,6 +16,6 @@ def bar(): Unit / { Foo, Bar, Pure } = {
   println("hello")
 }
 
-def main(): Unit / Foo = {
+def main(): Unit = try {
   foo()
-}
+} with Console {}

@@ -30,13 +30,10 @@ class ConcreteEffects private[typer] (protected val effects: List[InterfaceType]
 
   def filterNot(p: InterfaceType => Boolean): ConcreteEffects = ConcreteEffects.fromList(effects.filterNot(p))
 
-  def controlEffects: List[InterfaceType] = effects.controlEffects
-  def builtinEffects: List[InterfaceType] = effects.builtinEffects
+  def canonical: List[InterfaceType] = effects.sorted(using CanonicalOrdering)
 
   def forall(p: InterfaceType => Boolean): Boolean = effects.forall(p)
   def exists(p: InterfaceType => Boolean): Boolean = effects.exists(p)
-
-  override def toString = toEffects.toString
 }
 object ConcreteEffects {
   // unsafe, doesn't perform check
@@ -80,31 +77,29 @@ private[typer] def assertConcrete(effs: Effects)(using C: Context): Unit =
   if (!isConcreteEffects(effs)) C.abort(pretty"Effects need to be fully known: ${effs}")
 
 private[typer] def assertConcrete(eff: InterfaceType)(using C: Context): Unit =
-  if (!isConcreteEffect(eff)) {
+  if (!isConcreteInterfaceType(eff)) {
     C.abort(pretty"Effects need to be fully known: ${eff}")
   }
 
 private def isConcreteValueType(tpe: ValueType): Boolean = tpe match {
+  case ValueTypeRef(x) => isConcreteValueType(x)
+  case ValueTypeApp(tpe, args) => args.forall(isConcreteValueType)
+  case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
+}
+
+private def isConcreteValueType(tpe: TypeVar): Boolean = tpe match {
   case x: UnificationVar => false
   case x: TypeVar => true
-  case t: TypeConstructor => true
-  case t : BuiltinType => true
-  case ValueTypeApp(tpe, args) => isConcreteValueType(tpe) && args.forall(isConcreteValueType)
-  case BoxedType(tpe, capture) => isConcreteBlockType(tpe) && isConcreteCaptureSet(capture)
 }
 
 private def isConcreteBlockType(tpe: BlockType): Boolean = tpe match {
   case FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
     vparams.forall(isConcreteValueType) && bparams.forall(isConcreteBlockType) && isConcreteValueType(result) && isConcreteEffects(effects)
-  case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
-  case t: Interface => true
-  case b: BuiltinEffect => true
+  case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
 private def isConcreteCaptureSet(capt: Captures): Boolean = capt.isInstanceOf[CaptureSet]
 
-private def isConcreteEffect(eff: InterfaceType): Boolean = eff match {
-  case t: Interface => true
-  case t: BuiltinEffect => true
-  case BlockTypeApp(tpe, args) => isConcreteBlockType(tpe) && args.forall(isConcreteValueType)
+private def isConcreteInterfaceType(eff: InterfaceType): Boolean = eff match {
+  case InterfaceType(tpe, args) => args.forall(isConcreteValueType)
 }
-private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteEffect)
+private def isConcreteEffects(effs: Effects): Boolean = effs.toList.forall(isConcreteInterfaceType)

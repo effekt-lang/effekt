@@ -10,9 +10,9 @@ record Match(matched: String, index: Int)
 extern pure def regex(str: String): Regex =
   "new RegExp(str)"
 
-def exec(reg: Regex)(str: String): Option[Match] =
+def exec(reg: Regex, str: String): Option[Match] =
   reg.unsafeExec(str).undefinedToOption
 
 // internals
-extern pure def unsafeExec(reg: Regex)(str: String): Match =
+extern pure def unsafeExec(reg: Regex, str: String): Match =
   "(function () { var res = reg.exec(str); if (res === null) { return undefined } else { return Match(res[0], res.index) }})()"

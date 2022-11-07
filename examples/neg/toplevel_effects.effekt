@@ -1,5 +1,9 @@
-def sayHello(): Unit / { Console } =
-  println("Hello World!")
+effect Console {
+  def println(msg: String): Unit
+}
+
+def sayHello(): Unit/ Console =
+  do println("Hello World!")
 
 def pureFun(): Unit / {} = sayHello()
 

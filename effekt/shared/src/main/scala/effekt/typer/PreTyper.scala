@@ -99,7 +99,7 @@ class BoxUnboxInference {
 
       val (funs, methods) = syms.partitionMap {
         case t: symbols.Operation => Right(t)
-        case t: symbols.Fun => Left(t)
+        case t: symbols.Callable => Left(t)
         case t => C.abort(pp"Not a valid method or function: ${t}")
       }
 
@@ -163,7 +163,6 @@ class BoxUnboxInference {
     case d: EffectDef     => d
 
     case d: ExternType    => d
-    case d: ExternEffect  => d
     case d: ExternFun     => d
     case d: ExternInclude => d
   }

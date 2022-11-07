@@ -249,7 +249,6 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | dataDef
     | recordDef
     | externType
-    | externEffect
     | externFun
     | externInclude
     | failure("Expected a definition")
@@ -280,9 +279,6 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
-
-  lazy val externEffect: P[Def] =
-    `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect.apply
 
   lazy val externFun: P[Def] =
     `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
@@ -326,15 +322,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     some(`{` ~/> blockParam <~ `}`)
 
   lazy val valueParams: P[List[ValueParam]] =
-    some(valueParamSection) ^^ { _.flatten }
-
-  lazy val valueParamsOpt: P[List[ValueParam]] =
-    some(valueParamsOptSection) ^^ { _.flatten }
-
-  lazy val valueParamSection: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
 
-  lazy val valueParamsOptSection: P[List[ValueParam]] =
+  lazy val valueParamsOpt: P[List[ValueParam]] =
     `(` ~/> manySep(valueParamOpt, `,`) <~ `)`
 
   lazy val valueTypeAnnotation : P[ValueType] =
@@ -558,10 +548,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case effect ~ clauses =>
         Implementation(effect, clauses)
       }
-    | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case effect ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
-        val synthesizedId = IdRef(effect.id.name)
-        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf effect))
+    | idRef ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
+      case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
+        val synthesizedId = IdRef(id.name)
+        val interface = BlockTypeRef(id, Nil) withPositionOf id
+        Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf id))
       }
     )
 
@@ -640,8 +631,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val primValueType: P[ValueType] =
-    ( idRef ~ typeArgs ^^ ValueTypeApp.apply
-    | idRef ^^ TypeVar.apply
+    ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | failure("Expected a type")
@@ -657,9 +647,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
     )
 
-  lazy val interfaceType: P[InterfaceType] =
-    ( idRef ~ typeArgs ^^ BlockTypeApp.apply
-    | idRef ^^ InterfaceVar.apply
+  lazy val interfaceType: P[BlockTypeRef] =
+    ( idRef ~ maybeTypeArgs ^^ BlockTypeRef.apply
     | failure("Expected an interface / effect")
     )
 
@@ -701,7 +690,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    ValueTypeApp(IdRef(s"Tuple${tps.size}"), tps)
+    ValueTypeRef(IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

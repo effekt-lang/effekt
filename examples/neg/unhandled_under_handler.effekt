@@ -5,7 +5,7 @@ module unhandled_under_handler
 effect Flip(): Boolean
 effect MyPrint(n: Int): Unit
 
-def main(): Unit / { Console } = {
+def main(): Unit = {
 
   try {
     do MyPrint(4);

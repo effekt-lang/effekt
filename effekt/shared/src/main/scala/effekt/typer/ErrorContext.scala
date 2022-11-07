@@ -65,7 +65,7 @@ object ErrorContext {
       //  (2) refactor so that explainMismatch is part of Messages and can add additional
       //      messages (with info about the trees and their types).
       case MergeTypes(left, right) =>
-        val msg = s"Different arms of a conditional/match have incompatible types.\n\nOne arm has type\n  $left\nwhile another one has type\n  $right"
+        val msg = pp"Different arms of a conditional/match have incompatible types.\n\nOne arm has type\n  $left\nwhile another one has type\n  $right"
 
         if (tpe2 != left || tpe1 != right)
           pp"$msg\n\nType mismatch between $tpe2 and $tpe1."

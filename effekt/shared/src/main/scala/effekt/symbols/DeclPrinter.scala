@@ -49,15 +49,11 @@ object DeclPrinter extends ParenPrettyPrinter {
     case f: BuiltinFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
-    case BuiltinEffect(name, tparams) =>
-      val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
-      s"extern effect ${name}$tps"
-
     case BuiltinType(name, tparams) =>
       val tps = if (tparams.isEmpty) "" else s"[${tparams.mkString(", ")}]"
       s"extern type ${name}$tps"
 
-    case c: Fun =>
+    case c: Callable =>
       val tpe = context.functionTypeOption(c)
       format("def", c, tpe.map { _.result }, tpe.map { _.effects })
 
@@ -66,7 +62,7 @@ object DeclPrinter extends ParenPrettyPrinter {
       pp"def ${ d.name }: ${ tpe }"
   }
 
-  def format(kw: String, f: Fun, result: Option[ValueType], effects: Option[Effects]): Doc = {
+  def format(kw: String, f: Callable, result: Option[ValueType], effects: Option[Effects]): Doc = {
     val tps = if (f.tparams.isEmpty) "" else s"[${f.tparams.mkString(", ")}]"
 
     val valueParams = f.vparams.map { p => pp"${p.name}: ${p.tpe.get}" }.mkString(", ")

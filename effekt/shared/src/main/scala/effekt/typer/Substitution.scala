@@ -58,20 +58,17 @@ case class Substitutions(
   }
 
   def substitute(t: ValueType): ValueType = t match {
-    case x: TypeVar =>
-      values.getOrElse(x, x)
+    case ValueTypeRef(x) =>
+      values.getOrElse(x, t)
     case ValueTypeApp(t, args) =>
       ValueTypeApp(t, args.map { substitute })
     case BoxedType(tpe, capt) =>
       BoxedType(substitute(tpe), substitute(capt))
-    case other => other
   }
 
   def substitute(t: Effects): Effects = Effects(t.toList.map(substitute))
   def substitute(t: InterfaceType): InterfaceType = t match {
-    case t: Interface => t
-    case t: BuiltinEffect => t
-    case BlockTypeApp(cons, args) => BlockTypeApp(cons, args.map(substitute))
+    case InterfaceType(cons, args) => InterfaceType(cons, args.map(substitute))
   }
 
   def substitute(t: BlockType): BlockType = t match {
@@ -96,9 +93,6 @@ case class Substitutions(
 object Substitutions {
   val empty: Substitutions = Substitutions(Map.empty[TypeVar, ValueType], Map.empty[CaptVar, Captures])
   def apply(values: List[(TypeVar, ValueType)], captures: List[(CaptVar, Captures)]): Substitutions = Substitutions(values.toMap, captures.toMap)
+  def types(keys: List[TypeVar], values: List[ValueType]): Substitutions = Substitutions((keys zip values).toMap, Map.empty)
+  def captures(keys: List[CaptVar], values: List[Captures]): Substitutions = Substitutions(Map.empty, (keys zip values).toMap)
 }
-
-// TODO Mostly for backwards compat
-implicit def typeMapToSubstitution(values: Map[TypeVar, ValueType]): Substitutions = Substitutions(values, Map.empty[CaptVar, Captures])
-implicit def captMapToSubstitution(captures: Map[CaptVar, Captures]): Substitutions = Substitutions(Map.empty[TypeVar, ValueType], captures)
-

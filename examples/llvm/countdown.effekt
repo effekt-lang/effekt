@@ -1,5 +1,5 @@
 
-def count(n: Int): Unit / Console = {
+def count(n: Int): Unit = {
   if(n < 0) {
     if(true) {
       println(0)
