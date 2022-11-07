@@ -137,7 +137,7 @@ def toBoolLst(len: Int, num: Int): List[Boolean] / Console  = try {
       }
     }
   }
-} with Fail { () => println("toBoolLst: Unexpected negative number."); [] }
+} with Fail[A] { () => println("toBoolLst: Unexpected negative number."); [] }
 
 //// Observe the possibilities of true/false combinations for the RVs
 //// in lRef corresponding to the above described interpretation of
@@ -160,7 +160,7 @@ def obsSco(idx: Int, lRef: List[Ref], lProb: List[Double]): Unit / { IndexOutOfB
   }
 }
 
-def choose3[R] { x: R } { y: R } { z: R } : R / Fork =
+def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
   if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
 
 def fresh(): Ref / Heap = do empty(Unobserved())
@@ -233,7 +233,7 @@ type Weighted[R] { MkWeighted(weight: Double, value: R) }
 // accordingly and handle Fork by resuming with both
 // possibilities false and true appending the results.
 // This yields a list of weighted ways through the program.
-def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
+def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
   val empty: List[Weighted[R]] = Nil();
   try {
     var current = 1.0;
@@ -242,7 +242,7 @@ def handleProb[R] { prog: R / { Score, Fork, Fail } } = {
       Cons(MkWeighted(current, res), empty)
     } with Score { p => current = current * p; resume(()) }
   } with Fork { () => resume(true).append(resume(false)) }
-    with Fail { () => empty }
+    with Fail[A] { () => empty }
 }
 
 // functions for calculating the normalized posterior from a
@@ -325,7 +325,7 @@ def printGrassModel(res: List[Weighted[Var]]): Unit / Console = {
   println(Cons(priTru, Cons(priFls, Nil())));
   println("posterior rain true/false conditioned grass is wet");
   try{ println(posterior(res)) }
-  with Fail { () => println("Bad model: model evidence is 0, cannot compute posterior.") }
+  with Fail[A] { () => println("Bad model: model evidence is 0, cannot compute posterior.") }
 }
 
 def heapTest() = heap {
@@ -344,7 +344,7 @@ def heapTest() = heap {
   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
 }
 
-def catch[R] { p: => R / IndexOutOfBounds }: Unit =
+def catch[R] { p: => R / IndexOutOfBounds }: Unit / Console =
   try { p(); () }
   with IndexOutOfBounds[A] { () => println("Index out of bounds!") }
 
