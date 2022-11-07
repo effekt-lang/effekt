@@ -37,8 +37,8 @@ object assertions {
       case t: UserFunction => t
       case _ => reporter.abort("Expected a user defined function")
     }
-    def asBuiltinFunction: BuiltinFunction = s match {
-      case t: BuiltinFunction => t
+    def asBuiltinFunction: ExternFunction = s match {
+      case t: ExternFunction => t
       case _ => reporter.abort("Expected a builtin function")
     }
     def asConstructor: Constructor = s match {

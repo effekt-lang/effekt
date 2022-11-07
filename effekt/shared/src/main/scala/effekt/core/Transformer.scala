@@ -301,10 +301,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val as = vargsT ++ bargsT
 
     sym match {
-      case f: BuiltinFunction if isPure(f.capture) =>
+      case f: ExternFunction if isPure(f.capture) =>
         // if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
         PureApp(BlockVar(f), targs, vargsT)
-      case f: BuiltinFunction if pureOrIO(f.capture) =>
+      case f: ExternFunction if pureOrIO(f.capture) =>
         DirectApp(BlockVar(f), targs, as)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")

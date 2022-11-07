@@ -47,17 +47,17 @@ object DeclPrinter extends ParenPrettyPrinter {
       }
       "type" <+> name.toString <> tps <+> braces(nest(line <> vsep(ctrs)) <> line)
 
-    case f: BuiltinFunction =>
+    case f: ExternFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
-    case BuiltinType(name, tparams) =>
+    case ExternType(name, tparams) =>
       val tps = show(tparams)
       pp"extern type ${name}$tps"
 
-    case BuiltinInterface(name, tparams) =>
+    case ExternInterface(name, tparams) =>
       pp"extern interface ${name}${show(tparams)}"
 
-    case BuiltinResource(name, tpe) =>
+    case ExternResource(name, tpe) =>
       pp"extern resource ${name}: ${tpe}"
 
     case c: Callable =>

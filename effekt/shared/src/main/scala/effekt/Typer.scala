@@ -60,7 +60,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
             case term: BlockParam =>
               Context.bind(term, term.tpe)
               Context.bind(term, CaptureSet(term.capture))
-            case term: BuiltinResource =>
+            case term: ExternResource =>
               Context.bind(term, term.tpe)
               Context.bind(term, CaptureSet(term.capture))
             case term: Callable =>
@@ -1395,7 +1395,7 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def bind(p: TrackedParam): Unit = p match {
     case s @ BlockParam(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
-    case s @ BuiltinResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
+    case s @ ExternResource(name, tpe) => bind(s, tpe, CaptureSet(p.capture))
     case s : SelfParam => bind(s, s.tpe, CaptureSet(s.capture))
     case r : ResumeParam => panic("Cannot bind resume")
   }

@@ -159,9 +159,9 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     sym match {
       case _: Module =>
         Some(SymbolKind.Module)
-      case _: Interface | _: BuiltinInterface =>
+      case _: Interface | _: ExternInterface =>
         Some(SymbolKind.Interface)
-      case _: DataType | _: BuiltinType | _: TypeAlias =>
+      case _: DataType | _: ExternType | _: TypeAlias =>
         Some(SymbolKind.Enum)
       case _: Callable =>
         Some(SymbolKind.Method)

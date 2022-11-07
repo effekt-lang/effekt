@@ -99,8 +99,8 @@ trait Intelligence {
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
-    case b: BuiltinFunction =>
-      SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
+    case b: ExternFunction =>
+      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None)
 
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
@@ -133,13 +133,13 @@ trait Intelligence {
     case t: TypeAlias =>
       SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
-    case t: BuiltinType =>
+    case t: ExternType =>
       SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None)
 
-    case t: BuiltinInterface =>
+    case t: ExternInterface =>
       SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None)
 
-    case t: BuiltinResource =>
+    case t: ExternResource =>
       SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None)
 
     case c: Constructor =>

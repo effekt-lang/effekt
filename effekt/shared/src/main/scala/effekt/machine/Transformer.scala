@@ -6,7 +6,7 @@ import effekt.context.Context
 import effekt.lifted
 import effekt.lifted.LiftInference
 import effekt.symbols
-import effekt.symbols.{ BlockSymbol, BlockType, BuiltinFunction, BuiltinType, DataType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, BlockType, ExternFunction, ExternType, DataType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
 
 object Transformer {
 
@@ -282,7 +282,7 @@ object Transformer {
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.BuiltinFunction), List(), args) =>
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction), List(), args) =>
       val variable = Variable(freshName("x"), transform(blockName.result))
       transform(args).flatMap { values =>
         Binding { k =>
@@ -326,7 +326,7 @@ object Transformer {
     case symbols.DataType(name, tparams, constructors) => Context.abort("Not yet supported: (data) type polymorphism")
     case symbols.Record(name, Nil, constructor) => builtins.SingletonRecord
     case symbols.Record(name, tparams, constructor) => Context.abort("Not yet supported: (data) type polymorphism")
-    case t @ symbols.BuiltinType(name, tparams) => Context.abort(s"Application to an unknown symbol: $t")
+    case t @ symbols.ExternType(name, tparams) => Context.abort(s"Application to an unknown symbol: $t")
   }
 
   def transform(args: List[lifted.Argument])(using BlocksParamsContext, Context): Binding[List[Variable]] =

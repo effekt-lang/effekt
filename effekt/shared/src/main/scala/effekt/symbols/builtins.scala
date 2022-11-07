@@ -19,32 +19,32 @@ object builtins {
 
   private def name(s: String) = Name.qualified(s, prelude)
 
-  val UnitSymbol = BuiltinType(name("Unit"), Nil)
+  val UnitSymbol = ExternType(name("Unit"), Nil)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val BooleanSymbol = BuiltinType(name("Boolean"), Nil)
+  val BooleanSymbol = ExternType(name("Boolean"), Nil)
   val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
 
-  val IntSymbol = BuiltinType(name("Int"), Nil)
+  val IntSymbol = ExternType(name("Int"), Nil)
   val TInt = ValueTypeApp(IntSymbol, Nil)
 
-  val DoubleSymbol = BuiltinType(name("Double"), Nil)
+  val DoubleSymbol = ExternType(name("Double"), Nil)
   val TDouble = ValueTypeApp(DoubleSymbol, Nil)
 
-  val StringSymbol = BuiltinType(name("String"), Nil)
+  val StringSymbol = ExternType(name("String"), Nil)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
-  val TopSymbol = BuiltinType(name("⊤"), Nil)
+  val TopSymbol = ExternType(name("⊤"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  val BottomSymbol = BuiltinType(name("⊥"), Nil)
+  val BottomSymbol = ExternType(name("⊥"), Nil)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
-  val IOCapability = BuiltinResource(name("io"), InterfaceType(IOSymbol, Nil))
+  val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil))
 
   val ControlSymbol = Interface(Name.local("Control"), Nil, Nil)
-  val ControlCapability = BuiltinResource(name("control"), InterfaceType(ControlSymbol, Nil))
+  val ControlCapability = ExternResource(name("control"), InterfaceType(ControlSymbol, Nil))
 
   object TState {
     val S = TypeParam(Name.local("S"))
@@ -76,7 +76,7 @@ object builtins {
     "Ref" -> TState.interface
   )
 
-  lazy val globalRegion = BuiltinResource(name("global"), TRegion)
+  lazy val globalRegion = ExternResource(name("global"), TRegion)
 
   val rootTerms: Map[String, TermSymbol] = Map(
     "global" -> globalRegion,

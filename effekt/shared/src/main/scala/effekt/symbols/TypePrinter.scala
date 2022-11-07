@@ -59,13 +59,13 @@ object TypePrinter extends ParenPrettyPrinter {
 
   def toDoc(t: BlockTypeConstructor): Doc = t match {
     case Interface(name, tparams, ops) => name
-    case BuiltinInterface(name, tparams) => name
+    case ExternInterface(name, tparams) => name
   }
 
   def toDoc(t: TypeConstructor): Doc = t match {
     case DataType(name, tparams, constructors)  => name <> typeParams(tparams)
     case Record(name, tparams, constructor) => name <> typeParams(tparams)
-    case BuiltinType(name, tparams) => name
+    case ExternType(name, tparams) => name
   }
 
   def toDoc(eff: Effects): Doc =

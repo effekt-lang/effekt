@@ -224,7 +224,7 @@ case class TypeAlias(name: Name, tparams: List[TypeParam], tpe: ValueType) exten
  *
  * - [[DataType]]
  * - [[Record]]
- * - [[BuiltinType]]
+ * - [[ExternType]]
  */
 sealed trait TypeConstructor extends TypeSymbol {
   def tparams: List[TypeParam]
@@ -350,13 +350,13 @@ object CaptureSet {
 }
 
 /**
- * Builtins
+ * FFI
  */
-sealed trait Builtin extends Symbol {
+sealed trait Extern extends Symbol {
   override def builtin = true
 }
 
-case class BuiltinFunction(
+case class ExternFunction(
   name: Name,
   tparams: List[TypeParam],
   vparams: List[ValueParam],
@@ -365,15 +365,15 @@ case class BuiltinFunction(
   effects: Effects,
   capture: CaptureSet,
   body: String = ""
-) extends Callable with BlockSymbol with Builtin {
+) extends Callable with BlockSymbol with Extern {
   def annotatedResult = Some(result)
   def annotatedEffects = Some(effects)
 }
 
-case class BuiltinResource(name: Name, tpe: BlockType) extends TrackedParam, Builtin {
+case class ExternResource(name: Name, tpe: BlockType) extends TrackedParam, Extern {
   // every block parameter gives rise to a capture parameter
   val capture: Capture = Resource(name)
 }
 
-case class BuiltinType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Builtin
-case class BuiltinInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Builtin
+case class ExternType(name: Name, tparams: List[TypeParam]) extends TypeConstructor, Extern
+case class ExternInterface(name: Name, tparams: List[TypeParam]) extends BlockTypeConstructor, Extern
