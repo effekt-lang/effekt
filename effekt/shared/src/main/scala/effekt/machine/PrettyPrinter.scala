@@ -14,7 +14,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def evidenceToDoc(value: Evidence): Doc = value match {
     case builtins.Here => "Here"
-    case builtins.There(ev) => "There(" <> evidenceToDoc(ev) <> ")"
+    case builtins.There => "There"
+    case n => "There + " + evidenceToDoc(n)
   }
 
   implicit def toDoc(v: Variable): Doc = string(v.name)

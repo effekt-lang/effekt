@@ -187,7 +187,7 @@ object Transformer {
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
 
-        LiteralEvidence(transform(ev), builtins.There(builtins.Here),
+        LiteralEvidence(transform(ev), builtins.There,
           NewStack(delimiter, returnClause,
             PushStack(delimiter,
               New(transform(id), transform(handler),

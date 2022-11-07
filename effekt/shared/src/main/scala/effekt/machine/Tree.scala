@@ -173,12 +173,7 @@ object builtins {
 
   val Evidence = Type.Int()
   val Here: Evidence = 0
-  object There {
-    def apply(v: Evidence): Evidence = v+1
-    def unapply(v: Evidence): Option[Evidence] = {
-      if v > 0 then Some(v-1) else None
-    }
-  }
+  val There: Evidence = 1
 
   /**
    * Blocks types are interfaces with a single operation.
