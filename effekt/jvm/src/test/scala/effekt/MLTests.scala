@@ -1,11 +1,11 @@
 package effekt
 
 import java.io.File
-import org.scalatest.funspec.AnyFunSpec
+
 import sbt.io._
 import sbt.io.syntax._
+
 import scala.language.implicitConversions
-import scala.sys.process.Process
 
 class MLTests extends EffektTests {
 
@@ -13,20 +13,20 @@ class MLTests extends EffektTests {
 
   override lazy val ignored: List[File] = List()
 
-  def runTestFor(f: File, expected: String) =
-    it(f.getName + " (ml)") {
-      val out = runML(f)
-      assert(expected == out)
+  def runTestFor(input: java.io.File, check: File, expected: String): Unit =
+    test(input.getPath + " (ml)") {
+      val out = runML(input)
+      assertNoDiff(out, expected)
     }
 
-  def runML(f: File): String = {
+  def runML(input: File): String = {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--backend", "ml"
     ))
     configs.verify()
-    compiler.compileFile(f.getPath, configs)
-    removeAnsiColors(configs.stringEmitter.result())
+    compiler.compileFile(input.getPath, configs)
+    configs.stringEmitter.result()
   }
 }
