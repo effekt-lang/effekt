@@ -16,10 +16,6 @@ class JITTests extends EffektTests {
     examplesDir / "jit" / "choice.effekt",
     examplesDir / "jit" / "triples.effekt",
 
-    // Primitive missing: Boolean ==
-    examplesDir / "jit" / "boolean-algebra.effekt",
-    examplesDir / "jit" / "boolean-algebra-with-literals.effekt",
-
     // mutable state not supported, yet
     examplesDir / "jit" / "gids.effekt",
   )

@@ -8,13 +8,13 @@ extern io def random(): Double = "random(): Double"
 // Console ops
 // ===========
 
-extern io def println(n: Int): Unit = "println(Int): Unit / Console"
-extern io def println(n: Double): Unit = "println(Double): Unit / Console"
-extern io def println(b: Boolean): Unit = "println(Boolean): Unit / Console"
-extern io def println(b: Unit): Unit = "println(Unit): Unit / Console"
-extern io def println(s: String): Unit = "println(String): Unit / Console"
-extern io def readLn(): String = "readLn(): String / Console"
-extern io def readInt(): Int = "readInt(): Int / Console"
+extern io def println(n: Int): Unit = "println(Int): Unit"
+extern io def println(n: Double): Unit = "println(Double): Unit"
+extern io def println(b: Boolean): Unit = "println(Boolean): Unit"
+extern io def println(b: Unit): Unit = "println(Unit): Unit"
+extern io def println(s: String): Unit = "println(String): Unit"
+extern io def readLn(): String = "readLn(): String"
+extern io def readInt(): Int = "readInt(): Int"
 
 // integer primitives
 // ==================
