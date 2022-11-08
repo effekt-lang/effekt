@@ -4,7 +4,7 @@ package typer
 import effekt.context.Context
 import effekt.source.MatchPattern
 import effekt.symbols.*
-import effekt.symbols.builtins.{ TBottom, TInt, TTop }
+import effekt.symbols.builtins.{ TBottom, TTop }
 import effekt.util.messages.ErrorReporter
 
 

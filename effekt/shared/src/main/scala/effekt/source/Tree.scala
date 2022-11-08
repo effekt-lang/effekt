@@ -99,18 +99,18 @@ case class Comment() extends Tree
  */
 sealed trait Id extends Tree {
   def name: String
-  def symbol(implicit C: Context): Symbol = C.symbolOf(this)
-  def clone(implicit C: Context): Id
+  def symbol(using C: Context): Symbol = C.symbolOf(this)
+  def clone(using C: Context): Id
 }
 case class IdDef(name: String) extends Id {
-  def clone(implicit C: Context): Id = {
+  def clone(using C: Context): Id = {
     val copy = IdDef(name)
     C.positions.dupPos(this, copy)
     copy
   }
 }
 case class IdRef(name: String) extends Id {
-  def clone(implicit C: Context): Id = {
+  def clone(using C: Context): Id = {
     val copy = IdRef(name)
     C.positions.dupPos(this, copy)
     copy
@@ -148,15 +148,6 @@ enum Param extends Definition {
   case BlockParam(id: IdDef, tpe: BlockType)
 }
 export Param.*
-
-/**
- * Lambdas / function literals (e.g., { x => x + 1 })
- */
-case class BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
-
-case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition
-
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition
 
 /**
  * Global and local definitions
@@ -216,81 +207,105 @@ export Stmt.*
  * In our source language, almost everything is an expression.
  * Effectful calls, if, while, ...
  */
-sealed trait Term extends Tree
+enum Term extends Tree {
 
-// Variable / Value use (can now also stand for blocks)
-case class Var(id: IdRef) extends Term, Reference
-case class Assign(id: IdRef, expr: Term) extends Term, Reference
+  // Variable / Value use (can now also stand for blocks)
+  case Var(id: IdRef) extends Term, Reference
+  case Assign(id: IdRef, expr: Term) extends Term, Reference
 
-case class Literal(value: Any, tpe: symbols.ValueType) extends Term
+  case Literal(value: Any, tpe: symbols.ValueType)
+  case Hole(stmts: Stmt)
 
+  // Boxing and unboxing to represent first-class values
+  case Box(capt: Option[CaptureSet], block: Term)
+  case Unbox(term: Term)
+
+  /**
+   * Models:
+   * - field selection, i.e., `record.field` (receiver is an expression, result is an expression)
+   * - future: nested capability / module selection, i.e., `mymod.nested.foo` (receiver is a block, result is a block)
+   *
+   * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
+   */
+  case Select(receiver: Term, id: IdRef) extends Term, Reference
+
+  /**
+   * A call to an effect operation, i.e., `do raise()`.
+   *
+   * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
+   * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
+   */
+  case Do(effect: Option[BlockType.BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference
+
+  /**
+   * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
+   */
+  case Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term])
+
+  /**
+   * Models:
+   * - uniform function call, i.e., `list.map { ... }` (receiver is an expression, result is an expression)
+   * - capability call, i.e., `exc.raise()` (receiver is a block, result is an expression)
+   *
+   * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
+   */
+  case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+
+  // Control Flow
+  case If(cond: Term, thn: Stmt, els: Stmt)
+  case While(cond: Term, block: Stmt)
+  case Match(scrutinee: Term, clauses: List[MatchClause])
+
+  /**
+   * Handling effects
+   *
+   * try {
+   * <prog>
+   * } with <capability> : <Effect> { ... }
+   *
+   * Each with-clause is modeled as an instance of type [[Handler]].
+   */
+  case TryHandle(prog: Stmt, handlers: List[Handler])
+  case Region(id: IdDef, body: Stmt) extends Term, Definition
+
+  /**
+   * Lambdas / function literals (e.g., { x => x + 1 })
+   */
+  case BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
+  case New(impl: Implementation)
+}
+export Term.*
+
+// Smart Constructors for literals
+// -------------------------------
 def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
 def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
 def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
 def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
 def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
 
-/**
- * Represents a first-class function
- */
-case class Box(capt: Option[CaptureSet], block: Term) extends Term
-
-case class Unbox(term: Term) extends Term
-
 type CallLike = Call | Do | Select | MethodCall
 
-/**
- * Models:
- * - field selection, i.e., `record.field` (receiver is an expression, result is an expression)
- * - future: nested capability / module selection, i.e., `mymod.nested.foo` (receiver is a block, result is a block)
- *
- * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
- */
-case class Select(receiver: Term, id: IdRef) extends Term, Reference
 
-/**
- * A call to an effect operation, i.e., `do raise()`.
- *
- * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
- * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
- */
-case class Do(effect: Option[BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference
+enum CallTarget extends Tree {
 
-/**
- * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
- */
-case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term
+  // potentially overloaded
+  case IdTarget(id: IdRef) extends CallTarget, Reference
 
-/**
- * Models:
- * - uniform function call, i.e., `list.map { ... }` (receiver is an expression, result is an expression)
- * - capability call, i.e., `exc.raise()` (receiver is a block, result is an expression)
- *
- * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
- */
-case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
+  // not overloaded
+  case ExprTarget(receiver: Term)
+}
+export CallTarget.*
 
-sealed trait CallTarget extends Tree
 
-// potentially overloaded
-case class IdTarget(id: IdRef) extends CallTarget with Reference
+// Declarations
+// ------------
+case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition
+case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition
 
-// not overloaded
-case class ExprTarget(receiver: Term) extends CallTarget
 
-case class If(cond: Term, thn: Stmt, els: Stmt) extends Term
-case class While(cond: Term, block: Stmt) extends Term
-
-/**
- * Handling effects
- *
- *   try {
- *     <prog>
- *   } with <capability> : <Effect> { ... }
- *
- * Each with-clause is modeled as an instance of type [[Handler]].
- */
-case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
+// Implementations
+// ---------------
 
 /**
  * An implementation of a given interface
@@ -301,7 +316,7 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
  *
  * Called "template" or "class" in other languages.
  */
-case class Implementation(interface: BlockTypeRef, clauses: List[OpClause]) extends Reference {
+case class Implementation(interface: BlockType.BlockTypeRef, clauses: List[OpClause]) extends Reference {
   def id = interface.id
 }
 
@@ -314,20 +329,13 @@ case class Handler(capability: Option[BlockParam] = None, impl: Implementation) 
   def id = impl.id
 }
 
-case class New(impl: Implementation) extends Term
-
-
-// TODO also allow block params and add a check in TryHandle to rule out continuation capture and block params.
-
 // `ret` is an optional user-provided type annotation for the return type
 // currently the annotation is rejected by [[Typer]] -- after that phase, `ret` should always be `None`
 case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], ret: Option[Effectful], body: Stmt, resume: IdDef) extends Reference
 
-case class Region(id: IdDef, body: Stmt) extends Term with Definition
+// Pattern Matching
+// ----------------
 
-case class Hole(stmts: Stmt) extends Term
-
-case class Match(scrutinee: Term, clauses: List[MatchClause]) extends Term
 case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
 enum MatchPattern extends Tree {

@@ -343,13 +343,13 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val valueParam : P[ValueParam] =
-    idDef ~ valueTypeAnnotation ^^ { case id ~ tpe => ValueParam(id, Some(tpe)): ValueParam }
+    idDef ~ valueTypeAnnotation ^^ { case id ~ tpe => ValueParam(id, Some(tpe)) : ValueParam }
 
   lazy val valueParamOpt: P[ValueParam] =
-    idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe): ValueParam }
+    idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe) : ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe): BlockParam }
+    idDef ~ (`:` ~> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe) : BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -373,23 +373,24 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLiteral(Nil, ps, Nil, body) }
+    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLiteral(Nil, ps, Nil, body) : BlockLiteral }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
       val name = "__tmpRes"
-      BlockLiteral(
+      val res: BlockLiteral = BlockLiteral(
         Nil,
         List(ValueParam(IdDef(name), None)),
         Nil,
-        Return(Match(Var(IdRef(name)), cs))) withPositionOf cs
+        Return(Match(Var(IdRef(name)), cs)))
+      res withPositionOf cs
     }
-    | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) }
+    | `{` ~> stmts <~ `}` ^^ { s => BlockLiteral(Nil, Nil, Nil, s) : BlockLiteral }
     | failure("Expected a block argument")
     )
 
   lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None): ValueParam) })
+    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None) : ValueParam) })
 
   lazy val maybeValueArgs: P[List[Term]] =
     many(valueArgSection) ^^ { _.flatten }
@@ -518,12 +519,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | `(` ~> expr <~ `)` ^^ ExprTarget.apply
     )
 
-  lazy val idTarget: P[IdTarget] =
+  lazy val idTarget: P[CallTarget] =
     idRef ^^ IdTarget.apply
 
   lazy val unboxExpr: P[Term] = `unbox` ~/> expr ^^ Unbox.apply
 
-  lazy val newExpr: P[New] = `new` ~/> implementation ^^ New.apply
+  lazy val newExpr: P[Term] = `new` ~/> implementation ^^ New.apply
 
   lazy val funCall: P[Term] =
     ( callTarget ~ maybeTypeArgs ~ valueArgs ~ blockArgs ^^ Call.apply
@@ -610,10 +611,10 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val literals: P[Literal] =
     double | int | bool | unit | string
 
-  lazy val boxedExpr: P[Box] =
+  lazy val boxedExpr: P[Term] =
     `box` ~> captureSet.? ~ (idRef ^^ Var.apply | functionArg) ^^ { case capt ~ block => Box(capt, block) }
 
-  lazy val lambdaExpr: P[Box] =
+  lazy val lambdaExpr: P[Term] =
     `fun` ~> valueParams ~ (`{` ~/> stmts <~ `}`)  ^^ { case ps ~ body => Box(None, BlockLiteral(Nil, ps, Nil, body)) }
 
   lazy val listLiteral: P[Term] =
@@ -771,7 +772,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     case _ => EmptyRange
   }
 
-  override implicit def memo[T](parser : => Parser[T]) : PackratParser[T] =
+  override implicit def memo[T](parser: => Parser[T]) : PackratParser[T] =
     new PackratParser[T](parser.map { t =>
       checkPositions(t)
       t
