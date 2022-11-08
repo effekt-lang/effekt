@@ -375,7 +375,7 @@ object Transformer {
 
     case symbols.builtins.TString => Type.String()
 
-    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative("<function>")
+    case symbols.FunctionType(Nil, _, vparams, Nil, _, _) => Negative("<function>")
 
     case symbols.InterfaceType(interface, List()) => Negative(interface.name.name)
 
