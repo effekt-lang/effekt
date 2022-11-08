@@ -392,16 +392,16 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
 
-  def annotateResolvedType(tree: source.Type)(tpe: tree.resolved): Unit =
+  def annotateResolvedType(tree: source.Type)(tpe: symbols.Type): Unit =
     annotate(Annotations.Type, tree, tpe)
 
-  def resolvedType(tree: source.Type): tree.resolved =
-    annotation(Annotations.Type, tree).asInstanceOf[tree.resolved]
+  def resolvedType(tree: source.Type): symbols.Type =
+    annotation(Annotations.Type, tree)
 
-  def annotateResolvedCapture(tree: source.CaptureSet)(capt: tree.resolved): Unit =
+  def annotateResolvedCapture(tree: source.CaptureSet)(capt: symbols.CaptureSet): Unit =
     annotate(Annotations.Capture, tree, capt)
 
-  def resolvedCapture(tree: source.CaptureSet): tree.resolved =
+  def resolvedCapture(tree: source.CaptureSet): symbols.CaptureSet =
     annotation(Annotations.Capture, tree)
 
   def typeOf(s: Symbol): Type = s match {
@@ -489,8 +489,8 @@ trait AnnotationsDB { self: Context =>
    *
    * This one can fail.
    */
-  def symbolOf(tree: source.Reference): tree.symbol = {
-    val sym = symbolOf(tree.id).asInstanceOf[tree.symbol]
+  def symbolOf(tree: source.Reference): Symbol = {
+    val sym = symbolOf(tree.id)
 
     val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
     annotate(Annotations.References, sym, tree :: refs)
@@ -502,8 +502,8 @@ trait AnnotationsDB { self: Context =>
    *
    * These lookups should not fail (except there is a bug in the compiler)
    */
-  def symbolOf(tree: source.Definition): tree.symbol =
-    symbolOf(tree.id).asInstanceOf[tree.symbol]
+  def symbolOf(tree: source.Definition): Symbol =
+    symbolOf(tree.id)
 
   /**
    * Searching the definition for a symbol

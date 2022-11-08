@@ -61,7 +61,7 @@ class BoxUnboxInference {
 
     case b: BlockLiteral => Box(None, rewriteAsBlock(b)).inheritPosition(b)
 
-    case l: Literal[t]            => l
+    case l: Literal => l
 
     case Assign(id, expr) =>
       Assign(id, rewriteAsExpr(expr))

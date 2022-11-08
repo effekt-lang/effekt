@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 
@@ -249,7 +249,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
-      val sym = Context.symbolOf(f)
+      val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)
@@ -540,11 +540,6 @@ object Namer extends Phase[Parsed, NameResolved] {
         Substitutions.types(tparams, targs).substitute(tpe)
       case other => Context.abort(pretty"Expected a value type, but got ${other}")
     }
-    case source.TypeVar(id) => Context.resolveType(id) match {
-      case TypeAlias(name, tparams, tpe) =>
-        if (tparams.nonEmpty) Context.abort(pretty"Type alias ${name.name} expects ${tparams.size} type arguments, but got none.") else tpe
-      case other => Context.abort(pretty"Expected a value type, but got ${other}")
-    }
     case source.ValueTypeTree(tpe) =>
       tpe
     // TODO reconsider reusing the same set for terms and types...
@@ -643,7 +638,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
   def resolvingType[T <: source.Type, R <: symbols.Type](tpe: T)(f: T => R)(using Context): R = Context.at(tpe) {
     val res = f(tpe)
-    Context.annotateResolvedType(tpe)(res.asInstanceOf[tpe.resolved])
+    Context.annotateResolvedType(tpe)(res)
     kinds.wellformed(res)
     res
   }
