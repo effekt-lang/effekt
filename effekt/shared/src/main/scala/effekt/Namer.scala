@@ -7,7 +7,7 @@ package namer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.context.assertions.*
 import effekt.typer.Substitutions
-import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Named, Tree }
+import effekt.source.{ Def, Id, IdDef, IdRef, ModuleDecl, Tree }
 import effekt.symbols.*
 import effekt.util.messages.ErrorMessageReifier
 
@@ -249,7 +249,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     // FunDef and EffDef have already been resolved as part of the module declaration
     case f @ source.FunDef(id, tparams, vparams, bparams, ret, body) =>
-      val sym = Context.symbolOf(f)
+      val sym = f.symbol
       Context scoped {
         sym.tparams.foreach { p => Context.bind(p) }
         Context.bindValues(sym.vparams)

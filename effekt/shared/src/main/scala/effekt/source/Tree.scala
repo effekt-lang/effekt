@@ -117,21 +117,16 @@ case class IdRef(name: String) extends Id {
   }
 }
 
-sealed trait Named extends Tree {
-  def id: Id
-  type symbol <: Symbol
-}
+sealed trait Named extends Tree
 
 // Something that later will be stored in the symbol table
 sealed trait Definition extends Named {
   def id: IdDef
-  def symbol(implicit C: Context): symbol = C.symbolOf(this)
 }
 
 // Something that later can be looked up in the symbol table
 sealed trait Reference extends Named {
   def id: IdRef
-  def definition(implicit C: Context): symbol = C.symbolOf(this)
 }
 
 /**
@@ -148,92 +143,74 @@ case class Import(path: String) extends Tree
 /**
  * Parameters and arguments
  */
-sealed trait Param extends Definition
-case class ValueParam(id: IdDef, tpe: Option[ValueType]) extends Param { type symbol = symbols.ValueParam }
-case class BlockParam(id: IdDef, tpe: BlockType) extends Param { type symbol = symbols.BlockParam }
+enum Param extends Definition {
+  case ValueParam(id: IdDef, tpe: Option[ValueType])
+  case BlockParam(id: IdDef, tpe: BlockType)
+}
+export Param.*
 
 /**
  * Lambdas / function literals (e.g., { x => x + 1 })
  */
 case class BlockLiteral(tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], body: Stmt) extends Term
 
+case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition
+
+case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition
 
 /**
  * Global and local definitions
  */
-sealed trait Def extends Definition {
+enum Def extends Definition {
+
   def id: IdDef
-}
-case class FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt) extends Def {
-  type symbol = symbols.UserFunction
-}
-case class ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt) extends Def {
-  type symbol = symbols.ValBinder
-}
-case class VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt) extends Def {
-  type symbol = symbols.VarBinder
-}
-case class DefDef(id: IdDef, annot: Option[BlockType], block: Term) extends Def {
-  type symbol = symbols.DefBinder
-}
-case class InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true) extends Def {
-  type symbol = symbols.Interface
-}
-case class Operation(id: IdDef, tparams: List[Id], params: List[ValueParam], ret: Effectful) extends Definition {
-  type symbol = symbols.Operation
-}
-case class DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor]) extends Def {
-  type symbol = symbols.DataType
-}
-case class Constructor(id: IdDef, params: List[ValueParam]) extends Definition {
-  type symbol = symbols.Constructor
-}
-case class RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam]) extends Def {
-  type symbol = symbols.Record
-}
 
-/**
- * Type aliases like `type Matrix[T] = List[List[T]]`
- */
-case class TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType) extends Def {
-  type symbol = symbols.TypeAlias
-}
+  case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
+  case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
+  case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
+  case DefDef(id: IdDef, annot: Option[BlockType], block: Term)
+  case InterfaceDef(id: IdDef, tparams: List[Id], ops: List[Operation], isEffect: Boolean = true)
+  case DataDef(id: IdDef, tparams: List[Id], ctors: List[Constructor])
+  case RecordDef(id: IdDef, tparams: List[Id], fields: List[ValueParam])
 
-/**
- * Effect aliases like `effect Set = { Get, Put }`
- */
-case class EffectDef(id: IdDef, tparams: List[Id], effs: Effects) extends Def {
-  type symbol = symbols.EffectAlias
-}
+  /**
+   * Type aliases like `type Matrix[T] = List[List[T]]`
+   */
+  case TypeDef(id: IdDef, tparams: List[Id], tpe: ValueType)
 
-// only valid on the toplevel!
-case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
-  type symbol = symbols.ExternType
-}
+  /**
+   * Effect aliases like `effect Set = { Get, Put }`
+   */
+  case EffectDef(id: IdDef, tparams: List[Id], effs: Effects)
 
-case class ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
-  type symbol = symbols.ExternFunction
-}
+  /**
+   * Only valid on the toplevel!
+   */
+  case ExternType(id: IdDef, tparams: List[Id])
 
-case class ExternResource(id: IdDef, tpe: BlockType) extends Def {
-  type symbol = symbols.BlockParam
-}
+  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String)
 
-case class ExternInterface(id: IdDef, tparams: List[Id]) extends Def {
-  type symbol = symbols.ExternInterface
-}
+  case ExternResource(id: IdDef, tpe: BlockType)
 
-case class ExternInclude(path: String) extends Def {
-  def id = IdDef("includes don't have names")
-  // Namer resolves the path and loads the contents
-  var contents: String = ""
-}
+  case ExternInterface(id: IdDef, tparams: List[Id])
 
-sealed trait Stmt extends Tree
-case class DefStmt(d: Def, rest: Stmt) extends Stmt
-case class ExprStmt(d: Term, rest: Stmt) extends Stmt
-case class Return(d: Term) extends Stmt
-case class BlockStmt(stmts: Stmt) extends Stmt
+  /**
+   * Namer resolves the path and loads the contents in field [[contents]]
+   *
+   * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
+   *   have case specific refinements.
+   */
+  case ExternInclude(path: String)(var contents: String, val id: IdDef)
+}
+export Def.*
+
+enum Stmt extends Tree {
+  case DefStmt(d: Def, rest: Stmt)
+  case ExprStmt(d: Term, rest: Stmt)
+  case Return(d: Term)
+  case BlockStmt(stmts: Stmt)
+}
+export Stmt.*
 
 /**
  * In our source language, almost everything is an expression.
@@ -242,12 +219,8 @@ case class BlockStmt(stmts: Stmt) extends Stmt
 sealed trait Term extends Tree
 
 // Variable / Value use (can now also stand for blocks)
-case class Var(id: IdRef) extends Term with Reference {
-  type symbol = symbols.TermSymbol
-}
-case class Assign(id: IdRef, expr: Term) extends Term with Reference {
-  type symbol = symbols.VarBinder
-}
+case class Var(id: IdRef) extends Term, Reference
+case class Assign(id: IdRef, expr: Term) extends Term, Reference
 
 sealed trait Literal[T] extends Term {
   def value: T
@@ -274,9 +247,7 @@ type CallLike = Call | Do | Select | MethodCall
  *
  * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
  */
-case class Select(receiver: Term, id: IdRef) extends Term, Reference {
-  type symbol = symbols.Field
-}
+case class Select(receiver: Term, id: IdRef) extends Term, Reference
 
 /**
  * A call to an effect operation, i.e., `do raise()`.
@@ -284,9 +255,7 @@ case class Select(receiver: Term, id: IdRef) extends Term, Reference {
  * The [[effect]] is the optionally annotated effect type (not possible in source ATM). In the future, this could
  * look like `do Exc.raise()`, or `do[Exc] raise()`, or do[Exc].raise(), or simply Exc.raise() where Exc is a type.
  */
-case class Do(effect: Option[BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference {
-  type symbol = symbols.Operation
-}
+case class Do(effect: Option[BlockTypeRef], id: IdRef, targs: List[ValueType], vargs: List[Term]) extends Term, Reference
 
 /**
  * A call to either an expression, i.e., `(fun() { ...})()`; or a named function, i.e., `foo()`
@@ -300,17 +269,13 @@ case class Call(target: CallTarget, targs: List[ValueType], vargs: List[Term], b
  *
  * The resolved target can help to determine whether the receiver needs to be type-checked as first- or second-class.
  */
-case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference {
-  type symbol = symbols.TermSymbol
-}
+case class MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
 sealed trait CallTarget extends Tree
 
 // potentially overloaded
-case class IdTarget(id: IdRef) extends CallTarget with Reference {
-  // can refer to either a block OR a term symbol
-  type symbol = symbols.TermSymbol
-}
+case class IdTarget(id: IdRef) extends CallTarget with Reference
+
 // not overloaded
 case class ExprTarget(receiver: Term) extends CallTarget
 
@@ -339,7 +304,6 @@ case class TryHandle(prog: Stmt, handlers: List[Handler]) extends Term
  */
 case class Implementation(interface: BlockTypeRef, clauses: List[OpClause]) extends Reference {
   def id = interface.id
-  type symbol = symbols.Interface
 }
 
 /**
@@ -349,7 +313,6 @@ case class Handler(capability: Option[BlockParam] = None, impl: Implementation) 
   def effect = impl.interface
   def clauses = impl.clauses
   def id = impl.id
-  type symbol = symbols.Interface
 }
 
 case class New(impl: Implementation) extends Term
@@ -359,48 +322,45 @@ case class New(impl: Implementation) extends Term
 
 // `ret` is an optional user-provided type annotation for the return type
 // currently the annotation is rejected by [[Typer]] -- after that phase, `ret` should always be `None`
-case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], ret: Option[Effectful], body: Stmt, resume: IdDef) extends Reference {
-  type symbol = symbols.Operation
-}
+case class OpClause(id: IdRef,  tparams: List[Id], vparams: List[ValueParam], ret: Option[Effectful], body: Stmt, resume: IdDef) extends Reference
 
-case class Region(id: IdDef, body: Stmt) extends Term with Definition {
-  type symbol = symbols.TrackedParam
-}
+case class Region(id: IdDef, body: Stmt) extends Term with Definition
 
 case class Hole(stmts: Stmt) extends Term
 
 case class Match(scrutinee: Term, clauses: List[MatchClause]) extends Term
 case class MatchClause(pattern: MatchPattern, body: Stmt) extends Tree
 
-sealed trait MatchPattern extends Tree
+enum MatchPattern extends Tree {
 
-/**
- * Pattern matching anything:
- *
- *   case a => ...
- */
-case class AnyPattern(id: IdDef) extends MatchPattern with Definition { type symbol = symbols.ValueParam }
+  /**
+   * Pattern matching anything:
+   *
+   *   case a => ...
+   */
+  case AnyPattern(id: IdDef) extends MatchPattern, Definition
 
-/**
- * Pattern matching on a constructor
- *
- *   case Cons(a, as) => ...
- */
-case class TagPattern(id: IdRef, patterns: List[MatchPattern]) extends MatchPattern with Reference {
-  type symbol = symbols.Constructor
+  /**
+   * Pattern matching on a constructor
+   *
+   *   case Cons(a, as) => ...
+   */
+  case TagPattern(id: IdRef, patterns: List[MatchPattern]) extends MatchPattern, Reference
+
+  /**
+   * A wildcard pattern ignoring the matched value
+   *
+   *   case _ => ...
+   */
+  case IgnorePattern()
+
+  /**
+   * A pattern that matches a single literal value
+   */
+  case LiteralPattern[T](l: Literal[T])
 }
+export MatchPattern.*
 
-/**
- * A wildcard pattern ignoring the matched value
- *
- *   case _ => ...
- */
-case class IgnorePattern() extends MatchPattern
-
-/**
- * A pattern that matches a single literal value
- */
-case class LiteralPattern[T](l: Literal[T]) extends MatchPattern
 
 /**
  * Types and Effects
@@ -412,23 +372,22 @@ sealed trait Type extends Tree
 /**
  * Value Types
  */
-sealed trait ValueType extends Type
+enum ValueType extends Type {
 
-/**
- * Trees that represent inferred or synthesized types (not present in the source)
- */
-case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
+  /**
+   * Trees that represent inferred or synthesized types (not present in the source)
+   */
+  case ValueTypeTree(tpe: symbols.ValueType)
 
-/**
- * Types of first-class functions
- */
-case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
+  /**
+   * Types of first-class functions
+   */
+  case BoxedType(tpe: BlockType, capt: CaptureSet)
 
-// Bound occurrences (args can be empty)
-case class ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference {
-  // can be applied to type aliases or data types
-  type symbol = symbols.TypeSymbol
+  // Bound occurrences (args can be empty)
+  case ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference
 }
+export ValueType.*
 
 /**
  * Block Types
@@ -462,6 +421,78 @@ object Effects {
 case class CaptureSet(captures: List[IdRef]) extends Tree
 
 
+object Named {
+
+  type Params = ValueParam | BlockParam
+  type Externs = ExternDef | ExternResource | ExternInterface | ExternType
+  type Defs = FunDef | ValDef | VarDef | DefDef | InterfaceDef | DataDef | RecordDef | TypeDef | EffectDef
+  type Definitions =  Externs | Defs | Params | Operation | Constructor | Region | AnyPattern
+
+  type Types = ValueTypeRef | BlockTypeRef
+  type Vars = Var | Assign
+  type Calls = Do | Select | MethodCall | IdTarget
+  type References = Types | Vars | Calls | TagPattern | Handler | OpClause | Implementation
+
+  type ResolvedDefinitions[T <: Definitions] = T match {
+    // Defs
+    case FunDef       => symbols.UserFunction
+    case ValDef       => symbols.Binder.ValBinder // export Binder.* doesn't seem to work here (maybe because the packages are cyclic?)
+    case VarDef       => symbols.Binder.VarBinder
+    case DefDef       => symbols.Binder.DefBinder
+    case InterfaceDef => symbols.BlockTypeConstructor.Interface
+    case DataDef      => symbols.TypeConstructor.DataType
+    case RecordDef    => symbols.TypeConstructor.Record
+    case TypeDef      => symbols.TypeAlias
+    case EffectDef    => symbols.EffectAlias
+
+    // Params
+    case ValueParam => symbols.ValueParam
+    case BlockParam => symbols.TrackedParam.BlockParam
+
+    // Externs
+    case ExternDef       => symbols.ExternFunction
+    case ExternResource  => symbols.TrackedParam.BlockParam
+    case ExternInterface => symbols.BlockTypeConstructor.ExternInterface
+    case ExternType      => symbols.TypeConstructor.ExternType
+
+    // Others
+    case Operation   => symbols.Operation
+    case Constructor => symbols.Constructor
+    case Region      => symbols.TrackedParam
+    case AnyPattern  => symbols.ValueParam
+  }
+
+  type ResolvedReferences[T <: References] = T match {
+    // Types
+    case ValueTypeRef => symbols.TypeConstructor
+    case BlockTypeRef => symbols.BlockTypeConstructor
+
+    // Vars
+    case Var    => symbols.TermSymbol
+    case Assign => symbols.Binder.VarBinder
+
+    // CallLike
+    case Do         => symbols.Operation
+    case Select     => symbols.Field
+    case MethodCall => symbols.TermSymbol
+    case IdTarget   => symbols.TermSymbol
+
+    // Others
+    case Handler => symbols.BlockTypeConstructor.Interface
+    case OpClause => symbols.Operation
+    case Implementation => symbols.BlockTypeConstructor.Interface
+    case TagPattern => symbols.Constructor
+  }
+
+  extension [T <: Definitions](t: T & Definition) {
+    def symbol(using C: Context): ResolvedDefinitions[T] = C.symbolOf(t).asInstanceOf
+  }
+  extension [T <: References](t: T & Reference) {
+    def definition(using C: Context): ResolvedReferences[T] = C.symbolOf(t).asInstanceOf
+  }
+
+}
+export Named.symbol
 
 // MOVE TO NAMER
 object Resolvable {
@@ -476,16 +507,16 @@ object Resolvable {
   // -----------
   // we need to avoid widening, so here we define BlockType as a sum without a common parent
   // (see https://github.com/lampepfl/dotty/issues/16299)
-  type BlockType = BlockTypeTree | FunctionType | BlockTypeRef
+  type BlockTypes = BlockTypeTree | FunctionType | BlockTypeRef
 
-  type ResolvedBlockType[T <: BlockType] = T match {
+  type Resolved[T <: BlockTypes] = T match {
     case BlockTypeTree => symbols.BlockType
     case FunctionType => symbols.FunctionType
     case BlockTypeRef => symbols.InterfaceType
   }
 
-  extension [T <: BlockType] (t: T) {
-    def resolve(using C: Context): ResolvedBlockType[T] = C.resolvedType(t).asInstanceOf
+  extension [T <: BlockTypes] (t: T) {
+    def resolve(using C: Context): Resolved[T] = C.resolvedType(t).asInstanceOf
   }
 
   // Capture Sets

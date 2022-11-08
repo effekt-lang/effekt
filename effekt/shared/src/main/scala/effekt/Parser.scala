@@ -315,7 +315,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val externInclude: P[Def] =
-    `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\"")) }
+    `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""))("", IdDef("")) }
 
 
   /**
@@ -343,13 +343,13 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val valueParam : P[ValueParam] =
-    idDef ~ valueTypeAnnotation ^^ { case id ~ tpe => ValueParam(id, Some(tpe)) }
+    idDef ~ valueTypeAnnotation ^^ { case id ~ tpe => ValueParam(id, Some(tpe)): ValueParam }
 
   lazy val valueParamOpt: P[ValueParam] =
-    idDef ~ (`:` ~> valueType).? ^^ ValueParam.apply
+    idDef ~ (`:` ~> valueType).? ^^ { case id ~ tpe => ValueParam(id, tpe): ValueParam }
 
   lazy val blockParam: P[BlockParam] =
-    idDef ~ (`:` ~> blockType) ^^ BlockParam.apply
+    idDef ~ (`:` ~> blockType) ^^ { case id ~ tpe => BlockParam(id, tpe): BlockParam }
 
   lazy val typeParams: P[List[Id]] =
     `[` ~/> manySep(idDef, `,`) <~ `]`
@@ -389,7 +389,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None)) })
+    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None): ValueParam) })
 
   lazy val maybeValueArgs: P[List[Term]] =
     many(valueArgSection) ^^ { _.flatten }
@@ -439,15 +439,15 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
        }
     )
 
-  lazy val valDef: P[ValDef] =
+  lazy val valDef: P[Def] =
      `val` ~> idDef ~ (`:` ~/> valueType).? ~ (`=` ~/> stmt) ^^ ValDef.apply
 
-  lazy val varDef: P[VarDef] =
+  lazy val varDef: P[Def] =
     `var` ~/> idDef ~ (`:` ~/> valueType).? ~ (`in` ~/> idRef).? ~ (`=` ~/> stmt) ^^ {
       case id ~ tpe ~ reg ~ expr => VarDef(id, tpe, reg, expr)
     }
 
-  lazy val defDef: P[DefDef] =
+  lazy val defDef: P[Def] =
     `def` ~/> idDef ~ (`:` ~/> blockType).? ~ (`=` ~/> expr) ^^ {
       case id ~ tpe ~ block => DefDef(id, tpe, block)
     }
@@ -459,16 +459,16 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
-  lazy val typeDef: P[TypeDef] =
+  lazy val typeDef: P[Def] =
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef.apply
 
-  lazy val effectAliasDef: P[EffectDef] =
+  lazy val effectAliasDef: P[Def] =
     `effect` ~> idDef ~ maybeTypeParams ~ (`=` ~/> effects) ^^ EffectDef.apply
 
-  lazy val dataDef: P[DataDef] =
+  lazy val dataDef: P[Def] =
     `type` ~> idDef ~ maybeTypeParams ~ (`{` ~/> manySep(constructor, `;`) <~ `}`) ^^ DataDef.apply
 
-  lazy val recordDef: P[RecordDef] =
+  lazy val recordDef: P[Def] =
     `record` ~/> idDef ~ maybeTypeParams ~ valueParams ^^ RecordDef.apply
 
   lazy val constructor: P[Constructor] =
@@ -548,7 +548,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val handler: P[Handler] =
     ( `with` ~> (idDef <~ `:`).? ~ implementation ^^ {
       case capabilityName ~ impl =>
-        val capability = capabilityName map { name => BlockParam(name, impl.interface) }
+        val capability = capabilityName map { name => BlockParam(name, impl.interface): BlockParam }
         Handler(capability, impl)
       }
     )

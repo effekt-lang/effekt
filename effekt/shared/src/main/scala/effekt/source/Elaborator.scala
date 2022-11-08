@@ -46,7 +46,7 @@ trait ElaborationOps extends ContextOps { Context: Context =>
   private[source] def definitionFor(s: symbols.BlockParam): source.BlockParam =
     val id = IdDef(s.name.name)
     assignSymbol(id, s)
-    val tree = source.BlockParam(id, source.BlockTypeTree(s.tpe))
+    val tree: source.BlockParam = source.BlockParam(id, source.BlockTypeTree(s.tpe))
     tree
 
 }

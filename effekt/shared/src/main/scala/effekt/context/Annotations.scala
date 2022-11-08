@@ -489,8 +489,8 @@ trait AnnotationsDB { self: Context =>
    *
    * This one can fail.
    */
-  def symbolOf(tree: source.Reference): tree.symbol = {
-    val sym = symbolOf(tree.id).asInstanceOf[tree.symbol]
+  def symbolOf(tree: source.Reference): Symbol = {
+    val sym = symbolOf(tree.id)
 
     val refs = annotationOption(Annotations.References, sym).getOrElse(Nil)
     annotate(Annotations.References, sym, tree :: refs)
@@ -502,8 +502,8 @@ trait AnnotationsDB { self: Context =>
    *
    * These lookups should not fail (except there is a bug in the compiler)
    */
-  def symbolOf(tree: source.Definition): tree.symbol =
-    symbolOf(tree.id).asInstanceOf[tree.symbol]
+  def symbolOf(tree: source.Definition): Symbol =
+    symbolOf(tree.id)
 
   /**
    * Searching the definition for a symbol
