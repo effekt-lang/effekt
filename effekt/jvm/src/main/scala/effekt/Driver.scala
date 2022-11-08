@@ -136,7 +136,6 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       // 1. compile with mlton
       // 2. run resulting binary
       val out = C.config.output()
-      val outPath = C.config.outputPath()
       val mainPath = C.config.outputPath() / "mlton-main"
       out.emit(Process(Seq("mlton", "-output", mainPath.canonicalPath, path)).!!)
       out.emit(Process(Seq(mainPath.canonicalPath)).!!)
