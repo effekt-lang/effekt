@@ -1,4 +1,5 @@
 package effekt
+package generator
 package jit
 
 import scala.collection.mutable

@@ -9,7 +9,7 @@ import scala.sys.process.Process
 
 class JITTests extends EffektTests {
 
-  override lazy val included: List[File] = List(examplesDir / "pos" / "jit")
+  override lazy val included: List[File] = List(examplesDir / "jit")
 
   override lazy val ignored: List[File] = List(
   )
