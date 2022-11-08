@@ -12,8 +12,6 @@ class JITTests extends EffektTests {
   override lazy val included: List[File] = List(examplesDir / "pos" / "jit")
 
   override lazy val ignored: List[File] = List(
-    // computes the wrong results
-    examplesDir / "pos" / "jit" / "emit.effekt"
   )
 
 
