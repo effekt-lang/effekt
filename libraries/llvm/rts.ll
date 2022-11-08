@@ -253,7 +253,7 @@ define %Mem @newMem() alwaysinline {
 define %DetachedStk @newStack() alwaysinline {
 
     ; TODO find actual size of stack
-    %stkmem = call i8* @malloc(i64 64)
+    %stkmem = call i8* @malloc(i64 48)
     %stk = bitcast i8* %stkmem to %Stk
 
     %regionmem = call i8* @malloc(i64 24)
@@ -377,7 +377,7 @@ define %DetachedStk @uniqueStack(%DetachedStk %dstk) alwaysinline {
     %arenaused = sub i64 %intarenasp, %intarenabase
     %arenasize = sub i64 %intarenalimit, %intarenabase
 
-    %newstkmem = call i8* @malloc(i64 64)
+    %newstkmem = call i8* @malloc(i64 48)
     %newstk = bitcast i8* %newstkmem to %Stk
     %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
     %newstksp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1, i32 0
