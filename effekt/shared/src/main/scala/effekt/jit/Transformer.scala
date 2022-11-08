@@ -160,6 +160,17 @@ object Transformer {
         emit(ConstString(outs(RegisterType.String).head, new String(value, StandardCharsets.UTF_8))); // TODO: Escape or encode somehow
         emitInlined(block)
       }
+      case machine.Statement.LiteralEvidence(name, value, rest) => {
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
+        emit(Const(outs(RegisterType.Integer).head, value))
+        emitInlined(block)
+      }
+      case machine.Statement.ComposeEvidence(name, l, r, rest)  => {
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
+        val out = outs(RegisterType.Integer).head
+        emit(Add(out, transformArgument(l).id, transformArgument(r).id))
+        emitInlined(restBlock)
+      }
       case machine.NewStack(name, frame, rest) => {
         val (closesOver, _, target) = transformClosure(frame);
         val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
@@ -171,10 +182,10 @@ object Transformer {
         emit(PushStack(transformArgument(value).id));
         transform(rest)
       }
-      case machine.PopStack(name, rest) => {
+      case machine.PopStacks(name, n, rest) => {
         val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
         val out = outs(RegisterType.Continuation).head;
-        emit(Shift(out, 1));
+        emit(ShiftDyn(out, transformArgument(n).id));
         emitInlined(block)
       }
   }
