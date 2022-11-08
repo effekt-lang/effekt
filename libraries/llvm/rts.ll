@@ -416,8 +416,8 @@ define %DetachedStk @uniqueStack(%DetachedStk %dstk) alwaysinline {
     %intarenasp = ptrtoint %Sp %arenasp to i64
     %intarenabase = ptrtoint %Base %arenabase to i64
     %intarenalimit = ptrtoint %Limit %arenalimit to i64
-    %arenaused = sub i64 %intsp, %intarenabase
-    %arenasize = sub i64 %intlimit, %intarenabase
+    %arenaused = sub i64 %intarenasp, %intarenabase
+    %arenasize = sub i64 %intarenalimit, %intarenabase
 
     %newstkmem = call i8* @malloc(i64 64)
     %newstk = bitcast i8* %newstkmem to %Stk
