@@ -607,7 +607,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | `<{` ~> stmts <~ `}>` ^^ Hole.apply
     )
 
-  lazy val literals: P[Literal[_]] =
+  lazy val literals: P[Literal] =
     double | int | bool | unit | string
 
   lazy val boxedExpr: P[Box] =

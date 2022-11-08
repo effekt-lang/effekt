@@ -222,14 +222,13 @@ sealed trait Term extends Tree
 case class Var(id: IdRef) extends Term, Reference
 case class Assign(id: IdRef, expr: Term) extends Term, Reference
 
-sealed trait Literal[T] extends Term {
-  def value: T
-}
-case class UnitLit() extends Literal[Unit] { def value = () }
-case class IntLit(value: Int) extends Literal[Int]
-case class BooleanLit(value: Boolean) extends Literal[Boolean]
-case class DoubleLit(value: Double) extends Literal[Double]
-case class StringLit(value: String) extends Literal[String]
+case class Literal(value: Any, tpe: symbols.ValueType) extends Term
+
+def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
+def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
+def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
+def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
+def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
 
 /**
  * Represents a first-class function
@@ -357,7 +356,7 @@ enum MatchPattern extends Tree {
   /**
    * A pattern that matches a single literal value
    */
-  case LiteralPattern[T](l: Literal[T])
+  case LiteralPattern(l: Literal)
 }
 export MatchPattern.*
 
@@ -573,7 +572,7 @@ object Tree {
     def rewrite(e: Term)(using Context): Term = visit(e) {
       case e if expr.isDefinedAt(e) => expr(e)
       case v: Var                   => v
-      case l: Literal[t]            => l
+      case l: Literal               => l
 
       case Assign(id, expr) =>
         Assign(id, rewrite(expr))
@@ -727,7 +726,7 @@ object Tree {
     def query(e: Term)(using C: Context, ctx: Ctx): Res = visit(e) {
       case e if expr.isDefinedAt(e) => expr.apply(e)
       case v: Var                   => empty
-      case l: Literal[t]            => empty
+      case l: Literal               => empty
 
       case Assign(id, expr) => scoped { query(expr) }
 
