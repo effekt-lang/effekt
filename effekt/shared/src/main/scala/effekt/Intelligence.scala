@@ -97,8 +97,8 @@ trait Intelligence {
                | | `${outerTpe}` | `${innerTpe}` |
                |""".stripMargin
 
-  def allCaptures(s: Source)(using C: Context): List[(Tree, CaptureSet)] =
-    C.tryModuleOf(s).flatMap { mod => C.annotationOption(Annotations.CaptureForFile, mod) }.getOrElse(Nil)
+  def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
+    C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
 
   // For now we only show captures of function definitions and calls to box
   def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =

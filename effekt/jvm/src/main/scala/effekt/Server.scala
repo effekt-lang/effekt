@@ -243,7 +243,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
     if (params.getCommand == "inferredCaptures") {
       val captures = getInferredCaptures(src)(using context).map {
-        case (p, c) => CaptureInfo(positionToLocation(p), c.toString)
+        case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
       }
       if (captures.isEmpty) None else Some(captures.toArray)
     } else {

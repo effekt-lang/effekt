@@ -158,7 +158,7 @@ object Annotations {
   /**
    * Used by LSP to list all captures
    */
-  val CaptureForFile = Annotation[symbols.Module, List[(source.Tree, symbols.CaptureSet)]](
+  val CaptureForFile = Annotation[kiama.util.Source, List[(source.Tree, symbols.CaptureSet)]](
     "CaptureSet",
     "all inferred captures for file"
   )
