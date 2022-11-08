@@ -1,9 +1,10 @@
 package effekt
+package generator
 package jit
 
 import effekt.context.Context
 import effekt.symbols.{BlockSymbol, ValueSymbol}
-import effekt.jit.BlockNumbering.*
+import effekt.generator.jit.BlockNumbering.*
 import effekt.machine
 import effekt.machine.{Declaration, analysis}
 

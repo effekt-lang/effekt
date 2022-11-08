@@ -3,8 +3,7 @@ package generator
 package jit
 
 import effekt.context.Context
-import effekt.lifted.*
-import effekt.jit.*
+import effekt.lifted.LiftInference
 import effekt.symbols.Module
 
 import scala.language.implicitConversions
@@ -27,8 +26,8 @@ object JIT extends Backend {
       machine.Transformer.transform(mainSymbol, liftedMod, liftedDeps)
     };
 
-    val jitProgram = effekt.jit.Transformer.transform(machineMod);
-    val doc = effekt.jit.PrettyPrinter.toDocument(jitProgram);
+    val jitProgram = Transformer.transform(machineMod);
+    val doc = PrettyPrinter.toDocument(jitProgram);
 
     Some(Compiled(mainFile, Map(mainFile -> doc)))
   }

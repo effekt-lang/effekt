@@ -1,4 +1,5 @@
 package effekt
+package generator
 package jit
 
 import kiama.output.ParenPrettyPrinter
