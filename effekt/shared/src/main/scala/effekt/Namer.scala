@@ -157,13 +157,13 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternType(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        BuiltinType(Context.nameFor(id), tps)
+        ExternType(Context.nameFor(id), tps)
       })
 
     case source.ExternInterface(id, tparams) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        BuiltinInterface(Context.nameFor(id), tps)
+        ExternInterface(Context.nameFor(id), tps)
       })
 
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
@@ -178,14 +178,14 @@ object Namer extends Phase[Parsed, NameResolved] {
           Context.bindBlocks(bps)
           resolve(ret)
         }
-        BuiltinFunction(name, tps, vps, bps, tpe, eff, capt, body)
+        ExternFunction(name, tps, vps, bps, tpe, eff, capt, body)
       })
     }
 
     case source.ExternResource(id, tpe) =>
       val name = Context.freshNameFor(id)
       val btpe = resolve(tpe)
-      val sym = BuiltinResource(name, btpe)
+      val sym = ExternResource(name, btpe)
       Context.define(id, sym)
       Context.bindBlock(sym)
 
@@ -493,7 +493,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     sym
   }
   def resolve(p: source.BlockParam)(using Context): BlockParam = {
-    val sym = BlockParam(Name.local(p.id), resolve(p.tpe))
+    val sym: BlockParam = BlockParam(Name.local(p.id), resolve(p.tpe))
     Context.assignSymbol(p.id, sym)
     sym
   }
@@ -541,7 +541,6 @@ object Namer extends Phase[Parsed, NameResolved] {
       case other => Context.abort(pretty"Expected a value type, but got ${other}")
     }
     case source.TypeVar(id) => Context.resolveType(id) match {
-      case x: ValueType => x
       case TypeAlias(name, tparams, tpe) =>
         if (tparams.nonEmpty) Context.abort(pretty"Type alias ${name.name} expects ${tparams.size} type arguments, but got none.") else tpe
       case other => Context.abort(pretty"Expected a value type, but got ${other}")
@@ -637,7 +636,7 @@ object Namer extends Phase[Parsed, NameResolved] {
    * Resolves type variables, term vars are resolved as part of resolve(tree: Tree)
    */
   def resolve(id: Id)(using Context): TypeParam = {
-    val sym = TypeParam(Name.local(id))
+    val sym: TypeParam = TypeParam(Name.local(id))
     Context.define(id, sym)
     sym
   }

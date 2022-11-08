@@ -208,11 +208,11 @@ case class EffectDef(id: IdDef, tparams: List[Id], effs: Effects) extends Def {
 
 // only valid on the toplevel!
 case class ExternType(id: IdDef, tparams: List[Id]) extends Def {
-  type symbol = symbols.BuiltinType
+  type symbol = symbols.ExternType
 }
 
 case class ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def {
-  type symbol = symbols.BuiltinFunction
+  type symbol = symbols.ExternFunction
 }
 
 case class ExternResource(id: IdDef, tpe: BlockType) extends Def {
@@ -220,7 +220,7 @@ case class ExternResource(id: IdDef, tpe: BlockType) extends Def {
 }
 
 case class ExternInterface(id: IdDef, tparams: List[Id]) extends Def {
-  type symbol = symbols.BuiltinInterface
+  type symbol = symbols.ExternInterface
 }
 
 case class ExternInclude(path: String) extends Def {

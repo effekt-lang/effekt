@@ -127,14 +127,21 @@ enum Statement {
   case PushStack(stack: Variable, rest: Statement)
 
   /**
-   * e.g. let k = shift0; s
+   * e.g. let k = shift0 (n+1); s
+   * NOTE: Pops the stacks until the nth, i.e. the first n+1 ones
    */
-  case PopStack(name: Variable, rest: Statement)
+  case PopStacks(name: Variable, n: Variable, rest: Statement)
 
   /**
    * let x = #infix_add(v1, ...); s
    */
   case ForeignCall(name: Variable, builtin: String, arguments: Environment, rest: Statement)
+
+  /**
+   * Evidence composition, i.e. currently:
+   * let x = ev1 + ev2; s
+   */
+  case ComposeEvidence(name: Variable, ev1: Variable, ev2: Variable, rest: Statement)
 
   /**
    * let x = 42; s
@@ -143,6 +150,7 @@ enum Statement {
 
   case LiteralDouble(name: Variable, value: Double, rest: Statement)
   case LiteralUTF8String(name: Variable, utf8: Array[Byte], rest: Statement)
+  case LiteralEvidence(name: Variable, value: Evidence, rest: Statement)
 }
 export Statement.*
 
@@ -160,10 +168,12 @@ enum Type {
 }
 export Type.{ Positive, Negative }
 
-
+type Evidence = Int
 object builtins {
 
   val Evidence = Type.Int()
+  val Here: Evidence = 0
+  val There: Evidence = 1
 
   /**
    * Blocks types are interfaces with a single operation.

@@ -131,7 +131,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
     val documentSymbols = for {
       sym <- context.sourceSymbolsFor(source).toVector
-      if !sym.synthetic
+      if !sym.isSynthetic
       id <- context.definitionTreeOption(sym)
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
@@ -159,9 +159,9 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     sym match {
       case _: Module =>
         Some(SymbolKind.Module)
-      case _: Interface | _: BuiltinInterface =>
+      case _: Interface | _: ExternInterface =>
         Some(SymbolKind.Interface)
-      case _: DataType | _: BuiltinType | _: TypeAlias =>
+      case _: DataType | _: ExternType | _: TypeAlias =>
         Some(SymbolKind.Enum)
       case _: Callable =>
         Some(SymbolKind.Method)
