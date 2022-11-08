@@ -164,12 +164,11 @@ object Transformer {
       case machine.Invoke(value, tag, values) =>
         ???
 
-      // TODO store evidence & offset as a pair
-      case machine.Allocate(machine.Variable(name, machine.Type.Reference(tpe)), rest) =>
-        emit(Call(name, ptrType, alloc, List(ConstantInt(typeSize(tpe)))));
+      case machine.Allocate(machine.Variable(name, machine.Type.Reference(tpe)), region, rest) =>
+        emit(Call(name, refType, alloc, List(ConstantInt(typeSize(tpe)), transform(region))));
         transform(rest);
 
-      case machine.Allocate(_, _) =>
+      case machine.Allocate(_, _, _) =>
         ???
 
       case machine.Load(name, ref, rest) =>
@@ -239,7 +238,7 @@ object Transformer {
         emit(TailCall(LocalReference(returnAddressType, returnAddress), List(initialEnvironmentPointer, getStackPointer())));
         RetVoid()
 
-      case machine.NewStack(variable, frame, rest) =>
+      case machine.NewStack(variable, region, frame, rest) =>
         emit(Call(variable.name, transform(variable.tpe), newStack, List()));
 
         val frameEnvironment = freeVariables(frame).toList;
@@ -286,6 +285,9 @@ object Transformer {
         val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, returnAddressName, sharerName, eraserName);
         emit(Store(stackPointerPointer, newStackPointer));
+        var regionPtrVar = freshName(region.name)
+        emit(GetElementPtr(regionPtrVar, LocalReference(PointerType(NamedType("StkVal")), stkvar), List(0, 2)))
+        emit(Load(region.name, LocalReference(PointerType(NamedType("Region")), regionPtrVar)))
 
         eraseValues(List(variable), freeVariables(rest));
         transform(rest)
@@ -371,7 +373,8 @@ object Transformer {
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
   def stkType = NamedType("DetachedStk");
-  def ptrType = NamedType("Ptr");
+  def refType = NamedType("Ref");
+  def regionType = NamedType("Region");
 
   def transform(tpe: machine.Type): Type = tpe match {
     case machine.Positive(_)       => positiveType
@@ -380,7 +383,8 @@ object Transformer {
     case machine.Type.Double()     => NamedType("Double")
     case machine.Type.String()     => positiveType
     case machine.Type.Stack()      => stkType
-    case machine.Type.Reference(_) => ptrType
+    case machine.Type.Reference(_) => refType
+    case machine.Type.Region()     => regionType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -395,6 +399,7 @@ object Transformer {
       case machine.Type.String()     => 16
       case machine.Type.Stack()      => 32 // TODO Make fat?
       case machine.Type.Reference(_) => 8
+      case machine.Type.Region()     => 8
     }
 
   def defineFunction(name: String, parameters: List[Parameter])(prog: (FunctionContext, BlockContext) ?=> Terminator): ModuleContext ?=> Unit = {
@@ -579,6 +584,7 @@ object Transformer {
       case machine.Type.Double()     => ()
       case machine.Type.String()     => emit(Call("_", VoidType(), shareString, List(transform(value))))
       case machine.Type.Reference(_) => ()
+      case machine.Type.Region()     => ()
     }
   }
 
@@ -591,6 +597,7 @@ object Transformer {
       case machine.Type.Double()     => ()
       case machine.Type.String()     => emit(Call("_", VoidType(), eraseString, List(transform(value))))
       case machine.Type.Reference(_) => ()
+      case machine.Type.Region()     => ()
     }
   }
 
@@ -674,8 +681,8 @@ object Transformer {
   def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
   def eraseString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_decrement");
 
-  def alloc = ConstantGlobal(PointerType(FunctionType(ptrType, List())), "alloc")
-  def getPtr = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(ptrType))), "getPtr")
+  def alloc = ConstantGlobal(PointerType(FunctionType(refType, List())), "alloc")
+  def getPtr = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(refType))), "getPtr")
 
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");

@@ -191,9 +191,10 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val regionVar = Variable(freshName("_"), Type.Region())
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
+          NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter,
               New(transform(id), transform(handler),
                 transform(body)))))
@@ -202,41 +203,10 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val regionVar = Variable(transform(id.id), Type.Region())
 
-        NewStack(delimiter, returnClause,
-          PushStack(delimiter,transform(body)))
-
-      case lifted.State(id, init, region, body) =>
-        // TODO use the correct region
-        //val tpe = transform(Context.valueTypeOf(id))
-        transform(init).run { value =>
-          val tpe = value.tpe;
-          val name = transform(id)
-          val variable = Variable(name, tpe)
-          val stateVariable = Variable(name + "$State", Type.Reference(tpe))
-          val loadVariable = Variable(freshName(name), tpe)
-          val getter = Clause(List(),
-                        Load(loadVariable, stateVariable,
-                          Return(List(loadVariable))))
-
-          val setterVariable = Variable(freshName(name), tpe)
-          val setter = Clause(List(setterVariable),
-                                Store(stateVariable, setterVariable,
-                                  Return(List())))
-
-          Allocate(stateVariable,
-            Store(stateVariable, value,
-              New(variable, List(getter, setter),
-                transform(body))))
-        }
-
-      case lifted.Region(lifted.BlockLit(List(ev, id), body), tpe) =>
-        val variable = Variable(freshName("a"), transform(tpe))
-        val returnClause = Clause(List(variable), Return(List(variable)))
-        val delimiter = Variable(freshName("returnClause"), Type.Stack())
-
-        NewStack(delimiter, returnClause,
-          PushStack(delimiter,transform(body)))
+        NewStack(delimiter, regionVar, returnClause,
+          PushStack(delimiter, transform(body)))
 
       case lifted.State(id, init, region, body) =>
         // TODO use the correct region
@@ -255,8 +225,9 @@ object Transformer {
           val setter = Clause(List(setterVariable),
                                 Store(stateVariable, setterVariable,
                                   Return(List())))
+          val regionVar = Variable(transform(region), Type.Region())
 
-          Allocate(stateVariable,
+          Allocate(stateVariable, regionVar,
             Store(stateVariable, value,
               New(variable, List(getter, setter),
                 transform(body))))

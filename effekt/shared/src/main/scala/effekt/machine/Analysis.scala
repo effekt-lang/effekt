@@ -29,8 +29,8 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(clauses) ++ (freeVariables(rest) -- Set(name))
     case Invoke(value, tag, values) =>
       Set(value) ++ Set.from(values)
-    case Allocate(name, rest) =>
-      freeVariables(rest) -- Set(name)
+    case Allocate(name, region, rest) =>
+      freeVariables(rest) ++ Set(region) -- Set(name)
     case Load(name, ref, rest) =>
       Set(ref) ++ freeVariables(rest) -- Set(name)
     case Store(ref, value, rest) =>
@@ -39,8 +39,8 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(frame) ++ freeVariables(rest)
     case Return(values) =>
       Set.from(values)
-    case NewStack(name, frame, rest) =>
-      freeVariables(frame) ++ (freeVariables(rest) -- Set(name))
+    case NewStack(name, region, frame, rest) =>
+      freeVariables(frame) ++ (freeVariables(rest) -- Set(name, region))
     case PushStack(value, rest) =>
       Set(value) ++ freeVariables(rest)
     case PopStacks(name, n, rest) =>
