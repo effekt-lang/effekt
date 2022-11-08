@@ -1,0 +1,20 @@
+
+record Pair(x0: Int, x1: Int)
+
+type Maybe {
+  Nothing();
+  Just(pair: Pair)
+}
+
+def main() = {
+  val pair = Pair(0, 1);
+  val thing = Just(pair);
+  if (true) {
+    thing match {
+      case Nothing() => println(0)
+      case Just(p) => println(1)
+    }
+  } else {
+    println(2)
+  }
+}

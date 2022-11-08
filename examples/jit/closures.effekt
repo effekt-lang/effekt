@@ -1,0 +1,13 @@
+
+def useClosure { f: (Int, Int) => Int }: Int = {
+  f(4, 5)
+}
+
+def createClosure(n: Int): Int = {
+  def f { g: (Int, Int) => Int }: Int = {
+    useClosure { (x, y) => g(x, y) }
+  };
+  f { (a, b) => a + b + n }
+}
+
+def main() = println(createClosure(2))

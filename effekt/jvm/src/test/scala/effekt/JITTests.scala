@@ -12,6 +12,20 @@ class JITTests extends EffektTests {
   override lazy val included: List[File] = List(examplesDir / "jit")
 
   override lazy val ignored: List[File] = List(
+    // polymorphic effect operations not supported, yet
+    examplesDir / "jit" / "choice.effekt",
+    examplesDir / "jit" / "triples.effekt",
+
+    // Primitive missing: Boolean ==
+    examplesDir / "jit" / "boolean-algebra.effekt",
+    examplesDir / "jit" / "boolean-algebra-with-literals.effekt",
+
+    // Primitive missing: String +
+    examplesDir / "jit" / "strings-refcount.effekt",
+    examplesDir / "jit" / "strings.effekt",
+
+    // mutable state not supported, yet
+    examplesDir / "jit" / "gids.effekt",
   )
 
 

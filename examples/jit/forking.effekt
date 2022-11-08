@@ -1,0 +1,13 @@
+
+effect Fork(): Boolean
+
+def main() = {
+  try {
+    do Fork();
+    do Fork();
+    println(1)
+  } with Fork { () =>
+    resume(true); resume(false)
+  }
+}
+
