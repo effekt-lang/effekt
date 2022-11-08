@@ -156,6 +156,14 @@ object Annotations {
   )
 
   /**
+   * Used by LSP to list all captures
+   */
+  val CaptureForFile = Annotation[symbols.Module, List[(source.Tree, symbols.CaptureSet)]](
+    "CaptureSet",
+    "all inferred captures for file"
+  )
+
+  /**
    * The module a given symbol is defined in
    *
    * @deprecated

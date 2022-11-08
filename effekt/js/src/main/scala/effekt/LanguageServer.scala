@@ -35,6 +35,10 @@ object lsp {
   class Range(val start: Position, val end: Position) extends js.Object
   class Location(val uri: DocumentUri, val range: Range) extends js.Object
 
+  // Domain Specific Messages
+  // ------------------------
+  class CaptureInfo(val pos: Position, val capture: String) extends js.Object
+
   // Diagnostics
   // -----------
   class Diagnostic(val range: Range, val severity: DiagnosticSeverity, val message: String) extends js.Object {
@@ -133,6 +137,14 @@ class LanguageServer extends Intelligence {
     }
 
     lifted.PrettyPrinter.format(liftedCore.core.defs)
+  }
+
+  @JSExport
+  def inferredCaptures(path: String): js.Array[lsp.CaptureInfo] = {
+    typecheck(path)
+    getInferredCaptures(VirtualFileSource(path)).map {
+      case (p, c) => new lsp.CaptureInfo(toLSPPosition(p), c.toString)
+    }.toJSArray
   }
 
   /**
