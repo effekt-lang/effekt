@@ -168,17 +168,22 @@ class LanguageServer extends Intelligence {
   }
 
   private def messageToDiagnostic(m: EffektError) = {
-    val from = m.startPosition.map(convertPosition).orNull
-    val to = m.finishPosition.map(convertPosition).orNull
+    val from = m.startPosition.map(toLSPPosition).orNull
+    val to = m.finishPosition.map(toLSPPosition).orNull
     val text = context.messaging.formatContent(m)
     new lsp.Diagnostic(new lsp.Range(from, to), convertSeverity(m.severity), text)
   }
 
-  private def convertPosition(p: Position): lsp.Position =
+  private def toLSPPosition(p: Position): lsp.Position =
     new lsp.Position(p.line - 1, p.column - 1)
 
   private def fromLSPPosition(p: lsp.Position, source: Source): Position =
     Position(p.line + 1, p.character + 1, source)
+
+  private def toLSPLocation(from: Position, to: Position): Option[lsp.Location] = from.source match {
+    case VirtualFileSource(path) => Some(new lsp.Location(from.source.name, new lsp.Range(toLSPPosition(from), toLSPPosition(to))))
+    case _ => None
+  }
 
   private def convertSeverity(s: Severities.Severity): lsp.DiagnosticSeverity = s match {
     case Severities.Error       => lsp.DiagnosticSeverity.Error
