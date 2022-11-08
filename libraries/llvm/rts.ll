@@ -89,11 +89,25 @@
 
 ; Global locations
 
-@base = private global %Base null
-@limit = private global %Limit null
-@rest = private global %Stk undef
-@region = private global %Region undef
+@stk = private global %StkVal undef
+@base = private alias %Base, %Base* getelementptr (%StkVal, %Stk @stk, i64 0, i32 1, i32 1)
+@limit = private alias %Limit, %Limit* getelementptr (%StkVal, %Stk @stk, i64 0, i32 1, i32 2)
+@region = private alias %Region, %Region* getelementptr (%StkVal, %Stk @stk, i64 0, i32 2)
+@rest = private alias %Stk, %Stk* getelementptr (%StkVal, %Stk @stk, i64 0, i32 3)
 
+define %StkVal @getStk(%Sp %sp) alwaysinline {
+    %stk.0 = load %StkVal, %Stk @stk
+    %stk.1 = insertvalue %StkVal %stk.0, %Rc 0, 0
+    %stk.2 = insertvalue %StkVal %stk.1, %Sp %sp, 1, 0
+    ret %StkVal %stk.2
+}
+
+define void @setStk(%StkVal %stk) alwaysinline {
+    %stk.0 = insertvalue %StkVal %stk, %Rc undef, 0
+    %stk.1 = insertvalue %StkVal %stk.0, %Sp undef, 1, 0
+    store %StkVal %stk.1, %Stk @stk
+    ret void
+}
 
 ; Foreign imports
 
@@ -270,80 +284,37 @@ define %Sp @pushStack(%DetachedStk %dstk, %Sp %oldsp) alwaysinline {
     %stk = extractvalue %DetachedStk %dstk, 0
     %regionval = extractvalue %DetachedStk %dstk, 1
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
-    ; assert %stkrc == null
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
-    %stkregion = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %newstk.0 = load %StkVal, %Stk %stk
+    %newstk = insertvalue %StkVal %newstk.0, %Stk %stk, 3
 
-    %newsp = load %Sp, %Sp* %stksp
-    %newbase = load %Base, %Base* %stkbase
-    %newlimit = load %Limit, %Limit* %stklimit
-    %newregion = load %Region, %Region* %stkregion
-    ; %newrest = load %Stk, %Stk* %stkrest
-    ; assert %newrest == null
+    %oldstk = call %StkVal @getStk(%Sp %oldsp)
 
-    %oldbase = load %Base, %Base* @base
-    %oldlimit = load %Limit, %Limit* @limit
-    %oldrest = load %Stk, %Stk* @rest
-    %oldregion = load %Region, %Region* @region
+    call void @setStk(%StkVal %newstk)
 
-    store %Base %newbase, %Base* @base
-    store %Limit %newlimit, %Limit* @limit
-    store %Region %newregion, %Region* @region
-    store %Stk %stk, %Stk* @rest
+    store %StkVal %oldstk, %Stk %stk
 
-    store %Rc 0, %Rc* %stkrc
-    store %Sp %oldsp, %Sp* %stksp
-    store %Base %oldbase, %Base* %stkbase
-    store %Limit %oldlimit, %Limit* %stklimit
-    store %Region %oldregion, %Region* %stkregion
-    store %Stk %oldrest, %Stk* %stkrest
-
+    %newregion = extractvalue %StkVal %newstk, 2
     store %RegionVal %regionval, %Region %newregion
 
+    %newsp = extractvalue %StkVal %newstk, 1, 0
     ret %Sp %newsp
 }
 
 define {%DetachedStk, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
-    %stk = load %StkVal*, %StkVal** @rest
+    %oldstk = call %StkVal @getStk(%Sp %oldsp)
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
-    %stkregion = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %rest = extractvalue %StkVal %oldstk, 3
+    %newstk = load %StkVal, %Stk %rest
 
-    ; %newrc = load %Rc, %Rc* %stkrc
-    %newsp = load %Sp, %Sp* %stksp
-    %newbase = load %Base, %Base* %stkbase
-    %newlimit = load %Limit, %Limit* %stklimit
-    %newregion = load %Region, %Region* %stkregion
-    %newrest = load %Stk, %Stk* %stkrest
+    call void @setStk(%StkVal %newstk)
 
-    %oldbase = load %Base, %Base* @base
-    %oldlimit = load %Limit, %Limit* @limit
-    %oldregion = load %Region, %Region* @region
-    ; %oldrest = load %Stk, %Stk* @rest
+    store %StkVal %oldstk, %Stk %rest
 
-    store %Base %newbase, %Base* @base
-    store %Limit %newlimit, %Limit* @limit
-    store %Region %newregion, %Region* @region
-    store %Stk %newrest, %Stk* @rest
-
-    store %Rc 0, %Rc* %stkrc
-    store %Sp %oldsp, %Sp* %stksp
-    store %Base %oldbase, %Base* %stkbase
-    store %Limit %oldlimit, %Limit* %stklimit
-    store %Region %oldregion, %Region* %stkregion
-    store %Stk null, %Stk* %stkrest
-
+    %newsp = extractvalue %StkVal %newstk, 1, 0
+    %oldregion = extractvalue %StkVal %oldstk, 2
     %oldregionval = load %RegionVal, %Region %oldregion
-    %ret.0 = insertvalue {%DetachedStk, %Sp} undef, %Stk %stk, 0, 0
+    %ret.0 = insertvalue {%DetachedStk, %Sp} undef, %Stk %rest, 0, 0
     %ret.1 = insertvalue {%DetachedStk, %Sp} %ret.0, %RegionVal %oldregionval, 0, 1
     %ret.2 = insertvalue {%DetachedStk, %Sp} %ret.1, %Sp %newsp, 1
 
@@ -352,33 +323,20 @@ define {%DetachedStk, %Sp} @popStack(%Sp %oldsp) alwaysinline {
 
 define %Sp @underflowStack(%Sp %sp) alwaysinline {
     %stk = load %Stk, %Stk* @rest
+    %newstk = load %StkVal, %Stk %stk
+
     %region = load %Region, %Region* @region
     %arenabase = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i32 1
     %arenaptr = load %Base, %Base* %arenabase
 
-    %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
-    %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
-    %stkbase = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 1
-    %stklimit = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 2
-    %stkregion = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %stkrest = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-
-    ; %newrc = load %Rc, %Rc* %stkrc
-    %newsp = load %Sp, %Sp* %stksp
-    %newbase = load %Base, %Base* %stkbase
-    %newlimit = load %Limit, %Limit* %stklimit
-    %newregion = load %Region, %Region* %stkregion
-    %newrest = load %Stk, %Stk* %stkrest
-
-    store %Base %newbase, %Base* @base
-    store %Limit %newlimit, %Limit* @limit
-    store %Region %newregion, %Region* @region
-    store %Stk %newrest, %Stk* @rest
+    call void @setStk(%StkVal %newstk)
 
     %stkpuntyped = bitcast %Stk %stk to i8*
     call void @free(%Sp %sp)
     call void @free(%Base %arenaptr)
     call void @free(i8* %stkpuntyped)
+
+    %newsp = extractvalue %StkVal %newstk, 1, 0
     ret %Sp %newsp
 }
 
