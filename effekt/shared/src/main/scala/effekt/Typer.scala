@@ -1474,6 +1474,8 @@ trait TyperOps extends ContextOps { self: Context =>
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = unification.substitution
 
+    var capturesForLSP: List[(Tree, CaptureSet)] = Nil
+
     // Since (in comparison to System C) we now have type directed overload resolution again,
     // we need to make sure the typing context and all the annotations are backtrackable.
     // This can be achieved by going back to local `annotations` which are easily backtrackable.
