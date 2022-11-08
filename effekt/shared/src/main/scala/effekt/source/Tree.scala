@@ -403,31 +403,16 @@ case class IgnorePattern() extends MatchPattern
 case class LiteralPattern[T](l: Literal[T]) extends MatchPattern
 
 /**
- * Something that can be resolved by namer
- *
- * It does not need to be a symbol
- */
-sealed trait Resolvable extends Tree {
-  type resolved
-  def resolve(implicit C: Context): resolved
-}
-
-/**
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
  */
-sealed trait Type extends Tree, Resolvable {
-  type resolved <: symbols.Type
-  def resolve(implicit C: Context) = C.resolvedType(this)
-}
+sealed trait Type extends Tree
 
 /**
  * Value Types
  */
-sealed trait ValueType extends Type {
-  type resolved <: symbols.ValueType
-}
+sealed trait ValueType extends Type
 
 /**
  * Trees that represent inferred or synthesized types (not present in the source)
@@ -439,10 +424,6 @@ case class ValueTypeTree(tpe: symbols.ValueType) extends ValueType
  */
 case class BoxedType(tpe: BlockType, capt: CaptureSet) extends ValueType
 
-// Used for bindings
-case class TypeVar(id: IdDef) extends ValueType, Definition {
-  type symbol = symbols.Symbol with symbols.ValueType
-}
 // Bound occurrences (args can be empty)
 case class ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Reference {
   // can be applied to type aliases or data types
@@ -452,23 +433,17 @@ case class ValueTypeRef(id: IdRef, args: List[ValueType]) extends ValueType, Ref
 /**
  * Block Types
  */
-sealed trait BlockType extends Type
+enum BlockType extends Type {
 
-/**
- * Trees that represent inferred or synthesized types (not present in the source)
- */
-case class BlockTypeTree(eff: symbols.BlockType) extends BlockType {
-  type resolved = symbols.BlockType
+  /**
+   * Trees that represent inferred or synthesized types (not present in the source)
+   */
+  case BlockTypeTree(eff: symbols.BlockType)
+  case FunctionType(vparams: List[ValueType], result: ValueType, effects: Effects)
+  case BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference
 }
 
-case class FunctionType(vparams: List[ValueType], result: ValueType, effects: Effects) extends BlockType {
-  type resolved = symbols.FunctionType
-}
-
-case class BlockTypeRef(id: IdRef, args: List[ValueType]) extends BlockType, Reference {
-  type symbol = symbols.TypeSymbol
-  type resolved <: symbols.InterfaceType
-}
+export BlockType.*
 
 // We have Effectful as a tree in order to apply code actions on it (see Server.inferEffectsAction)
 case class Effectful(tpe: ValueType, eff: Effects) extends Tree
@@ -477,17 +452,50 @@ case class Effectful(tpe: ValueType, eff: Effects) extends Tree
  * Represents an annotated set of effects. Before name resolution, we cannot know
  * the concrete nature of its elements (so it is generic [[BlockTypeRef]]).
  */
-case class Effects(effs: List[BlockTypeRef]) extends Tree
+case class Effects(effs: List[BlockType.BlockTypeRef]) extends Tree
 object Effects {
   val Pure: Effects = Effects()
   def apply(effs: BlockTypeRef*): Effects = Effects(effs.toSet)
   def apply(effs: Set[BlockTypeRef]): Effects = Effects(effs.toList)
 }
 
-case class CaptureSet(captures: List[IdRef]) extends Resolvable {
-  type resolved = symbols.CaptureSet
-  def resolve(using C: Context): resolved = C.resolvedCapture(this)
+case class CaptureSet(captures: List[IdRef]) extends Tree
+
+
+
+// MOVE TO NAMER
+object Resolvable {
+
+  // Value Types
+  // -----------
+  extension (t: ValueType) {
+    def resolve(using C: Context): symbols.ValueType = C.resolvedType(t).asInstanceOf
+  }
+
+  // BLock Types
+  // -----------
+  // we need to avoid widening, so here we define BlockType as a sum without a common parent
+  // (see https://github.com/lampepfl/dotty/issues/16299)
+  type BlockType = BlockTypeTree | FunctionType | BlockTypeRef
+
+  type ResolvedBlockType[T <: BlockType] = T match {
+    case BlockTypeTree => symbols.BlockType
+    case FunctionType => symbols.FunctionType
+    case BlockTypeRef => symbols.InterfaceType
+  }
+
+  extension [T <: BlockType] (t: T) {
+    def resolve(using C: Context): ResolvedBlockType[T] = C.resolvedType(t).asInstanceOf
+  }
+
+  // Capture Sets
+  // ------------
+  extension (capt: source.CaptureSet) {
+    def resolve(using C: Context): symbols.CaptureSet = C.resolvedCapture(capt)
+  }
 }
+export Resolvable.resolve
+
 
 object Tree {
 

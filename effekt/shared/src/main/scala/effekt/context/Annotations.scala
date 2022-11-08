@@ -392,16 +392,16 @@ trait AnnotationsDB { self: Context =>
     case _              => panic(s"Trying to store a value type for non value '${s}'")
   }
 
-  def annotateResolvedType(tree: source.Type)(tpe: tree.resolved): Unit =
+  def annotateResolvedType(tree: source.Type)(tpe: symbols.Type): Unit =
     annotate(Annotations.Type, tree, tpe)
 
-  def resolvedType(tree: source.Type): tree.resolved =
-    annotation(Annotations.Type, tree).asInstanceOf[tree.resolved]
+  def resolvedType(tree: source.Type): symbols.Type =
+    annotation(Annotations.Type, tree)
 
-  def annotateResolvedCapture(tree: source.CaptureSet)(capt: tree.resolved): Unit =
+  def annotateResolvedCapture(tree: source.CaptureSet)(capt: symbols.CaptureSet): Unit =
     annotate(Annotations.Capture, tree, capt)
 
-  def resolvedCapture(tree: source.CaptureSet): tree.resolved =
+  def resolvedCapture(tree: source.CaptureSet): symbols.CaptureSet =
     annotation(Annotations.Capture, tree)
 
   def typeOf(s: Symbol): Type = s match {

@@ -89,11 +89,4 @@ object assertions {
       case _ => reporter.abort("Expected a capability type")
     }
   }
-
-  extension(t: source.Type)(using reporter: ErrorReporter) {
-    def asTypeVar: source.TypeVar = t match {
-      case t: source.TypeVar => t
-      case _ => reporter.abort("Expected a value type")
-    }
-  }
 }

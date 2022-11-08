@@ -658,7 +658,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val interfaceType: P[BlockTypeRef] =
-    ( idRef ~ maybeTypeArgs ^^ BlockTypeRef.apply
+    ( idRef ~ maybeTypeArgs ^^ { case (id ~ targs) => BlockTypeRef(id, targs): BlockTypeRef }
     | failure("Expected an interface / effect")
     )
 
