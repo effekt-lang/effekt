@@ -6,7 +6,6 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
-import effekt.source.ExternFlag
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -22,7 +21,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val exports = mod.terms.flatMap {
       case (name, syms) => syms.collect {
         // TODO export valuebinders properly
-        case sym: Fun if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
+        case sym: Callable if !sym.isInstanceOf[Operation] && !sym.isInstanceOf[Field] => sym
         case sym: ValBinder => sym
       }
     }.toList
@@ -33,7 +32,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val optimized = optimize(transformed)
 
-    ModuleDecl(path, imports.map { _.path }, optimized, exports)
+    // We use the imports on the symbol (since they include the prelude)
+    ModuleDecl(path, mod.imports.map { _.path }, optimized, exports)
   }
 
   /**
@@ -50,7 +50,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      core.Record(rec, rec.fields, rest())
+      core.Record(rec, rec.constructor.fields, rest())
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       Let(v.symbol, Run(transform(binding), Context.inferredTypeOf(binding)), rest())
@@ -64,7 +64,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
-      val tpe = getStateType(sym)
+      val tpe = TState.extractType(Context.blockTypeOf(sym))
       insertBindings {
         val b = Context.bind(tpe, transform(binding))
         State(sym, b, sym.region, rest())
@@ -73,19 +73,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       core.Record(d.symbol, ops.map { e => e.symbol }, rest())
 
-    case f @ source.ExternFun(pure, id, tps, vps, bps, ret, body) =>
+    case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
       Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
 
     case e @ source.ExternInclude(path) =>
       Include(e.contents, rest())
 
-    case d: source.ExternEffect => rest()
-
+    // For now we forget about all of the following definitions in core:
+    case d: source.ExternResource => rest()
     case d: source.ExternType => rest()
-
-    case d : source.TypeDef => rest()
-
+    case d: source.ExternInterface => rest()
+    case d: source.TypeDef => rest()
     case d: source.EffectDef => rest()
   }
 
@@ -155,10 +154,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case _ =>
       transformUnbox(tree)
-  }
-  def getStateType(v: VarBinder)(implicit C: Context): ValueType = C.blockTypeOf(v) match {
-    case BlockTypeApp(TState.interface, List(tpe)) => tpe
-    case _ => C.panic("Not a mutable variable")
   }
 
   def transformAsPure(tree: source.Term)(using Context): Pure = transformAsExpr(tree) match {
@@ -241,11 +236,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = r.symbol
       val tpe = sym match {
         case b: BlockParam => b.tpe
-        case b: SelfParam => b.tpe
+        case b: SelfParam => builtins.TRegion
         case _ => Context.panic("Continuations cannot be regions")
       }
       val cap = core.BlockParam(sym, tpe)
-      Context.bind(Context.inferredTypeOf(tree), Region(BlockLit(List(cap), transform(body))))
+      Context.bind(Context.inferredTypeOf(tree), core.Region(BlockLit(List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)
@@ -306,12 +301,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val as = vargsT ++ bargsT
 
     sym match {
-      case f: BuiltinFunction if f.purity == ExternFlag.Pure =>
-        if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
+      case f: ExternFunction if isPure(f.capture) =>
+        // if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
         PureApp(BlockVar(f), targs, vargsT)
-      case f: BuiltinFunction if f.purity == ExternFlag.IO =>
+      case f: ExternFunction if pureOrIO(f.capture) =>
         DirectApp(BlockVar(f), targs, as)
-      case r: Record =>
+      case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
         PureApp(BlockVar(r), targs, vargsT)
       case f: Operation =>
@@ -412,7 +407,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     c =>
       def isIO = c == builtins.IOCapability.capture
       def isMutableState = c.isInstanceOf[LexicalRegion]
-      isIO || isMutableState
+      def isResource = c.isInstanceOf[Resource]
+      def isControl = c == builtins.ControlCapability.capture
+      !isControl && (isIO || isMutableState || isResource)
   }
 }
 

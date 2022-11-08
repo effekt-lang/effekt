@@ -18,7 +18,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "3.1.3",
+  scalaVersion := "3.2.0",
   scalacOptions ++= Seq(
     "-encoding", "utf8",
     "-deprecation",
@@ -45,8 +45,8 @@ lazy val lspDependencies = Seq(
 )
 
 lazy val testingDependencies = Seq(
-  "org.scala-sbt" %% "io" % "1.6.0" % "test",
-  "org.scalatest" %% "scalatest" % "3.2.9" % "test"
+  "org.scala-sbt" %% "io" % "1.6.0" % Test,
+  "org.scalameta" %% "munit" % "0.7.29" % Test
 )
 
 lazy val kiama: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("kiama"))
@@ -81,6 +81,8 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
     // Test configuration
     // ------------------
+    // TODO make parallel execution for tests safe (probably synchronization issues with std IO) and
+    //   then enable.
     Test / parallelExecution := false,
 
     Test / watchTriggers += baseDirectory.value.toGlob / "libraries" / "**" / "*.effekt",
@@ -123,7 +125,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       // prepend shebang to make jar file executable
       val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
-      IO.append(binary, "#! /usr/bin/env java -jar\n")
+      IO.append(binary, "#! /usr/bin/env -S java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
     },
 

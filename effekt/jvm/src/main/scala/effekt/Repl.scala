@@ -2,8 +2,8 @@ package effekt
 
 import effekt.source._
 import effekt.context.{ Context, IOModuleDB }
-import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator }
-import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource }
+import effekt.symbols.{ BlockSymbol, DeclPrinter, Module, ValueSymbol, ErrorMessageInterpolator, isSynthetic }
+import effekt.util.{ AnsiColoredMessaging, AnsiHighlight, VirtualSource, getOrElseAborting }
 import effekt.util.messages.EffektError
 import effekt.util.Version.effektVersion
 import kiama.util.{ Console, REPL, Source, StringSource, Range }
@@ -188,7 +188,8 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
       val output = config.output()
 
       context.setup(config)
-      val src = context.findSource(i.path).getOrElse {
+
+      val src = context.findSource(i.path).getOrElseAborting {
         output.emitln(s"Cannot find source for import ${i.path}")
         return
       }
@@ -197,14 +198,14 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
         output.emitln(s"Successfully imported ${i.path}\n")
         output.emitln(s"Imported Types\n==============")
         cu.types.toList.sortBy { case (n, _) => n }.collect {
-          case (name, sym) if !sym.synthetic =>
+          case (name, sym) if !sym.isSynthetic =>
             outputCode(DeclPrinter(sym), config)
         }
         output.emitln(s"\nImported Functions\n==================")
         cu.terms.toList.sortBy { case (n, _) => n }.foreach {
           case (name, syms) =>
             syms.collect {
-              case sym if !sym.synthetic =>
+              case sym if !sym.isSynthetic =>
                 outputCode(DeclPrinter(sym), config)
             }
         }
@@ -214,15 +215,16 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
     case d: Def =>
       val extendedDefs = module + d
       val decl = extendedDefs.make(UnitLit())
+
       runFrontend(source, decl, config) { cu =>
         module = extendedDefs
 
         // try to find the symbol for the def to print the type
-        (context.symbolOf(d) match {
-          case v: ValueSymbol =>
+        (context.symbolOption(d.id) match {
+          case Some(v: ValueSymbol) =>
             Some(context.valueTypeOf(v))
-          case b: BlockSymbol =>
-            Some(context.functionTypeOf(b))
+          case Some(b: BlockSymbol) =>
+            Some(context.blockTypeOf(b))
           case t =>
             None
         }) map { tpe =>
@@ -308,7 +310,7 @@ class Repl(driver: Driver) extends REPL[Tree, EffektConfig, EffektError] {
 
       val body = Return(expr)
 
-      ModuleDecl("interactive", Import("effekt") :: imports,
+      ModuleDecl("interactive", imports,
         definitions :+ FunDef(IdDef("main"), Nil, Nil, Nil, None,
           body))
     }

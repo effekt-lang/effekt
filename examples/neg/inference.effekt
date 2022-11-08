@@ -10,11 +10,6 @@ def triple(n: Int, s: Int) = {
   }
 }
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-
 def test1(l1: List[Int]): Int = l1 match {
   case Nil() => 4
   case Cons(a, rest) => a

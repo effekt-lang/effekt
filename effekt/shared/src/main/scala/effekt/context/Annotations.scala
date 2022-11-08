@@ -1,6 +1,7 @@
 package effekt
 package context
 
+import effekt.symbols.ResumeParam
 import effekt.util.messages.ErrorReporter
 import kiama.util.Memoiser
 
@@ -455,6 +456,13 @@ trait AnnotationsDB { self: Context =>
   def assignSymbol(id: source.Id, sym: Symbol): Unit = id match {
     case id: source.IdDef =>
       annotate(Annotations.DefinitionTree, sym, id)
+      sym match {
+        case _: ResumeParam =>
+        case s: symbols.TrackedParam =>
+          // for tracked params, also note the id als definition site for the capture.
+          annotate(Annotations.DefinitionTree, s.capture, id)
+        case _ =>
+      }
       annotate(Annotations.Symbol, id, sym)
       addDefinedSymbolToSource(sym)
     case _ =>

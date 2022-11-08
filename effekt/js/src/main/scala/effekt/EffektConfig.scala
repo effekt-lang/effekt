@@ -15,4 +15,6 @@ trait EffektConfig {
   def outputPath(): String = "out"
 
   def requiresLift(): Boolean = false
+
+  def prelude() = List("effekt")
 }

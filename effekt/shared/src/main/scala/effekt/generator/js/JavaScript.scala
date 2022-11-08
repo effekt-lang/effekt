@@ -111,7 +111,7 @@ trait JavaScript extends Backend {
     id match {
       case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => ref(id.name.toString + "_" + id.id)
       case _: symbols.Operation => ref("op$" + id.name.toString)
-      case _: symbols.InterfaceType => ref(id.name.name)
+      case _: symbols.Interface => ref(id.name.name)
       case _: symbols.Field => ref(id.name.name)
       case _ => id.name match {
         case LocalName(name) => ref(name)
@@ -136,6 +136,16 @@ trait JavaScript extends Backend {
 
   def toJS(p: Param): JSName = nameDef(p.id)
 
+  // For externs, do not sanitize anything. We assume the programmer
+  // knows what they are doing.
+  def externParams(p: Param)(using C: Context): JSName = {
+    val name = p.id.name.name
+    if (reserved contains name) {
+      C.warning(s"Identifier '${name}' is used in an extern function, but is a JS reserved keyword.")
+    }
+    JSName(name)
+  }
+
   def toJS(b: core.Block)(using Context): js.Expr = b match {
     case BlockVar(v) =>
       nameRef(v)
@@ -145,7 +155,7 @@ trait JavaScript extends Backend {
     case Member(b, id) =>
       js.Member(toJS(b), memberNameRef(id))
     case Extern(ps, body) =>
-      js.Lambda(ps map toJS, js.RawExpr(body))
+      js.Lambda(ps map externParams, js.RawExpr(body))
     case Unbox(e)     => toJS(e)
     case New(handler) => toJS(handler)
   }
@@ -253,7 +263,7 @@ trait JavaScript extends Backend {
 
     case Def(id, tpe, Extern(ps, body), rest) =>
       val (stmts, ret) = toJSStmt(rest)
-      (js.Function(nameDef(id), ps map toJS, List(js.Return(js.RawExpr(body)))) :: stmts, ret)
+      (js.Function(nameDef(id), ps map externParams, List(js.Return(js.RawExpr(body)))) :: stmts, ret)
 
     case Def(id, tpe, block, rest) =>
       val (stmts, ret) = toJSStmt(rest)
@@ -292,7 +302,7 @@ trait JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  def generateConstructor(ctor: symbols.Record): js.Stmt =
+  def generateConstructor(ctor: symbols.Constructor): js.Stmt =
     generateConstructor(ctor, ctor.fields)
 
   def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt =

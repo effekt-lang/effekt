@@ -33,3 +33,9 @@ jobs:
 
     - name: Assemble fully optimized js file
       run: sbt effektJS/fullOptJS
+
+    - name: Try installing effekt binary
+      run: sbt install
+
+    - name: Run effekt binary
+      run: effekt --help

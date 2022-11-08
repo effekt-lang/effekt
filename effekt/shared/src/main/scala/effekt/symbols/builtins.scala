@@ -19,56 +19,74 @@ object builtins {
 
   private def name(s: String) = Name.qualified(s, prelude)
 
-  val TUnit = BuiltinType(name("Unit"), Nil)
-  val TBoolean = BuiltinType(name("Boolean"), Nil)
-  val TInt = BuiltinType(name("Int"), Nil)
-  val TDouble = BuiltinType(name("Double"), Nil)
-  val TString = BuiltinType(name("String"), Nil)
+  val UnitSymbol = ExternType(name("Unit"), Nil)
+  val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val TTop = BuiltinType(name("⊤"), Nil)
-  val TBottom = BuiltinType(name("⊥"), Nil)
+  val BooleanSymbol = ExternType(name("Boolean"), Nil)
+  val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
 
-  val IOEffect = BuiltinEffect(name("IO"), Nil)
-  val IOCapability = BlockParam(name("io"), IOEffect)
+  val IntSymbol = ExternType(name("Int"), Nil)
+  val TInt = ValueTypeApp(IntSymbol, Nil)
 
-  val ControlEffect = BuiltinEffect(name("Control"), Nil)
-  val ControlCapability = BlockParam(name("control"), ControlEffect)
+  val DoubleSymbol = ExternType(name("Double"), Nil)
+  val TDouble = ValueTypeApp(DoubleSymbol, Nil)
+
+  val StringSymbol = ExternType(name("String"), Nil)
+  val TString = ValueTypeApp(StringSymbol, Nil)
+
+  val TopSymbol = ExternType(name("⊤"), Nil)
+  val TTop = ValueTypeApp(TopSymbol, Nil)
+
+  val BottomSymbol = ExternType(name("⊥"), Nil)
+  val TBottom = ValueTypeApp(BottomSymbol, Nil)
+
+  val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
+  val IOCapability = ExternResource(name("io"), InterfaceType(IOSymbol, Nil))
+
+  val ControlSymbol = Interface(Name.local("Control"), Nil, Nil)
+  val ControlCapability = ExternResource(name("control"), InterfaceType(ControlSymbol, Nil))
 
   object TState {
-    val S = TypeVar(Name.local("S"))
-    val interface = Interface(Name.local("$State"), List(S), Nil)
-    val get = Operation(name("get"), Nil, Nil, S, Effects.Pure, interface)
-    val put = Operation(name("put"), Nil, List(ValueParam(Name.local("s"), Some(S))), TUnit, Effects.Pure, interface)
+    val S: TypeParam = TypeParam(Name.local("S"))
+    val interface: Interface = Interface(Name.local("Ref"), List(S), Nil)
+    val get = Operation(name("get"), List(S), Nil, ValueTypeRef(S), Effects.Pure, interface)
+    val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), TUnit, Effects.Pure, interface)
     interface.ops = List(get, put)
+
+    def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))
 
     def extractType(state: BlockType)(using C: Context): ValueType =
       state match {
-        case BlockTypeApp(i, List(tpe)) => tpe
+        case InterfaceType(i, List(tpe)) if i == interface => tpe
         case tpe => C.panic(pretty"Expected builtin state, but got $tpe")
       }
   }
 
-  val TRegion = Interface(Name.local("Region"), Nil, Nil)
+  val RegionSymbol = Interface(Name.local("Region"), Nil, Nil)
+  val TRegion = InterfaceType(RegionSymbol, Nil)
 
   val rootTypes: Map[String, TypeSymbol] = Map(
-    "Unit" -> TUnit,
-    "Boolean" -> TBoolean,
-    "Int" -> TInt,
-    "Double" -> TDouble,
-    "String" -> TString,
-    "IO" -> IOEffect,
-    "Region" -> TRegion
+    "Unit" -> UnitSymbol,
+    "Boolean" -> BooleanSymbol,
+    "Int" -> IntSymbol,
+    "Double" -> DoubleSymbol,
+    "String" -> StringSymbol,
+    "IO" -> IOSymbol,
+    "Region" -> RegionSymbol,
+    "Ref" -> TState.interface
   )
 
-  lazy val globalRegion = BlockParam(name("global"), TRegion)
+  lazy val globalRegion = ExternResource(name("global"), TRegion)
 
-  // it is a set, because terms can be overloaded...
   val rootTerms: Map[String, TermSymbol] = Map(
-    "global" -> globalRegion
+    "global" -> globalRegion,
+    "get" -> TState.get,
+    "put" -> TState.put
   )
 
   val rootCaptures: Map[String, Capture] = Map(
     "io" -> IOCapability.capture,
-    "control" -> ControlCapability.capture
+    "control" -> ControlCapability.capture,
+    "global" -> globalRegion.capture
   )
 }

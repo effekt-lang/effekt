@@ -173,7 +173,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def liftBlockLitTo(b: core.BlockLit)(using Environment, Context): BlockLit = b match {
     case core.BlockLit(params, body) =>
       var environment = env
-      
+
       // evidence for the block itself
       val selfEvidence = EvidenceSymbol()
 

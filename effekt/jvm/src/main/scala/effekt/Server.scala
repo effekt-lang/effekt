@@ -4,7 +4,7 @@ import effekt.context.Context
 import effekt.core.PrettyPrinter
 import effekt.lifted.LiftInference
 import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging }
+import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
 
 import kiama.util.{ Position, Services, Source }
@@ -54,13 +54,13 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     if (showIR == "none") { return; }
 
     if (showIR == "source") {
-      val tree = C.getAST(source).getOrElse { return; }
+      val tree = C.getAST(source).getOrElseAborting { return; }
       publishTree("source", tree)
     }
 
     if (List("target", "core", "lifted-core") contains showIR) {
 
-      val (transformed, out) = C.compileSeparate(source).getOrElse { return; }
+      val (transformed, out) = C.compileSeparate(source).getOrElseAborting { return; }
 
       if (showIR == "target") {
         val extension = C.config.backend() match {
@@ -78,14 +78,14 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
       }
 
       if (showIR == "lifted-core") {
-        val liftedCore = LiftInference.run(transformed).getOrElse { return; }
+        val liftedCore = LiftInference.run(transformed).getOrElseAborting { return; }
         if (showTree) publishTree("lifted", liftedCore.core)
         else publishIR("lifted", lifted.PrettyPrinter.format(liftedCore.core))
       }
     }
 
     if (showIR == "machine") {
-      val CompilationUnit(main, deps) = C.compileAll(source).getOrElse { return; }
+      val CompilationUnit(main, deps) = C.compileAll(source).getOrElseAborting { return; }
       val machineProg = machine.Transformer.transform(main, deps)
 
       if (showTree) publishTree("machine", machineProg.program)
@@ -132,7 +132,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
     val documentSymbols = for {
       sym <- context.sourceSymbolsFor(source).toVector
-      if !sym.synthetic
+      if !sym.isSynthetic
       id <- context.definitionTreeOption(sym)
       decl <- getSourceTreeFor(sym)
       kind <- getSymbolKind(sym)
@@ -159,8 +159,12 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   def getSymbolKind(sym: Symbol): Option[SymbolKind] =
     sym match {
       case _: Module =>
-        Some(SymbolKind.Class)
-      case _: Fun =>
+        Some(SymbolKind.Module)
+      case _: Interface | _: ExternInterface =>
+        Some(SymbolKind.Interface)
+      case _: DataType | _: ExternType | _: TypeAlias =>
+        Some(SymbolKind.Enum)
+      case _: Callable =>
         Some(SymbolKind.Method)
       case _: Param | _: ValBinder | _: VarBinder =>
         Some(SymbolKind.Variable)

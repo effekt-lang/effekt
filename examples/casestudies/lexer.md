@@ -76,7 +76,7 @@ def lexerFromList[R](l: List[Token]) { program: => R / Lexer }: R / LexerError =
 ```
 We define a separate handler to report lexer errors to the console:
 ```
-def report { prog: => Unit / LexerError }: Unit / Console =
+def report { prog: => Unit / LexerError }: Unit =
   try { prog() } with LexerError[A] { (msg, pos) =>
     println(pos.line.show ++ ":" ++ pos.col.show ++ " " ++ msg)
   }

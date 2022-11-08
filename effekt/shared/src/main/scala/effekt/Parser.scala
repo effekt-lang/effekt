@@ -107,13 +107,14 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val `unbox` = keyword("unbox")
   lazy val `return` = keyword("return")
   lazy val `region` = keyword("region")
+  lazy val `resource` = keyword("resource")
   lazy val `new` = keyword("new")
 
   def keywordStrings: List[String] = List(
     "def", "val", "var", "handle", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
     "match", "module", "import", "extern", "fun", "for",
-    "at", "box", "unbox", "return", "region", "new"
+    "at", "box", "unbox", "return", "region", "new", "resource"
   )
 
   def keyword(kw: String): Parser[String] =
@@ -218,10 +219,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // format: OFF
 
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ {
-      case name ~ imports ~ defs if name != "effekt" => ModuleDecl(name, Import("effekt") :: imports, defs)
-      case name ~ imports ~ defs => ModuleDecl(name, imports, defs)
-    }
+    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -252,8 +250,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | dataDef
     | recordDef
     | externType
-    | externEffect
+    | externInterface
     | externFun
+    | externResource
     | externInclude
     | failure("Expected a definition")
     )
@@ -284,14 +283,17 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
 
-  lazy val externEffect: P[Def] =
-    `extern` ~> `effect` ~/> idDef ~ maybeTypeParams ^^ ExternEffect.apply
+  lazy val externInterface: P[Def] =
+    `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
-    `extern` ~> ((externFlag | success(ExternFlag.IO)) <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
+    `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
-        ExternFun(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
     }
+
+  lazy val externResource: P[Def] =
+    (`extern` ~ `resource`) ~> (idDef ~ (`:` ~> blockType)) ^^ ExternResource.apply
 
   // Delimiter for multiline strings
   val multi = "\"\"\""
@@ -305,10 +307,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // multi-line strings `(?s)` sets multi-line mode.
   lazy val multilineString: P[String] = matchRegex(s"(?s)${multi}[\t\n\r ]*(.*?)[\t\n\r ]*${multi}".r) ^^ { m => m.group(1) }
 
-  lazy val externFlag: P[ExternFlag.Purity] =
-    ( `pure` ^^^ ExternFlag.Pure
-    | `io` ^^^ ExternFlag.IO
-    | `control` ^^^ ExternFlag.Control
+  lazy val externCapture: P[CaptureSet] =
+    ( `pure` ^^^ CaptureSet(Nil)
+    | idRef ^^ { id => CaptureSet(List(id)) }
+    | captureSet
+    | success(CaptureSet(List(IdRef("io"))))
     )
 
   lazy val externInclude: P[Def] =
@@ -329,15 +332,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     some(`{` ~/> blockParam <~ `}`)
 
   lazy val valueParams: P[List[ValueParam]] =
-    some(valueParamSection) ^^ { _.flatten }
-
-  lazy val valueParamsOpt: P[List[ValueParam]] =
-    some(valueParamsOptSection) ^^ { _.flatten }
-
-  lazy val valueParamSection: P[List[ValueParam]] =
     `(` ~/> manySep(valueParam, `,`) <~ `)`
 
-  lazy val valueParamsOptSection: P[List[ValueParam]] =
+  lazy val valueParamsOpt: P[List[ValueParam]] =
     `(` ~/> manySep(valueParamOpt, `,`) <~ `)`
 
   lazy val valueTypeAnnotation : P[ValueType] =
@@ -561,10 +558,11 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
       case effect ~ clauses =>
         Implementation(effect, clauses)
       }
-    | (idRef ^^ InterfaceVar.apply) ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
-      case effect ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
-        val synthesizedId = IdRef(effect.id.name)
-        Implementation(effect, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf effect))
+    | idRef ~ maybeTypeParams ~ implicitResume ~ functionArg ^^ {
+      case id ~ tparams ~ resume ~ BlockLiteral(_, vparams, _, body) =>
+        val synthesizedId = IdRef(id.name)
+        val interface = BlockTypeRef(id, Nil) withPositionOf id
+        Implementation(interface, List(OpClause(synthesizedId, tparams, vparams, None, body, resume) withPositionOf id))
       }
     )
 
@@ -643,8 +641,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val primValueType: P[ValueType] =
-    ( idRef ~ typeArgs ^^ ValueTypeApp.apply
-    | idRef ^^ TypeVar.apply
+    ( idRef ~ maybeTypeArgs ^^ ValueTypeRef.apply
     | `(` ~> valueType <~ `)`
     | `(` ~> valueType ~ (`,` ~/> some(valueType) <~ `)`) ^^ { case f ~ r => TupleTypeTree(f :: r) }
     | failure("Expected a type")
@@ -660,9 +657,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
     )
 
-  lazy val interfaceType: P[InterfaceType] =
-    ( idRef ~ typeArgs ^^ BlockTypeApp.apply
-    | idRef ^^ InterfaceVar.apply
+  lazy val interfaceType: P[BlockTypeRef] =
+    ( idRef ~ maybeTypeArgs ^^ BlockTypeRef.apply
     | failure("Expected an interface / effect")
     )
 
@@ -704,7 +700,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   }
 
   private def TupleTypeTree(tps: List[ValueType]): ValueType =
-    ValueTypeApp(IdRef(s"Tuple${tps.size}"), tps)
+    ValueTypeRef(IdRef(s"Tuple${tps.size}"), tps)
 
   // === Utils ===
   def many[T](p: => Parser[T]): Parser[List[T]] =

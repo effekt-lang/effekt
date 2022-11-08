@@ -3,6 +3,7 @@ package typer
 
 import effekt.symbols.*
 import effekt.util.messages.{ ErrorReporter, ErrorMessageReifier }
+import effekt.util.foreachAborting
 
 // Auxiliary Definitions
 // ---------------------
@@ -172,7 +173,7 @@ class Constraints(
   def learn(x: UnificationVar, y: ValueType)(merge: (ValueType, ValueType) => Unit): Unit = {
 
     def learnType(x: Node, tpe: ValueType): Unit = {
-      assert(!tpe.isInstanceOf[UnificationVar])
+      // tpe should not be a reference to a unification variable
       typeOf(x) foreach { otherTpe => merge(tpe, otherTpe) }
       typeSubstitution = typeSubstitution.updated(x, tpe)
       updateSubstitution()
@@ -194,7 +195,7 @@ class Constraints(
     }
 
     y match {
-      case y: UnificationVar => connectNodes(getNode(x), getNode(y))
+      case ValueTypeRef(y: UnificationVar) => connectNodes(getNode(x), getNode(y))
       case tpe => learnType(getNode(x), tpe)
     }
   }
@@ -205,11 +206,10 @@ class Constraints(
   def leave(types: List[UnificationVar], capts: List[CaptUnificationVar]): Unit =
     // Check that we could infer all types of type variable instantiations.
     types.foreach {
-      case x @ UnificationVar(UnificationVar.TypeVariableInstantiation(underlying, callTree)) =>
+      case x @ UnificationVar(underlying, callTree) =>
         if (!typeSubstitution.isDefinedAt(getNode(x))) C.at(callTree) {
           C.error(s"Cannot infer type argument ${underlying}, maybe consider annotating it?")
         }
-      case _ => ()
     }
 
     // (0) only add those to pending that haven't been solved already
@@ -391,7 +391,7 @@ class Constraints(
   private def propagateLower(bounds: Set[Capture], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
 
-    captSubstitution.get(x) foreach {
+    captSubstitution.get(x) foreachAborting {
       // we already have fixed the capture set, check equality
       case CaptureSet(capt) =>
         checkEquality(capt, bounds)
@@ -412,7 +412,7 @@ class Constraints(
   private def propagateUpper(bounds: Set[Capture], x: CNode)(using seen: Set[CNode]): Unit =
     if (seen contains x) return()
 
-    captSubstitution.get(x) foreach {
+    captSubstitution.get(x) foreachAborting {
       // we already have fixed the capture set, check equality
       case CaptureSet(capt) =>
         checkEquality(capt, bounds)

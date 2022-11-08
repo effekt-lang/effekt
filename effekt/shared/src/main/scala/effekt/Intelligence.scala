@@ -99,19 +99,11 @@ trait Intelligence {
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 
-    case b: BuiltinFunction =>
-      SymbolInfo(b, "Builtin function", Some(DeclPrinter(b)), None)
+    case b: ExternFunction =>
+      SymbolInfo(b, "External function definition", Some(DeclPrinter(b)), None)
 
     case f: UserFunction if C.functionTypeOption(f).isDefined =>
       SymbolInfo(f, "Function", Some(DeclPrinter(f)), None)
-
-    case f: BuiltinEffect =>
-      val ex = s"""|Builtin effects like `${f.name}` are tracked by the effect system,
-                   |but cannot be handled with `try { ... } with ${f.name} { ... }`. The return type
-                   |of the main function can still have unhandled builtin effects.
-                   |""".stripMargin
-
-      SymbolInfo(f, "Builtin Effect", None, Some(ex))
 
     case f: Operation =>
       val ex =
@@ -141,7 +133,16 @@ trait Intelligence {
     case t: TypeAlias =>
       SymbolInfo(t, "Type alias", Some(DeclPrinter(t)), None)
 
-    case c: Record =>
+    case t: ExternType =>
+      SymbolInfo(t, "External type definition", Some(DeclPrinter(t)), None)
+
+    case t: ExternInterface =>
+      SymbolInfo(t, "External interface definition", Some(DeclPrinter(t)), None)
+
+    case t: ExternResource =>
+      SymbolInfo(t, "External resource definition", Some(DeclPrinter(t)), None)
+
+    case c: Constructor =>
       val ex = pp"""|Instances of data types like `${c.tpe}` can only store
                     |_values_, not _blocks_. Hence, constructors like `${c.name}` only have
                     |value parameter lists, not block parameters.

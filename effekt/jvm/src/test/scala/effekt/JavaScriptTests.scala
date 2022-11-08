@@ -7,20 +7,23 @@ import sbt.io.syntax._
 
 import scala.util.matching._
 
-import org.scalatest.funspec.AnyFunSpec
-
 import scala.language.implicitConversions
+
 
 class JavaScriptTests extends EffektTests {
 
-  override lazy val ignored: List[File] = List(
-    examplesDir / "llvm"
+  override def included: List[File] = List(
+    examplesDir / "pos",
+    examplesDir / "neg",
+    examplesDir / "casestudies"
   )
 
-  def runTestFor(f: File, expected: String) =
-    it(f.getName) {
-      val out = interpretJS(f)
-      assert(expected == out)
+  override lazy val ignored: List[File] = List()
+
+  def runTestFor(input: File, check: File, expected: String): Unit =
+    test(input.getPath) {
+      val out = interpretJS(input)
+      assertNoDiff(out, expected, s"Output running '${input.getPath}' differed from check file '${check.getPath}'.")
     }
 
   def interpretJS(file: File): String = {
@@ -30,11 +33,14 @@ class JavaScriptTests extends EffektTests {
     val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js/monadic"))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
-    removeAnsiColors(configs.stringEmitter.result())
+    configs.stringEmitter.result()
   }
 }
 
-object TestUtils extends JavaScriptTests {
+object TestUtils {
+
+  object jsTests extends JavaScriptTests
+  import jsTests.*
 
   /**
    * Generates the check files from the actual outputs.
@@ -60,8 +66,10 @@ object TestUtils extends JavaScriptTests {
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
           val out = interpretJS(f)
-          // save checkfile in source folder (e.g. examples/)
-          IO.write(checkfile, out)
+
+          // Save checkfile in source folder (e.g. examples/)
+          // We remove ansi colors to make check files human-readable.
+          IO.write(checkfile, removeAnsiColors(out))
         }
       case _ => ()
     }
@@ -70,4 +78,6 @@ object TestUtils extends JavaScriptTests {
   def generateCheckFiles(regenerateAll: Boolean = false): Unit = {
     generateCheckFilesIn(examplesDir, regenerateAll)
   }
+
+  def removeAnsiColors(text: String): String = text.replaceAll("\u001B\\[[;\\d]*m", "")
 }

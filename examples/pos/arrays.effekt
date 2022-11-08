@@ -4,11 +4,11 @@ import mutable/array
 
 def main() = {
     val arr = emptyArray[String]();
-    arr.put(0, "hello");
-    arr.put(2, "world");
-    println(arr.get(0));
-    println(arr.get(2));
-    println(arr.get(4));
-    arr.put(4, "foo");
-    println(arr.get(4))
+    put(arr, 0, "hello");
+    put(arr, 2, "world");
+    println(get(arr, 0));
+    println(get(arr, 2));
+    println(get(arr, 4));
+    put(arr, 4, "foo");
+    println(get(arr, 4))
 }

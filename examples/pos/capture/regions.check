@@ -10,6 +10,6 @@ before
 after
 after
 after
-[warning] examples/pos/capture/regions.effekt:12:3: Handling effects that are not used: Dummy
+[warning] examples/pos/capture/regions.effekt:12:3: Handling effects that are not used: { Dummy }
   try { prog() } with Dummy { resume(()) }
   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

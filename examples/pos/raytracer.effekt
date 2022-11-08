@@ -23,7 +23,7 @@ def dot(a: Vector, b: Vector): Double =
 def cross(a: Vector, b: Vector): Vector =
   Vector((a.y * b.z) - (a.z * b.y), (a.z * b.x) - (a.x * b.z), (a.x * b.y) - (a.y * b.x))
 
-def scale(a: Vector)(t: Double): Vector =
+def scale(a: Vector, t: Double): Vector =
   Vector(a.x * t, a.y * t, a.z * t)
 
 def add(a: Vector, b: Vector): Vector =
@@ -140,13 +140,13 @@ def render(scene: Scene, image: Buffer) = {
     trace(pos, dir, scene, 0).toColor
   }
 
-  def storeAt(color: Color)(x: Int, y: Int): Unit = {
+  def storeAt(color: Color, x: Int, y: Int): Unit = {
     val opaque = 255;
     val index = x * 4 + y * width * 4;
-    image.put(index + 0, color.red);
-    image.put(index + 1, color.green);
-    image.put(index + 2, color.blue);
-    image.put(index + 3, opaque)
+    put(image, index + 0, color.red);
+    put(image, index + 1, color.green);
+    put(image, index + 2, color.blue);
+    put(image, index + 3, opaque)
   }
 
   // now this is a real stress-test of backtrackable state

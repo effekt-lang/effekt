@@ -1,7 +1,5 @@
 module effekt
 
-extern effect Console
-
 // Runtime
 extern include "effekt_runtime.js"
 
@@ -15,7 +13,7 @@ def locally[R] { f: R }: R = f()
 
 // Side effecting ops
 // ==================
-extern def println[R](value: R): Unit / Console =
+extern def println[R](value: R): Unit =
   "println$impl(value)"
 
 extern def inspect[R](value: R): Unit =
@@ -126,7 +124,7 @@ def timed { block: Unit }: Int = {
   after - before
 }
 
-def measure(warmup: Int, iterations: Int) { block: Unit }: Unit / Console = {
+def measure(warmup: Int, iterations: Int) { block: Unit }: Unit = {
   def run(n: Int, report: Boolean): Unit = {
     if (n <= 0) { () } else {
       val time = timed { block() };

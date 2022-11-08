@@ -1,16 +1,15 @@
 package effekt
 package typer
+package constraints
 
 import effekt.source.NoSource
 import effekt.symbols.*
-import effekt.typer.*
 import effekt.util.messages.{ DebugMessaging, ErrorReporter, FatalPhaseError }
 import kiama.util.Positions
-import org.scalatest.funspec.AnyFunSpec
 
 import scala.language.implicitConversions
 
-class ConstraintTests extends AnyFunSpec {
+abstract class ConstraintTests extends munit.FunSuite {
 
   object messages extends DebugMessaging
 
@@ -28,25 +27,26 @@ class ConstraintTests extends AnyFunSpec {
   lazy val C = freshCaptVar("C")
   lazy val D = freshCaptVar("D")
 
-  lazy val x = CaptureParameter(Name.local("x"))
-  lazy val y = CaptureParameter(Name.local("y"))
-  lazy val z = CaptureParameter(Name.local("z"))
+  lazy val x = CaptureParam(Name.local("x"))
+  lazy val y = CaptureParam(Name.local("y"))
+  lazy val z = CaptureParam(Name.local("z"))
 
 
   def freshTypeVar(name: String) =
-    scope.fresh(UnificationVar.TypeVariableInstantiation(TypeVar(Name.local(name)), NoSource))
+    scope.fresh(TypeParam(Name.local(name)), NoSource)
 
   def freshCaptVar(name: String) =
-    scope.freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParameter(Name.local(name)), NoSource))
+    scope.freshCaptVar(CaptUnificationVar.VariableInstantiation(CaptureParam(Name.local(name)), NoSource))
 
   def freshGraph() = {
     messages.clear()
     new Constraints
   }
+}
 
+class TestSimpleFlow extends ConstraintTests {
 
-  describe("Simple flow") {
-    it ("should propagate captures through lower bounds") {
+    test("should propagate captures through lower bounds") {
       val graph = freshGraph()
       import graph.*
 
@@ -62,7 +62,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(B.upper == None)
     }
 
-    it ("should transitively propagate captures through lower bounds") {
+    test("should transitively propagate captures through lower bounds") {
       val graph = freshGraph()
       import graph.*
 
@@ -81,7 +81,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(C.upper == None)
     }
 
-    it ("should propagate captures after connecting") {
+    test("should propagate captures after connecting") {
       val graph = freshGraph()
       import graph.*
 
@@ -97,7 +97,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(B.upper == None)
     }
 
-    it ("should transitively propagate captures through lower bounds after connecting") {
+    test("should transitively propagate captures through lower bounds after connecting") {
       val graph = freshGraph()
       import graph.*
 
@@ -117,25 +117,24 @@ class ConstraintTests extends AnyFunSpec {
       assert(B.upper == None)
       assert(C.upper == None)
     }
-  }
+}
 
-  describe("Errors") {
-
-    it ("should report an error when conflicting bounds flow") {
+class TestErrors extends ConstraintTests {
+    test("should report an error when conflicting bounds flow") {
       val graph = freshGraph()
       import graph.*
 
       connect(A, B)
       requireUpper(Set(y), B)
 
-      assertThrows[FatalPhaseError] {
+      intercept[FatalPhaseError] {
         requireLower(Set(x), A)
       }
     }
-  }
+}
 
-  describe("Substitutions") {
-    it ("should add a substitution for a capture variable, when leaving the scope") {
+class TestSubstitutions extends ConstraintTests {
+    test("should add a substitution for a capture variable, when leaving the scope") {
       val graph = freshGraph()
       import graph.*
 
@@ -146,7 +145,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(subst.get(A) == Some(CaptureSet(x)))
     }
 
-    it ("should check consistency with already substituted variables") {
+    test("should check consistency with already substituted variables") {
       val graph = freshGraph()
       import graph.*
 
@@ -157,14 +156,14 @@ class ConstraintTests extends AnyFunSpec {
       assert(B.lower == Some(Set(x)))
 
       requireUpper(Set(y), C)
-      assertThrows[FatalPhaseError] {
+      intercept[FatalPhaseError] {
         connect(A, C)
       }
     }
-  }
+}
 
-  describe("Subtracting") {
-    it ("should not propagate filtered captures into bounds") {
+class TestSubtracting extends ConstraintTests {
+    test ("should not propagate filtered captures into bounds") {
       val graph = freshGraph()
       import graph.*
 
@@ -179,7 +178,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(A.upper == None)
       assert(B.upper == None)
     }
-    it ("should not propagate filtered existing captures into bounds") {
+    test ("should not propagate filtered existing captures into bounds") {
       val graph = freshGraph()
       import graph.*
 
@@ -194,7 +193,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(A.upper == None)
       assert(B.upper == None)
     }
-    it ("should not conflict with solved substitutions") {
+    test ("should not conflict with solved substitutions") {
       val graph = freshGraph()
       import graph.*
 
@@ -209,7 +208,7 @@ class ConstraintTests extends AnyFunSpec {
       // should not affect upper bounds
       assert(B.upper == None)
     }
-    it ("if bounded from both sides it should still filter, appropriately") {
+    test ("if bounded from both sides it should still filter, appropriately") {
       val graph = freshGraph()
       import graph.*
 
@@ -228,7 +227,7 @@ class ConstraintTests extends AnyFunSpec {
       // should not affect upper bounds
       assert(B.upper == None)
     }
-    it ("filtering from above should admit *more* capabilities, not less") {
+    test ("filtering from above should admit *more* capabilities, not less") {
       val graph = freshGraph()
       import graph.*
 
@@ -251,7 +250,7 @@ class ConstraintTests extends AnyFunSpec {
       assert(B.lower == Some(Set()))
       assert(B.upper == Some(Set(x)))
     }
-    it ("filtering from above transitively should admit *more* capabilities, not less") {
+    test ("filtering from above transitively should admit *more* capabilities, not less") {
       val graph = freshGraph()
       import graph.*
 
@@ -279,5 +278,4 @@ class ConstraintTests extends AnyFunSpec {
       // all three flow as upper bound to A
       assert(A.upper == Some(Set(x, y, z)))
     }
-  }
 }

@@ -49,10 +49,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
   // Creating fresh unification variables
   // ------------------------------------
-  def fresh(role: UnificationVar.Role): UnificationVar = scope match {
+  def fresh(underlying: TypeVar.TypeParam, call: source.Tree): UnificationVar = scope match {
     case GlobalScope => sys error "Cannot add unification variables to global scope"
     case s : LocalScope =>
-      val x = new UnificationVar(role)
+      val x = new UnificationVar(underlying, call)
       scope = s.copy(types = x :: s.types)
       x
   }
@@ -200,10 +200,10 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
     val typeRigids =
       if (targs.size == tparams.size) targs
-      else tparams map { t => fresh(UnificationVar.TypeVariableInstantiation(t, position)) }
+      else tparams map { t => ValueTypeRef(fresh(t, position)) }
 
-    if (cparams.size != (bparams.size + eff.controlEffects.size)) {
-      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.controlEffects.size}.\n  ${tpe}"
+    if (cparams.size != (bparams.size + eff.canonical.size)) {
+      sys error pp"Capture param count ${cparams.size} is not equal to bparam ${bparams.size} + controleffects ${eff.canonical.size}.\n  ${tpe}"
     }
 
     val captRigids =
@@ -218,7 +218,7 @@ class Unification(using C: ErrorReporter) extends TypeUnifier, TypeMerger, TypeI
 
     val substitutedEffects = instantiate(eff)
 
-    val fun = FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
+    val fun: FunctionType = FunctionType(Nil, Nil, substitutedVparams, substitutedBparams, substitutedReturn, substitutedEffects)
     (typeRigids, captRigids, fun)
   }
 
@@ -327,13 +327,12 @@ trait TypeInstantiator { self: Unification =>
 
 
   def instantiate(t: ValueType)(using Instantiation): ValueType = t match {
-    case x: TypeVar =>
-      valueInstantiations.getOrElse(x, x)
+    case ValueTypeRef(x) =>
+      valueInstantiations.getOrElse(x, t)
     case ValueTypeApp(t, args) =>
       ValueTypeApp(t, args.map { instantiate })
     case BoxedType(tpe, capt) =>
       BoxedType(instantiate(tpe), instantiate(capt))
-    case other => other
   }
 
   def instantiate(t: Effects)(using Instantiation): Effects = Effects(t.toList.map(instantiate))
@@ -344,9 +343,7 @@ trait TypeInstantiator { self: Unification =>
   }
 
   def instantiate(t: InterfaceType)(using Instantiation): InterfaceType = t match {
-    case b: Interface           => b
-    case BlockTypeApp(c, targs) => BlockTypeApp(c, targs map instantiate)
-    case b: BuiltinEffect => b
+    case InterfaceType(c, targs) => InterfaceType(c, targs map instantiate)
   }
 
   def instantiate(t: FunctionType)(using i: Instantiation): FunctionType = t match {

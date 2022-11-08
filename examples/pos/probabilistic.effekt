@@ -154,7 +154,7 @@ def heapTest() = heap {
   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
 }
 
-def catch[R] { p: => R / IndexOutOfBounds }: Unit / Console =
+def catch[R] { p: => R / IndexOutOfBounds }: Unit =
   try { p(); () }
   with IndexOutOfBounds[A] { () => println("Index out of bounds!") }
 

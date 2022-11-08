@@ -5,7 +5,6 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.{ Query, Rewrite }
-import effekt.typer.typeMapToSubstitution
 
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
