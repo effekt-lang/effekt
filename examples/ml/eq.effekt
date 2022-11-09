@@ -1,4 +1,7 @@
-record Test(field: Int, field: Int)
+record Test(
+    field: Int,
+    field: Int
+)
 
 def main() = {
     println(1 == 1);

@@ -156,11 +156,14 @@ object ML extends Backend {
     //      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
     //      Block(constructors ++ defs, exprs, result)
 
-    case Record(did, fields, rest) =>
+    case Record(did: symbols.Record, fields, rest) =>
       val fieldNames = fields map name
       val rec = ml.MakeRecord(fieldNames.map(name => (name, Variable(name))))
-      val constructor = ml.FunBind(name(did), fieldNames, rec)
+      val constructor = ml.FunBind(name(did.constructor), fieldNames, rec)
       constructor :: toML(rest) // use the native record types
+
+    case Record(_, _, _) => ???
+
 
     case Include(contents, rest) =>
       val include = RawBind(contents)

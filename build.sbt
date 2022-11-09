@@ -125,7 +125,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       // prepend shebang to make jar file executable
       val binary = (ThisBuild / baseDirectory).value / "bin" / "effekt"
       IO.delete(binary)
-      IO.append(binary, "#! /usr/bin/env -S java -jar\n")
+      IO.append(binary, "#! /usr/bin/env java -jar\n")
       IO.append(binary, IO.readBytes(jarfile))
     },
 
