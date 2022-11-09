@@ -1,8 +1,8 @@
 package effekt
 
-import effekt.context.Context
+import effekt.context.{ Annotations, Context }
 import effekt.source.{ FunDef, ModuleDecl, Tree }
-import kiama.util.Position
+import kiama.util.{ Position, Source }
 
 trait Intelligence {
 
@@ -96,6 +96,28 @@ trait Intelligence {
                | |:------------- |:------------- |
                | | `${outerTpe}` | `${innerTpe}` |
                |""".stripMargin
+
+  def allCaptures(src: Source)(using C: Context): List[(Tree, CaptureSet)] =
+    C.annotationOption(Annotations.CaptureForFile, src).getOrElse(Nil)
+
+  // For now we only show captures of function definitions and calls to box
+  def getInferredCaptures(src: Source)(using C: Context): List[(Position, CaptureSet)] =
+    allCaptures(src).filter {
+      case (t, c) =>
+        val p = C.positions.getStart(t)
+        p.isDefined
+    }.collect {
+      case (t: source.FunDef, c) => for {
+        pos <- C.positions.getStart(t)
+      } yield (pos, c)
+      case (t: source.DefDef, c) => for {
+        pos <- C.positions.getStart(t)
+      } yield (pos, c)
+      case (source.Box(None, block), _) if C.inferredCaptureOption(block).isDefined => for {
+        pos <- C.positions.getStart(block)
+        capt <- C.inferredCaptureOption(block)
+      } yield (pos, capt)
+    }.flatten
 
   def getInfoOf(sym: Symbol)(implicit C: Context): Option[SymbolInfo] = PartialFunction.condOpt(resolveCallTarget(sym)) {
 

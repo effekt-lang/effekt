@@ -10,7 +10,7 @@ import effekt.util.messages.EffektError
 import kiama.util.{ Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind }
+import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -36,7 +36,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   /**
    * Overriding hook to also publish core and target for LSP server
    */
-  override def afterCompilation(source: Source, config: EffektConfig)(implicit C: Context): Unit = {
+  override def afterCompilation(source: Source, config: EffektConfig)(using C: Context): Unit = {
     super.afterCompilation(source, config)
 
     // don't do anything, if we aren't running as a language server
@@ -119,6 +119,11 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     }
   }
 
+  def positionToLocation(p: Position): Location = {
+    val s = convertPosition(Some(p))
+    new Location(p.source.name, new LSPRange(s, s))
+  }
+
   def getSourceTreeFor(sym: Symbol): Option[Tree] = sym match {
     case a: Anon => Some(a.decl)
     case f: UserFunction => Some(f.decl)
@@ -198,7 +203,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
    * Also, it is necessary to be able to manually set the code action kind (and register them on startup).
    * This way, we can use custom kinds like `refactor.closehole` that can be mapped to keys.
    */
-  def inferEffectsAction(fun: FunDef)(implicit C: Context): Option[TreeAction] = for {
+  def inferEffectsAction(fun: FunDef)(using C: Context): Option[TreeAction] = for {
     // the inferred type
     (tpe, eff) <- C.inferredTypeAndEffectOption(fun)
     // the annotated type
@@ -210,7 +215,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     res <- CodeAction("Update return type with inferred effects", fun.ret, s": $tpe / $eff")
   } yield res
 
-  def closeHoleAction(hole: Hole)(implicit C: Context): Option[TreeAction] = for {
+  def closeHoleAction(hole: Hole)(using C: Context): Option[TreeAction] = for {
     holeTpe <- C.inferredTypeOption(hole)
     contentTpe <- C.inferredTypeOption(hole.stmts)
     if holeTpe == contentTpe
@@ -228,11 +233,23 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     }
   } yield res
 
-  def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(implicit C: Context): Boolean = {
+  def needsUpdate(annotated: (ValueType, Effects), inferred: (ValueType, Effects))(using Context): Boolean = {
     val (tpe1, effs1) = annotated
     val (tpe2, effs2) = inferred
     tpe1 != tpe2 || effs1 != effs2
   }
+
+  case class CaptureInfo(location: Location, captureText: String)
+
+  override def executeCommand(src: Source, params: ExecuteCommandParams): Option[Any] =
+    if (params.getCommand == "inferredCaptures") {
+      val captures = getInferredCaptures(src)(using context).map {
+        case (p, c) => CaptureInfo(positionToLocation(p), TypePrinter.show(c))
+      }
+      if (captures.isEmpty) None else Some(captures.toArray)
+    } else {
+      None
+    }
 
   override def createServices(config: EffektConfig) = new LSPServices(this, config)
 

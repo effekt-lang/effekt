@@ -6,6 +6,8 @@ import effekt.symbols.*
 import effekt.context.assertions.*
 import effekt.source.Tree.{ Query, Rewrite }
 
+import kiama.util.Source
+
 /**
  * Transformation on source trees that translates programs into explicit capability-passing style
  *
@@ -26,7 +28,7 @@ object Elaborator extends Phase[Typechecked, Typechecked] {
   def run(input: Typechecked)(implicit C: Context) = {
     val transformedTree = ExplicitCapabilities.rewrite(input.tree)
 
-    AnnotateCaptures.annotate(transformedTree)
+    AnnotateCaptures(input.source).annotate(transformedTree)
 
     val treeExplicitRegions = ExplicitRegions.rewrite(transformedTree)
 
@@ -44,7 +46,7 @@ trait ElaborationOps extends ContextOps { Context: Context =>
   private[source] def definitionFor(s: symbols.BlockParam): source.BlockParam =
     val id = IdDef(s.name.name)
     assignSymbol(id, s)
-    val tree = source.BlockParam(id, source.BlockTypeTree(s.tpe))
+    val tree: source.BlockParam = source.BlockParam(id, source.BlockTypeTree(s.tpe))
     tree
 
 }
@@ -185,10 +187,13 @@ object ExplicitRegions extends Rewrite {
  *
  * TODO remove self-regions
  * TODO annotate unbox in Typer and use it here
- *
- * TODO move this pass after capability-passing / elaboration
  */
-object AnnotateCaptures extends Query[Unit, CaptureSet] {
+class AnnotateCaptures(src: Source) extends Query[Unit, CaptureSet] {
+
+  // We collect all captures while traversing the tree.
+  // They are then annotated to the source file for LSP to query.
+  private var allCaptures: List[(source.Tree, symbols.CaptureSet)] = Nil
+
   def empty: CaptureSet = CaptureSet.empty
   def combine(r1: CaptureSet, r2: CaptureSet): CaptureSet = r1 ++ r2
 
@@ -263,15 +268,17 @@ object AnnotateCaptures extends Query[Unit, CaptureSet] {
     case _ => Context.panic("All capture unification variables should have been replaced by now.")
   }
 
-  def Context(implicit ctx: Context): Context = ctx
+  def Context(using ctx: Context): Context = ctx
 
   def annotate(tree: source.ModuleDecl)(using Context): Unit =
     given Unit = ();
     query(tree)
+    Context.annotate(Annotations.CaptureForFile, src, allCaptures)
 
   override def visit[T <: Tree](t: T)(visitor: T => CaptureSet)(using Context, Unit): CaptureSet =
     val capt = visitor(t)
     Context.annotate(Annotations.InferredCapture, t, capt)
+    allCaptures = (t, capt) :: allCaptures
     capt
 
 }

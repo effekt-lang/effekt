@@ -6,7 +6,7 @@ package typer
  */
 import effekt.context.{ Annotation, Annotations, Context, ContextOps }
 import effekt.context.assertions.*
-import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree }
+import effekt.source.{ AnyPattern, Def, IgnorePattern, MatchPattern, ModuleDecl, Stmt, TagPattern, Term, Tree, resolve, symbol }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.symbols.kinds.*
@@ -98,11 +98,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(expr, expected) {
-      case source.IntLit(n)     => Result(TInt, Pure)
-      case source.BooleanLit(n) => Result(TBoolean, Pure)
-      case source.UnitLit()     => Result(TUnit, Pure)
-      case source.DoubleLit(n)  => Result(TDouble, Pure)
-      case source.StringLit(s)  => Result(TString, Pure)
+      case source.Literal(_, tpe)     => Result(tpe, Pure)
 
       case source.If(cond, thn, els) =>
         val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
@@ -1473,6 +1469,8 @@ trait TyperOps extends ContextOps { self: Context =>
 
   private[typer] def commitTypeAnnotations(): Unit = {
     val subst = unification.substitution
+
+    var capturesForLSP: List[(Tree, CaptureSet)] = Nil
 
     // Since (in comparison to System C) we now have type directed overload resolution again,
     // we need to make sure the typing context and all the annotations are backtrackable.
