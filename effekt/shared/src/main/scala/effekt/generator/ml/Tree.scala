@@ -8,6 +8,7 @@ class MLName(n: String) {
     val tmp = nn.replace('$', '\'')
     if (tmp.startsWith("_")) "f" + tmp else tmp
   }
+
   val name: String = fixName(n)
 }
 
@@ -56,13 +57,21 @@ enum Expr {
   case Variable(name: MLName)
 
   case FieldLookup(record: Expr, field: MLName)
-  
+
   case MakeRecord(fields: List[(MLName, Expr)])
 
-  //  // match and handle are both macros, stable across Chez variants, so we add them to the language.
-  //  case Match(scrutinee: Expr, clauses: List[(Expr, Expr)])
+  case Match(scrutinee: Expr, clauses: List[MatchClause])
 
   //  case Handle(handlers: List[Handler], body: Expr)
+}
+
+case class MatchClause(pattern: Pattern, body: Expr)
+enum Pattern {
+  case Ignore
+  case Bind(name: MLName)
+  case Literal(l: String)
+  // ml supports direct binders (`{x, y}`) but we don't need them.
+  case Record(assignments: List[(MLName, Pattern)])
 }
 
 export Expr.*

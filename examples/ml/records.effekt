@@ -2,19 +2,19 @@ record MyRecord(field: Int)
 
 record MyRecord2(f1: Int, f2: Int)
 
-def main() = {
-    val r = MyRecord(32)
-    println(r.field); // 32
-    println(m(MyRecord2(1, 2))); // 1
-    println(m(MyRecord2(2, 3))); // 12
-    println(m(MyRecord2(1, -2))) // 1
-
-}
-
 def m(mr: MyRecord2): Int = {
     mr match {
         case MyRecord2(x, 2) => x
         case MyRecord2(_, 3) => 12
         case _ => 1
     }
+}
+
+def main() = {
+    val r = MyRecord(32)
+    println(r.field); // 32
+    println(m(MyRecord2(1, 2))); // 1
+    println(m(MyRecord2(2, 3))); // 12
+    println(m(MyRecord2(42, 42))) // 1
+
 }

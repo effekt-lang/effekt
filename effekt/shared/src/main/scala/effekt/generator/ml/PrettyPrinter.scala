@@ -74,17 +74,36 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Sequence(exps, rest) =>
       val seq = vsep(exps map toDoc, "; ") <> ";" <@> toDoc(rest)
       parens(seq)
+    case Expr.Match(scrutinee, clauses) =>
+      val mlMatch = "case" <+> toDoc(scrutinee) <+> "of" <+> nest(line <>
+        ssep(clauses map toDoc, line <> "| ")
+      ) <> line
+      parens(mlMatch)
   }
 
-  /**
-   * Returns `()` for empty lists and `toDoc(a) toDoc(b) ...` otherwise.
-   */
-  def argList[A](args: Seq[A], toDoc: A => Doc): Doc = {
-    if (args.isEmpty) {
-      "()"
-    } else {
-      hsep(args map toDoc)
-    }
+  def toDoc(mc: ml.MatchClause): Doc = {
+    toDoc(mc.pattern) <+> "=>" <+> nest(line <> toDoc(mc.body))
   }
+
+  def toDoc(p: ml.Pattern): Doc = p match {
+    case Pattern.Ignore => "_"
+    case Pattern.Bind(name) => toDoc(name)
+    case Pattern.Literal(l) => string(l)
+    case Pattern.Record(assignments) =>
+      "{" <>
+        hsep(assignments map {case (name, p) => toDoc(name) <+> "=" <+> toDoc(p)}, ", ") <>
+        "}"
+  }
+
+      /**
+       * Returns `()` for empty lists and `toDoc(a) toDoc(b) ...` otherwise.
+       */
+      def argList[A](args: Seq[A], toDoc: A => Doc): Doc = {
+        if (args.isEmpty) {
+          "()"
+        } else {
+          hsep(args map toDoc)
+        }
+      }
 
 }

@@ -4,7 +4,7 @@ package ml
 
 import effekt.context.Context
 import effekt.lifted.*
-import effekt.symbols.{Module, Symbol, Wildcard}
+import effekt.symbols.{Module, Symbol, TypeConstructor, Wildcard}
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -84,10 +84,16 @@ object ML extends Backend {
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) => ??? // bind(toMLExpr(binding), nameDef(id), toML(body))
     case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
-    case Match(scrutinee, clauses) => println(stmt); ???
-    //      ml.Match(toML(scrutinee), clauses.map { case (pattern, branch) =>
-    //        (toML(pattern), curry(toML(branch)))
-    //      })
+    case Match(scrutinee, clauses) =>
+      def clauseToML(c: (Pattern, BlockLit)): ml.MatchClause = {
+        val (pattern, b) = c
+        val names = b.params.map(p => name(p.id))
+        val body = toMLExpr(b.body)
+        val mlPattern = toML(pattern, names)
+        ml.MatchClause(mlPattern, body)
+      }
+
+      ml.Match(toML(scrutinee), clauses map clauseToML)
 
     case Hole => ???
 
@@ -208,7 +214,7 @@ object ML extends Backend {
   def toML(scope: Evidence): ml.Expr = scope match {
     case Evidence(Nil) => Consts.here
     case Evidence(ev :: Nil) => Variable(name(ev))
-    case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(name(s)) }:_*)
+    case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(name(s)) }: _*)
   }
 
   def toML(expr: Expr): ml.Expr = expr match {
@@ -232,11 +238,33 @@ object ML extends Backend {
     case Run(s, tpe) => Call(Consts.run)(toMLExpr(s))
   }
 
-  def toML(p: Pattern): ml.Expr = ???
-  //  p match {
-  //    case IgnorePattern()    => Variable(MLName("ignore"))
-  //    case AnyPattern()       => Variable(MLName("any"))
-  //    case LiteralPattern(l)  => Builtin("literal", toML(l))
-  //    case TagPattern(id, ps) => Builtin("match-" + uniqueName(id), ps map { p => toML(p) }: _*)
-  //  }
+  def toML(p: Pattern, names: List[MLName]): ml.Pattern = {
+    def translate(p: Pattern, names: List[MLName]): (ml.Pattern, List[MLName]) = {
+      (p, names) match {
+        case (IgnorePattern(), _) => (ml.Pattern.Ignore, names)
+        case (AnyPattern(), name :: rest) => (ml.Pattern.Bind(name), rest)
+        case (LiteralPattern(l), rest) => (ml.Pattern.Literal(l.value.toString), rest)
+        case (TagPattern(tag: symbols.Constructor, patterns), _) =>
+          tag.tpe match {
+            case _: TypeConstructor.DataType => ??? // unsupported
+            case _: TypeConstructor.ExternType => ??? // unsupported
+            case _: TypeConstructor.Record =>
+              val fieldNames = tag.fields map name
+              val (mlPatternsRev: List[ml.Pattern], names1: List[MLName]) = patterns.foldLeft((Nil: List[ml.Pattern], names)) {
+                case ((patterns, names), pattern) =>
+                  val (mlPattern, names1) = translate(pattern, names)
+                  (mlPattern :: patterns, names1)
+              }
+              assert(fieldNames.length == mlPatternsRev.length)
+              (ml.Pattern.Record(fieldNames.zip(mlPatternsRev.reverse)), names1)
+          }
+        case (AnyPattern(), _) => ??? // invalid list of names
+        case (TagPattern(_, _), _) => ??? // unsupported
+      }
+    }
+
+    val (mlPattern, remainingNames) = translate(p, names)
+    assert(remainingNames.isEmpty, s"pattern: ${p.toString}\nnames: $names")
+    mlPattern
+  }
 }
