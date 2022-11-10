@@ -145,6 +145,10 @@ object TreeDocs {
             // skip line
         }
       }
+      if (state != SearchingStart) {
+        println(s"Cannot find end marker for generating documentation in: ${src}")
+        return;
+      }
 
       if (changed) {
         println(s"Generated TreeDoc in ${src}")
