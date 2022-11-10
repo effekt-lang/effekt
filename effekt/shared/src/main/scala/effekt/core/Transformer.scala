@@ -77,8 +77,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = f.symbol
       Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
 
-    case e @ source.ExternInclude(path) =>
-      Include(e.contents, rest())
+    case e @ source.ExternInclude(path, contents, _) =>
+      Include(contents, rest())
 
     // For now we forget about all of the following definitions in core:
     case d: source.ExternResource => rest()
