@@ -13,7 +13,7 @@ play with it and give us your feedback :)
 
 ## Installation
 
-You need to have Java (>= 1.8) and Node (>= 10) and npm installed.
+You need to have Java (>= 11) and Node (>= 10) and npm installed.
 
 The recommended way of installing Effekt is by running:
 
