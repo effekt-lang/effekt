@@ -1,9 +1,6 @@
 import sbt._
 import Keys._
 
-import java.io.PrintWriter
-import scala.tools.nsc.interpreter.OutputStream
-
 object TreeDocs {
 
   import scala.util.matching.Regex
@@ -115,8 +112,6 @@ object TreeDocs {
 
       val lines = IO.readLines(src)
 
-      // writeBytes(file: File, bytes: Array[Byte], append: Boolean)
-
       val stringWriter = new java.io.StringWriter()
       val output = new java.io.PrintWriter(stringWriter)
 
@@ -137,8 +132,8 @@ object TreeDocs {
                 state = SearchingEnd(docs, prefixIndented)
             }
           case SearchingEnd(docs, prefix) if containsEndMarker(line) =>
-            output.println(prefix)
-            output.println(docs)
+            output.println(prefix.stripTrailing)
+            output.println(docs.stripTrailing)
             copyLine() // copy end marker
             state = SearchingStart
           case SearchingEnd(_, _) =>
