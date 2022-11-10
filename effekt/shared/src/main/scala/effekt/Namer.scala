@@ -189,7 +189,7 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
       Context.bindBlock(sym)
 
-    case d @ source.ExternInclude(path) =>
+    case d @ source.ExternInclude(path, _, _) =>
       d.contents = Context.contentsOf(path).getOrElse {
         Context.abort(s"Missing include: ${path}")
       }
@@ -312,7 +312,7 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternInterface(id, tparams) => ()
     case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
-    case source.ExternInclude(path) => ()
+    case source.ExternInclude(path, _, _) => ()
 
     case source.If(cond, thn, els) =>
       resolveGeneric(cond);
