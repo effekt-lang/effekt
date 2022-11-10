@@ -1,0 +1,6 @@
+def main() = {
+    println(-1); // -1
+    println(-1.2); // -1.2
+    println(0.0/0.0) // NaN
+    println(1.0/0.0) // Infinity
+}

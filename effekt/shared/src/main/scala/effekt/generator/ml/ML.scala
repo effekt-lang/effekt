@@ -80,7 +80,7 @@ object ML extends Backend {
 
   def toMLExpr(stmt: Stmt): ml.Expr = stmt match {
     case Return(e) => Call(Consts.pure)(toML(e))
-    case App(b, targs, args) => Expr.Call(toML(b), args map toML)
+    case App(b, _, args) => Expr.Call(toML(b), args map toML)
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) => ??? // bind(toMLExpr(binding), nameDef(id), toML(body))
     case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
@@ -117,14 +117,14 @@ object ML extends Backend {
     case Region(body) => ???
     //      ml.Builtin("with-region")(toML(body))
 
-    case Let(Wildcard(_), tpe, binding, body) =>
+    case Let(Wildcard(_), _, binding, body) =>
       val mlBinding = toML(binding)
       toMLExpr(body) match {
         case ml.Sequence(exps, rest) => ml.Sequence(mlBinding :: exps, rest)
         case mlbody => ml.Sequence(List(mlBinding), mlbody)
       }
 
-    case Let(id, tpe, binding, body) =>
+    case Let(id, _, binding, body) =>
       val mlBinding = createBinder(id, binding)
       toMLExpr(body) match {
         case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
@@ -153,7 +153,7 @@ object ML extends Backend {
 
   def toML(stmt: Stmt): List[ml.Binding] = stmt match {
 
-    case Def(id, tpe, block, rest) =>
+    case Def(id, _, block, rest) =>
       val constDef = createBinder(id, block)
       constDef :: toML(rest)
 
@@ -175,14 +175,14 @@ object ML extends Backend {
       val include = RawBind(contents)
       include :: toML(rest)
 
-    case Let(Wildcard(_), tpe, binding, body) =>
+    case Let(Wildcard(_), _, _, _) =>
       Nil
 
-    case Let(id, tpe, binding, body) =>
+    case Let(id, _, binding, body) =>
       val constant = createBinder(id, binding)
       constant :: toML(body)
 
-    case other => Nil
+    case _ => Nil
   }
 
   def toML(block: BlockLit): ml.Lambda = block match {
@@ -221,10 +221,27 @@ object ML extends Backend {
     case UnitLit() => Consts.unitVal
     case StringLit(s) => MLString(s)
     case BooleanLit(b) => if (b) Consts.trueVal else Consts.falseVal
-    case l: Literal[t] => ml.RawValue(l.value.toString)
+    case l: Literal[_] =>
+      def numberString(x: AnyVal): ml.Expr = {
+        val s = x.toString
+        if (s.startsWith("-")) {
+          ml.RawExpr(s"~${s.substring(1)}")
+        } else ml.RawValue(s)
+
+      }
+
+      l.value match {
+        case v: Byte => numberString(v)
+        case v: Short => numberString(v)
+        case v: Int => numberString(v)
+        case v: Long => numberString(v)
+        case v: Float => numberString(v)
+        case v: Double => numberString(v)
+        case _ => ml.RawValue(l.value.toString)
+      }
     case ValueVar(id) => ml.Variable(name(id))
 
-    case PureApp(b, targs, args) => ml.Call(toML(b), args map {
+    case PureApp(b, _, args) => ml.Call(toML(b), args map {
       case e: Expr => toML(e)
       case b: Block => toML(b)
       case e: Evidence => toML(e)
@@ -235,7 +252,7 @@ object ML extends Backend {
 
     case Closure(b) => toML(b)
 
-    case Run(s, tpe) => Call(Consts.run)(toMLExpr(s))
+    case Run(s, _) => Call(Consts.run)(toMLExpr(s))
   }
 
   def toML(p: Pattern, names: List[MLName]): ml.Pattern = {

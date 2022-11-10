@@ -14,10 +14,10 @@ extern io def println(value: String): Unit =
   """print (value ^ "\n")"""
 
 extern io def println(value: Int): Unit =
-  """print ((Int.toString value) ^ "\n")"""
+  """print ((effektIntString value) ^ "\n")"""
 
 extern io def println(value: Double): Unit =
-  """print ((Real.toString value) ^ "\n")"""
+  """print ((effektDoubleString value) ^ "\n")"""
 
 extern io def println(value: Boolean): Unit =
   """print ((Bool.toString value) ^ "\n")"""
