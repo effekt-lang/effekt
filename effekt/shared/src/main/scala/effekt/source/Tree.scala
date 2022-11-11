@@ -265,7 +265,7 @@ enum Term extends Tree {
   case Var(id: IdRef) extends Term, Reference
   case Assign(id: IdRef, expr: Term) extends Term, Reference
 
-  case Literal(value: Any, tpe: symbols.ValueType)
+  case Literal(value: Any, tpe: ValueType)
   case Hole(stmts: Stmt)
 
   // Boxing and unboxing to represent first-class values
@@ -330,11 +330,11 @@ export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
-def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
-def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
-def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
-def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
+def UnitLit(): Literal = Literal((), ValueTypeRef(IdRef("Unit"), Nil)) // TODO in the future we want to use qualified path here...
+def IntLit(value: Int): Literal = Literal(value, ValueTypeRef(IdRef("Int"), Nil))
+def BooleanLit(value: Boolean): Literal = Literal(value, ValueTypeRef(IdRef("Boolean"), Nil))
+def DoubleLit(value: Double): Literal = Literal(value, ValueTypeRef(IdRef("Double"), Nil))
+def StringLit(value: String): Literal = Literal(value, ValueTypeRef(IdRef("String"), Nil))
 
 type CallLike = Call | Do | Select | MethodCall
 

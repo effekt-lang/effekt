@@ -185,7 +185,12 @@ trait Compiler {
   def getAST(source: Source)(implicit C: Context): Option[ModuleDecl] =
     CachedParser(source).map { res => res.tree }
 
-  /**
+  def loadBuiltins(source: Source)(implicit C: Context): Option[Module] = for {
+    parsed <- CachedParser(source)
+    resolved <- Namer.resolveBuiltins(parsed)
+  } yield resolved.mod
+
+/**
    * Called by ModuleDB (and indirectly by Namer) to run the frontend for a
    * dependency.
    */

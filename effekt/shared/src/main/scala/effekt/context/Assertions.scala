@@ -81,12 +81,20 @@ object assertions {
       case t: BlockSymbol => t
       case _ => reporter.panic("Expected a block symbol")
     }
+    def asValueTypeConstructor: TypeConstructor = s match {
+      case t: TypeConstructor => t
+      case _ => reporter.abort("Expected a value type constructor")
+    }
+    def asBlockTypeConstructor: BlockTypeConstructor = s match {
+      case t: BlockTypeConstructor => t
+      case _ => reporter.abort("Expected a block type constructor")
+    }
   }
 
   extension(t: symbols.Type)(using reporter: ErrorReporter) {
     def asInterfaceType: InterfaceType = t match {
       case t: InterfaceType => t
-      case _ => reporter.abort("Expected a capability type")
+      case _ => reporter.abort("Expected a interface type")
     }
   }
 }

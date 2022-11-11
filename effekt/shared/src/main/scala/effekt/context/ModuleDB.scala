@@ -3,6 +3,7 @@ package context
 
 import effekt.symbols._
 import kiama.util.Source
+import assertions.*
 
 /**
  * The ModuleDB depends on three things:
@@ -37,11 +38,10 @@ trait ModuleDB { self: Context =>
   /**
    * Tries to find a module for the given source, will run compiler on demand
    */
-  def moduleOf(source: Source): Module = {
+  def moduleOf(source: Source): Module =
     tryModuleOf(source).getOrElse {
       abort(s"Cannot compile dependency: ${stripSuffix(source.name)}")
     }
-  }
 
   private def stripSuffix(path: String): String =
     path.stripSuffix(".effekt").stripSuffix(".md")
@@ -82,5 +82,22 @@ trait ModuleDB { self: Context =>
     }
 
     main
+  }
+
+  // This should probably go in a separate trait: Builtins.scala
+  lazy val builtinsModule: Module =
+    val builtinsName = "builtins"
+    val src = findSource(builtinsName).getOrElse { abort(s"Cannot find source for $builtinsName") }
+    loadBuiltins(src).getOrElse {
+      abort(s"Cannot load builtins: ${ builtinsName }")
+    }
+
+  object builtins {
+    lazy val RegionSymbol = builtinsModule.types.getOrElse("Region", abort("Regions not supported by this backend.")).asBlockTypeConstructor
+    lazy val TRegion = symbols.InterfaceType(RegionSymbol, Nil)
+
+    // TODO for Literals, this COULD be moved to backends that need the types.
+    lazy val IntSymbol = builtinsModule.types.getOrElse("Int", abort("Ints not supported by this backend.")).asValueTypeConstructor
+    lazy val TInt = symbols.ValueTypeApp(IntSymbol, Nil)
   }
 }

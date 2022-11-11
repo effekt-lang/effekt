@@ -367,7 +367,7 @@ object Transformer {
 
     case symbols.builtins.TUnit => builtins.UnitType
 
-    case symbols.builtins.TInt => Type.Int()
+    case s if s == Context.builtins.TInt => Type.Int()
 
     case symbols.builtins.TBoolean => builtins.BooleanType
 

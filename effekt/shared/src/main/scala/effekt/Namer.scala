@@ -52,6 +52,10 @@ object Namer extends Phase[Parsed, NameResolved] {
     val preludes = Context.config.prelude()
     val isPrelude = preludes.contains(decl.path)
 
+    val builtinMod = Context.builtinsModule
+    // TODO also bind capture!
+    scope.defineAll(builtinMod.terms, builtinMod.types, Map.empty)
+
     val processedPreludes = if (!isPrelude) {
       preludes.map(processDependency)
     } else { Nil }
@@ -73,6 +77,20 @@ object Namer extends Phase[Parsed, NameResolved] {
     val allImports = (processedPreludes ++ imports).distinct
     Context.module.exports(allImports, scope.terms.toMap, scope.types.toMap)
     decl
+  }
+
+  def resolveBuiltins(input: Parsed)(using Context): Option[NameResolved] = {
+    println("Resolving builtins...")
+    val Parsed(source, tree) = input
+
+    val scope: Scope = toplevel(Map.empty, Map.empty, Map.empty)
+    Context.initNamerstate(scope)
+
+
+    val mod = Module(tree, source)
+    Context.using(module = mod, focus = tree) { resolveGeneric(tree) }
+    mod.exports(Nil, scope.terms.toMap, scope.types.toMap)
+    Some(NameResolved(source, tree, mod))
   }
 
   /**

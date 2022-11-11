@@ -98,7 +98,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
     checkAgainst(expr, expected) {
-      case source.Literal(_, tpe)     => Result(tpe, Pure)
+      case source.Literal(_, tpe)     => Result(tpe.resolve, Pure)
 
       case source.If(cond, thn, els) =>
         val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
