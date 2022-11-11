@@ -169,7 +169,7 @@ object Wellformedness extends Visit[WFContext] {
 
       // it is not possible to match on builtins
       case b: ExternType =>
-        Context.abort("Matching on an extern type is not possible.")
+        ()
     }
   }
 
