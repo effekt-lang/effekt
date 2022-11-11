@@ -377,6 +377,22 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.MatchClause(pattern, body) =>
       val ps = resolve(pattern)
+
+      // wellformedness: only linear patterns
+      var names: Set[Name] = Set.empty
+      ps foreach { p =>
+        if (names contains p.name)
+          Context.error(pp"Patterns have to be linear: names can only occur once, but ${p.name} shows up multiple times.")
+
+        val cs = Context.allConstructorsFor(p.name.name)
+        if (cs.nonEmpty) {
+          Context.warning(pp"Pattern binds variable ${p.name}. Maybe you meant to match on equally named constructor of type ${cs.head.tpe}?")
+        }
+
+        names = names + p.name
+      }
+
+
       Context scoped {
         ps.foreach { Context.bind }
         resolveGeneric(body)
@@ -746,6 +762,11 @@ trait NamerOps extends ContextOps { Context: Context =>
     assignSymbol(id, sym)
     sym
   }
+
+  private[namer] def allConstructorsFor(name: String): Set[Constructor] =
+    scope.allTermsFor(name).collect {
+      case c: Constructor => c
+    }
 
   private[namer] def resolveAny(id: Id): Symbol = at(id) {
     val sym = scope.lookupFirst(id.name)

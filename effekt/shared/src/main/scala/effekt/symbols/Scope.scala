@@ -40,6 +40,8 @@ object scopes {
     def currentTermsFor(key: String): Set[TermSymbol] =
       terms.getOrElse(key, Set.empty)
 
+    def allTermsFor(key: String): Set[TermSymbol]
+
     // TODO add appropriate checks
     def define(key: String, sym: TermSymbol)(implicit C: Context): Unit = {
       val bindings = terms.getOrElse(key, Set())
@@ -106,6 +108,8 @@ object scopes {
 
     def leave(implicit C: Context): Scope =
       C.abort("Internal Compiler Error: Leaving top level scope")
+
+    def allTermsFor(key: String): Set[TermSymbol] = Set.empty
   }
 
   trait BlockScope extends Scope {
@@ -155,6 +159,8 @@ object scopes {
 
     def leave(implicit C: Context): Scope =
       parent
+
+    def allTermsFor(key: String): Set[TermSymbol] = currentTermsFor(key) ++ parent.allTermsFor(key)
 
     override def toString = s"BlockScope(${terms.keySet.mkString(", ")}) :: $parent"
   }
