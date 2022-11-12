@@ -7,6 +7,7 @@ import effekt.lifted
 import effekt.lifted.LiftInference
 import effekt.symbols
 import effekt.symbols.{ BlockSymbol, BlockType, DataType, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.builtins.TState
 
 object Transformer {
 
@@ -226,10 +227,11 @@ object Transformer {
                                   Return(List())))
           val regionVar = Variable(transform(region), Type.Region())
 
+          // TODO use interface when it's implemented
           Allocate(stateVariable, regionVar,
             Store(stateVariable, value,
-              New(variable, List(getter, setter),
-                transform(body))))
+              //New(variable, List(getter, setter),
+                transform(body)))
         }
 
       case _ =>
@@ -306,6 +308,27 @@ object Transformer {
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+      }
+
+    // hardcoded translation for get and put.
+    // TODO remove this when interfaces are correctly translated
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.get), List(), List()) =>
+      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+      val variable = Variable(freshName("x"), tpe)
+      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+      Binding { k =>
+        Load(variable, stateVariable, k(variable))
+      }
+
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.put), List(), List(arg)) =>
+      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+      val variable = Variable(freshName("x"), Positive("Unit"));
+      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+      transform(arg).flatMap { value =>
+        Binding { k =>
+          Store(stateVariable, value,
+            Construct(variable, builtins.Unit, List(), k(variable)))
+        }
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction), List(), args) =>
