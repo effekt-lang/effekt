@@ -398,7 +398,7 @@ object Transformer {
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
       case machine.Type.Stack()      => 32 // TODO Make fat?
-      case machine.Type.Reference(_) => 8
+      case machine.Type.Reference(_) => 16
       case machine.Type.Region()     => 8
     }
 
