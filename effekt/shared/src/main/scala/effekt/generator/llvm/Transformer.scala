@@ -189,7 +189,7 @@ object Transformer {
         val typedPtr = freshName("typed_ptr");
         emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(tpe)))
 
-        emit(Store(LocalReference(PointerType(tpe), typedPtr), LocalReference(tpe, value.name)))
+        emit(Store(LocalReference(PointerType(tpe), typedPtr), transform(value)))
         transform(rest)
 
       case machine.PushFrame(frame, rest) =>
