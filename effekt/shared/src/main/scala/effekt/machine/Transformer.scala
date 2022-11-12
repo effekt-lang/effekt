@@ -205,12 +205,11 @@ object Transformer {
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
         val regionVar = Variable(transform(id.id), Type.Region())
 
-        NewStack(delimiter, regionVar, returnClause,
-          PushStack(delimiter, transform(body)))
+        LiteralEvidence(transform(ev), builtins.There,
+          NewStack(delimiter, regionVar, returnClause,
+            PushStack(delimiter, transform(body))))
 
       case lifted.State(id, init, region, body) =>
-        // TODO use the correct region
-        //val tpe = transform(Context.valueTypeOf(id))
         transform(init).run { value =>
           val tpe = value.tpe;
           val name = transform(id)
