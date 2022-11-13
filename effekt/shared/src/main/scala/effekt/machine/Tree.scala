@@ -133,9 +133,9 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
-  *  e.g. Int *x; s
+  *  e.g. Int x in r = 42; s
   */
-  case Allocate(name: Variable, region: Variable, rest: Statement)
+  case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
 
   /**
   * e.g. y = *x; s

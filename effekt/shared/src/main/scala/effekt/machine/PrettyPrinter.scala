@@ -65,8 +65,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
-    case Allocate(name, region, rest) =>
-      toDoc(name.tpe) <+> name <+> "in" <+> toDoc(region) <> ";" <> line <> toDoc(rest)
+    case Allocate(name, init, region, rest) =>
+      toDoc(name.tpe) <+> name <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <> ";" <> line <> toDoc(rest)
 
     case Load(name, ref, rest) =>
       name <+> "=" <+> "*" <> ref <> ";" <> line <> toDoc(rest)

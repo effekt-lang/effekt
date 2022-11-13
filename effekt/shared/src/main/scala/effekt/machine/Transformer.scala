@@ -228,10 +228,9 @@ object Transformer {
           val regionVar = Variable(transform(region), Type.Region())
 
           // TODO use interface when it's implemented
-          Allocate(stateVariable, regionVar,
-            Store(stateVariable, value,
-              //New(variable, List(getter, setter),
-                transform(body)))
+          Allocate(stateVariable, value, regionVar,
+            //New(variable, List(getter, setter),
+              transform(body))
         }
 
       case _ =>

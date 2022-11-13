@@ -164,11 +164,19 @@ object Transformer {
       case machine.Invoke(value, tag, values) =>
         ???
 
-      case machine.Allocate(machine.Variable(name, machine.Type.Reference(tpe)), region, rest) =>
+      case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, region, rest) =>
         emit(Call(name, refType, alloc, List(ConstantInt(typeSize(tpe)), transform(region))));
+
+        val ptr = freshName("ptr");
+        emit(Call(ptr, PointerType(IntegerType8()), getPtr, List(transform(ref))))
+
+        val typedPtr = freshName("typed_ptr");
+        emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(transform(tpe))))
+
+        emit(Store(LocalReference(PointerType(transform(tpe)), typedPtr), transform(init)))
         transform(rest);
 
-      case machine.Allocate(_, _, _) =>
+      case machine.Allocate(_, _, _, _) =>
         ???
 
       case machine.Load(name, ref, rest) =>
