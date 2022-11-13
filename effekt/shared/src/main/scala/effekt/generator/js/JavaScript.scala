@@ -230,7 +230,7 @@ trait JavaScript extends Backend {
     //        case (p, b) => js.Object(`pattern` -> toJS(p), `exec` -> toJS(b))
     //      })
     //      monadic.Builtin("match", toJS(sc), cs)
-      ???
+      monadic.Builtin("hole")
 
     case core.Hole =>
       monadic.Builtin("hole")

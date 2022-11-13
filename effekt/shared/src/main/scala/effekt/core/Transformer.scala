@@ -200,7 +200,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(Context.inferredTypeOf(sc), transformAsPure(sc))
       val clauses = cs.map(c => preprocess(scrutinee.id, c))
-      Context.bind(Context.inferredTypeOf(tree), compileMatch(clauses))
+      val compiledMatch = Context.at(tree) { compileMatch(clauses) }
+      Context.bind(Context.inferredTypeOf(tree), compiledMatch)
 
     case source.TryHandle(prog, handlers) =>
       val caps = handlers.map { h =>
@@ -339,9 +340,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   // Match Compiler
   // --------------
+  // The implementation of the match compiler follows closely the short paper:
+  //   Jules Jacob
+  //   How to compile pattern matching
+  //   https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
+  //
+  // There also is a more advanced Rust implementation that we could look at:
+  //   https://gitlab.com/yorickpeterse/pattern-matching-in-rust/-/tree/main/jacobs2021
 
   // case pats => label(args...)
-  private case class Clause(pats: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
+  private case class Clause(patterns: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
 
   // Uses the bind effect to bind the right hand sides of clauses!
   private def preprocess(sc: ValueSymbol, clause: source.MatchClause)(using Context): Clause = {
@@ -361,9 +369,103 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Clause(Map(sc -> clause.pattern), joinpoint.id, params.map { case (p, _) => p })
   }
 
-  private def compileMatch(clauses: List[Clause]): core.Stmt = {
-    println(s"Compiling match for clauses: ${clauses}")
-    ???
+  private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
+
+    if (clauses.isEmpty) Context.error("Non-exhaustive pattern match.")
+
+    val normalizedClauses = clauses.map(normalize)
+
+    def jumpToBranch(target: BlockSymbol, args: List[ValueSymbol]) =
+      core.App(core.BlockVar(target), Nil, args.map(a => core.ValueVar(a)))
+
+    // (1) Check whether we are already successful
+    val Clause(patterns, target, args) = normalizedClauses.head
+    if (patterns.isEmpty) { return jumpToBranch(target, args) }
+
+    def branchingHeuristic =
+      patterns.keys.maxBy(v => normalizedClauses.count {
+        case Clause(ps, _, _) => ps.contains(v)
+      })
+
+    // (2) Choose the variable to split on
+    val splitVar = branchingHeuristic
+
+    def hasCatchAll = clauses.exists { c => c.patterns.isEmpty }
+
+    def mentionedVariants = normalizedClauses
+      .flatMap(_.patterns.get(splitVar))
+      .collect { case p : source.TagPattern => p.definition }
+
+    val variants = mentionedVariants.distinct
+
+    // TODO there could be a match all
+    def checkExhaustiveness() =
+      val allVariants = variants.head.tpe match {
+        case d: DataType => d.constructors
+        case r: Record => List(r.constructor)
+        case _ => ???
+      }
+      val missingCases = allVariants.toSet -- variants.toSet
+      if (missingCases.nonEmpty && !hasCatchAll) Context.abort(pp"Non-exhaustive pattern match. Missing cases: ${missingCases}")
+
+    checkExhaustiveness()
+
+    val clausesFor = collection.mutable.Map.empty[Constructor, Vector[Clause]]
+    var defaults = Vector.empty[Clause]
+
+    def addClause(c: Constructor, cl: Clause): Unit =
+      val clauses = clausesFor.getOrElse(c, Vector.empty)
+      clausesFor.update(c, clauses :+ cl)
+
+    def addDefault(cl: Clause): Unit =
+      defaults = defaults :+ cl
+
+    def freshFields(c: Constructor) = c.fields.map { f =>
+      val tmp = Tmp.apply(Context.module)
+      Context.assignType(tmp, f.returnType)
+      tmp
+    }
+    val varsFor: Map[Constructor, List[Tmp]] = variants.map { v => v -> freshFields(v) }.toMap
+
+    normalizedClauses.foreach {
+      case c @ Clause(patterns, target, args) => patterns.get(splitVar) match {
+        case Some(p @ source.TagPattern(id, ps)) =>
+          val constructor = p.definition
+          addClause(constructor, Clause(patterns - splitVar ++ varsFor(constructor).zip(ps), target, args))
+        case Some(_) => Context.panic("Should not happen")
+        case None =>
+          // Clauses that don't match on that var are duplicated.
+          // So we want to choose our branching heuristic to minimize this
+          addDefault(c)
+          // THIS ONE IS NOT LINEAR
+          variants.foreach { v => addClause(v, c) }
+      }
+    }
+
+    val branches = variants.toList.map { v =>
+      // TODO only add defaultVar as `self`, if it is free in the body.
+      val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
+      val params = varsFor(v).map { tmp => ValueParam(tmp) }
+      val blockLit: BlockLit = BlockLit(params, body)
+      (v, blockLit)
+    }
+
+    val default = if defaults.isEmpty then None else Some(compileMatch(defaults))
+
+    core.Match(ValueVar(splitVar), branches, default)
+  }
+
+  /**
+   * Substitutes IdPatterns and removes wildcards (and literal patterns -- which are already ruled out by Typer);
+   * only TagPatterns are left.
+   */
+  private def normalize(clause: Clause)(using Context): Clause = {
+    val Clause(patterns, target, args) = clause
+    val substitution = patterns.collect { case (v, source.AnyPattern(id)) => id.symbol -> v }
+    val tagPatterns = patterns.collect { case (v, p: source.TagPattern) => v -> p }
+
+    // HERE WE COULD GATHER AN EXPLICIT SUBSTITUTION ON THE RHS
+    Clause(tagPatterns, target, args.map(v => substitution.getOrElse(v, v)))
   }
 
 

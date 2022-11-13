@@ -161,7 +161,6 @@ case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local(
 case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 case class TmpBlock(module: Module) extends BlockSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
-
 /**
  * Type Symbols
  * - [[ValueTypeSymbol]]
