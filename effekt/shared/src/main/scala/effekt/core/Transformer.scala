@@ -200,18 +200,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(Context.inferredTypeOf(sc), transformAsPure(sc))
       val clauses = cs.map(c => preprocess(scrutinee.id, c))
-
-      println(clauses)
-
-      //      val cs: List[(Pattern, BlockLit)] = clauses.map {
-      //        case cl @ source.MatchClause(pattern, body) =>
-      //          val (p, ps) = transform(pattern)
-      //          (p, BlockLit(ps, transform(body)))
-      //      }
-      //      Context.bind(Context.inferredTypeOf(tree), Match(scrutinee, cs))
-
-      // TODO this is where the match compiler comes in!
-      ???
+      Context.bind(Context.inferredTypeOf(tree), compileMatch(clauses))
 
     case source.TryHandle(prog, handlers) =>
       val caps = handlers.map { h =>
@@ -351,6 +340,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // Match Compiler
   // --------------
 
+  // case pats => label(args...)
+  private case class Clause(pats: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
+
   // Uses the bind effect to bind the right hand sides of clauses!
   private def preprocess(sc: ValueSymbol, clause: source.MatchClause)(using Context): Clause = {
     def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
@@ -369,8 +361,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Clause(Map(sc -> clause.pattern), joinpoint.id, params.map { case (p, _) => p })
   }
 
-  // case pats => label(args...)
-  private case class Clause(pats: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
+  private def compileMatch(clauses: List[Clause]): core.Stmt = {
+    println(s"Compiling match for clauses: ${clauses}")
+    ???
+  }
+
+
+  // Helpers
+  // -------
 
   // Helpers to constructed typed trees
   def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
