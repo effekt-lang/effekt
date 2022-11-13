@@ -4,7 +4,6 @@ package typer
 import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.context.assertions.*
-import effekt.lifted.TagPattern
 import effekt.source.{ Def, ExprTarget, IdTarget, MatchPattern, Tree }
 import effekt.source.Tree.{ Query, Visit }
 

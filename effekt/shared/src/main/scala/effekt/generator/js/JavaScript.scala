@@ -160,16 +160,6 @@ trait JavaScript extends Backend {
     case New(handler) => toJS(handler)
   }
 
-  def toJS(pattern: core.Pattern)(using Context): js.Expr = pattern match {
-    case IgnorePattern() => builtin("ignore")
-    case AnyPattern() => builtin("any")
-    case LiteralPattern(l) => js.Call(builtin("literal"), List(toJS(l)))
-    case TagPattern(id, patterns) =>
-      val tag = JsString(nameDef(id).name) // TODO improve
-      val childMatchers = patterns map toJS
-      js.Call(builtin("tagged"), tag :: childMatchers)
-  }
-
   def builtin(name: String): js.Expr = js.Member($effekt, JSName(name))
 
   def toJS(args: List[Argument])(using Context): List[js.Expr] = args map {
@@ -235,11 +225,12 @@ trait JavaScript extends Backend {
     case core.Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
 
-    case core.Match(sc, clauses) =>
-      val cs = js.ArrayLiteral(clauses map {
-        case (p, b) => js.Object(`pattern` -> toJS(p), `exec` -> toJS(b))
-      })
-      monadic.Builtin("match", toJS(sc), cs)
+    case core.Match(sc, clauses, default) =>
+    //      val cs = js.ArrayLiteral(clauses map {
+    //        case (p, b) => js.Object(`pattern` -> toJS(p), `exec` -> toJS(b))
+    //      })
+    //      monadic.Builtin("match", toJS(sc), cs)
+      ???
 
     case core.Hole =>
       monadic.Builtin("hole")

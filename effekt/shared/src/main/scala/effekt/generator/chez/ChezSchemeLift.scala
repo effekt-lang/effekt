@@ -85,10 +85,11 @@ object ChezSchemeLift extends Backend {
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
-    case Match(scrutinee, clauses) =>
-      chez.Match(toChez(scrutinee), clauses.map { case (pattern, branch) =>
-        (toChez(pattern), curry(toChez(branch)))
-      })
+    case Match(scrutinee, clauses, default) =>
+    //      chez.Match(toChez(scrutinee), clauses.map { case (pattern, branch) =>
+    //        (toChez(pattern), curry(toChez(branch)))
+    //      })
+      ???
 
     case Hole => ???
 
@@ -209,12 +210,5 @@ object ChezSchemeLift extends Backend {
     case Closure(b) => toChez(b)
 
     case Run(s, tpe) => run(toChezExpr(s))
-  }
-
-  def toChez(p: Pattern): chez.Expr = p match {
-    case IgnorePattern()    => Variable(ChezName("ignore"))
-    case AnyPattern()       => Variable(ChezName("any"))
-    case LiteralPattern(l)  => Builtin("literal", toChez(l))
-    case TagPattern(id, ps) => Builtin("match-" + uniqueName(id), ps map { p => toChez(p) }: _*)
   }
 }

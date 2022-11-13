@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.symbols.{ Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, Operation, Type, ValueType, BlockType }
+import effekt.symbols.{ BlockSymbol, BlockType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol, ValueType }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -153,16 +153,6 @@ enum Param extends Tree {
 }
 export Param.*
 
-
-enum Pattern extends Tree {
-  case IgnorePattern()
-  case AnyPattern()
-  case TagPattern(tag: Symbol, patterns: List[Pattern])
-  case LiteralPattern[T](l: Literal[T])
-}
-export Pattern.*
-
-
 /**
  * Statements
  *
@@ -199,7 +189,7 @@ enum Stmt extends Tree {
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case While(cond: Stmt, body: Stmt)
   case Return(e: Pure)
-  case Match(scrutinee: Pure, clauses: List[(Pattern, BlockLit)])
+  case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
 
   case Include(contents: String, rest: Stmt)
 
@@ -235,7 +225,6 @@ object Tree {
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def param: PartialFunction[Param, Param] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
-    def pattern: PartialFunction[Pattern, Pattern] = PartialFunction.empty
     def handler: PartialFunction[Handler, Handler] = PartialFunction.empty
 
     def rewrite(p: Pure): Pure =
@@ -289,10 +278,10 @@ object Tree {
           Handle(rewrite(body), tpe, handler map rewrite)
         case Region(body) =>
           Region(rewrite(body))
-        case Match(scrutinee, clauses) =>
+        case Match(scrutinee, clauses, default) =>
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
-          })
+          }, default map rewrite)
         case h: Hole.type => h
       }
 
@@ -313,14 +302,6 @@ object Tree {
       case New(impl) =>
         New(rewrite(impl))
       case b: BlockVar => b
-    }
-    def rewrite(e: Pattern): Pattern = e match {
-      case e if pattern.isDefinedAt(e) => pattern(e)
-      case TagPattern(tag, patterns: List[Pattern]) =>
-        TagPattern(tag, patterns map rewrite)
-      case Pattern.LiteralPattern(l) =>
-        LiteralPattern(rewrite(l).asInstanceOf[Literal[_]])
-      case p => p
     }
     def rewrite(e: Handler): Handler = e match {
       case e if handler.isDefinedAt(e) => handler(e)

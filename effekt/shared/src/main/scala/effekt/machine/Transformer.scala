@@ -178,19 +178,19 @@ object Transformer {
           Switch(value, List(Clause(List(), transform(elseStmt)), Clause(List(), transform(thenStmt))))
         }
 
-      case lifted.Match(scrutinee, clauses) =>
+      case lifted.Match(scrutinee, clauses, default) =>
         // TODO unordered matches
         // TODO overlapping matches
         // TODO incomplete matches
         // TODO nested matches
-        transform(scrutinee).run { value =>
-          Switch(value, clauses.map {
-            case (lifted.IgnorePattern(), _) => ??? // Clause(List(), NOOP) // TODO verify
-            case (lifted.AnyPattern(), _) => ???
-            case (lifted.TagPattern(constructor, patterns), lifted.BlockLit(params, body)) =>
-              Clause(params.map(transform), transform(body))
-            case (lifted.LiteralPattern(l), block) => ???
-          })
+        transform(scrutinee).run { value => ???
+          //          Switch(value, clauses.map {
+          //            case (lifted.IgnorePattern(), _) => ??? // Clause(List(), NOOP) // TODO verify
+          //            case (lifted.AnyPattern(), _) => ???
+          //            case (lifted.TagPattern(constructor, patterns), lifted.BlockLit(params, body)) =>
+          //              Clause(params.map(transform), transform(body))
+          //            case (lifted.LiteralPattern(l), block) => ???
+          //          })
         }
 
       case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>

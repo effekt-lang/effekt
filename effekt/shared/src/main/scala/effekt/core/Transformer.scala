@@ -198,12 +198,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Match(sc, clauses) =>
       val scrutinee = transformAsPure(sc)
 
-      val cs: List[(Pattern, BlockLit)] = clauses.map {
-        case cl @ source.MatchClause(pattern, body) =>
-          val (p, ps) = transform(pattern)
-          (p, BlockLit(ps, transform(body)))
-      }
-      Context.bind(Context.inferredTypeOf(tree), Match(scrutinee, cs))
+      //      val cs: List[(Pattern, BlockLit)] = clauses.map {
+      //        case cl @ source.MatchClause(pattern, body) =>
+      //          val (p, ps) = transform(pattern)
+      //          (p, BlockLit(ps, transform(body)))
+      //      }
+      //      Context.bind(Context.inferredTypeOf(tree), Match(scrutinee, cs))
+
+      // TODO this is where the match compiler comes in!
+      ???
 
     case source.TryHandle(prog, handlers) =>
       val caps = handlers.map { h =>
@@ -325,15 +328,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol)
   def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol)
-
-  def transform(tree: source.MatchPattern)(using Context): (Pattern, List[core.ValueParam]) = tree match {
-    case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
-    case source.LiteralPattern(l)  => (core.LiteralPattern(transformLit(l)), Nil)
-    case p @ source.AnyPattern(id) => (core.AnyPattern(), List(ValueParam(p.symbol)))
-    case p @ source.TagPattern(id, ps) =>
-      val (patterns, params) = ps.map(transform).unzip
-      (core.TagPattern(p.definition, patterns), params.flatten)
-  }
 
   def freshWildcardFor(e: source.Tree)(using Context): Wildcard = {
     val x = Wildcard(Context.module)
