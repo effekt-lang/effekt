@@ -6,6 +6,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
+import effekt.source.MatchPattern
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -195,8 +196,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val exprTpe = Context.inferredTypeOf(tree)
       Context.bind(exprTpe, While(insertBindings { Return(transformAsPure(cond)) }, transform(body)))
 
-    case source.Match(sc, clauses) =>
-      val scrutinee = transformAsPure(sc)
+    case source.Match(sc, cs) =>
+      // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
+      val scrutinee: ValueVar = Context.bind(Context.inferredTypeOf(sc), transformAsPure(sc))
+      val clauses = cs.map(c => preprocess(scrutinee.id, c))
+
+      println(clauses)
 
       //      val cs: List[(Pattern, BlockLit)] = clauses.map {
       //        case cl @ source.MatchClause(pattern, body) =>
@@ -343,6 +348,30 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Context.reifyBindings(body, bindings)
   }
 
+  // Match Compiler
+  // --------------
+
+  // Uses the bind effect to bind the right hand sides of clauses!
+  private def preprocess(sc: ValueSymbol, clause: source.MatchClause)(using Context): Clause = {
+    def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
+      case p @ source.AnyPattern(id) => List(p.symbol)
+      case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)
+      case _ => Nil
+    }
+    val params = boundVars(clause.pattern).map { p => (p, Context.valueTypeOf(p)) }
+    val body = transform(clause.body)
+    val blockLit = BlockLit(params.map { case (p, tpe) => core.ValueParam(p, tpe) }, body)
+    val returnType = Context.inferredTypeOf(clause.body)
+    val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
+
+    // TODO Do we also need to annotate the capture???
+    val joinpoint = Context.bind(blockTpe, blockLit)
+    Clause(Map(sc -> clause.pattern), joinpoint.id, params.map { case (p, _) => p })
+  }
+
+  // case pats => label(args...)
+  private case class Clause(pats: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
+
   // Helpers to constructed typed trees
   def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
     core.ValueParam(id, Context.valueTypeOf(id))
@@ -432,7 +461,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * @param tpe the type of the bound statement
    * @param s the statement to be bound
    */
-  private[core] def bind(tpe: symbols.ValueType, s: Stmt): Pure = {
+  private[core] def bind(tpe: symbols.ValueType, s: Stmt): ValueVar = {
 
     // create a fresh symbol and assign the type
     val x = Tmp(module)
@@ -444,7 +473,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     ValueVar(x)
   }
 
-  private[core] def bind(tpe: symbols.ValueType, s: Expr): Pure = {
+  private[core] def bind(tpe: symbols.ValueType, s: Expr): ValueVar = {
 
     // create a fresh symbol and assign the type
     val x = Tmp(module)
@@ -454,6 +483,18 @@ trait TransformerOps extends ContextOps { Context: Context =>
     bindings += binding
 
     ValueVar(x)
+  }
+
+  private[core] def bind(tpe: symbols.BlockType, b: Block): BlockVar = {
+
+    // create a fresh symbol and assign the type
+    val x = TmpBlock(module)
+    assignType(x, tpe)
+
+    val binding = Binding.Def(x, tpe, b)
+    bindings += binding
+
+    BlockVar(x)
   }
 
   private[core] def withBindings[R](block: => R): (R, ListBuffer[Binding]) = Context in {
