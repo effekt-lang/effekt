@@ -411,6 +411,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 private[core] enum Binding {
   case Val(name: Tmp, tpe: symbols.ValueType, binding: Stmt)
   case Let(name: Tmp, tpe: symbols.ValueType, binding: Expr)
+  case Def(name: TmpBlock, tpe: symbols.BlockType, binding: Block)
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
@@ -473,6 +474,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
       case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
       case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
       case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
+      case (Binding.Def(x, tpe, b), body) => Def(x, tpe, b, body)
     }
   }
 }
