@@ -139,7 +139,7 @@ object Transformer {
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
-          case symbols.UserFunction(_, _, _, _, _, _, _) =>
+          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock(_) =>
             // TODO this is a hack, values is in general shorter than environment
             val environment = getBlocksParams(id)
             transform(args).run { values =>
@@ -179,18 +179,34 @@ object Transformer {
         }
 
       case lifted.Match(scrutinee, clauses, default) =>
-        // TODO unordered matches
-        // TODO overlapping matches
-        // TODO incomplete matches
-        // TODO nested matches
-        transform(scrutinee).run { value => ???
-          //          Switch(value, clauses.map {
-          //            case (lifted.IgnorePattern(), _) => ??? // Clause(List(), NOOP) // TODO verify
-          //            case (lifted.AnyPattern(), _) => ???
-          //            case (lifted.TagPattern(constructor, patterns), lifted.BlockLit(params, body)) =>
-          //              Clause(params.map(transform), transform(body))
-          //            case (lifted.LiteralPattern(l), block) => ???
-          //          })
+        val constructors = clauses match {
+            case (symbols.Constructor(_, _, _, tpe), _) :: _ => tpe match {
+              case symbols.DataType(_, _, constructors) => constructors
+              case symbols.Record(_, _, constructor) => List(constructor)
+              case symbols.ExternType(_, _) => ??? // TODO: can this happen?
+            }
+         case _ => ??? // TODO: can there be an empty set of clauses? How do we get the type then?
+        };
+        transform(scrutinee).run { value =>
+          Switch(value, constructors.map {
+                   constructor => clauses.find { _._1 == constructor } match {
+                     case Some((_, lifted.BlockLit(params, body))) =>
+                       Clause(params.map(transform), transform(body))
+                     case None =>
+                       default match {
+                         case Some(body) =>
+                           Clause(
+                             constructor.fields.map {
+                               field => Variable(freshName("_"), transform(field.param.tpe.getOrElse {
+                                 ??? // TODO: when is this param None? Why is there a name as well?
+                               }))
+                             },
+                             transform(body))
+                         case None => ???
+                       }
+                   }
+                 }
+          )
         }
 
       case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
