@@ -100,10 +100,14 @@ trait ChezScheme {
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
     case Match(scrutinee, clauses, default) =>
-      //      chez.Match(toChez(scrutinee), clauses.map { case (pattern, branch) =>
-      //        (toChez(pattern), curry(toChez(branch)))
-      //      })
-     ???
+      val sc = toChez(scrutinee)
+      val cls = clauses.map { case (constr, branch) =>
+        val names = RecordNames(constr)
+        val pred = chez.Call(chez.Variable(names.predicate), List(sc))
+        val matcher = chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch)))
+        (pred, matcher)
+      }
+      chez.Cond(cls, default.map(toChezExpr))
 
     case Hole => ???
 
