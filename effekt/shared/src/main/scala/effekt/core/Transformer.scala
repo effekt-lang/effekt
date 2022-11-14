@@ -369,6 +369,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Clause(Map(sc -> clause.pattern), joinpoint.id, params.map { case (p, _) => p })
   }
 
+  /**
+   * The match compiler works with
+   * - a sequence of clauses that represent alternatives (disjunction)
+   * - each sequence contains a list of patterns that all have to match (conjunction).
+   */
   private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
 
     if (clauses.isEmpty) Context.error("Non-exhaustive pattern match.")
@@ -389,8 +394,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // (2) Choose the variable to split on
     val splitVar = branchingHeuristic
-
-    def hasCatchAll = clauses.exists { c => c.patterns.isEmpty }
 
     def mentionedVariants = normalizedClauses
       .flatMap(_.patterns.get(splitVar))
