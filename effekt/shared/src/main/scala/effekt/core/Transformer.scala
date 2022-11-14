@@ -398,18 +398,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val variants = mentionedVariants.distinct
 
-    // TODO there could be a match all
-    def checkExhaustiveness() =
-      val allVariants = variants.head.tpe match {
-        case d: DataType => d.constructors
-        case r: Record => List(r.constructor)
-        case _ => ???
-      }
-      val missingCases = allVariants.toSet -- variants.toSet
-      if (missingCases.nonEmpty && !hasCatchAll) Context.abort(pp"Non-exhaustive pattern match. Missing cases: ${missingCases}")
-
-    checkExhaustiveness()
-
     val clausesFor = collection.mutable.Map.empty[Constructor, Vector[Clause]]
     var defaults = Vector.empty[Clause]
 
