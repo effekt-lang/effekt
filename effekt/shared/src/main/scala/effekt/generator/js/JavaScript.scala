@@ -5,7 +5,8 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.*
-import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, Wildcard }
+import effekt.lifted.EvidenceSymbol
+import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, TermSymbol, TypeConstructor, TypeSymbol, Wildcard }
 import effekt.util.paths.*
 import effekt.{ Compiled, CoreTransformed, symbols }
 import kiama.output.ParenPrettyPrinter
@@ -98,6 +99,7 @@ trait JavaScript extends Backend {
   val `exec` = JSName("exec")
   val `fresh` = JSName("fresh")
   val `tag` = JSName("__tag")
+  val `name` = JSName("__name")
   val `data` = JSName("__data")
 
   def nameDef(id: Symbol): JSName = JSName(jsEscape(id match {
@@ -225,13 +227,6 @@ trait JavaScript extends Backend {
     case core.Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
 
-    case core.Match(sc, clauses, default) =>
-    //      val cs = js.ArrayLiteral(clauses map {
-    //        case (p, b) => js.Object(`pattern` -> toJS(p), `exec` -> toJS(b))
-    //      })
-    //      monadic.Builtin("match", toJS(sc), cs)
-      monadic.Builtin("hole")
-
     case core.Hole =>
       monadic.Builtin("hole")
 
@@ -289,6 +284,24 @@ trait JavaScript extends Backend {
       val (stmts, ret) = toJSStmt(body)
       (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
 
+    // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
+    case core.Match(sc, clauses, default) =>
+      val scrutinee = toJS(sc)
+
+      val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
+        // f17()
+        case (c: symbols.Constructor, block) if c.fields.isEmpty =>
+          (tagFor(c), js.Return(js.Call(toJS(block), Nil)))
+
+        // f17.apply(null, sc.__data)
+        case (c: symbols.Constructor, block) =>
+          (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
+      }, None)
+
+      val (stmts, ret) = default.map(toJSStmt).getOrElse((Nil, monadic.Pure(js.RawExpr("null"))))
+      (sw :: stmts, ret)
+
+
     case other =>
       (Nil, toJSMonadic(other))
   }
@@ -296,13 +309,28 @@ trait JavaScript extends Backend {
   def generateConstructor(ctor: symbols.Constructor): js.Stmt =
     generateConstructor(ctor, ctor.fields)
 
-  def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt =
+  def tagFor(c: symbols.Constructor): js.Expr = c.tpe match {
+    case TypeConstructor.DataType(name, tparams, constructors) => js.RawExpr(constructors.indexOf(c).toString)
+    case TypeConstructor.Record(name, tparams, constructor) => js.RawExpr("0")
+    case TypeConstructor.ExternType(name, tparams) => ???
+  }
+
+  def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt = {
+
+    // TODO we really need to stop using records for capabilities in core!
+    val tagValue = ctor match {
+      case c: symbols.Constructor => tagFor(c)
+      case _ => js.RawExpr("0") // this case is only necessary since records are also used to represent capabilities
+    }
+
     js.Function(
       nameDef(ctor),
       fields.map { f => nameDef(f) },
       List(js.Return(js.Object(List(
-        `tag`  -> JsString(nameDef(ctor).name), // TODO improve
+        `tag`  -> tagValue,
+        `name` -> JsString(nameDef(ctor).name), // TODO improve
         `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f)) })
       ) ++ fields.map { f => (nameDef(f), Variable(nameDef(f))) })))
     )
+  }
 }

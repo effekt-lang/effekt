@@ -93,6 +93,8 @@ enum Stmt {
   // e.g. const x = <EXPR>
   case Const(name: JSName, binding: Expr)
 
+  case Switch(scrutinee: Expr, branches: List[(Expr, Stmt)], default: Option[Stmt])
+
   // e.g. function <NAME>(x, y) { <STMT>* }
   case Function(name: JSName, params: List[JSName], stmts: List[Stmt])
 

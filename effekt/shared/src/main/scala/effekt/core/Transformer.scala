@@ -442,6 +442,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     }
 
+    // TODO order variants by declaration of constructor.
     val branches = variants.toList.map { v =>
       // TODO only add defaultVar as `self`, if it is free in the body.
       val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
