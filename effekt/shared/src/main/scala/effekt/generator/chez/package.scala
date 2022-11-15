@@ -31,6 +31,7 @@ case class RecordNames(sym: Symbol) {
   val uid = ChezName(name)
   val typeName = ChezName(basename + "$Type" + id)
   val predicate = ChezName(name + "?")
+  val matcher = ChezName("match-" + name)
   val constructor = sym match {
     case _: effekt.symbols.Interface => ChezName(s"make-${name}")
     case _ => uid
@@ -39,6 +40,9 @@ case class RecordNames(sym: Symbol) {
 
 // https://www.scheme.com/csug8/objects.html
 // https://scheme.com/tspl4/records.html
+//
+// There is also a paper by Andrey and Kent on records in Chez Scheme:
+//    https://andykeep.com/pubs/scheme-12b.pdf
 def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
 
   val did = id match {
@@ -54,12 +58,11 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
   // Record
   val record = chez.Record(names.typeName, names.constructor, names.predicate, names.uid, fields map nameDef)
 
-  // Matcher
-  def matcher = {
+  // Matcher (old implementation generating a combinator)
+  def matcherFull = {
 
     var fresh = 0;
     val fieldNames = fields map { _ => fresh += 1; ChezName("p" + fresh) }
-    val matcherName = ChezName("match-" + names.name)
     val sc = ChezName("sc")
     val matched = ChezName("matched")
     val failed = ChezName("failed")
@@ -89,12 +92,25 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
         }
         matchFields(fieldNames zip fields)
     }
-    chez.Function(matcherName, fieldNames,
+    chez.Function(names.matcher, fieldNames,
           chez.Lambda(List(sc, matched, failed, k),
             chez.If(
               chez.Call(names.predicate, Variable(sc)),
               matcherBody,
               chez.Call(failed))))
+  }
+
+  // The matcher only applies the given block with the extracted fields
+  // (define (<MATCHER-NAME> sc block) (block (field-1 sc) (field-2 sc) ...)))
+  def matcher = {
+    val sc = ChezName("sc")
+    val block = ChezName("block")
+
+    val selectors = fields map { field =>
+      chez.Call(nameRef(field), Variable(sc))
+    }
+    chez.Function(names.matcher, List(sc, block),
+      chez.Call(Variable(block), selectors))
   }
 
   List(record, matcher)

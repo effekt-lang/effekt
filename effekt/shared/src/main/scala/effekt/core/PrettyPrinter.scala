@@ -67,13 +67,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     else
       toDocStmt(s)
 
-  def toDoc(p: Pattern): Doc = p match {
-    case IgnorePattern()           => "_"
-    case Pattern.LiteralPattern(l) => toDoc(l)
-    case AnyPattern()              => "*"
-    case TagPattern(id, patterns)  => toDoc(id.name) <> parens(hsep(patterns map toDoc, comma))
-  }
-
   def toDoc(handler: Handler): Doc = {
     val handlerName = toDoc(handler.id.name)
     val clauses = handler.clauses.map {
@@ -137,9 +130,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Region(body) =>
       "region" <+> toDoc(body)
 
-    case Match(sc, clauses) =>
-      val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p) <+> "=>" <+> toDoc(b) })) <> line)
-      toDoc(sc) <+> "match" <+> cs
+    case Match(sc, clauses, default) =>
+      val cs = braces(nest(line <> vsep(clauses map { case (p, b) => "case" <+> toDoc(p.name) <+> toDoc(b) })) <> line)
+      val d = default.map { body => space <> "else" <+> braces(nest(line <> toDoc(body))) }.getOrElse { emptyDoc }
+      toDoc(sc) <+> "match" <+> cs <> d
 
     case Hole =>
       "<>"

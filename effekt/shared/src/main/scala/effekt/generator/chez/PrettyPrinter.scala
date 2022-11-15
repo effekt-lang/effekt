@@ -30,9 +30,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Lambda(params, body)    => parens("lambda" <+> parens(params.map(toDoc)) <> toDoc(body))
     case If(cond, thn, els)      => parens("if" <+> toDoc(cond) <> nest(line <> toDoc(thn)) <> nest(line <> toDoc(els)))
     case Variable(name)          => toDoc(name)
-    case Match(sc, clauses) => parens("pattern-match" <+> toDoc(sc) <> nest(line <> parens(align(vcat(clauses.map {
-      case (pattern, branch) => brackets(toDoc(pattern) <+> toDoc(branch))
-    })))))
+    case Cond(clauses, default)  =>
+      val els = default.toList.map(d => brackets("else" <+> toDoc(d)))
+      parens("cond" <+> nest(line <> align(vcat(clauses.map {
+        case (pattern, branch) => brackets(group(toDoc(pattern) <+> toDoc(branch)))
+      } ++ els))))
     case Handle(handlers, body) => parens("handle" <+> parens(align(vcat(handlers map toDoc))) <+> nest(line <> toDoc(body)))
   }
 

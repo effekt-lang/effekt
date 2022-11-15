@@ -51,11 +51,9 @@ spreadsheet:
 ```
 def example1(key: Key): Val / { Need, NeedInput } = {
     println(key);
-    key match {
-        case "B1" => do Need("A1") + do Need("A2")
-        case "B2" => do Need("B1") * 2
-        case _ => do NeedInput(key)
-    }
+    if (key == "B1") do Need("A1") + do Need("A2")
+    else if (key == "B2") do Need("B1") * 2
+    else do NeedInput(key)
 }
 ```
 
@@ -115,11 +113,9 @@ A second example needs the same key twice.
 // Needing the same key twice
 def example2(key: Key) = {
     println(key);
-    key match {
-        case "B1" => do Need("A1") + do Need("A2")
-        case "B2" => do Need("B1") * do Need("B1")
-        case _ => do NeedInput(key)
-    }
+    if (key == "B1") do Need("A1") + do Need("A2")
+    else if (key == "B2") do Need("B1") * do Need("B1")
+    else do NeedInput(key)
 }
 ```
 

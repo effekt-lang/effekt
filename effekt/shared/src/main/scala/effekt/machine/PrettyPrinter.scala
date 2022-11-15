@@ -52,10 +52,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Construct(name, tag, arguments, rest) =>
       "let" <+> name <+> "=" <+> tag.toString <> parens(arguments map toDoc) <> ";" <> line <> toDoc(rest)
 
-    // TODO add tags to variants.
-    case Switch(scrutinee, clauses) =>
-      val cls = clauses.zipWithIndex.map { case (cl, idx) => idx.toString <+> ":" <+> toDoc(cl) }
-      "switch" <+> scrutinee <+> line <> indent(vcat(cls))
+    case Switch(scrutinee, clauses, default) =>
+      val cls = clauses.map { case (idx, cl) => idx.toString <+> ":" <+> toDoc(cl) }
+      val d = default.map(d => space <> "else" <+> toDoc(d)).getOrElse(emptyDoc)
+      "switch" <+> scrutinee <+> line <> indent(vcat(cls)) <> d
 
     case New(name, operations, rest) =>
       "let" <+> name <+> "=" <+> "new" <+> block(operations map toDoc) <> ";" <> line <> toDoc(rest)

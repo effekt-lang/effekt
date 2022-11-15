@@ -2,7 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ Name, Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, InterfaceType, Operation, Type, ValueType, FunctionType, BlockType, TrackedParam }
+import effekt.symbols.{ BlockSymbol, BlockType, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType }
 
 sealed trait Tree
 /**
@@ -68,13 +68,7 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Return(e: Expr) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Pattern, BlockLit)]) extends Stmt
-
-sealed trait Pattern extends Tree
-case class IgnorePattern() extends Pattern
-case class AnyPattern() extends Pattern
-case class TagPattern(tag: Symbol, patterns: List[Pattern]) extends Pattern
-case class LiteralPattern[T](l: Literal[T]) extends Pattern
+case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
 
 case class Include(contents: String, rest: Stmt) extends Stmt
 
@@ -106,7 +100,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case While(cond, body) => freeVariables(cond) ++ freeVariables(body)
   case Return(e) => freeVariables(e)
-  case Match(scrutinee, clauses) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) }
+  case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
   case Include(contents, rest) => freeVariables(rest)
   case Hole => Set.empty
   case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)

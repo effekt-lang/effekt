@@ -59,6 +59,7 @@ export Declaration.*
  * The parameters (x1, etc.) are binding occurrences.
  *
  *    Gamma ++ Delta |- s
+ *    Gamma ++ Delta |- s
  *    -----------------------
  *    Gamma |- { Delta => s }
  *
@@ -119,7 +120,7 @@ enum Statement {
   /**
    * e.g. switch v { (x1, ...) => s1; ... }
    */
-  case Switch(scrutinee: Variable, clauses: List[Clause])
+  case Switch(scrutinee: Variable, clauses: List[(Int, Clause)], default: Option[Clause])
 
   /**
    * e.g. let x = new { (x1, ...) => s1; ... }; s

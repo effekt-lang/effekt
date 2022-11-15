@@ -6,6 +6,7 @@ import effekt.context.{ Annotations, Context, ContextOps }
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
+import effekt.source.MatchPattern
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -195,15 +196,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val exprTpe = Context.inferredTypeOf(tree)
       Context.bind(exprTpe, While(insertBindings { Return(transformAsPure(cond)) }, transform(body)))
 
-    case source.Match(sc, clauses) =>
-      val scrutinee = transformAsPure(sc)
-
-      val cs: List[(Pattern, BlockLit)] = clauses.map {
-        case cl @ source.MatchClause(pattern, body) =>
-          val (p, ps) = transform(pattern)
-          (p, BlockLit(ps, transform(body)))
-      }
-      Context.bind(Context.inferredTypeOf(tree), Match(scrutinee, cs))
+    case source.Match(sc, cs) =>
+      // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
+      val scrutinee: ValueVar = Context.bind(Context.inferredTypeOf(sc), transformAsPure(sc))
+      val clauses = cs.map(c => preprocess(scrutinee.id, c))
+      val compiledMatch = Context.at(tree) { compileMatch(clauses) }
+      Context.bind(Context.inferredTypeOf(tree), compiledMatch)
 
     case source.TryHandle(prog, handlers) =>
       val caps = handlers.map { h =>
@@ -326,15 +324,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol)
   def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol)
 
-  def transform(tree: source.MatchPattern)(using Context): (Pattern, List[core.ValueParam]) = tree match {
-    case source.IgnorePattern()    => (core.IgnorePattern(), Nil)
-    case source.LiteralPattern(l)  => (core.LiteralPattern(transformLit(l)), Nil)
-    case p @ source.AnyPattern(id) => (core.AnyPattern(), List(ValueParam(p.symbol)))
-    case p @ source.TagPattern(id, ps) =>
-      val (patterns, params) = ps.map(transform).unzip
-      (core.TagPattern(p.definition, patterns), params.flatten)
-  }
-
   def freshWildcardFor(e: source.Tree)(using Context): Wildcard = {
     val x = Wildcard(Context.module)
     Context.inferredTypeOption(e) match {
@@ -348,6 +337,132 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val (body, bindings) = Context.withBindings { stmt }
     Context.reifyBindings(body, bindings)
   }
+
+  // Match Compiler
+  // --------------
+  // The implementation of the match compiler follows closely the short paper:
+  //   Jules Jacob
+  //   How to compile pattern matching
+  //   https://julesjacobs.com/notes/patternmatching/patternmatching.pdf
+  //
+  // There also is a more advanced Rust implementation that we could look at:
+  //   https://gitlab.com/yorickpeterse/pattern-matching-in-rust/-/tree/main/jacobs2021
+
+  // case pats => label(args...)
+  private case class Clause(patterns: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
+
+  // Uses the bind effect to bind the right hand sides of clauses!
+  private def preprocess(sc: ValueSymbol, clause: source.MatchClause)(using Context): Clause = {
+    def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
+      case p @ source.AnyPattern(id) => List(p.symbol)
+      case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)
+      case _ => Nil
+    }
+    val params = boundVars(clause.pattern).map { p => (p, Context.valueTypeOf(p)) }
+    val body = transform(clause.body)
+    val blockLit = BlockLit(params.map { case (p, tpe) => core.ValueParam(p, tpe) }, body)
+    val returnType = Context.inferredTypeOf(clause.body)
+    val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
+
+    // TODO Do we also need to annotate the capture???
+    val joinpoint = Context.bind(blockTpe, blockLit)
+    Clause(Map(sc -> clause.pattern), joinpoint.id, params.map { case (p, _) => p })
+  }
+
+  /**
+   * The match compiler works with
+   * - a sequence of clauses that represent alternatives (disjunction)
+   * - each sequence contains a list of patterns that all have to match (conjunction).
+   */
+  private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
+
+    if (clauses.isEmpty) Context.error("Non-exhaustive pattern match.")
+
+    val normalizedClauses = clauses.map(normalize)
+
+    def jumpToBranch(target: BlockSymbol, args: List[ValueSymbol]) =
+      core.App(core.BlockVar(target), Nil, args.map(a => core.ValueVar(a)))
+
+    // (1) Check whether we are already successful
+    val Clause(patterns, target, args) = normalizedClauses.head
+    if (patterns.isEmpty) { return jumpToBranch(target, args) }
+
+    def branchingHeuristic =
+      patterns.keys.maxBy(v => normalizedClauses.count {
+        case Clause(ps, _, _) => ps.contains(v)
+      })
+
+    // (2) Choose the variable to split on
+    val splitVar = branchingHeuristic
+
+    def mentionedVariants = normalizedClauses
+      .flatMap(_.patterns.get(splitVar))
+      .collect { case p : source.TagPattern => p.definition }
+
+    val variants = mentionedVariants.distinct
+
+    val clausesFor = collection.mutable.Map.empty[Constructor, Vector[Clause]]
+    var defaults = Vector.empty[Clause]
+
+    def addClause(c: Constructor, cl: Clause): Unit =
+      val clauses = clausesFor.getOrElse(c, Vector.empty)
+      clausesFor.update(c, clauses :+ cl)
+
+    def addDefault(cl: Clause): Unit =
+      defaults = defaults :+ cl
+
+    def freshFields(c: Constructor) = c.fields.map { f =>
+      val tmp = Tmp.apply(Context.module)
+      Context.assignType(tmp, f.returnType)
+      tmp
+    }
+    val varsFor: Map[Constructor, List[Tmp]] = variants.map { v => v -> freshFields(v) }.toMap
+
+    normalizedClauses.foreach {
+      case c @ Clause(patterns, target, args) => patterns.get(splitVar) match {
+        case Some(p @ source.TagPattern(id, ps)) =>
+          val constructor = p.definition
+          addClause(constructor, Clause(patterns - splitVar ++ varsFor(constructor).zip(ps), target, args))
+        case Some(_) => Context.panic("Should not happen")
+        case None =>
+          // Clauses that don't match on that var are duplicated.
+          // So we want to choose our branching heuristic to minimize this
+          addDefault(c)
+          // THIS ONE IS NOT LINEAR
+          variants.foreach { v => addClause(v, c) }
+      }
+    }
+
+    // TODO order variants by declaration of constructor.
+    val branches = variants.toList.map { v =>
+      // TODO only add defaultVar as `self`, if it is free in the body.
+      val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
+      val params = varsFor(v).map { tmp => ValueParam(tmp) }
+      val blockLit: BlockLit = BlockLit(params, body)
+      (v, blockLit)
+    }
+
+    val default = if defaults.isEmpty then None else Some(compileMatch(defaults))
+
+    core.Match(ValueVar(splitVar), branches, default)
+  }
+
+  /**
+   * Substitutes IdPatterns and removes wildcards (and literal patterns -- which are already ruled out by Typer);
+   * only TagPatterns are left.
+   */
+  private def normalize(clause: Clause)(using Context): Clause = {
+    val Clause(patterns, target, args) = clause
+    val substitution = patterns.collect { case (v, source.AnyPattern(id)) => id.symbol -> v }
+    val tagPatterns = patterns.collect { case (v, p: source.TagPattern) => v -> p }
+
+    // HERE WE COULD GATHER AN EXPLICIT SUBSTITUTION ON THE RHS
+    Clause(tagPatterns, target, args.map(v => substitution.getOrElse(v, v)))
+  }
+
+
+  // Helpers
+  // -------
 
   // Helpers to constructed typed trees
   def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
@@ -417,6 +532,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 private[core] enum Binding {
   case Val(name: Tmp, tpe: symbols.ValueType, binding: Stmt)
   case Let(name: Tmp, tpe: symbols.ValueType, binding: Expr)
+  case Def(name: TmpBlock, tpe: symbols.BlockType, binding: Block)
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
@@ -437,7 +553,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * @param tpe the type of the bound statement
    * @param s the statement to be bound
    */
-  private[core] def bind(tpe: symbols.ValueType, s: Stmt): Pure = {
+  private[core] def bind(tpe: symbols.ValueType, s: Stmt): ValueVar = {
 
     // create a fresh symbol and assign the type
     val x = Tmp(module)
@@ -449,7 +565,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     ValueVar(x)
   }
 
-  private[core] def bind(tpe: symbols.ValueType, s: Expr): Pure = {
+  private[core] def bind(tpe: symbols.ValueType, s: Expr): ValueVar = {
 
     // create a fresh symbol and assign the type
     val x = Tmp(module)
@@ -459,6 +575,18 @@ trait TransformerOps extends ContextOps { Context: Context =>
     bindings += binding
 
     ValueVar(x)
+  }
+
+  private[core] def bind(tpe: symbols.BlockType, b: Block): BlockVar = {
+
+    // create a fresh symbol and assign the type
+    val x = TmpBlock(module)
+    assignType(x, tpe)
+
+    val binding = Binding.Def(x, tpe, b)
+    bindings += binding
+
+    BlockVar(x)
   }
 
   private[core] def withBindings[R](block: => R): (R, ListBuffer[Binding]) = Context in {
@@ -479,6 +607,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
       case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
       case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
       case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
+      case (Binding.Def(x, tpe, b), body) => Def(x, tpe, b, body)
     }
   }
 }

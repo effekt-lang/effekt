@@ -463,9 +463,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
   def checkPattern(sc: ValueType, pattern: MatchPattern)(using Context, Captures): Map[Symbol, ValueType] = Context.focusing(pattern) {
     case source.IgnorePattern()    => Map.empty
     case p @ source.AnyPattern(id) => Map(p.symbol -> sc)
-    case p @ source.LiteralPattern(lit) =>
-      lit.checkAgainst(sc)
-      Map.empty
+    case p @ source.LiteralPattern(lit) => Context.abort("Matching literals is not supported at the moment.")
+      //      lit.checkAgainst(sc)
+      //      Map.empty
     case p @ source.TagPattern(id, patterns) =>
 
       // symbol of the constructor we match against

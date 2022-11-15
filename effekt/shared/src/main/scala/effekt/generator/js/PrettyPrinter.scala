@@ -33,6 +33,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ExprStmt(expr)                => toDoc(expr) <> ";"
     case Const(id, expr)               => "const" <+> toDoc(id) <+> "=" <+> toDoc(expr) <> ";"
     case Function(name, params, stmts) => "function" <+> toDoc(name) <> parens(params map toDoc) <+> jsBlock(stmts map toDoc)
+    case Switch(sc, branches, default) => "switch" <+> parens(toDoc(sc)) <+> jsBlock(branches.map {
+      case (tag, body) => "case" <+> toDoc(tag) <> ":" <+> toDoc(body)
+    } ++ default.toList.map { body => "default:" <+> toDoc(body) })
   }
 
   // some helpers
