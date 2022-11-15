@@ -1,0 +1,8 @@
+type Void {}
+
+def undef(x: Option[Void]): Option[Int] = x match {
+  case None() => None()
+  case Some(v) => v match {}
+}
+
+def main() = ()
