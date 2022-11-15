@@ -11,6 +11,8 @@ def freeVariables(clause: Clause): Set[Variable] =
     case Clause(parameters, body) => freeVariables(body) -- parameters.toSet
   }
 
+def freeVariables(taggedClause: (Int, Clause)): Set[Variable] = freeVariables(taggedClause._2)
+
 def freeVariables(statement: Statement): Set[Variable] =
   statement match {
     case Def(_, _, rest) =>
@@ -21,8 +23,8 @@ def freeVariables(statement: Statement): Set[Variable] =
       freeVariables(rest) -- bindings.map(_._1).toSet ++ bindings.map(_._2).toSet
     case Construct(name, tag, values, rest) =>
       Set.from(values) ++ (freeVariables(rest) -- Set(name))
-    case Switch(value, clauses) =>
-      Set(value) ++ freeVariables(clauses)
+    case Switch(value, clauses, default: Option[Clause]) =>
+      Set(value) ++ clauses.flatMap { case (tag, branch) => freeVariables(branch) } ++ default.map(freeVariables).getOrElse(Set.empty)
     case New(name, clauses, rest) =>
       freeVariables(clauses) ++ (freeVariables(rest) -- Set(name))
     case Invoke(value, tag, values) =>

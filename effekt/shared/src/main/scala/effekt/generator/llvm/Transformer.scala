@@ -77,40 +77,49 @@ object Transformer {
         eraseValues(List(variable), freeVariables(rest))
         transform(rest)
 
-      case machine.Switch(value, clauses) =>
-        shareValues(List(value), freeVariables(clauses))
+      case machine.Switch(value, clauses, default) =>
+        shareValues(List(value), clauses.flatMap(freeVariables).toSet)
 
         val tagName = freshName("tag")
         val objName = freshName("obj")
         emit(ExtractValue(tagName, transform(value), 0))
         emit(ExtractValue(objName, transform(value), 1))
 
-        val freeInClauses = freeVariables(clauses).toList
+        val freeInClauses = clauses.flatMap(freeVariables)
 
         val stackPointer = getStackPointer();
-        val labels = clauses.map {
-          case clause =>
-            implicit val BC = BlockContext();
-            BC.stackPointer = stackPointer;
+        def labelClause(clause: machine.Clause): String = {
+          implicit val BC = BlockContext()
+          BC.stackPointer = stackPointer
 
-            consumeObject(LocalReference(objType, objName), clause.parameters, freeVariables(clause.body));
-            eraseValues(freeInClauses, freeVariables(clause));
+          consumeObject(LocalReference(objType, objName), clause.parameters, freeVariables(clause.body));
+          eraseValues(freeInClauses, freeVariables(clause));
 
-            val terminator = transform(clause.body);
+          val terminator = transform(clause.body);
 
-            val instructions = BC.instructions; BC.instructions = null;
+          val instructions = BC.instructions;
+          BC.instructions = null;
 
+          val label = freshName("l");
+          emit(BasicBlock(label, instructions, terminator))
+          label
+        }
+
+        val defaultLabel = default match {
+          case Some(clause) => labelClause(clause)
+          case None =>
             val label = freshName("l");
-            emit(BasicBlock(label, instructions, terminator));
+            emit(BasicBlock(label, List(), RetVoid()))
             label
         }
-        labels.zipWithIndex match {
-          case Nil =>
-            // TODO more informative way to end program. Clean up too?
-            RetVoid()
-          case (label, _) :: labels =>
-            Switch(LocalReference(IntegerType64(), tagName), label, labels.map { case (l, i) => (i, l) })
+
+        val labels = clauses.map {
+          case (tag, clause) => (tag, labelClause(clause))
         }
+
+        assert(labels.nonEmpty, "Should not be possible. In the future also support matching on void")
+
+        Switch(LocalReference(IntegerType64(), tagName), defaultLabel, labels)
 
       case machine.New(variable, List(clause), rest) =>
         // TODO multiple methods (see case below)

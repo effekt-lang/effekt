@@ -175,38 +175,19 @@ object Transformer {
 
       case lifted.If(cond, thenStmt, elseStmt) =>
         transform(cond).run { value =>
-          Switch(value, List(Clause(List(), transform(elseStmt)), Clause(List(), transform(thenStmt))))
+          Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
         }
 
       case lifted.Match(scrutinee, clauses, default) =>
-        val constructors = clauses match {
-            case (symbols.Constructor(_, _, _, tpe), _) :: _ => tpe match {
-              case symbols.DataType(_, _, constructors) => constructors
-              case symbols.Record(_, _, constructor) => List(constructor)
-              case symbols.ExternType(_, _) => ??? // TODO: can this happen?
-            }
-         case _ => ??? // TODO: can there be an empty set of clauses? How do we get the type then?
-        };
+        val transformedClauses = clauses.map { case (constr, lifted.BlockLit(params, body)) =>
+          getTagFor(constr) -> Clause(params.map(transform), transform(body))
+        }
+        val transformedDefault = default.map { clause =>
+          Clause(List(), transform(clause))
+        }
+
         transform(scrutinee).run { value =>
-          Switch(value, constructors.map {
-                   constructor => clauses.find { _._1 == constructor } match {
-                     case Some((_, lifted.BlockLit(params, body))) =>
-                       Clause(params.map(transform), transform(body))
-                     case None =>
-                       default match {
-                         case Some(body) =>
-                           Clause(
-                             constructor.fields.map {
-                               field => Variable(freshName("_"), transform(field.param.tpe.getOrElse {
-                                 ??? // TODO: when is this param None? Why is there a name as well?
-                               }))
-                             },
-                             transform(body))
-                         case None => ???
-                       }
-                   }
-                 }
-          )
+          Switch(value, transformedClauses, transformedDefault)
         }
 
       case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
@@ -322,7 +303,7 @@ object Transformer {
       val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }
       transform(target).flatMap { value =>
         Binding { k =>
-          Switch(value, List(Clause(variables, k(variables(fieldIndex)))))
+          Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)
         }
       }
 
