@@ -89,9 +89,9 @@ trait JavaScript extends Backend {
 
   def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
-  def jsModuleName(path: String): String = "$" + path.replace('/', '_')
+  def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 
-  def jsModuleFile(path: String): String = path.replace('/', '_') + ".js"
+  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
 
   def toJSName(s: String): JSName = JSName(jsEscape(s))
 
