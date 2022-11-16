@@ -8,6 +8,5 @@ def main() = try {
     println(do Age(Person("Peter", 12)));
     println(do Age(Person("Mary", 23)))
 } with Age {
-    case Person("Peter", age) => resume(age + 1)
     case Person(name, age) => resume(age)
 }

@@ -38,12 +38,13 @@ enum Expr {
   // e.g. (if COND THEN ELSE)
   case If(cond: Expr, thn: Expr, els: Expr)
 
+  // e.g. (cond ([COND1 BRANCH1]... [else DEFAULT]))
+  case Cond(clauses: List[(Expr, Expr)], default: Option[Expr])
+
   // e.g x
   case Variable(name: ChezName)
 
-  // match and handle are both macros, stable across Chez variants, so we add them to the language.
-  case Match(scrutinee: Expr, clauses: List[(Expr, Expr)])
-
+  // handle is a macro, stable across Chez variants, so we add it to the language.
   case Handle(handlers: List[Handler], body: Expr)
 }
 export Expr.*
@@ -223,9 +224,7 @@ object Tree {
       case Let_*(bindings, body) => Let_*(bindings map rewrite, rewrite(body))
       case Lambda(params, body) => Lambda(params, rewrite(body))
       case If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-      case Match(scrutinee, clauses) => Match(rewrite(scrutinee), clauses map {
-        case (p, e) => (rewrite(p), rewrite(e))
-      })
+      case Cond(clauses, default) => Cond(clauses map { case (c, t) => (rewrite(c), rewrite(t)) }, default map rewrite)
       case Handle(handlers, body) => Handle(handlers map rewrite, rewrite(body))
     }
 
@@ -278,8 +277,8 @@ object Tree {
 
       case Call(callee, arguments) => combineAll(query(callee) :: arguments.map(query))
       case If(cond, thn, els) => combineAll(List(query(cond), query(thn), query(els)))
+      case Cond(clauses, default) => combineAll(default.toList.map(query) ++ clauses.map { case (p, e) => combine(query(p), query(e)) })
 
-      case Match(scrutinee, clauses) => combineAll(query(scrutinee) :: clauses.map { case (p, e) => combine(query(p), query(e)) })
       case Handle(handlers, body) =>
         combineAll(query(body) :: handlers.map {
           case Handler(name, ops) => combineAll(ops map {
