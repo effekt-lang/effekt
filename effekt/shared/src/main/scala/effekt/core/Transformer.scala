@@ -377,7 +377,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
 
     // matching on void will result in this case
-    if (clauses.isEmpty) return core.Return(core.UnitLit()) // TODO return void
+    if (clauses.isEmpty) return core.Hole
 
     val normalizedClauses = clauses.map(normalize)
 
