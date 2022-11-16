@@ -28,7 +28,7 @@ case class Label(name: String, environment: Environment)
  *
  *    List(x -> y)
  *
- * will replace all occurrences of x by y. Here x is a binding occurrence 
+ * will replace all occurrences of x by y. Here x is a binding occurrence
  * and y is a bound occurrence.
  */
 type Substitution = List[(Variable, Variable)]
@@ -52,22 +52,47 @@ export Declaration.*
 
 
 /**
- * Clauses are parametrized statements 
- * 
+ * Clauses are parametrized statements
+ *
  * e.g. { (x1...) => s }
- * 
+ *
  * The parameters (x1, etc.) are binding occurrences.
- * 
+ *
  *    Gamma ++ Delta |- s
  *    -----------------------
  *    Gamma |- { Delta => s }
- * 
+ *
  * In the typing rule Delta corresponds to [[parameters]].
  */
 case class Clause(parameters: Environment, body: Statement)
 
+
 /**
  * Statements
+ *
+ * ----------[[ effekt.machine.Statement ]]----------
+ *
+ *   ─ [[ Statement ]]
+ *     │─ [[ Def ]]
+ *     │─ [[ Jump ]]
+ *     │─ [[ Substitute ]]
+ *     │─ [[ Construct ]]
+ *     │─ [[ Switch ]]
+ *     │─ [[ New ]]
+ *     │─ [[ Invoke ]]
+ *     │─ [[ PushFrame ]]
+ *     │─ [[ Return ]]
+ *     │─ [[ NewStack ]]
+ *     │─ [[ PushStack ]]
+ *     │─ [[ PopStacks ]]
+ *     │─ [[ ForeignCall ]]
+ *     │─ [[ ComposeEvidence ]]
+ *     │─ [[ LiteralInt ]]
+ *     │─ [[ LiteralDouble ]]
+ *     │─ [[ LiteralUTF8String ]]
+ *     │─ [[ LiteralEvidence ]]
+ *
+ * --------------------------------------------------
  */
 enum Statement {
 

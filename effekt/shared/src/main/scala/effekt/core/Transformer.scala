@@ -77,8 +77,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = f.symbol
       Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
 
-    case e @ source.ExternInclude(path) =>
-      Include(e.contents, rest())
+    case e @ source.ExternInclude(path, contents, _) =>
+      Include(contents, rest())
 
     // For now we forget about all of the following definitions in core:
     case d: source.ExternResource => rest()
@@ -110,12 +110,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       transform(b)
   }
 
-  def transformLit[T](tree: source.Literal[T])(using Context): Literal[T] = tree match {
-    case source.UnitLit()         => UnitLit()
-    case source.IntLit(value)     => IntLit(value)
-    case source.BooleanLit(value) => BooleanLit(value)
-    case source.DoubleLit(value)  => DoubleLit(value)
-    case source.StringLit(value)  => StringLit(value)
+  def transformLit(tree: source.Literal)(using Context): Literal[_] = tree match {
+    case source.Literal(value: Unit, _)    => UnitLit()
+    case source.Literal(value: Int, _)     => IntLit(value)
+    case source.Literal(value: Boolean, _) => BooleanLit(value)
+    case source.Literal(value: Double, _)  => DoubleLit(value)
+    case source.Literal(value: String, _)  => StringLit(value)
+    case source.Literal(value, _)          => Context.panic(s"Unknown literal value: ${value}")
   }
 
   def transformUnbox(tree: source.Term)(implicit C: Context): Block =
@@ -168,7 +169,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: BlockSymbol => transformBox(tree)
     }
 
-    case l: source.Literal[t] => transformLit(l)
+    case l: source.Literal => transformLit(l)
 
     case source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), selector.symbol)
