@@ -533,7 +533,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val matchExpr: P[Term] =
-    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ Match.apply
+    (accessExpr <~ `match` ~/ `{`) ~/ (many(clause) <~ `}`) ^^ Match.apply
 
   lazy val doExpr: P[Term] =
     `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {
