@@ -1,8 +1,13 @@
 type Void {}
 
-def undef(x: Option[Void]): Option[Int] = x match {
-  case None() => None()
-  case Some(v) => v match {}
+type Either[A, B] {
+  Left(a: A)
+  Right(b: B)
+}
+
+def elim[A](x: Either[A, Void]): A = x match {
+  case Left(a) => a
+  case Right(v) => v match {}
 }
 
 def main() = ()
