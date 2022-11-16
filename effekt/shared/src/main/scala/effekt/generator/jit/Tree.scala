@@ -53,7 +53,7 @@ sealed trait Terminator extends Tree
 case class Return(args: RegList) extends Terminator
 case class Jump(target: BlockLabel) extends Terminator
 case class Resume(cont: Register) extends Terminator
-case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause]) extends Terminator
+case class Match(adt_type: Int, scrutinee: Register, clauses: List[Clause], default: Clause) extends Terminator
 case class Invoke(receiver: Register, tag: MethodTag, args: RegList) extends Terminator
 
 enum Type extends Tree {

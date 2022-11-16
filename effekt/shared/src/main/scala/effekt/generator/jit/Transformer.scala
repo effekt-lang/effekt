@@ -34,7 +34,9 @@ object Transformer {
         val codatatypes = ProgC.codatas.toList;
 
         val compiledProgram = Program(entryBlock :: ProgC.basicBlocks.toList, datatypes, codatatypes, ProgC.frameSize);
-        numberBlocks(ProgC.blockSymbols.toMap, compiledProgram)
+        val blockIndexMap = ProgC.blockSymbols.toMap +
+          ("(PANIC)" -> BlockIndex(ProgC.basicBlocks.length + 10)) // For exiting the program, jump behind the last block
+        numberBlocks(blockIndexMap, compiledProgram)
     }
 
   def transform(label: String, env: Environment, body: machine.Statement)(using ProgramContext): BasicBlock = {
@@ -96,7 +98,7 @@ object Transformer {
             val (closesOver, params, block) = transformInline(clause, reuse=false);
             val label = emit(block);
             Clause(params, label)
-          })
+          }, Clause(RegList(Map.empty), BlockName("(PANIC)")))
         case Type.Integer() => {
           val List(elseClause, thenClause) = clauses;
           val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);

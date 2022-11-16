@@ -25,10 +25,14 @@ object BlockNumbering {
   def numberBlocks(blockIndices: Map[String, BlockIndex])(terminator: Terminator): Terminator = {
     terminator match
       case Jump(BlockName(target)) => Jump(blockIndices(target))
-      case Match(adt_type, scrutinee, clauses) => Match(adt_type, scrutinee, clauses.map({
-        case Clause(args, BlockName(target)) => Clause(args, blockIndices(target))
-        case c => c
-      }))
+      case Match(adt_type, scrutinee, clauses, default) => Match(adt_type, scrutinee, clauses.map({
+          case Clause(args, BlockName(target)) => Clause(args, blockIndices(target))
+          case c => c
+        }),
+        default match {
+          case Clause(args, BlockName(target)) => Clause(args, blockIndices(target))
+          case c => c
+        })
       case _ => terminator
   }
 }
