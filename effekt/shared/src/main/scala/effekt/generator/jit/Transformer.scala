@@ -91,16 +91,28 @@ object Transformer {
           case _ => ???
         }
       }
-      case machine.Switch(v @ machine.Variable(name, typ), clauses) => {
+      case machine.Switch(v @ machine.Variable(name, typ), machineClauses, default) => {
+        val clauseMap = machineClauses.toMap[Int, machine.Clause]
+        val defaultClause = default.getOrElse(machine.Clause(List(),
+          machine.Statement.Jump(machine.Label("(PANIC)", List()))))
+
         transform(typ) match {
         case Type.Datatype(adtType) =>
-          Match(adtType, transformArgument(v).id, for (clause <- clauses) yield {
-            val (closesOver, params, block) = transformInline(clause, reuse=false);
-            val label = emit(block);
-            Clause(params, label)
-          }, Clause(RegList(Map.empty), BlockName("(PANIC)")))
+          val (_, defParams, defBlock) = transformInline(defaultClause, reuse=false)
+          val defLabel = emit(defBlock)
+          val defaultClauseJit = Clause(defParams, defLabel)
+
+          Match(adtType, transformArgument(v).id, (for (i <- 0 to clauseMap.keys.max) yield {
+            if (clauseMap.contains(i)) {
+              val clause = clauseMap(i)
+              val (closesOver, params, block) = transformInline(clause, reuse=false);
+              val label = emit(block);
+              Clause(params, label)
+            } else { defaultClauseJit }
+          }).toList, defaultClauseJit)
         case Type.Integer() => {
-          val List(elseClause, thenClause) = clauses;
+          val elseClause = clauseMap.getOrElse(machine.builtins.False, defaultClause)
+          val thenClause = clauseMap.getOrElse(machine.builtins.True, defaultClause)
           val (_ign1, thenArgs, thenBlock) = transformInline(thenClause);
           val (elseClosesOver, elseArgs, elseBlock) = transformInline(elseClause)
           val elseLabel = emit(elseBlock);
@@ -108,7 +120,7 @@ object Transformer {
           emitInlined(thenBlock)
         }
         case Type.Unit() => {
-          val List(clause) = clauses;
+          val clause = clauseMap.getOrElse(machine.builtins.Unit, defaultClause)
           val (_ign1, args, block) = transformInline(clause);
           emitInlined(block)
         }
