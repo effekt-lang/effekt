@@ -78,11 +78,34 @@ object ML extends Backend {
     toML(module.defs)
   }
 
+  def tpeToML(tpe: symbols.ValueType): ml.Type = tpe match {
+    case ValueType.BoxedType(_, _) => ???
+    case ValueType.ValueTypeRef(tvar) => ml.Type.Var(name(tvar))
+    case ValueType.ValueTypeApp(tc, Nil) => tcToML(tc)
+    case ValueType.ValueTypeApp(tc, one :: Nil) => ml.Type.Tapp(tcToML(tc), tpeToML(one))
+    case ValueType.ValueTypeApp(tc, args) =>
+      ml.Type.Tapp(tcToML(tc), ml.Type.Tuple(args map tpeToML))
+  }
+
+  def tcToML(tc: symbols.TypeConstructor): ml.Type = tc match {
+    case symbols.builtins.IntSymbol => ml.Type.Integer
+    case symbols.builtins.DoubleSymbol => ml.Type.Real
+    case symbols.builtins.BooleanSymbol => ml.Type.Bool
+    case symbols.builtins.StringSymbol => ml.Type.String
+    case TypeConstructor.DataType(_, _, _) =>
+      ml.Type.Data(name(tc))
+    case TypeConstructor.Record(_, tparams, constructor) =>
+      ???
+    case TypeConstructor.ExternType(_, _) =>
+      ml.Type.Builtin(name(tc))
+  }
+
   def toMLExpr(stmt: Stmt): ml.Expr = stmt match {
     case Return(e) => Call(Consts.pure)(toML(e))
     case App(b, _, args) => Expr.Call(toML(b), args map toML)
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
-    case Val(id, tpe, binding, body) => ??? // bind(toMLExpr(binding), nameDef(id), toML(body))
+    case Val(id, tpe, binding, body) =>
+      Call(Consts.bind)(toMLExpr(binding), ml.Lambda(name(id))(toMLExpr(body)))
     case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
     case Match(scrutinee, clauses, default) =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
@@ -176,22 +199,6 @@ object ML extends Backend {
     // did is actually TypeConstructor.DataType
     // ctors is actually symbols.Constructor
     case Data(did: TypeConstructor.DataType, ctors, rest) =>
-
-      def tpeToML(tpe: symbols.ValueType): ml.Type = tpe match {
-        case ValueType.BoxedType(tpe, capture) => ???
-        case ValueType.ValueTypeRef(tvar) if did.tparams.contains(tvar) => ml.Type.Var(name(tvar))
-        case ValueType.ValueTypeRef(_) => ???
-        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.Int" =>
-          ml.Type.Integer
-        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.String" =>
-          ml.Type.String
-        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.Boolean" =>
-          ml.Type.Bool
-        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.Double" =>
-          ml.Type.Real
-        case ValueType.ValueTypeApp(constructor, args) => ???
-      }
-
       def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
         case symbols.Constructor(_, _, fields, _) =>
           val tpeList = fields.map(f => tpeToML(f.param.tpe.getOrElse(???)))
@@ -306,34 +313,4 @@ object ML extends Backend {
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
   }
 
-//  def toML(p: Pattern, names: List[MLName]): ml.Pattern = {
-//    def translate(p: Pattern, names: List[MLName]): (ml.Pattern, List[MLName]) = {
-//      (p, names) match {
-//        case (IgnorePattern(), _) => (ml.Pattern.Ignore, names)
-//        case (AnyPattern(), name :: rest) => (ml.Pattern.Bind(name), rest)
-//        case (LiteralPattern(l), rest) => (ml.Pattern.Literal(l.value.toString), rest)
-//        case (TagPattern(tag: symbols.Constructor, patterns), _) =>
-//          tag.tpe match {
-//            case TypeConstructor.DataType(name, tparams, constructors) =>
-//              ??? // wip
-//            case _: TypeConstructor.ExternType => ??? // unsupported
-//            case _: TypeConstructor.Record =>
-//              val fieldNames = tag.fields map name
-//              val (mlPatternsRev: List[ml.Pattern], names1: List[MLName]) = patterns.foldLeft((Nil: List[ml.Pattern], names)) {
-//                case ((patterns, names), pattern) =>
-//                  val (mlPattern, names1) = translate(pattern, names)
-//                  (mlPattern :: patterns, names1)
-//              }
-//              assert(fieldNames.length == mlPatternsRev.length)
-//              (ml.Pattern.Record(fieldNames.zip(mlPatternsRev.reverse)), names1)
-//          }
-//        case (AnyPattern(), _) => ??? // invalid list of names
-//        case (TagPattern(_, _), _) => ??? // unsupported
-//      }
-//    }
-//
-//    val (mlPattern, remainingNames) = translate(p, names)
-//    assert(remainingNames.isEmpty, s"pattern: ${p.toString}\nnames: $names")
-//    mlPattern
-//  }
 }

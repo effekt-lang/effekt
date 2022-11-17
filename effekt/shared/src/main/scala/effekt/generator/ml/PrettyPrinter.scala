@@ -35,7 +35,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "fun" <+> toDoc(name) <+> argList(params, toDoc) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
     case DataBind(name, tparams, constructors) =>
-      "datatype" <+> hsep(tparams map toDoc) <+> toDoc(name) <+> "=" <> nest(line <>
+      val args: Doc = if (tparams.isEmpty) "" else parens(hsep(tparams map toDoc, ","))
+      "datatype" <+> args <+> toDoc(name) <+> "=" <> nest(line <>
         ssep(constructors.map {
           case (name, None) => toDoc(name)
           case (name, Some(tpe)) => toDoc(name) <+> "of" <+> toDoc(tpe)
@@ -48,6 +49,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(tpe: ml.Type): Doc = tpe match {
     case Type.Var(n) => toDoc(n)
+    case Type.Tuple(Nil) => ???
+    case Type.Tuple(t :: Nil) => toDoc(t)
     case Type.Tuple(l) =>
       val d = ssep(l map toDoc, " * ")
       parens(d)
@@ -55,9 +58,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Real => "real"
     case Type.String => "string"
     case Type.Bool => "bool"
-    case Type.Data(name, targs) =>
-      val d = hsep(targs map toDoc) <+> toDoc(name)
-      parens(d)
+    case Type.Data(name) => toDoc(name)
+    case Type.Tapp(tpe, arg) =>
+      val ap = toDoc(arg) <+> toDoc(tpe)
+      parens(ap)
+    case Type.Builtin(t) => toDoc(t)
   }
 
   def toDoc(expr: Expr): Doc = expr match {

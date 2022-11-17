@@ -21,13 +21,15 @@ class MLName(n: String) {
 }
 
 enum Type {
+  case Tapp(tpe: Type, arg: Type)
+  case Builtin(n: MLName)
   case Var(n: MLName)
   case Tuple(l: List[Type])
   case Integer
   case Real
   case String
   case Bool
-  case Data(name: MLName, targs: List[Type])
+  case Data(name: MLName)
 }
 
 enum Binding {
