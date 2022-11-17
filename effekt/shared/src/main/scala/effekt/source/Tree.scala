@@ -7,72 +7,66 @@ import effekt.symbols.Symbol
 /**
  * Data type representing source program trees.
  *
- * Terms:
+ * ----------[[ effekt.source.Tree ]]----------
  *
- *   Tree
- *   |- Id
- *   |  |- IdDef
- *   |  |- IdRef
- *   |
- *   |- ModuleDecl
- *   |
- *   |- ParamSection
- *   |  |- ValueParams
- *   |  |- BlockParam
- *   |  |- CapabilityParam (*)
- *   |
- *   |- Def
- *   |  |- FunDef
- *   |  |- ValDef
- *   |  |- VarDef
- *   |  |- EffDef
- *   |  |- DataDef
- *   |  |- RecordDef
- *   |  |- TypeDef
- *   |  |- EffectDef
- *   |  |- ExternType
- *   |  |- ExternFun
- *   |  |- ExternInclude
- *   |
- *   |- Stmt
- *   |  |- DefStmt
- *   |  |- ExprStmt
- *   |  |- BlockStmt
- *   |  |- Return
- *   |
- *   |- Term
- *   |  |- Var
- *   |  |- Assign
- *   |  |- Literal
- *   |  |  |- UnitLit
- *   |  |  |- IntLit
- *   |  |  |- BooleanLit
- *   |  |  |- DoubleLit
- *   |  |  |- StringLit
- *   |  |
- *   |  |- Lambda
- *   |  |- Call
- *   |  |- If
- *   |  |- While
- *   |  |- TryHandle
- *   |  |- MatchExpr
- *   |  |- Hole
- *   |
+ *   ─ [[ Tree ]]
+ *     │─ [[ NoSource ]]
+ *     │─ [[ Comment ]]
+ *     │─ [[ Id ]]
+ *     │  │─ [[ IdDef ]]
+ *     │  │─ [[ IdRef ]]
+ *     │
+ *     │─ [[ Named ]]
+ *     │  │─ [[ Definition ]]
+ *     │  │─ [[ Reference ]]
+ *     │
+ *     │─ [[ ModuleDecl ]]
+ *     │─ [[ Import ]]
+ *     │─ [[ Stmt ]]
+ *     │  │─ [[ DefStmt ]]
+ *     │  │─ [[ ExprStmt ]]
+ *     │  │─ [[ Return ]]
+ *     │  │─ [[ BlockStmt ]]
+ *     │
+ *     │─ [[ Term ]]
+ *     │  │─ [[ Var ]]
+ *     │  │─ [[ Assign ]]
+ *     │  │─ [[ Literal ]]
+ *     │  │─ [[ Hole ]]
+ *     │  │─ [[ Box ]]
+ *     │  │─ [[ Unbox ]]
+ *     │  │─ [[ Select ]]
+ *     │  │─ [[ Do ]]
+ *     │  │─ [[ Call ]]
+ *     │  │─ [[ MethodCall ]]
+ *     │  │─ [[ If ]]
+ *     │  │─ [[ While ]]
+ *     │  │─ [[ Match ]]
+ *     │  │─ [[ TryHandle ]]
+ *     │  │─ [[ Region ]]
+ *     │  │─ [[ BlockLiteral ]]
+ *     │  │─ [[ New ]]
+ *     │
+ *     │─ [[ CallTarget ]]
+ *     │  │─ [[ IdTarget ]]
+ *     │  │─ [[ ExprTarget ]]
+ *     │
+ *     │─ [[ MatchClause ]]
+ *     │─ [[ MatchPattern ]]
+ *     │  │─ [[ AnyPattern ]]
+ *     │  │─ [[ TagPattern ]]
+ *     │  │─ [[ IgnorePattern ]]
+ *     │  │─ [[ LiteralPattern ]]
+ *     │
+ *     │─ [[ Type ]]
+ *     │  │─ [[ ValueType ]]
+ *     │  │─ [[ BlockType ]]
+ *     │
+ *     │─ [[ Effectful ]]
+ *     │─ [[ Effects ]]
+ *     │─ [[ CaptureSet ]]
  *
- * Types
- *   ...
- *   |- Type
- *   |  |- ValueType
- *   |  |  |- ValueTypeTree (*)
- *   |  |  |- TypeVar
- *   |  |  |- TypeApp
- *   |  |
- *   |  |- CapabilityType
- *   |  |- BlockType
- *   |
- *   |- Effect
- *   |- Effectful
- *   |- Effects
+ * --------------------------------------------------------------
  *
  * We extend product to allow reflective access by Kiama.
  */
@@ -149,8 +143,29 @@ enum Param extends Definition {
 }
 export Param.*
 
+
 /**
  * Global and local definitions
+ *
+ * ----------[[ effekt.source.Def ]]----------
+ *
+ *   ─ [[ Def ]]
+ *     │─ [[ FunDef ]]
+ *     │─ [[ ValDef ]]
+ *     │─ [[ VarDef ]]
+ *     │─ [[ DefDef ]]
+ *     │─ [[ InterfaceDef ]]
+ *     │─ [[ DataDef ]]
+ *     │─ [[ RecordDef ]]
+ *     │─ [[ TypeDef ]]
+ *     │─ [[ EffectDef ]]
+ *     │─ [[ ExternType ]]
+ *     │─ [[ ExternDef ]]
+ *     │─ [[ ExternResource ]]
+ *     │─ [[ ExternInterface ]]
+ *     │─ [[ ExternInclude ]]
+ *
+ * -------------------------------------------
  */
 enum Def extends Definition {
 
@@ -191,10 +206,23 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(path: String)(var contents: String, val id: IdDef)
+  case ExternInclude(path: String, var contents: String = "", val id: IdDef = IdDef(""))
 }
 export Def.*
 
+
+/**
+ * ----------[[ effekt.source.Stmt ]]----------
+ *
+ *   ─ [[ Stmt ]]
+ *     │─ [[ DefStmt ]]
+ *     │─ [[ ExprStmt ]]
+ *     │─ [[ Return ]]
+ *     │─ [[ BlockStmt ]]
+ *
+ * --------------------------------------------
+ *
+ */
 enum Stmt extends Tree {
   case DefStmt(d: Def, rest: Stmt)
   case ExprStmt(d: Term, rest: Stmt)
@@ -203,9 +231,33 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
+
 /**
  * In our source language, almost everything is an expression.
  * Effectful calls, if, while, ...
+ *
+ * ----------[[ effekt.source.Term ]]----------
+ *
+ *   ─ [[ Term ]]
+ *     │─ [[ Var ]]
+ *     │─ [[ Assign ]]
+ *     │─ [[ Literal ]]
+ *     │─ [[ Hole ]]
+ *     │─ [[ Box ]]
+ *     │─ [[ Unbox ]]
+ *     │─ [[ Select ]]
+ *     │─ [[ Do ]]
+ *     │─ [[ Call ]]
+ *     │─ [[ MethodCall ]]
+ *     │─ [[ If ]]
+ *     │─ [[ While ]]
+ *     │─ [[ Match ]]
+ *     │─ [[ TryHandle ]]
+ *     │─ [[ Region ]]
+ *     │─ [[ BlockLiteral ]]
+ *     │─ [[ New ]]
+ *
+ * --------------------------------------------
  */
 enum Term extends Tree {
 
@@ -373,6 +425,22 @@ export MatchPattern.*
  * Types and Effects
  *
  * TODO generalize to blocks that can take blocks
+ *
+ * ----------[[ effekt.source.Type ]]----------
+ *
+ *   ─ [[ Type ]]
+ *     │─ [[ ValueType ]]
+ *     │  │─ [[ ValueTypeTree ]]
+ *     │  │─ [[ BoxedType ]]
+ *     │  │─ [[ ValueTypeRef ]]
+ *     │
+ *     │─ [[ BlockType ]]
+ *     │  │─ [[ BlockTypeTree ]]
+ *     │  │─ [[ FunctionType ]]
+ *     │  │─ [[ BlockTypeRef ]]
+ *     │
+ *
+ * --------------------------------------------
  */
 sealed trait Type extends Tree
 

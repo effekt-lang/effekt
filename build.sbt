@@ -8,6 +8,7 @@ lazy val generateLicenses = taskKey[Unit]("Analyses dependencies and downloads a
 lazy val updateVersions = taskKey[Unit]("Update version in package.json and pom.xml")
 lazy val install = taskKey[Unit]("Installs the current version locally")
 lazy val assembleBinary = taskKey[Unit]("Assembles the effekt binary in bin/effekt")
+lazy val generateDocumentation = taskKey[Unit]("Generates some documentation.")
 
 
 lazy val effektVersion = "0.2.0"
@@ -65,8 +66,6 @@ lazy val root = project.in(file("effekt"))
   .settings(Seq(
     Compile / run := (effekt.jvm / Compile / run).evaluated
   ))
-
-
 
 lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("effekt"))
   .settings(
@@ -155,8 +154,9 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       Process(s"${npm.value} version ${effektVersion} --no-git-tag-version --allow-same-version").!!
       Process(s"${mvn.value} versions:set -DnewVersion=${effektVersion} -DgenerateBackupPoms=false").!!
     },
-
-    Compile / sourceGenerators += versionGenerator.taskValue
+    generateDocumentation := TreeDocs.replacer.value,
+    Compile / sourceGenerators += versionGenerator.taskValue,
+    Compile / sourceGenerators += TreeDocs.generator.taskValue
   )
   .jsSettings(
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },

@@ -139,7 +139,7 @@ object Transformer {
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
-          case symbols.UserFunction(_, _, _, _, _, _, _) =>
+          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock(_) =>
             // TODO this is a hack, values is in general shorter than environment
             val environment = getBlocksParams(id)
             transform(args).run { values =>
@@ -175,22 +175,19 @@ object Transformer {
 
       case lifted.If(cond, thenStmt, elseStmt) =>
         transform(cond).run { value =>
-          Switch(value, List(Clause(List(), transform(elseStmt)), Clause(List(), transform(thenStmt))))
+          Switch(value, List(0 -> Clause(List(), transform(elseStmt)), 1 -> Clause(List(), transform(thenStmt))), None)
         }
 
-      case lifted.Match(scrutinee, clauses) =>
-        // TODO unordered matches
-        // TODO overlapping matches
-        // TODO incomplete matches
-        // TODO nested matches
+      case lifted.Match(scrutinee, clauses, default) =>
+        val transformedClauses = clauses.map { case (constr, lifted.BlockLit(params, body)) =>
+          getTagFor(constr) -> Clause(params.map(transform), transform(body))
+        }
+        val transformedDefault = default.map { clause =>
+          Clause(List(), transform(clause))
+        }
+
         transform(scrutinee).run { value =>
-          Switch(value, clauses.map {
-            case (lifted.IgnorePattern(), _) => ??? // Clause(List(), NOOP) // TODO verify
-            case (lifted.AnyPattern(), _) => ???
-            case (lifted.TagPattern(constructor, patterns), lifted.BlockLit(params, body)) =>
-              Clause(params.map(transform), transform(body))
-            case (lifted.LiteralPattern(l), block) => ???
-          })
+          Switch(value, transformedClauses, transformedDefault)
         }
 
       case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
@@ -306,7 +303,7 @@ object Transformer {
       val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }
       transform(target).flatMap { value =>
         Binding { k =>
-          Switch(value, List(Clause(variables, k(variables(fieldIndex)))))
+          Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)
         }
       }
 
@@ -375,7 +372,7 @@ object Transformer {
 
     case symbols.builtins.TString => Type.String()
 
-    case symbols.FunctionType(Nil, Nil, vparams, Nil, _, _) => Negative("<function>")
+    case symbols.FunctionType(Nil, _, vparams, Nil, _, _) => Negative("<function>")
 
     case symbols.InterfaceType(interface, List()) => Negative(interface.name.name)
 

@@ -315,7 +315,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val externInclude: P[Def] =
-    `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""))("", IdDef("")) }
+    `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\"")) }
 
 
   /**
@@ -533,7 +533,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val matchExpr: P[Term] =
-    (accessExpr <~ `match` ~/ `{`) ~/ (some(clause) <~ `}`) ^^ Match.apply
+    (accessExpr <~ `match` ~/ `{`) ~/ (many(clause) <~ `}`) ^^ Match.apply
 
   lazy val doExpr: P[Term] =
     `do` ~/> idRef ~ maybeTypeArgs ~ valueArgs ^^ {

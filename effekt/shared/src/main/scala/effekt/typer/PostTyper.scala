@@ -175,6 +175,15 @@ object Wellformedness extends Visit[WFContext] {
   def checkExhaustivity(sc: Constructor, cls: List[MatchPattern])(using Context, WFContext): Unit = {
     import source.{ MatchPattern, AnyPattern, IgnorePattern, TagPattern }
 
+    cls.foreach {
+      case p @ source.TagPattern(_, _) =>
+        val c = p.definition.asConstructor
+        if (c.tpe != sc.tpe) {
+          Context.abort("Unrelated type constructor.")
+        }
+      case _ =>
+    }
+
     val catchall = cls.exists { p => p.isInstanceOf[AnyPattern] || p.isInstanceOf[IgnorePattern] }
 
     if (catchall)
@@ -186,7 +195,7 @@ object Wellformedness extends Visit[WFContext] {
     }
 
     if (related.isEmpty) {
-      Context.error(s"Non exhaustive pattern matching, missing case for ${ sc }")
+      Context.error(pp"Non exhaustive pattern matching, missing case for ${ sc }")
     }
 
     (sc.fields.map { f => f.returnType } zip related.transpose) foreach {

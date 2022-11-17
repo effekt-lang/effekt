@@ -1,6 +1,6 @@
 function show$impl(obj) {
-  if (!!obj && !!obj.__tag) {
-    return obj.__tag + "(" + obj.__data.map(show).join(", ") + ")"
+  if (!!obj && !!obj.__name) {
+    return obj.__name + "(" + obj.__data.map(show).join(", ") + ")"
   } else if (!!obj && obj.__unit) {
     return "()";
   } else {
@@ -9,7 +9,7 @@ function show$impl(obj) {
 }
 
 function equals$impl(obj1, obj2) {
-  if (!!obj1 && !!obj2 && !!obj1.__tag && !!obj2.__tag) {
+  if (!!obj1 && !!obj2 && obj1.__data && !!obj2.__data) {
     if (obj1.__tag != obj2.__tag) return false;
 
     for (var i = 0; i < obj1.__data.length; i++) {

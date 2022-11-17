@@ -49,6 +49,10 @@ object assertions {
       case t: DataType => t
       case _ => reporter.abort("Expected a data type")
     }
+    def asRecord: Record = s match {
+      case t: Record => t
+      case _ => reporter.abort("Expected a record")
+    }
     def asValBinder: ValBinder = s match {
       case t: ValBinder => t
       case _ => reporter.abort("Expected a value binder")

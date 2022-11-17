@@ -117,10 +117,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Record(id, fields, rest) =>
       Record(id, fields, transform(rest))
 
-    // TODO either the implementation of match should provide evidence
-    // or we should not abstract over evidence!
-    case core.Match(scrutinee, clauses) =>
-      Match(transform(scrutinee), clauses.map { case (p, b) => (transform(p), transformBody(b)) })
+    case core.Match(scrutinee, clauses, default) =>
+      Match(transform(scrutinee),
+        clauses.map { case (c, b) => (c, transformBody(b)) },
+        default.map { s => transform(s) })
 
     case core.If(cond, thn, els) =>
       If(transform(cond), transform(thn), transform(els))
@@ -199,13 +199,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transformBody(tree: core.BlockLit)(using Environment, Context): BlockLit = tree match {
     case core.BlockLit(params, body) =>
       BlockLit(params.map { p => transform(p) }, transform(body))
-  }
-
-  def transform(p: core.Pattern): Pattern = p match {
-    case core.IgnorePattern() => IgnorePattern()
-    case core.AnyPattern() => AnyPattern()
-    case core.TagPattern(tag, patterns) => TagPattern(tag, patterns.map { p => transform(p) })
-    case core.LiteralPattern(l) => LiteralPattern(transform(l))
   }
 
   def transform(args: List[core.Argument])(using Environment, Context): List[Argument] = {

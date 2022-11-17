@@ -1,8 +1,55 @@
 package effekt
 package core
 
-import effekt.symbols.{ Symbol, TermSymbol, ValueSymbol, BlockSymbol, Interface, Operation, Type, ValueType, BlockType }
+import effekt.symbols.{ BlockSymbol, BlockType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol, ValueType }
 
+/**
+ * Tree structure of programs in our internal core representation.
+ *
+ * ----------[[ effekt.core.Tree ]]----------
+ *
+ *   ─ [[ Tree ]]
+ *     │─ [[ ModuleDecl ]]
+ *     │─ [[ Argument ]]
+ *     │  │─ [[ Pure ]]
+ *     │  │─ [[ Block ]]
+ *     │
+ *     │─ [[ Expr ]]
+ *     │  │─ [[ DirectApp ]]
+ *     │  │─ [[ Run ]]
+ *     │  │─ [[ Pure ]]
+ *     │
+ *     │─ [[ Param ]]
+ *     │  │─ [[ ValueParam ]]
+ *     │  │─ [[ BlockParam ]]
+ *     │
+ *     │─ [[ Pattern ]]
+ *     │  │─ [[ IgnorePattern ]]
+ *     │  │─ [[ AnyPattern ]]
+ *     │  │─ [[ TagPattern ]]
+ *     │  │─ [[ LiteralPattern ]]
+ *     │
+ *     │─ [[ Stmt ]]
+ *     │  │─ [[ Def ]]
+ *     │  │─ [[ Val ]]
+ *     │  │─ [[ Let ]]
+ *     │  │─ [[ Data ]]
+ *     │  │─ [[ Record ]]
+ *     │  │─ [[ App ]]
+ *     │  │─ [[ If ]]
+ *     │  │─ [[ While ]]
+ *     │  │─ [[ Return ]]
+ *     │  │─ [[ Match ]]
+ *     │  │─ [[ Include ]]
+ *     │  │─ [[ Hole ]]
+ *     │  │─ [[ State ]]
+ *     │  │─ [[ Handle ]]
+ *     │  │─ [[ Region ]]
+ *     │
+ *     │─ [[ Handler ]]
+ *
+ * -------------------------------------------
+ */
 sealed trait Tree
 
 /**
@@ -14,6 +61,7 @@ case class ModuleDecl(path: String, imports: List[String], defs: Stmt, exports: 
  * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
  */
 sealed trait Argument extends Tree
+
 
 /**
  * Expressions (with potential IO effects)
@@ -30,8 +78,26 @@ case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt, tpe: ValueType) extends Expr
 
+
 /**
  * Pure Expressions (no IO effects, or control effects)
+ *
+ * ----------[[ effekt.core.Pure ]]----------
+ *
+ *   ─ [[ Pure ]]
+ *     │─ [[ ValueVar ]]
+ *     │─ [[ Literal ]]
+ *     │  │─ [[ UnitLit ]]
+ *     │  │─ [[ IntLit ]]
+ *     │  │─ [[ BooleanLit ]]
+ *     │  │─ [[ DoubleLit ]]
+ *     │  │─ [[ StringLit ]]
+ *     │
+ *     │─ [[ PureApp ]]
+ *     │─ [[ Select ]]
+ *     │─ [[ Box ]]
+ *
+ * -------------------------------------------
  */
 sealed trait Pure extends Expr with Argument
 object Pure {
@@ -56,16 +122,19 @@ export Literal.*
 
 /**
  * Blocks
+ *
+ * ----------[[ effekt.core.Block ]]----------
+ *
+ *   ─ [[ Block ]]
+ *     │─ [[ BlockVar ]]
+ *     │─ [[ BlockLit ]]
+ *     │─ [[ Member ]]
+ *     │─ [[ Extern ]]
+ *     │─ [[ Unbox ]]
+ *     │─ [[ New ]]
+ *
+ * -------------------------------------------
  */
-
-enum Param extends Tree {
-  def id: TermSymbol
-
-  case ValueParam(id: ValueSymbol, tpe: ValueType)
-  case BlockParam(id: BlockSymbol, tpe: BlockType)
-}
-export Param.*
-
 enum Block extends Argument {
   case BlockVar(id: BlockSymbol)
   case BlockLit(params: List[Param], body: Stmt)
@@ -76,17 +145,37 @@ enum Block extends Argument {
 }
 export Block.*
 
-enum Pattern extends Tree {
-  case IgnorePattern()
-  case AnyPattern()
-  case TagPattern(tag: Symbol, patterns: List[Pattern])
-  case LiteralPattern[T](l: Literal[T])
-}
-export Pattern.*
+enum Param extends Tree {
+  def id: TermSymbol
 
+  case ValueParam(id: ValueSymbol, tpe: ValueType)
+  case BlockParam(id: BlockSymbol, tpe: BlockType)
+}
+export Param.*
 
 /**
  * Statements
+ *
+ * ----------[[ effekt.core.Stmt ]]----------
+ *
+ *   ─ [[ Stmt ]]
+ *     │─ [[ Def ]]
+ *     │─ [[ Val ]]
+ *     │─ [[ Let ]]
+ *     │─ [[ Data ]]
+ *     │─ [[ Record ]]
+ *     │─ [[ App ]]
+ *     │─ [[ If ]]
+ *     │─ [[ While ]]
+ *     │─ [[ Return ]]
+ *     │─ [[ Match ]]
+ *     │─ [[ Include ]]
+ *     │─ [[ Hole ]]
+ *     │─ [[ State ]]
+ *     │─ [[ Handle ]]
+ *     │─ [[ Region ]]
+ *
+ * -------------------------------------------
  */
 enum Stmt extends Tree {
   case Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt)
@@ -100,7 +189,7 @@ enum Stmt extends Tree {
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case While(cond: Stmt, body: Stmt)
   case Return(e: Pure)
-  case Match(scrutinee: Pure, clauses: List[(Pattern, BlockLit)])
+  case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
 
   case Include(contents: String, rest: Stmt)
 
@@ -136,7 +225,6 @@ object Tree {
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def param: PartialFunction[Param, Param] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
-    def pattern: PartialFunction[Pattern, Pattern] = PartialFunction.empty
     def handler: PartialFunction[Handler, Handler] = PartialFunction.empty
 
     def rewrite(p: Pure): Pure =
@@ -190,10 +278,10 @@ object Tree {
           Handle(rewrite(body), tpe, handler map rewrite)
         case Region(body) =>
           Region(rewrite(body))
-        case Match(scrutinee, clauses) =>
+        case Match(scrutinee, clauses, default) =>
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
-          })
+          }, default map rewrite)
         case h: Hole.type => h
       }
 
@@ -214,14 +302,6 @@ object Tree {
       case New(impl) =>
         New(rewrite(impl))
       case b: BlockVar => b
-    }
-    def rewrite(e: Pattern): Pattern = e match {
-      case e if pattern.isDefinedAt(e) => pattern(e)
-      case TagPattern(tag, patterns: List[Pattern]) =>
-        TagPattern(tag, patterns map rewrite)
-      case Pattern.LiteralPattern(l) =>
-        LiteralPattern(rewrite(l).asInstanceOf[Literal[_]])
-      case p => p
     }
     def rewrite(e: Handler): Handler = e match {
       case e if handler.isDefinedAt(e) => handler(e)
