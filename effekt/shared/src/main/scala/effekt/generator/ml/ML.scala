@@ -193,10 +193,11 @@ object ML extends Backend {
       }
 
       def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
-        case symbols.Constructor(_, tparams, fields, tpe) =>
+        case symbols.Constructor(_, _, fields, _) =>
           val tpeList = fields.map(f => tpeToML(f.param.tpe.getOrElse(???)))
           val tpe = tpeList match {
             case Nil => None
+            case one :: Nil => Some(one)
             case _ => Some(ml.Type.Tuple(tpeList))
           }
           (name(s), tpe)
