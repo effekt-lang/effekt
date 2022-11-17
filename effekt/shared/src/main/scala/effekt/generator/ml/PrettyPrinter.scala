@@ -39,7 +39,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
         ssep(constructors.map {
           case (name, None) => toDoc(name)
           case (name, Some(tpe)) => toDoc(name) <+> "of" <+> toDoc(tpe)
-        }, line <> " |") <>
+        }, line <> "| ") <>
         ";"
       )
     case RawBind(raw) =>
@@ -96,9 +96,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Sequence(exps, rest) =>
       val seq = vsep(exps map toDoc, "; ") <> ";" <@> toDoc(rest)
       parens(seq)
-    case Expr.Match(scrutinee, clauses) =>
+    case Expr.Match(scrutinee, clauses, default) =>
+      val mlDefault: Doc = default match {
+        case None => ""
+        case Some(d) =>
+          val delim: Doc = if (clauses.isEmpty) "" else line <> "| "
+          delim <> "_ =>" <+> toDoc(d)
+      }
       val mlMatch = "case" <+> toDoc(scrutinee) <+> "of" <+> nest(line <>
-        ssep(clauses map toDoc, line <> "| ")
+        ssep(clauses map toDoc, line <> "| ") <> mlDefault
       ) <> line
       parens(mlMatch)
   }
@@ -108,13 +114,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(p: ml.Pattern): Doc = p match {
-    case Pattern.Ignore => "_"
-    case Pattern.Bind(name) => toDoc(name)
-    case Pattern.Literal(l) => string(l)
     case Pattern.Record(assignments) =>
       "{" <>
-        hsep(assignments map { case (name, p) => toDoc(name) <+> "=" <+> toDoc(p) }, ", ") <>
+        hsep(assignments map { case (fname, binder) => toDoc(fname) <+> "=" <+> toDoc(binder) }, ",") <>
         "}"
+    case Pattern.Datatype(tag, terms) if terms.isEmpty =>
+      toDoc(tag)
+    case Pattern.Datatype(tag, terms) =>
+      toDoc(tag) <> parens(hsep(terms map toDoc, ","))
   }
 
   /**

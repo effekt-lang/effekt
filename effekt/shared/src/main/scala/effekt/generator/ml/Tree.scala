@@ -78,18 +78,16 @@ enum Expr {
 
   case MakeRecord(fields: List[(MLName, Expr)])
 
-  case Match(scrutinee: Expr, clauses: List[MatchClause])
+  case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
 
   //  case Handle(handlers: List[Handler], body: Expr)
 }
 
 case class MatchClause(pattern: Pattern, body: Expr)
 enum Pattern {
-  case Ignore
-  case Bind(name: MLName)
-  case Literal(l: String)
   // ml supports direct binders (`{x, y}`) but we don't need them.
-  case Record(assignments: List[(MLName, Pattern)])
+  case Record(assignments: List[(MLName, MLName)])
+  case Datatype(tag: MLName, terms: List[MLName])
 }
 
 export Expr.*

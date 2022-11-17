@@ -4,6 +4,7 @@ type Cool[A] {
     CoolBool(b: Boolean)
     CoolDouble(d: Double)
     CoolC(a: A)
+    CoolD()
 }
 
 def main(): Unit = {
@@ -14,5 +15,6 @@ def main(): Unit = {
         case CoolBool(b) => println(b)
         case CoolDouble(d) => println(d)
         case CoolC(a) => println(a)
+        case CoolD() => println("hey")
     }
 }

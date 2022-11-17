@@ -84,16 +84,25 @@ object ML extends Backend {
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) => ??? // bind(toMLExpr(binding), nameDef(id), toML(body))
     case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
-    case Match(scrutinee, clauses) =>
-      def clauseToML(c: (Pattern, BlockLit)): ml.MatchClause = {
-        val (pattern, b) = c
-        val names = b.params.map(p => name(p.id))
+    case Match(scrutinee, clauses, default) =>
+      def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
+        val (constructor, b) = c
+        val binders = b.params.map(p => name(p.id))
+        val pattern = constructor.tpe match {
+          case symbols.Record(_, _, _) =>
+            val fieldNames = constructor.fields map name
+            assert(fieldNames.length == binders.length)
+            ml.Pattern.Record(fieldNames zip binders)
+          case symbols.DataType(_, _, _) =>
+            val tag = name(constructor)
+            ml.Pattern.Datatype(tag, binders)
+          case _: symbols.ExternType => ???
+        }
         val body = toMLExpr(b.body)
-        val mlPattern = toML(pattern, names)
-        ml.MatchClause(mlPattern, body)
+        ml.MatchClause(pattern, body)
       }
 
-      ml.Match(toML(scrutinee), clauses map clauseToML)
+      ml.Match(toML(scrutinee), clauses map clauseToML, default map toMLExpr)
 
     case Hole => ???
 
@@ -129,6 +138,13 @@ object ML extends Backend {
       toMLExpr(body) match {
         case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
         case mlbody => ml.Let(List(mlBinding), mlbody)
+      }
+
+    case Def(id, _, block, rest) =>
+      val constDef = createBinder(id, block)
+      toMLExpr(rest) match {
+        case ml.Let(bindings, body) => ml.Let(constDef :: bindings, body)
+        case mlbody => ml.Let(List(constDef), mlbody)
       }
 
     case other => println(other); ???
@@ -190,7 +206,6 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       val data = ml.Binding.DataBind(name(did), tvars, ctors map constructorToML)
       data :: toML(rest)
-      ???
     //      val defs = toML(rest)
     //      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
     //      Block(constructors ++ defs, exprs, result)
@@ -290,34 +305,34 @@ object ML extends Backend {
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
   }
 
-  def toML(p: Pattern, names: List[MLName]): ml.Pattern = {
-    def translate(p: Pattern, names: List[MLName]): (ml.Pattern, List[MLName]) = {
-      (p, names) match {
-        case (IgnorePattern(), _) => (ml.Pattern.Ignore, names)
-        case (AnyPattern(), name :: rest) => (ml.Pattern.Bind(name), rest)
-        case (LiteralPattern(l), rest) => (ml.Pattern.Literal(l.value.toString), rest)
-        case (TagPattern(tag: symbols.Constructor, patterns), _) =>
-          tag.tpe match {
-            case TypeConstructor.DataType(name, tparams, constructors) =>
-              ??? // wip
-            case _: TypeConstructor.ExternType => ??? // unsupported
-            case _: TypeConstructor.Record =>
-              val fieldNames = tag.fields map name
-              val (mlPatternsRev: List[ml.Pattern], names1: List[MLName]) = patterns.foldLeft((Nil: List[ml.Pattern], names)) {
-                case ((patterns, names), pattern) =>
-                  val (mlPattern, names1) = translate(pattern, names)
-                  (mlPattern :: patterns, names1)
-              }
-              assert(fieldNames.length == mlPatternsRev.length)
-              (ml.Pattern.Record(fieldNames.zip(mlPatternsRev.reverse)), names1)
-          }
-        case (AnyPattern(), _) => ??? // invalid list of names
-        case (TagPattern(_, _), _) => ??? // unsupported
-      }
-    }
-
-    val (mlPattern, remainingNames) = translate(p, names)
-    assert(remainingNames.isEmpty, s"pattern: ${p.toString}\nnames: $names")
-    mlPattern
-  }
+//  def toML(p: Pattern, names: List[MLName]): ml.Pattern = {
+//    def translate(p: Pattern, names: List[MLName]): (ml.Pattern, List[MLName]) = {
+//      (p, names) match {
+//        case (IgnorePattern(), _) => (ml.Pattern.Ignore, names)
+//        case (AnyPattern(), name :: rest) => (ml.Pattern.Bind(name), rest)
+//        case (LiteralPattern(l), rest) => (ml.Pattern.Literal(l.value.toString), rest)
+//        case (TagPattern(tag: symbols.Constructor, patterns), _) =>
+//          tag.tpe match {
+//            case TypeConstructor.DataType(name, tparams, constructors) =>
+//              ??? // wip
+//            case _: TypeConstructor.ExternType => ??? // unsupported
+//            case _: TypeConstructor.Record =>
+//              val fieldNames = tag.fields map name
+//              val (mlPatternsRev: List[ml.Pattern], names1: List[MLName]) = patterns.foldLeft((Nil: List[ml.Pattern], names)) {
+//                case ((patterns, names), pattern) =>
+//                  val (mlPattern, names1) = translate(pattern, names)
+//                  (mlPattern :: patterns, names1)
+//              }
+//              assert(fieldNames.length == mlPatternsRev.length)
+//              (ml.Pattern.Record(fieldNames.zip(mlPatternsRev.reverse)), names1)
+//          }
+//        case (AnyPattern(), _) => ??? // invalid list of names
+//        case (TagPattern(_, _), _) => ??? // unsupported
+//      }
+//    }
+//
+//    val (mlPattern, remainingNames) = translate(p, names)
+//    assert(remainingNames.isEmpty, s"pattern: ${p.toString}\nnames: $names")
+//    mlPattern
+//  }
 }
