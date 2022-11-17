@@ -1,5 +1,7 @@
 module effekt
 
+type Void {}
+
 // Side effection ops
 // ==================
 extern io def random(): Int = "random(): Int"
@@ -13,6 +15,7 @@ extern io def println(n: Double): Unit = "println(Double): Unit"
 extern io def println(b: Boolean): Unit = "println(Boolean): Unit"
 extern io def println(b: Unit): Unit = "println(Unit): Unit"
 extern io def println(s: String): Unit = "println(String): Unit"
+extern io def printlnErr(s: String): Unit = "printlnErr(String): Unit"
 extern io def readLn(): String = "readLn(): String"
 extern io def readInt(): Int = "readInt(): Int"
 
@@ -103,3 +106,11 @@ extern pure def read(s: String): Boolean = "read(String): Boolean"
 // Benchmarking
 // ============
 extern io def currentTimeNanos(): Int = "currentTimeNanos(): Int"
+
+// System
+// ======
+extern io def exit(code: Int): Void = "exit(Int): Void" // should probably be control, but this is unsupported as of now
+def panic(msg: String): Void = {
+  printlnErr("Panic: " ++ msg);
+  exit(1)
+}
