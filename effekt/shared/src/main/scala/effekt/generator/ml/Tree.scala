@@ -62,6 +62,8 @@ enum Expr {
   // Sequential Scoping
   case Let(bindings: List[Binding], body: Expr)
 
+  case Tuple(terms: List[Expr])
+
   case Sequence(exps: List[Expr], rest: Expr)
 
   //  // e.g. (let* ([x 42] [y x]) (+ x y))
@@ -79,6 +81,8 @@ enum Expr {
   case FieldLookup(record: Expr, field: MLName)
 
   case MakeRecord(fields: List[(MLName, Expr)])
+
+  case MakeDatatype(tag: MLName, arg: Expr)
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
 

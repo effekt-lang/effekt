@@ -214,20 +214,11 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       val data = ml.Binding.DataBind(name(did), tvars, ctors map constructorToML)
       data :: toML(rest)
-    //      val defs = toML(rest)
-    //      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
-    //      Block(constructors ++ defs, exprs, result)
 
     case Data(_, _, _) => ???
 
-    case Record(did: symbols.Record, fields, rest) =>
-      val fieldNames = fields map name
-      val rec = ml.MakeRecord(fieldNames.map(name => (name, Variable(name))))
-      val constructor = ml.FunBind(name(did.constructor), fieldNames, rec)
-      constructor :: toML(rest) // use the native record types
-
-    case Record(_, _, _) => ???
-
+    case Record(_, _, rest) =>
+      toML(rest) // use the native record types
 
     case Include(contents, rest) =>
       val include = RawBind(contents)
@@ -299,11 +290,21 @@ object ML extends Backend {
       }
     case ValueVar(id) => ml.Variable(name(id))
 
-    case PureApp(b, _, args) => ml.Call(toML(b), args map {
-      case e: Expr => toML(e)
-      case b: Block => toML(b)
-      case e: Evidence => toML(e)
-    })
+    case PureApp(b, _, args) =>
+      val mlArgs = args map {
+        case e: Expr => toML(e)
+        case b: Block => toML(b)
+        case e: Evidence => toML(e)
+      }
+      b match {
+        case BlockVar(id @ symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _))) =>
+          ml.MakeDatatype(name(id), ml.Expr.Tuple(mlArgs))
+        case BlockVar(symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, constr))) =>
+          val fieldNames = constr.fields map name
+          assert(fieldNames.length == mlArgs.length)
+          ml.Expr.MakeRecord(fieldNames zip mlArgs)
+        case _ => ml.Call(toML(b), mlArgs)
+      }
 
     case Select(b, field) =>
       ml.FieldLookup(toML(b), name(field))

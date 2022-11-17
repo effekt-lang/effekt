@@ -92,12 +92,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
       parens(ifs)
     case Expr.Variable(name) =>
       toDoc(name)
+    case Expr.Tuple(Nil) => "()"
+    case Expr.Tuple(one :: Nil) => toDoc(one)
+    case Expr.Tuple(terms) =>
+      parens(hsep(terms map toDoc, ","))
     case Expr.FieldLookup(record, field) =>
       val lookup = "#" <> toDoc(field) <+> toDoc(record)
       parens(lookup)
     case Expr.MakeRecord(fields) =>
       val fieldAssignments = fields.map((name, exp) => toDoc(name) <+> "=" <+> toDoc(exp))
       "{" <> hsep(fieldAssignments, ", ") <> "}"
+    case Expr.MakeDatatype(tag, arg) =>
+      val mdt = toDoc(tag) <+> toDoc(arg)
+      parens(mdt)
     case Expr.Sequence(exps, rest) =>
       val seq = vsep(exps map toDoc, "; ") <> ";" <@> toDoc(rest)
       parens(seq)
