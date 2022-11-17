@@ -173,13 +173,13 @@ extern pure def infixOr(x: Boolean, y: Boolean): Boolean =
 extern pure def infixAnd(x: Boolean, y: Boolean): Boolean =
   "x andalso y"
 
-// // Pairs
-// // =====
-// record Tuple2[A, B](first: A, second: B)
-// record Tuple3[A, B, C](first: A, second: B, third: C)
-// record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
-// record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
-// record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+// Pairs
+// =====
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
 
 // // Exceptions
 // // ==========
