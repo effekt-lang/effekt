@@ -5,20 +5,38 @@ package ml
 // TODO choose appropriate representation and apply conversions
 class MLName(n: String) {
   private def fixName(nn: String): String = {
-    val tmp = nn.replace('$', '\'')
+    val tmp = nn.replace("$", "Dollar")
     if (tmp.startsWith("_")) "f" + tmp else tmp
   }
 
   val name: String = fixName(n)
+
+  override def equals(obj: Any): Boolean = obj match {
+    case n: MLName =>
+      this.name == n.name
+    case _ => false
+  }
+
+  override def hashCode(): Int = this.name.hashCode
 }
 
-sealed trait Binding
+enum Type {
+  case Var(n: MLName)
+  case Tuple(l: List[Type])
+  case Integer
+  case Real
+  case String
+  case Bool
+  case Data(name: MLName, targs: List[Type])
+}
 
-case class ValBind(name: MLName, body: Expr) extends Binding
-
-case class FunBind(name: MLName, params: List[MLName], body: Expr) extends Binding
-
-case class RawBind(raw: String) extends Binding
+enum Binding {
+  case ValBind(name: MLName, body: Expr)
+  case FunBind(name: MLName, params: List[MLName], body: Expr)
+  case RawBind(raw: String)
+  case DataBind(name: MLName, tparams: List[Type.Var], constructors: List[(MLName, Option[Type])])
+}
+export Binding.*
 
 case class Toplevel(bindings: List[Binding], body: Expr)
 
@@ -86,7 +104,7 @@ object Consts {
   // from effekt.sml
   val bind: Expr = Variable(MLName("bind"))
   val pure: Expr = Variable(MLName("pure"))
-  val lif: Expr = Variable(MLName("lift"))
+  val lift: Expr = Variable(MLName("lift"))
   val reset: Expr = Variable(MLName("reset"))
   val run: Expr = Variable(MLName("run"))
   val nested: Expr = Variable(MLName("nested"))

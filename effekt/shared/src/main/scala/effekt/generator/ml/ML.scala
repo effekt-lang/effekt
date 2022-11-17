@@ -4,7 +4,7 @@ package ml
 
 import effekt.context.Context
 import effekt.lifted.*
-import effekt.symbols.{Module, Symbol, TypeConstructor, Wildcard}
+import effekt.symbols.{Module, Symbol, TermSymbol, TypeConstructor, TypeSymbol, ValueType, Wildcard}
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -157,10 +157,45 @@ object ML extends Backend {
       val constDef = createBinder(id, block)
       constDef :: toML(rest)
 
-    case Data(did, ctors, rest) => ???
+    // did is actually TypeConstructor.DataType
+    // ctors is actually symbols.Constructor
+    case Data(did: TypeConstructor.DataType, ctors, rest) =>
+
+      def tpeToML(tpe: symbols.ValueType): ml.Type = tpe match {
+        case ValueType.BoxedType(tpe, capture) => ???
+        case ValueType.ValueTypeRef(tvar) if did.tparams.contains(tvar) => ml.Type.Var(name(tvar))
+        case ValueType.ValueTypeRef(_) => ???
+        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.Int" =>
+          ml.Type.Integer
+        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.String" =>
+          ml.Type.String
+        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.Boolean" =>
+          ml.Type.Bool
+        case ValueType.ValueTypeApp(symbols.TypeConstructor.ExternType(qn: symbols.QualifiedName, Nil), Nil) if qn.qualifiedName == "effekt.Double" =>
+          ml.Type.Real
+        case ValueType.ValueTypeApp(constructor, args) => ???
+      }
+
+      def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
+        case symbols.Constructor(_, tparams, fields, tpe) =>
+          val tpeList = fields.map(f => tpeToML(f.param.tpe.getOrElse(???)))
+          val tpe = tpeList match {
+            case Nil => None
+            case _ => Some(ml.Type.Tuple(tpeList))
+          }
+          (name(s), tpe)
+        case _ => ???
+      }
+
+      val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
+      val data = ml.Binding.DataBind(name(did), tvars, ctors map constructorToML)
+      data :: toML(rest)
+      ???
     //      val defs = toML(rest)
     //      val constructors = ctors.flatMap(ctor => generateConstructor(ctor.asInstanceOf[effekt.symbols.Record]))
     //      Block(constructors ++ defs, exprs, result)
+
+    case Data(_, _, _) => ???
 
     case Record(did: symbols.Record, fields, rest) =>
       val fieldNames = fields map name
@@ -263,7 +298,8 @@ object ML extends Backend {
         case (LiteralPattern(l), rest) => (ml.Pattern.Literal(l.value.toString), rest)
         case (TagPattern(tag: symbols.Constructor, patterns), _) =>
           tag.tpe match {
-            case _: TypeConstructor.DataType => ??? // unsupported
+            case TypeConstructor.DataType(name, tparams, constructors) =>
+              ??? // wip
             case _: TypeConstructor.ExternType => ??? // unsupported
             case _: TypeConstructor.Record =>
               val fieldNames = tag.fields map name

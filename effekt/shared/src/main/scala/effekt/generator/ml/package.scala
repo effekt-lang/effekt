@@ -12,7 +12,10 @@ import effekt.util.paths.*
 
 def uniqueName(id: Symbol): String = id.name.toString + "_" + id.id
 
-def name(id: Symbol): MLName = MLName(uniqueName(id))
+def name(id: Symbol): MLName = id match {
+  case _: symbols.TypeParam => MLName(s"'${uniqueName(id)}")
+  case _ => MLName(uniqueName(id))
+}
 
 //def intersperse[T](l: List[T], el: T): List[T] = l match {
 //  case Nil => Nil

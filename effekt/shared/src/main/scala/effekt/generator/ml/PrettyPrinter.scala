@@ -34,8 +34,30 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case FunBind(name, params, body) =>
       "fun" <+> toDoc(name) <+> argList(params, toDoc) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
+    case DataBind(name, tparams, constructors) =>
+      "datatype" <+> hsep(tparams map toDoc) <+> toDoc(name) <+> "=" <> nest(line <>
+        ssep(constructors.map {
+          case (name, None) => toDoc(name)
+          case (name, Some(tpe)) => toDoc(name) <+> "of" <+> toDoc(tpe)
+        }, line <> " |") <>
+        ";"
+      )
     case RawBind(raw) =>
       string(raw)
+  }
+
+  def toDoc(tpe: ml.Type): Doc = tpe match {
+    case Type.Var(n) => toDoc(n)
+    case Type.Tuple(l) =>
+      val d = ssep(l map toDoc, " * ")
+      parens(d)
+    case Type.Integer => "int"
+    case Type.Real => "real"
+    case Type.String => "string"
+    case Type.Bool => "bool"
+    case Type.Data(name, targs) =>
+      val d = hsep(targs map toDoc) <+> toDoc(name)
+      parens(d)
   }
 
   def toDoc(expr: Expr): Doc = expr match {
@@ -70,7 +92,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       parens(lookup)
     case Expr.MakeRecord(fields) =>
       val fieldAssignments = fields.map((name, exp) => toDoc(name) <+> "=" <+> toDoc(exp))
-      "{" <> hsep(fieldAssignments, ", ")  <> "}"
+      "{" <> hsep(fieldAssignments, ", ") <> "}"
     case Expr.Sequence(exps, rest) =>
       val seq = vsep(exps map toDoc, "; ") <> ";" <@> toDoc(rest)
       parens(seq)
@@ -91,19 +113,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Pattern.Literal(l) => string(l)
     case Pattern.Record(assignments) =>
       "{" <>
-        hsep(assignments map {case (name, p) => toDoc(name) <+> "=" <+> toDoc(p)}, ", ") <>
+        hsep(assignments map { case (name, p) => toDoc(name) <+> "=" <+> toDoc(p) }, ", ") <>
         "}"
   }
 
-      /**
-       * Returns `()` for empty lists and `toDoc(a) toDoc(b) ...` otherwise.
-       */
-      def argList[A](args: Seq[A], toDoc: A => Doc): Doc = {
-        if (args.isEmpty) {
-          "()"
-        } else {
-          hsep(args map toDoc)
-        }
-      }
+  /**
+   * Returns `()` for empty lists and `toDoc(a) toDoc(b) ...` otherwise.
+   */
+  def argList[A](args: Seq[A], toDoc: A => Doc): Doc = {
+    if (args.isEmpty) {
+      "()"
+    } else {
+      hsep(args map toDoc)
+    }
+  }
 
 }

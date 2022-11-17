@@ -1,0 +1,18 @@
+type Cool[A] {
+    CoolInt(i: Int)
+    CoolString(s: String)
+    CoolBool(b: Boolean)
+    CoolDouble(d: Double)
+    CoolC(a: A)
+}
+
+def main(): Unit = {
+    val c = CoolC(3.2);
+    c match {
+        case CoolInt(i) => println(i)
+        case CoolString(s) => println(s)
+        case CoolBool(b) => println(b)
+        case CoolDouble(d) => println(d)
+        case CoolC(a) => println(a)
+    }
+}
