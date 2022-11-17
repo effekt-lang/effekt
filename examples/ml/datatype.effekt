@@ -6,6 +6,7 @@ type Cool[A] {
     CoolC(a: A)
     CoolD()
     CoolE(c: Cool[Cool[Int]])
+    CoolF(t: (Int, Int))
 }
 
 def main(): Unit = {
@@ -14,9 +15,10 @@ def main(): Unit = {
         case CoolInt(i) => println(i)
         case CoolString(s, _) => println(s)
         case CoolBool(b) => println(b)
-        case CoolDouble(d) => println(d)
         case CoolC(a) => println("123")
         case CoolD() => println("hey")
         case CoolE(_) => println(1)
+        case CoolF((x, y)) => println(x + y)
+        case _ => println("other")
     }
 }

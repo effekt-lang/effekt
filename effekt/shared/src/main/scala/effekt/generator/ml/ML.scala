@@ -78,13 +78,21 @@ object ML extends Backend {
     toML(module.defs)
   }
 
-  def tpeToML(tpe: symbols.ValueType): ml.Type = tpe match {
+  def tpeToML(tpe: symbols.ValueType, inst: ml.Type => ml.Type = x => x): ml.Type = tpe match {
     case ValueType.BoxedType(_, _) => ???
-    case ValueType.ValueTypeRef(tvar) => ml.Type.Var(name(tvar))
+    case ValueType.ValueTypeRef(tvar) =>
+      val tv = ml.Type.Var(name(tvar))
+      inst(tv)
     case ValueType.ValueTypeApp(tc, Nil) => tcToML(tc)
-    case ValueType.ValueTypeApp(tc, one :: Nil) => ml.Type.Tapp(tcToML(tc), tpeToML(one))
+    case ValueType.ValueTypeApp(TypeConstructor.Record(_, tparams, constructor), args) =>
+      val argTypes = args.map(tpeToML(_, inst))
+      val instMap = tparams.map(t => ml.Type.Var(name(t))).zip(argTypes).toMap
+      val instF = (tpe: ml.Type) => inst(if (instMap.contains(tpe)) instMap(tpe) else tpe)
+      val fieldTypes = constructor.fields.map { f => (name(f), tpeToML(f.param.tpe.getOrElse(???), instF)) }
+      ml.Type.Record(fieldTypes)
+    case ValueType.ValueTypeApp(tc, one :: Nil) => ml.Type.Tapp(tcToML(tc), tpeToML(one, inst))
     case ValueType.ValueTypeApp(tc, args) =>
-      ml.Type.Tapp(tcToML(tc), ml.Type.Tuple(args map tpeToML))
+      ml.Type.Tapp(tcToML(tc), ml.Type.Tuple(args.map(tpeToML(_, inst))))
   }
 
   def tcToML(tc: symbols.TypeConstructor): ml.Type = tc match {
@@ -94,8 +102,9 @@ object ML extends Backend {
     case symbols.builtins.StringSymbol => ml.Type.String
     case TypeConstructor.DataType(_, _, _) =>
       ml.Type.Data(name(tc))
-    case TypeConstructor.Record(_, tparams, constructor) =>
-      ???
+    case TypeConstructor.Record(_, _, constructor) =>
+      val fieldTypes = constructor.fields.map{f => (name(f), tpeToML(f.param.tpe.getOrElse(???)))}
+      ml.Type.Record(fieldTypes)
     case TypeConstructor.ExternType(_, _) =>
       ml.Type.Builtin(name(tc))
   }
@@ -276,7 +285,6 @@ object ML extends Backend {
         if (s.startsWith("-")) {
           ml.RawExpr(s"~${s.substring(1)}")
         } else ml.RawValue(s)
-
       }
 
       l.value match {

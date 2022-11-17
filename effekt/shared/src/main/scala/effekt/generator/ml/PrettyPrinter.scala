@@ -35,7 +35,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "fun" <+> toDoc(name) <+> argList(params, toDoc) <+>
         "=" <> nest(line <> toDoc(body) <> ";")
     case DataBind(name, tparams, constructors) =>
-      val args: Doc = if (tparams.isEmpty) "" else parens(hsep(tparams map toDoc, ","))
+      val args: Doc = tparams match {
+        case Nil => ""
+        case one :: Nil => toDoc(one)
+        case _ => parens(hsep(tparams map toDoc, ","))
+      }
       "datatype" <+> args <+> toDoc(name) <+> "=" <> nest(line <>
         ssep(constructors.map {
           case (name, None) => toDoc(name)
@@ -59,6 +63,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.String => "string"
     case Type.Bool => "bool"
     case Type.Data(name) => toDoc(name)
+    case Type.Record(fields) =>
+      "{" <> hsep(fields.map{case (name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)}, ",") <> "}"
     case Type.Tapp(tpe, arg) =>
       val ap = toDoc(arg) <+> toDoc(tpe)
       parens(ap)
