@@ -158,7 +158,7 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * e.g. let k = stack { (x, ...) => s }; s
+   * e.g. let k = stack with region r { (x, ...) => s }; s
    */
   case NewStack(name: Variable, region: Variable, frame: Clause, rest: Statement)
 

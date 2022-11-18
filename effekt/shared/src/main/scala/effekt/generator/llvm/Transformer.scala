@@ -165,39 +165,22 @@ object Transformer {
         ???
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, region, rest) =>
-        emit(Call(name, refType, alloc, List(ConstantInt(typeSize(tpe)), transform(region))));
-
         val ptr = freshName("ptr");
-        emit(Call(ptr, PointerType(IntegerType8()), getPtr, List(transform(ref))))
+        emit(Call(ptr, PointerType(IntegerType8()), alloc, List(ConstantInt(typeSize(tpe)), transform(region))));
+        emit(BitCast(name, LocalReference(PointerType(IntegerType8()), ptr), PointerType(transform(tpe))))
 
-        val typedPtr = freshName("typed_ptr");
-        emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(transform(tpe))))
-
-        emit(Store(LocalReference(PointerType(transform(tpe)), typedPtr), transform(init)))
+        emit(Store(transform(ref), transform(init)))
         transform(rest);
 
       case machine.Allocate(_, _, _, _) =>
         ???
 
       case machine.Load(name, ref, rest) =>
-        val ptr = freshName("ptr");
-        emit(Call(ptr, PointerType(IntegerType8()), getPtr, List(transform(ref))))
-
-        val typedPtr = freshName("typed_ptr");
-        emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(transform(name.tpe))))
-
-        emit(Load(name.name, LocalReference(PointerType(transform(name.tpe)), typedPtr)))
+        emit(Load(name.name, transform(ref)))
         transform(rest)
 
       case machine.Store(ref, value, rest) =>
-        val tpe = transform(value.tpe)
-        val ptr = freshName("ptr");
-        emit(Call(ptr, PointerType(IntegerType8()), getPtr, List(transform(ref))))
-
-        val typedPtr = freshName("typed_ptr");
-        emit(BitCast(typedPtr, LocalReference(PointerType(IntegerType8()), ptr), PointerType(tpe)))
-
-        emit(Store(LocalReference(PointerType(tpe), typedPtr), transform(value)))
+        emit(Store(transform(ref), transform(value)))
         transform(rest)
 
       case machine.PushFrame(frame, rest) =>
@@ -286,15 +269,13 @@ object Transformer {
         shareValues(frameEnvironment, freeVariables(rest));
         val stackPointerPointer = LocalReference(PointerType(spType), freshName("stkspp"));
         val oldStackPointer = LocalReference(spType, freshName("stksp"));
-        val stkvar = freshName(variable.name)
-        emit(ExtractValue(stkvar, LocalReference(stkType, variable.name), 0))
-        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), stkvar), List(0, 1, 0)));
+        emit(GetElementPtr(stackPointerPointer.name, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 1, 0)));
         emit(Load(oldStackPointer.name, stackPointerPointer));
         val temporaryStackPointer = pushEnvironmentOnto(oldStackPointer, frameEnvironment);
         val newStackPointer = pushReturnAddressOnto(temporaryStackPointer, returnAddressName, sharerName, eraserName);
         emit(Store(stackPointerPointer, newStackPointer));
         var regionPtrVar = freshName(region.name)
-        emit(GetElementPtr(regionPtrVar, LocalReference(PointerType(NamedType("StkVal")), stkvar), List(0, 2)))
+        emit(GetElementPtr(regionPtrVar, LocalReference(PointerType(NamedType("StkVal")), variable.name), List(0, 2)))
         emit(Load(region.name, LocalReference(PointerType(NamedType("Region")), regionPtrVar)))
 
         eraseValues(List(variable), freeVariables(rest));
@@ -380,19 +361,18 @@ object Transformer {
   def envType = NamedType("Env");
   def objType = NamedType("Obj");
   def spType = NamedType("Sp");
-  def stkType = NamedType("DetachedStk");
-  def refType = NamedType("Ref");
+  def stkType = NamedType("Stk");
   def regionType = NamedType("Region");
 
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Positive(_)       => positiveType
-    case machine.Negative(_)       => negativeType
-    case machine.Type.Int()        => NamedType("Int")
-    case machine.Type.Double()     => NamedType("Double")
-    case machine.Type.String()     => positiveType
-    case machine.Type.Stack()      => stkType
-    case machine.Type.Reference(_) => refType
-    case machine.Type.Region()     => regionType
+    case machine.Positive(_)         => positiveType
+    case machine.Negative(_)         => negativeType
+    case machine.Type.Int()          => NamedType("Int")
+    case machine.Type.Double()       => NamedType("Double")
+    case machine.Type.String()       => positiveType
+    case machine.Type.Stack()        => stkType
+    case machine.Type.Reference(tpe) => PointerType(transform(tpe))
+    case machine.Type.Region()       => regionType
   }
 
   def environmentSize(environment: machine.Environment): Int =
@@ -405,8 +385,8 @@ object Transformer {
       case machine.Type.Int()        => 8 // TODO Make fat?
       case machine.Type.Double()     => 8 // TODO Make fat?
       case machine.Type.String()     => 16
-      case machine.Type.Stack()      => 32 // TODO Make fat?
-      case machine.Type.Reference(_) => 16
+      case machine.Type.Stack()      => 8 // TODO Make fat?
+      case machine.Type.Reference(_) => 8
       case machine.Type.Region()     => 8
     }
 
@@ -689,8 +669,7 @@ object Transformer {
   def eraseFrames = ConstantGlobal(PointerType(FunctionType(VoidType(),List(spType))), "eraseFrames");
   def eraseString = ConstantGlobal(PointerType(FunctionType(VoidType(),List(positiveType))), "c_buffer_refcount_decrement");
 
-  def alloc = ConstantGlobal(PointerType(FunctionType(refType, List())), "alloc")
-  def getPtr = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List(refType))), "getPtr")
+  def alloc = ConstantGlobal(PointerType(FunctionType(PointerType(IntegerType8()), List())), "alloc")
 
   def newStack = ConstantGlobal(PointerType(FunctionType(stkType,List())), "newStack");
   def pushStack = ConstantGlobal(PointerType(FunctionType(spType,List(stkType, spType))), "pushStack");
