@@ -27,20 +27,23 @@ object Transformer {
 
   def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl, deps: List[lifted.ModuleDecl])(using C: Context): Program = {
     val stmt = mod.defs;
-    given TLC: ToplevelContext = ToplevelContext(transform(mainSymbol));
+    val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
 
     findToplevelBlocksParams(stmt)
-    mod.externs.foreach(transform)
-    val transformedMain = transformToplevel(stmt, Jump(Label(getMainName, List())))
+    val transformedMain = transformToplevel(stmt, Jump(Label(mainName, List())))
 
+    var declarations: List[Declaration] = Nil
+
+    // TODO Jonathan: I think this should be a foldRight here.
     val statement = deps.foldLeft(transformedMain) {
       case (compiled, dependency) =>
-        findToplevelBlocksParams(dependency.defs);
+        declarations ++= dependency.externs.map(transform)
+        findToplevelBlocksParams(dependency.defs)
         transformToplevel(dependency.defs, compiled)
     }
 
-    val declarations = TLC.declarations
+    declarations ++= mod.externs.map(transform)
 
     Program(declarations, statement)
   }
@@ -55,20 +58,20 @@ object Transformer {
   //      transformToplevel(stmt, mods)
   //  }
 
-  def transform(extern: lifted.Extern)(using ToplevelContext, BlocksParamsContext, Context): Unit = extern match {
+  def transform(extern: lifted.Extern)(using BlocksParamsContext, Context): Declaration = extern match {
     case lifted.Extern.Def(name, functionType: FunctionType, params, body) =>
       val transformedParams = params.map {
         case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
         case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
-      emitDeclaration(Extern(transform(name), transformedParams, transform(functionType.result), body))
+      Extern(transform(name), transformedParams, transform(functionType.result), body)
 
     case lifted.Extern.Include(contents) =>
-      emitDeclaration(Include(contents))
+      Include(contents)
   }
 
-  def transformToplevel(stmt: lifted.Stmt, entryPoint: Statement)(using ToplevelContext, BlocksParamsContext, Context): Statement =
+  def transformToplevel(stmt: lifted.Stmt, entryPoint: Statement)(using BlocksParamsContext, Context): Statement =
     stmt match {
       case lifted.Def(id, _, lifted.BlockLit(params, body), rest) =>
         Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, entryPoint))
@@ -402,18 +405,6 @@ object Transformer {
 
   def abort(message: String)(using C: Context) =
     C.abort(message)
-
-  class ToplevelContext(val mainName: String) {
-    var declarations: List[Declaration] = List()
-  }
-
-  def emitDeclaration(declaration: Declaration)(using TLC: ToplevelContext) = {
-    TLC.declarations = TLC.declarations :+ declaration
-  }
-
-  def getMainName(using TLC: ToplevelContext): String = {
-    TLC.mainName
-  }
 
   class BlocksParamsContext() {
     var blocksParams: Map[BlockSymbol, Environment] = Map()
