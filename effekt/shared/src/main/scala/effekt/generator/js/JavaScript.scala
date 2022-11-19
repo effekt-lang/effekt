@@ -148,6 +148,14 @@ trait JavaScript extends Backend {
     JSName(name)
   }
 
+  def toJS(e: core.Extern)(using Context): js.Stmt = e match {
+    case Extern.Def(id, tpe, params, body) =>
+      js.Function(nameDef(id), params map externParams, List(js.Return(js.RawExpr(body))))
+
+    case Extern.Include(contents) =>
+      js.RawStmt(contents)
+  }
+
   def toJS(b: core.Block)(using Context): js.Expr = b match {
     case BlockVar(v) =>
       nameRef(v)
@@ -156,8 +164,6 @@ trait JavaScript extends Backend {
       monadic.Lambda(ps map toJS, stmts, ret) // TODO
     case Member(b, id) =>
       js.Member(toJS(b), memberNameRef(id))
-    case Extern(ps, body) =>
-      js.Lambda(ps map externParams, js.RawExpr(body))
     case Unbox(e)     => toJS(e)
     case New(handler) => toJS(handler)
   }
@@ -191,10 +197,11 @@ trait JavaScript extends Backend {
     val name    = JSName(jsModuleName(module.path))
     val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
     val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
+    val externs = module.externs.map(toJS)
     val decls   = module.decls.flatMap(toJS)
     val (stmts, _) = toJSStmt(module.defs)
 
-    js.Module(name, imports, exports, decls ++ stmts)
+    js.Module(name, imports, exports, decls ++ externs ++ stmts)
   }
 
 
@@ -260,17 +267,9 @@ trait JavaScript extends Backend {
       val (stmts, jsBody) = toJSStmt(body)
       (monadic.Function(nameDef(id), ps map toJS, stmts, jsBody) :: restStmts, ret)
 
-    case Def(id, tpe, Extern(ps, body), rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (js.Function(nameDef(id), ps map externParams, List(js.Return(js.RawExpr(body)))) :: stmts, ret)
-
     case Def(id, tpe, block, rest) =>
       val (stmts, ret) = toJSStmt(rest)
       (js.Const(nameDef(id), toJS(block)) :: stmts, ret)
-
-    case Include(contents, rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (js.RawStmt(contents) :: stmts, ret)
 
     case Let(Wildcard(_), tpe, binding, body) =>
       val (stmts, ret) = toJSStmt(body)

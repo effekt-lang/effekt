@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.symbols.{ BlockSymbol, BlockType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol, ValueType }
+import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol, ValueType }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -59,6 +59,7 @@ case class ModuleDecl(
   path: String,
   imports: List[String],
   decls: List[Decl],
+  externs: List[Extern],
   defs: Stmt,
   exports: List[Symbol]
 ) extends Tree
@@ -73,6 +74,13 @@ enum Decl {
 }
 export Decl.*
 
+/**
+ * FFI external definitions
+ */
+enum Extern {
+  case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
+  case Include(contents: String)
+}
 
 /**
  * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
@@ -156,7 +164,6 @@ enum Block extends Argument {
   case BlockVar(id: BlockSymbol)
   case BlockLit(params: List[Param], body: Stmt)
   case Member(b: Block, field: TermSymbol)
-  case Extern(params: List[Param], body: String)
   case Unbox(p: Pure)
   case New(impl: Handler)
 }
@@ -205,8 +212,6 @@ enum Stmt extends Tree {
   case While(cond: Stmt, body: Stmt)
   case Return(e: Pure)
   case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
-
-  case Include(contents: String, rest: Stmt)
 
   case Hole
 
@@ -281,8 +286,6 @@ object Tree {
           While(rewrite(cond), rewrite(body))
         case Return(e: Expr) =>
           Return(rewrite(e))
-        case Include(contents, rest) =>
-          Include(contents, rewrite(rest))
         case State(id, init, reg, body) =>
           State(id, rewrite(init), reg, rewrite(body))
         case Handle(body, tpe, handler) =>
@@ -306,8 +309,6 @@ object Tree {
         BlockLit(params map rewrite, rewrite(body))
       case Member(b, field) =>
         Member(rewrite(b), field)
-      case Extern(params, body) =>
-        Extern(params map rewrite, body)
       case Unbox(e) =>
         Unbox(rewrite(e))
       case New(impl) =>

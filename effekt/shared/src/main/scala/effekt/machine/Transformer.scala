@@ -6,7 +6,7 @@ import effekt.context.Context
 import effekt.lifted
 import effekt.lifted.LiftInference
 import effekt.symbols
-import effekt.symbols.{ BlockSymbol, BlockType, ExternFunction, ExternType, DataType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.{ BlockSymbol, BlockType, DataType, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
 
 object Transformer {
 
@@ -31,6 +31,7 @@ object Transformer {
     given BC: BlocksParamsContext = BlocksParamsContext();
 
     findToplevelBlocksParams(stmt)
+    mod.externs.foreach(transform)
     val transformedMain = transformToplevel(stmt, Jump(Label(getMainName, List())))
 
     val statement = deps.foldLeft(transformedMain) {
@@ -54,23 +55,23 @@ object Transformer {
   //      transformToplevel(stmt, mods)
   //  }
 
+  def transform(extern: lifted.Extern)(using ToplevelContext, BlocksParamsContext, Context): Unit = extern match {
+    case lifted.Extern.Def(name, functionType: FunctionType, params, body) =>
+      val transformedParams = params.map {
+        case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
+        case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
+        case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
+      }
+      emitDeclaration(Extern(transform(name), transformedParams, transform(functionType.result), body))
+
+    case lifted.Extern.Include(contents) =>
+      emitDeclaration(Include(contents))
+  }
+
   def transformToplevel(stmt: lifted.Stmt, entryPoint: Statement)(using ToplevelContext, BlocksParamsContext, Context): Statement =
     stmt match {
-      case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
-        val transformedParams = params.map {
-          case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
-          case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
-          case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
-        }
-        emitDeclaration(Extern(transform(name), transformedParams, transform(functionType.result), body))
-        transformToplevel(rest, entryPoint)
-
       case lifted.Def(id, _, lifted.BlockLit(params, body), rest) =>
         Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, entryPoint))
-
-      case lifted.Include(content, rest) =>
-        emitDeclaration(Include(content));
-        transformToplevel(rest, entryPoint)
 
       case lifted.Return(lifted.UnitLit()) =>
         entryPoint
@@ -231,7 +232,6 @@ object Transformer {
       }
 
     case lifted.Member(b, field) => ???
-    case lifted.Extern(params, body) => ???
     case lifted.Unbox(e) => ???
     case lifted.New(impl) => ???
   }
@@ -381,17 +381,12 @@ object Transformer {
 
   def findToplevelBlocksParams(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Unit = {
     stmt match {
-      case lifted.Def(name, functionType: FunctionType, lifted.Extern(params, body), rest) =>
-        findToplevelBlocksParams(rest)
-
       case lifted.Def(blockName, _, lifted.BlockLit(params, body), rest) =>
         noteBlockParams(blockName, params.map(transform));
         findToplevelBlocksParams(rest)
 
       case lifted.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
-        findToplevelBlocksParams(rest)
-      case lifted.Include(content, rest) =>
         findToplevelBlocksParams(rest)
       case lifted.Return(lifted.UnitLit()) =>
         ()

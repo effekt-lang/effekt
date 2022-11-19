@@ -5,7 +5,6 @@ import effekt.Phase
 import effekt.context.Context
 import effekt.lifted
 import effekt.core
-import effekt.core.Decl
 import effekt.symbols.{ Symbol, builtins }
 
 object LiftInference extends Phase[CoreTransformed, CoreLifted] {
@@ -21,7 +20,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(using Environment, Context): ModuleDecl =
-    ModuleDecl(mod.path, mod.imports, mod.decls.map(transform), transform(mod.defs), mod.exports)
+    ModuleDecl(mod.path, mod.imports, mod.decls.map(transform), mod.externs.map(transform), transform(mod.defs), mod.exports)
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, tpe)
@@ -31,7 +30,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Block)(using Environment, Context): Block = tree match {
     case b @ core.BlockLit(params, body) => liftBlockLitTo(b)
     case core.Member(body, id) => Member(transform(body), id)
-    case core.Extern(params, body) => Extern(params.map { p => transform(p) }, body)
     case core.BlockVar(b) => BlockVar(b)
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
@@ -48,8 +46,15 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Record(id, fields) =>
       Record(id, fields)
 
-    case Decl.Interface(id, operations) =>
+    case core.Interface(id, operations) =>
       Interface(id, operations)
+  }
+
+  def transform(tree: core.Extern)(using Environment, Context): lifted.Extern = tree match {
+    case core.Extern.Def(id, tpe, params, body) =>
+      Extern.Def(id, tpe, params.map { p => transform(p) }, body)
+    case core.Extern.Include(contents) =>
+      Extern.Include(contents)
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
@@ -136,8 +141,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Return(e) =>
       Return(transform(e))
-
-    case core.Include(contents, rest) => Include(contents, transform(rest))
 
     case core.Hole => Hole
   }
@@ -257,7 +260,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       case b: core.BlockVar => Evidence(env.getOrElse(b.id, Nil)) //.map { x => Evidence(x) }
       case b: core.BlockLit   => Here()
       case core.Member(b, id) => evidenceFor(b)
-      case b: core.Extern     => Here() // sys error "Cannot provide scope evidence for built in function"
       // TODO check whether this makes any sense
       case b: core.Unbox      => Here()
       case b: core.New => Here()

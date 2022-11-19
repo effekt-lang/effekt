@@ -25,13 +25,18 @@ object PrettyPrinter extends ParenPrettyPrinter {
       emptyline <> toDoc(m.defs)
   }
 
+  def toDoc(e: Extern): Doc = e match {
+    case Extern.Def(id, tpe, ps, body) =>
+      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\""
+    case Extern.Include(contents) => emptyDoc // right now, do not print includes.
+  }
+
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v) => v.name.toString
     case BlockLit(ps, body) =>
       braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
-    case Extern(ps, body) => parens(hsep(ps map toDoc, comma)) <+> "=>" <+> braces(nest(line <> body) <> line)
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
@@ -87,10 +92,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(s: Stmt): Doc = s match {
-    case Def(id, tpe, Extern(ps, body), rest) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\"" <> emptyline <>
-        toDoc(rest)
-
     case Def(id, tpe, BlockLit(params, body), rest) =>
       "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body)) <> emptyline <>
         toDoc(rest)
@@ -139,10 +140,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Hole =>
       "<>"
-
-    // for now, don't print includes
-    case Include(contents, rest) =>
-      toDoc(rest)
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))

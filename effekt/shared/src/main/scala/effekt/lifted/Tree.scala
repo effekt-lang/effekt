@@ -12,6 +12,7 @@ case class ModuleDecl(
   path: String,
   imports: List[String],
   decls: List[Decl],
+  externs: List[Extern],
   defs: Stmt,
   exports: List[Symbol]
 ) extends Tree
@@ -25,6 +26,14 @@ enum Decl {
   case Interface(id: Symbol, operations: List[Symbol])
 }
 export Decl.*
+
+/**
+ * FFI external definitions
+ */
+enum Extern {
+  case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
+  case Include(contents: String)
+}
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -65,7 +74,6 @@ case class BlockVar(id: BlockSymbol) extends Block
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
 case class Member(b: Block, field: TermSymbol) extends Block
-case class Extern(params: List[Param], body: String) extends Block
 case class Unbox(e: Expr) extends Block
 case class New(impl: Handler) extends Block
 
@@ -83,8 +91,6 @@ case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Return(e: Expr) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
-
-case class Include(contents: String, rest: Stmt) extends Stmt
 
 case object Hole extends Stmt
 
@@ -113,7 +119,6 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case While(cond, body) => freeVariables(cond) ++ freeVariables(body)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
-  case Include(contents, rest) => freeVariables(rest)
   case Hole => Set.empty
   case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
   case Handle(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap {
@@ -147,7 +152,6 @@ def freeVariables(block: Block): Set[Symbol] = block match {
     }
     freeVariables(body) -- bound
   case Member(b, field) => freeVariables(b)
-  case Extern(params, body) => Set.empty
   case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case New(handler) => ??? // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }

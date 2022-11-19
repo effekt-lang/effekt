@@ -33,10 +33,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val optimized = optimize(transformed)
 
+    val externals = Context.gatheredExternals
     val declarations = Context.gatheredDeclarations
 
     // We use the imports on the symbol (since they include the prelude)
-    ModuleDecl(path, mod.imports.map { _.path }, declarations, optimized, exports)
+    ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, optimized, exports)
   }
 
   /**
@@ -81,10 +82,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
+      Context.emitExternal(Extern.Def(f.symbol, Context.functionTypeOf(sym), (vps map transform) ++ (bps map transform), body))
+      rest()
 
     case e @ source.ExternInclude(path, contents, _) =>
-      Include(contents, rest())
+      Context.emitExternal(Extern.Include(contents))
+      rest()
 
     // For now we forget about all of the following definitions in core:
     case d: source.ExternResource => rest()
@@ -549,10 +552,12 @@ trait TransformerOps extends ContextOps { Context: Context =>
    */
   private var bindings: ListBuffer[Binding] = ListBuffer()
   private var declarations: ListBuffer[core.Decl] = ListBuffer()
+  private var externals: ListBuffer[core.Extern] = ListBuffer()
 
   private[core] def initTransformerState() = {
     bindings = ListBuffer()
     declarations = ListBuffer()
+    externals = ListBuffer()
   }
 
   /**
@@ -621,5 +626,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
 
   private[core] def emitDeclaration(decl: core.Decl): Unit = declarations += decl
 
+  private[core] def emitExternal(decl: core.Extern): Unit = externals += decl
+
   private[core] def gatheredDeclarations = declarations.toList
+  private[core] def gatheredExternals = externals.toList
 }

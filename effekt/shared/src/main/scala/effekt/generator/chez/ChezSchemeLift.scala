@@ -77,9 +77,10 @@ object ChezSchemeLift extends Backend {
 
   def toChez(module: ModuleDecl): List[chez.Def] = {
     val decls = module.decls.flatMap(toChez)
+    val externs = module.externs.map(toChez)
     // TODO FIXME, once there is a let _ = ... in there, we are doomed!
     val chez.Block(defns, _, _) = toChez(module.defs)
-    decls ++ defns
+    decls ++ externs ++ defns
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
@@ -137,17 +138,22 @@ object ChezSchemeLift extends Backend {
       generateConstructor(id, operations)
   }
 
+  def toChez(decl: lifted.Extern): chez.Def = decl match {
+    case Extern.Def(id, tpe, params, body) =>
+      chez.Constant(nameDef(id),
+        chez.Lambda(params map { p => ChezName(p.id.name.name) },
+          chez.RawExpr(body)))
+
+    case Extern.Include(contents) =>
+      RawDef(contents)
+  }
+
   def toChez(stmt: Stmt): chez.Block = stmt match {
 
     case Def(id, tpe, block, rest) =>
       val Block(defs, exprs, result) = toChez(rest)
       val constDef = chez.Constant(nameDef(id), toChez(block))
       Block(constDef :: defs, exprs, result)
-
-    case Include(contents, rest) =>
-      val include = RawDef(contents)
-      val chez.Block(defs, exprs, result) = toChez(rest)
-      chez.Block(include :: defs, exprs, result)
 
     case Let(Wildcard(_), tpe, binding, body) =>
       toChez(binding) match {
@@ -183,9 +189,6 @@ object ChezSchemeLift extends Backend {
 
     case Member(b, field) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
-
-    case Extern(params, body) =>
-      chez.Lambda(params map { p => ChezName(p.id.name.name) }, chez.RawExpr(body))
 
     case Unbox(e) =>
       toChez(e)
