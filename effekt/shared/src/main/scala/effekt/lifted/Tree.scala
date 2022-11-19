@@ -8,7 +8,23 @@ sealed trait Tree
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ModuleDecl(path: String, imports: List[String], defs: Stmt, exports: List[Symbol]) extends Tree
+case class ModuleDecl(
+  path: String,
+  imports: List[String],
+  decls: List[Decl],
+  defs: Stmt,
+  exports: List[Symbol]
+) extends Tree
+
+/**
+ * Toplevel data and interface declarations
+ */
+enum Decl {
+  case Data(id: Symbol, ctors: List[Symbol])
+  case Record(id: Symbol, fields: List[Symbol])
+  case Interface(id: Symbol, operations: List[Symbol])
+}
+export Decl.*
 
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
@@ -60,8 +76,6 @@ sealed trait Stmt extends Tree
 case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
-case class Data(id: Symbol, ctors: List[Symbol], rest: Stmt) extends Stmt
-case class Record(id: Symbol, fields: List[Symbol], rest: Stmt) extends Stmt
 
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
@@ -77,7 +91,7 @@ case object Hole extends Stmt
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
 case class Handle(body: Block, answerType: ValueType, handler: List[Handler]) extends Stmt
 
-case class Handler(id: Interface, clauses: List[(Operation, BlockLit)]) extends Tree
+case class Handler(id: symbols.Interface, clauses: List[(Operation, BlockLit)]) extends Tree
 
 case class Region(body: Block) extends Stmt
 
@@ -94,8 +108,6 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case Def(id, tpe, block, rest) => (freeVariables(block) ++ freeVariables(rest)) -- Set(id)
   case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
   case Let(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
-  case Data(id, ctors, rest) => freeVariables(rest)
-  case Record(id, fields, rest) =>freeVariables(rest)
   case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case While(cond, body) => freeVariables(cond) ++ freeVariables(body)

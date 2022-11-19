@@ -85,7 +85,10 @@ trait ChezScheme {
   def toChez(p: Param): ChezName = nameDef(p.id)
 
   def toChez(module: ModuleDecl): List[chez.Def] = {
-    toChez(module.defs).definitions // TODO FIXME, once there is a let _ = ... in there, we are doomed!
+    val decls = module.decls.flatMap(toChez)
+     // TODO FIXME, once there is a let _ = ... in there, we are doomed!
+    val chez.Block(defns, _, _) = toChez(module.defs)
+    decls ++ defns
   }
 
   def toChez(args: List[Argument]): List[chez.Expr] = args map {
@@ -133,25 +136,27 @@ trait ChezScheme {
     case other => chez.Let(Nil, toChez(other))
   }
 
+  def toChez(decl: core.Decl): List[chez.Def] = decl match {
+    case Data(did, ctors) =>
+      ctors.flatMap {
+        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
+        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
+      }
+
+    case Record(did, fields) =>
+      generateConstructor(did, fields)
+
+    // We use chez scheme records to also represent capabilities.
+    case Decl.Interface(id, operations) =>
+      generateConstructor(id, operations)
+  }
+
   def toChez(stmt: Stmt): chez.Block = stmt match {
 
     case Def(id, tpe, block, rest) =>
       val chez.Block(defs, exprs, result) = toChez(rest)
       val constDef = chez.Constant(nameDef(id), toChez(block))
       chez.Block(constDef :: defs, exprs, result)
-
-    case Data(did, ctors, rest) =>
-      val chez.Block(defs, exprs, result) = toChez(rest)
-      val constructors = ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${other}"
-      }
-      chez.Block(constructors ++ defs, exprs, result)
-
-    case Record(did, fields, rest) =>
-      val chez.Block(defs, exprs, result) = toChez(rest)
-      val constructors = generateConstructor(did, fields)
-      chez.Block(constructors ++ defs, exprs, result)
 
     case Include(contents, rest) =>
       val include = RawDef(contents)

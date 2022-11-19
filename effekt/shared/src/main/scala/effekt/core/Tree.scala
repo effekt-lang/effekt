@@ -55,7 +55,24 @@ sealed trait Tree
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
-case class ModuleDecl(path: String, imports: List[String], defs: Stmt, exports: List[Symbol]) extends Tree
+case class ModuleDecl(
+  path: String,
+  imports: List[String],
+  decls: List[Decl],
+  defs: Stmt,
+  exports: List[Symbol]
+) extends Tree
+
+/**
+ * Toplevel data and interface declarations
+ */
+enum Decl {
+  case Data(id: Symbol, ctors: List[Symbol])
+  case Record(id: Symbol, fields: List[Symbol])
+  case Interface(id: Symbol, operations: List[Symbol])
+}
+export Decl.*
+
 
 /**
  * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
@@ -181,8 +198,6 @@ enum Stmt extends Tree {
   case Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt)
   case Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt)
   case Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt)
-  case Data(id: Symbol, ctors: List[Symbol], rest: Stmt)
-  case Record(id: Symbol, fields: List[Symbol], rest: Stmt)
 
   case App(b: Block, targs: List[Type], args: List[Argument])
 
@@ -201,7 +216,7 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
-case class Handler(id: Interface, clauses: List[(Operation, Block.BlockLit)]) extends Tree
+case class Handler(id: symbols.Interface, clauses: List[(Operation, Block.BlockLit)]) extends Tree
 
 
 object Tree {
@@ -258,10 +273,6 @@ object Tree {
           Val(id, tpe, rewrite(binding), rewrite(body))
         case Let(id, tpe, binding, body) =>
           Let(id, tpe, rewrite(binding), rewrite(body))
-        case Data(id, ctors, rest) =>
-          Data(id, ctors, rewrite(rest))
-        case Record(id, fields, rest) =>
-          Record(id, fields, rewrite(rest))
         case App(b, targs, args) =>
           App(rewrite(b), targs, args map rewrite)
         case If(cond, thn, els) =>

@@ -16,13 +16,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     pretty(toDoc(t), 4)
 
   def format(s: Stmt): String =
-    pretty(toDocStmt(s), 60).layout
+    pretty(toDoc(s), 60).layout
 
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
-      emptyline <> toDocStmt(m.defs)
+      emptyline <> toDoc(m.defs)
   }
 
   def toDoc(b: Block): Doc = b match {
@@ -52,7 +52,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Closure(b) => parens("box" <+> toDoc(b))
-    case Run(s, _)  => "run" <+> block(toDocStmt(s))
+    case Run(s, _)  => "run" <+> block(toDoc(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -66,41 +66,38 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev.name) }, ","))
   }
 
-  def toDoc(s: Stmt): Doc =
-    if (requiresBlock(s))
-      braces(nest(line <> toDocStmt(s)) <> line)
-    else
-      toDocStmt(s)
-
   def toDoc(handler: Handler): Doc = {
     val handlerName = toDoc(handler.id.name)
     val clauses = handler.clauses.map {
       case (id, BlockLit(params, body)) =>
-        "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDocStmt(body))
+        "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
 
-  def toDocStmt(s: Stmt): Doc = s match {
+  def toDoc(d: Decl): Doc = d match {
+    case Data(did, ctors) =>
+      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
+
+    case Record(did, fields) =>
+      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) })
+
+    case Interface(id, operations) =>
+      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
+  }
+
+  def toDoc(s: Stmt): Doc = s match {
     case Def(id, tpe, Extern(ps, body), rest) =>
       "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\"" <> emptyline <>
-        toDocStmt(rest)
+        toDoc(rest)
 
     case Def(id, tpe, BlockLit(params, body), rest) =>
-      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDocStmt(body)) <> emptyline <>
-        toDocStmt(rest)
+      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body)) <> emptyline <>
+        toDoc(rest)
 
     case Def(id, tpe, b, rest) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <>
-        toDocStmt(rest)
-
-    case Data(did, ctors, rest) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) }) <> emptyline <>
-        toDocStmt(rest)
-
-    case Record(did, fields, rest) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) }) <> emptyline <>
-        toDocStmt(rest)
+        toDoc(rest)
 
     case Val(Wildcard(_), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <>
@@ -118,7 +115,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
     case If(cond, thn, els) =>
-      "if" <+> parens(toDoc(cond)) <+> block(toDocStmt(thn)) <+> "else" <+> block(toDocStmt(els))
+      "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
     case While(cond, body) =>
       "while" <+> parens(toDoc(cond)) <+> block(toDoc(body)) <+> line
@@ -145,18 +142,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     // for now, don't print includes
     case Include(contents, rest) =>
-      toDocStmt(rest)
-  }
-
-  def requiresBlock(s: Stmt): Boolean = s match {
-    case Data(did, ctors, rest) => true
-    case Def(id, tpe, d, rest) => true
-    case _ => false
+      toDoc(rest)
   }
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 
   def parens(docs: List[Doc]): Doc = parens(hsep(docs, comma))
+
+  def braces(docs: List[Doc]): Doc = braces(hsep(docs, semi))
 
   def brackets(docs: List[Doc]): Doc = brackets(hsep(docs, comma))
 

@@ -5,6 +5,7 @@ import effekt.Phase
 import effekt.context.Context
 import effekt.lifted
 import effekt.core
+import effekt.core.Decl
 import effekt.symbols.{ Symbol, builtins }
 
 object LiftInference extends Phase[CoreTransformed, CoreLifted] {
@@ -20,7 +21,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(using Environment, Context): ModuleDecl =
-    ModuleDecl(mod.path, mod.imports, transform(mod.defs), mod.exports)
+    ModuleDecl(mod.path, mod.imports, mod.decls.map(transform), transform(mod.defs), mod.exports)
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, tpe)
@@ -38,6 +39,17 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.New(core.Handler(interface, clauses)) =>
       val transformedMethods = clauses.map { case (op, block) => (op, liftBlockLitTo(block)) }
       New(Handler(interface, transformedMethods))
+  }
+
+  def transform(tree: core.Decl)(using Context): lifted.Decl = tree match {
+    case core.Data(id, ctors) =>
+      Data(id, ctors)
+
+    case core.Record(id, fields) =>
+      Record(id, fields)
+
+    case Decl.Interface(id, operations) =>
+      Interface(id, operations)
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
@@ -110,12 +122,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.State(id, init, region, body) =>
       State(id, transform(init), region, transform(body))
-
-    case core.Data(id, ctors, rest) =>
-      Data(id, ctors, transform(rest))
-
-    case core.Record(id, fields, rest) =>
-      Record(id, fields, transform(rest))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),

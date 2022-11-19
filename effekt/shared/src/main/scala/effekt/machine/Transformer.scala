@@ -72,14 +72,6 @@ object Transformer {
         emitDeclaration(Include(content));
         transformToplevel(rest, entryPoint)
 
-      case lifted.Record(_, _, rest) =>
-        // Currently machine is structurally typed, we do not generate definitions
-        transformToplevel(rest, entryPoint)
-
-      case lifted.Data(_, _, rest) =>
-        // Currently machine is structurally typed, we do not generate definitions
-        transformToplevel(rest, entryPoint)
-
       case lifted.Return(lifted.UnitLit()) =>
         entryPoint
 
@@ -400,10 +392,6 @@ object Transformer {
         // TODO expand this catch-all case
         findToplevelBlocksParams(rest)
       case lifted.Include(content, rest) =>
-        findToplevelBlocksParams(rest)
-      case lifted.Record(_, _, rest) =>
-        findToplevelBlocksParams(rest)
-      case lifted.Data(_, _, rest) =>
         findToplevelBlocksParams(rest)
       case lifted.Return(lifted.UnitLit()) =>
         ()

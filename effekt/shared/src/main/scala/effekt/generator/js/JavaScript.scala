@@ -191,9 +191,10 @@ trait JavaScript extends Backend {
     val name    = JSName(jsModuleName(module.path))
     val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
     val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
+    val decls   = module.decls.flatMap(toJS)
     val (stmts, _) = toJSStmt(module.defs)
 
-    js.Module(name, imports, exports, stmts)
+    js.Module(name, imports, exports, decls ++ stmts)
   }
 
 
@@ -236,6 +237,18 @@ trait JavaScript extends Backend {
     }
   }
 
+  def toJS(d: Decl)(using Context): List[js.Stmt] = d match {
+    case core.Data(did, ctors) =>
+      ctors.map { ctor => generateConstructor(ctor.asConstructor) }
+
+    case core.Record(did, fields) =>
+      List(generateConstructor(did, fields))
+
+    // interfaces are structurally typed at the moment, no need to generate anything.
+    case core.Interface(id, operations) =>
+      Nil
+  }
+
   /**
    * Translate the statement in a js "direct-style" statement context.
    *
@@ -254,15 +267,6 @@ trait JavaScript extends Backend {
     case Def(id, tpe, block, rest) =>
       val (stmts, ret) = toJSStmt(rest)
       (js.Const(nameDef(id), toJS(block)) :: stmts, ret)
-
-    case Data(did, ctors, rest) =>
-      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
-      val (stmts, ret) = toJSStmt(rest)
-      (cs ++ stmts, ret)
-
-    case Record(did, fields, rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (generateConstructor(did, fields) :: stmts, ret)
 
     case Include(contents, rest) =>
       val (stmts, ret) = toJSStmt(rest)
