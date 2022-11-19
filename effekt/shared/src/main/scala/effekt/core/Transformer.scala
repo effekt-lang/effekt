@@ -27,8 +27,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     }.toList
 
-    val transformed = defs.foldRight(Return(UnitLit()) : Stmt) {
-      case (d, r) => transform(d, () => r)
+    val transformed = defs.foldLeft(Return(UnitLit()) : Stmt) {
+      case (r, d) => transform(d, () => r)
     }
 
     val optimized = optimize(transformed)
