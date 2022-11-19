@@ -238,7 +238,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   lazy val repl: P[Tree] = toplevel | expr | importDecl
 
   lazy val toplevel: P[Def] =
-    (valDef
+    ( valDef
     | funDef
     | defDef
     | effectDef
@@ -246,11 +246,8 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | effectAliasDef
     | dataDef
     | recordDef
-    | externType
-    | externInterface
-    | externFun
-    | externResource
-    | externInclude
+    | externDef
+    | `var` ~> failure("Mutable variable declarations are currently not supported on the toplevel.")
     | failure("Expected a top-level definition")
     )
 
@@ -264,6 +261,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     // aliases are allowed, since they are fully resolved during name checking
     | typeAliasDef
     | effectAliasDef
+    | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
+        failure(s"Only supported on the toplevel: ${kw} declaration.")
+      }
     | failure("Expected a definition")
     )
 
@@ -289,6 +289,15 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val effectOp: P[Operation] =
     idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> effectful) ^^ Operation.apply
+
+
+  lazy val externDef: P[Def] =
+    ( externType
+    | externInterface
+    | externFun
+    | externResource
+    | externInclude
+    )
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
