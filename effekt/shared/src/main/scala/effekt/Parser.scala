@@ -219,7 +219,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // format: OFF
 
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(importDecl) ~ many(toplevel) ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -235,17 +235,14 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   /**
    * For the REPL
    */
-  lazy val repl: P[Tree] = definition | expr | importDecl
+  lazy val repl: P[Tree] = toplevel | expr | importDecl
 
-  /**
-   * Definitions
-   */
-  lazy val definition: P[Def] =
-    ( valDef
+  lazy val toplevel: P[Def] =
+    (valDef
     | funDef
     | defDef
     | effectDef
-    | typeDef
+    | typeAliasDef
     | effectAliasDef
     | dataDef
     | recordDef
@@ -254,6 +251,19 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | externFun
     | externResource
     | externInclude
+    | failure("Expected a top-level definition")
+    )
+
+  /**
+   * Definitions
+   */
+  lazy val definition: P[Def] =
+    ( valDef
+    | funDef
+    | defDef
+    // aliases are allowed, since they are fully resolved during name checking
+    | typeAliasDef
+    | effectAliasDef
     | failure("Expected a definition")
     )
 
@@ -460,7 +470,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
-  lazy val typeDef: P[Def] =
+  lazy val typeAliasDef: P[Def] =
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef.apply
 
   lazy val effectAliasDef: P[Def] =

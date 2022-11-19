@@ -18,7 +18,11 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "casestudies"
   )
 
-  override lazy val ignored: List[File] = List()
+  override lazy val ignored: List[File] = List(
+    // we deprecated locally defined type and effect declarations, for now.
+    examplesDir / "neg" / "existential_effect_leaks.effekt",
+    examplesDir / "neg" / "scoped.effekt",
+  )
 
   def runTestFor(input: File, check: File, expected: String): Unit =
     test(input.getPath) {
