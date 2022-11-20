@@ -145,27 +145,31 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Hole => Hole
   }
 
-  def transform(tree: core.Expr)(using Environment, Context): Expr = tree match {
+  def transform(tree: core.Pure)(using Environment, Context): Pure = tree match {
     case l: core.Literal[_] =>
       transform(l)
 
     case core.ValueVar(sym) =>
       ValueVar(sym)
 
-    case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>
-      PureApp(transform(b), targs, transform(args))
-
-    case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
-      PureApp(transform(b), targs, transform(args))
+    case core.PureApp(b, targs, args) =>
+      PureApp(transform(b), targs, args map transform)
 
     case core.Select(target, field) =>
       Select(transform(target), field)
 
     case core.Box(b) =>
       Box(transform(b))
+  }
+
+  def transform(tree: core.Expr)(using Environment, Context): Expr = tree match {
+    case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>
+      DirectApp(transform(b), targs, transform(args))
 
     case core.Run(s, tpe) =>
       Run(transform(s), tpe)
+
+    case p: core.Pure => transform(p)
   }
 
   def transform[T](tree: core.Literal[T]): Literal[T] = tree match {
@@ -219,8 +223,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       case b: core.Block =>
         evidence = Here() :: evidence
         transform(b)
-      case e: core.Expr  =>
-        transform(e)
+      case p: core.Pure  =>
+        transform(p)
     }
     evidence.reverse ++ transformedArgs
   }
