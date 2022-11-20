@@ -35,8 +35,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Unbox(b) => Unbox(transform(b))
 
     case core.New(core.Implementation(interface, clauses)) =>
-      val transformedMethods = clauses.map { case core.Operation(op, block) => (op, liftBlockLitTo(block)) }
-      New(Handler(interface, transformedMethods))
+      val transformedMethods = clauses.map { case core.Operation(op, block) => Operation(op, liftBlockLitTo(block)) }
+      New(Implementation(interface, transformedMethods))
   }
 
   def transform(tree: core.Decl)(using Context): lifted.Decl = tree match {
@@ -81,7 +81,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // [[ try { {cap}... => s } with ... ]] = try { [ev]{cap}... => s } with ...
       val transformedBody = transform(body)(using environment, Context) // lift is provided by the handler runtime
 
-      Handle(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
+      Try(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
 
     case core.Try(_, _, _) => Context.panic("Should not happen. Handle always take block literals as body.")
 
@@ -162,7 +162,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Select(transform(target), field)
 
     case core.Box(b) =>
-      Closure(transform(b))
+      Box(transform(b))
 
     case core.Run(s, tpe) =>
       Run(transform(s), tpe)
@@ -225,12 +225,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     evidence.reverse ++ transformedArgs
   }
 
-  def transform(h: core.Implementation)(using Environment, Context): Handler = h match {
+  def transform(h: core.Implementation)(using Environment, Context): Implementation = h match {
     case core.Implementation(id, clauses) =>
-      Handler(id, clauses.map {
+      Implementation(id, clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
-        case core.Operation(op, core.BlockLit(params, body)) => (op, BlockLit(params.map { p => transform(p) }, transform(body)))
+        case core.Operation(op, core.BlockLit(params, body)) => Operation(op, BlockLit(params.map { p => transform(p) }, transform(body)))
       })
   }
 

@@ -129,7 +129,7 @@ object Pure {
 
   // invariant, block b is pure.
   case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
-  case class Select(target: Pure, field: Symbol) extends Pure
+  case class Select(target: Pure, field: symbols.Field) extends Pure
 
   case class Box(b: Block) extends Pure
 }
@@ -202,7 +202,7 @@ enum Stmt extends Tree {
   case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Symbol, init: Pure, region: Symbol, body: Stmt)
+  case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?
   case Try(body: Block, answerType: ValueType, handler: List[Implementation])
   case Region(body: Block)
 

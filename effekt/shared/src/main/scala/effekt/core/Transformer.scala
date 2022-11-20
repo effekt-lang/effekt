@@ -181,8 +181,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case l: source.Literal => transformLit(l)
 
-    case source.Select(receiver, selector) =>
-      Select(transformAsPure(receiver), selector.symbol)
+    case s @ source.Select(receiver, selector) =>
+      Select(transformAsPure(receiver), s.definition)
 
     case source.Box(capt, block) =>
       transformBox(block)
