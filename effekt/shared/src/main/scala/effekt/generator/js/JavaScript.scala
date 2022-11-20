@@ -187,8 +187,8 @@ trait JavaScript extends Backend {
     case Run(s, tpe) => monadic.Run(toJSMonadic(s))
   }
 
-  def toJS(handler: core.Handler)(using Context): js.Expr =
-    js.Object(handler.clauses.map { case (id, b) => nameDef(id) -> toJS(b) })
+  def toJS(handler: core.Implementation)(using Context): js.Expr =
+    js.Object(handler.operations.map { case Operation(id, b) => nameDef(id) -> toJS(b) })
 
   // TODO
   //  def toJSMonadic(s: core.Stmt)(using Context, Buffer[js.Stmt]): monadic.Control = s match {
@@ -229,7 +229,7 @@ trait JavaScript extends Backend {
     case core.Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Handle(body, tpe, hs) =>
+    case core.Try(body, tpe, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
     case core.Region(body) =>

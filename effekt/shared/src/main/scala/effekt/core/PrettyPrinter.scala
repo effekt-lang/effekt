@@ -66,10 +66,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def toDoc(handler: Handler): Doc = {
-    val handlerName = toDoc(handler.id.name)
-    val clauses = handler.clauses.map {
-      case (id, BlockLit(params, body)) =>
+  def toDoc(instance: Implementation): Doc = {
+    val handlerName = toDoc(instance.interface.name)
+    val clauses = instance.operations.map {
+      case Operation(id, BlockLit(params, body)) =>
         "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
@@ -119,7 +119,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Handle(body, tpe, hs) =>
+    case Try(body, tpe, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
     case State(id, init, region, body) =>

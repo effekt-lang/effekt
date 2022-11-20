@@ -149,12 +149,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val clauses = members.map { cl => (cl.definition, cl) }.toMap
       val sig = h.definition
 
-      New(Handler(sig, sig.ops.map(clauses.apply).map {
+      New(Implementation(sig, sig.ops.map(clauses.apply).map {
         case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
           val vps = vparams map transform
           // currently the operations don't take block params
           val opBlock: BlockLit = BlockLit(vps, transform(body))
-          (op.definition, opBlock)
+          core.Operation(op.definition, opBlock)
       }))
 
     case source.Unbox(b) =>
@@ -220,11 +220,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val body = BlockLit(caps, transform(prog))
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
-      def transformHandler: source.Handler => core.Handler = {
+      def transformHandler: source.Handler => core.Implementation = {
         case h @ source.Handler(cap, source.Implementation(eff, cls)) =>
           val clauses = cls.map { cl => (cl.definition, cl) }.toMap
 
-          Handler(h.definition, h.definition.ops.map(clauses.apply).map {
+          Implementation(h.definition, h.definition.ops.map(clauses.apply).map {
             case op @ source.OpClause(id, tps, vps, ret, body, resume) =>
               val ps = vps map transform
 
@@ -232,13 +232,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               val resumeParam = BlockParam(resume.symbol.asInstanceOf[BlockSymbol])
 
               val opBlock: BlockLit = BlockLit(ps :+ resumeParam, transform(body))
-              (op.definition, opBlock)
+              core.Operation(op.definition, opBlock)
           })
       }
 
       val answerType = Context.inferredTypeOf(tree)
 
-      Context.bind(answerType, Handle(body, answerType, handlers map transformHandler))
+      Context.bind(answerType, Try(body, answerType, handlers map transformHandler))
 
     case r @ source.Region(name, body) =>
       val sym = r.symbol

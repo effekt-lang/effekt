@@ -33,11 +33,11 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *     │  │─ [[ While ]]
  *     │  │─ [[ Match ]]
  *     │  │─ [[ State ]]
- *     │  │─ [[ Handle ]]
+ *     │  │─ [[ Try ]]
  *     │  │─ [[ Region ]]
  *     │  │─ [[ Hole ]]
  *     │
- *     │─ [[ Handler ]]
+ *     │─ [[ Implementation ]]
  *
  * -------------------------------------------
  */
@@ -155,7 +155,7 @@ enum Block extends Argument {
   case BlockLit(params: List[Param], body: Stmt)
   case Member(b: Block, field: TermSymbol)
   case Unbox(p: Pure)
-  case New(impl: Handler)
+  case New(impl: Implementation)
 }
 export Block.*
 
@@ -182,7 +182,7 @@ export Param.*
  *     │─ [[ While ]]
  *     │─ [[ Match ]]
  *     │─ [[ State ]]
- *     │─ [[ Handle ]]
+ *     │─ [[ Try ]]
  *     │─ [[ Region ]]
  *     │─ [[ Hole ]]
  *
@@ -203,7 +203,7 @@ enum Stmt extends Tree {
 
   // Effects
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt)
-  case Handle(body: Block, answerType: ValueType, handler: List[Handler])
+  case Try(body: Block, answerType: ValueType, handler: List[Implementation])
   case Region(body: Block)
 
   // Others
@@ -211,7 +211,19 @@ enum Stmt extends Tree {
 }
 export Stmt.*
 
-case class Handler(id: symbols.Interface, clauses: List[(Operation, Block.BlockLit)]) extends Tree
+/**
+ * An instance of an interface, concretely implementing the operations.
+ *
+ * Used to represent handlers / capabilities, and objects / modules.
+ */
+case class Implementation(interface: symbols.Interface, operations: List[Operation]) extends Tree
+
+/**
+ * Implementation of a method / effect operation.
+ *
+ * TODO generalize from BlockLit to also allow block definitions
+ */
+case class Operation(name: symbols.Operation, implementation: Block.BlockLit)
 
 
 object Tree {
@@ -235,7 +247,7 @@ object Tree {
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def param: PartialFunction[Param, Param] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
-    def handler: PartialFunction[Handler, Handler] = PartialFunction.empty
+    def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
     def rewrite(p: Pure): Pure =
       p match {
@@ -278,8 +290,8 @@ object Tree {
           Return(rewrite(e))
         case State(id, init, reg, body) =>
           State(id, rewrite(init), reg, rewrite(body))
-        case Handle(body, tpe, handler) =>
-          Handle(rewrite(body), tpe, handler map rewrite)
+        case Try(body, tpe, handler) =>
+          Try(rewrite(body), tpe, handler map rewrite)
         case Region(body) =>
           Region(rewrite(body))
         case Match(scrutinee, clauses, default) =>
@@ -305,11 +317,12 @@ object Tree {
         New(rewrite(impl))
       case b: BlockVar => b
     }
-    def rewrite(e: Handler): Handler = e match {
+    def rewrite(e: Implementation): Implementation = e match {
       case e if handler.isDefinedAt(e) => handler(e)
-      case Handler(id: Symbol, clauses: List[(Symbol, BlockLit)]) => Handler(id, clauses map {
-        case (s, b) => (s, rewrite(b).asInstanceOf[BlockLit])
-      })
+      case Implementation(id: Symbol, clauses) => Implementation(id, clauses map rewrite)
+    }
+    def rewrite(o: Operation): Operation = o match {
+      case Operation(name, impl) => Operation(name, rewrite(impl).asInstanceOf[BlockLit])
     }
 
     def rewrite(e: Argument): Argument = e match {
