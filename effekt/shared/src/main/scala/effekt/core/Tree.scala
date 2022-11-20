@@ -24,18 +24,18 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *     │  │─ [[ BlockParam ]]
  *     │
  *     │─ [[ Stmt ]]
- *     │  │─ [[ Def ]]
+ *     │  │─ [[ Return ]]
  *     │  │─ [[ Val ]]
+ *     │  │─ [[ Def ]]
  *     │  │─ [[ Let ]]
  *     │  │─ [[ App ]]
  *     │  │─ [[ If ]]
  *     │  │─ [[ While ]]
- *     │  │─ [[ Return ]]
  *     │  │─ [[ Match ]]
- *     │  │─ [[ Hole ]]
  *     │  │─ [[ State ]]
  *     │  │─ [[ Handle ]]
  *     │  │─ [[ Region ]]
+ *     │  │─ [[ Hole ]]
  *     │
  *     │─ [[ Handler ]]
  *
@@ -173,38 +173,41 @@ export Param.*
  * ----------[[ effekt.core.Stmt ]]----------
  *
  *   ─ [[ Stmt ]]
- *     │─ [[ Def ]]
+ *     │─ [[ Return ]]
  *     │─ [[ Val ]]
+ *     │─ [[ Def ]]
  *     │─ [[ Let ]]
  *     │─ [[ App ]]
  *     │─ [[ If ]]
  *     │─ [[ While ]]
- *     │─ [[ Return ]]
  *     │─ [[ Match ]]
- *     │─ [[ Hole ]]
  *     │─ [[ State ]]
  *     │─ [[ Handle ]]
  *     │─ [[ Region ]]
+ *     │─ [[ Hole ]]
  *
  * -------------------------------------------
  */
 enum Stmt extends Tree {
-  case Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt)
+  // Fine-grain CBV
+  case Return(e: Pure)
   case Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt)
+  case Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt)
   case Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt)
-
   case App(b: Block, targs: List[Type], args: List[Argument])
 
+  // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
   case While(cond: Stmt, body: Stmt)
-  case Return(e: Pure)
   case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
 
-  case Hole
-
+  // Effects
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt)
   case Handle(body: Block, answerType: ValueType, handler: List[Handler])
   case Region(body: Block)
+
+  // Others
+  case Hole
 }
 export Stmt.*
 
