@@ -89,9 +89,9 @@ trait JavaScript extends Backend {
 
   def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
 
-  def jsModuleName(path: String): String = "$" + path.replace('/', '_')
+  def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 
-  def jsModuleFile(path: String): String = path.replace('/', '_') + ".js"
+  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
 
   def toJSName(s: String): JSName = JSName(jsEscape(s))
 
@@ -148,6 +148,14 @@ trait JavaScript extends Backend {
     JSName(name)
   }
 
+  def toJS(e: core.Extern)(using Context): js.Stmt = e match {
+    case Extern.Def(id, tpe, params, body) =>
+      js.Function(nameDef(id), params map externParams, List(js.Return(js.RawExpr(body))))
+
+    case Extern.Include(contents) =>
+      js.RawStmt(contents)
+  }
+
   def toJS(b: core.Block)(using Context): js.Expr = b match {
     case BlockVar(v) =>
       nameRef(v)
@@ -156,8 +164,6 @@ trait JavaScript extends Backend {
       monadic.Lambda(ps map toJS, stmts, ret) // TODO
     case Member(b, id) =>
       js.Member(toJS(b), memberNameRef(id))
-    case Extern(ps, body) =>
-      js.Lambda(ps map externParams, js.RawExpr(body))
     case Unbox(e)     => toJS(e)
     case New(handler) => toJS(handler)
   }
@@ -191,9 +197,11 @@ trait JavaScript extends Backend {
     val name    = JSName(jsModuleName(module.path))
     val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
     val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
+    val externs = module.externs.map(toJS)
+    val decls   = module.decls.flatMap(toJS)
     val (stmts, _) = toJSStmt(module.defs)
 
-    js.Module(name, imports, exports, stmts)
+    js.Module(name, imports, exports, decls ++ externs ++ stmts)
   }
 
 
@@ -236,6 +244,18 @@ trait JavaScript extends Backend {
     }
   }
 
+  def toJS(d: Decl)(using Context): List[js.Stmt] = d match {
+    case core.Data(did, ctors) =>
+      ctors.map { ctor => generateConstructor(ctor.asConstructor) }
+
+    case core.Record(did, fields) =>
+      List(generateConstructor(did, fields))
+
+    // interfaces are structurally typed at the moment, no need to generate anything.
+    case core.Interface(id, operations) =>
+      Nil
+  }
+
   /**
    * Translate the statement in a js "direct-style" statement context.
    *
@@ -247,26 +267,9 @@ trait JavaScript extends Backend {
       val (stmts, jsBody) = toJSStmt(body)
       (monadic.Function(nameDef(id), ps map toJS, stmts, jsBody) :: restStmts, ret)
 
-    case Def(id, tpe, Extern(ps, body), rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (js.Function(nameDef(id), ps map externParams, List(js.Return(js.RawExpr(body)))) :: stmts, ret)
-
     case Def(id, tpe, block, rest) =>
       val (stmts, ret) = toJSStmt(rest)
       (js.Const(nameDef(id), toJS(block)) :: stmts, ret)
-
-    case Data(did, ctors, rest) =>
-      val cs = ctors.map { ctor => generateConstructor(ctor.asConstructor) }
-      val (stmts, ret) = toJSStmt(rest)
-      (cs ++ stmts, ret)
-
-    case Record(did, fields, rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (generateConstructor(did, fields) :: stmts, ret)
-
-    case Include(contents, rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (js.RawStmt(contents) :: stmts, ret)
 
     case Let(Wildcard(_), tpe, binding, body) =>
       val (stmts, ret) = toJSStmt(body)

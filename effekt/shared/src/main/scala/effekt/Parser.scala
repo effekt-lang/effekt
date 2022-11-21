@@ -219,7 +219,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   // format: OFF
 
   lazy val program: P[ModuleDecl] =
-    ( moduleDecl ~ many(importDecl) ~ many(definition) ^^ ModuleDecl.apply
+    ( moduleDecl ~ many(importDecl) ~ many(toplevel) ^^ ModuleDecl.apply
     | failure("Required at least one top-level function or effect definition")
     )
 
@@ -235,7 +235,21 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
   /**
    * For the REPL
    */
-  lazy val repl: P[Tree] = definition | expr | importDecl
+  lazy val repl: P[Tree] = toplevel | expr | importDecl
+
+  lazy val toplevel: P[Def] =
+    ( valDef
+    | funDef
+    | defDef
+    | effectDef
+    | typeAliasDef
+    | effectAliasDef
+    | dataDef
+    | recordDef
+    | externDef
+    | `var` ~> failure("Mutable variable declarations are currently not supported on the toplevel.")
+    | failure("Expected a top-level definition")
+    )
 
   /**
    * Definitions
@@ -244,16 +258,12 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     ( valDef
     | funDef
     | defDef
-    | effectDef
-    | typeDef
+    // aliases are allowed, since they are fully resolved during name checking
+    | typeAliasDef
     | effectAliasDef
-    | dataDef
-    | recordDef
-    | externType
-    | externInterface
-    | externFun
-    | externResource
-    | externInclude
+    | (`extern` | `effect` | `interface` | `type` | `record`).into { (kw: String) =>
+        failure(s"Only supported on the toplevel: ${kw} declaration.")
+      }
     | failure("Expected a definition")
     )
 
@@ -279,6 +289,15 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
 
   lazy val effectOp: P[Operation] =
     idDef ~ maybeTypeParams ~ valueParams ~/ (`:` ~/> effectful) ^^ Operation.apply
+
+
+  lazy val externDef: P[Def] =
+    ( externType
+    | externInterface
+    | externFun
+    | externResource
+    | externInclude
+    )
 
   lazy val externType: P[Def] =
     `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
@@ -460,7 +479,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
         Return(Match(sc, List(MatchClause(p, body)))) withPositionOf p
      }
 
-  lazy val typeDef: P[Def] =
+  lazy val typeAliasDef: P[Def] =
     `type` ~> idDef ~ maybeTypeParams ~ (`=` ~/> valueType) ^^ TypeDef.apply
 
   lazy val effectAliasDef: P[Def] =

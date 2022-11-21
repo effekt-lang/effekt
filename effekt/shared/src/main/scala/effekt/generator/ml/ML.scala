@@ -75,7 +75,10 @@ object ML extends Backend {
   }
 
   def toML(module: ModuleDecl): List[ml.Binding] = {
-    toML(module.defs)
+    val decls = module.decls.flatMap(toML)
+    val externs = module.externs.map(toML)
+    val rest = toML(module.defs)
+    decls ++ externs ++ rest
   }
 
   def tpeToML(tpe: symbols.ValueType, inst: ml.Type => ml.Type = x => x): ml.Type = tpe match {
@@ -107,6 +110,37 @@ object ML extends Backend {
       ml.Type.Record(fieldTypes)
     case TypeConstructor.ExternType(_, _) =>
       ml.Type.Builtin(name(tc))
+  }
+
+  def toML(decl: Decl): List[ml.Binding] = decl match {
+    // did is actually TypeConstructor.DataType
+    // ctors is actually symbols.Constructor
+    case Data(did: TypeConstructor.DataType, ctors) =>
+      def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
+        case symbols.Constructor(_, _, fields, _) =>
+          val tpeList = fields.map(f => tpeToML(f.param.tpe.getOrElse(???)))
+          val tpe = tpeList match {
+            case Nil => None
+            case one :: Nil => Some(one)
+            case _ => Some(ml.Type.Tuple(tpeList))
+          }
+          (name(s), tpe)
+        case _ => ???
+      }
+
+      val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
+      List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
+
+    case Data(_, _) => ???
+    case Record(_, _) => Nil // use the native record types
+    case Decl.Interface(id, operations) => ???
+  }
+
+  def toML(ext: Extern): ml.Binding = ext match {
+    case Extern.Def(id, _, params, body) =>
+      ml.FunBind(name(id), params map (p => MLName(p.id.name.name)), RawExpr(body))
+    case Extern.Include(contents) =>
+      RawBind(contents)
   }
 
   def toMLExpr(stmt: Stmt): ml.Expr = stmt match {
@@ -178,8 +212,6 @@ object ML extends Backend {
         case ml.Let(bindings, body) => ml.Let(constDef :: bindings, body)
         case mlbody => ml.Let(List(constDef), mlbody)
       }
-
-    case other => println(other); ???
   }
 
   def createBinder(id: Symbol, binding: Expr): Binding = binding match {
@@ -192,8 +224,6 @@ object ML extends Backend {
     binding match {
       case BlockLit(params, body) =>
         ml.FunBind(name(id), params map toML, toMLExpr(body))
-      case Extern(params, body) =>
-        ml.FunBind(name(id), params map (p => MLName(p.id.name.name)), RawExpr(body))
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
@@ -204,34 +234,6 @@ object ML extends Backend {
     case Def(id, _, block, rest) =>
       val constDef = createBinder(id, block)
       constDef :: toML(rest)
-
-    // did is actually TypeConstructor.DataType
-    // ctors is actually symbols.Constructor
-    case Data(did: TypeConstructor.DataType, ctors, rest) =>
-      def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
-        case symbols.Constructor(_, _, fields, _) =>
-          val tpeList = fields.map(f => tpeToML(f.param.tpe.getOrElse(???)))
-          val tpe = tpeList match {
-            case Nil => None
-            case one :: Nil => Some(one)
-            case _ => Some(ml.Type.Tuple(tpeList))
-          }
-          (name(s), tpe)
-        case _ => ???
-      }
-
-      val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
-      val data = ml.Binding.DataBind(name(did), tvars, ctors map constructorToML)
-      data :: toML(rest)
-
-    case Data(_, _, _) => ???
-
-    case Record(_, _, rest) =>
-      toML(rest) // use the native record types
-
-    case Include(contents, rest) =>
-      val include = RawBind(contents)
-      include :: toML(rest)
 
     case Let(Wildcard(_), _, _, _) =>
       Nil
@@ -258,8 +260,8 @@ object ML extends Backend {
     case Member(b, field) =>
       ml.FieldLookup(toML(b), name(field))
 
-    case Extern(params, body) =>
-      ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
+//    case Extern(params, body) =>
+//      ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
 
     case Unbox(e) =>
       toML(e)
