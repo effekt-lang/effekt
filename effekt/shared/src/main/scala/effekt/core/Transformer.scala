@@ -27,14 +27,18 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     }.toList
 
-    val transformed = defs.foldRight(Return(UnitLit()) : Stmt) {
-      case (d, r) => transform(d, () => r)
-    }
+    // The type of the acc needs to be a function!
+    val transformed = (defs.foldRight(() => Return(UnitLit()) : Stmt) {
+      case (d, r) => () => transform(d, () => r())
+    })()
 
     val optimized = optimize(transformed)
 
+    val externals = Context.gatheredExternals
+    val declarations = Context.gatheredDeclarations
+
     // We use the imports on the symbol (since they include the prelude)
-    ModuleDecl(path, mod.imports.map { _.path }, optimized, exports)
+    ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, optimized, exports)
   }
 
   /**
@@ -47,11 +51,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body)), rest())
 
     case d @ source.DataDef(id, _, ctors) =>
-      Data(d.symbol, ctors.map { c => c.symbol }, rest())
+      Context.emitDeclaration(Data(d.symbol, ctors.map { c => c.symbol }))
+      rest()
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      core.Record(rec, rec.constructor.fields, rest())
+      Context.emitDeclaration(core.Record(rec, rec.constructor.fields))
+      rest()
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       Let(v.symbol, Run(transform(binding), Context.inferredTypeOf(binding)), rest())
@@ -72,14 +78,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      core.Record(d.symbol, ops.map { e => e.symbol }, rest())
+      Context.emitDeclaration(core.Interface(d.symbol, ops.map { e => e.symbol }))
+      rest()
 
     case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
-      Def(f.symbol, Context.functionTypeOf(sym), Extern((vps map transform) ++ (bps map transform), body), rest())
+      Context.emitExternal(Extern.Def(f.symbol, Context.functionTypeOf(sym), (vps map transform) ++ (bps map transform), body))
+      rest()
 
     case e @ source.ExternInclude(path, contents, _) =>
-      Include(contents, rest())
+      Context.emitExternal(Extern.Include(contents))
+      rest()
 
     // For now we forget about all of the following definitions in core:
     case d: source.ExternResource => rest()
@@ -376,7 +385,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    */
   private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
 
-    if (clauses.isEmpty) Context.error("Non-exhaustive pattern match.")
+    // matching on void will result in this case
+    if (clauses.isEmpty) return core.Hole
 
     val normalizedClauses = clauses.map(normalize)
 
@@ -542,9 +552,13 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */
   private var bindings: ListBuffer[Binding] = ListBuffer()
+  private var declarations: ListBuffer[core.Decl] = ListBuffer()
+  private var externals: ListBuffer[core.Extern] = ListBuffer()
 
   private[core] def initTransformerState() = {
     bindings = ListBuffer()
+    declarations = ListBuffer()
+    externals = ListBuffer()
   }
 
   /**
@@ -610,4 +624,11 @@ trait TransformerOps extends ContextOps { Context: Context =>
       case (Binding.Def(x, tpe, b), body) => Def(x, tpe, b, body)
     }
   }
+
+  private[core] def emitDeclaration(decl: core.Decl): Unit = declarations += decl
+
+  private[core] def emitExternal(decl: core.Extern): Unit = externals += decl
+
+  private[core] def gatheredDeclarations = declarations.toList
+  private[core] def gatheredExternals = externals.toList
 }

@@ -76,7 +76,11 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(module: ModuleDecl): List[chez.Def] = {
-    toChez(module.defs).definitions // TODO FIXME, once there is a let _ = ... in there, we are doomed!
+    val decls = module.decls.flatMap(toChez)
+    val externs = module.externs.map(toChez)
+    // TODO FIXME, once there is a let _ = ... in there, we are doomed!
+    val chez.Block(defns, _, _) = toChez(module.defs)
+    decls ++ externs ++ defns
   }
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
@@ -95,7 +99,7 @@ object ChezSchemeLift extends Backend {
       }
       chez.Cond(cls, default.map(toChezExpr))
 
-    case Hole => ???
+    case Hole => chez.Builtin("hole")
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
@@ -119,30 +123,37 @@ object ChezSchemeLift extends Backend {
     case other => chez.Let(Nil, toChez(other))
   }
 
+  def toChez(decl: lifted.Decl): List[chez.Def] = decl match {
+    case Data(did, ctors) =>
+      ctors.flatMap {
+        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
+        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
+      }
+
+    case Record(did, fields) =>
+      generateConstructor(did, fields)
+
+    // We use chez scheme records to also represent capabilities.
+    case Decl.Interface(id, operations) =>
+      generateConstructor(id, operations)
+  }
+
+  def toChez(decl: lifted.Extern): chez.Def = decl match {
+    case Extern.Def(id, tpe, params, body) =>
+      chez.Constant(nameDef(id),
+        chez.Lambda(params map { p => ChezName(p.id.name.name) },
+          chez.RawExpr(body)))
+
+    case Extern.Include(contents) =>
+      RawDef(contents)
+  }
+
   def toChez(stmt: Stmt): chez.Block = stmt match {
 
     case Def(id, tpe, block, rest) =>
       val Block(defs, exprs, result) = toChez(rest)
       val constDef = chez.Constant(nameDef(id), toChez(block))
       Block(constDef :: defs, exprs, result)
-
-    case Data(did, ctors, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
-      val constructors = ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
-      }
-      Block(constructors ++ defs, exprs, result)
-
-    case Record(did, fields, rest) =>
-      val Block(defs, exprs, result) = toChez(rest)
-      val constructors = generateConstructor(did, fields)
-      Block(constructors ++ defs, exprs, result)
-
-    case Include(contents, rest) =>
-      val include = RawDef(contents)
-      val chez.Block(defs, exprs, result) = toChez(rest)
-      chez.Block(include :: defs, exprs, result)
 
     case Let(Wildcard(_), tpe, binding, body) =>
       toChez(binding) match {
@@ -178,9 +189,6 @@ object ChezSchemeLift extends Backend {
 
     case Member(b, field) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
-
-    case Extern(params, body) =>
-      chez.Lambda(params map { p => ChezName(p.id.name.name) }, chez.RawExpr(body))
 
     case Unbox(e) =>
       toChez(e)

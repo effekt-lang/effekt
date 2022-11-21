@@ -89,3 +89,9 @@
   (begin
     (run warmup)
     (run iterations)))
+
+(define (hole)
+  (raise
+    (condition
+      (make-error)
+      (make-message-condition "not implemented"))))
