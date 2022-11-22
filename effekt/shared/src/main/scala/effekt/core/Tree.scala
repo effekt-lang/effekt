@@ -134,12 +134,6 @@ case class Run(s: Stmt, tpe: ValueType) extends Expr
  *   ─ [[ Pure ]]
  *     │─ [[ ValueVar ]]
  *     │─ [[ Literal ]]
- *     │  │─ [[ UnitLit ]]
- *     │  │─ [[ IntLit ]]
- *     │  │─ [[ BooleanLit ]]
- *     │  │─ [[ DoubleLit ]]
- *     │  │─ [[ StringLit ]]
- *     │
  *     │─ [[ PureApp ]]
  *     │─ [[ Select ]]
  *     │─ [[ Box ]]
@@ -159,7 +153,6 @@ object Pure {
   case class Box(b: Block) extends Pure
 }
 export Pure.*
-export Literal.*
 
 /**
  * Blocks
