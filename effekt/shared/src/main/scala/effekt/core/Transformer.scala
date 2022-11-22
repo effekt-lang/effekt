@@ -27,18 +27,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     }.toList
 
-    // The type of the acc needs to be a function!
-    val transformed = (defs.foldRight(() => Return(UnitLit()) : Stmt) {
-      case (d, r) => () => transform(d, () => r())
-    })()
+    val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
-    val optimized = optimize(transformed)
+    val definitions = toplevelDeclarations.collect { case d: Definition => d }
+    val externals = toplevelDeclarations.collect { case d: Extern => d }
+    val declarations = toplevelDeclarations.collect { case d: Decl => d }
 
-    val externals = Context.gatheredExternals
-    val declarations = Context.gatheredDeclarations
+    // val optimized = optimize(transformed)
 
     // We use the imports on the symbol (since they include the prelude)
-    ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, optimized, exports)
+    ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, definitions, exports)
   }
 
   def addToScope(definition: Definition, body: Stmt): Stmt = body match {
@@ -55,15 +53,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val ps = (vps map transform) ++ (bps map transform)
       addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), rest())
 
-    case d @ source.DataDef(id, _, ctors) =>
-      Context.emitDeclaration(Data(d.symbol, ctors.map { c => c.symbol }))
-      rest()
-
-    case d @ source.RecordDef(id, _, _) =>
-      val rec = d.symbol
-      Context.emitDeclaration(core.Record(rec, rec.constructor.fields))
-      rest()
-
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       val tpe = Context.inferredTypeOf(binding)
       addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), rest())
@@ -76,6 +65,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       insertBindings {
         addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), rest())
       }
+
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
       val tpe = TState.extractType(Context.blockTypeOf(sym))
@@ -84,25 +74,75 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         State(sym, b, sym.region, rest())
       }
 
+    // TODO we could also make this clear in the syntax of source.Tree
+    case d : source.InterfaceDef  => Context.panic("Only allowed on the toplevel")
+    case d : source.ExternDef     => Context.panic("Only allowed on the toplevel")
+    case d : source.ExternInclude => Context.panic("Only allowed on the toplevel")
+    case d : source.DataDef       => Context.panic("Only allowed on the toplevel")
+    case d : source.RecordDef     => Context.panic("Only allowed on the toplevel")
+
+    // For now we forget about all of the following definitions in core:
+    case d: source.ExternResource  => rest()
+    case d: source.ExternType      => rest()
+    case d: source.ExternInterface => rest()
+    case d: source.TypeDef         => rest()
+    case d: source.EffectDef       => rest()
+  }
+
+
+  def transformToplevel(d: source.Def)(using Context): List[Definition | Decl | Extern] = d match {
+    case f @ source.FunDef(id, _, vps, bps, _, body) =>
+      val sym = f.symbol
+      val ps = (vps map transform) ++ (bps map transform)
+      List(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))))
+
+    case d @ source.DataDef(id, _, ctors) =>
+      List(Data(d.symbol, ctors.map { c => c.symbol }))
+
+    case d @ source.RecordDef(id, _, _) =>
+      val rec = d.symbol
+      List(core.Record(rec, rec.constructor.fields))
+
+    case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
+      val tpe = Context.inferredTypeOf(binding)
+      List(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)))
+
+    case v @ source.ValDef(id, _, binding) =>
+      Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
+
+    case v @ source.DefDef(id, annot, binding) =>
+      val sym = v.symbol
+      val (definition, bindings) = Context.withBindings {
+        Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding))
+      }
+
+      // convert binding into Definition.
+      val additionalDefinitions = bindings.toList.map {
+        case Binding.Let(name, tpe, binding) => Definition.Let(name, tpe, binding)
+        case Binding.Def(name, tpe, binding) => Definition.Def(name, tpe, binding)
+        case Binding.Val(name, tpe, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
+      }
+      additionalDefinitions ++ List(definition)
+
+    case v @ source.VarDef(id, _, reg, binding) =>
+      Context.at(d) { Context.abort("Mutuble variable bindings currently not allowed on the toplevel") }
+
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      Context.emitDeclaration(core.Interface(d.symbol, ops.map { e => e.symbol }))
-      rest()
+      List(core.Interface(d.symbol, ops.map { e => e.symbol }))
 
     case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
-      Context.emitExternal(Extern.Def(f.symbol, Context.functionTypeOf(sym), (vps map transform) ++ (bps map transform), body))
-      rest()
+      List(Extern.Def(sym, Context.functionTypeOf(sym), (vps map transform) ++ (bps map transform), body))
 
     case e @ source.ExternInclude(path, contents, _) =>
-      Context.emitExternal(Extern.Include(contents))
-      rest()
+      List(Extern.Include(contents))
 
     // For now we forget about all of the following definitions in core:
-    case d: source.ExternResource => rest()
-    case d: source.ExternType => rest()
-    case d: source.ExternInterface => rest()
-    case d: source.TypeDef => rest()
-    case d: source.EffectDef => rest()
+    case d: source.ExternResource => Nil
+    case d: source.ExternType => Nil
+    case d: source.ExternInterface => Nil
+    case d: source.TypeDef => Nil
+    case d: source.EffectDef => Nil
   }
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
@@ -559,13 +599,9 @@ trait TransformerOps extends ContextOps { Context: Context =>
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */
   private var bindings: ListBuffer[Binding] = ListBuffer()
-  private var declarations: ListBuffer[core.Decl] = ListBuffer()
-  private var externals: ListBuffer[core.Extern] = ListBuffer()
 
   private[core] def initTransformerState() = {
     bindings = ListBuffer()
-    declarations = ListBuffer()
-    externals = ListBuffer()
   }
 
   /**
@@ -631,11 +667,4 @@ trait TransformerOps extends ContextOps { Context: Context =>
       case (Binding.Def(x, tpe, b), body) => Transformer.addToScope(Definition.Def(x, tpe, b), body)
     }
   }
-
-  private[core] def emitDeclaration(decl: core.Decl): Unit = declarations += decl
-
-  private[core] def emitExternal(decl: core.Extern): Unit = externals += decl
-
-  private[core] def gatheredDeclarations = declarations.toList
-  private[core] def gatheredExternals = externals.toList
 }

@@ -20,8 +20,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     Some(CoreLifted(input.source, input.tree, input.mod, transformed))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
-  def transform(mod: core.ModuleDecl)(using Environment, Context): ModuleDecl =
-    ModuleDecl(mod.path, mod.imports, mod.decls.map(transform), mod.externs.map(transform), transform(mod.defs), mod.exports)
+  def transform(mod: core.ModuleDecl)(using Environment, Context): ModuleDecl = {
+    // TODO drop once we also ported lifted to use [[core.Definition]]
+    val adapterStatement = core.Scope(mod.definitions, core.Return(core.UnitLit()))
+    ModuleDecl(mod.path, mod.imports, mod.decls.map(transform), mod.externs.map(transform), transform(adapterStatement), mod.exports)
+  }
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, tpe)

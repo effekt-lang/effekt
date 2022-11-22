@@ -18,12 +18,18 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
+  def format(defs: List[Definition]): String =
+    pretty(toDoc(defs), 60).layout
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
-      emptyline <> toDoc(m.defs)
+      emptyline <> toDoc(m.definitions)
   }
+
+  def toDoc(definitions: List[Definition]): Doc =
+    vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tpe, ps, body) =>
@@ -97,7 +103,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(s: Stmt): Doc = s match {
     case Scope(definitions, rest) =>
-      vsep(definitions map toDoc, semi) <> emptyline <> toDoc(rest)
+      toDoc(definitions) <> emptyline <> toDoc(rest)
 
     case Return(e) =>
       toDoc(e)

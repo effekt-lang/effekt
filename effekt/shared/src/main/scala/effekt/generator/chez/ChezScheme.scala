@@ -88,7 +88,11 @@ trait ChezScheme {
     val decls = module.decls.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
-    val chez.Block(defns, _, _) = toChez(module.defs)
+    val defns = module.definitions.map(toChez).flatMap {
+      case Left(d) => Some(d)
+      case Right(None) => None
+      case Right(e) => ???
+    }
     decls ++ externs ++ defns
   }
 

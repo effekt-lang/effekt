@@ -51,7 +51,7 @@ case class ModuleDecl(
   imports: List[String],
   decls: List[Decl],
   externs: List[Extern],
-  defs: Stmt,
+  definitions: List[Definition],
   exports: List[Symbol]
 ) extends Tree
 

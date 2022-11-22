@@ -199,7 +199,7 @@ trait JavaScript extends Backend {
     val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
     val externs = module.externs.map(toJS)
     val decls   = module.decls.flatMap(toJS)
-    val (stmts, _) = toJSStmt(module.defs)
+    val stmts   = module.definitions.map(toJS)
 
     js.Module(name, imports, exports, decls ++ externs ++ stmts)
   }
