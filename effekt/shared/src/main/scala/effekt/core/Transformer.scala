@@ -29,11 +29,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val toplevelDeclarations = defs.flatMap(d => transformToplevel(d))
 
-    val definitions = toplevelDeclarations.collect { case d: Definition => d }
+    val definitions = toplevelDeclarations.collect { case d: Definition => optimize(d) }
     val externals = toplevelDeclarations.collect { case d: Extern => d }
     val declarations = toplevelDeclarations.collect { case d: Decl => d }
-
-    // val optimized = optimize(transformed)
 
     // We use the imports on the symbol (since they include the prelude)
     ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, definitions, exports)
@@ -509,7 +507,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
     core.Val(id, Context.valueTypeOf(id), binding, body)
 
-  def optimize(s: Stmt)(using Context): Stmt = {
+  def optimize(s: Definition)(using Context): Definition = {
 
     // a very small and easy post processing step...
     // reduces run-return pairs
