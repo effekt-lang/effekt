@@ -58,7 +58,7 @@ case class ModuleDecl(
 /**
  * Toplevel data and interface declarations
  */
-enum Decl {
+enum Decl extends Tree {
   case Data(id: Symbol, ctors: List[Symbol])
   case Record(id: Symbol, fields: List[Symbol])
   case Interface(id: Symbol, operations: List[Symbol])
@@ -68,9 +68,20 @@ export Decl.*
 /**
  * FFI external definitions
  */
-enum Extern {
+enum Extern extends Tree {
   case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
   case Include(contents: String)
+}
+
+enum Definition {
+  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
+  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr) // PURE on the toplevel?
+
+  // TBD
+  // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
+
+  // TDB
+  // case Mutual(defs: List[Definition.Def])
 }
 
 /**
@@ -189,11 +200,12 @@ export Param.*
  * -------------------------------------------
  */
 enum Stmt extends Tree {
+
+  case Scope(definitions: List[Definition], body: Stmt)
+
   // Fine-grain CBV
   case Return(e: Pure)
   case Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt)
-  case Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt)
-  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt)
   case App(b: Block, targs: List[Type], args: List[Argument])
 
   // Local Control Flow
@@ -245,6 +257,7 @@ object Tree {
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
     def param: PartialFunction[Param, Param] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
@@ -271,15 +284,20 @@ object Tree {
         case p: Pure     => rewrite(p)
       }
 
+    def rewrite(d: Definition): Definition = d match {
+      case d if defn.isDefinedAt(d) => defn(d)
+      case Definition.Def(id, tpe, block) =>
+        Definition.Def(id, tpe, rewrite(block))
+      case Definition.Let(id, tpe, binding) =>
+        Definition.Let(id, tpe, rewrite(binding))
+    }
+
     def rewrite(e: Stmt): Stmt =
       e match {
         case e if stmt.isDefinedAt(e) => stmt(e)
-        case Def(id, tpe, block, rest) =>
-          Def(id, tpe, rewrite(block), rewrite(rest))
+        case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
         case Val(id, tpe, binding, body) =>
           Val(id, tpe, rewrite(binding), rewrite(body))
-        case Let(id, tpe, binding, body) =>
-          Let(id, tpe, rewrite(binding), rewrite(body))
         case App(b, targs, args) =>
           App(rewrite(b), targs, args map rewrite)
         case If(cond, thn, els) =>

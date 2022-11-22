@@ -41,6 +41,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, optimized, exports)
   }
 
+  def addToScope(definition: Definition, body: Stmt): Stmt = body match {
+    case Scope(definitions, body) => Scope(definition :: definitions, body)
+    case other => Scope(List(definition), other)
+  }
+
   /**
    * the "rest" is a thunk so that traversal of statements takes place in the correct order.
    */
@@ -48,7 +53,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
       val ps = (vps map transform) ++ (bps map transform)
-      Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body)), rest())
+      addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), rest())
 
     case d @ source.DataDef(id, _, ctors) =>
       Context.emitDeclaration(Data(d.symbol, ctors.map { c => c.symbol }))
@@ -60,15 +65,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       rest()
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      Let(v.symbol, Run(transform(binding), Context.inferredTypeOf(binding)), rest())
+      val tpe = Context.inferredTypeOf(binding)
+      addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), rest())
 
     case v @ source.ValDef(id, _, binding) =>
       Val(v.symbol, transform(binding), rest())
 
     case v @ source.DefDef(id, annot, binding) =>
       val sym = v.symbol
-      insertBindings { Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), rest()) }
-
+      insertBindings {
+        addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), rest())
+      }
     case v @ source.VarDef(id, _, reg, binding) =>
       val sym = v.symbol
       val tpe = TState.extractType(Context.blockTypeOf(sym))
@@ -105,7 +112,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
-      val let = Let(freshWildcardFor(e), expr, transform(rest))
+      val let = addToScope(Let(freshWildcardFor(e), expr), transform(rest))
       if (bs.isEmpty) { let }
       else { Context.reifyBindings(let, bs) }
 
@@ -484,8 +491,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
     core.Val(id, Context.valueTypeOf(id), binding, body)
 
-  def Let(id: ValueSymbol, binding: Expr, body: Stmt)(using Context): core.Let =
-    core.Let(id, Context.valueTypeOf(id), binding, body)
+  def Let(id: ValueSymbol, binding: Expr)(using Context): core.Definition.Let =
+    core.Definition.Let(id, Context.valueTypeOf(id), binding)
 
   def optimize(s: Stmt)(using Context): Stmt = {
 
@@ -501,7 +508,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     object directStyleVal extends core.Tree.Rewrite {
       override def stmt = {
         case core.Val(id, tpe, core.Return(expr), body) =>
-          core.Let(id, tpe, rewrite(expr), rewrite(body))
+          addToScope(Definition.Let(id, tpe, rewrite(expr)), rewrite(body))
       }
     }
     val opt = eliminateReturnRun.rewrite(s)
@@ -620,8 +627,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
       case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
       case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
       case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
-      case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
-      case (Binding.Def(x, tpe, b), body) => Def(x, tpe, b, body)
+      case (Binding.Let(x, tpe, b), body) => Transformer.addToScope(Definition.Let(x, tpe, b), body)
+      case (Binding.Def(x, tpe, b), body) => Transformer.addToScope(Definition.Def(x, tpe, b), body)
     }
   }
 

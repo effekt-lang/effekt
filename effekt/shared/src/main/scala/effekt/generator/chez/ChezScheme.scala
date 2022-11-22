@@ -162,30 +162,33 @@ trait ChezScheme {
       RawDef(contents)
   }
 
-  def toChez(stmt: Stmt): chez.Block = stmt match {
+  def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
+    case Definition.Def(id, tpe, block) =>
+      Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Def(id, tpe, block, rest) =>
-      val chez.Block(defs, exprs, result) = toChez(rest)
-      val constDef = chez.Constant(nameDef(id), toChez(block))
-      chez.Block(constDef :: defs, exprs, result)
-
-    case Let(Wildcard(_), tpe, binding, body) =>
+    case Definition.Let(Wildcard(_), tpe, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
         // since this might lead to invalid scheme code.
-        case _: chez.Variable => toChez(body)
-        case _ => toChez(body) match {
-          case chez.Block(Nil, exprs, result) => chez.Block(Nil, toChez(binding) :: exprs, result)
-          case b => chez.Block(Nil, toChez(binding) :: Nil, chez.Let(Nil, b))
-        }
+        case _: chez.Variable => Right(None)
+        case other => Right(Some(other))
       }
 
     // we could also generate a let here...
-    case Let(id, tpe, binding, body) =>
-      val chez.Block(defs, exprs, result) = toChez(body)
-      val constant = chez.Constant(nameDef(id), toChez(binding))
-      chez.Block(constant :: defs, exprs, result)
+    case Definition.Let(id, tpe, binding) =>
+      Left(chez.Constant(nameDef(id), toChez(binding)))
+  }
+
+  def toChez(stmt: Stmt): chez.Block = stmt match {
+    // TODO maybe this can be simplified after also introducing mutual definitions
+    case Scope(definitions, body) =>
+      definitions.map(toChez).foldRight(toChez(body)) {
+        case (Left(defn), chez.Block(defns, exprs, result)) => chez.Block(defn :: defns, exprs, result)
+        case (Right(Some(expr)), chez.Block(Nil, exprs, result)) => chez.Block(Nil, expr :: exprs, result)
+        case (Right(Some(expr)), rest) => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
+        case (Right(None), rest) => rest
+      }
 
     case other => chez.Block(Nil, Nil, toChezExpr(other))
   }

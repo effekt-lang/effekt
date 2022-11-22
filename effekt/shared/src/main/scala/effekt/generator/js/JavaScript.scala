@@ -256,28 +256,30 @@ trait JavaScript extends Backend {
       Nil
   }
 
+  def toJS(d: core.Definition)(using Context): js.Stmt = d match {
+    case Definition.Def(id, tpe, BlockLit(ps, body)) =>
+      val (stmts, jsBody) = toJSStmt(body)
+      monadic.Function(nameDef(id), ps map toJS, stmts, jsBody)
+
+    case Definition.Def(id, tpe, block) =>
+      js.Const(nameDef(id), toJS(block))
+
+    case Definition.Let(Wildcard(_), tpe, binding) =>
+      js.ExprStmt(toJS(binding))
+
+    case Definition.Let(id, tpe, binding) =>
+      js.Const(nameDef(id), toJS(binding))
+  }
+
   /**
    * Translate the statement in a js "direct-style" statement context.
    *
    * That is, multiple statements that end in one monadic return
    */
   def toJSStmt(s: core.Stmt)(using Context): (List[js.Stmt], monadic.Control) = s match {
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      val (restStmts, ret) = toJSStmt(rest)
-      val (stmts, jsBody) = toJSStmt(body)
-      (monadic.Function(nameDef(id), ps map toJS, stmts, jsBody) :: restStmts, ret)
-
-    case Def(id, tpe, block, rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (js.Const(nameDef(id), toJS(block)) :: stmts, ret)
-
-    case Let(Wildcard(_), tpe, binding, body) =>
+    case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
-      (js.ExprStmt(toJS(binding)) :: stmts, ret)
-
-    case Let(id, tpe, binding, body) =>
-      val (stmts, ret) = toJSStmt(body)
-      (js.Const(nameDef(id), toJS(binding)) :: stmts, ret)
+      (definitions.map(toJS) ++ stmts, ret)
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)

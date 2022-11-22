@@ -86,14 +86,21 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
   }
 
-  def toDoc(s: Stmt): Doc = s match {
-    case Def(id, tpe, BlockLit(params, body), rest) =>
-      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body)) <> emptyline <>
-        toDoc(rest)
+  def toDoc(d: Definition): Doc = d match {
+    case Definition.Def(id, tpe, BlockLit(params, body)) =>
+      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
+    case Definition.Def(id, tpe, block) =>
+      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
+    case Definition.Let(id, tpe, binding) =>
+      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
+  }
 
-    case Def(id, tpe, b, rest) =>
-      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <>
-        toDoc(rest)
+  def toDoc(s: Stmt): Doc = s match {
+    case Scope(definitions, rest) =>
+      vsep(definitions map toDoc, semi) <> emptyline <> toDoc(rest)
+
+    case Return(e) =>
+      toDoc(e)
 
     case Val(Wildcard(_), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <>
@@ -101,10 +108,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Val(id, tpe, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
-        toDoc(body)
-
-    case Let(id, tpe, binding, body) =>
-      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, args) =>
@@ -115,9 +118,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case While(cond, body) =>
       "while" <+> parens(toDoc(cond)) <+> block(toDoc(body)) <+> line
-
-    case Return(e) =>
-      toDoc(e)
 
     case Try(body, tpe, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")

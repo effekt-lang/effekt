@@ -5,6 +5,7 @@ import effekt.Phase
 import effekt.context.Context
 import effekt.lifted
 import effekt.core
+import effekt.core.Definition
 import effekt.symbols.{ Symbol, builtins }
 
 object LiftInference extends Phase[CoreTransformed, CoreLifted] {
@@ -115,15 +116,20 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       App(transform(b), targs, ev :: transformedArgs)
 
-    case core.Def(id, tpe, block, rest) =>
-      val env = pretransform(tree)
-      Def(id, tpe, transform(block)(using env, Context), transform(rest)(using env, Context))
+    case core.Scope(definitions, rest) =>
+      val env = pretransform(definitions)
+      val body = transform(rest)(using env, Context)
+
+      // TODO once we also port lifted to non-intrinsic lists, this can be simplified
+      definitions.foldRight(body) {
+        case (core.Definition.Def(id, tpe, block), rest) =>
+          Def(id, tpe, transform(block)(using env, Context), rest)
+        case (core.Definition.Let(id, tpe, binding), rest) =>
+          Let(id, tpe, transform(binding)(using env, Context), rest)
+      }
 
     case core.Val(id, tpe, binding, body) =>
       Val(id, tpe, transform(binding), transform(body))
-
-    case core.Let(id, tpe, binding, body) =>
-      Let(id, tpe, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
       State(id, transform(init), region, transform(body))
@@ -241,8 +247,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    *
    * TODO add mutual blocks to core and lifted. This way we know exactly what to pretransform.
    */
-  def pretransform(s: core.Stmt)(using env: Environment, C: Context): Environment = s match {
-    case core.Def(id, tpe, block, rest) =>
+  def pretransform(s: List[core.Definition])(using env: Environment, C: Context): Environment = s match {
+    case core.Definition.Def(id, tpe, block) :: rest =>
       // will this ever be non-empty???
       val extendedEnv = env.bind(id, env.evidenceFor(block).scopes)
       pretransform(rest)(using extendedEnv, C)
