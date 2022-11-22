@@ -100,23 +100,39 @@
 
 ; Global locations
 
-@stk = private global %StkVal undef
-@base = private alias %Base, %Base* getelementptr (%StkVal, %Stk @stk, i64 0, i32 1, i32 1)
-@limit = private alias %Limit, %Limit* getelementptr (%StkVal, %Stk @stk, i64 0, i32 1, i32 2)
-@region = private alias %Region, %Region* getelementptr (%StkVal, %Stk @stk, i64 0, i32 2)
-@rest = private alias %Stk, %Stk* getelementptr (%StkVal, %Stk @stk, i64 0, i32 4)
+@base = private global %Base null
+@limit = private global %Limit null
+@region = private global %Region undef
+@rest = private global %Stk undef
+
 
 define %StkVal @getStk(%Sp %sp) alwaysinline {
-    %stk.0 = load %StkVal, %Stk @stk
-    %stk.1 = insertvalue %StkVal %stk.0, %Rc 0, 0
-    %stk.2 = insertvalue %StkVal %stk.1, %Sp %sp, 1, 0
-    ret %StkVal %stk.2
+    %base = load %Base, %Base* @base
+    %limit = load %Limit, %Limit* @limit
+    %region = load %Region, %Region* @region
+    %rest = load %Stk, %Stk* @rest
+
+    %stk.0 = insertvalue %StkVal undef, %Rc 0, 0
+    %stk.1 = insertvalue %StkVal %stk.0, %Sp %sp, 1, 0
+    %stk.2 = insertvalue %StkVal %stk.1, %Base %base, 1, 1
+    %stk.3 = insertvalue %StkVal %stk.2, %Limit %limit, 1, 2
+    %stk.4 = insertvalue %StkVal %stk.3, %Region %region, 2
+    %stk.5 = insertvalue %StkVal %stk.4, %RegionBackup null, 3
+    %stk.6 = insertvalue %StkVal %stk.5, %Stk %rest, 4
+
+    ret %StkVal %stk.6
 }
 
 define void @setStk(%StkVal %stk) alwaysinline {
-    %stk.0 = insertvalue %StkVal %stk, %Rc undef, 0
-    %stk.1 = insertvalue %StkVal %stk.0, %Sp undef, 1, 0
-    store %StkVal %stk.1, %Stk @stk
+    %base = extractvalue %StkVal %stk, 1, 1
+    %limit = extractvalue %StkVal %stk, 1, 2
+    %region = extractvalue %StkVal %stk, 2
+    %rest = extractvalue %StkVal %stk, 4
+
+    store %Base %base, %Base* @base
+    store %Limit %limit, %Limit* @limit
+    store %Region %region, %Region* @region
+    store %Stk %rest, %Stk* @rest
     ret void
 }
 
