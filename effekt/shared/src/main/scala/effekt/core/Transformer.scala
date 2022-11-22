@@ -99,55 +99,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case other => Scope(List(definition), other)
   }
 
-  /**
-   * the "rest" is a thunk so that traversal of statements takes place in the correct order.
-   */
-  def transform(d: source.Def, rest: () => Stmt)(using Context): Stmt = d match {
-    case f @ source.FunDef(id, _, vps, bps, _, body) =>
-      val sym = f.symbol
-      val ps = (vps map transform) ++ (bps map transform)
-      addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), rest())
-
-    case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      val tpe = Context.inferredTypeOf(binding)
-      addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), rest())
-
-    case v @ source.ValDef(id, _, binding) =>
-      Val(v.symbol, transform(binding), rest())
-
-    case v @ source.DefDef(id, annot, binding) =>
-      val sym = v.symbol
-      insertBindings {
-        addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), rest())
-      }
-
-    case v @ source.VarDef(id, _, reg, binding) =>
-      val sym = v.symbol
-      val tpe = TState.extractType(Context.blockTypeOf(sym))
-      insertBindings {
-        val b = Context.bind(tpe, transform(binding))
-        State(sym, b, sym.region, rest())
-      }
-
-    // TODO we could also make this clear in the syntax of source.Tree
-    case d : source.InterfaceDef  => Context.panic("Only allowed on the toplevel")
-    case d : source.ExternDef     => Context.panic("Only allowed on the toplevel")
-    case d : source.ExternInclude => Context.panic("Only allowed on the toplevel")
-    case d : source.DataDef       => Context.panic("Only allowed on the toplevel")
-    case d : source.RecordDef     => Context.panic("Only allowed on the toplevel")
-
-    // For now we forget about all of the following definitions in core:
-    case d: source.ExternResource  => rest()
-    case d: source.ExternType      => rest()
-    case d: source.ExternInterface => rest()
-    case d: source.TypeDef         => rest()
-    case d: source.EffectDef       => rest()
-  }
-
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
-    case source.DefStmt(d, rest) =>
-      transform(d, () => transform(rest))
-
     // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
@@ -159,11 +111,54 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.ExprStmt(e, rest) =>
       Val(freshWildcardFor(e), insertBindings { Return(transformAsPure(e)) }, transform(rest))
 
+    // return e
     case source.Return(e) =>
       insertBindings { Return(transformAsPure(e)) }
 
+    // simply drop superfluous {}s
     case source.BlockStmt(b) =>
       transform(b)
+
+    case source.DefStmt(d, rest) => d match {
+      case f @ source.FunDef(id, _, vps, bps, _, body) =>
+        val sym = f.symbol
+        val ps = (vps map transform) ++ (bps map transform)
+        addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), transform(rest))
+
+      case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
+        val tpe = Context.inferredTypeOf(binding)
+        addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), transform(rest))
+
+      case v @ source.ValDef(id, _, binding) =>
+        Val(v.symbol, transform(binding), transform(rest))
+
+      case v @ source.DefDef(id, annot, binding) =>
+        val sym = v.symbol
+        insertBindings {
+          addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), transform(rest))
+        }
+
+      case v @ source.VarDef(id, _, reg, binding) =>
+        val sym = v.symbol
+        val tpe = TState.extractType(Context.blockTypeOf(sym))
+        insertBindings {
+          State(sym, Context.bind(tpe, transform(binding)), sym.region, transform(rest))
+        }
+
+      // TODO we could also make this clear in the syntax of source.Tree
+      case d: source.InterfaceDef => Context.panic("Only allowed on the toplevel")
+      case d: source.ExternDef => Context.panic("Only allowed on the toplevel")
+      case d: source.ExternInclude => Context.panic("Only allowed on the toplevel")
+      case d: source.DataDef => Context.panic("Only allowed on the toplevel")
+      case d: source.RecordDef => Context.panic("Only allowed on the toplevel")
+
+      // For now we forget about all of the following definitions in core:
+      case d: source.ExternResource => transform(rest)
+      case d: source.ExternType => transform(rest)
+      case d: source.ExternInterface => transform(rest)
+      case d: source.TypeDef => transform(rest)
+      case d: source.EffectDef => transform(rest)
+    }
   }
 
   def transformLit(tree: source.Literal)(using Context): Literal[_] = tree match {
