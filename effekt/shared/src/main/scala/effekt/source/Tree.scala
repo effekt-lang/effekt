@@ -169,8 +169,6 @@ export Param.*
  */
 enum Def extends Definition {
 
-  def id: IdDef
-
   case FunDef(id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Option[Effectful], body: Stmt)
   case ValDef(id: IdDef, annot: Option[ValueType], binding: Stmt)
   case VarDef(id: IdDef, annot: Option[ValueType], region: Option[IdRef], binding: Stmt)
@@ -194,7 +192,7 @@ enum Def extends Definition {
    */
   case ExternType(id: IdDef, tparams: List[Id])
 
-  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String)
+  case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
@@ -208,7 +206,15 @@ enum Def extends Definition {
    */
   case ExternInclude(path: String, var contents: String = "", val id: IdDef = IdDef(""))
 }
+object Def {
+  type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude
+  type Declaration = InterfaceDef | DataDef | RecordDef
+  type Alias = TypeDef | EffectDef
+  type Toplevel = FunDef | ValDef | DefDef | Alias | Extern | Declaration
+  type Local = FunDef | ValDef | DefDef | Alias | VarDef
+}
 export Def.*
+
 
 
 /**

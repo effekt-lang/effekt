@@ -241,7 +241,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     ( valDef
     | funDef
     | defDef
-    | effectDef
+    | interfaceDef
     | typeAliasDef
     | effectAliasDef
     | dataDef
@@ -277,7 +277,7 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     | failure("Expected the body of a function definition, starting with =")
     )
 
-  lazy val effectDef: P[Def] =
+  lazy val interfaceDef: P[Def] =
     ( `effect` ~> effectOp ^^ {
         case op =>
           InterfaceDef(IdDef(op.id.name) withPositionOf op.id, Nil, List(op), true)

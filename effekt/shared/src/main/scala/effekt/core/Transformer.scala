@@ -87,11 +87,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Extern.Include(contents))
 
     // For now we forget about all of the following definitions in core:
-    case d: source.ExternResource => Nil
-    case d: source.ExternType => Nil
-    case d: source.ExternInterface => Nil
-    case d: source.TypeDef => Nil
-    case d: source.EffectDef => Nil
+    case d: source.Def.Extern => Nil
+    case d: source.Def.Alias => Nil
   }
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
@@ -140,19 +137,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           State(sym, Context.bind(tpe, transform(binding)), sym.region, transform(rest))
         }
 
-      // TODO we could also make this clear in the syntax of source.Tree
-      case d: source.InterfaceDef => Context.panic("Only allowed on the toplevel")
-      case d: source.ExternDef => Context.panic("Only allowed on the toplevel")
-      case d: source.ExternInclude => Context.panic("Only allowed on the toplevel")
-      case d: source.DataDef => Context.panic("Only allowed on the toplevel")
-      case d: source.RecordDef => Context.panic("Only allowed on the toplevel")
+      case d: source.Def.Extern => Context.panic("Only allowed on the toplevel")
+      case d: source.Def.Declaration => Context.panic("Only allowed on the toplevel")
 
       // For now we forget about all of the following definitions in core:
-      case d: source.ExternResource => transform(rest)
-      case d: source.ExternType => transform(rest)
-      case d: source.ExternInterface => transform(rest)
-      case d: source.TypeDef => transform(rest)
-      case d: source.EffectDef => transform(rest)
+      case d: source.Def.Alias => transform(rest)
     }
   }
 
