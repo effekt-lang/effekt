@@ -10,6 +10,15 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *
  *   ─ [[ Tree ]]
  *     │─ [[ ModuleDecl ]]
+ *     │─ [[ Decl ]]
+ *     │  │─ [[ Data ]]
+ *     │  │─ [[ Record ]]
+ *     │  │─ [[ Interface ]]
+ *     │
+ *     │─ [[ Extern ]]
+ *     │  │─ [[ Def ]]
+ *     │  │─ [[ Include ]]
+ *     │
  *     │─ [[ Argument ]]
  *     │  │─ [[ Pure ]]
  *     │  │─ [[ Block ]]
@@ -24,10 +33,9 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *     │  │─ [[ BlockParam ]]
  *     │
  *     │─ [[ Stmt ]]
+ *     │  │─ [[ Scope ]]
  *     │  │─ [[ Return ]]
  *     │  │─ [[ Val ]]
- *     │  │─ [[ Def ]]
- *     │  │─ [[ Let ]]
  *     │  │─ [[ App ]]
  *     │  │─ [[ If ]]
  *     │  │─ [[ While ]]
@@ -196,10 +204,9 @@ export Param.*
  * ----------[[ effekt.core.Stmt ]]----------
  *
  *   ─ [[ Stmt ]]
+ *     │─ [[ Scope ]]
  *     │─ [[ Return ]]
  *     │─ [[ Val ]]
- *     │─ [[ Def ]]
- *     │─ [[ Let ]]
  *     │─ [[ App ]]
  *     │─ [[ If ]]
  *     │─ [[ While ]]

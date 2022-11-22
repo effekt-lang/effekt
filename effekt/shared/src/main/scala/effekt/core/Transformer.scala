@@ -72,7 +72,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       additionalDefinitions ++ List(definition)
 
     case v @ source.VarDef(id, _, reg, binding) =>
-      Context.at(d) { Context.abort("Mutuble variable bindings currently not allowed on the toplevel") }
+      Context.at(d) { Context.abort("Mutable variable bindings currently not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
       List(core.Interface(d.symbol, ops.map { e => e.symbol }))
