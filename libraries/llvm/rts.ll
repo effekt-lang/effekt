@@ -56,13 +56,13 @@
 ; Pointers for a heap allocated stack
 %Mem = type { %Sp, %Base, %Limit }
 
-%State = type %StateHeader*
-
 ; This is part of a linked list containing all states in a region.
 ;
-;   +[ RegionVal ]+--------------+
-;   | Next | Size | Payload ...  |
-;   +-------------+--------------+
+;   +[ StateHeader ]+--------------+
+;   | Next  | Size  | Payload ...  |
+;   +---------------+--------------+
+%State = type %StateHeader*
+
 %StateHeader = type { %State, i64 }
 
 ; Linked list of states and the total size of allocated space (without state headers)
