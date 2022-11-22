@@ -84,6 +84,18 @@ enum Definition {
   // case Mutual(defs: List[Definition.Def])
 }
 
+// Some smart constructors
+private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
+  case Scope(definitions, body) => Scope(definition :: definitions, body)
+  case other => Scope(List(definition), other)
+}
+
+def Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) =
+  addToScope(Definition.Def(id, tpe, block), rest)
+
+def Let(id: ValueSymbol, tpe: ValueType, binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(id, tpe, binding), rest)
+
 /**
  * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
  */

@@ -94,16 +94,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d: source.EffectDef => Nil
   }
 
-  def addToScope(definition: Definition, body: Stmt): Stmt = body match {
-    case Scope(definitions, body) => Scope(definition :: definitions, body)
-    case other => Scope(List(definition), other)
-  }
-
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
-      val let = addToScope(Let(freshWildcardFor(e), expr), transform(rest))
+      val let = Let(freshWildcardFor(e), Context.inferredTypeOf(e), expr, transform(rest))
       if (bs.isEmpty) { let }
       else { Context.reifyBindings(let, bs) }
 
@@ -123,11 +118,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f @ source.FunDef(id, _, vps, bps, _, body) =>
         val sym = f.symbol
         val ps = (vps map transform) ++ (bps map transform)
-        addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), transform(rest))
+        Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
         val tpe = Context.inferredTypeOf(binding)
-        addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), transform(rest))
+        Let(v.symbol, tpe, Run(transform(binding), tpe), transform(rest))
 
       case v @ source.ValDef(id, _, binding) =>
         Val(v.symbol, transform(binding), transform(rest))
@@ -135,7 +130,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol
         insertBindings {
-          addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), transform(rest))
+          Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), transform(rest))
         }
 
       case v @ source.VarDef(id, _, reg, binding) =>
@@ -525,9 +520,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
     core.Val(id, Context.valueTypeOf(id), binding, body)
 
-  def Let(id: ValueSymbol, binding: Expr)(using Context): core.Definition.Let =
-    core.Definition.Let(id, Context.valueTypeOf(id), binding)
-
   def optimize(s: Stmt)(using Context): Stmt = {
 
     // a very small and easy post processing step...
@@ -542,7 +534,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     object directStyleVal extends core.Tree.Rewrite {
       override def stmt = {
         case core.Val(id, tpe, core.Return(expr), body) =>
-          addToScope(Definition.Let(id, tpe, rewrite(expr)), rewrite(body))
+          Let(id, tpe, rewrite(expr), rewrite(body))
       }
     }
     val opt = eliminateReturnRun.rewrite(s)
@@ -657,8 +649,8 @@ trait TransformerOps extends ContextOps { Context: Context =>
       case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
       case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
       case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
-      case (Binding.Let(x, tpe, b), body) => Transformer.addToScope(Definition.Let(x, tpe, b), body)
-      case (Binding.Def(x, tpe, b), body) => Transformer.addToScope(Definition.Def(x, tpe, b), body)
+      case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
+      case (Binding.Def(x, tpe, b), body) => Def(x, tpe, b, body)
     }
   }
 }
