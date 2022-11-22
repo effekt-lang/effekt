@@ -39,57 +39,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, definitions, exports)
   }
 
-  def addToScope(definition: Definition, body: Stmt): Stmt = body match {
-    case Scope(definitions, body) => Scope(definition :: definitions, body)
-    case other => Scope(List(definition), other)
-  }
-
-  /**
-   * the "rest" is a thunk so that traversal of statements takes place in the correct order.
-   */
-  def transform(d: source.Def, rest: () => Stmt)(using Context): Stmt = d match {
-    case f @ source.FunDef(id, _, vps, bps, _, body) =>
-      val sym = f.symbol
-      val ps = (vps map transform) ++ (bps map transform)
-      addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), rest())
-
-    case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      val tpe = Context.inferredTypeOf(binding)
-      addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), rest())
-
-    case v @ source.ValDef(id, _, binding) =>
-      Val(v.symbol, transform(binding), rest())
-
-    case v @ source.DefDef(id, annot, binding) =>
-      val sym = v.symbol
-      insertBindings {
-        addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), rest())
-      }
-
-    case v @ source.VarDef(id, _, reg, binding) =>
-      val sym = v.symbol
-      val tpe = TState.extractType(Context.blockTypeOf(sym))
-      insertBindings {
-        val b = Context.bind(tpe, transform(binding))
-        State(sym, b, sym.region, rest())
-      }
-
-    // TODO we could also make this clear in the syntax of source.Tree
-    case d : source.InterfaceDef  => Context.panic("Only allowed on the toplevel")
-    case d : source.ExternDef     => Context.panic("Only allowed on the toplevel")
-    case d : source.ExternInclude => Context.panic("Only allowed on the toplevel")
-    case d : source.DataDef       => Context.panic("Only allowed on the toplevel")
-    case d : source.RecordDef     => Context.panic("Only allowed on the toplevel")
-
-    // For now we forget about all of the following definitions in core:
-    case d: source.ExternResource  => rest()
-    case d: source.ExternType      => rest()
-    case d: source.ExternInterface => rest()
-    case d: source.TypeDef         => rest()
-    case d: source.EffectDef       => rest()
-  }
-
-
   def transformToplevel(d: source.Def)(using Context): List[Definition | Decl | Extern] = d match {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
@@ -143,6 +92,56 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d: source.ExternInterface => Nil
     case d: source.TypeDef => Nil
     case d: source.EffectDef => Nil
+  }
+
+  def addToScope(definition: Definition, body: Stmt): Stmt = body match {
+    case Scope(definitions, body) => Scope(definition :: definitions, body)
+    case other => Scope(List(definition), other)
+  }
+
+  /**
+   * the "rest" is a thunk so that traversal of statements takes place in the correct order.
+   */
+  def transform(d: source.Def, rest: () => Stmt)(using Context): Stmt = d match {
+    case f @ source.FunDef(id, _, vps, bps, _, body) =>
+      val sym = f.symbol
+      val ps = (vps map transform) ++ (bps map transform)
+      addToScope(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))), rest())
+
+    case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
+      val tpe = Context.inferredTypeOf(binding)
+      addToScope(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)), rest())
+
+    case v @ source.ValDef(id, _, binding) =>
+      Val(v.symbol, transform(binding), rest())
+
+    case v @ source.DefDef(id, annot, binding) =>
+      val sym = v.symbol
+      insertBindings {
+        addToScope(Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding)), rest())
+      }
+
+    case v @ source.VarDef(id, _, reg, binding) =>
+      val sym = v.symbol
+      val tpe = TState.extractType(Context.blockTypeOf(sym))
+      insertBindings {
+        val b = Context.bind(tpe, transform(binding))
+        State(sym, b, sym.region, rest())
+      }
+
+    // TODO we could also make this clear in the syntax of source.Tree
+    case d : source.InterfaceDef  => Context.panic("Only allowed on the toplevel")
+    case d : source.ExternDef     => Context.panic("Only allowed on the toplevel")
+    case d : source.ExternInclude => Context.panic("Only allowed on the toplevel")
+    case d : source.DataDef       => Context.panic("Only allowed on the toplevel")
+    case d : source.RecordDef     => Context.panic("Only allowed on the toplevel")
+
+    // For now we forget about all of the following definitions in core:
+    case d: source.ExternResource  => rest()
+    case d: source.ExternType      => rest()
+    case d: source.ExternInterface => rest()
+    case d: source.TypeDef         => rest()
+    case d: source.EffectDef       => rest()
   }
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
