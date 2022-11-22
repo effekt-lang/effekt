@@ -132,8 +132,8 @@ object ML extends Backend {
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
     case Data(_, _) => ???
-    case Record(_, _) => Nil // use the native record types
-    case Decl.Interface(id, operations) => ???
+    case Record(_, _) => Nil // use native record types
+    case Interface(_, _) => Nil // use native record type
   }
 
   def toML(ext: Extern): ml.Binding = ext match {
@@ -178,16 +178,17 @@ object ML extends Backend {
     case State(id, init, region, body) => ???
     //      ml.Let(List(Binding(nameDef(id), ml.Builtin("fresh", Variable(nameRef(region)), toML(init)))), toML(body))
 
-    case Handle(body, tpe, handler) => ???
-    //      val handlers: List[ml.Handler] = handler.map { h =>
-    //        val names = RecordNames(h.id)
-    //        ml.Handler(names.constructor, h.clauses.map {
-    //          case (op, BlockLit(params, body)) =>
-    //            // the LAST argument is the continuation...
-    //            ml.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toMLExpr(body))
-    //        })
-    //      }
-    //      ml.Handle(handlers, toML(body))
+    case Handle(body, _, handler) =>
+      val handlers: List[ml.Expr.MakeRecord] = handler.map { (h: Handler) =>
+        val fields = h.clauses.map { case (op, BlockLit(params, body)) =>
+          val args = params.map(p => name(p.id))
+          (name(op), ml.Expr.Lambda(args, toMLExpr(body)))
+        }
+        ml.Expr.MakeRecord(fields)
+      }
+      val args = ml.Consts.lift :: handlers
+      val tr = ml.Call(toML(body))(args: _*)
+      ml.Call(ml.Consts.reset)(tr)
 
     case Region(body) => ???
     //      ml.Builtin("with-region")(toML(body))

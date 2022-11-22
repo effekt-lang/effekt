@@ -86,8 +86,6 @@ enum Expr {
   case MakeDatatype(tag: MLName, arg: Expr)
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
-
-  //  case Handle(handlers: List[Handler], body: Expr)
 }
 
 case class MatchClause(pattern: Pattern, body: Expr)

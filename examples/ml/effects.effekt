@@ -1,0 +1,22 @@
+
+import immutable/option
+
+effect Lexer {
+  def peek(): Option[String]
+  def next(s1: String, s2: String): String
+  def bail[A](): A
+}
+
+def main() = {
+    val s = try {
+        do peek() match {
+            case Some(v) => do next(v, "b")
+            case None() => do bail()
+        }
+    } with Lexer {
+        def peek() = resume(Some("a"))
+        def next(s1, s2) = resume(s1)
+        def bail[A]() = "bail"
+    };
+    println(s)
+}
