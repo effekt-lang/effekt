@@ -203,7 +203,7 @@ object Transformer {
     }
 
   def transform(arg: lifted.Argument)(using BlocksParamsContext, Context): Binding[Variable] = arg match {
-    case expr: lifted.Expr => transform(expr)
+    case pure: lifted.Pure => transform(pure)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
       scopes.map({ scope =>
@@ -239,7 +239,8 @@ object Transformer {
     case lifted.New(impl) => ???
   }
 
-  def transform(expr: lifted.Expr)(using BlocksParamsContext, Context): Binding[Variable] = expr match {
+
+  def transform(p: lifted.Pure)(using BlocksParamsContext, Context): Binding[Variable] = p match {
     case lifted.ValueVar(id) =>
       val tpe = Context.valueTypeOf(id);
       pure(Variable(transform(id), transform(tpe)))
@@ -302,6 +303,15 @@ object Transformer {
         }
       }
 
+    case lifted.PureApp(_, _, _) =>
+      Context.abort(s"Unsupported expression: $pure")
+
+    case lifted.Box(b) =>
+      Context.abort(s"Unsupported expression: $pure")
+  }
+
+  def transform(expr: lifted.Expr)(using BlocksParamsContext, Context): Binding[Variable] = expr match {
+
     case lifted.Run(stmt, tpe) =>
       // NOTE: `stmt` is guaranteed to be of type `tpe`.
       val variable = Variable(freshName("x"), transform(tpe))
@@ -309,8 +319,10 @@ object Transformer {
         PushFrame(Clause(List(variable), k(variable)), transform(stmt))
       }
 
-    case _ =>
-      Context.abort(s"Unsupported expression: $expr")
+    case lifted.DirectApp(_, _, _) =>
+      Context.abort(s"Not implemented: ${expr}")
+
+    case pure: lifted.Pure => transform(pure)
   }
 
   def getTagFor(constructor: symbols.Constructor)(using Context): Int = constructor.tpe match {

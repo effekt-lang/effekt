@@ -36,66 +36,123 @@ enum Extern {
 }
 
 /**
- * Fine-grain CBV: Arguments can be either expressions or blocks
+ * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
  */
 sealed trait Argument extends Tree
 
 /**
- * Expressions
+ * Expressions (with potential IO effects)
  */
-sealed trait Expr extends Argument
-case class ValueVar(id: ValueSymbol) extends Expr
+sealed trait Expr extends Tree
 
-sealed trait Literal[T] extends Expr {
-  def value: T
-}
-case class UnitLit() extends Literal[Unit] { def value = () }
-case class IntLit(value: Int) extends Literal[Int]
-case class BooleanLit(value: Boolean) extends Literal[Boolean]
-case class DoubleLit(value: Double) extends Literal[Double]
-case class StringLit(value: String) extends Literal[String]
-
-case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol) extends Expr
-case class Box(b: Block) extends Expr
+// invariant, block b is {io}.
+case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Run(s: Stmt, tpe: ValueType) extends Expr
 
 /**
- * Blocks
+ * Pure Expressions (no IO effects, or control effects)
+ *
+ * ----------[[ effekt.lifted.Pure ]]----------
+ *
+ *   ─ [[ Pure ]]
+ *     │─ [[ ValueVar ]]
+ *     │─ [[ Literal ]]
+ *     │  │─ [[ UnitLit ]]
+ *     │  │─ [[ IntLit ]]
+ *     │  │─ [[ BooleanLit ]]
+ *     │  │─ [[ DoubleLit ]]
+ *     │  │─ [[ StringLit ]]
+ *     │
+ *     │─ [[ PureApp ]]
+ *     │─ [[ Select ]]
+ *     │─ [[ Box ]]
+ *
+ * -------------------------------------------
  */
+sealed trait Pure extends Expr with Argument
+object Pure {
+  case class ValueVar(id: ValueSymbol) extends Pure
+
+  enum Literal[T](val value: T) extends Pure {
+    case UnitLit() extends Literal(())
+    case IntLit(v: Int) extends Literal(v)
+    case BooleanLit(v: Boolean) extends Literal(v)
+    case DoubleLit(v: Double) extends Literal(v)
+    case StringLit(v: String) extends Literal(v)
+  }
+
+  // invariant, block b is pure.
+  case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
+  case class Select(target: Pure, field: symbols.Field) extends Pure
+
+  case class Box(b: Block) extends Pure
+}
+export Pure.*
+export Literal.*
+
+/**
+ * Blocks
+ *
+ * ----------[[ effekt.lifted.Block ]]----------
+ *
+ *   ─ [[ Block ]]
+ *     │─ [[ BlockVar ]]
+ *     │─ [[ BlockLit ]]
+ *     │─ [[ Member ]]
+ *     │─ [[ Unbox ]]
+ *     │─ [[ New ]]
+ *
+ * -------------------------------------------
+ */
+sealed trait Block extends Argument
+case class BlockVar(id: BlockSymbol) extends Block
+case class BlockLit(params: List[Param], body: Stmt) extends Block
+case class Member(b: Block, field: TermSymbol) extends Block
+case class Unbox(e: Pure) extends Block
+case class New(impl: Implementation) extends Block
+
 sealed trait Param extends Tree { def id: Symbol }
 case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
 case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
 case class EvidenceParam(id: EvidenceSymbol) extends Param
 
-sealed trait Block extends Argument
-case class BlockVar(id: BlockSymbol) extends Block
-
-// TODO add type params here
-case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: TermSymbol) extends Block
-case class Unbox(e: Expr) extends Block
-case class New(impl: Implementation) extends Block
-
 /**
  * Statements
+ *
+ * ----------[[ effekt.lifted.Stmt ]]----------
+ *
+ *   ─ [[ Stmt ]]
+ *     │─ [[ Return ]]
+ *     │─ [[ Val ]]
+ *     │─ [[ Def ]]
+ *     │─ [[ Let ]]
+ *     │─ [[ App ]]
+ *     │─ [[ If ]]
+ *     │─ [[ While ]]
+ *     │─ [[ Match ]]
+ *     │─ [[ State ]]
+ *     │─ [[ Try ]]
+ *     │─ [[ Region ]]
+ *     │─ [[ Hole ]]
+ *
+ * -------------------------------------------
  */
 sealed trait Stmt extends Tree
 
 // Fine-grain CBV
-case class Return(e: Expr) extends Stmt
+case class Return(e: Pure) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
 case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 // Local Control Flow
-case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
+case class If(cond: Pure, thn: Stmt, els: Stmt) extends Stmt
 case class While(cond: Stmt, body: Stmt) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
+case class Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
 
 // Effects
-case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
+case class State(id: Symbol, init: Pure, region: Symbol, body: Stmt) extends Stmt
 case class Try(body: Block, answerType: ValueType, handler: List[Implementation]) extends Stmt
 case class Region(body: Block) extends Stmt
 
@@ -113,7 +170,6 @@ case class Implementation(id: symbols.Interface, operations: List[Operation]) ex
  * Implementation of a method / effect operation.
  */
 case class Operation(name: symbols.Operation, implementation: BlockLit)
-
 
 
 /**
@@ -141,16 +197,21 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
 }
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
+  case Run(s, tpe) => freeVariables(s)
+  case DirectApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case pure: Pure => freeVariables(pure)
+}
+
+def freeVariables(pure: Pure): Set[Symbol] = pure match {
   case ValueVar(id) => Set(id)
   case literal: Literal[_] => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
-  case Run(s, tpe) => freeVariables(s)
 }
 
 def freeVariables(arg: Argument): Set[Symbol] = arg match {
-  case expr: Expr => freeVariables(expr)
+  case pure: Pure => freeVariables(pure)
   case block: Block => freeVariables(block)
   case ev: Evidence => freeVariables(ev)
 }

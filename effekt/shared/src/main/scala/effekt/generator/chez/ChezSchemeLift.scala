@@ -70,7 +70,7 @@ object ChezSchemeLift extends Backend {
   def toChez(p: Param): ChezName = nameDef(p.id)
 
   def toChez(e: Argument): chez.Expr = e match {
-    case e: lifted.Expr  => toChez(e)
+    case p: lifted.Pure  => toChez(p)
     case b: lifted.Block => toChez(b)
     case e: lifted.Evidence => toChez(e)
   }
@@ -203,24 +203,24 @@ object ChezSchemeLift extends Backend {
     case Evidence(scopes) => chez.Builtin("nested", scopes map { s => chez.Variable(nameRef(s)) }:_*)
   }
 
-  def toChez(expr: Expr): chez.Expr = expr match {
-    case UnitLit()     => chez.RawValue("#f")
-    case StringLit(s)  => ChezString(s)
+  def toChez(pure: Pure): chez.Expr = pure match {
+    case UnitLit() => chez.RawValue("#f")
+    case StringLit(s) => ChezString(s)
     case BooleanLit(b) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal[t] => chez.RawValue(l.value.toString)
-    case ValueVar(id)  => chez.Variable(nameRef(id))
+    case ValueVar(id) => chez.Variable(nameRef(id))
 
-    case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
-      case e: Expr  => toChez(e)
-      case b: Block => toChez(b)
-      case e: Evidence => toChez(e)
-    })
+    case PureApp(b, targs, args) => chez.Call(toChez(b), args.map(toChez))
 
     case Select(b, field) =>
       chez.Call(nameRef(field), toChez(b))
 
     case Box(b) => toChez(b)
+  }
 
+  def toChez(expr: Expr): chez.Expr = expr match {
     case Run(s, tpe) => run(toChezExpr(s))
+    case DirectApp(b, targs, args) => chez.Call(toChez(b), args.map(toChez))
+    case p: Pure => toChez(p)
   }
 }
