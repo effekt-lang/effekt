@@ -22,7 +22,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(using Environment, Context): ModuleDecl = {
     // TODO drop once we also ported lifted to use [[core.Definition]]
-    val adapterStatement = core.Scope(mod.definitions, core.Return(core.UnitLit()))
+    val adapterStatement = core.Scope(mod.definitions, core.Return(core.Literal((), builtins.TUnit)))
     ModuleDecl(mod.path, mod.imports, mod.decls.map(transform), mod.externs.map(transform), transform(adapterStatement), mod.exports)
   }
 
@@ -155,8 +155,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Expr)(using Environment, Context): Expr = tree match {
-    case l: core.Literal[_] =>
-      transform(l)
+    case core.Literal(value, tpe) =>
+      Literal(value, tpe)
 
     case core.ValueVar(sym) =>
       ValueVar(sym)
@@ -175,14 +175,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Run(s, tpe) =>
       Run(transform(s), tpe)
-  }
-
-  def transform[T](tree: core.Literal[T]): Literal[T] = tree match {
-    case core.UnitLit() => UnitLit()
-    case core.IntLit(value: Int) => IntLit(value)
-    case core.BooleanLit(value: Boolean) => BooleanLit(value)
-    case core.DoubleLit(value: Double) => DoubleLit(value)
-    case core.StringLit(value: String) => StringLit(value)
   }
 
   /**

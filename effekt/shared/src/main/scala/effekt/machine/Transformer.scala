@@ -76,7 +76,7 @@ object Transformer {
       case lifted.Def(id, _, lifted.BlockLit(params, body), rest) =>
         Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, entryPoint))
 
-      case lifted.Return(lifted.UnitLit()) =>
+      case lifted.Return(_) =>
         entryPoint
 
       case _ =>
@@ -244,31 +244,31 @@ object Transformer {
       val tpe = Context.valueTypeOf(id);
       pure(Variable(transform(id), transform(tpe)))
 
-    case lifted.UnitLit() =>
+    case lifted.Literal((), _) =>
       val variable = Variable(freshName("x"), Positive("Unit"));
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
-    case lifted.IntLit(value) =>
+    case lifted.Literal(value: Int, _) =>
       val variable = Variable(freshName("x"), Type.Int());
       Binding { k =>
         LiteralInt(variable, value, k(variable))
       }
 
-    case lifted.BooleanLit(value: Boolean) =>
+    case lifted.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("x"), Positive("Boolean"))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
-    case lifted.DoubleLit(v) =>
+    case lifted.Literal(v: Double, _) =>
       val literal_binding = Variable(freshName("x"), Type.Double());
       Binding { k =>
         LiteralDouble(literal_binding, v, k(literal_binding))
       }
 
-    case lifted.StringLit(javastring) =>
+    case lifted.Literal(javastring: String, _) =>
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
@@ -391,7 +391,7 @@ object Transformer {
       case lifted.Def(_, _, _, rest) =>
         // TODO expand this catch-all case
         findToplevelBlocksParams(rest)
-      case lifted.Return(lifted.UnitLit()) =>
+      case lifted.Return(_) =>
         ()
       case _ =>
         println("unsupported in finding toplevel blocks " + stmt)

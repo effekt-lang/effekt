@@ -176,9 +176,9 @@ trait JavaScript extends Backend {
   }
 
   def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
-    case UnitLit() => builtin("unit")
-    case StringLit(s) => JsString(s)
-    case literal: Literal[_] => js.RawExpr(literal.value.toString)
+    case Literal((), _) => builtin("unit")
+    case Literal(s: String, _) => JsString(s)
+    case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id) => nameRef(id)
     case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)

@@ -143,15 +143,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
   }
 
-  def transformLit(tree: source.Literal)(using Context): Literal[_] = tree match {
-    case source.Literal(value: Unit, _)    => UnitLit()
-    case source.Literal(value: Int, _)     => IntLit(value)
-    case source.Literal(value: Boolean, _) => BooleanLit(value)
-    case source.Literal(value: Double, _)  => DoubleLit(value)
-    case source.Literal(value: String, _)  => StringLit(value)
-    case source.Literal(value, _)          => Context.panic(s"Unknown literal value: ${value}")
-  }
-
   def transformUnbox(tree: source.Term)(implicit C: Context): Block =
     Unbox(transformAsPure(tree))
 
@@ -202,7 +193,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: BlockSymbol => transformBox(tree)
     }
 
-    case l: source.Literal => transformLit(l)
+    case source.Literal(value, tpe) => Literal(value, tpe)
 
     case s @ source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), s.definition)

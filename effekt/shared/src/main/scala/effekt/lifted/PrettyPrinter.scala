@@ -46,9 +46,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()               => "()"
-    case StringLit(s)            => "\"" + s + "\""
-    case l: Literal[t]           => l.value.toString
+    case Literal((), _)          => "()"
+    case Literal(s: String, _)   => "\"" + s + "\""
+    case l: Literal              => l.value.toString
     case ValueVar(id)            => id.name.toString
 
     case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))

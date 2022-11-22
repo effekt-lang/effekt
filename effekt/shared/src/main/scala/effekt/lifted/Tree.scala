@@ -46,15 +46,7 @@ sealed trait Argument extends Tree
 sealed trait Expr extends Argument
 case class ValueVar(id: ValueSymbol) extends Expr
 
-sealed trait Literal[T] extends Expr {
-  def value: T
-}
-case class UnitLit() extends Literal[Unit] { def value = () }
-case class IntLit(value: Int) extends Literal[Int]
-case class BooleanLit(value: Boolean) extends Literal[Boolean]
-case class DoubleLit(value: Double) extends Literal[Double]
-case class StringLit(value: String) extends Literal[String]
-
+case class Literal(value: Any, tpe: symbols.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Box(b: Block) extends Expr
@@ -142,7 +134,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
   case ValueVar(id) => Set(id)
-  case literal: Literal[_] => Set.empty
+  case literal: Literal => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
