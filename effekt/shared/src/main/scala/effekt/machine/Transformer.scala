@@ -124,9 +124,9 @@ object Transformer {
         // TODO deal with evidenve?
         val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe : @unchecked
         val implTransformed = interfaceOps.map({ op =>
-          impl.clauses.find(_._1 == op).get
+          impl.operations.find(_._1 == op).get
         }).map({
-          case (_, lifted.BlockLit(params, body)) =>
+          case lifted.Operation(_, lifted.BlockLit(params, body)) =>
             // TODO we assume that there are no block params in methods
             Clause(params.map(transform), transform(body))
         })
@@ -186,7 +186,7 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
+      case lifted.Try(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
         // TODO more than one handler
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
@@ -292,7 +292,7 @@ object Transformer {
         }
       }
 
-    case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
+    case lifted.Select(target, field: symbols.Field) =>
       val fields = field.constructor.fields
       val fieldIndex = fields.indexOf(field)
       val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }
@@ -327,12 +327,12 @@ object Transformer {
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Handler)(using BlocksParamsContext, Context): List[Clause] = {
-    handler.clauses.sortBy[Int]({
-      case (operationName, _) =>
+  def transform(handler: lifted.Implementation)(using BlocksParamsContext, Context): List[Clause] = {
+    handler.operations.sortBy[Int]({
+      case lifted.Operation(operationName, _) =>
         handler.id.ops.indexOf(operationName)
     }).map({
-      case (operationName, lifted.BlockLit(params :+ resume, body))=>
+      case lifted.Operation(operationName, lifted.BlockLit(params :+ resume, body))=>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
