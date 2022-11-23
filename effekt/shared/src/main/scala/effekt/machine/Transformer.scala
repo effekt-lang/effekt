@@ -43,11 +43,11 @@ object Transformer {
 
     findToplevelBlocksParams(definitions)
 
-    val transformedDefinitions = (definitions :+ mainEntry).foldLeft(mainEntry) {
+    val transformedDefinitions = definitions.foldLeft(mainEntry) {
       case (rest, lifted.Definition.Def(id, _, lifted.BlockLit(params, body))) =>
         Def(Label(transform(id), params.map(transform)), transform(body), rest)
-      case (rest, _) =>
-        Context.abort("Toplevel def and let bindings not yet supported.")
+      case (rest, d) =>
+        Context.abort(s"Toplevel def and let bindings not yet supported: ${d}")
     }
 
     Program(declarations, transformedDefinitions)
@@ -68,43 +68,52 @@ object Transformer {
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Statement =
     stmt match {
-      case lifted.Scope(definitions, rest) => ???
-//      case lifted.Let(id, tpe, binding, rest) =>
-//        transform(binding).run { value =>
-//          // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-//          Substitute(List(Variable(transform(id), transform(tpe)) -> value), transform(rest))
-//        }
+      case lifted.Scope(definitions, rest) =>
 
+        definitions.foreach {
+          case Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)) =>
+            // TODO does not work for mutually recursive local definitions
+            val freeParams = lifted.freeVariables(block).toList.collect {
+              case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
+              case id: symbols.BlockParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+              case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+              case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
+              // we ignore functions since we do not "close" over them.
 
-//      case lifted.Def(id, tpe, block @ lifted.BlockLit(params, body), rest) =>
-//        // TODO does not work for mutually recursive local definitions
-//        val freeParams = lifted.freeVariables(block).toList.collect {
-//          case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
-//          case id: symbols.BlockParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
-//          case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
-//          case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
-//          // we ignore functions since we do not "close" over them.
-//
-//          // TODO
-//          //          case id: lifted.ScopeId => ???
-//        }
-//        val allParams = params.map(transform) ++ freeParams;
-//        noteBlockParams(id, allParams)
-//        Def(Label(transform(id), allParams), transform(body), transform(rest))
-//
-//      case lifted.Def(id, tpe, block @ lifted.New(impl), rest) =>
-//        // TODO freeParams?
-//        // TODO deal with evidenve?
-//        val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe: @unchecked
-//        val implTransformed = interfaceOps.map({ op =>
-//          impl.operations.find(_._1 == op).get
-//        }).map({
-//          case lifted.Operation(_, lifted.BlockLit(params, body)) =>
-//            // TODO we assume that there are no block params in methods
-//            Clause(params.map(transform), transform(body))
-//        })
-//        New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, transform(rest))
+              // TODO
+              //          case id: lifted.ScopeId => ???
+            }
+            val allParams = params.map(transform) ++ freeParams;
+            noteBlockParams(id, allParams)
+          case _ => ()
+        }
 
+        definitions.foldRight(transform(rest)) {
+          case (lifted.Definition.Let(id, tpe, binding), rest) =>
+            transform(binding).run { value =>
+              // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
+              Substitute(List(Variable(transform(id), transform(tpe)) -> value), rest)
+            }
+
+          case (lifted.Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)), rest) =>
+            Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
+
+          case (lifted.Definition.Def(id, tpe, block @ lifted.New(impl)), rest) =>
+            // TODO freeParams?
+            // TODO deal with evidenve?
+            val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe: @unchecked
+            val implTransformed = interfaceOps.map({ op =>
+              impl.operations.find(_._1 == op).get
+            }).map({
+              case lifted.Operation(_, lifted.BlockLit(params, body)) =>
+                // TODO we assume that there are no block params in methods
+                Clause(params.map(transform), transform(body))
+            })
+            New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, rest)
+
+          case (d @ lifted.Definition.Def(_, _, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
+            Context.abort(s"block definition: $d")
+        }
 
       case lifted.Return(lifted.Run(stmt, tpe)) =>
         transform(stmt)
