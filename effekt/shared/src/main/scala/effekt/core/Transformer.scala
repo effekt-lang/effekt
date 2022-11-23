@@ -216,7 +216,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(exprTpe, If(c, transform(thn), transform(els)))
 
     // [[ while(cond) { body } ]] =
-    //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() };
+    //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
     case source.While(cond, body) =>
       val exprTpe = Context.inferredTypeOf(tree)
