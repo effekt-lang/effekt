@@ -73,7 +73,8 @@ object builtins {
     "String" -> StringSymbol,
     "IO" -> IOSymbol,
     "Region" -> RegionSymbol,
-    "Ref" -> TState.interface
+    "Ref" -> TState.interface,
+    "Nothing" -> BottomSymbol
   )
 
   lazy val globalRegion = ExternResource(name("global"), TRegion)

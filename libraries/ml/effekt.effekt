@@ -4,9 +4,7 @@ module effekt
 
 extern include "effekt.sml"
 
-//extern effect Console
-
-//def locally[R] { f: => R }: R = f()
+def locally[R] { f: => R }: R = f()
 
 // Side effecting ops
 // ==================
@@ -22,18 +20,17 @@ extern io def println(value: Double): Unit =
 extern io def println(value: Boolean): Unit =
   """print ((Bool.toString value) ^ "\n")"""
 
-// // TODO: more println types
+// TODO: generic println
 
-// // TODO: random
-// // extern io def random(): Int =
-// //   "Math.random()"
+extern io def random(): Double =
+  "mlRandomReal ()"
 
-// // TODO: js is milliseconds (which need 64 bit)
-// extern io def timestamp(): Int =
-//   "(Time.toSeconds(Time.now()))"
+// TODO: js is absolute, but that is too big for 32-bit ints
+extern io def timestamp(): Int =
+  "IntInf.toInt ((Time.toMilliseconds (Time.now ())) - mlStartTime)"
 
 // String ops
-// ==========
+// ========== TODO
 // // extern pure def show[R](value: R): String =
 // //   "show$impl(value)"
 
@@ -181,17 +178,18 @@ record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
 record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
 record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
 
-// // Exceptions
-// // ==========
-// // a fatal runtime error that cannot be caught
-// extern io def panic[R](msg: String): R =
-//   "(raise Fail msg)"
+// Exceptions
+// ==========
+// a fatal runtime error that cannot be caught
+extern io def panic[R](msg: String): R =
+  "raise Fail msg"
 
 // effect Exception[E] {
 //   def raise[A](exception: E, msg: String): A
 // }
 // record RuntimeError()
 
+// // TODO: doesnt work with type inference
 // def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
 
 // // converts exceptions of (static) type E to an uncatchable panic that aborts the program
@@ -199,7 +197,7 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 //   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = panic(msg) }
 
 // // reports exceptions of (static) type E to the console
-// def report[E] { prog: => Unit / Exception[E] }: Unit / Console =
+// def report[E] { prog: => Unit / Exception[E] }: Unit =
 //   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = println(msg) }
 
 // // ignores exceptions of (static) type E
@@ -207,8 +205,8 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 // def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
 //   try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = () }
 
-// // Control Flow
-// // ============
+// Control Flow
+// ============
 // def each(start: Int, end: Int) { action: (Int) => Unit } = {
 //   var i = start;
 //   while (i < end) {
@@ -221,33 +219,25 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 
 
 
-// // Benchmarking
-// // ============
+// Benchmarking
+// ============
 
-// // Current time in nanoseconds
-// // TODO use a better timer
-// // extern control def currentTimeNanos(): Int =
-// //   "$effekt.delayed(() => new Date().getTime() * 1000)"
+// runs the block and returns the time in nanoseconds
+def timed { block: => Unit }: Int = {
+  val before = timestamp()
+  block()
+  val after = timestamp()
+  1000 * (after - before)
+}
 
-// // extern io def setTimeout(callback: () => Unit at {}, timeout: Int): Unit =
-// //   "(function() { window.setTimeout(() => callback().run(), timeout); return $effekt.unit; })()"
-
-// // // runs the block and returns the time in nanoseconds
-// // def timed { block: => Unit }: Int = {
-// //   val before = currentTimeNanos()
-// //   block()
-// //   val after = currentTimeNanos()
-// //   after - before
-// // }
-
-// // def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit / Console = {
-// //   def run(n: Int, report: Boolean): Unit = {
-// //     if (n <= 0) { () } else {
-// //       val time = timed { block() };
-// //       if (report) { println(time) } else { () };
-// //       run(n - 1, report)
-// //     }
-// //   }
-// //   run(warmup, false)
-// //   run(iterations, true)
-// // }
+def measure(warmup: Int, iterations: Int) { block: => Unit }: Unit = {
+  def run(n: Int, report: Boolean): Unit = {
+    if (n <= 0) { () } else {
+      val time = timed { block() };
+      if (report) { println(time) } else { () };
+      run(n - 1, report)
+    }
+  }
+  run(warmup, false)
+  run(iterations, true)
+}
