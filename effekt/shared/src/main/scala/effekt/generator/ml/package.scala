@@ -4,7 +4,7 @@ package ml
 
 import effekt.context.Context
 import effekt.core.*
-import effekt.symbols.{ Module, Symbol, Wildcard }
+import effekt.symbols.{ Module, Symbol, Wildcard, Name }
 
 import scala.language.implicitConversions
 import effekt.util.paths.*
@@ -16,6 +16,8 @@ def name(id: Symbol): MLName = id match {
   case _: symbols.TypeParam => MLName(s"'${uniqueName(id)}")
   case _ => MLName(uniqueName(id))
 }
+
+def name(id: Name): MLName = MLName(id.name)
 
 //def intersperse[T](l: List[T], el: T): List[T] = l match {
 //  case Nil => Nil

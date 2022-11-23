@@ -68,21 +68,21 @@ object ML extends Backend {
 
   def toML(p: Param): MLName = name(p.id)
 
-  def toML(e: Argument): ml.Expr = e match {
+  def toML(e: Argument)(using Context): ml.Expr = e match {
     case e: lifted.Expr => toML(e)
     case b: lifted.Block => toML(b)
     case e: lifted.Evidence => toML(e)
   }
 
-  def toML(module: ModuleDecl): List[ml.Binding] = {
+  def toML(module: ModuleDecl)(using Context): List[ml.Binding] = {
     val decls = module.decls.flatMap(toML)
     val externs = module.externs.map(toML)
     val rest = toML(module.defs)
     decls ++ externs ++ rest
   }
 
-  def tpeToML(tpe: symbols.ValueType, inst: ml.Type => ml.Type = x => x): ml.Type = tpe match {
-    case ValueType.BoxedType(_, _) => ???
+  def tpeToML(tpe: symbols.ValueType, inst: ml.Type => ml.Type = x => x)(using C: Context): ml.Type = tpe match {
+    case ValueType.BoxedType(_, _) => C.abort("Boxed type is not supported")
     case ValueType.ValueTypeRef(tvar) =>
       val tv = ml.Type.Var(name(tvar))
       inst(tv)
@@ -91,14 +91,16 @@ object ML extends Backend {
       val argTypes = args.map(tpeToML(_, inst))
       val instMap = tparams.map(t => ml.Type.Var(name(t))).zip(argTypes).toMap
       val instF = (tpe: ml.Type) => inst(if (instMap.contains(tpe)) instMap(tpe) else tpe)
-      val fieldTypes = constructor.fields.map { f => (name(f), tpeToML(f.param.tpe.getOrElse(???), instF)) }
+      val fieldTypes = constructor.fields.map { f =>
+        (name(f), tpeToML(f.param.tpe.getOrElse(C.panic(s"Record constructor is missing types")), instF))
+      }
       ml.Type.Record(fieldTypes)
     case ValueType.ValueTypeApp(tc, one :: Nil) => ml.Type.Tapp(tcToML(tc), tpeToML(one, inst))
     case ValueType.ValueTypeApp(tc, args) =>
       ml.Type.Tapp(tcToML(tc), ml.Type.Tuple(args.map(tpeToML(_, inst))))
   }
 
-  def tcToML(tc: symbols.TypeConstructor): ml.Type = tc match {
+  def tcToML(tc: symbols.TypeConstructor)(using C: Context): ml.Type = tc match {
     case symbols.builtins.IntSymbol => ml.Type.Integer
     case symbols.builtins.DoubleSymbol => ml.Type.Real
     case symbols.builtins.BooleanSymbol => ml.Type.Bool
@@ -106,32 +108,34 @@ object ML extends Backend {
     case TypeConstructor.DataType(_, _, _) =>
       ml.Type.Data(name(tc))
     case TypeConstructor.Record(_, _, constructor) =>
-      val fieldTypes = constructor.fields.map{f => (name(f), tpeToML(f.param.tpe.getOrElse(???)))}
+      val fieldTypes = constructor.fields.map { f =>
+        (name(f), tpeToML(f.param.tpe.getOrElse(C.panic("Record constructor is missing types"))))
+      }
       ml.Type.Record(fieldTypes)
     case TypeConstructor.ExternType(_, _) =>
       ml.Type.Builtin(name(tc))
   }
 
-  def toML(decl: Decl): List[ml.Binding] = decl match {
-    // did is actually TypeConstructor.DataType
-    // ctors is actually symbols.Constructor
+  def toML(decl: Decl)(using C: Context): List[ml.Binding] = decl match {
     case Data(did: TypeConstructor.DataType, ctors) =>
       def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
         case symbols.Constructor(_, _, fields, _) =>
-          val tpeList = fields.map(f => tpeToML(f.param.tpe.getOrElse(???)))
+          val tpeList = fields.map(f =>
+            tpeToML(f.param.tpe.getOrElse(C.panic("Data constructor is missing types")))
+          )
           val tpe = tpeList match {
             case Nil => None
             case one :: Nil => Some(one)
             case _ => Some(ml.Type.Tuple(tpeList))
           }
           (name(s), tpe)
-        case _ => ???
+        case _ => C.panic("Constructor's symbol is not a constructor symbol")
       }
 
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
-    case Data(_, _) => ???
+    case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
     case Record(_, _) => Nil // use native record types
     case Interface(_, _) => Nil // use native record type
   }
@@ -143,13 +147,13 @@ object ML extends Backend {
       RawBind(contents)
   }
 
-  def toMLExpr(stmt: Stmt): ml.Expr = stmt match {
+  def toMLExpr(stmt: Stmt)(using C: Context): ml.Expr = stmt match {
     case Return(e) => Call(Consts.pure)(toML(e))
     case App(b, _, args) => Expr.Call(toML(b), args map toML)
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) =>
       Call(Consts.bind)(toMLExpr(binding), ml.Lambda(name(id))(toMLExpr(body)))
-    case While(cond, body) => ??? // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
+    case While(cond, body) => C.abort("While is not supported") // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
     case Match(scrutinee, clauses, default) =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
         val (constructor, b) = c
@@ -162,7 +166,7 @@ object ML extends Backend {
           case symbols.DataType(_, _, _) =>
             val tag = name(constructor)
             ml.Pattern.Datatype(tag, binders)
-          case _: symbols.ExternType => ???
+          case _: symbols.ExternType => C.abort("Match on ExternType is not supported")
         }
         val body = toMLExpr(b.body)
         ml.MatchClause(pattern, body)
@@ -170,19 +174,40 @@ object ML extends Backend {
 
       ml.Match(toML(scrutinee), clauses map clauseToML, default map toMLExpr)
 
-    case Hole => ???
+    case Hole => C.abort("Hole is not supported")
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion => ???
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion => C.abort("State is not supported")
     //      ml.Let(List(Binding(nameDef(id), ml.Builtin("box", toML(init)))), toML(body))
 
-    case State(id, init, region, body) => ???
+    case State(id, init, region, body) => C.abort("State is not supported")
     //      ml.Let(List(Binding(nameDef(id), ml.Builtin("fresh", Variable(nameRef(region)), toML(init)))), toML(body))
 
     case Handle(body, _, handler) =>
       val handlers: List[ml.Expr.MakeRecord] = handler.map { (h: Handler) =>
         val fields = h.clauses.map { case (op, BlockLit(params, body)) =>
-          val args = params.map(p => name(p.id))
-          (name(op), ml.Expr.Lambda(args, toMLExpr(body)))
+          val args = params.init.map(p => name(p.id))
+          val resumeName = name(params.last.id)
+          val evName = freshName("ev_tmp")
+          val ev1Name = freshName("ev1_tmp")
+          val vName = freshName("vName")
+          val kName = freshName("k_tmp")
+          val newBody = ml.Call(
+            ml.Expr.Variable(evName)
+          )(
+            ml.Lambda(
+              kName
+            )(
+              ml.Expr.Let(
+                List(ml.Binding.FunBind(
+                  resumeName,
+                  List(ev1Name, vName),
+                  ml.Call(ev1Name)(ml.Call(kName)(ml.Expr.Variable(vName)))
+                )),
+                toMLExpr(body)
+              )
+            )
+          )
+          (name(op), ml.Expr.Lambda(evName :: args, newBody))
         }
         ml.Expr.MakeRecord(fields)
       }
@@ -190,7 +215,7 @@ object ML extends Backend {
       val tr = ml.Call(toML(body))(args: _*)
       ml.Call(ml.Consts.reset)(tr)
 
-    case Region(body) => ???
+    case Region(body) => C.abort("Region is not supported")
     //      ml.Builtin("with-region")(toML(body))
 
     case Let(Wildcard(_), _, binding, body) =>
@@ -215,13 +240,13 @@ object ML extends Backend {
       }
   }
 
-  def createBinder(id: Symbol, binding: Expr): Binding = binding match {
+  def createBinder(id: Symbol, binding: Expr)(using Context): Binding = binding match {
     case Closure(b) => createBinder(id, b)
     case _ =>
       ml.ValBind(name(id), toML(binding))
   }
 
-  def createBinder(id: Symbol, binding: Block): Binding = {
+  def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
     binding match {
       case BlockLit(params, body) =>
         ml.FunBind(name(id), params map toML, toMLExpr(body))
@@ -230,7 +255,7 @@ object ML extends Backend {
     }
   }
 
-  def toML(stmt: Stmt): List[ml.Binding] = stmt match {
+  def toML(stmt: Stmt)(using Context): List[ml.Binding] = stmt match {
 
     case Def(id, _, block, rest) =>
       val constDef = createBinder(id, block)
@@ -246,12 +271,12 @@ object ML extends Backend {
     case _ => Nil
   }
 
-  def toML(block: BlockLit): ml.Lambda = block match {
+  def toML(block: BlockLit)(using Context): ml.Lambda = block match {
     case BlockLit(params, body) =>
       ml.Lambda(params map toML: _*)(toMLExpr(body))
   }
 
-  def toML(block: Block): ml.Expr = block match {
+  def toML(block: Block)(using C: Context): ml.Expr = block match {
     case BlockVar(id) =>
       Variable(name(id))
 
@@ -261,13 +286,13 @@ object ML extends Backend {
     case Member(b, field) =>
       ml.FieldLookup(toML(b), name(field))
 
-//    case Extern(params, body) =>
-//      ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
+    //    case Extern(params, body) =>
+    //      ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
 
     case Unbox(e) =>
       toML(e)
 
-    case New(Handler(id, clauses)) => ???
+    case New(Handler(id, clauses)) => C.abort("New is not supported")
     //      val MLName(name) = nameRef(id)
     //      ml.Call(Variable(MLName(s"make-${name}")), clauses.map { case (_, block) => toML(block) })
   }
@@ -278,7 +303,7 @@ object ML extends Backend {
     case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(name(s)) }: _*)
   }
 
-  def toML(expr: Expr): ml.Expr = expr match {
+  def toML(expr: Expr)(using Context): ml.Expr = expr match {
     case UnitLit() => Consts.unitVal
     case StringLit(s) => MLString(s)
     case BooleanLit(b) => if (b) Consts.trueVal else Consts.falseVal
@@ -308,7 +333,7 @@ object ML extends Backend {
         case e: Evidence => toML(e)
       }
       b match {
-        case BlockVar(id @ symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _))) =>
+        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _))) =>
           ml.MakeDatatype(name(id), ml.Expr.Tuple(mlArgs))
         case BlockVar(symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, constr))) =>
           val fieldNames = constr.fields map name
@@ -324,5 +349,8 @@ object ML extends Backend {
 
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
   }
+
+  def freshName(s: String): MLName =
+    name(symbols.Name.local("ev_tmp" + Symbol.fresh.next()))
 
 }

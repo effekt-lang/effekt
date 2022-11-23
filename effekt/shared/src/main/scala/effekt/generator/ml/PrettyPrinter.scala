@@ -7,6 +7,7 @@ import kiama.output.PrettyPrinterTypes.Document
 
 import scala.language.implicitConversions
 
+/// fillip wadler (prettier pretty printer)
 object PrettyPrinter extends ParenPrettyPrinter {
 
   override val defaultIndent = 2
