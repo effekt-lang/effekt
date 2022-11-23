@@ -112,7 +112,7 @@ object ChezSchemeLift extends Backend {
         val names = RecordNames(h.id)
         chez.Handler(names.constructor, h.operations.map {
           case Operation(op, BlockLit(params, body)) =>
-            // the LAST argument is the continuation...
+            // the LAST parameter is the continuation...
             chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
         })
       }

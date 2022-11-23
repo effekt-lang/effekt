@@ -82,7 +82,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Extern.Def(sym, Context.functionTypeOf(sym), (vps map transform) ++ (bps map transform), body))
 
     case e @ source.ExternInclude(path, contents, _) =>
-      List(Extern.Include(contents))
+      List(Extern.Include(contents.get))
 
     // For now we forget about all of the following definitions in core:
     case d: source.Def.Extern => Nil

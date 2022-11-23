@@ -204,7 +204,7 @@ enum Def extends Definition {
    * @note Storing content and id as user-visible fields is a workaround for the limitation that Enum's cannot
    *   have case specific refinements.
    */
-  case ExternInclude(path: String, var contents: String = "", val id: IdDef = IdDef(""))
+  case ExternInclude(path: String, var contents: Option[String] = None, val id: IdDef = IdDef(""))
 }
 object Def {
   type Extern = ExternType | ExternDef | ExternResource | ExternInterface | ExternInclude

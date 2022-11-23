@@ -134,7 +134,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
   case ValueVar(id) => Set(id)
-  case literal: Literal => Set.empty
+  case Literal(value, tpe) => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...

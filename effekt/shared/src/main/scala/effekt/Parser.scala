@@ -334,7 +334,9 @@ class EffektParsers(positions: Positions) extends Parsers(positions) {
     )
 
   lazy val externInclude: P[Def] =
-    `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\"")) }
+    ( `extern` ~> `include` ~/> """\"([^\"]*)\"""".r ^^ { s => ExternInclude(s.stripPrefix("\"").stripSuffix("\""), None) }
+    | `extern` ~> multilineString ^^ { contents => ExternInclude("", Some(contents)) }
+    )
 
 
   /**
