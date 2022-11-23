@@ -13,7 +13,7 @@ case class ModuleDecl(
   imports: List[String],
   decls: List[Decl],
   externs: List[Extern],
-  defs: Stmt,
+  definitions: List[Definition],
   exports: List[Symbol]
 ) extends Tree
 
@@ -33,6 +33,11 @@ export Decl.*
 enum Extern {
   case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
   case Include(contents: String)
+}
+
+enum Definition {
+  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
+  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr)
 }
 
 /**
@@ -74,11 +79,11 @@ case class New(impl: Implementation) extends Block
  */
 sealed trait Stmt extends Tree
 
+case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
+
 // Fine-grain CBV
 case class Return(e: Expr) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
-case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
-case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 // Local Control Flow
@@ -116,10 +121,26 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
+def freeVariables(d: Definition): Set[Symbol] = d match {
+  case Definition.Def(id, tpe, block) => freeVariables(block)
+  case Definition.Let(id, tpe, binding) => freeVariables(binding)
+}
+
 def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
-  case Def(id, tpe, block, rest) => (freeVariables(block) ++ freeVariables(rest)) -- Set(id)
+  // TODO fix
+  case Scope(definitions, body) =>
+    var free: Set[Symbol] = Set.empty
+    // we assume definitions can be mutually recursive, for now.
+    var bound: Set[Symbol] = definitions.collect { case Definition.Def(id, _, _) => id }.toSet
+    definitions.foreach {
+      case Definition.Def(id, tpe, block) =>
+        free ++= freeVariables(block) -- bound
+      case Definition.Let(id, tpe, binding) =>
+        free ++= freeVariables(binding) -- bound
+        bound ++= Set(id)
+    }
+    freeVariables(body) -- bound ++ free
   case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
-  case Let(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
   case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)

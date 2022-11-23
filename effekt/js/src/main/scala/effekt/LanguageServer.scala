@@ -136,7 +136,7 @@ class LanguageServer extends Intelligence {
       return null
     }
 
-    lifted.PrettyPrinter.format(liftedCore.core.defs)
+    lifted.PrettyPrinter.format(liftedCore.core.definitions)
   }
 
   @JSExport
