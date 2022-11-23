@@ -298,7 +298,7 @@ define %Stk @newStack() alwaysinline {
     ret %Stk %stk
 }
 
-define fastcc void @deleteUntil(%State %state, %State %end) {
+define void @deleteUntil(%State %state, %State %end) {
     %cmp = icmp eq %State %state, %end
     br i1 %cmp, label %done, label %delete
 
