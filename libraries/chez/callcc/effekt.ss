@@ -1,11 +1,4 @@
 
-(define-syntax while
-  (syntax-rules ()
-    [(_ c exp1 exp2 ...)
-     (letrec ([loop (lambda ()
-       (if c (begin exp1 exp2 ... (loop)) #f))])
-       (loop))]))
-
 ; ;; EXAMPLE
 ; ; (handle ([Fail_22 (Fail_109 () resume_120 (Nil_74))])
 ; ;       (let ((tmp86_121 ((Fail_109  Fail_22))))

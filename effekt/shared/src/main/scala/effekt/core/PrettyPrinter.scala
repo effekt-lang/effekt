@@ -122,9 +122,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
-    case While(cond, body) =>
-      "while" <+> parens(toDoc(cond)) <+> block(toDoc(body)) <+> line
-
     case Try(body, tpe, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 

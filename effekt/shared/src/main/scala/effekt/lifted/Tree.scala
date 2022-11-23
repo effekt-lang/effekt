@@ -83,7 +83,6 @@ case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 // Local Control Flow
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
-case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
 
 // Effects
@@ -123,7 +122,6 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case Let(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
   case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
-  case While(cond, body) => freeVariables(cond) ++ freeVariables(body)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
   case Hole => Set.empty

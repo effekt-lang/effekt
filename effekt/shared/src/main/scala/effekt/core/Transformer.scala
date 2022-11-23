@@ -215,9 +215,32 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val exprTpe = Context.inferredTypeOf(tree)
       Context.bind(exprTpe, If(c, transform(thn), transform(els)))
 
+    // [[ while(cond) { body } ]] =
+    //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() };
+    //   loop$13()
     case source.While(cond, body) =>
       val exprTpe = Context.inferredTypeOf(tree)
-      Context.bind(exprTpe, While(insertBindings { Return(transformAsPure(cond)) }, transform(body)))
+
+      val loopName = TmpBlock(Context.module)
+      val loopType = FunctionType(Nil, Nil, Nil, Nil, builtins.TUnit, Effects.Pure)
+      val loopCall = Stmt.App(BlockVar(loopName), Nil, Nil)
+
+      val loop = Block.BlockLit(Nil,
+        insertBindings {
+          Stmt.If(transformAsPure(cond),
+            Stmt.Val(Tmp(Context.module), Context.inferredTypeOf(body), transform(body), loopCall),
+            Return(Literal((), builtins.TUnit)))
+        }
+      )
+
+      Context.bind(loopName, loopType, loop)
+
+      // captures???
+      if (Context.inferredCapture(cond) == CaptureSet.empty) {
+        Context.at(cond) { Context.warning(pp"Condition to while loop is pure, which might not be intended.") }
+      }
+
+      Context.bind(exprTpe, loopCall)
 
     case source.Match(sc, cs) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
@@ -553,7 +576,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 private[core] enum Binding {
   case Val(name: Tmp, tpe: symbols.ValueType, binding: Stmt)
   case Let(name: Tmp, tpe: symbols.ValueType, binding: Expr)
-  case Def(name: TmpBlock, tpe: symbols.BlockType, binding: Block)
+  case Def(name: BlockSymbol, tpe: symbols.BlockType, binding: Block)
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
@@ -599,15 +622,16 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def bind(tpe: symbols.BlockType, b: Block): BlockVar = {
+    bind(TmpBlock(module), tpe, b)
+  }
 
-    // create a fresh symbol and assign the type
-    val x = TmpBlock(module)
-    assignType(x, tpe)
+  private[core] def bind(name: BlockSymbol, tpe: symbols.BlockType, b: Block): BlockVar = {
+    assignType(name, tpe)
 
-    val binding = Binding.Def(x, tpe, b)
+    val binding = Binding.Def(name, tpe, b)
     bindings += binding
 
-    BlockVar(x)
+    BlockVar(name)
   }
 
   private[core] def withBindings[R](block: => R): (R, ListBuffer[Binding]) = Context in {

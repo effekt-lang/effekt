@@ -216,7 +216,6 @@ enum Stmt extends Tree {
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
-  case While(cond: Stmt, body: Stmt)
   case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
 
   // Effects
@@ -308,8 +307,6 @@ object Tree {
           App(rewrite(b), targs, args map rewrite)
         case If(cond, thn, els) =>
           If(rewrite(cond), rewrite(thn), rewrite(els))
-        case While(cond, body) =>
-          While(rewrite(cond), rewrite(body))
         case Return(e: Expr) =>
           Return(rewrite(e))
         case State(id, init, reg, body) =>

@@ -145,9 +145,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.If(cond, thn, els) =>
       If(transform(cond), transform(thn), transform(els))
 
-    case core.While(cond, body) =>
-      While(transform(cond), transform(body))
-
     case core.Return(e) =>
       Return(transform(e))
 

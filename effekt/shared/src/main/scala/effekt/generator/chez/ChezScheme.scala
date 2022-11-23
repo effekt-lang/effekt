@@ -106,7 +106,6 @@ trait ChezScheme {
     case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
-    case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>

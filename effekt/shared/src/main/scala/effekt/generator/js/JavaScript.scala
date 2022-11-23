@@ -223,9 +223,6 @@ trait JavaScript extends Backend {
     case core.If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
 
-    case core.While(cond, body) =>
-      monadic.While(toJSMonadic(cond), toJSMonadic(body))
-
     case core.Return(e) =>
       monadic.Pure(toJS(e))
 

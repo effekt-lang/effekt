@@ -19,19 +19,6 @@
 
 (define (here x) x)
 
-; (define (while cond exp)
-;   ($then cond (lambda (c)
-;     (if c ($then exp (lambda (_) (while cond exp))) (pure #f)))))
-
-(define-syntax while
-  (syntax-rules ()
-    [(_ c e)
-     (let ([condition (lambda () c)])
-       (letrec ([loop (lambda (u)
-         ($then (condition) (lambda (condValue)
-           (if condValue ($then e loop) (pure #f)))))])
-         (loop #f)))]))
-
 ; (define-syntax lift
 ;   (syntax-rules ()
 ;     [(_ m)
