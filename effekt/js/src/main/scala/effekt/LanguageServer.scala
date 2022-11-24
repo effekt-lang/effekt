@@ -123,7 +123,7 @@ class LanguageServer extends Intelligence {
     val (mainOutputPath, mainCore) = compileCached(VirtualFileSource(path)).getOrElseAborting {
       return null
     }
-    core.PrettyPrinter.format(mainCore.core.defs)
+    core.PrettyPrinter.format(mainCore.core.definitions)
   }
 
   @JSExport
@@ -136,7 +136,7 @@ class LanguageServer extends Intelligence {
       return null
     }
 
-    lifted.PrettyPrinter.format(liftedCore.core.defs)
+    lifted.PrettyPrinter.format(liftedCore.core.definitions)
   }
 
   @JSExport

@@ -1026,8 +1026,6 @@ object Typer extends Phase[NameResolved, Typechecked] {
     // (2) check return type
     expected.foreach { expected => matchExpected(ret, expected) }
 
-    val typeSubst = Substitutions.types(funTpe.tparams, typeArgs)
-
     var effs: ConcreteEffects = Pure
 
     (vps zip vargs) foreach { case (tpe, expr) =>

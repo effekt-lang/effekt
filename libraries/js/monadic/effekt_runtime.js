@@ -202,10 +202,6 @@ const $runtime = (function() {
   const toplevel = 1;
   var _prompt = 2;
 
-  function _while(c, body) {
-    return c().then(b => b ? body().then(() => _while(c, body)) : pure($effekt.unit))
-  }
-
   function handle(handlers) {
     const p = _prompt++;
 
@@ -247,7 +243,6 @@ const $runtime = (function() {
     fresh: Cell,
 
     _if: (c, thn, els) => c ? thn() : els(),
-    _while: _while,
     withRegion: withRegion,
     constructor: (_, tag) => function() {
       return { __tag: tag, __data: Array.from(arguments) }

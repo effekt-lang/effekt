@@ -30,7 +30,7 @@ object TreeDocs {
       val res = block
       val after = System.currentTimeMillis()
 
-      println(s"$desc took ${ after - before }ms")
+      // println(s"$desc took ${ after - before }ms")
       res
     }
 
@@ -43,7 +43,7 @@ object TreeDocs {
           IO.readLines(src).foreach { line =>
             findStartMarker(line).foreach {
               case Marker(prefix, path) =>
-                println(s"File: ${ src }, Class: ${ path }")
+                // println(s"File: ${ src }, Class: ${ path }")
                 classes = classes :+ path
             }
           }
@@ -83,8 +83,6 @@ object TreeDocs {
    * - [[sbt.Run]]
    */
   def replacer: Def.Initialize[Task[Unit]] = Def.task {
-
-    println("Running replacer")
 
     import sbt.internal.inc.classpath.ClasspathUtil
 
@@ -146,7 +144,7 @@ object TreeDocs {
       }
 
       if (changed) {
-        println(s"Generated TreeDoc in ${src}")
+        // println(s"Generated TreeDoc in ${src}")
         IO.write(src, stringWriter.toString)
       }
     }

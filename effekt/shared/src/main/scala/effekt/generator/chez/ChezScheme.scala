@@ -88,7 +88,11 @@ trait ChezScheme {
     val decls = module.decls.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
-    val chez.Block(defns, _, _) = toChez(module.defs)
+    val defns = module.definitions.map(toChez).flatMap {
+      case Left(d) => Some(d)
+      case Right(None) => None
+      case Right(e) => ???
+    }
     decls ++ externs ++ defns
   }
 
@@ -102,7 +106,6 @@ trait ChezScheme {
     case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
-    case While(cond, body) => chez.Builtin("while", toChezExpr(cond), toChezExpr(body))
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -162,30 +165,33 @@ trait ChezScheme {
       RawDef(contents)
   }
 
-  def toChez(stmt: Stmt): chez.Block = stmt match {
+  def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
+    case Definition.Def(id, tpe, block) =>
+      Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Def(id, tpe, block, rest) =>
-      val chez.Block(defs, exprs, result) = toChez(rest)
-      val constDef = chez.Constant(nameDef(id), toChez(block))
-      chez.Block(constDef :: defs, exprs, result)
-
-    case Let(Wildcard(_), tpe, binding, body) =>
+    case Definition.Let(Wildcard(_), tpe, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
         // since this might lead to invalid scheme code.
-        case _: chez.Variable => toChez(body)
-        case _ => toChez(body) match {
-          case chez.Block(Nil, exprs, result) => chez.Block(Nil, toChez(binding) :: exprs, result)
-          case b => chez.Block(Nil, toChez(binding) :: Nil, chez.Let(Nil, b))
-        }
+        case _: chez.Variable => Right(None)
+        case other => Right(Some(other))
       }
 
     // we could also generate a let here...
-    case Let(id, tpe, binding, body) =>
-      val chez.Block(defs, exprs, result) = toChez(body)
-      val constant = chez.Constant(nameDef(id), toChez(binding))
-      chez.Block(constant :: defs, exprs, result)
+    case Definition.Let(id, tpe, binding) =>
+      Left(chez.Constant(nameDef(id), toChez(binding)))
+  }
+
+  def toChez(stmt: Stmt): chez.Block = stmt match {
+    // TODO maybe this can be simplified after also introducing mutual definitions
+    case Scope(definitions, body) =>
+      definitions.map(toChez).foldRight(toChez(body)) {
+        case (Left(defn), chez.Block(defns, exprs, result)) => chez.Block(defn :: defns, exprs, result)
+        case (Right(Some(expr)), chez.Block(Nil, exprs, result)) => chez.Block(Nil, expr :: exprs, result)
+        case (Right(Some(expr)), rest) => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
+        case (Right(None), rest) => rest
+      }
 
     case other => chez.Block(Nil, Nil, toChezExpr(other))
   }
@@ -213,11 +219,11 @@ trait ChezScheme {
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
-    case UnitLit()     => chez.RawValue("#f")
-    case StringLit(s)  => ChezString(s)
-    case BooleanLit(b) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
-    case l: Literal[t] => chez.RawValue(l.value.toString)
-    case ValueVar(id)  => chez.Variable(nameRef(id))
+    case Literal((), _)         => chez.RawValue("#f")
+    case Literal(s: String, _)  => ChezString(s)
+    case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
+    case l: Literal             => chez.RawValue(l.value.toString)
+    case ValueVar(id)           => chez.Variable(nameRef(id))
 
     case DirectApp(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)

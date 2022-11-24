@@ -18,11 +18,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
+  def format(defs: List[Definition]): String =
+    pretty(toDoc(defs), 60).layout
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
-      emptyline <> toDoc(m.defs)
+      emptyline <> toDoc(m.definitions)
   }
 
   def toDoc(e: Extern): Doc = e match {
@@ -46,9 +49,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()               => "()"
-    case StringLit(s)            => "\"" + s + "\""
-    case l: Literal[t]           => l.value.toString
+    case Literal((), _)          => "()"
+    case Literal(s: String, _)   => "\"" + s + "\""
+    case l: Literal              => l.value.toString
     case ValueVar(id)            => id.name.toString
 
     case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
@@ -91,14 +94,21 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
   }
 
-  def toDoc(s: Stmt): Doc = s match {
-    case Def(id, tpe, BlockLit(params, body), rest) =>
-      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body)) <> emptyline <>
-        toDoc(rest)
+  def toDoc(d: Definition): Doc = d match {
+    case Definition.Def(id, tpe, BlockLit(params, body)) =>
+      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
+    case Definition.Def(id, tpe, block) =>
+      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
+    case Definition.Let(id, tpe, binding) =>
+      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
+  }
 
-    case Def(id, tpe, b, rest) =>
-      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <>
-        toDoc(rest)
+  def toDoc(definitions: List[Definition]): Doc =
+    vsep(definitions map toDoc, semi)
+
+  def toDoc(s: Stmt): Doc = s match {
+    case Scope(definitions, rest) =>
+      toDoc(definitions) <> emptyline <> toDoc(rest)
 
     case Val(Wildcard(_), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <>
@@ -108,18 +118,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Let(id, tpe, binding, body) =>
-      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
-        toDoc(body)
-
     case App(b, targs, args) =>
       toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
-
-    case While(cond, body) =>
-      "while" <+> parens(toDoc(cond)) <+> block(toDoc(body)) <+> line
 
     case Return(e) =>
       toDoc(e)

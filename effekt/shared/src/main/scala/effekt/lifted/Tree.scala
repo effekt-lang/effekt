@@ -13,7 +13,7 @@ case class ModuleDecl(
   imports: List[String],
   decls: List[Decl],
   externs: List[Extern],
-  defs: Stmt,
+  definitions: List[Definition],
   exports: List[Symbol]
 ) extends Tree
 
@@ -35,6 +35,11 @@ enum Extern {
   case Include(contents: String)
 }
 
+enum Definition {
+  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
+  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr)
+}
+
 /**
  * Fine-grain CBV: Arguments can be either expressions or blocks
  */
@@ -46,15 +51,7 @@ sealed trait Argument extends Tree
 sealed trait Expr extends Argument
 case class ValueVar(id: ValueSymbol) extends Expr
 
-sealed trait Literal[T] extends Expr {
-  def value: T
-}
-case class UnitLit() extends Literal[Unit] { def value = () }
-case class IntLit(value: Int) extends Literal[Int]
-case class BooleanLit(value: Boolean) extends Literal[Boolean]
-case class DoubleLit(value: Double) extends Literal[Double]
-case class StringLit(value: String) extends Literal[String]
-
+case class Literal(value: Any, tpe: symbols.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Box(b: Block) extends Expr
@@ -82,16 +79,15 @@ case class New(impl: Implementation) extends Block
  */
 sealed trait Stmt extends Tree
 
+case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
+
 // Fine-grain CBV
 case class Return(e: Expr) extends Stmt
 case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
-case class Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) extends Stmt
-case class Let(id: ValueSymbol, tpe: ValueType, binding: Expr, body: Stmt) extends Stmt
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 // Local Control Flow
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
-case class While(cond: Stmt, body: Stmt) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
 
 // Effects
@@ -125,13 +121,28 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
+def freeVariables(d: Definition): Set[Symbol] = d match {
+  case Definition.Def(id, tpe, block) => freeVariables(block)
+  case Definition.Let(id, tpe, binding) => freeVariables(binding)
+}
+
 def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
-  case Def(id, tpe, block, rest) => (freeVariables(block) ++ freeVariables(rest)) -- Set(id)
+  // TODO fix
+  case Scope(definitions, body) =>
+    var free: Set[Symbol] = Set.empty
+    // we assume definitions can be mutually recursive, for now.
+    var bound: Set[Symbol] = definitions.collect { case Definition.Def(id, _, _) => id }.toSet
+    definitions.foreach {
+      case Definition.Def(id, tpe, block) =>
+        free ++= freeVariables(block) -- bound
+      case Definition.Let(id, tpe, binding) =>
+        free ++= freeVariables(binding) -- bound
+        bound ++= Set(id)
+    }
+    freeVariables(body) -- bound ++ free
   case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
-  case Let(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
   case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
-  case While(cond, body) => freeVariables(cond) ++ freeVariables(body)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
   case Hole => Set.empty
@@ -142,7 +153,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
   case ValueVar(id) => Set(id)
-  case literal: Literal[_] => Set.empty
+  case Literal(value, tpe) => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
