@@ -146,7 +146,7 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
 
       // Give (hopefully) useful error messages
       val ghEC = try {
-        Process("gh release download -R se-tuebingen/jitting-effects latest -p rpyeffect-jit-%s-%s".format(arch, os)).!
+        Process("gh release download -R effekt-lang/jitting-effects latest -p rpyeffect-jit-%s-%s".format(arch, os)).!
       } catch {
         case e: java.io.IOException => {
           if(e.getCause.isInstanceOf[java.io.IOException]

@@ -28,9 +28,15 @@ jobs:
       with:
         node-version: '10.x'
 
+    - name: Obtain a GitHub App Installation Access Token for downloading the JIT binary
+      id: githubAppAuth
+      run: |
+        TOKEN="$(npx obtain-github-app-installation-access-token ci ${{ secrets.JITTING_EFFECTS_GH_APP_CREDENTIALS_TOKEN }})" 
+        echo "::add-mask::$TOKEN"
+        echo "::set-output name=token::$TOKEN"
     - name: Download JIT binary
       env:
-        GH_TOKEN: ${{ secrets.JITTING_EFFECTS_GH_TOKEN }}
+        GH_TOKEN: ${{ steps.githubAppAuth.outputs.token }}
       run: sbt effektJVM/downloadJITBinary
 
     - name: Run tests
