@@ -277,7 +277,7 @@ define %Mem @newMem() alwaysinline {
 define %Stk @newStack() alwaysinline {
 
     ; TODO find actual size of stack
-    %stkmem = call i8* @malloc(i64 48)
+    %stkmem = call i8* @malloc(i64 56)
     %stk = bitcast i8* %stkmem to %Stk
 
     %regionmem = call i8* @malloc(i64 16)
@@ -433,7 +433,7 @@ copy:
     %used = sub i64 %intsp, %intbase
     %size = sub i64 %intlimit, %intbase
 
-    %newstkmem = call i8* @malloc(i64 48)
+    %newstkmem = call i8* @malloc(i64 56)
     %newstk = bitcast i8* %newstkmem to %Stk
     %newstkrc = getelementptr %StkVal, %Stk %newstk, i64 0, i32 0
     %newstksp = getelementptr %StkVal, %Stk %newstk, i64 0, i32 1, i32 0
