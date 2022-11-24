@@ -7,6 +7,7 @@ import effekt.lifted
 import effekt.lifted.LiftInference
 import effekt.symbols
 import effekt.symbols.{ BlockSymbol, BlockType, DataType, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.builtins.TState
 
 object Transformer {
 
@@ -191,12 +192,46 @@ object Transformer {
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val regionVar = Variable(freshName("_"), Type.Region())
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
+          NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter,
               New(transform(id), transform(handler),
                 transform(body)))))
+
+      case lifted.Region(lifted.BlockLit(List(ev, id), body), tpe) =>
+        val variable = Variable(freshName("a"), transform(tpe))
+        val returnClause = Clause(List(variable), Return(List(variable)))
+        val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val regionVar = Variable(transform(id.id), Type.Region())
+
+        LiteralEvidence(transform(ev), builtins.There,
+          NewStack(delimiter, regionVar, returnClause,
+            PushStack(delimiter, transform(body))))
+
+      case lifted.State(id, init, region, body) =>
+        transform(init).run { value =>
+          val tpe = value.tpe;
+          val name = transform(id)
+          val variable = Variable(name, tpe)
+          val stateVariable = Variable(name + "$State", Type.Reference(tpe))
+          val loadVariable = Variable(freshName(name), tpe)
+          val getter = Clause(List(),
+                        Load(loadVariable, stateVariable,
+                          Return(List(loadVariable))))
+
+          val setterVariable = Variable(freshName(name), tpe)
+          val setter = Clause(List(setterVariable),
+                                Store(stateVariable, setterVariable,
+                                  Return(List())))
+          val regionVar = Variable(transform(region), Type.Region())
+
+          // TODO use interface when it's implemented
+          Allocate(stateVariable, value, regionVar,
+            //New(variable, List(getter, setter),
+              transform(body))
+        }
 
       case _ =>
         Context.abort(s"Unsupported statement: $stmt")
@@ -272,6 +307,27 @@ object Transformer {
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+      }
+
+    // hardcoded translation for get and put.
+    // TODO remove this when interfaces are correctly translated
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.get), List(), List()) =>
+      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+      val variable = Variable(freshName("x"), tpe)
+      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+      Binding { k =>
+        Load(variable, stateVariable, k(variable))
+      }
+
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.put), List(), List(arg)) =>
+      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+      val variable = Variable(freshName("x"), Positive("Unit"));
+      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+      transform(arg).flatMap { value =>
+        Binding { k =>
+          Store(stateVariable, value,
+            Construct(variable, builtins.Unit, List(), k(variable)))
+        }
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction), List(), args) =>

@@ -248,7 +248,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Continuations cannot be regions")
       }
       val cap = core.BlockParam(sym, tpe)
-      Context.bind(Context.inferredTypeOf(tree), core.Region(BlockLit(List(cap), transform(body))))
+      val answerType = Context.inferredTypeOf(tree)
+      Context.bind(answerType, Region(BlockLit(List(cap), transform(body)), answerType))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)

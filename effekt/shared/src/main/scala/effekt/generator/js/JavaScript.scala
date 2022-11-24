@@ -232,7 +232,7 @@ trait JavaScript extends Backend {
     case core.Try(body, tpe, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
-    case core.Region(body) =>
+    case core.Region(body, _) =>
       monadic.Builtin("withRegion", toJS(body))
 
     case core.Hole =>

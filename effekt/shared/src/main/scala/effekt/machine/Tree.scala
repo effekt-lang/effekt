@@ -133,6 +133,21 @@ enum Statement {
   case Invoke(receiver: Variable, tag: Tag, arguments: Environment)
 
   /**
+  *  e.g. Int x in r = 42; s
+  */
+  case Allocate(name: Variable, init: Variable, region: Variable, rest: Statement)
+
+  /**
+  * e.g. y = *x; s
+  */
+  case Load(name: Variable, ref: Variable, rest: Statement)
+
+  /**
+  * e.g. *x = 42; s
+  */
+  case Store(ref: Variable, value: Variable, rest: Statement)
+
+  /**
    * e.g. push { (x, ...) => s }; s
    */
   case PushFrame(frame: Clause, rest: Statement)
@@ -143,9 +158,9 @@ enum Statement {
   case Return(arguments: Environment)
 
   /**
-   * e.g. let k = stack { (x, ...) => s }; s
+   * e.g. let k = stack with region r { (x, ...) => s }; s
    */
-  case NewStack(name: Variable, frame: Clause, rest: Statement)
+  case NewStack(name: Variable, region: Variable, frame: Clause, rest: Statement)
 
   /**
    * e.g. push k; s
@@ -191,6 +206,8 @@ enum Type {
   case Int()
   case Double()
   case String()
+  case Reference(tpe: Type)
+  case Region()
 }
 export Type.{ Positive, Negative }
 

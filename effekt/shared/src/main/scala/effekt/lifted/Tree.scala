@@ -97,7 +97,7 @@ case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], defaul
 // Effects
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
 case class Try(body: Block, answerType: ValueType, handler: List[Implementation]) extends Stmt
-case class Region(body: Block) extends Stmt
+case class Region(body: Block, answerType: ValueType) extends Stmt
 
 // Others
 case object Hole extends Stmt
@@ -137,7 +137,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
   case Hole => Set.empty
   case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
   case Try(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
-  case Region(body) => freeVariables(body)
+  case Region(body, _) => freeVariables(body)
 }
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
