@@ -77,7 +77,7 @@ object ML extends Backend {
   def toML(module: ModuleDecl)(using Context): List[ml.Binding] = {
     val decls = module.decls.flatMap(toML)
     val externs = module.externs.map(toML)
-    val rest = toML(module.defs)
+    val rest = module.definitions.map(toML)
     decls ++ externs ++ rest
   }
 
@@ -153,7 +153,6 @@ object ML extends Backend {
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, tpe, binding, body) =>
       Call(Consts.bind)(toMLExpr(binding), ml.Lambda(name(id))(toMLExpr(body)))
-    case While(cond, body) => C.abort("While is not supported") // ml.Builtin("while", toMLExpr(cond), toMLExpr(body))
     case Match(scrutinee, clauses, default) =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
         val (constructor, b) = c
@@ -176,15 +175,17 @@ object ML extends Backend {
 
     case Hole => C.abort("Hole is not supported")
 
+    case Scope(definitions, body) => ml.Expr.Let(definitions.map(toML), toMLExpr(body))
+
     case State(id, init, region, body) if region == symbols.builtins.globalRegion => C.abort("State is not supported")
     //      ml.Let(List(Binding(nameDef(id), ml.Builtin("box", toML(init)))), toML(body))
 
     case State(id, init, region, body) => C.abort("State is not supported")
     //      ml.Let(List(Binding(nameDef(id), ml.Builtin("fresh", Variable(nameRef(region)), toML(init)))), toML(body))
 
-    case Handle(body, _, handler) =>
-      val handlers: List[ml.Expr.MakeRecord] = handler.map { (h: Handler) =>
-        val fields = h.clauses.map { case (op, BlockLit(params, body)) =>
+    case Try(body, _, handler) =>
+      val handlers: List[ml.Expr.MakeRecord] = handler.map { (h: Implementation) =>
+        val fields = h.operations.map { case Operation(op, BlockLit(params, body)) =>
           val args = params.init.map(p => name(p.id))
           val resumeName = name(params.last.id)
           val evName = freshName("ev_tmp")
@@ -215,35 +216,33 @@ object ML extends Backend {
       val tr = ml.Call(toML(body))(args: _*)
       ml.Call(ml.Consts.reset)(tr)
 
-    case Region(body) => C.abort("Region is not supported")
+    case Region(body, answerType) => C.abort("Region is not supported")
     //      ml.Builtin("with-region")(toML(body))
 
-    case Let(Wildcard(_), _, binding, body) =>
-      val mlBinding = toML(binding)
-      toMLExpr(body) match {
-        case ml.Sequence(exps, rest) => ml.Sequence(mlBinding :: exps, rest)
-        case mlbody => ml.Sequence(List(mlBinding), mlbody)
-      }
+//    case Val(Wildcard(), _, binding, body) =>
+//      val mlBinding = toMLExpr(binding)
+//      toMLExpr(body) match {
+//        case ml.Sequence(exps, rest) => ml.Sequence(mlBinding :: exps, rest)
+//        case mlbody => ml.Sequence(List(mlBinding), mlbody)
+//      }
+//
+//    case Val(id, _, binding, body) =>
+//      val mlBinding = createBinder(id, binding)
+//      toMLExpr(body) match {
+//        case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
+//        case mlbody => ml.Let(List(mlBinding), mlbody)
+//      }
 
-    case Let(id, _, binding, body) =>
-      val mlBinding = createBinder(id, binding)
-      toMLExpr(body) match {
-        case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
-        case mlbody => ml.Let(List(mlBinding), mlbody)
-      }
-
-    case Def(id, _, block, rest) =>
-      val constDef = createBinder(id, block)
-      toMLExpr(rest) match {
-        case ml.Let(bindings, body) => ml.Let(constDef :: bindings, body)
-        case mlbody => ml.Let(List(constDef), mlbody)
-      }
+    //    case Def(id, _, block, rest) =>
+    //      val constDef = createBinder(id, block)
+    //      toMLExpr(rest) match {
+    //        case ml.Let(bindings, body) => ml.Let(constDef :: bindings, body)
+    //        case mlbody => ml.Let(List(constDef), mlbody)
+    //      }
   }
 
-  def createBinder(id: Symbol, binding: Expr)(using Context): Binding = binding match {
-    case Closure(b) => createBinder(id, b)
-    case _ =>
-      ml.ValBind(name(id), toML(binding))
+  def createBinder(id: Symbol, binding: Expr)(using Context): Binding = {
+    ml.ValBind(name(id), toML(binding))
   }
 
   def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
@@ -255,20 +254,10 @@ object ML extends Backend {
     }
   }
 
-  def toML(stmt: Stmt)(using Context): List[ml.Binding] = stmt match {
-
-    case Def(id, _, block, rest) =>
-      val constDef = createBinder(id, block)
-      constDef :: toML(rest)
-
-    case Let(Wildcard(_), _, _, _) =>
-      Nil
-
-    case Let(id, _, binding, body) =>
-      val constant = createBinder(id, binding)
-      constant :: toML(body)
-
-    case _ => Nil
+  def toML(defn: Definition)(using C: Context): ml.Binding = defn match {
+    case Definition.Def(id, _, block) => createBinder(id, block)
+    case Definition.Let(Wildcard(), _, binding) => ml.Binding.AnonBind(toML(binding))
+    case Definition.Let(id, _, binding) => createBinder(id, binding)
   }
 
   def toML(block: BlockLit)(using Context): ml.Lambda = block match {
@@ -292,7 +281,7 @@ object ML extends Backend {
     case Unbox(e) =>
       toML(e)
 
-    case New(Handler(id, clauses)) => C.abort("New is not supported")
+    case New(Implementation(id, operations)) => C.abort("New is not supported")
     //      val MLName(name) = nameRef(id)
     //      ml.Call(Variable(MLName(s"make-${name}")), clauses.map { case (_, block) => toML(block) })
   }
@@ -303,11 +292,8 @@ object ML extends Backend {
     case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(name(s)) }: _*)
   }
 
-  def toML(expr: Expr)(using Context): ml.Expr = expr match {
-    case UnitLit() => Consts.unitVal
-    case StringLit(s) => MLString(s)
-    case BooleanLit(b) => if (b) Consts.trueVal else Consts.falseVal
-    case l: Literal[_] =>
+  def toML(expr: Expr)(using C: Context): ml.Expr = expr match {
+    case l: Literal =>
       def numberString(x: AnyVal): ml.Expr = {
         val s = x.toString
         if (s.startsWith("-")) {
@@ -322,6 +308,9 @@ object ML extends Backend {
         case v: Long => numberString(v)
         case v: Float => numberString(v)
         case v: Double => numberString(v)
+        case _: Unit => Consts.unitVal
+        case v: String => MLString(v)
+        case v: Boolean => if (v) Consts.trueVal else Consts.falseVal
         case _ => ml.RawValue(l.value.toString)
       }
     case ValueVar(id) => ml.Variable(name(id))
@@ -345,9 +334,9 @@ object ML extends Backend {
     case Select(b, field) =>
       ml.FieldLookup(toML(b), name(field))
 
-    case Closure(b) => toML(b)
-
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
+
+    case Box(b) => C.abort("Box not supported")
   }
 
   def freshName(s: String): MLName =

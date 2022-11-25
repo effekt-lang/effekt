@@ -34,6 +34,7 @@ enum Type {
 }
 
 enum Binding {
+  case AnonBind(body: Expr)
   case ValBind(name: MLName, body: Expr)
   case FunBind(name: MLName, params: List[MLName], body: Expr)
   case RawBind(raw: String)

@@ -29,6 +29,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     pretty(doc)
 
   def toDoc(binding: Binding): Doc = binding match {
+    case AnonBind(body) =>
+      group("val" <+> "_"         <+> "=" <> nest(line <> toDoc(body) <> ";"))
     case ValBind(name, body) =>
       group("val" <+> toDoc(name) <+> "=" <> nest(line <> toDoc(body) <> ";"))
     case FunBind(name, params, body) =>
