@@ -20,10 +20,6 @@ const $runtime = (function() {
 
   const callcc = f => { throw "callcc not yet supported" }
 
-  function _while(c, body) {
-    return then(c)(b => b ? then(body)(() => _while(c, body)) : pure($effekt.unit))
-  }
-
   // TODO an alternative strategy for state is to operate on mutable state and save/restore in
   // stateLift.
 
@@ -117,7 +113,6 @@ const $runtime = (function() {
     handle: handle,
     state: handleState,
     then: then,
-    _while: _while,
     constructor: (_, tag) => function() {
       return { __tag: tag, __data: Array.from(arguments) }
     },

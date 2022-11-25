@@ -74,6 +74,8 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
       s"${localName(result)} = getelementptr ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}, i64 $i0"
     case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0, i1)) =>
       s"${localName(result)} = getelementptr ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}, i64 $i0, i32 $i1"
+    case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0, i1, i2)) =>
+      s"${localName(result)} = getelementptr ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}, i64 $i0, i32 $i1, i32 $i2"
     case GetElementPtr(_, operand, _) => C.abort(s"can only form a pointer to a local reference, not: $operand")
 
     case BitCast(result, operand, tpe) =>

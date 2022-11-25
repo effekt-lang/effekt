@@ -176,9 +176,9 @@ trait JavaScript extends Backend {
   }
 
   def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
-    case UnitLit() => builtin("unit")
-    case StringLit(s) => JsString(s)
-    case literal: Literal[_] => js.RawExpr(literal.value.toString)
+    case Literal((), _) => builtin("unit")
+    case Literal(s: String, _) => JsString(s)
+    case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id) => nameRef(id)
     case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
@@ -187,8 +187,8 @@ trait JavaScript extends Backend {
     case Run(s, tpe) => monadic.Run(toJSMonadic(s))
   }
 
-  def toJS(handler: core.Handler)(using Context): js.Expr =
-    js.Object(handler.clauses.map { case (id, b) => nameDef(id) -> toJS(b) })
+  def toJS(handler: core.Implementation)(using Context): js.Expr =
+    js.Object(handler.operations.map { case Operation(id, b) => nameDef(id) -> toJS(b) })
 
   // TODO
   //  def toJSMonadic(s: core.Stmt)(using Context, Buffer[js.Stmt]): monadic.Control = s match {
@@ -199,7 +199,7 @@ trait JavaScript extends Backend {
     val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
     val externs = module.externs.map(toJS)
     val decls   = module.decls.flatMap(toJS)
-    val (stmts, _) = toJSStmt(module.defs)
+    val stmts   = module.definitions.map(toJS)
 
     js.Module(name, imports, exports, decls ++ externs ++ stmts)
   }
@@ -223,16 +223,13 @@ trait JavaScript extends Backend {
     case core.If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
 
-    case core.While(cond, body) =>
-      monadic.While(toJSMonadic(cond), toJSMonadic(body))
-
     case core.Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Handle(body, tpe, hs) =>
+    case core.Try(body, tpe, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
-    case core.Region(body) =>
+    case core.Region(body, _) =>
       monadic.Builtin("withRegion", toJS(body))
 
     case core.Hole =>
@@ -256,28 +253,30 @@ trait JavaScript extends Backend {
       Nil
   }
 
+  def toJS(d: core.Definition)(using Context): js.Stmt = d match {
+    case Definition.Def(id, tpe, BlockLit(ps, body)) =>
+      val (stmts, jsBody) = toJSStmt(body)
+      monadic.Function(nameDef(id), ps map toJS, stmts, jsBody)
+
+    case Definition.Def(id, tpe, block) =>
+      js.Const(nameDef(id), toJS(block))
+
+    case Definition.Let(Wildcard(_), tpe, binding) =>
+      js.ExprStmt(toJS(binding))
+
+    case Definition.Let(id, tpe, binding) =>
+      js.Const(nameDef(id), toJS(binding))
+  }
+
   /**
    * Translate the statement in a js "direct-style" statement context.
    *
    * That is, multiple statements that end in one monadic return
    */
   def toJSStmt(s: core.Stmt)(using Context): (List[js.Stmt], monadic.Control) = s match {
-    case Def(id, tpe, BlockLit(ps, body), rest) =>
-      val (restStmts, ret) = toJSStmt(rest)
-      val (stmts, jsBody) = toJSStmt(body)
-      (monadic.Function(nameDef(id), ps map toJS, stmts, jsBody) :: restStmts, ret)
-
-    case Def(id, tpe, block, rest) =>
-      val (stmts, ret) = toJSStmt(rest)
-      (js.Const(nameDef(id), toJS(block)) :: stmts, ret)
-
-    case Let(Wildcard(_), tpe, binding, body) =>
+    case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
-      (js.ExprStmt(toJS(binding)) :: stmts, ret)
-
-    case Let(id, tpe, binding, body) =>
-      val (stmts, ret) = toJSStmt(body)
-      (js.Const(nameDef(id), toJS(binding)) :: stmts, ret)
+      (definitions.map(toJS) ++ stmts, ret)
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       val (stmts, ret) = toJSStmt(body)
