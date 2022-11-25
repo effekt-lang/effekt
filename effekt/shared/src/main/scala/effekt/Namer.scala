@@ -189,10 +189,13 @@ object Namer extends Phase[Parsed, NameResolved] {
       Context.define(id, sym)
       Context.bindBlock(sym)
 
-    case d @ source.ExternInclude(path, _, _) =>
-      d.contents = Context.contentsOf(path).getOrElse {
+    case d @ source.ExternInclude(path, Some(contents), _) =>
+      ()
+
+    case d @ source.ExternInclude(path, None, _) =>
+      d.contents = Some(Context.contentsOf(path).getOrElse {
         Context.abort(s"Missing include: ${path}")
-      }
+      })
       ()
   }
 

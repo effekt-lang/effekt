@@ -31,12 +31,14 @@ object PrettyPrinter extends ParenPrettyPrinter {
   })
 
   def toDoc(tpe: Type): Doc = tpe match {
-    case Positive(name) => name
-    case Negative(name) => name
-    case Type.Int()     => "Int"
-    case Type.Double()  => "Double"
-    case Type.String()  => "String"
-    case Type.Stack()   => "Stack"
+    case Positive(name)      => name
+    case Negative(name)      => name
+    case Type.Int()          => "Int"
+    case Type.Double()       => "Double"
+    case Type.String()       => "String"
+    case Type.Stack()        => "Stack"
+    case Type.Reference(tpe) => toDoc(tpe) <> "*"
+    case Type.Region()       => "Region"
   }
 
   def toDoc(stmt: Statement): Doc = stmt match {
@@ -63,14 +65,23 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Invoke(receiver, tag, arguments) =>
       "invoke" <+> receiver <> "." <> tag.toString <> parens(arguments map toDoc)
 
+    case Allocate(name, init, region, rest) =>
+      toDoc(name.tpe) <+> name <+> "in" <+> toDoc(region) <+> "=" <+> toDoc(init) <> ";" <> line <> toDoc(rest)
+
+    case Load(name, ref, rest) =>
+      name <+> "=" <+> "*" <> ref <> ";" <> line <> toDoc(rest)
+
+    case Store(ref, value, rest) =>
+      "*" <> ref <+> "=" <+> value <> ";" <> line <> toDoc(rest)
+
     case PushFrame(frame, rest) =>
       "push" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
     case Return(arguments) =>
       "return" <+> hsep(arguments map toDoc, ",")
 
-    case NewStack(name, frame, rest) =>
-      "let" <+> name <+> "=" <+> "stack" <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
+    case NewStack(name, region, frame, rest) =>
+      "let" <+> name <+> "=" <+> "stack" <+> "with" <+> "region" <+> toDoc(region) <+> toDoc(frame) <> ";" <> line <> toDoc(rest)
 
     case PushStack(stack, rest) =>
       "push stack" <+> stack <> ";" <> line <> toDoc(rest)

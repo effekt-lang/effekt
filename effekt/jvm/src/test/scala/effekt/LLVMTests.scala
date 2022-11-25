@@ -17,9 +17,6 @@ class LLVMTests extends EffektTests {
     // polymorphic effect operations not supported, yet
     examplesDir / "llvm" / "choice.effekt",
     examplesDir / "llvm" / "triples.effekt",
-
-    // mutable state not support, yet
-    examplesDir / "llvm" / "gids.effekt",
   )
 
   def runTestFor(input: File, check: File, expected: String): Unit = {

@@ -18,12 +18,18 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
+  def format(defs: List[Definition]): String =
+    pretty(toDoc(defs), 60).layout
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
-      emptyline <> toDoc(m.defs)
+      emptyline <> toDoc(m.definitions)
   }
+
+  def toDoc(definitions: List[Definition]): Doc =
+    vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
     case Extern.Def(id, tpe, ps, body) =>
@@ -46,9 +52,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(n: Name): Doc = n.toString
 
   def toDoc(e: Expr): Doc = e match {
-    case UnitLit()                 => "()"
-    case StringLit(s)              => "\"" + s + "\""
-    case l: Literal[t]             => l.value.toString
+    case Literal((), _)            => "()"
+    case Literal(s: String, _)     => "\"" + s + "\""
+    case Literal(value, _)         => value.toString
     case ValueVar(id)              => id.name.toString
 
     case PureApp(b, targs, args)   => toDoc(b) <> parens(hsep(args map argToDoc, comma))
@@ -66,10 +72,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def toDoc(handler: Handler): Doc = {
-    val handlerName = toDoc(handler.id.name)
-    val clauses = handler.clauses.map {
-      case (id, BlockLit(params, body)) =>
+  def toDoc(instance: Implementation): Doc = {
+    val handlerName = toDoc(instance.interface.name)
+    val clauses = instance.operations.map {
+      case Operation(id, BlockLit(params, body)) =>
         "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
@@ -86,25 +92,28 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
   }
 
+  def toDoc(d: Definition): Doc = d match {
+    case Definition.Def(id, tpe, BlockLit(params, body)) =>
+      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
+    case Definition.Def(id, tpe, block) =>
+      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
+    case Definition.Let(id, tpe, binding) =>
+      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
+  }
+
   def toDoc(s: Stmt): Doc = s match {
-    case Def(id, tpe, BlockLit(params, body), rest) =>
-      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body)) <> emptyline <>
-        toDoc(rest)
+    case Scope(definitions, rest) =>
+      toDoc(definitions) <> emptyline <> toDoc(rest)
 
-    case Def(id, tpe, b, rest) =>
-      "def" <+> toDoc(id.name) <+> "=" <+> toDoc(b) <> emptyline <>
-        toDoc(rest)
+    case Return(e) =>
+      toDoc(e)
 
-    case Val(Wildcard(_), tpe, binding, body) =>
+    case Val(Wildcard(), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case Val(id, tpe, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
-        toDoc(body)
-
-    case Let(id, tpe, binding, body) =>
-      "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
     case App(b, targs, args) =>
@@ -113,19 +122,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
-    case While(cond, body) =>
-      "while" <+> parens(toDoc(cond)) <+> block(toDoc(body)) <+> line
-
-    case Return(e) =>
-      toDoc(e)
-
-    case Handle(body, tpe, hs) =>
+    case Try(body, tpe, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
     case State(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 
-    case Region(body) =>
+    case Region(body, _) =>
       "region" <+> toDoc(body)
 
     case Match(sc, clauses, default) =>

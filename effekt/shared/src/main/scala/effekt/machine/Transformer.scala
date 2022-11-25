@@ -4,9 +4,10 @@ package machine
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.lifted
-import effekt.lifted.LiftInference
+import effekt.lifted.{ Definition, LiftInference }
 import effekt.symbols
 import effekt.symbols.{ BlockSymbol, BlockType, DataType, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.builtins.TState
 
 object Transformer {
 
@@ -26,37 +27,32 @@ object Transformer {
   }
 
   def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl, deps: List[lifted.ModuleDecl])(using C: Context): Program = {
-    val stmt = mod.defs;
+
     val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
 
-    findToplevelBlocksParams(stmt)
-    val transformedMain = transformToplevel(stmt, Jump(Label(mainName, List())))
-
+    // collect all information
     var declarations: List[Declaration] = Nil
+    var definitions: List[lifted.Definition] = Nil
 
-    // TODO Jonathan: I think this should be a foldRight here.
-    val statement = deps.foldLeft(transformedMain) {
-      case (compiled, dependency) =>
-        declarations ++= dependency.externs.map(transform)
-        findToplevelBlocksParams(dependency.defs)
-        transformToplevel(dependency.defs, compiled)
+    (mod :: deps).foreach { module =>
+      declarations ++= module.externs.map(transform)
+      definitions ++= module.definitions
     }
 
-    declarations ++= mod.externs.map(transform)
+    val mainEntry = Jump(Label(mainName, List()))
 
-    Program(declarations, statement)
+    findToplevelBlocksParams(definitions)
+
+    val transformedDefinitions = definitions.foldLeft(mainEntry) {
+      case (rest, lifted.Definition.Def(id, _, lifted.BlockLit(params, body))) =>
+        Def(Label(transform(id), params.map(transform)), transform(body), rest)
+      case (rest, d) =>
+        Context.abort(s"Toplevel def and let bindings not yet supported: ${d}")
+    }
+
+    Program(declarations, transformedDefinitions)
   }
-
-
-  // TODO this marks the end of the list
-  //  mods match {
-  //    case Nil =>
-  //      Jump(Label(getMainName, List()))
-  //    case lifted.ModuleDecl(_, _, stmt, _) :: mods =>
-  //      findToplevelBlocksParams(stmt);
-  //      transformToplevel(stmt, mods)
-  //  }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, Context): Declaration = extern match {
     case lifted.Extern.Def(name, functionType: FunctionType, params, body) =>
@@ -71,20 +67,55 @@ object Transformer {
       Include(contents)
   }
 
-  def transformToplevel(stmt: lifted.Stmt, entryPoint: Statement)(using BlocksParamsContext, Context): Statement =
-    stmt match {
-      case lifted.Def(id, _, lifted.BlockLit(params, body), rest) =>
-        Def(Label(transform(id), params.map(transform)), transform(body), transformToplevel(rest, entryPoint))
-
-      case lifted.Return(lifted.UnitLit()) =>
-        entryPoint
-
-      case _ =>
-        Context.abort(s"Unsupported declaration: $stmt")
-    }
-
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Statement =
     stmt match {
+      case lifted.Scope(definitions, rest) =>
+
+        definitions.foreach {
+          case Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)) =>
+            // TODO does not work for mutually recursive local definitions
+            val freeParams = lifted.freeVariables(block).toList.collect {
+              case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
+              case id: symbols.BlockParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+              case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+              case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
+              // we ignore functions since we do not "close" over them.
+
+              // TODO
+              //          case id: lifted.ScopeId => ???
+            }
+            val allParams = params.map(transform) ++ freeParams;
+            noteBlockParams(id, allParams)
+          case _ => ()
+        }
+
+        definitions.foldRight(transform(rest)) {
+          case (lifted.Definition.Let(id, tpe, binding), rest) =>
+            transform(binding).run { value =>
+              // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
+              Substitute(List(Variable(transform(id), transform(tpe)) -> value), rest)
+            }
+
+          case (lifted.Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)), rest) =>
+            Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
+
+          case (lifted.Definition.Def(id, tpe, block @ lifted.New(impl)), rest) =>
+            // TODO freeParams?
+            // TODO deal with evidenve?
+            val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe: @unchecked
+            val implTransformed = interfaceOps.map({ op =>
+              impl.operations.find(_._1 == op).get
+            }).map({
+              case lifted.Operation(_, lifted.BlockLit(params, body)) =>
+                // TODO we assume that there are no block params in methods
+                Clause(params.map(transform), transform(body))
+            })
+            New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, rest)
+
+          case (d @ lifted.Definition.Def(_, _, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
+            Context.abort(s"block definition: $d")
+        }
+
       case lifted.Return(lifted.Run(stmt, tpe)) =>
         transform(stmt)
 
@@ -96,46 +127,10 @@ object Transformer {
           Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
             transform(bind)
         )
-
-      case lifted.Let(id, tpe, binding, rest) =>
-        transform(binding).run { value =>
-          // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-          Substitute(List(Variable(transform(id), transform(tpe)) -> value), transform(rest))
-        }
-
-      case lifted.Def(id, tpe, block @ lifted.BlockLit(params, body), rest) =>
-        // TODO does not work for mutually recursive local definitions
-        val freeParams = lifted.freeVariables(block).toList.collect {
-          case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
-          case id: symbols.BlockParam  => Variable(transform(id), transform(Context.blockTypeOf(id)))
-          case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
-          case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
-          // we ignore functions since we do not "close" over them.
-
-          // TODO
-          //          case id: lifted.ScopeId => ???
-        }
-        val allParams = params.map(transform) ++ freeParams;
-        noteBlockParams(id, allParams)
-        Def(Label(transform(id), allParams), transform(body), transform(rest))
-
-      case lifted.Def(id, tpe, block @ lifted.New(impl), rest) =>
-        // TODO freeParams?
-        // TODO deal with evidenve?
-        val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe : @unchecked
-        val implTransformed = interfaceOps.map({ op =>
-          impl.clauses.find(_._1 == op).get
-        }).map({
-          case (_, lifted.BlockLit(params, body)) =>
-            // TODO we assume that there are no block params in methods
-            Clause(params.map(transform), transform(body))
-        })
-        New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, transform(rest))
-
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
-          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock(_) =>
+          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock() =>
             // TODO this is a hack, values is in general shorter than environment
             val environment = getBlocksParams(id)
             transform(args).run { values =>
@@ -186,17 +181,51 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case lifted.Handle(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
+      case lifted.Try(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
         // TODO more than one handler
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val regionVar = Variable(freshName("_"), Type.Region())
 
         LiteralEvidence(transform(ev), builtins.There,
-          NewStack(delimiter, returnClause,
+          NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter,
               New(transform(id), transform(handler),
                 transform(body)))))
+
+      case lifted.Region(lifted.BlockLit(List(ev, id), body), tpe) =>
+        val variable = Variable(freshName("a"), transform(tpe))
+        val returnClause = Clause(List(variable), Return(List(variable)))
+        val delimiter = Variable(freshName("returnClause"), Type.Stack())
+        val regionVar = Variable(transform(id.id), Type.Region())
+
+        LiteralEvidence(transform(ev), builtins.There,
+          NewStack(delimiter, regionVar, returnClause,
+            PushStack(delimiter, transform(body))))
+
+      case lifted.State(id, init, region, body) =>
+        transform(init).run { value =>
+          val tpe = value.tpe;
+          val name = transform(id)
+          val variable = Variable(name, tpe)
+          val stateVariable = Variable(name + "$State", Type.Reference(tpe))
+          val loadVariable = Variable(freshName(name), tpe)
+          val getter = Clause(List(),
+                        Load(loadVariable, stateVariable,
+                          Return(List(loadVariable))))
+
+          val setterVariable = Variable(freshName(name), tpe)
+          val setter = Clause(List(setterVariable),
+                                Store(stateVariable, setterVariable,
+                                  Return(List())))
+          val regionVar = Variable(transform(region), Type.Region())
+
+          // TODO use interface when it's implemented
+          Allocate(stateVariable, value, regionVar,
+            //New(variable, List(getter, setter),
+              transform(body))
+        }
 
       case _ =>
         Context.abort(s"Unsupported statement: $stmt")
@@ -244,34 +273,55 @@ object Transformer {
       val tpe = Context.valueTypeOf(id);
       pure(Variable(transform(id), transform(tpe)))
 
-    case lifted.UnitLit() =>
+    case lifted.Literal((), _) =>
       val variable = Variable(freshName("x"), Positive("Unit"));
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
-    case lifted.IntLit(value) =>
+    case lifted.Literal(value: Int, _) =>
       val variable = Variable(freshName("x"), Type.Int());
       Binding { k =>
         LiteralInt(variable, value, k(variable))
       }
 
-    case lifted.BooleanLit(value: Boolean) =>
+    case lifted.Literal(value: Boolean, _) =>
       val variable = Variable(freshName("x"), Positive("Boolean"))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
-    case lifted.DoubleLit(v) =>
+    case lifted.Literal(v: Double, _) =>
       val literal_binding = Variable(freshName("x"), Type.Double());
       Binding { k =>
         LiteralDouble(literal_binding, v, k(literal_binding))
       }
 
-    case lifted.StringLit(javastring) =>
+    case lifted.Literal(javastring: String, _) =>
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
+      }
+
+    // hardcoded translation for get and put.
+    // TODO remove this when interfaces are correctly translated
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.get), List(), List()) =>
+      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+      val variable = Variable(freshName("x"), tpe)
+      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+      Binding { k =>
+        Load(variable, stateVariable, k(variable))
+      }
+
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.put), List(), List(arg)) =>
+      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+      val variable = Variable(freshName("x"), Positive("Unit"));
+      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+      transform(arg).flatMap { value =>
+        Binding { k =>
+          Store(stateVariable, value,
+            Construct(variable, builtins.Unit, List(), k(variable)))
+        }
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction), List(), args) =>
@@ -292,7 +342,7 @@ object Transformer {
         }
       }
 
-    case lifted.Select(target: lifted.Expr, field: symbols.Field) =>
+    case lifted.Select(target, field: symbols.Field) =>
       val fields = field.constructor.fields
       val fieldIndex = fields.indexOf(field)
       val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }
@@ -327,12 +377,12 @@ object Transformer {
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Handler)(using BlocksParamsContext, Context): List[Clause] = {
-    handler.clauses.sortBy[Int]({
-      case (operationName, _) =>
+  def transform(handler: lifted.Implementation)(using BlocksParamsContext, Context): List[Clause] = {
+    handler.operations.sortBy[Int]({
+      case lifted.Operation(operationName, _) =>
         handler.id.ops.indexOf(operationName)
     }).map({
-      case (operationName, lifted.BlockLit(params :+ resume, body))=>
+      case lifted.Operation(operationName, lifted.BlockLit(params :+ resume, body))=>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
@@ -382,22 +432,13 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(stmt: lifted.Stmt)(using BlocksParamsContext, Context): Unit = {
-    stmt match {
-      case lifted.Def(blockName, _, lifted.BlockLit(params, body), rest) =>
-        noteBlockParams(blockName, params.map(transform));
-        findToplevelBlocksParams(rest)
-
-      case lifted.Def(_, _, _, rest) =>
-        // TODO expand this catch-all case
-        findToplevelBlocksParams(rest)
-      case lifted.Return(lifted.UnitLit()) =>
-        ()
-      case _ =>
-        println("unsupported in finding toplevel blocks " + stmt)
-        ()
+  def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, Context): Unit =
+    definitions.foreach {
+      case Definition.Def(blockName, tpe, lifted.BlockLit(params, body)) =>
+        noteBlockParams(blockName, params.map(transform))
+      case _ => ()
     }
-  }
+
 
   /**
    * Extra info in context

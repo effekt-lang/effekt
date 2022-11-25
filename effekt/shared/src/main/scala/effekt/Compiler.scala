@@ -14,30 +14,6 @@ import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
 /**
- * The compiler for the Effekt language.
- *
- * The compiler is set up in the following large phases that consist itself of potentially multiple phases
- *
- * (1) Parser    (Source      -> source.Tree)  Load file and parse it into an AST
- *
- * (2) Frontend  (source.Tree -> source.Tree)  Perform name analysis, typechecking, region inference,
- *                                             and other rewriting of the source AST
- *
- * (3) Middleend (source.Tree -> core.Tree)    Perform an ANF transformation into core, and
- *                                             other rewritings on the core AST
- *
- * (4) Backend  (core.Tree   -> Document)     Generate code in a target language
- *
- * The compiler itself does not read from or write to files. This is important since, we need to
- * virtualize the file system to also run the compiler in the browser.
- *
- * - Reading files is performed by the mixin [[effekt.context.ModuleDB]], which is implemented
- *   differently for the JS and JVM versions.
- * - Writing to files is performed by the hook [[Compiler.saveOutput]], which is implemented
- *   differently for the JS and JVM versions.
- */
-
-/**
  * Intermediate results produced by the various phases.
  *
  * All phases have a source field, which is mostly used to invalidate caches based on the timestamp.
@@ -89,6 +65,30 @@ case class CompilationUnit(main: CoreTransformed, dependencies: List[CoreTransfo
  */
 case class Compiled(mainFile: String, outputFiles: Map[String, Document])
 
+
+/**
+ * The compiler for the Effekt language.
+ *
+ * The compiler is set up in the following large phases that consist itself of potentially multiple phases
+ *
+ *   1. Parser    (Source      -> source.Tree)  Load file and parse it into an AST
+ *
+ *   2. Frontend  (source.Tree -> source.Tree)  Perform name analysis, typechecking, region inference,
+ *                                             and other rewriting of the source AST
+ *
+ *   3. Middleend (source.Tree -> core.Tree)    Perform an ANF transformation into core, and
+ *                                             other rewritings on the core AST
+ *
+ *   4. Backend  (core.Tree   -> Document)     Generate code in a target language
+ *
+ * The compiler itself does not read from or write to files. This is important since, we need to
+ * virtualize the file system to also run the compiler in the browser.
+ *
+ * - Reading files is performed by the mixin [[effekt.context.ModuleDB]], which is implemented
+ *   differently for the JS and JVM versions.
+ * - Writing to files is performed by the hook [[Compiler.saveOutput]], which is implemented
+ *   differently for the JS and JVM versions.
+ */
 trait Compiler {
 
   /**
