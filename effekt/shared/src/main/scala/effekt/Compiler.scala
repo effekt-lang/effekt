@@ -230,7 +230,7 @@ trait Compiler {
    * TODO Currently the backend is not cached at all
    */
   def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    (Frontend andThen Middleend andThen Backend.separate).apply(source)
+    ???
 
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file

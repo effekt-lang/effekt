@@ -163,9 +163,7 @@ class LanguageServer extends Intelligence {
   // really changed. Writing will change the timestamp and lazy reloading of modules
   // on the JS side uses the timestamp to determine whether we need to re-eval a
   // module or not.
-  private val compileCached = Phase.cached("compile-cached") {
-    Phase("compile") { compileSingle }
-  }
+  private val compileCached = Phase.cached("compile-cached") { compileSingle }
 
   private def messageToDiagnostic(m: EffektError) = {
     val from = m.startPosition.map(toLSPPosition).orNull

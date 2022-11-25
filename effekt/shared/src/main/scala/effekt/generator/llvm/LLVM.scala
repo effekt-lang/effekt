@@ -14,9 +14,9 @@ import effekt.context.assertions.*
 import effekt.util.paths.*
 
 object LLVM extends Backend {
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using Context): Option[Compiled] = {
+  def compileWhole(main: CoreTransformed)(using Context): Option[Compiled] = {
     val mainFile = path(main.mod)
-    val machineMod = machine.Transformer.transform(main, dependencies)
+    val machineMod = machine.Transformer.transform(main)
     val llvmDefinitions = Transformer.transform(machineMod)
 
     val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
@@ -37,7 +37,7 @@ object LLVM extends Backend {
    * and the prelude.
    */
   def compileSeparate(main: CoreTransformed)(using Context): Option[Document] = {
-    val machine.Program(decls, prog) = machine.Transformer.transform(main, Nil)
+    val machine.Program(decls, prog) = machine.Transformer.transform(main)
 
     // we don't print declarations here.
     val llvmDefinitions = Transformer.transform(machine.Program(Nil, prog))

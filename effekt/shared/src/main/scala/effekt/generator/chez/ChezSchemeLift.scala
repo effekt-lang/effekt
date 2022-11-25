@@ -31,12 +31,11 @@ object ChezSchemeLift extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
+  def compileWhole(main: CoreTransformed)(using C: Context) = {
     val mainSymbol = C.checkMain(main.mod)
-    val deps = dependencies.flatMap { dep => compile(dep) }
 
     LiftInference(main).map { lifted =>
-      val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core, deps))
+      val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
       val mainFile = path(main.mod)
       Compiled(mainFile, Map(mainFile -> result))
@@ -55,9 +54,9 @@ object ChezSchemeLift extends Backend {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     LiftInference(in).toList.flatMap { lifted => toChez(lifted.core) }
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
-    val defs = toChez(core)
-    chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+    val definitions = toChez(core)
+    chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   /**
@@ -65,7 +64,6 @@ object ChezSchemeLift extends Backend {
    */
   def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
-
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 

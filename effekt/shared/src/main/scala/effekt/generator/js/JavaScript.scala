@@ -5,7 +5,6 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.*
-import effekt.lifted.EvidenceSymbol
 import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, TermSymbol, TypeConstructor, TypeSymbol, Wildcard }
 import effekt.util.paths.*
 import effekt.{ Compiled, CoreTransformed, symbols }
@@ -32,11 +31,10 @@ trait JavaScript extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
-    val compiledDependencies = dependencies.flatMap { dep => compile(dep) }.toMap
+  def compileWhole(main: CoreTransformed)(implicit C: Context) = {
     compile(main).map {
       case (mainFile, result) =>
-        Compiled(mainFile, compiledDependencies.updated(mainFile, result))
+        Compiled(mainFile, Map(mainFile -> result))
     }
   }
 
@@ -92,8 +90,6 @@ trait JavaScript extends Backend {
   def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
 
   def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
-
-  def toJSName(s: String): JSName = JSName(jsEscape(s))
 
   val `fresh` = JSName("fresh")
   val `tag` = JSName("__tag")
