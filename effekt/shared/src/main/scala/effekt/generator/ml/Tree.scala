@@ -84,7 +84,7 @@ enum Expr {
 
   case MakeRecord(fields: List[(MLName, Expr)])
 
-  case MakeDatatype(tag: MLName, arg: Expr)
+  case MakeDatatype(tag: MLName, arg: Option[Expr])
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
 }

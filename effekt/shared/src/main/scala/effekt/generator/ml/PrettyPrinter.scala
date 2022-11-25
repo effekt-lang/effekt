@@ -121,7 +121,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.MakeRecord(fields) =>
       val fieldAssignments = fields.map((name, exp) => toDoc(name) <+> "=" <+> toDoc(exp))
       group(nest("{" <@> vsep(fieldAssignments, ",")) <@> "}")
-    case Expr.MakeDatatype(tag, arg) =>
+    case Expr.MakeDatatype(tag, None) =>
+        toDoc(tag)
+    case Expr.MakeDatatype(tag, Some(arg)) =>
       val mdt = toDoc(tag) <+> toDoc(arg)
       parens(mdt)
     case Expr.Sequence(Nil, rest) => toDoc(rest)

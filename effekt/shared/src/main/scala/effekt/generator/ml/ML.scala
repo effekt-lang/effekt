@@ -323,7 +323,8 @@ object ML extends Backend {
       }
       b match {
         case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _))) =>
-          ml.MakeDatatype(name(id), ml.Expr.Tuple(mlArgs))
+          if (mlArgs.isEmpty) ml.MakeDatatype(name(id), None)
+          else ml.MakeDatatype(name(id), Some(ml.Expr.Tuple(mlArgs)))
         case BlockVar(symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, constr))) =>
           val fieldNames = constr.fields map name
           assert(fieldNames.length == mlArgs.length)
