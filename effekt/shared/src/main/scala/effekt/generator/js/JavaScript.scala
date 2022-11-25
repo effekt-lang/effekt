@@ -175,9 +175,11 @@ trait JavaScript extends Backend {
     val state   = generateStateAccessors
 
     // TODO this is not necessary, once we implement proper exports.
-    val exports = module.exports.collectFirst {
+    val allMains = module.exports.collect {
       case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
-    }.toList
+    }
+
+    val exports = List(allMains.last)
 
     js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
