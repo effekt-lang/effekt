@@ -173,7 +173,7 @@ object ML extends Backend {
 
       ml.Match(toML(scrutinee), clauses map clauseToML, default map toMLExpr)
 
-    case Hole => C.abort("Hole is not supported")
+    case Hole => ml.Expr.RawExpr("raise Hole")
 
     case Scope(definitions, body) => ml.Expr.Let(definitions.map(toML), toMLExpr(body))
 

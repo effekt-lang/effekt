@@ -48,3 +48,5 @@ fun mlRandomReal () =
    in
       shiftRight rreal wsize
    end;
+
+exception Hole
