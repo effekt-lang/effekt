@@ -31,13 +31,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val definitions = toplevelDeclarations.collect { case d: Definition => optimize(d) }
     val externals = toplevelDeclarations.collect { case d: Extern => d }
-    val declarations = toplevelDeclarations.collect { case d: Decl => d }
+    val declarations = toplevelDeclarations.collect { case d: Declaration => d }
 
     // We use the imports on the symbol (since they include the prelude)
     ModuleDecl(path, mod.imports.map { _.path }, declarations, externals, definitions, exports)
   }
 
-  def transformToplevel(d: source.Def)(using Context): List[Definition | Decl | Extern] = d match {
+  def transformToplevel(d: source.Def)(using Context): List[Definition | Declaration | Extern] = d match {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
       val ps = (vps map transform) ++ (bps map transform)

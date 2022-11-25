@@ -153,7 +153,7 @@ trait Compiler {
   /**
    * Backend
    */
-  def Backend(implicit C: Context): Backend = C.config.backend() match {
+  def Backend(using C: Context): Backend = C.config.backend() match {
     case "js"           => effekt.generator.js.JavaScriptMonadic
     case "chez-callcc"  => effekt.generator.chez.ChezSchemeCallCC
     case "chez-monadic" => effekt.generator.chez.ChezSchemeMonadic
@@ -163,7 +163,7 @@ trait Compiler {
 
   object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
     val phaseName = "lower-dependencies"
-    def run(main: CoreTransformed)(implicit C: Context) = {
+    def run(main: CoreTransformed)(using Context) = {
       val dependencies = main.mod.dependencies flatMap { dep =>
         // We already ran the frontend on the dependencies (since they are discovered
         // dynamically). The results are cached, so it doesn't hurt dramatically to run
@@ -171,6 +171,34 @@ trait Compiler {
         (Frontend andThen Middleend)(dep.source)
       }
       Some(CompilationUnit(main, dependencies))
+    }
+  }
+
+  object Aggregate extends Phase[CompilationUnit, CompilationUnit] {
+    val phaseName = "aggregate"
+
+    def run(unit: CompilationUnit)(using Context) = {
+      val CompilationUnit(CoreTransformed(src, tree, mod, main), dependencies) = unit
+      val deps = dependencies.map(d => d.core)
+
+      // collect all information
+      var declarations: List[core.Declaration] = Nil
+      var externs: List[core.Extern] = Nil
+      var definitions: List[core.Definition] = Nil
+      var exports: List[symbols.Symbol] = Nil
+
+      (deps :+ main).foreach { module =>
+        externs ++= module.externs
+        declarations ++= module.declarations
+        definitions ++= module.definitions
+        exports ++= module.exports
+      }
+
+      val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
+
+      // TODO in the future check for duplicate exports
+
+      Some(CompilationUnit(CoreTransformed(src, tree, mod, aggregated), Nil))
     }
   }
 
@@ -182,14 +210,14 @@ trait Compiler {
   /**
    * Used by LSP server (Intelligence) to map positions to source trees
    */
-  def getAST(source: Source)(implicit C: Context): Option[ModuleDecl] =
+  def getAST(source: Source)(using Context): Option[ModuleDecl] =
     CachedParser(source).map { res => res.tree }
 
   /**
    * Called by ModuleDB (and indirectly by Namer) to run the frontend for a
    * dependency.
    */
-  def runFrontend(source: Source)(implicit C: Context): Option[Module] =
+  def runFrontend(source: Source)(using Context): Option[Module] =
     Frontend(source).map { res => res.mod }
 
   /**
@@ -201,15 +229,15 @@ trait Compiler {
    *
    * TODO Currently the backend is not cached at all
    */
-  def compileSeparate(source: Source)(implicit C: Context): Option[(CoreTransformed, Document)] =
+  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
     (Frontend andThen Middleend andThen Backend.separate).apply(source)
 
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
-  def compileWhole(source: Source)(implicit C: Context): Option[Compiled] =
-    (Frontend andThen Middleend andThen LowerDependencies andThen Backend.whole).apply(source)
+  def compileWhole(source: Source)(using Context): Option[Compiled] =
+    (Frontend andThen Middleend andThen LowerDependencies andThen Aggregate andThen Backend.whole).apply(source)
 
-  def compileAll(source: Source)(implicit C: Context): Option[CompilationUnit] =
-    (Frontend andThen Middleend andThen LowerDependencies).apply(source)
+  def compileAll(source: Source)(using Context): Option[CompilationUnit] =
+    (Frontend andThen Middleend andThen LowerDependencies andThen Aggregate).apply(source)
 }

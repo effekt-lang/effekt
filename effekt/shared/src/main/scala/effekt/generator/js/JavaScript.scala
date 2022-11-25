@@ -95,46 +95,20 @@ trait JavaScript extends Backend {
 
   def toJSName(s: String): JSName = JSName(jsEscape(s))
 
-  val `pattern` = JSName("pattern")
-  val `exec` = JSName("exec")
   val `fresh` = JSName("fresh")
   val `tag` = JSName("__tag")
   val `name` = JSName("__name")
   val `data` = JSName("__data")
 
-  def nameDef(id: Symbol): JSName = JSName(jsEscape(id match {
-    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
-    case _: symbols.Operation => "op$" + id.name.toString
-    case _ => id.name.toString
-  }))
+  def nameDef(id: Symbol): JSName = uniqueName(id)
 
-  def nameRef(id: Symbol)(using C: Context): js.Expr = {
-    def ref(name: String): js.Expr = Variable(JSName(jsEscape(name)))
-    id match {
-      case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => ref(id.name.toString + "_" + id.id)
-      case _: symbols.Operation => ref("op$" + id.name.toString)
-      case _: symbols.Interface => ref(id.name.name)
-      case _: symbols.Field => ref(id.name.name)
-      case _ => id.name match {
-        case LocalName(name) => ref(name)
-        case QualifiedName(Nil, name) => ref(name)
-        // TODO this is rather fragile...
-        case QualifiedName(path, name) if C.module.path == path.mkString("/") => ref(name)
-        case QualifiedName(path, name) =>
-          val prefix = ref("$" + path.mkString("_"))
-          val member = JSName(jsEscape(name))
-          js.Member(prefix, member)
-        case NoName => sys error "Trying to generate code for an anonymous entity"
-      }
-    }
-  }
+  def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
+
+  def nameRef(id: Symbol)(using C: Context): js.Expr = Variable(uniqueName(id))
 
   // name references for fields and methods
-  def memberNameRef(id: Symbol): JSName = JSName(jsEscape(id match {
-    case _: symbols.Operation => "op$" + id.name.toString
-    case _: symbols.Field => id.name.name
-    case _ => sys error "Trying to generate a member reference for something that is not a field or operation!"
-  }))
+  def memberNameRef(id: Symbol): JSName = uniqueName(id)
+
 
   def toJS(p: Param): JSName = nameDef(p.id)
 
@@ -190,18 +164,22 @@ trait JavaScript extends Backend {
   def toJS(handler: core.Implementation)(using Context): js.Expr =
     js.Object(handler.operations.map { case Operation(id, b) => nameDef(id) -> toJS(b) })
 
-  // TODO
-  //  def toJSMonadic(s: core.Stmt)(using Context, Buffer[js.Stmt]): monadic.Control = s match {
-
   def toJS(module: core.ModuleDecl)(using Context): js.Module = {
+
     val name    = JSName(jsModuleName(module.path))
     val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
-    val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
+    //val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
     val externs = module.externs.map(toJS)
-    val decls   = module.decls.flatMap(toJS)
+    val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
+    val state   = generateStateAccessors
 
-    js.Module(name, imports, exports, decls ++ externs ++ stmts)
+    // TODO this is not necessary, once we implement proper exports.
+    val exports = module.exports.collectFirst {
+      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
+    }.toList
+
+    js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
 
 
@@ -241,7 +219,7 @@ trait JavaScript extends Backend {
     }
   }
 
-  def toJS(d: Decl)(using Context): List[js.Stmt] = d match {
+  def toJS(d: Declaration)(using Context): List[js.Stmt] = d match {
     case core.Data(did, ctors) =>
       ctors.map { ctor => generateConstructor(ctor.asConstructor) }
 
@@ -325,14 +303,29 @@ trait JavaScript extends Backend {
       case _ => js.RawExpr("0") // this case is only necessary since records are also used to represent capabilities
     }
 
+    val constructor = ctor match {
+      case c: symbols.Constructor => c
+      case c: symbols.Record => c.constructor
+      case _ => ???
+    }
+
     js.Function(
-      nameDef(ctor),
+      nameDef(constructor),
       fields.map { f => nameDef(f) },
       List(js.Return(js.Object(List(
         `tag`  -> tagValue,
-        `name` -> JsString(nameDef(ctor).name), // TODO improve
+        `name` -> JsString(ctor.name.name),
         `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f)) })
       ) ++ fields.map { f => (nameDef(f), Variable(nameDef(f))) })))
     )
+  }
+
+  // const $getOp = "get$1234"
+  // const $putOp = "put$7554"
+  def generateStateAccessors: List[js.Stmt] = {
+    val getter = Const(JSName("$getOp"), JsString(nameDef(symbols.builtins.TState.get).name))
+    val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
+
+    List(getter, setter)
   }
 }

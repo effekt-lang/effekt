@@ -50,7 +50,7 @@ trait ModuleDB { self: Context =>
    * Tries to find a module for the given source, will run compiler on demand
    */
   def tryModuleOf(source: Source): Option[Module] = for {
-    mod <- runFrontend(source)(this)
+    mod <- runFrontend(source)(using this)
   } yield mod
 
   /**

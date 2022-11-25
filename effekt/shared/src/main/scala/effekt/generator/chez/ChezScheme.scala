@@ -85,7 +85,7 @@ trait ChezScheme {
   def toChez(p: Param): ChezName = nameDef(p.id)
 
   def toChez(module: ModuleDecl): List[chez.Def] = {
-    val decls = module.decls.flatMap(toChez)
+    val decls = module.declarations.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
     val defns = module.definitions.map(toChez).flatMap {
@@ -140,7 +140,7 @@ trait ChezScheme {
     case other => chez.Let(Nil, toChez(other))
   }
 
-  def toChez(decl: core.Decl): List[chez.Def] = decl match {
+  def toChez(decl: core.Declaration): List[chez.Def] = decl match {
     case Data(did, ctors) =>
       ctors.flatMap {
         case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
@@ -151,7 +151,7 @@ trait ChezScheme {
       generateConstructor(did, fields)
 
     // We use chez scheme records to also represent capabilities.
-    case Decl.Interface(id, operations) =>
+    case Declaration.Interface(id, operations) =>
       generateConstructor(id, operations)
   }
 

@@ -132,7 +132,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
 
-    val mod = context.runFrontend(source)(context)
+    context.runFrontend(source)(using context)
 
     val documentSymbols = for {
       sym <- context.sourceSymbolsFor(source).toVector

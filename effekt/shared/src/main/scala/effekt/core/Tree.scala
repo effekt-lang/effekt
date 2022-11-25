@@ -10,7 +10,7 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *
  *   ─ [[ Tree ]]
  *     │─ [[ ModuleDecl ]]
- *     │─ [[ Decl ]]
+ *     │─ [[ Declaration ]]
  *     │  │─ [[ Data ]]
  *     │  │─ [[ Record ]]
  *     │  │─ [[ Interface ]]
@@ -56,7 +56,7 @@ sealed trait Tree
 case class ModuleDecl(
   path: String,
   imports: List[String],
-  decls: List[Decl],
+  declarations: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
   exports: List[Symbol]
@@ -65,12 +65,12 @@ case class ModuleDecl(
 /**
  * Toplevel data and interface declarations
  */
-enum Decl extends Tree {
+enum Declaration extends Tree {
   case Data(id: Symbol, ctors: List[Symbol])
   case Record(id: Symbol, fields: List[Symbol])
   case Interface(id: Symbol, operations: List[Symbol])
 }
-export Decl.*
+export Declaration.*
 
 /**
  * FFI external definitions

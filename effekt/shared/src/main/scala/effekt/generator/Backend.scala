@@ -43,5 +43,6 @@ trait Backend extends BackendPhase {
 
   // Using the two methods above, we can implement the required phases.
   val whole = Phase("compile-whole") { input => compileWhole(input.main, input.dependencies) }
-  val separate = Phase("compile-separate") { core => compileSeparate(core) map { doc => (core, doc) } }
+  val separate = Phase("compile-separate") { core => ??? }
+    // compileSeparate(core) map { doc => (core, doc) } }
 }

@@ -81,7 +81,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     handlerName <+> block(vsep(clauses))
   }
 
-  def toDoc(d: Decl): Doc = d match {
+  def toDoc(d: Declaration): Doc = d match {
     case Data(did, ctors) =>
       "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
 

@@ -129,7 +129,6 @@ object monadic {
 
   def Call(callee: Expr, args: List[Expr]): Control = js.Call(callee, args)
   def If(cond: Expr, thn: Control, els: Control): Control = js.IfExpr(cond, thn, els)
-  def While(cond: Control, body: Control): Control = Builtin("_while", js.Lambda(Nil, cond), js.Lambda(Nil, body))
   def Handle(handlers: List[Expr], body: Expr): Control = js.Call(Builtin("handle", js.ArrayLiteral(handlers)), List(body))
 
   def Builtin(name: String, args: Expr*): Control = js.MethodCall($effekt, JSName(name), args: _*)
