@@ -355,9 +355,9 @@ object Transformer {
   def sharerType = NamedType("Sharer");
   def eraserType = NamedType("Eraser");
   def frameHeaderType = NamedType("FrameHeader");
-  def envType = PointerType();
+  def envType = NamedType("Env");
   def objType = NamedType("Obj");
-  def spType = PointerType();
+  def spType = NamedType("Sp");
   def stkType = NamedType("Stk");
   def regionType = NamedType("Region");
 
