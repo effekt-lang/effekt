@@ -157,9 +157,9 @@ case class CallTarget(name: Name, symbols: List[Set[BlockSymbol]]) extends Block
 /**
  * Introduced by Transformer
  */
-case class Wildcard(module: Module) extends ValueSymbol { val name = Name.local("_") }
-case class Tmp(module: Module) extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
-case class TmpBlock(module: Module) extends BlockSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
+case class Wildcard() extends ValueSymbol { val name = Name.local("_") }
+case class TmpValue() extends ValueSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
+case class TmpBlock() extends BlockSymbol { val name = Name.local("tmp" + Symbol.fresh.next()) }
 
 /**
  * Type Symbols
@@ -360,7 +360,7 @@ case class ExternFunction(
  */
 extension (s: Symbol) {
   def isSynthetic: Boolean = s match {
-    case _: Field | _: Constructor | _: CallTarget | _: Wildcard | _: Tmp | _: ResumeParam => true
+    case _: Field | _: Constructor | _: CallTarget | _: Wildcard | _: TmpValue | _: ResumeParam => true
     case s => s.synthetic
   }
 }

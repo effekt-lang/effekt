@@ -169,7 +169,7 @@ trait ChezScheme {
     case Definition.Def(id, tpe, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(_), tpe, binding) =>
+    case Definition.Let(Wildcard(), tpe, binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY

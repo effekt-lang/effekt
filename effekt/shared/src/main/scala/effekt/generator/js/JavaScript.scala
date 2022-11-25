@@ -211,7 +211,7 @@ trait JavaScript extends Backend {
    * Not all statement types can be printed in this context!
    */
   def toJSMonadic(s: core.Stmt)(using Context): monadic.Control = s match {
-    case core.Val(Wildcard(_), tpe, binding, body) =>
+    case core.Val(Wildcard(), tpe, binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
     case core.Val(id, tpe, binding, body) =>
@@ -261,7 +261,7 @@ trait JavaScript extends Backend {
     case Definition.Def(id, tpe, block) =>
       js.Const(nameDef(id), toJS(block))
 
-    case Definition.Let(Wildcard(_), tpe, binding) =>
+    case Definition.Let(Wildcard(), tpe, binding) =>
       js.ExprStmt(toJS(binding))
 
     case Definition.Let(id, tpe, binding) =>

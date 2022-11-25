@@ -130,7 +130,7 @@ object Transformer {
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
-          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock(_) =>
+          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock() =>
             // TODO this is a hack, values is in general shorter than environment
             val environment = getBlocksParams(id)
             transform(args).run { values =>

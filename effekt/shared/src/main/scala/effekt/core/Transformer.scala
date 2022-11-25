@@ -221,14 +221,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.While(cond, body) =>
       val exprTpe = Context.inferredTypeOf(tree)
 
-      val loopName = TmpBlock(Context.module)
+      val loopName = TmpBlock()
       val loopType = FunctionType(Nil, Nil, Nil, Nil, builtins.TUnit, Effects.Pure)
       val loopCall = Stmt.App(BlockVar(loopName), Nil, Nil)
 
       val loop = Block.BlockLit(Nil,
         insertBindings {
           Stmt.If(transformAsPure(cond),
-            Stmt.Val(Tmp(Context.module), Context.inferredTypeOf(body), transform(body), loopCall),
+            Stmt.Val(TmpValue(), Context.inferredTypeOf(body), transform(body), loopCall),
             Return(Literal((), builtins.TUnit)))
         }
       )
@@ -372,7 +372,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol)
 
   def freshWildcardFor(e: source.Tree)(using Context): Wildcard = {
-    val x = Wildcard(Context.module)
+    val x = Wildcard()
     Context.inferredTypeOption(e) match {
       case Some(t) => Context.assignType(x, t)
       case _           => Context.abort("Internal Error: Missing type of source expression.")
@@ -460,11 +460,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       defaults = defaults :+ cl
 
     def freshFields(c: Constructor) = c.fields.map { f =>
-      val tmp = Tmp.apply(Context.module)
+      val tmp = TmpValue.apply()
       Context.assignType(tmp, f.returnType)
       tmp
     }
-    val varsFor: Map[Constructor, List[Tmp]] = variants.map { v => v -> freshFields(v) }.toMap
+    val varsFor: Map[Constructor, List[TmpValue]] = variants.map { v => v -> freshFields(v) }.toMap
 
     normalizedClauses.foreach {
       case c @ Clause(patterns, target, args) => patterns.get(splitVar) match {
@@ -575,8 +575,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 
 private[core] enum Binding {
-  case Val(name: Tmp, tpe: symbols.ValueType, binding: Stmt)
-  case Let(name: Tmp, tpe: symbols.ValueType, binding: Expr)
+  case Val(name: TmpValue, tpe: symbols.ValueType, binding: Stmt)
+  case Let(name: TmpValue, tpe: symbols.ValueType, binding: Expr)
   case Def(name: BlockSymbol, tpe: symbols.BlockType, binding: Block)
 }
 
@@ -601,7 +601,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(tpe: symbols.ValueType, s: Stmt): ValueVar = {
 
     // create a fresh symbol and assign the type
-    val x = Tmp(module)
+    val x = TmpValue()
     assignType(x, tpe)
 
     val binding = Binding.Val(x, tpe, s)
@@ -613,7 +613,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(tpe: symbols.ValueType, s: Expr): ValueVar = {
 
     // create a fresh symbol and assign the type
-    val x = Tmp(module)
+    val x = TmpValue()
     assignType(x, tpe)
 
     val binding = Binding.Let(x, tpe, s)
@@ -623,7 +623,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def bind(tpe: symbols.BlockType, b: Block): BlockVar = {
-    bind(TmpBlock(module), tpe, b)
+    bind(TmpBlock(), tpe, b)
   }
 
   private[core] def bind(name: BlockSymbol, tpe: symbols.BlockType, b: Block): BlockVar = {
