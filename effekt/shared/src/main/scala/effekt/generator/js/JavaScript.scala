@@ -5,7 +5,6 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.*
-import effekt.lifted.EvidenceSymbol
 import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, TermSymbol, TypeConstructor, TypeSymbol, Wildcard }
 import effekt.util.paths.*
 import effekt.{ Compiled, CoreTransformed, symbols }
@@ -15,126 +14,71 @@ import kiama.util.Source
 
 import scala.language.implicitConversions
 
-// used by the website
-object JavaScriptVirtual extends JavaScript {
-  def jsModuleSystem(module: js.Module): List[js.Stmt] = module.virtual
-}
-
-// used by REPL and compiler
-object JavaScriptMonadic extends JavaScript {
-  def jsModuleSystem(module: js.Module): List[js.Stmt] = module.commonjs
-}
-
-trait JavaScript extends Backend {
-
-  def jsModuleSystem(module: js.Module): List[js.Stmt]
+object JavaScript extends Backend {
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context) = {
-    val compiledDependencies = dependencies.flatMap { dep => compile(dep) }.toMap
-    compile(main).map {
-      case (mainFile, result) =>
-        Compiled(mainFile, compiledDependencies.updated(mainFile, result))
-    }
+  def compileWhole(input: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) = {
+
+    assert(input.core.imports.isEmpty, "All dependencies should have been inlined by now.")
+
+    val module = input.mod
+    val mainFile = path(module)
+    val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
+
+    val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
+    Some(Compiled(mainFile, Map(mainFile -> result)))
   }
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
-    C.using(module = input.mod) {
-      Some(js.PrettyPrinter.format(jsModuleSystem(toJS(input.core))))
+  def compileSeparate(input: CoreTransformed)(using C: Context) = {
+    val module = input.mod
+
+    def shouldExport(sym: Symbol) = sym match {
+      // do not export fields, since they are no defined functions
+      case _: symbols.Field => false
+      // do not export effect operations, since they are translated to field selection as well.
+      case _: symbols.Operation => false
+
+      // all others are fine
+      case _ => true
     }
+
+    // also search all mains and use last one (shadowing), if any.
+    val allMains = input.core.exports.collect {
+      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
+    }
+
+    val required = usedImports(input)
+
+    // this is mostly to import $effekt
+    val dependencies = module.dependencies.map {
+      d => js.Import.All(JSName(jsModuleName(d.path)), jsModuleFile(d.path))
+    }
+    val imports = dependencies ++ required.toList.map {
+      case (mod, syms) =>
+        js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
+    }
+
+    val provided = module.terms.values.flatten.toList.distinct
+    val exports = allMains.lastOption.toList ++ provided.collect {
+      case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
+    }
+
+    C.using(module = input.mod) {
+      val result = toJS(input.core, imports, exports).virtual
+      Some(js.PrettyPrinter.format(result))
+    }
+  }
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / jsModuleFile(m.path)).unixPath
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   *
-   * Writes the compiled result into a file.
-   */
-  private def compile(in: CoreTransformed)(implicit C: Context): Option[(String, Document)] =
-    compileSeparate(in).map { doc =>
-      (path(in.mod), doc)
-    }
-
-
-  // Names
-  // -----
-
-  val reserved = List(
-    // reserved words (according to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#keywords)
-    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export",
-    "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return",
-    "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
-
-    // future reserved words
-    "enum", "implements", "interface", "package", "private", "protected", "public",
-
-    // identifiers with special meanings
-    "get", "set", "arguments", "async", "eval",
-
-    // special names in CommonJS module systems
-    "module", "exports", "require",
-
-    // other special names
-    "window", "document", "alert", "console", "this"
-  )
-
-  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
-
-  def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
-
-  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
-
-  def toJSName(s: String): JSName = JSName(jsEscape(s))
-
-  val `pattern` = JSName("pattern")
-  val `exec` = JSName("exec")
-  val `fresh` = JSName("fresh")
-  val `tag` = JSName("__tag")
-  val `name` = JSName("__name")
-  val `data` = JSName("__data")
-
-  def nameDef(id: Symbol): JSName = JSName(jsEscape(id match {
-    case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => id.name.toString + "_" + id.id
-    case _: symbols.Operation => "op$" + id.name.toString
-    case _ => id.name.toString
-  }))
-
-  def nameRef(id: Symbol)(using C: Context): js.Expr = {
-    def ref(name: String): js.Expr = Variable(JSName(jsEscape(name)))
-    id match {
-      case b: symbols.BlockParam if b.tpe.isInstanceOf[symbols.InterfaceType] => ref(id.name.toString + "_" + id.id)
-      case _: symbols.Operation => ref("op$" + id.name.toString)
-      case _: symbols.Interface => ref(id.name.name)
-      case _: symbols.Field => ref(id.name.name)
-      case _ => id.name match {
-        case LocalName(name) => ref(name)
-        case QualifiedName(Nil, name) => ref(name)
-        // TODO this is rather fragile...
-        case QualifiedName(path, name) if C.module.path == path.mkString("/") => ref(name)
-        case QualifiedName(path, name) =>
-          val prefix = ref("$" + path.mkString("_"))
-          val member = JSName(jsEscape(name))
-          js.Member(prefix, member)
-        case NoName => sys error "Trying to generate code for an anonymous entity"
-      }
-    }
-  }
-
-  // name references for fields and methods
-  def memberNameRef(id: Symbol): JSName = JSName(jsEscape(id match {
-    case _: symbols.Operation => "op$" + id.name.toString
-    case _: symbols.Field => id.name.name
-    case _ => sys error "Trying to generate a member reference for something that is not a field or operation!"
-  }))
 
   def toJS(p: Param): JSName = nameDef(p.id)
 
@@ -168,15 +112,13 @@ trait JavaScript extends Backend {
     case New(handler) => toJS(handler)
   }
 
-  def builtin(name: String): js.Expr = js.Member($effekt, JSName(name))
-
   def toJS(args: List[Argument])(using Context): List[js.Expr] = args map {
     case b: Block => toJS(b)
     case e: Expr => toJS(e)
   }
 
   def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
-    case Literal((), _) => builtin("unit")
+    case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id) => nameRef(id)
@@ -190,18 +132,13 @@ trait JavaScript extends Backend {
   def toJS(handler: core.Implementation)(using Context): js.Expr =
     js.Object(handler.operations.map { case Operation(id, b) => nameDef(id) -> toJS(b) })
 
-  // TODO
-  //  def toJSMonadic(s: core.Stmt)(using Context, Buffer[js.Stmt]): monadic.Control = s match {
-
-  def toJS(module: core.ModuleDecl)(using Context): js.Module = {
+  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
-    val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
-    val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
     val externs = module.externs.map(toJS)
-    val decls   = module.decls.flatMap(toJS)
+    val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
-
-    js.Module(name, imports, exports, decls ++ externs ++ stmts)
+    val state   = generateStateAccessors
+    js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
 
 
@@ -241,7 +178,7 @@ trait JavaScript extends Backend {
     }
   }
 
-  def toJS(d: Decl)(using Context): List[js.Stmt] = d match {
+  def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
     case core.Data(did, ctors) =>
       ctors.map { ctor => generateConstructor(ctor.asConstructor) }
 
@@ -325,14 +262,110 @@ trait JavaScript extends Backend {
       case _ => js.RawExpr("0") // this case is only necessary since records are also used to represent capabilities
     }
 
+    val constructor = ctor match {
+      case c: symbols.Constructor => c
+      case c: symbols.Record => c.constructor
+      case _ => ???
+    }
+
     js.Function(
-      nameDef(ctor),
+      nameDef(constructor),
       fields.map { f => nameDef(f) },
       List(js.Return(js.Object(List(
         `tag`  -> tagValue,
-        `name` -> JsString(nameDef(ctor).name), // TODO improve
+        `name` -> JsString(ctor.name.name),
         `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f)) })
       ) ++ fields.map { f => (nameDef(f), Variable(nameDef(f))) })))
     )
+  }
+
+  // const $getOp = "get$1234"
+  // const $putOp = "put$7554"
+  def generateStateAccessors: List[js.Stmt] = {
+    val getter = Const(JSName("$getOp"), JsString(nameDef(symbols.builtins.TState.get).name))
+    val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
+
+    List(getter, setter)
+  }
+
+
+  // Names
+  // -----
+
+  val reserved = List(
+    // reserved words (according to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#keywords)
+    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export",
+    "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return",
+    "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+
+    // future reserved words
+    "enum", "implements", "interface", "package", "private", "protected", "public",
+
+    // identifiers with special meanings
+    "get", "set", "arguments", "async", "eval",
+
+    // special names in CommonJS module systems
+    "module", "exports", "require",
+
+    // other special names
+    "window", "document", "alert", "console", "this"
+  )
+
+  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
+
+  def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
+
+  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
+
+  val `fresh` = JSName("fresh")
+  val `tag` = JSName("__tag")
+  val `name` = JSName("__name")
+  val `data` = JSName("__data")
+
+  def nameDef(id: Symbol): JSName = uniqueName(id)
+
+  def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
+
+  def nameRef(id: Symbol)(using C: Context): js.Expr = Variable(uniqueName(id))
+
+  // name references for fields and methods
+  def memberNameRef(id: Symbol): JSName = uniqueName(id)
+
+
+  // Separate Compilation (Website)
+  // ------------------------------
+
+  /**
+   * Analyse core to find references to symbols defined in other modules.
+   *
+   * Necessary for generating the linker code (separate compilation for the web)
+   */
+  private def usedImports(input: CoreTransformed): Map[Module, Set[TermSymbol]] = {
+    val dependencies = input.mod.dependencies
+
+    // Create a mapping Termsymbol -> Module
+    val publicDependencySymbols = dependencies.flatMap {
+      m => m.terms.values.flatten.map(sym => sym -> m)
+    }.toMap
+
+    var usedFrom: Map[Module, Set[TermSymbol]] = Map.empty
+
+    def register(m: Module, sym: TermSymbol) = {
+      val before = usedFrom.getOrElse(m, Set.empty)
+      usedFrom = usedFrom.updated(m, before + sym)
+    }
+
+    // Traverse tree once more to find all used symbols, defined in other modules.
+    def findUsedDependencies(t: Definition) =
+      Tree.visit(t) {
+        case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+        case ValueVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+      }
+
+    input.core.definitions.foreach(findUsedDependencies)
+
+    usedFrom
   }
 }

@@ -3,20 +3,22 @@ const $runtime = (function() {
   // Regions
   function Cell(init) {
     var _value = init;
-    return {
-      "op$get": function() {
-        return _value
-      },
-      "op$put": function(v) {
-        _value = v;
-        return $effekt.unit
-      },
+    const cell = ({
       backup: function() {
         var _backup = _value
         var cell = this;
         return () => { _value = _backup; return cell }
       }
-    }
+    });
+    // $getOp and $putOp are auto generated from the compiler
+    cell[$getOp] = function() {
+      return _value
+    };
+    cell[$putOp] = function(v) {
+      _value = v;
+      return $effekt.unit;
+    };
+    return cell
   }
 
   function Arena() {
