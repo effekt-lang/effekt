@@ -1,5 +1,3 @@
-$effekt = {};
-
 const $runtime = (function() {
 
   // Regions

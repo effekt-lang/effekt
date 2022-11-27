@@ -50,6 +50,16 @@ trait JavaScript extends Backend {
   def compileSeparate(input: CoreTransformed)(using C: Context) = {
     val module = input.mod
 
+    def shouldExport(sym: Symbol) = sym match {
+      // do not export fields, since they are no defined functions
+      case _: symbols.Field => false
+      // do not export effect operations, since they are translated to field selection as well.
+      case _: symbols.Operation => false
+
+      // all others are fine
+      case _ => true
+    }
+
     // also search all mains and use last one (shadowing), if any.
     val allMains = input.core.exports.collect {
       case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
@@ -63,12 +73,12 @@ trait JavaScript extends Backend {
     }
     val imports = dependencies ++ required.toList.map {
       case (mod, syms) =>
-        js.Import.Selective(syms.toList.map(uniqueName), jsModuleFile(mod.path))
+        js.Import.Selective(syms.filter(shouldExport).toList.map(uniqueName), jsModuleFile(mod.path))
     }
 
     val provided = module.terms.values.flatten.toList.distinct
-    val exports = allMains.lastOption.toList ++ provided.map {
-      sym => js.Export(nameDef(sym), nameRef(sym))
+    val exports = allMains.lastOption.toList ++ provided.collect {
+      case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }
 
     C.using(module = input.mod) {

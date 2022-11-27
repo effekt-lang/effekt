@@ -46,13 +46,27 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
     importStmts ++ moduleBody
   }
 
+  /**
+   * Generates the Javascript module skeleton
+   *
+   * {{{
+   *   const MYMODULE = {}
+   *   // ... contents of the module
+   *   module.exports = Object.assign(MYMODULE, {
+   *     // EXPORTS...
+   *   })
+   * }}}
+   */
   def moduleBody: List[Stmt] = {
-    // module.exports = { EXPORTS }
-    val exportStatement = js.Assign(js.Member(js.Variable(JSName("module")), JSName("exports")),
-      js.Object(exports.map { e => e.name -> e.expr })
-    )
+    val declaration = js.Const(name, js.Object())
 
-    stmts :+ exportStatement
+    // module.exports = Object.assign(MODULE, { EXPORTS })
+    val exportStatement = js.ExprStmt(js.Call(RawExpr("module.exports = Object.assign"), List(
+      js.Variable(name),
+      js.Object(exports.map { e => e.name -> e.expr })
+    )))
+
+    (declaration :: stmts) :+ exportStatement
   }
 }
 
