@@ -95,9 +95,8 @@ object ML extends Backend {
         (name(f), tpeToML(f.param.tpe.getOrElse(C.panic(s"Record constructor is missing types")), instF))
       }
       ml.Type.Record(fieldTypes)
-    case ValueType.ValueTypeApp(tc, one :: Nil) => ml.Type.Tapp(tcToML(tc), tpeToML(one, inst))
     case ValueType.ValueTypeApp(tc, args) =>
-      ml.Type.Tapp(tcToML(tc), ml.Type.Tuple(args.map(tpeToML(_, inst))))
+      ml.Type.Tapp(tcToML(tc), args.map(tpeToML(_, inst)))
   }
 
   def tcToML(tc: symbols.TypeConstructor)(using C: Context): ml.Type = tc match {
@@ -135,9 +134,18 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
-    case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
-    case Record(_, _) => Nil // use native record types
+    case Decl.Record(id: TypeConstructor.Record, fields) => // use the native constructor
+      val tparams: List[ml.Type.Var] = id.tparams.map(p => ml.Type.Var(name(p)))
+      val fieldTypes = fields.map {
+        case f: symbols.Field => (name(f), tpeToML(f.param.tpe.getOrElse(C.panic("No type on record field"))))
+        case _ => C.panic("Record fields are not actually a field")
+      }
+      val tpe = ml.Type.Record(fieldTypes)
+      val binding = ml.Binding.TypeBind(name(id), tparams, tpe)
+      List(binding)
     case Interface(_, _) => Nil // use native record type
+    case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
+    case Decl.Record(_, _) => C.panic("Record symbol is not TypeConstructor.Record")
   }
 
   def toML(ext: Extern): ml.Binding = ext match {

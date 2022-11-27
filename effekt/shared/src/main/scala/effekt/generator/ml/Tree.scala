@@ -21,7 +21,7 @@ class MLName(n: String) {
 }
 
 enum Type {
-  case Tapp(tpe: Type, arg: Type)
+  case Tapp(tpe: Type, arg: List[Type])
   case Builtin(n: MLName)
   case Var(n: MLName)
   case Tuple(l: List[Type])
@@ -39,6 +39,7 @@ enum Binding {
   case FunBind(name: MLName, params: List[MLName], body: Expr)
   case RawBind(raw: String)
   case DataBind(name: MLName, tparams: List[Type.Var], constructors: List[(MLName, Option[Type])])
+  case TypeBind(name: MLName, tparams: List[Type.Var], tpe: Type)
 }
 export Binding.*
 

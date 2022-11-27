@@ -37,12 +37,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       group("fun" <+> toDoc(name) <+> argList(params, toDoc, true) <+>
         "=" <> nest(line <> toDoc(body) <> ";"))
     case DataBind(name, tparams, constructors) =>
-      val args: Doc = tparams match {
-        case Nil => ""
-        case one :: Nil => toDoc(one)
-        case _ => parens(hsep(tparams map toDoc, ","))
-      }
-      "datatype" <+> args <+> toDoc(name) <+> "=" <> nest(line <>
+      "datatype" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <> nest(line <>
         ssep(constructors.map {
           case (name, None) => toDoc(name)
           case (name, Some(tpe)) => toDoc(name) <+> "of" <+> toDoc(tpe)
@@ -51,6 +46,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
       )
     case RawBind(raw) =>
       string(raw)
+    case TypeBind(name, Nil, tpe) =>
+      nest("type" <+> toDoc(name) <+> "=" <@> toDoc(tpe))
+    case TypeBind(name, tparams, tpe) =>
+      nest("type" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <@> toDoc(tpe))
+  }
+
+  def tlistDoc(tparams: List[Type]): Doc = tparams match {
+    case Nil => ""
+    case one :: Nil => toDoc(one)
+    case _ => parens(hsep(tparams map toDoc, ","))
   }
 
   def toDoc(tpe: ml.Type): Doc = tpe match {
@@ -67,8 +72,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Data(name) => toDoc(name)
     case Type.Record(fields) =>
       "{" <> hsep(fields.map{case (name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)}, ",") <> "}"
-    case Type.Tapp(tpe, arg) =>
-      val ap = toDoc(arg) <+> toDoc(tpe)
+    case Type.Tapp(tpe, args) =>
+      val ap = tlistDoc(args) <+> toDoc(tpe)
       parens(ap)
     case Type.Builtin(t) => toDoc(t)
   }
