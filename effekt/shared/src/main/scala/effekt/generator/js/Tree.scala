@@ -19,7 +19,12 @@ case class Export(name: JSName, expr: Expr)
 
 case class Module(name: JSName, imports: List[Import], exports: List[Export], stmts: List[Stmt]) {
 
+  /**
+   * Generates the Javascript module skeleton for whole program compilation
+   */
   def commonjs: List[Stmt] = {
+    val effekt = js.Const(JSName("$effekt"), js.Object())
+
     val importStmts = imports.map {
       // const MOD = require(PATH)
       case Import.All(name, file) =>
@@ -30,9 +35,24 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
         js.Destruct(names, js.Call(Variable(JSName("require")), List(JsString(s"./${ file }"))))
     }
 
-    importStmts ++ moduleBody
+    val exportStatement = js.Assign(RawExpr("module.exports"),
+      js.Object(exports.map { e => e.name -> e.expr })
+    )
+
+    List(effekt) ++ importStmts ++ stmts ++ List(exportStatement)
   }
 
+  /**
+   * Generates the Javascript module skeleton for virtual modules that are compiled separately
+   *
+   * {{{
+   *   const MYMODULE = {}
+   *   // ... contents of the module
+   *   module.exports = Object.assign(MYMODULE, {
+   *     // EXPORTS...
+   *   })
+   * }}}
+   */
   def virtual : List[Stmt] = {
     val importStmts = imports.map {
       // const MOD = load(PATH)
@@ -43,21 +63,7 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
       case Import.Selective(names, file) =>
         js.Destruct(names, js.Call(Variable(JSName("load")), List(JsString(file))))
     }
-    importStmts ++ moduleBody
-  }
 
-  /**
-   * Generates the Javascript module skeleton
-   *
-   * {{{
-   *   const MYMODULE = {}
-   *   // ... contents of the module
-   *   module.exports = Object.assign(MYMODULE, {
-   *     // EXPORTS...
-   *   })
-   * }}}
-   */
-  def moduleBody: List[Stmt] = {
     val declaration = js.Const(name, js.Object())
 
     // module.exports = Object.assign(MODULE, { EXPORTS })
@@ -66,7 +72,7 @@ case class Module(name: JSName, imports: List[Import], exports: List[Export], st
       js.Object(exports.map { e => e.name -> e.expr })
     )))
 
-    (declaration :: stmts) :+ exportStatement
+    importStmts ++ List(declaration) ++ stmts ++ List(exportStatement)
   }
 }
 

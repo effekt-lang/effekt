@@ -14,19 +14,7 @@ import kiama.util.Source
 
 import scala.language.implicitConversions
 
-// used by the website
-object JavaScriptVirtual extends JavaScript {
-  def jsModuleSystem(module: js.Module): List[js.Stmt] = module.virtual
-}
-
-// used by REPL and compiler
-object JavaScriptMonadic extends JavaScript {
-  def jsModuleSystem(module: js.Module): List[js.Stmt] = module.commonjs
-}
-
-trait JavaScript extends Backend {
-
-  def jsModuleSystem(module: js.Module): List[js.Stmt]
+object JavaScript extends Backend {
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
@@ -40,7 +28,7 @@ trait JavaScript extends Backend {
     val mainSymbol = C.checkMain(module)
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
 
-    val result = js.PrettyPrinter.format(jsModuleSystem(toJS(input.core, Nil, exports)))
+    val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
     Some(Compiled(mainFile, Map(mainFile -> result)))
   }
 
@@ -82,8 +70,8 @@ trait JavaScript extends Backend {
     }
 
     C.using(module = input.mod) {
-      val result = toJS(input.core, imports, exports)
-      Some(js.PrettyPrinter.format(jsModuleSystem(result)))
+      val result = toJS(input.core, imports, exports).virtual
+      Some(js.PrettyPrinter.format(result))
     }
   }
 
