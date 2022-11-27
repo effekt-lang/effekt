@@ -17,7 +17,7 @@ trait BackendPhase {
   /**
    * Entrypoint used by REPL and Driver to compile a file and execute it
    */
-  def whole: Phase[CompilationUnit, Compiled]
+  def whole: Phase[CoreTransformed, Compiled]
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
@@ -43,8 +43,8 @@ trait Backend extends BackendPhase {
 
   // Using the methods above, we can implement the required phases.
   val whole = Phase("compile-whole") { input =>
-    val mainSymbol = summon[Context].checkMain(input.main.mod)
-    compileWhole(input.main, mainSymbol)
+    val mainSymbol = summon[Context].checkMain(input.mod)
+    compileWhole(input, mainSymbol)
   }
 
   val separate = Phase("compile-separate") { core => compileSeparate(core) map { doc => (core, doc) } }

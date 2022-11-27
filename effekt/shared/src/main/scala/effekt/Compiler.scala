@@ -52,16 +52,6 @@ case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module
 case class CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl) extends PhaseResult
 
 /**
- * The result of [[LowerDependencies]] running all phases up to (including) ANF transformation on
- * all dependencies.
- *
- * A compilation unit consisting of all transitive dependencies in topological ordering.
- */
-case class CompilationUnit(main: CoreTransformed, dependencies: List[CoreTransformed]) extends PhaseResult {
-  val source = main.source
-}
-
-/**
  * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
  */
 case class Compiled(mainFile: String, outputFiles: Map[String, Document])
@@ -162,24 +152,19 @@ trait Compiler {
     case "llvm"         => effekt.generator.llvm.LLVM
   }
 
-  object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
-    val phaseName = "lower-dependencies"
-    def run(main: CoreTransformed)(using Context) = {
-      val dependencies = main.mod.dependencies flatMap { dep =>
+  object Aggregate extends Phase[CoreTransformed, CoreTransformed] {
+    val phaseName = "aggregate"
+
+    def run(input: CoreTransformed)(using Context) = {
+      val CoreTransformed(src, tree, mod, main) = input
+
+      val dependencies = mod.dependencies flatMap { dep =>
         // We already ran the frontend on the dependencies (since they are discovered
         // dynamically). The results are cached, so it doesn't hurt dramatically to run
         // the frontend again. However, the indirection via dep.source is not very elegant.
-        (Frontend andThen Middleend)(dep.source)
+        (Frontend andThen Middleend) (dep.source)
       }
-      Some(CompilationUnit(main, dependencies))
-    }
-  }
 
-  object Aggregate extends Phase[CompilationUnit, CompilationUnit] {
-    val phaseName = "aggregate"
-
-    def run(unit: CompilationUnit)(using Context) = {
-      val CompilationUnit(CoreTransformed(src, tree, mod, main), dependencies) = unit
       val deps = dependencies.map(d => d.core)
 
       // collect all information
@@ -199,7 +184,7 @@ trait Compiler {
 
       // TODO in the future check for duplicate exports
 
-      Some(CompilationUnit(CoreTransformed(src, tree, mod, aggregated), Nil))
+      Some(CoreTransformed(src, tree, mod, aggregated))
     }
   }
 
@@ -235,8 +220,8 @@ trait Compiler {
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
   def compileWhole(source: Source)(using Context): Option[Compiled] =
-    (Frontend andThen Middleend andThen LowerDependencies andThen Aggregate andThen Backend.whole).apply(source)
+    (Frontend andThen Middleend andThen Aggregate andThen Backend.whole).apply(source)
 
-  def compileAll(source: Source)(using Context): Option[CompilationUnit] =
-    (Frontend andThen Middleend andThen LowerDependencies andThen Aggregate).apply(source)
+  def compileAll(source: Source)(using Context): Option[CoreTransformed] =
+    (Frontend andThen Middleend andThen Aggregate).apply(source)
 }
