@@ -11,10 +11,7 @@ import effekt.symbols.builtins.TState
 
 object Transformer {
 
-  def transform(main: CoreTransformed)(using C: Context): Program = {
-
-    val mainSymbol = C.checkMain(main.mod)
-
+  def transform(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Program = {
     val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main) : @unchecked
 
     C.using(module = main.mod) {

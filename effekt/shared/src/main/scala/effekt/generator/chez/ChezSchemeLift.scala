@@ -4,7 +4,7 @@ package chez
 
 import effekt.context.Context
 import effekt.lifted.*
-import effekt.symbols.{ Module, Symbol, Wildcard }
+import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
 
 import scala.language.implicitConversions
 import effekt.util.paths.*
@@ -31,16 +31,13 @@ object ChezSchemeLift extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed)(using C: Context) = {
-    val mainSymbol = C.checkMain(main.mod)
-
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) =
     LiftInference(main).map { lifted =>
       val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
       val mainFile = path(main.mod)
       Compiled(mainFile, Map(mainFile -> result))
     }
-  }
 
   /**
    * Entrypoint used by the LSP server to show the compiled output

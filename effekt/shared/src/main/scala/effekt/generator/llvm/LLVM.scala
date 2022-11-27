@@ -9,14 +9,14 @@ import effekt.context.Context
 import effekt.lifted.*
 import effekt.machine
 import effekt.llvm.*
-import effekt.symbols.{ Module, BlockSymbol, Name, Symbol, ValueSymbol }
+import effekt.symbols.{ Module, BlockSymbol, Name, Symbol, ValueSymbol, TermSymbol }
 import effekt.context.assertions.*
 import effekt.util.paths.*
 
 object LLVM extends Backend {
-  def compileWhole(main: CoreTransformed)(using Context): Option[Compiled] = {
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using Context): Option[Compiled] = {
     val mainFile = path(main.mod)
-    val machineMod = machine.Transformer.transform(main)
+    val machineMod = machine.Transformer.transform(main, mainSymbol)
     val llvmDefinitions = Transformer.transform(machineMod)
 
     val llvmString = effekt.llvm.PrettyPrinter.show(llvmDefinitions)
@@ -37,7 +37,7 @@ object LLVM extends Backend {
    * and the prelude.
    */
   def compileSeparate(main: CoreTransformed)(using Context): Option[Document] = {
-    val machine.Program(decls, prog) = machine.Transformer.transform(main)
+    val machine.Program(decls, prog) = machine.Transformer.transform(main, symbols.TmpValue())
 
     // we don't print declarations here.
     val llvmDefinitions = Transformer.transform(machine.Program(Nil, prog))

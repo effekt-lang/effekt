@@ -19,13 +19,12 @@ object JavaScript extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(input: CoreTransformed)(using C: Context) = {
+  def compileWhole(input: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) = {
 
     assert(input.core.imports.isEmpty, "All dependencies should have been inlined by now.")
 
     val module = input.mod
     val mainFile = path(module)
-    val mainSymbol = C.checkMain(module)
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
 
     val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)

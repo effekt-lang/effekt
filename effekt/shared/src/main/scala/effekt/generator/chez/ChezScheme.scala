@@ -4,7 +4,7 @@ package chez
 
 import effekt.context.Context
 import effekt.core.*
-import effekt.symbols.{ Module, Symbol, Wildcard }
+import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
 
 import scala.language.implicitConversions
 import effekt.util.paths.*
@@ -49,8 +49,7 @@ trait ChezScheme {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed)(using C: Context) = {
-    val mainSym = C.checkMain(main.mod)
+  def compileWhole(main: CoreTransformed, mainSym: TermSymbol)(using C: Context) = {
     val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core)))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
