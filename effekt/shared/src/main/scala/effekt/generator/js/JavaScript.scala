@@ -31,20 +31,51 @@ trait JavaScript extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed)(implicit C: Context) = {
-    compile(main).map {
-      case (mainFile, result) =>
-        Compiled(mainFile, Map(mainFile -> result))
-    }
+  def compileWhole(input: CoreTransformed)(using C: Context) = {
+
+    assert(input.core.imports.isEmpty, "All dependencies should have been inlined by now.")
+
+    val module = input.mod
+    val mainFile = path(module)
+    val mainSymbol = C.checkMain(module)
+    val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
+
+    val result = js.PrettyPrinter.format(jsModuleSystem(toJS(input.core, Nil, exports)))
+    Some(Compiled(mainFile, Map(mainFile -> result)))
   }
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(implicit C: Context) =
-    C.using(module = input.mod) {
-      Some(js.PrettyPrinter.format(jsModuleSystem(toJS(input.core))))
+  def compileSeparate(input: CoreTransformed)(using C: Context) = {
+    val module = input.mod
+
+    // also search all mains and use last one (shadowing), if any.
+    val allMains = input.core.exports.collect {
+      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
     }
+
+    val required = usedImports(input)
+
+    // this is mostly to import $effekt
+    val dependencies = module.dependencies.map {
+      d => js.Import.All(JSName(jsModuleName(d.path)), jsModuleFile(d.path))
+    }
+    val imports = dependencies ++ required.toList.map {
+      case (mod, syms) =>
+        js.Import.Selective(syms.toList.map(uniqueName), jsModuleFile(mod.path))
+    }
+
+    val provided = module.terms.values.flatten.toList.distinct
+    val exports = allMains.lastOption.toList ++ provided.map {
+      sym => js.Export(nameDef(sym), nameRef(sym))
+    }
+
+    C.using(module = input.mod) {
+      val result = toJS(input.core, imports, exports)
+      Some(js.PrettyPrinter.format(jsModuleSystem(result)))
+    }
+  }
 
   /**
    * This is used for both: writing the files to and generating the `require` statements.
@@ -53,14 +84,37 @@ trait JavaScript extends Backend {
     (C.config.outputPath() / jsModuleFile(m.path)).unixPath
 
   /**
-   * Compiles only the given module, does not compile dependencies
+   * Analyse core to find references to symbols defined in other modules.
    *
-   * Writes the compiled result into a file.
+   * Necessary for generating the linker code (separate compilation for the web)
    */
-  private def compile(in: CoreTransformed)(implicit C: Context): Option[(String, Document)] =
-    compileSeparate(in).map { doc =>
-      (path(in.mod), doc)
+  def usedImports(input: CoreTransformed): Map[Module, Set[TermSymbol]] = {
+    val dependencies = input.mod.dependencies
+
+    // Create a mapping Termsymbol -> Module
+    val publicDependencySymbols = dependencies.flatMap {
+      m => m.terms.values.flatten.map(sym => sym -> m)
+    }.toMap
+
+    var usedFrom: Map[Module, Set[TermSymbol]] = Map.empty
+    def register(m: Module, sym: TermSymbol) = {
+      val before = usedFrom.getOrElse(m, Set.empty)
+      usedFrom = usedFrom.updated(m, before + sym)
     }
+
+    // Traverse tree once more to find all used symbols, defined in other modules.
+    def findUsedDependencies(t: Definition) =
+      Tree.visit(t) {
+        case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+        case ValueVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+      }
+
+    input.core.definitions.foreach(findUsedDependencies)
+
+    usedFrom
+  }
 
 
   // Names
@@ -160,23 +214,12 @@ trait JavaScript extends Backend {
   def toJS(handler: core.Implementation)(using Context): js.Expr =
     js.Object(handler.operations.map { case Operation(id, b) => nameDef(id) -> toJS(b) })
 
-  def toJS(module: core.ModuleDecl)(using Context): js.Module = {
-
+  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
-    val imports = module.imports.map { i => js.Import(JSName(jsModuleName(i)), jsModuleFile(i)) }
-    //val exports = module.exports.map { e => js.Export(nameDef(e), nameRef(e)) }
     val externs = module.externs.map(toJS)
     val decls   = module.declarations.flatMap(toJS)
     val stmts   = module.definitions.map(toJS)
     val state   = generateStateAccessors
-
-    // TODO this is not necessary, once we implement proper exports.
-    val allMains = module.exports.collect {
-      case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
-    }
-
-    val exports = List(allMains.last)
-
     js.Module(name, imports, exports, state ++ decls ++ externs ++ stmts)
   }
 
@@ -217,7 +260,7 @@ trait JavaScript extends Backend {
     }
   }
 
-  def toJS(d: Declaration)(using Context): List[js.Stmt] = d match {
+  def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
     case core.Data(did, ctors) =>
       ctors.map { ctor => generateConstructor(ctor.asConstructor) }
 

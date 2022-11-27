@@ -7,44 +7,52 @@ case class JSName(name: String)
 
 val $effekt = Variable(JSName("$effekt"))
 
-case class Import(name: JSName, file: String)
+enum Import {
+  // import * as <name> from "<file>";
+  case All(name: JSName, file: String)
+
+  // import {<members>, ...} from "<file>";
+  case Selective(members: List[JSName], file: String)
+}
+
 case class Export(name: JSName, expr: Expr)
 
 case class Module(name: JSName, imports: List[Import], exports: List[Export], stmts: List[Stmt]) {
-  def amdefine: List[Stmt] = {
-    val prelude = RawStmt("if (typeof define !== 'function') { var define = require('amdefine')(module) }")
-    val importFiles = ArrayLiteral(imports.map(i => JsString(s"./${i.file}")))
-    val importNames = imports.map(i => i.name)
-
-    List(js.ExprStmt(js.Call(Variable(JSName("define")), List(importFiles,
-      js.Lambda(importNames, js.Block(moduleBody))))))
-  }
 
   def commonjs: List[Stmt] = {
-    val importStmts = imports.map { i =>
+    val importStmts = imports.map {
       // const MOD = require(PATH)
-      js.Const(i.name, js.Call(Variable(JSName("require")), List(JsString(s"./${i.file}"))))
+      case Import.All(name, file) =>
+        js.Const(name, js.Call(Variable(JSName("require")), List(JsString(s"./${file}"))))
+
+      // const {NAMES, ...} = require(PATH)
+      case Import.Selective(names, file) =>
+        js.Destruct(names, js.Call(Variable(JSName("require")), List(JsString(s"./${ file }"))))
     }
 
     importStmts ++ moduleBody
   }
 
   def virtual : List[Stmt] = {
-    val importStmts = imports.map { i =>
+    val importStmts = imports.map {
       // const MOD = load(PATH)
-      js.Const(i.name, js.Call(Variable(JSName("load")), List(JsString(i.file))))
+      case Import.All(name, file) =>
+        js.Const(name, js.Call(Variable(JSName("load")), List(JsString(file))))
+
+      // const {NAMES, ...} = load(PATH)
+      case Import.Selective(names, file) =>
+        js.Destruct(names, js.Call(Variable(JSName("load")), List(JsString(file))))
     }
     importStmts ++ moduleBody
   }
 
   def moduleBody: List[Stmt] = {
-    val declaration = js.Const(name, js.Object())
-    val exportStatement = js.ExprStmt(js.Call(RawExpr("module.exports = Object.assign"), List(
-      js.Variable(name),
+    // module.exports = { EXPORTS }
+    val exportStatement = js.Assign(js.Member(js.Variable(JSName("module")), JSName("exports")),
       js.Object(exports.map { e => e.name -> e.expr })
-    )))
+    )
 
-    (declaration :: stmts) :+ exportStatement
+    stmts :+ exportStatement
   }
 }
 
@@ -92,6 +100,12 @@ enum Stmt {
 
   // e.g. const x = <EXPR>
   case Const(name: JSName, binding: Expr)
+
+  // e.g. <EXPR> = <EXPR>
+  case Assign(target: Expr, value: Expr)
+
+  // e.g. const {x,y,z} = <EXPR>
+  case Destruct(names: List[JSName], binding: Expr)
 
   // e.g. switch (sc) { case <EXPR>: <STMT>; ...; default: <STMT> }
   case Switch(scrutinee: Expr, branches: List[(Expr, Stmt)], default: Option[Stmt])

@@ -10,6 +10,7 @@ import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.Backend
+import effekt.generator.js.JavaScriptVirtual
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -226,11 +227,9 @@ trait Compiler {
    *
    * It does **not** generate files and write them using `saveOutput`!
    * This is achieved by `compileWhole`.
-   *
-   * TODO Currently the backend is not cached at all
    */
   def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    ???
+    (Frontend andThen Middleend andThen Backend.separate).apply(source)
 
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file

@@ -22,7 +22,7 @@ trait BackendPhase {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def separate: Phase[CoreTransformed, (CoreTransformed, Document)] = ???
+  def separate: Phase[CoreTransformed, (CoreTransformed, Document)]
 }
 
 /**
@@ -32,10 +32,17 @@ trait BackendPhase {
 trait Backend extends BackendPhase {
 
   /**
-   * Entrypoint used by REPL and Driver to compile a file and execute it
+   * Entrypoint used by REPL and Driver to compile a file and execute it.
    */
   def compileWhole(main: CoreTransformed)(implicit C: Context): Option[Compiled]
 
-  // Using the method above, we can implement the required phases.
+  /**
+   * Entrypoint used by the LSP server to show the compiled output
+   */
+  def compileSeparate(input: CoreTransformed)(implicit C: Context): Option[Document]
+
+  // Using the methods above, we can implement the required phases.
   val whole = Phase("compile-whole") { input => compileWhole(input.main) }
+
+  val separate = Phase("compile-separate") { core => compileSeparate(core) map { doc => (core, doc) } }
 }
