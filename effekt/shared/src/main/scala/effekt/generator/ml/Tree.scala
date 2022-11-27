@@ -30,6 +30,7 @@ enum Type {
   case String
   case Bool
   case Data(name: MLName)
+  case Alias(name: MLName)
   case Record(fields: List[(MLName, Type)])
 }
 

@@ -81,22 +81,15 @@ object ML extends Backend {
     decls ++ externs ++ rest
   }
 
-  def tpeToML(tpe: symbols.ValueType, inst: ml.Type => ml.Type = x => x)(using C: Context): ml.Type = tpe match {
-    case ValueType.BoxedType(_, _) => C.abort("Boxed type is not supported")
+  def tpeToML(tpe: symbols.ValueType)(using C: Context): ml.Type = tpe match {
+    case ValueType.BoxedType(_, _) =>
+      C.abort("Boxed type is not supported")
     case ValueType.ValueTypeRef(tvar) =>
-      val tv = ml.Type.Var(name(tvar))
-      inst(tv)
-    case ValueType.ValueTypeApp(tc, Nil) => tcToML(tc)
-    case ValueType.ValueTypeApp(TypeConstructor.Record(_, tparams, constructor), args) =>
-      val argTypes = args.map(tpeToML(_, inst))
-      val instMap = tparams.map(t => ml.Type.Var(name(t))).zip(argTypes).toMap
-      val instF = (tpe: ml.Type) => inst(if (instMap.contains(tpe)) instMap(tpe) else tpe)
-      val fieldTypes = constructor.fields.map { f =>
-        (name(f), tpeToML(f.param.tpe.getOrElse(C.panic(s"Record constructor is missing types")), instF))
-      }
-      ml.Type.Record(fieldTypes)
+      ml.Type.Var(name(tvar))
+    case ValueType.ValueTypeApp(tc, Nil) =>
+      tcToML(tc)
     case ValueType.ValueTypeApp(tc, args) =>
-      ml.Type.Tapp(tcToML(tc), args.map(tpeToML(_, inst)))
+      ml.Type.Tapp(tcToML(tc), args.map(tpeToML))
   }
 
   def tcToML(tc: symbols.TypeConstructor)(using C: Context): ml.Type = tc match {
@@ -106,11 +99,8 @@ object ML extends Backend {
     case symbols.builtins.StringSymbol => ml.Type.String
     case TypeConstructor.DataType(_, _, _) =>
       ml.Type.Data(name(tc))
-    case TypeConstructor.Record(_, _, constructor) =>
-      val fieldTypes = constructor.fields.map { f =>
-        (name(f), tpeToML(f.param.tpe.getOrElse(C.panic("Record constructor is missing types"))))
-      }
-      ml.Type.Record(fieldTypes)
+    case TypeConstructor.Record(_, _, _) =>
+      ml.Type.Alias(name(tc))
     case TypeConstructor.ExternType(_, _) =>
       ml.Type.Builtin(name(tc))
   }

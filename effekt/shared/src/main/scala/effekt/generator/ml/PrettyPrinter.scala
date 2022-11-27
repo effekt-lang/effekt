@@ -70,6 +70,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.String => "string"
     case Type.Bool => "bool"
     case Type.Data(name) => toDoc(name)
+    case Type.Alias(name) => toDoc(name)
     case Type.Record(fields) =>
       "{" <> hsep(fields.map{case (name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)}, ",") <> "}"
     case Type.Tapp(tpe, args) =>
