@@ -11,7 +11,7 @@ class ReplTests extends munit.FunSuite {
 
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
-      "--lib", "libraries/js/monadic"))
+      "--lib", "libraries/js"))
 
     configs.verify()
 

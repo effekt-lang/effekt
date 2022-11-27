@@ -204,7 +204,7 @@ lazy val versionGenerator = Def.task {
  */
 lazy val stdLibGenerator = Def.task {
 
-  val baseDir = (ThisBuild / baseDirectory).value / "libraries" / "js" / "monadic"
+  val baseDir = (ThisBuild / baseDirectory).value / "libraries" / "js"
   val resources = baseDir ** "*.*"
 
   val sourceDir = (Compile / sourceManaged).value

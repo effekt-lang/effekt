@@ -114,7 +114,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   def interpret(): Boolean = !server() && !compile()
 
   private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {
-    case "js" => path / "libraries" / "js" / "monadic"
+    case "js" => path / "libraries" / "js"
     case "chez-monadic" => path / "libraries" / "chez" / "monadic"
     case "chez-callcc" => path / "libraries" / "chez" / "callcc"
     case "chez-lift" => path / "libraries" / "chez" / "lift"
