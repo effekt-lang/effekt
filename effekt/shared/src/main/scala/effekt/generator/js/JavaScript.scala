@@ -80,83 +80,6 @@ object JavaScript extends Backend {
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / jsModuleFile(m.path)).unixPath
 
-  /**
-   * Analyse core to find references to symbols defined in other modules.
-   *
-   * Necessary for generating the linker code (separate compilation for the web)
-   */
-  def usedImports(input: CoreTransformed): Map[Module, Set[TermSymbol]] = {
-    val dependencies = input.mod.dependencies
-
-    // Create a mapping Termsymbol -> Module
-    val publicDependencySymbols = dependencies.flatMap {
-      m => m.terms.values.flatten.map(sym => sym -> m)
-    }.toMap
-
-    var usedFrom: Map[Module, Set[TermSymbol]] = Map.empty
-    def register(m: Module, sym: TermSymbol) = {
-      val before = usedFrom.getOrElse(m, Set.empty)
-      usedFrom = usedFrom.updated(m, before + sym)
-    }
-
-    // Traverse tree once more to find all used symbols, defined in other modules.
-    def findUsedDependencies(t: Definition) =
-      Tree.visit(t) {
-        case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
-          register(publicDependencySymbols(x), x)
-        case ValueVar(x) if publicDependencySymbols.isDefinedAt(x) =>
-          register(publicDependencySymbols(x), x)
-      }
-
-    input.core.definitions.foreach(findUsedDependencies)
-
-    usedFrom
-  }
-
-
-  // Names
-  // -----
-
-  val reserved = List(
-    // reserved words (according to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#keywords)
-    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export",
-    "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return",
-    "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
-
-    // future reserved words
-    "enum", "implements", "interface", "package", "private", "protected", "public",
-
-    // identifiers with special meanings
-    "get", "set", "arguments", "async", "eval",
-
-    // special names in CommonJS module systems
-    "module", "exports", "require",
-
-    // other special names
-    "window", "document", "alert", "console", "this"
-  )
-
-  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
-
-  def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
-
-  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
-
-  val `fresh` = JSName("fresh")
-  val `tag` = JSName("__tag")
-  val `name` = JSName("__name")
-  val `data` = JSName("__data")
-
-  def nameDef(id: Symbol): JSName = uniqueName(id)
-
-  def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
-
-  def nameRef(id: Symbol)(using C: Context): js.Expr = Variable(uniqueName(id))
-
-  // name references for fields and methods
-  def memberNameRef(id: Symbol): JSName = uniqueName(id)
-
-
   def toJS(p: Param): JSName = nameDef(p.id)
 
   // For externs, do not sanitize anything. We assume the programmer
@@ -189,15 +112,13 @@ object JavaScript extends Backend {
     case New(handler) => toJS(handler)
   }
 
-  def builtin(name: String): js.Expr = js.Member($effekt, JSName(name))
-
   def toJS(args: List[Argument])(using Context): List[js.Expr] = args map {
     case b: Block => toJS(b)
     case e: Expr => toJS(e)
   }
 
   def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
-    case Literal((), _) => builtin("unit")
+    case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id) => nameRef(id)
@@ -365,5 +286,86 @@ object JavaScript extends Backend {
     val setter = Const(JSName("$putOp"), JsString(nameDef(symbols.builtins.TState.put).name))
 
     List(getter, setter)
+  }
+
+
+  // Names
+  // -----
+
+  val reserved = List(
+    // reserved words (according to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Lexical_grammar#keywords)
+    "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "export",
+    "extends", "false", "finally", "for", "function", "if", "import", "in", "instanceof", "let", "new", "null", "return",
+    "static", "super", "switch", "this", "throw", "true", "try", "typeof", "var", "void", "while", "with", "yield",
+
+    // future reserved words
+    "enum", "implements", "interface", "package", "private", "protected", "public",
+
+    // identifiers with special meanings
+    "get", "set", "arguments", "async", "eval",
+
+    // special names in CommonJS module systems
+    "module", "exports", "require",
+
+    // other special names
+    "window", "document", "alert", "console", "this"
+  )
+
+  def jsEscape(name: String): String = if (reserved contains name) "$" + name else name
+
+  def jsModuleName(path: String): String = "$" + path.replace('/', '_').replace('-', '_')
+
+  def jsModuleFile(path: String): String = path.replace('/', '_').replace('-', '_') + ".js"
+
+  val `fresh` = JSName("fresh")
+  val `tag` = JSName("__tag")
+  val `name` = JSName("__name")
+  val `data` = JSName("__data")
+
+  def nameDef(id: Symbol): JSName = uniqueName(id)
+
+  def uniqueName(sym: Symbol): JSName = JSName(jsEscape(sym.name.toString + "_" + sym.id))
+
+  def nameRef(id: Symbol)(using C: Context): js.Expr = Variable(uniqueName(id))
+
+  // name references for fields and methods
+  def memberNameRef(id: Symbol): JSName = uniqueName(id)
+
+
+  // Separate Compilation (Website)
+  // ------------------------------
+
+  /**
+   * Analyse core to find references to symbols defined in other modules.
+   *
+   * Necessary for generating the linker code (separate compilation for the web)
+   */
+  private def usedImports(input: CoreTransformed): Map[Module, Set[TermSymbol]] = {
+    val dependencies = input.mod.dependencies
+
+    // Create a mapping Termsymbol -> Module
+    val publicDependencySymbols = dependencies.flatMap {
+      m => m.terms.values.flatten.map(sym => sym -> m)
+    }.toMap
+
+    var usedFrom: Map[Module, Set[TermSymbol]] = Map.empty
+
+    def register(m: Module, sym: TermSymbol) = {
+      val before = usedFrom.getOrElse(m, Set.empty)
+      usedFrom = usedFrom.updated(m, before + sym)
+    }
+
+    // Traverse tree once more to find all used symbols, defined in other modules.
+    def findUsedDependencies(t: Definition) =
+      Tree.visit(t) {
+        case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+        case ValueVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+          register(publicDependencySymbols(x), x)
+      }
+
+    input.core.definitions.foreach(findUsedDependencies)
+
+    usedFrom
   }
 }
