@@ -184,26 +184,26 @@ record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth:
 extern io def panic[R](msg: String): R =
   "raise Fail msg"
 
-// effect Exception[E] {
-//   def raise(exception: E, msg: String): Nothing
-// }
-// record RuntimeError()
+effect Exception[E] {
+  def raise(exception: E, msg: String): Nothing
+}
+record RuntimeError()
 
-// // TODO: doesnt work with type inference
-// def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
-
-// // converts exceptions of (static) type E to an uncatchable panic that aborts the program
-// def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
-//   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
-
-// // reports exceptions of (static) type E to the console
-// def report[E] { prog: => Unit / Exception[E] }: Unit =
-//   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
-
-// // ignores exceptions of (static) type E
-// // TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
-// def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
-//   try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
+//// TODO: doesnt work with type inference
+//def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
+//
+//// converts exceptions of (static) type E to an uncatchable panic that aborts the program
+//def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
+//  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = panic(msg) }
+//
+//// reports exceptions of (static) type E to the console
+//def report[E] { prog: => Unit / Exception[E] }: Unit =
+//  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = println(msg) }
+//
+//// ignores exceptions of (static) type E
+//// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+//def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
+//  try { prog() } with Exception[E] { def raise(exception: E, msg: String) = () }
 
 // Control Flow
 // ============

@@ -37,7 +37,7 @@ enum Type {
 enum Binding {
   case AnonBind(body: Expr)
   case ValBind(name: MLName, body: Expr)
-  case FunBind(name: MLName, params: List[MLName], body: Expr)
+  case FunBind(name: MLName, params: List[(MLName, Option[Type])], body: Expr)
   case RawBind(raw: String)
   case DataBind(name: MLName, tparams: List[Type.Var], constructors: List[(MLName, Option[Type])])
   case TypeBind(name: MLName, tparams: List[Type.Var], tpe: Type)

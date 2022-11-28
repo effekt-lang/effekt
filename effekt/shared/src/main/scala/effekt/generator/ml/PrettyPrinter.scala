@@ -34,7 +34,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ValBind(name, body) =>
       group("val" <+> toDoc(name) <+> "=" <> nest(line <> toDoc(body) <> ";"))
     case FunBind(name, params, body) =>
-      group("fun" <+> toDoc(name) <+> argList(params, toDoc, true) <+>
+      def pToDoc(p: (MLName, Option[ml.Type])) = p match {
+        case (pname, None) => toDoc(pname)
+        case (pname, Some(tpe)) => parens(toDoc(pname) <> ":" <+> toDoc(tpe))
+      }
+      group("fun" <+> toDoc(name) <+> argList(params, pToDoc, true) <+>
         "=" <> nest(line <> toDoc(body) <> ";"))
     case DataBind(name, tparams, constructors) =>
       "datatype" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <> nest(line <>

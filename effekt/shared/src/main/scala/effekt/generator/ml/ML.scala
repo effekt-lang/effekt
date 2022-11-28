@@ -140,7 +140,12 @@ object ML extends Backend {
 
   def toML(ext: Extern): ml.Binding = ext match {
     case Extern.Def(id, _, params, body) =>
-      ml.FunBind(name(id), params map (p => MLName(p.id.name.name)), RawExpr(body))
+      def pToML(p: Param): (ml.MLName, Option[ml.Type]) = p match {
+        case ValueParam(id, tpe) => (MLName(id.name.toString), None)
+        case BlockParam(id, tpe) => (MLName(id.name.toString), None)
+        case EvidenceParam(id) => (MLName(id.name.toString), None)
+      }
+      ml.FunBind(name(id), params map pToML, RawExpr(body))
     case Extern.Include(contents) =>
       RawBind(contents)
   }
@@ -199,7 +204,7 @@ object ML extends Backend {
               ml.Expr.Let(
                 List(ml.Binding.FunBind(
                   resumeName,
-                  List(ev1Name, vName),
+                  List((ev1Name, None), (vName, None)),
                   ml.Call(ev1Name)(ml.Call(kName)(ml.Expr.Variable(vName)))
                 )),
                 toMLExpr(body)
@@ -246,7 +251,7 @@ object ML extends Backend {
   def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
     binding match {
       case BlockLit(params, body) =>
-        ml.FunBind(name(id), params map toML, toMLExpr(body))
+        ml.FunBind(name(id), params.map(p => (toML(p), None)), toMLExpr(body))
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
