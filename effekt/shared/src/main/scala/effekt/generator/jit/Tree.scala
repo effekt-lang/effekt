@@ -43,10 +43,13 @@ case class Subst(args: RegList) extends Instruction
 case class Copy(tpe: RegisterType, from: Register, to: Register) extends Instruction
 case class Drop(tpe: RegisterType, reg: Register) extends Instruction
 case class Swap(tpe: RegisterType, a: Register, b: Register) extends Instruction
+case class Allocate(out: Register, tpe: RegisterType, init: Register, region: Register) extends Instruction
+case class Load(out: Register, tpe: RegisterType, ref: Register) extends Instruction
+case class Store(ref: Register, tpe: RegisterType, value: Register) extends Instruction
 
 case class Construct(out: Register, adt_type: Int, tag: ConstructorTag, args: RegList) extends Instruction
 case class PushStack(arg: Register) extends Instruction
-case class NewStack(out: Register, target: BlockLabel, args: RegList) extends Instruction
+case class NewStack(out: Register, region: Register, target: BlockLabel, args: RegList) extends Instruction
 case class New(out: Register, targets: List[BlockLabel], args: RegList) extends Instruction
 
 sealed trait Terminator extends Tree
@@ -64,6 +67,8 @@ enum Type extends Tree {
   case String()
   case Datatype(index: Int)
   case Codata(index: Int)
+  case Region()
+  case Reference(to: Type)
 
   def registerType: RegisterType = this match {
     case Unit() => RegisterType.Erased
@@ -73,11 +78,13 @@ enum Type extends Tree {
     case String() => RegisterType.String
     case Codata(index) => RegisterType.Codata
     case Datatype(index) => RegisterType.Datatype
+    case Region() => RegisterType.Region
+    case Reference(_) => RegisterType.Reference
   }
 }
 
 enum RegisterType {
-  case Integer, Double, String, Continuation, Codata, Datatype, Erased
+  case Integer, Double, String, Continuation, Codata, Datatype, Erased, Reference, Region
 
   def isErased: Boolean = this match {
     case Erased => true

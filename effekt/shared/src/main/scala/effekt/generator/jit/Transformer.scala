@@ -124,7 +124,7 @@ object Transformer {
           val (_ign1, args, block) = transformInline(clause);
           emitInlined(block)
         }
-        case Type.Continuation() | Type.Double() | Type.String() |  Type.Codata(_) => {
+        case Type.Continuation() | Type.Double() | Type.String() |  Type.Codata(_) | Type.Reference(_) | Type.Region() => {
           sys error "Fatal error: Trying to match on non-datatype"
         }
         }
@@ -186,11 +186,12 @@ object Transformer {
         emit(Add(out, transformArgument(l).id, transformArgument(r).id))
         emitInlined(restBlock)
       }
-      case machine.NewStack(name, frame, rest) => {
+      case machine.NewStack(name, region, frame, rest) => {
         val (closesOver, _, target) = transformClosure(frame);
-        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name), rest));
+        val (_, RegList(outs), restBlock) = transformInline(machine.Clause(List(name, region), rest));
         val out = outs(RegisterType.Continuation).head
-        emit(NewStack(out, target, closesOver));
+        val regReg = outs(RegisterType.Region).head
+        emit(NewStack(out, regReg, target, closesOver));
         emitInlined(restBlock)
       }
       case machine.PushStack(value, rest) => {
@@ -203,6 +204,25 @@ object Transformer {
         emit(ShiftDyn(out, transformArgument(n).id));
         emitInlined(block)
       }
+      case machine.Allocate(name, init, mRegion, rest) =>
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(name, mRegion), rest));
+        val tpe = transform(init.tpe)
+        val out = outs(RegisterType.Reference).head
+        val region = outs(RegisterType.Region).last
+        emit(Allocate(out, tpe.registerType, transformArgument(init).id, region))
+        emitInlined(block)
+      case machine.Load(name, ref, rest) =>
+        val (_, RegList(outs), block) = transformInline(machine.Clause(List(name), rest));
+        val Type.Reference(tpe) = transform(ref.tpe) : @unchecked
+        assert(tpe == transform(name.tpe))
+        val out = outs(tpe.registerType).head
+        emit(Load(out, tpe.registerType, transformArgument(ref).id))
+        emitInlined(block)
+      case machine.Store(ref, value, rest) =>
+        val Type.Reference(tpe) = transform(ref.tpe) : @unchecked
+        assert(tpe == transform(value.tpe))
+        emit(Store(transformArgument(ref).id, tpe.registerType, transformArgument(value).id))
+        transform(rest)
   }
 
   def transform(typ: machine.Type)(using PC: ProgramContext): Type = {
@@ -215,6 +235,8 @@ object Transformer {
       case machine.Type.Double() => Type.Double()
       case machine.Type.String() => Type.String()
       case machine.Type.Stack() => Type.Continuation()
+      case machine.Type.Reference(tpe) => Type.Reference(transform(tpe))
+      case machine.Type.Region() => Type.Region()
   }
 
   def transformClosure(machineClause: machine.Clause)(using ProgramContext, BlockContext): (RegList, RegList, BlockLabel) = {

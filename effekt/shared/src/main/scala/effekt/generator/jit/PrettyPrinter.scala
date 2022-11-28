@@ -43,6 +43,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.String() => Some(jsonObjectSmall(ListMap("type" -> "\"string\"")))
     case Type.Codata(index) => Some(jsonObjectSmall(ListMap("type" -> "\"codata\"", "index" -> index.toString)))
     case Type.Datatype(index) => Some(jsonObjectSmall(ListMap("type" -> "\"adt\"", "index" -> index.toString)))
+    case Type.Reference(to) => Some(jsonObjectSmall(ListMap("type" -> "\"ref\"", "target" -> toDoc(to).getOrElse("\"unit\""))))
+    case Type.Region() => Some(jsonObjectSmall(ListMap("type" -> "\"region\"")))
   }
 
   extension(rtpe: RegisterType) {
@@ -53,6 +55,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       case RegisterType.String => "string"
       case RegisterType.Datatype => "adt"
       case RegisterType.Codata => "codata"
+      case RegisterType.Reference => "ref"
+      case RegisterType.Region => "region"
       case _ => sys error "Cannot print erased register type"
     }
   }
@@ -118,8 +122,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "tag" -> tag.toString,
       "args" -> toDoc(args)
     ))
-    case NewStack(out, target, args) => jsonObjectSmall(ListMap("op" -> "\"NewStack\"",
+    case NewStack(out, region, target, args) => jsonObjectSmall(ListMap("op" -> "\"NewStack\"",
       "out" -> toDoc(out),
+      "region" -> toDoc(region),
       "target" -> toDoc(target),
       "args" -> toDoc(args)
     ))
@@ -130,6 +135,22 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "out" -> toDoc(out),
       "targets" -> jsonListSmall(targets.map(toDoc)),
       "args" -> toDoc(args)
+    ))
+    case Allocate(out, tpe, init, region) => jsonObjectSmall(ListMap("op" -> "\"Allocate\"",
+      "out" -> toDoc(out),
+      "type" -> toDoc(tpe),
+      "init" -> toDoc(init),
+      "region" -> toDoc(region)
+    ))
+    case Load(out, tpe, ref) => jsonObjectSmall(ListMap("op" -> "\"Load\"",
+      "out" -> toDoc(out),
+      "type" -> toDoc(tpe),
+      "ref" -> toDoc(ref)
+    ))
+    case Store(ref, tpe, value) => jsonObjectSmall(ListMap("op" -> "\"Store\"",
+      "ref" -> toDoc(ref),
+      "type" -> toDoc(tpe),
+      "value" -> toDoc(value)
     ))
   }
 

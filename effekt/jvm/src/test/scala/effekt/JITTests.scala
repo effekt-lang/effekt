@@ -15,9 +15,6 @@ class JITTests extends EffektTests {
     // polymorphic effect operations not supported, yet
     examplesDir / "jit" / "choice.effekt",
     examplesDir / "jit" / "triples.effekt",
-
-    // mutable state not supported, yet
-    examplesDir / "jit" / "gids.effekt",
   )
 
 
