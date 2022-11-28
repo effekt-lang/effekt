@@ -11,35 +11,22 @@ import effekt.symbols.builtins.TState
 
 object Transformer {
 
-  def transform(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context): Program = {
-
-    val mainSymbol = C.checkMain(main.mod)
-
+  def transform(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Program = {
     val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main) : @unchecked
 
-    // TODO this flatMap is wrong. If LiftInference returns None, then this will not fail but the dep. will be ignored.
-    //   future me, or anybody else: if you fix this, also fix in ChezLift
-    val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) }
-
     C.using(module = main.mod) {
-      transform(mainSymbol, liftedMain, liftedDeps);
+      transform(mainSymbol, liftedMain);
     }
   }
 
-  def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl, deps: List[lifted.ModuleDecl])(using C: Context): Program = {
+  def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl)(using C: Context): Program = {
 
     val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
 
     // collect all information
-    var declarations: List[Declaration] = Nil
-    var definitions: List[lifted.Definition] = Nil
-
-    (mod :: deps).foreach { module =>
-      declarations ++= module.externs.map(transform)
-      definitions ++= module.definitions
-    }
-
+    val declarations = mod.externs.map(transform)
+    val definitions = mod.definitions
     val mainEntry = Jump(Label(mainName, List()))
 
     findToplevelBlocksParams(definitions)
@@ -130,7 +117,7 @@ object Transformer {
       case lifted.App(lifted.BlockVar(id), List(), args) =>
         // TODO deal with BlockLit
         id match {
-          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock(_) =>
+          case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock() =>
             // TODO this is a hack, values is in general shorter than environment
             val environment = getBlocksParams(id)
             transform(args).run { values =>

@@ -3,28 +3,19 @@ package generator
 package jit
 
 import effekt.context.Context
-import effekt.lifted.LiftInference
-import effekt.symbols.Module
+import effekt.symbols.{Module, TermSymbol}
+import effekt.util.paths.*
 
 import scala.language.implicitConversions
-import effekt.util.paths.*
-import kiama.output.PrettyPrinterTypes
+import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 
 import scala.sys.process.Process
 
 object JIT extends Backend {
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(implicit C: Context): Option[Compiled] = {
-
-    val mainSymbol = C.checkMain(main.mod);
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(implicit C: Context): Option[Compiled] = {
     val mainFile = path(main.mod);
 
-    val Some(liftedMod) = LiftInference(main).map(_.core) : @unchecked
-    // TODO this flatmap is wrong, or?
-    val liftedDeps = dependencies.flatMap { dep => LiftInference(dep).map(_.core) };
-
-    val machineMod = C.using(module = main.mod) {
-      machine.Transformer.transform(mainSymbol, liftedMod, liftedDeps)
-    };
+    val machineMod = machine.Transformer.transform(main, mainSymbol)
 
     val jitProgram = Transformer.transform(machineMod);
     val doc = PrettyPrinter.toDocument(jitProgram);
@@ -32,7 +23,16 @@ object JIT extends Backend {
     Some(Compiled(mainFile, Map(mainFile -> doc)))
   }
 
-  override def compileSeparate(input: CoreTransformed)(implicit C: Context): Option[PrettyPrinterTypes.Document] = ???
+  override def compileSeparate(main: CoreTransformed)(implicit C: Context): Option[Document] = {
+    val machine.Program(decls, prog) = machine.Transformer.transform(main, symbols.TmpValue())
+
+    // we don't print declarations here.
+    val jitDefinitions = Transformer.transform(machine.Program(Nil, prog))
+
+    val jitString = PrettyPrinter.toDoc(jitDefinitions).toString()
+
+    Some(Document(jitString, emptyLinks))
+  }
 
   def path(m: Module)(implicit C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".rpyeffect"

@@ -110,7 +110,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Scope(definitions, rest) =>
       toDoc(definitions) <> emptyline <> toDoc(rest)
 
-    case Val(Wildcard(_), tpe, binding, body) =>
+    case Val(Wildcard(), tpe, binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
