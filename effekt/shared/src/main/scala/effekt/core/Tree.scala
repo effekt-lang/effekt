@@ -92,6 +92,7 @@ enum Definition {
 
   // TDB
   // case Mutual(defs: List[Definition.Def])
+  val capt: Captures = Type.inferCapt(this)
 }
 
 // Some smart constructors
@@ -119,13 +120,16 @@ sealed trait Argument extends Tree
  * - [[Run]]
  * - [[Pure]]
  */
-sealed trait Expr extends Tree
+sealed trait Expr extends Tree {
+  val tpe: core.ValueType = Type.inferType(this)
+  val capt: core.Captures = Type.inferCapt(this)
+}
 
 // invariant, block b is {io}.
 case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt, tpe: ValueType) extends Expr
+case class Run(s: Stmt, annotatedType: ValueType) extends Expr
 
 
 /**
@@ -142,17 +146,16 @@ case class Run(s: Stmt, tpe: ValueType) extends Expr
  *
  * -------------------------------------------
  */
-sealed trait Pure extends Expr with Argument
-object Pure {
-  case class ValueVar(id: ValueSymbol) extends Pure
+enum Pure extends Expr with Argument {
+  case ValueVar(id: ValueSymbol) extends Pure
 
-  case class Literal(value: Any, tpe: symbols.ValueType) extends Pure
+  case Literal(value: Any, annotatedType: symbols.ValueType) extends Pure
 
   // invariant, block b is pure.
-  case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
-  case class Select(target: Pure, field: symbols.Field) extends Pure
+  case PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
+  case Select(target: Pure, field: symbols.Field) extends Pure
 
-  case class Box(b: Block) extends Pure
+  case Box(b: Block) extends Pure
 }
 export Pure.*
 
@@ -173,9 +176,13 @@ export Pure.*
 enum Block extends Argument {
   case BlockVar(id: BlockSymbol)
   case BlockLit(params: List[Param], body: Stmt)
-  case Member(b: Block, field: TermSymbol)
-  case Unbox(p: Pure)
+  case Member(block: Block, field: TermSymbol)
+  case Unbox(pure: Pure)
   case New(impl: Implementation)
+
+
+  val tpe: core.BlockType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
 }
 export Block.*
 
@@ -211,9 +218,9 @@ enum Stmt extends Tree {
   case Scope(definitions: List[Definition], body: Stmt)
 
   // Fine-grain CBV
-  case Return(e: Pure)
-  case Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt)
-  case App(b: Block, targs: List[Type], args: List[Argument])
+  case Return(expr: Pure)
+  case Val(id: ValueSymbol, annotatedType: ValueType, binding: Stmt, body: Stmt)
+  case App(callee: Block, targs: List[Type], args: List[Argument])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
@@ -221,11 +228,14 @@ enum Stmt extends Tree {
 
   // Effects
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?
-  case Try(body: Block, answerType: ValueType, handler: List[Implementation])
+  case Try(body: Block, answerType: ValueType, handlers: List[Implementation])
   case Region(body: Block, answerType: ValueType)
 
   // Others
   case Hole
+
+  val tpe: core.ValueType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
 }
 export Stmt.*
 
@@ -234,14 +244,20 @@ export Stmt.*
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(interface: symbols.Interface, operations: List[Operation]) extends Tree
+case class Implementation(interface: symbols.Interface, operations: List[Operation]) extends Tree {
+  val tpe = interface // TODO this has to become a core.BlockType.Interface
+  val capt = operations.flatMap(_.capt).toSet
+}
 
 /**
  * Implementation of a method / effect operation.
  *
  * TODO generalize from BlockLit to also allow block definitions
  */
-case class Operation(name: symbols.Operation, implementation: Block.BlockLit)
+case class Operation(name: symbols.Operation, implementation: Block.BlockLit) {
+  val tpe = implementation.tpe
+  val capt = implementation.capt
+}
 
 
 object Tree {
