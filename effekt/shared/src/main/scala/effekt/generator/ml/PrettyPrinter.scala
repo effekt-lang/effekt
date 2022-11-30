@@ -34,11 +34,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case ValBind(name, body) =>
       group("val" <+> toDoc(name) <+> "=" <> nest(line <> toDoc(body) <> ";"))
     case FunBind(name, params, body) =>
-      def pToDoc(p: (MLName, Option[ml.Type])) = p match {
-        case (pname, None) => toDoc(pname)
-        case (pname, Some(tpe)) => parens(toDoc(pname) <> ":" <+> toDoc(tpe))
-      }
-      group("fun" <+> toDoc(name) <+> argList(params, pToDoc, true) <+>
+      group("fun" <+> toDoc(name) <+> argList(params, paramToDoc, true) <+>
         "=" <> nest(line <> toDoc(body) <> ";"))
     case DataBind(name, tparams, constructors) =>
       "datatype" <+> tlistDoc(tparams) <+> toDoc(name) <+> "=" <> nest(line <>
@@ -60,6 +56,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Nil => ""
     case one :: Nil => toDoc(one)
     case _ => parens(hsep(tparams map toDoc, ","))
+  }
+
+  def paramToDoc(p: (MLName, Option[ml.Type])): Doc = p match {
+    case (pname, None) => toDoc(pname)
+    case (pname, Some(tpe)) => parens(toDoc(pname) <> ":" <+> toDoc(tpe))
   }
 
   def toDoc(tpe: ml.Type): Doc = tpe match {
@@ -113,7 +114,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val lambda = "fn () =>" <+> toDoc(body)
       parens(lambda)
     case Expr.Lambda(params, body) =>
-      val paramDocs = params.map{p => "fn" <+> toDoc(p) <+> "=>"}
+      val paramDocs = params.map{p => "fn" <+> paramToDoc(p) <+> "=>"}
       val lambda = nest(hsep(paramDocs) <@> toDoc(body))
       parens(lambda)
     case Expr.If(cond, thn, els) =>

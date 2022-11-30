@@ -74,7 +74,7 @@ enum Expr {
   //  case Let_*(bindings: List[Binding], body: Block)
 
   // e.g. (fn (x y) => body)
-  case Lambda(params: List[MLName], body: Expr)
+  case Lambda(params: List[(MLName, Option[Type])], body: Expr)
 
   // e.g. (if COND then THEN else ELSE)
   case If(cond: Expr, thn: Expr, els: Expr)
@@ -105,7 +105,7 @@ object Consts {
   val unitVal: Expr = RawValue("()")
   val trueVal: Expr = RawValue("true")
   val falseVal: Expr = RawValue("false")
-  val id: Expr = ml.Lambda(MLName("x"))(Variable(MLName("x")))
+  val id: Expr = ml.Lambda((MLName("x"), None))(Variable(MLName("x")))
 
   // from effekt.sml
   val bind: Expr = Variable(MLName("bind"))
@@ -136,6 +136,6 @@ def Call(name: MLName)(args: Expr*): Expr = Expr.Call(Variable(name), args.toLis
 
 def Call(expr: Expr)(args: Expr*): Expr = Expr.Call(expr, args.toList)
 
-def Lambda(params: MLName*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
+def Lambda(params: (MLName, Option[Type])*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
 
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")

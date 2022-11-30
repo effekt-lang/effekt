@@ -138,22 +138,22 @@ object ML extends Backend {
 
   def toML(ext: Extern): ml.Binding = ext match {
     case Extern.Def(id, _, params, body) =>
-      def pToML(p: Param): (ml.MLName, Option[ml.Type]) = p match {
-        case ValueParam(id, tpe) => (MLName(id.name.toString), None)
-        case BlockParam(id, tpe) => (MLName(id.name.toString), None)
-        case EvidenceParam(id) => (MLName(id.name.toString), None)
-      }
-      ml.FunBind(name(id), params map pToML, RawExpr(body))
+      ml.FunBind(name(id), params map (paramToML(_, false)), RawExpr(body))
     case Extern.Include(contents) =>
       RawBind(contents)
+  }
+
+  def paramToML(p: Param, unique: Boolean = true): (ml.MLName, Option[ml.Type]) = {
+    if (unique) (name(p.id), None)
+    else (MLName(p.id.name.toString), None)
   }
 
   def toMLExpr(stmt: Stmt)(using C: Context): ml.Expr = stmt match {
     case Return(e) => Call(Consts.pure)(toML(e))
     case App(b, _, args) => Expr.Call(toML(b), args map toML)
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
-    case Val(id, tpe, binding, body) =>
-      Call(Consts.bind)(toMLExpr(binding), ml.Lambda(name(id))(toMLExpr(body)))
+    case Val(id, _, binding, body) =>
+      Call(Consts.bind)(toMLExpr(binding), ml.Lambda((name(id), None))(toMLExpr(body)))
     case Match(scrutinee, clauses, default) =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
         val (constructor, b) = c
@@ -187,7 +187,7 @@ object ML extends Backend {
     case Try(body, _, handler) =>
       val handlers: List[ml.Expr.MakeRecord] = handler.map { (h: Implementation) =>
         val fields = h.operations.map { case Operation(op, BlockLit(params, body)) =>
-          val args = params.init.map(p => name(p.id))
+          val args = params.init.map(paramToML(_))
           val resumeName = name(params.last.id)
           val evName = freshName("ev_tmp")
           val ev1Name = freshName("ev1_tmp")
@@ -197,7 +197,7 @@ object ML extends Backend {
             ml.Expr.Variable(evName)
           )(
             ml.Lambda(
-              kName
+              (kName, None)
             )(
               ml.Expr.Let(
                 List(ml.Binding.FunBind(
@@ -209,7 +209,7 @@ object ML extends Backend {
               )
             )
           )
-          (name(op), ml.Expr.Lambda(evName :: args, newBody))
+          (name(op), ml.Expr.Lambda((evName, None) :: args, newBody))
         }
         ml.Expr.MakeRecord(fields)
       }
@@ -263,7 +263,7 @@ object ML extends Backend {
 
   def toML(block: BlockLit)(using Context): ml.Lambda = block match {
     case BlockLit(params, body) =>
-      ml.Lambda(params map toML: _*)(toMLExpr(body))
+      ml.Lambda(params map (paramToML(_)), toMLExpr(body))
   }
 
   def toML(block: Block)(using C: Context): ml.Expr = block match {
