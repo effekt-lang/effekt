@@ -10,6 +10,7 @@ import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.Backend
+import effekt.generator.js.JavaScript
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -49,16 +50,6 @@ case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module
  * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
  */
 case class CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl) extends PhaseResult
-
-/**
- * The result of [[LowerDependencies]] running all phases up to (including) ANF transformation on
- * all dependencies.
- *
- * A compilation unit consisting of all transitive dependencies in topological ordering.
- */
-case class CompilationUnit(main: CoreTransformed, dependencies: List[CoreTransformed]) extends PhaseResult {
-  val source = main.source
-}
 
 /**
  * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
@@ -153,8 +144,8 @@ trait Compiler {
   /**
    * Backend
    */
-  def Backend(implicit C: Context): Backend = C.config.backend() match {
-    case "js"           => effekt.generator.js.JavaScriptMonadic
+  def Backend(using C: Context): Backend = C.config.backend() match {
+    case "js"           => effekt.generator.js.JavaScript
     case "chez-callcc"  => effekt.generator.chez.ChezSchemeCallCC
     case "chez-monadic" => effekt.generator.chez.ChezSchemeMonadic
     case "chez-lift"    => effekt.generator.chez.ChezSchemeLift
@@ -162,16 +153,39 @@ trait Compiler {
     case "ml"           => effekt.generator.ml.ML
   }
 
-  object LowerDependencies extends Phase[CoreTransformed, CompilationUnit] {
-    val phaseName = "lower-dependencies"
-    def run(main: CoreTransformed)(implicit C: Context) = {
-      val dependencies = main.mod.dependencies flatMap { dep =>
+  object Aggregate extends Phase[CoreTransformed, CoreTransformed] {
+    val phaseName = "aggregate"
+
+    def run(input: CoreTransformed)(using Context) = {
+      val CoreTransformed(src, tree, mod, main) = input
+
+      val dependencies = mod.dependencies flatMap { dep =>
         // We already ran the frontend on the dependencies (since they are discovered
         // dynamically). The results are cached, so it doesn't hurt dramatically to run
         // the frontend again. However, the indirection via dep.source is not very elegant.
-        (Frontend andThen Middleend)(dep.source)
+        (Frontend andThen Middleend) (dep.source)
       }
-      Some(CompilationUnit(main, dependencies))
+
+      val deps = dependencies.map(d => d.core)
+
+      // collect all information
+      var declarations: List[core.Declaration] = Nil
+      var externs: List[core.Extern] = Nil
+      var definitions: List[core.Definition] = Nil
+      var exports: List[symbols.Symbol] = Nil
+
+      (deps :+ main).foreach { module =>
+        externs ++= module.externs
+        declarations ++= module.declarations
+        definitions ++= module.definitions
+        exports ++= module.exports
+      }
+
+      val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
+
+      // TODO in the future check for duplicate exports
+
+      Some(CoreTransformed(src, tree, mod, aggregated))
     }
   }
 
@@ -183,14 +197,14 @@ trait Compiler {
   /**
    * Used by LSP server (Intelligence) to map positions to source trees
    */
-  def getAST(source: Source)(implicit C: Context): Option[ModuleDecl] =
+  def getAST(source: Source)(using Context): Option[ModuleDecl] =
     CachedParser(source).map { res => res.tree }
 
   /**
    * Called by ModuleDB (and indirectly by Namer) to run the frontend for a
    * dependency.
    */
-  def runFrontend(source: Source)(implicit C: Context): Option[Module] =
+  def runFrontend(source: Source)(using Context): Option[Module] =
     Frontend(source).map { res => res.mod }
 
   /**
@@ -199,18 +213,16 @@ trait Compiler {
    *
    * It does **not** generate files and write them using `saveOutput`!
    * This is achieved by `compileWhole`.
-   *
-   * TODO Currently the backend is not cached at all
    */
-  def compileSeparate(source: Source)(implicit C: Context): Option[(CoreTransformed, Document)] =
+  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
     (Frontend andThen Middleend andThen Backend.separate).apply(source)
 
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
-  def compileWhole(source: Source)(implicit C: Context): Option[Compiled] =
-    (Frontend andThen Middleend andThen LowerDependencies andThen Backend.whole).apply(source)
+  def compileWhole(source: Source)(using Context): Option[Compiled] =
+    (Frontend andThen Middleend andThen Aggregate andThen Backend.whole).apply(source)
 
-  def compileAll(source: Source)(implicit C: Context): Option[CompilationUnit] =
-    (Frontend andThen Middleend andThen LowerDependencies).apply(source)
+  def compileAll(source: Source)(using Context): Option[CoreTransformed] =
+    (Frontend andThen Middleend andThen Aggregate).apply(source)
 }

@@ -1,7 +1,7 @@
 package effekt
 
 import effekt.context.{ Context, VirtualFileSource, VirtualModuleDB }
-import effekt.generator.js.JavaScriptVirtual
+import effekt.generator.js.JavaScript
 import effekt.lifted.LiftInference
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.{ BufferedMessaging, EffektError, EffektMessaging, FatalPhaseError }
@@ -67,7 +67,7 @@ class LanguageServer extends Intelligence {
     /**
      * Don't output amdefine module declarations
      */
-    override def Backend(implicit C: Context) = JavaScriptVirtual
+    override def Backend(implicit C: Context) = JavaScript
 
     object messaging extends PlainMessaging
   }
@@ -153,7 +153,7 @@ class LanguageServer extends Intelligence {
   private def compileSingle(src: Source)(implicit C: Context): Option[(String, CoreTransformed)] =
     context.compileSeparate(src).map {
       case (core, doc) =>
-        val path = JavaScriptVirtual.path(core.mod)
+        val path = JavaScript.path(core.mod)
         writeFile(path, doc.layout)
         (path, core)
     }

@@ -4,7 +4,7 @@ package chez
 
 import effekt.context.Context
 import effekt.core.*
-import effekt.symbols.{ Module, Symbol, Wildcard }
+import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
 
 import scala.language.implicitConversions
 import effekt.util.paths.*
@@ -49,10 +49,8 @@ trait ChezScheme {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context) = {
-    val mainSym = C.checkMain(main.mod)
-    val deps = dependencies.flatMap { dep => compile(dep) }
-    val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core, deps)))
+  def compileWhole(main: CoreTransformed, mainSym: TermSymbol)(using C: Context) = {
+    val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core)))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
     Some(Compiled(mainFile, Map(mainFile -> result)))
@@ -70,9 +68,9 @@ trait ChezScheme {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     toChez(in.core)
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[chez.Def])(implicit C: Context): chez.Block = {
-    val defs = toChez(core)
-    chez.Block(generateStateAccessors ++ dependencies ++ defs, Nil, runMain(nameRef(mainSymbol)))
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+    val definitions = toChez(core)
+    chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   /**
@@ -85,7 +83,7 @@ trait ChezScheme {
   def toChez(p: Param): ChezName = nameDef(p.id)
 
   def toChez(module: ModuleDecl): List[chez.Def] = {
-    val decls = module.decls.flatMap(toChez)
+    val decls = module.declarations.flatMap(toChez)
     val externs = module.externs.map(toChez)
      // TODO FIXME, once there is a let _ = ... in there, we are doomed!
     val defns = module.definitions.map(toChez).flatMap {
@@ -140,7 +138,7 @@ trait ChezScheme {
     case other => chez.Let(Nil, toChez(other))
   }
 
-  def toChez(decl: core.Decl): List[chez.Def] = decl match {
+  def toChez(decl: core.Declaration): List[chez.Def] = decl match {
     case Data(did, ctors) =>
       ctors.flatMap {
         case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
@@ -151,7 +149,7 @@ trait ChezScheme {
       generateConstructor(did, fields)
 
     // We use chez scheme records to also represent capabilities.
-    case Decl.Interface(id, operations) =>
+    case Declaration.Interface(id, operations) =>
       generateConstructor(id, operations)
   }
 

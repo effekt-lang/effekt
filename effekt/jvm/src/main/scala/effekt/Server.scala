@@ -85,8 +85,8 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
     }
 
     if (showIR == "machine") {
-      val CompilationUnit(main, deps) = C.compileAll(source).getOrElseAborting { return; }
-      val machineProg = machine.Transformer.transform(main, deps)
+      val main = C.compileAll(source).getOrElseAborting { return; }
+      val machineProg = machine.Transformer.transform(main, symbols.TmpValue())
 
       if (showTree) publishTree("machine", machineProg.program)
       else publishIR("machine", machine.PrettyPrinter.format(machineProg.program))
@@ -133,7 +133,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
   override def getSymbols(source: Source): Option[Vector[DocumentSymbol]] =
 
-    val mod = context.runFrontend(source)(context)
+    context.runFrontend(source)(using context)
 
     val documentSymbols = for {
       sym <- context.sourceSymbolsFor(source).toVector

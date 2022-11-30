@@ -10,6 +10,8 @@ jobs:
 
     name: Build Effekt compiler and run tests
     runs-on: ${{ matrix.os }}
+    env:
+      EFFEKT_LLVM_VERSION: 15
     steps:
     - uses: actions/checkout@v2
       with:
@@ -22,6 +24,9 @@ jobs:
 
     - name: Install Chez Scheme
       run: sudo apt-get install chezscheme
+
+    - name: Install latest LLVM
+      run: sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
     - name: Set up NodeJS
       uses: actions/setup-node@v1

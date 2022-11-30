@@ -34,7 +34,7 @@ class JavaScriptTests extends EffektTests {
     // this resets the caches before each test:
     // effekt.util.Task.reset()
     val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js/monadic"))
+    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js"))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result()

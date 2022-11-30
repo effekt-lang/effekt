@@ -10,7 +10,7 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *
  *   ─ [[ Tree ]]
  *     │─ [[ ModuleDecl ]]
- *     │─ [[ Decl ]]
+ *     │─ [[ Declaration ]]
  *     │  │─ [[ Data ]]
  *     │  │─ [[ Record ]]
  *     │  │─ [[ Interface ]]
@@ -56,7 +56,7 @@ sealed trait Tree
 case class ModuleDecl(
   path: String,
   imports: List[String],
-  decls: List[Decl],
+  declarations: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
   exports: List[Symbol]
@@ -65,12 +65,14 @@ case class ModuleDecl(
 /**
  * Toplevel data and interface declarations
  */
-enum Decl extends Tree {
+enum Declaration extends Tree {
+  def id: Symbol
+
   case Data(id: Symbol, ctors: List[Symbol])
   case Record(id: Symbol, fields: List[Symbol])
   case Interface(id: Symbol, operations: List[Symbol])
 }
-export Decl.*
+export Declaration.*
 
 /**
  * FFI external definitions
@@ -79,6 +81,7 @@ enum Extern extends Tree {
   case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
   case Include(contents: String)
 }
+
 
 enum Definition {
   case Def(id: BlockSymbol, tpe: BlockType, block: Block)
@@ -246,12 +249,13 @@ object Tree {
   // Generic traversal of trees, applying the partial function `f` to every contained
   // element of type Tree.
   def visit(obj: Any)(f: PartialFunction[Tree, Unit]): Unit = obj match {
+    case t: Tree if f.isDefinedAt(t) => f(t)
+    case s: symbols.Symbol => ()
     case t: Iterable[t] => t.foreach { t => visit(t)(f) }
     case p: Product => p.productIterator.foreach {
-      case t: Tree => f(t)
-      case other   => ()
+      case t => visit(t)(f)
     }
-    case leaf => Set.empty
+    case leaf => ()
   }
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
