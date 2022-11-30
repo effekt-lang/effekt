@@ -174,7 +174,7 @@ export Pure.*
  * -------------------------------------------
  */
 enum Block extends Argument {
-  case BlockVar(id: BlockSymbol)
+  case BlockVar(id: BlockSymbol, annotatedTpe: BlockType, annotatedCapt: Captures)
   case BlockLit(params: List[Param], body: Stmt)
   case Member(block: Block, field: TermSymbol)
   case Unbox(pure: Pure)

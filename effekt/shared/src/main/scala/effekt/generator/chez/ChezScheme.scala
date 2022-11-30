@@ -200,7 +200,7 @@ trait ChezScheme {
   }
 
   def toChez(block: Block): chez.Expr = block match {
-    case BlockVar(id) =>
+    case BlockVar(id, _, _) =>
       Variable(nameRef(id))
 
     case b @ BlockLit(params, body) => toChez(b)

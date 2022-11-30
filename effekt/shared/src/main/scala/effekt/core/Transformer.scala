@@ -393,6 +393,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(sc: BlockType)(using Context): core.BlockType = ???
 
+  def transform(sc: Captures)(using Context): core.Captures = ???
+
 
   // Match Compiler
   // --------------
@@ -438,7 +440,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val normalizedClauses = clauses.map(normalize)
 
     def jumpToBranch(target: BlockSymbol, args: List[ValueSymbol]) =
-      core.App(core.BlockVar(target), Nil, args.map(a => ValueVar(a)))
+      core.App(BlockVar(target), Nil, args.map(a => ValueVar(a)))
 
     // (1) Check whether we are already successful
     val Clause(patterns, target, args) = normalizedClauses.head
@@ -531,6 +533,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
     core.ValueVar(id, transform(Context.valueTypeOf(id)))
 
+  def BlockVar(id: BlockSymbol)(using Context): core.BlockVar =
+    core.BlockVar(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
+
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
     core.Val(id, binding, body)
 
@@ -619,19 +624,19 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val binding = Binding.Val(x, s)
     bindings += binding
 
-    Transformer.ValueVar(x)
+    ValueVar(x, s.tpe)
   }
 
-  private[core] def bind(tpe: symbols.ValueType, s: Expr): ValueVar = {
+  private[core] def bind(tpe: symbols.ValueType, e: Expr): ValueVar = {
 
     // create a fresh symbol and assign the type
     val x = TmpValue()
     assignType(x, tpe)
 
-    val binding = Binding.Let(x, s)
+    val binding = Binding.Let(x, e)
     bindings += binding
 
-    Transformer.ValueVar(x)
+    ValueVar(x, e.tpe)
   }
 
   private[core] def bind(tpe: symbols.BlockType, b: Block): BlockVar = {
@@ -639,12 +644,13 @@ trait TransformerOps extends ContextOps { Context: Context =>
   }
 
   private[core] def bind(name: BlockSymbol, tpe: symbols.BlockType, b: Block): BlockVar = {
+    // TODO we probably do not need the assignType here, anymore.
     assignType(name, tpe)
 
     val binding = Binding.Def(name, b)
     bindings += binding
 
-    BlockVar(name)
+    BlockVar(name, b.tpe, b.capt)
   }
 
   private[core] def withBindings[R](block: => R): (R, ListBuffer[Binding]) = Context in {

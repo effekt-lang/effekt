@@ -101,7 +101,7 @@ object JavaScript extends Backend {
   }
 
   def toJS(b: core.Block)(using Context): js.Expr = b match {
-    case BlockVar(v) =>
+    case BlockVar(v, _, _) =>
       nameRef(v)
     case BlockLit(ps, body) =>
       val (stmts, ret) = toJSStmt(body)
@@ -358,7 +358,7 @@ object JavaScript extends Backend {
     // Traverse tree once more to find all used symbols, defined in other modules.
     def findUsedDependencies(t: Definition) =
       Tree.visit(t) {
-        case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+        case BlockVar(x, tpe, capt) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
         case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)

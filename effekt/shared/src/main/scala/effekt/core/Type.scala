@@ -95,7 +95,7 @@ object Type {
   }
 
   def inferType(block: Block): BlockType = block match {
-    case Block.BlockVar(id /*, tpe, capt */ ) => ??? // tpe
+    case Block.BlockVar(id, tpe, capt) => tpe
     case Block.BlockLit(/* tparams, cparams, */ params, body) =>
       val tparams = Nil // TODO
       val cparams = Nil // TODO
@@ -108,7 +108,7 @@ object Type {
     case Block.New(impl) => ??? // impl.tpe
   }
   def inferCapt(block: Block): Captures = block match {
-    case Block.BlockVar(id /*, tpe, capt */ ) => ??? // capt
+    case Block.BlockVar(id, tpe, capt) => capt
     case Block.BlockLit(/* tparams, cparams, */ params, body) =>
       // body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
       body.capt // -- cparams

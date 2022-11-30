@@ -383,7 +383,9 @@ trait AnnotationsDB { self: Context =>
 
   // TODO maybe move to TyperOps
   def assignType(s: Symbol, tpe: BlockType): Unit = s match {
-    case b: BlockSymbol => annotate(Annotations.BlockType, b, tpe)
+    case b: BlockSymbol =>
+      annotate(Annotations.BlockType, b, tpe)
+      // annotate(Annotations.Captures, b, capt)
     case _              => panic(s"Trying to store a block type for non block '${s}'")
   }
 
