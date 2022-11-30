@@ -96,11 +96,11 @@ object Type {
 
   def inferType(block: Block): BlockType = block match {
     case Block.BlockVar(id, tpe, capt) => tpe
-    case Block.BlockLit(/* tparams, cparams, */ params, body) =>
+    case Block.BlockLit(/* tparams, cparams, */ vps, bps, body) =>
       val tparams = Nil // TODO
       val cparams = Nil // TODO
-      val vparams = params.collect { case p: Param.ValueParam => p.tpe }
-      val bparams = params.collect { case p: Param.BlockParam => p.tpe }
+      val vparams = vps.map { p => p.tpe }
+      val bparams = bps.map { p => p.tpe }
 
       BlockType.Function(tparams, cparams, vparams, bparams, body.tpe)
     case Block.Member(b, field /*, tpe */) => ??? // tpe
@@ -109,7 +109,7 @@ object Type {
   }
   def inferCapt(block: Block): Captures = block match {
     case Block.BlockVar(id, tpe, capt) => capt
-    case Block.BlockLit(/* tparams, cparams, */ params, body) =>
+    case Block.BlockLit(/* tparams, cparams, */ vparams, bparams, body) =>
       // body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
       body.capt // -- cparams
     case Block.Member(block, field) => block.capt

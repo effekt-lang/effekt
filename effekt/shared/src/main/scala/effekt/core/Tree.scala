@@ -81,7 +81,7 @@ export Declaration.*
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Symbol, tpe: FunctionType, params: List[Param], body: String)
+  case Def(id: Symbol, tpe: FunctionType, vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: String)
   case Include(contents: String)
 }
 
@@ -178,7 +178,7 @@ export Pure.*
  */
 enum Block extends Argument {
   case BlockVar(id: Symbol, annotatedTpe: BlockType, annotatedCapt: Captures)
-  case BlockLit(params: List[Param], body: Stmt)
+  case BlockLit(vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
   case Member(block: Block, field: symbols.Symbol)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
@@ -284,7 +284,6 @@ object Tree {
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
-    def param: PartialFunction[Param, Param] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
@@ -343,14 +342,10 @@ object Tree {
         case h: Hole.type => h
       }
 
-    def rewrite(e: Param): Param = e match {
-      case e if param.isDefinedAt(e) => param(e)
-      case e => e
-    }
     def rewrite(e: Block): Block = e match {
       case e if block.isDefinedAt(e) => block(e)
-      case BlockLit(params, body) =>
-        BlockLit(params map rewrite, rewrite(body))
+      case BlockLit(vps, bps, body) =>
+        BlockLit(vps, bps, rewrite(body))
       case Member(b, field) =>
         Member(rewrite(b), field)
       case Unbox(e) =>

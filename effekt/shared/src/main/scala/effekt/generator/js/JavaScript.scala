@@ -93,8 +93,8 @@ object JavaScript extends Backend {
   }
 
   def toJS(e: core.Extern)(using Context): js.Stmt = e match {
-    case Extern.Def(id, tpe, params, body) =>
-      js.Function(nameDef(id), params map externParams, List(js.Return(js.RawExpr(body))))
+    case Extern.Def(id, tpe, vps, bps, body) =>
+      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
@@ -103,9 +103,9 @@ object JavaScript extends Backend {
   def toJS(b: core.Block)(using Context): js.Expr = b match {
     case BlockVar(v, _, _) =>
       nameRef(v)
-    case BlockLit(ps, body) =>
+    case BlockLit(vps, bps, body) =>
       val (stmts, ret) = toJSStmt(body)
-      monadic.Lambda(ps map toJS, stmts, ret) // TODO
+      monadic.Lambda((vps ++ bps) map toJS, stmts, ret) // TODO
     case Member(b, id) =>
       js.Member(toJS(b), memberNameRef(id))
     case Unbox(e)     => toJS(e)
@@ -191,9 +191,9 @@ object JavaScript extends Backend {
   }
 
   def toJS(d: core.Definition)(using Context): js.Stmt = d match {
-    case Definition.Def(id, BlockLit(ps, body)) =>
+    case Definition.Def(id, BlockLit(vps, bps, body)) =>
       val (stmts, jsBody) = toJSStmt(body)
-      monadic.Function(nameDef(id), ps map toJS, stmts, jsBody)
+      monadic.Function(nameDef(id), (vps++ bps) map toJS, stmts, jsBody)
 
     case Definition.Def(id, block) =>
       js.Const(nameDef(id), toJS(block))

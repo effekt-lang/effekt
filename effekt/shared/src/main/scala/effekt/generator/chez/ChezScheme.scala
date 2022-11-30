@@ -126,9 +126,9 @@ trait ChezScheme {
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.interface)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, BlockLit(params, body)) =>
+          case Operation(op, BlockLit(vps, bps, body)) =>
             // the LAST argument is the continuation...
-            chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
+            chez.Operation(nameDef(op), (vps ++ bps.init).map(p => nameDef(p.id)), nameDef(bps.last.id), toChezExpr(body))
         })
       }
       chez.Handle(handlers, toChez(body))
@@ -154,9 +154,9 @@ trait ChezScheme {
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, params, body) =>
+    case Extern.Def(id, tpe, vps, bps, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda(params map { p => ChezName(p.id.name.name) },
+        chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
           chez.RawExpr(body)))
 
     case Extern.Include(contents) =>
@@ -195,15 +195,15 @@ trait ChezScheme {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(params, body) =>
-      chez.Lambda(params map toChez, toChez(body))
+    case BlockLit(vps, bps, body) =>
+      chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 
   def toChez(block: Block): chez.Expr = block match {
     case BlockVar(id, _, _) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(params, body) => toChez(b)
+    case b @ BlockLit(vps, bps, body) => toChez(b)
 
     case Member(b, field) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))

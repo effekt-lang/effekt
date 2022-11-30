@@ -40,8 +40,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformToplevel(d: source.Def)(using Context): List[Definition | Declaration | Extern] = d match {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
-      val ps = (vps map transform) ++ (bps map transform)
-      List(Definition.Def(sym, BlockLit(ps, transform(body))))
+      List(Definition.Def(sym, BlockLit(vps map transform, bps map transform, transform(body))))
 
     case d @ source.DataDef(id, _, ctors) =>
       List(Data(d.symbol, ctors.map { c => c.symbol }))
@@ -78,7 +77,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case f @ source.ExternDef(pure, id, tps, vps, bps, ret, body) =>
       val sym = f.symbol
-      List(Extern.Def(sym, Context.functionTypeOf(sym), (vps map transform) ++ (bps map transform), body))
+      List(Extern.Def(sym, Context.functionTypeOf(sym), vps map transform, bps map transform, body))
 
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
@@ -110,9 +109,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case source.DefStmt(d, rest) => d match {
       case f @ source.FunDef(id, _, vps, bps, _, body) =>
-        val sym = f.symbol
-        val ps = (vps map transform) ++ (bps map transform)
-        Def(sym, BlockLit(ps, transform(body)), transform(rest))
+        Def(f.symbol, BlockLit(vps map transform, bps map transform, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
         Let(v.symbol, Run(transform(binding)), transform(rest))
@@ -164,7 +161,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
           val vps = vparams map transform
           // currently the operations don't take block params
-          val opBlock: BlockLit = BlockLit(vps, transform(body))
+          val opBlock: BlockLit = BlockLit(vps, Nil, transform(body))
           core.Operation(op.definition, opBlock)
       }))
 
@@ -172,7 +169,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Unbox(transformAsPure(b))
 
     case source.BlockLiteral(tps, vps, bps, body) =>
-      BlockLit((vps map transform) ++ (bps map transform), transform(body))
+      BlockLit(vps map transform, bps map transform, transform(body))
 
     case _ =>
       transformUnbox(tree)
@@ -218,7 +215,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loopName = TmpBlock()
       val loopCall = Stmt.App(BlockVar(loopName), Nil, Nil)
 
-      val loop = Block.BlockLit(Nil,
+      val loop = Block.BlockLit(Nil, Nil,
         insertBindings {
           Stmt.If(transformAsPure(cond),
             Stmt.Val(TmpValue(), transform(body), loopCall),
@@ -247,7 +244,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         val cap = h.capability.get.symbol
         BlockParam(cap)
       }
-      val body = BlockLit(caps, transform(prog))
+      val body = BlockLit(Nil, caps, transform(prog))
 
       // to obtain a canonical ordering of operation clauses, we use the definition ordering
       def transformHandler: source.Handler => core.Implementation = {
@@ -256,13 +253,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
           Implementation(h.definition, h.definition.ops.map(clauses.apply).map {
             case op @ source.OpClause(id, tps, vps, ret, body, resume) =>
-              val ps = vps map transform
-
               // introduce a block parameter for resume
               val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
               val resumeParam = BlockParam(resumeSymbol)
 
-              val opBlock: BlockLit = BlockLit(ps :+ resumeParam, transform(body))
+              val opBlock: BlockLit = BlockLit(vps map transform, List(resumeParam), transform(body))
               core.Operation(op.definition, opBlock)
           })
       }
@@ -276,8 +271,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case b: SelfParam => builtins.TRegion
         case _ => Context.panic("Continuations cannot be regions")
       }
-      val cap = core.BlockParam(sym, transform(tpe))
-      Context.bind(Region(BlockLit(List(cap), transform(body))))
+      val cap: core.BlockParam = core.BlockParam(sym, transform(tpe))
+      Context.bind(Region(BlockLit(Nil, List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Hole)
@@ -399,7 +394,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
     val params = boundVars(clause.pattern).map { p => (p, transform(Context.valueTypeOf(p))) }
     val body = transform(clause.body)
-    val blockLit = BlockLit(params.map(core.ValueParam.apply), body)
+    val blockLit = BlockLit(params.map(core.ValueParam.apply), Nil, body)
     val returnType = Context.inferredTypeOf(clause.body)
 
     ??? // TODO construct core.BlockType
@@ -480,8 +475,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val branches = variants.toList.map { v =>
       // TODO only add defaultVar as `self`, if it is free in the body.
       val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
-      val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe) }
-      val blockLit: BlockLit = BlockLit(params, body)
+      val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
+      val blockLit: BlockLit = BlockLit(params, Nil, body)
       (v, blockLit)
     }
 
