@@ -1,5 +1,6 @@
 package effekt.llvm
 
+import scala.collection.mutable
 import effekt.llvm.Operand.LocalReference
 import effekt.machine
 import effekt.machine.analysis.*
@@ -420,6 +421,24 @@ object Transformer {
     }
   }
 
+  def getEraser(environment: machine.Environment)(using C: ModuleContext): Operand = {
+    val types = environment.map{ _.tpe };
+    val freshEnvironment = environment.map{
+      case machine.Variable(name, tpe) => machine.Variable(freshName(name), tpe)
+    };
+    val eraser = ConstantGlobal(eraserType, freshName("eraser"));
+
+    C.erasers.getOrElseUpdate(types, {
+      defineFunction(eraser.name, List(Parameter(envType, "env"))) {
+        // TODO avoid unnecessary loads
+        loadEnvironmentAt(LocalReference(envType, "env"), freshEnvironment);
+        eraseValues(freshEnvironment, Set());
+        RetVoid()
+      };
+      eraser
+    });
+  }
+
   def produceObject(environment: machine.Environment, freeInBody: Set[machine.Variable])(using ModuleContext, FunctionContext, BlockContext): Operand = {
     if (environment.isEmpty) {
       ConstantNull(objType)
@@ -427,15 +446,7 @@ object Transformer {
       val obj = LocalReference(objType, freshName("obj"));
       val env = LocalReference(envType, freshName("env"));
       val size = ConstantInt(environmentSize(environment));
-      val eraser = ConstantGlobal(eraserType, freshName("eraser"));
-
-      //TODO cache eraser based on environment
-      defineFunction(eraser.name, List(Parameter(envType, "env"))) {
-        // TODO avoid unnecessary loads
-        loadEnvironmentAt(LocalReference(envType, "env"), environment);
-        eraseValues(environment, Set());
-        RetVoid()
-      }
+      val eraser = getEraser(environment)
 
       emit(Call(obj.name, objType, newObject, List(eraser, size)));
       emit(Call(env.name, envType, objectEnvironment, List(obj)));
@@ -653,6 +664,7 @@ object Transformer {
   class ModuleContext() {
     var counter = 0;
     var definitions: List[Definition] = List();
+    val erasers = mutable.HashMap[List[machine.Type], Operand]();
   }
 
   def emit(definition: Definition)(using C: ModuleContext) =
