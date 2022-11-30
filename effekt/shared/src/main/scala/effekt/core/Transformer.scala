@@ -287,7 +287,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
       val cap = core.BlockParam(sym, transform(tpe))
       val answerType = Context.inferredTypeOf(tree)
-      Context.bind(answerType, Region(BlockLit(List(cap), transform(body)), answerType))
+      Context.bind(answerType, Region(BlockLit(List(cap), transform(body))))
 
     case source.Hole(stmts) =>
       Context.bind(Context.inferredTypeOf(tree), Hole)

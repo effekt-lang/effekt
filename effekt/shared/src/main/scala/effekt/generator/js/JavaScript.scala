@@ -166,7 +166,7 @@ object JavaScript extends Backend {
     case core.Try(body, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
-    case core.Region(body, _) =>
+    case core.Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
 
     case core.Hole =>

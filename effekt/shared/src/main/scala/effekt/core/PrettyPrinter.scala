@@ -128,7 +128,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case State(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 
-    case Region(body, _) =>
+    case Region(body) =>
       "region" <+> toDoc(body)
 
     case Match(sc, clauses, default) =>

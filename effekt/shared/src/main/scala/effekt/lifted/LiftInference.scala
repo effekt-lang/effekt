@@ -99,7 +99,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Try(_, _) => Context.panic("Should not happen. Handle always take block literals as body.")
 
     // [[ region { {cap}... => s } ]] = region { [ev]{cap}... => s }
-    case core.Region(core.BlockLit(params, body), tpe) =>
+    case core.Region(core.BlockLit(params, body)) =>
       var environment = env
 
       // evidence for the region body itself
@@ -114,9 +114,9 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
           transform(p)
         case _ => Context.panic("Should not happen. Body of regions only abstract over block parameters")
       }
-      Region(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, Context)), tpe)
+      Region(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, Context)), body.tpe)
 
-    case core.Region(_, _) => Context.panic("Should not happen. Regions always take block literals as body.")
+    case core.Region(_) => Context.panic("Should not happen. Regions always take block literals as body.")
 
     case core.App(b: core.Block, targs, args: List[core.Argument]) =>
 

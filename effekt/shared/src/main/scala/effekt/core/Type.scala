@@ -153,7 +153,7 @@ object Type {
 
     case Stmt.State(id, init, region, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
-    case Stmt.Region(body, answerType) => body.returnType
+    case Stmt.Region(body) => body.returnType
 
     case Stmt.Hole => TBottom
   }
@@ -178,7 +178,7 @@ object Type {
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.State(id, init, region, body) => Set(region) ++ body.capt
     case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
-    case Stmt.Region(body, answerType) => body.capt
+    case Stmt.Region(body) => body.capt
     case Stmt.Hole => Set.empty
   }
 

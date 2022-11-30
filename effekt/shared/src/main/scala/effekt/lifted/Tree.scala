@@ -93,7 +93,7 @@ case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], defaul
 // Effects
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
 case class Try(body: Block, answerType: core.ValueType, handler: List[Implementation]) extends Stmt
-case class Region(body: Block, answerType: ValueType) extends Stmt
+case class Region(body: Block, answerType: core.ValueType) extends Stmt
 
 // Others
 case object Hole extends Stmt
