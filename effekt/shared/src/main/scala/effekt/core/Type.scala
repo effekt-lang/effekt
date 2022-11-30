@@ -99,8 +99,8 @@ object Type {
     case Block.BlockLit(/* tparams, cparams, */ params, body) =>
       val tparams = Nil // TODO
       val cparams = Nil // TODO
-      val vparams = params.collect { case p: Param.ValueParam => ??? : ValueType /*p.tpe*/ }
-      val bparams = params.collect { case b: Param.BlockParam => ??? : BlockType }
+      val vparams = params.collect { case p: Param.ValueParam => p.tpe }
+      val bparams = params.collect { case p: Param.BlockParam => p.tpe }
 
       BlockType.Function(tparams, cparams, vparams, bparams, body.tpe)
     case Block.Member(b, field /*, tpe */) => ??? // tpe
@@ -187,7 +187,7 @@ object Type {
       instantiate(callee.functionType, ??? /* targs */, Nil).result
     case Run(s, tpe) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
-    case Pure.Literal(value, tpe) => ??? //tpe
+    case Pure.Literal(value, tpe) => tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, ??? /*targs*/ , Nil).result
     case Pure.Select(target, field /*, annotatedType*/) => ??? // annotatedType
     case Pure.Box(block /*, capt*/) => ValueType.Boxed(block.tpe, ???)
