@@ -21,9 +21,9 @@ case class BasicBlock(name: String, instructions: List[Instruction], terminator:
 enum Instruction {
   case Call(result: String, resultType: Type, function: Operand, arguments: List[Operand])
   case TailCall(function: Operand, arguments: List[Operand])
-  case Load(result: String, address: Operand)
+  case Load(result: String, tpe: Type, address: Operand)
   case Store(address: Operand, value: Operand)
-  case GetElementPtr(result: String, address: Operand, indices: List[Int])
+  case GetElementPtr(result: String, tpe: Type, address: Operand, indices: List[Int])
   case BitCast(result: String, operand: Operand, typ: Type)
   case Add(result: String, operand0: Operand, operand1: Operand)
   case FAdd(result: String, operand0: Operand, operand1: Operand)
@@ -65,7 +65,7 @@ enum Type {
   case IntegerType1()
   case IntegerType8() // required for `void*` (which only exists as `i8*` in LLVM) and `char*`
   case IntegerType64()
-  case PointerType(pointerReferent: Type)
+  case PointerType()
   case ArrayType(size: Int, of: Type)
   case StructureType(elementTypes: List[Type])
   case FunctionType(resultType: Type, argumentTypes: List[Type])
