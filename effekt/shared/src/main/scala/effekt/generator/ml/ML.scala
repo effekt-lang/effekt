@@ -28,12 +28,11 @@ object ML extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, dependencies: List[CoreTransformed])(using C: Context): Option[Compiled] = {
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Option[Compiled] = {
     val mainSymbol = C.checkMain(main.mod)
-    val deps = dependencies.flatMap { dep => compile(dep) }
 
     LiftInference(main).map { lifted =>
-      val mlModule = compilationUnit(mainSymbol, lifted.mod, lifted.core, deps)
+      val mlModule = compilationUnit(mainSymbol, lifted.core)
       val result = ml.PrettyPrinter.pretty(ml.PrettyPrinter.toDoc(mlModule), 100)
       val mainFile = path(main.mod)
       Compiled(mainFile, Map(mainFile -> result))
@@ -54,9 +53,8 @@ object ML extends Backend {
   private def compile(in: CoreTransformed)(using Context): List[ml.Binding] =
     LiftInference(in).toList.flatMap { lifted => toML(lifted.core) }
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl, dependencies: List[ml.Binding])(implicit C: Context): ml.Toplevel = {
-    val defs = toML(core)
-    ml.Toplevel(dependencies ++ defs, runMain(name(mainSymbol)))
+  def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(implicit C: Context): ml.Toplevel = {
+    ml.Toplevel(toML(core), runMain(name(mainSymbol)))
   }
 
   /**
