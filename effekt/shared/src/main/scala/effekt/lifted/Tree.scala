@@ -31,13 +31,13 @@ export Decl.*
  * FFI external definitions
  */
 enum Extern {
-  case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
+  case Def(id: Symbol, tpe: FunctionType, params: List[Param], body: String)
   case Include(contents: String)
 }
 
 enum Definition {
-  case Def(id: BlockSymbol, tpe: core.BlockType, block: Block)
-  case Let(id: ValueSymbol, tpe: core.ValueType, binding: Expr)
+  case Def(id: Symbol, tpe: core.BlockType, block: Block)
+  case Let(id: Symbol, tpe: core.ValueType, binding: Expr)
 }
 
 /**
@@ -49,7 +49,7 @@ sealed trait Argument extends Tree
  * Expressions
  */
 sealed trait Expr extends Argument
-case class ValueVar(id: ValueSymbol) extends Expr
+case class ValueVar(id: Symbol) extends Expr
 
 case class Literal(value: Any, tpe: core.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
@@ -61,16 +61,16 @@ case class Run(s: Stmt, tpe: core.ValueType) extends Expr
  * Blocks
  */
 sealed trait Param extends Tree { def id: Symbol }
-case class ValueParam(id: ValueSymbol, tpe: core.ValueType) extends Param
-case class BlockParam(id: BlockSymbol, tpe: core.BlockType) extends Param
+case class ValueParam(id: Symbol, tpe: core.ValueType) extends Param
+case class BlockParam(id: Symbol, tpe: core.BlockType) extends Param
 case class EvidenceParam(id: EvidenceSymbol) extends Param
 
 sealed trait Block extends Argument
-case class BlockVar(id: BlockSymbol) extends Block
+case class BlockVar(id: Symbol) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: TermSymbol) extends Block
+case class Member(b: Block, field: Symbol) extends Block
 case class Unbox(e: Expr) extends Block
 case class New(impl: Implementation) extends Block
 
@@ -83,7 +83,7 @@ case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
 
 // Fine-grain CBV
 case class Return(e: Expr) extends Stmt
-case class Val(id: ValueSymbol, tpe: core.ValueType, binding: Stmt, body: Stmt) extends Stmt
+case class Val(id: Symbol, tpe: core.ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 // Local Control Flow

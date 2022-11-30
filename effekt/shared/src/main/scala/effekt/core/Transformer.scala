@@ -243,7 +243,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Match(sc, cs) =>
       // (1) Bind scrutinee and all clauses so we do not have to deal with sharing on demand.
       val scrutinee: ValueVar = Context.bind(Context.inferredTypeOf(sc), transformAsPure(sc))
-      val clauses = cs.map(c => preprocess(scrutinee.id, c))
+      val clauses = cs.map(c => preprocess(scrutinee, c))
       val compiledMatch = Context.at(tree) { compileMatch(clauses) }
       Context.bind(Context.inferredTypeOf(tree), compiledMatch)
 
@@ -405,24 +405,26 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   //   https://gitlab.com/yorickpeterse/pattern-matching-in-rust/-/tree/main/jacobs2021
 
   // case pats => label(args...)
-  private case class Clause(patterns: Map[ValueSymbol, source.MatchPattern], label: BlockSymbol, args: List[ValueSymbol])
+  private case class Clause(patterns: Map[ValueVar, source.MatchPattern], label: BlockVar, args: List[ValueVar])
 
   // Uses the bind effect to bind the right hand sides of clauses!
-  private def preprocess(sc: ValueSymbol, clause: source.MatchClause)(using Context): Clause = {
+  private def preprocess(sc: ValueVar, clause: source.MatchClause)(using Context): Clause = {
     def boundVars(p: source.MatchPattern): List[ValueParam] = p match {
       case p @ source.AnyPattern(id) => List(p.symbol)
       case source.TagPattern(id, patterns) => patterns.flatMap(boundVars)
       case _ => Nil
     }
-    val params = boundVars(clause.pattern).map { p => (p, Context.valueTypeOf(p)) }
+    val params = boundVars(clause.pattern).map { p => (p, transform(Context.valueTypeOf(p))) }
     val body = transform(clause.body)
-    val blockLit = BlockLit(params.map { case (p, tpe) => core.ValueParam(p, transform(tpe)) }, body)
+    val blockLit = BlockLit(params.map(core.ValueParam.apply), body)
     val returnType = Context.inferredTypeOf(clause.body)
-    val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
+
+    ??? // TODO construct core.BlockType
+    // val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
 
     // TODO Do we also need to annotate the capture???
-    val joinpoint = Context.bind(blockTpe, blockLit)
-    Clause(Map(sc -> clause.pattern), joinpoint.id, params.map { case (p, _) => p })
+    val joinpoint = Context.bind(???, blockLit)
+    Clause(Map(sc -> clause.pattern), joinpoint, params.map(core.ValueVar.apply))
   }
 
   /**
@@ -437,8 +439,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val normalizedClauses = clauses.map(normalize)
 
-    def jumpToBranch(target: BlockSymbol, args: List[ValueSymbol]) =
-      core.App(BlockVar(target), Nil, args.map(a => ValueVar(a)))
+    def jumpToBranch(target: BlockVar, args: List[ValueVar]) =
+      core.App(target, Nil, args)
 
     // (1) Check whether we are already successful
     val Clause(patterns, target, args) = normalizedClauses.head
@@ -468,12 +470,15 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     def addDefault(cl: Clause): Unit =
       defaults = defaults :+ cl
 
-    def freshFields(c: Constructor) = c.fields.map { f =>
+    def freshFields(c: Constructor): List[core.ValueVar] = c.fields.map { f =>
       val tmp = TmpValue.apply()
+      // TODO maybe assignType is not necessary here anymore.
       Context.assignType(tmp, f.returnType)
-      tmp
+      // TODO We need to perform substitution here, no?
+      //  or we need to annotate the types in typer.
+      core.ValueVar(tmp, transform(f.returnType))
     }
-    val varsFor: Map[Constructor, List[TmpValue]] = variants.map { v => v -> freshFields(v) }.toMap
+    val varsFor: Map[Constructor, List[core.ValueVar]] = variants.map { v => v -> freshFields(v) }.toMap
 
     normalizedClauses.foreach {
       case c @ Clause(patterns, target, args) => patterns.get(splitVar) match {
@@ -494,14 +499,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val branches = variants.toList.map { v =>
       // TODO only add defaultVar as `self`, if it is free in the body.
       val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
-      val params = varsFor(v).map { tmp => ValueParam(tmp) }
+      val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe) }
       val blockLit: BlockLit = BlockLit(params, body)
       (v, blockLit)
     }
 
     val default = if defaults.isEmpty then None else Some(compileMatch(defaults))
 
-    core.Match(ValueVar(splitVar), branches, default)
+    core.Match(splitVar, branches, default)
   }
 
   /**
@@ -514,7 +519,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val tagPatterns = patterns.collect { case (v, p: source.TagPattern) => v -> p }
 
     // HERE WE COULD GATHER AN EXPLICIT SUBSTITUTION ON THE RHS
-    Clause(tagPatterns, target, args.map(v => substitution.getOrElse(v, v)))
+    Clause(tagPatterns, target, args.map(v => substitution.getOrElse(v.id, v)))
   }
 
 

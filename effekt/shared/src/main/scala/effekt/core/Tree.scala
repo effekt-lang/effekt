@@ -78,14 +78,14 @@ export Declaration.*
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
+  case Def(id: Symbol, tpe: FunctionType, params: List[Param], body: String)
   case Include(contents: String)
 }
 
 
 enum Definition {
-  case Def(id: BlockSymbol, block: Block)
-  case Let(id: ValueSymbol, binding: Expr) // PURE on the toplevel?
+  case Def(id: Symbol, block: Block)
+  case Let(id: Symbol, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -101,10 +101,10 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
   case other => Scope(List(definition), other)
 }
 
-def Def(id: BlockSymbol, block: Block, rest: Stmt) =
+def Def(id: Symbol, block: Block, rest: Stmt) =
   addToScope(Definition.Def(id, block), rest)
 
-def Let(id: ValueSymbol, binding: Expr, rest: Stmt) =
+def Let(id: Symbol, binding: Expr, rest: Stmt) =
   addToScope(Definition.Let(id,  binding), rest)
 
 /**
@@ -147,7 +147,7 @@ case class Run(s: Stmt) extends Expr
  * -------------------------------------------
  */
 enum Pure extends Expr with Argument {
-  case ValueVar(id: ValueSymbol, annotatedType: ValueType) extends Pure
+  case ValueVar(id: Symbol, annotatedType: ValueType) extends Pure
 
   case Literal(value: Any, annotatedType: ValueType) extends Pure
 
@@ -174,9 +174,9 @@ export Pure.*
  * -------------------------------------------
  */
 enum Block extends Argument {
-  case BlockVar(id: BlockSymbol, annotatedTpe: BlockType, annotatedCapt: Captures)
+  case BlockVar(id: Symbol, annotatedTpe: BlockType, annotatedCapt: Captures)
   case BlockLit(params: List[Param], body: Stmt)
-  case Member(block: Block, field: TermSymbol)
+  case Member(block: Block, field: symbols.Symbol)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
@@ -187,10 +187,10 @@ enum Block extends Argument {
 export Block.*
 
 enum Param extends Tree {
-  def id: TermSymbol
+  def id: Symbol
 
-  case ValueParam(id: ValueSymbol, tpe: ValueType)
-  case BlockParam(id: BlockSymbol, tpe: BlockType)
+  case ValueParam(id: Symbol, tpe: ValueType)
+  case BlockParam(id: Symbol, tpe: BlockType)
 }
 export Param.*
 
@@ -219,7 +219,7 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: Pure)
-  case Val(id: ValueSymbol, binding: Stmt, body: Stmt)
+  case Val(id: Symbol, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[Type], args: List[Argument])
 
   // Local Control Flow

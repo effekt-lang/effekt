@@ -340,17 +340,17 @@ object JavaScript extends Backend {
    *
    * Necessary for generating the linker code (separate compilation for the web)
    */
-  private def usedImports(input: CoreTransformed): Map[Module, Set[TermSymbol]] = {
+  private def usedImports(input: CoreTransformed): Map[Module, Set[Symbol]] = {
     val dependencies = input.mod.dependencies
 
     // Create a mapping Termsymbol -> Module
     val publicDependencySymbols = dependencies.flatMap {
-      m => m.terms.values.flatten.map(sym => sym -> m)
+      m => m.terms.values.flatten.map(sym => (sym : Symbol) -> m)
     }.toMap
 
-    var usedFrom: Map[Module, Set[TermSymbol]] = Map.empty
+    var usedFrom: Map[Module, Set[Symbol]] = Map.empty
 
-    def register(m: Module, sym: TermSymbol) = {
+    def register(m: Module, sym: Symbol) = {
       val before = usedFrom.getOrElse(m, Set.empty)
       usedFrom = usedFrom.updated(m, before + sym)
     }

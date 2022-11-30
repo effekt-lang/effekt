@@ -438,14 +438,14 @@ object Transformer {
     C.abort(message)
 
   class BlocksParamsContext() {
-    var blocksParams: Map[BlockSymbol, Environment] = Map()
+    var blocksParams: Map[Symbol, Environment] = Map()
   }
 
-  def noteBlockParams(id: BlockSymbol, params: Environment)(using BC: BlocksParamsContext): Unit = {
+  def noteBlockParams(id: Symbol, params: Environment)(using BC: BlocksParamsContext): Unit = {
     BC.blocksParams = BC.blocksParams + (id -> params)
   }
 
-  def getBlocksParams(id: BlockSymbol)(using BC: BlocksParamsContext): Environment = {
+  def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = {
     // TODO what if this is not found?
     BC.blocksParams(id)
   }
