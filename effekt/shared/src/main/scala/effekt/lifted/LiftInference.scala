@@ -158,7 +158,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Literal(value, tpe) =>
       Literal(value, tpe)
 
-    case core.ValueVar(sym) =>
+    case core.ValueVar(sym, tpe) =>
       ValueVar(sym)
 
     case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>

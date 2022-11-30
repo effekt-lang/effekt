@@ -438,7 +438,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val normalizedClauses = clauses.map(normalize)
 
     def jumpToBranch(target: BlockSymbol, args: List[ValueSymbol]) =
-      core.App(core.BlockVar(target), Nil, args.map(a => core.ValueVar(a)))
+      core.App(core.BlockVar(target), Nil, args.map(a => ValueVar(a)))
 
     // (1) Check whether we are already successful
     val Clause(patterns, target, args) = normalizedClauses.head
@@ -528,6 +528,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def BlockParam(id: BlockSymbol)(using Context): core.BlockParam =
     core.BlockParam(id, transform(Context.blockTypeOf(id)))
 
+  def ValueVar(id: ValueSymbol)(using Context): core.ValueVar =
+    core.ValueVar(id, transform(Context.valueTypeOf(id)))
+
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
     core.Val(id, binding, body)
 
@@ -616,7 +619,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val binding = Binding.Val(x, s)
     bindings += binding
 
-    ValueVar(x)
+    Transformer.ValueVar(x)
   }
 
   private[core] def bind(tpe: symbols.ValueType, s: Expr): ValueVar = {
@@ -628,7 +631,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val binding = Binding.Let(x, s)
     bindings += binding
 
-    ValueVar(x)
+    Transformer.ValueVar(x)
   }
 
   private[core] def bind(tpe: symbols.BlockType, b: Block): BlockVar = {
@@ -657,10 +660,10 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def reifyBindings(body: Stmt, bindings: ListBuffer[Binding]): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
-      case (Binding.Val(x, b), Return(ValueVar(y))) if x == y => b
+      case (Binding.Val(x, b), Return(ValueVar(y, _))) if x == y => b
       case (Binding.Val(x, b), body) => Val(x, b, body)
-      case (Binding.Let(x, Run(s, _)), Return(ValueVar(y))) if x == y => s
-      case (Binding.Let(x, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
+      case (Binding.Let(x, Run(s, _)), Return(ValueVar(y, _))) if x == y => s
+      case (Binding.Let(x, b: Pure), Return(ValueVar(y, _))) if x == y => Return(b)
       case (Binding.Let(x, b), body) => Let(x, b, body)
       case (Binding.Def(x, b), body) => Def(x, b, body)
     }

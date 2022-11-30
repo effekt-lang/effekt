@@ -221,7 +221,7 @@ trait ChezScheme {
     case Literal(s: String, _)  => ChezString(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal             => chez.RawValue(l.value.toString)
-    case ValueVar(id)           => chez.Variable(nameRef(id))
+    case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
     case DirectApp(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)

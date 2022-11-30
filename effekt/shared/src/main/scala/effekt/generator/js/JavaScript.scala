@@ -121,7 +121,7 @@ object JavaScript extends Backend {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
-    case ValueVar(id) => nameRef(id)
+    case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
@@ -360,7 +360,7 @@ object JavaScript extends Backend {
       Tree.visit(t) {
         case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
-        case ValueVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+        case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
       }
 

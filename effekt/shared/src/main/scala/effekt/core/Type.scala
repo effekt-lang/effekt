@@ -186,7 +186,7 @@ object Type {
     case DirectApp(callee, targs, vargs) =>
       instantiate(callee.functionType, ??? /* targs */, Nil).result
     case Run(s, tpe) => s.tpe
-    case Pure.ValueVar(id /*, tpe*/) => ??? // tpe
+    case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => ??? //tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, ??? /*targs*/ , Nil).result
     case Pure.Select(target, field /*, annotatedType*/) => ??? // annotatedType

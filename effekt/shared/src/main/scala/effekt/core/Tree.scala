@@ -147,7 +147,7 @@ case class Run(s: Stmt, annotatedType: symbols.ValueType) extends Expr
  * -------------------------------------------
  */
 enum Pure extends Expr with Argument {
-  case ValueVar(id: ValueSymbol) extends Pure
+  case ValueVar(id: ValueSymbol, annotatedType: ValueType) extends Pure
 
   case Literal(value: Any, annotatedType: ValueType) extends Pure
 
