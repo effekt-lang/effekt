@@ -185,7 +185,7 @@ object Type {
   def inferType(expr: Expr): ValueType = expr match {
     case DirectApp(callee, targs, vargs) =>
       instantiate(callee.functionType, ??? /* targs */, Nil).result
-    case Run(s, tpe) => s.tpe
+    case Run(s) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, ??? /*targs*/ , Nil).result
@@ -201,7 +201,7 @@ object Type {
       case p: Pure => Set.empty
       case b: Block => b.capt
     }
-    case Run(s, _) => s.capt
+    case Run(s) => s.capt
     case pure: Pure => Set.empty
   }
 

@@ -173,8 +173,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Box(b) =>
       Box(transform(b))
 
-    case core.Run(s, tpe) =>
-      Run(transform(s), tpe)
+    case core.Run(s) =>
+      Run(transform(s), s.tpe)
   }
 
   /**

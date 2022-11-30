@@ -55,7 +55,7 @@ case class Literal(value: Any, tpe: core.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Box(b: Block) extends Expr
-case class Run(s: Stmt, tpe: ValueType) extends Expr
+case class Run(s: Stmt, tpe: core.ValueType) extends Expr
 
 /**
  * Blocks

@@ -51,8 +51,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(core.Record(rec, rec.constructor.fields))
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-      val tpe = Context.inferredTypeOf(binding)
-      List(Definition.Let(v.symbol, Run(transform(binding), tpe)))
+      List(Definition.Let(v.symbol, Run(transform(binding))))
 
     case v @ source.ValDef(id, _, binding) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
@@ -116,8 +115,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         Def(sym, BlockLit(ps, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
-        val tpe = Context.inferredTypeOf(binding)
-        Let(v.symbol, Run(transform(binding), tpe), transform(rest))
+        Let(v.symbol, Run(transform(binding)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) =>
         Val(v.symbol, transform(binding), transform(rest))
@@ -323,7 +321,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transformAsBlock)
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
-        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs), funTpe.result)
+        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
       } else {
         Context.bind(Context.inferredTypeOf(tree), App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
       }
@@ -361,7 +359,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Field =>
         Context.panic("Should have been translated to a select!")
       case f: BlockSymbol if pureOrIO(f) && bargs.forall { pureOrIO } =>
-        Run(App(BlockVar(f), targs, as), Context.functionTypeOf(f).result)
+        Run(App(BlockVar(f), targs, as))
       case f: BlockSymbol =>
         Context.bind(Context.inferredTypeOf(call), App(BlockVar(f), targs, as))
       case f: ValueSymbol =>
@@ -545,7 +543,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // reduces run-return pairs
     object eliminateReturnRun extends core.Tree.Rewrite {
       override def expr = {
-        case core.Run(core.Return(p), _) => rewrite(p)
+        case core.Run(core.Return(p)) => rewrite(p)
       }
     }
 
@@ -668,7 +666,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
       // optimization: remove unnecessary binds
       case (Binding.Val(x, b), Return(ValueVar(y, _))) if x == y => b
       case (Binding.Val(x, b), body) => Val(x, b, body)
-      case (Binding.Let(x, Run(s, _)), Return(ValueVar(y, _))) if x == y => s
+      case (Binding.Let(x, Run(s)), Return(ValueVar(y, _))) if x == y => s
       case (Binding.Let(x, b: Pure), Return(ValueVar(y, _))) if x == y => Return(b)
       case (Binding.Let(x, b), body) => Let(x, b, body)
       case (Binding.Def(x, b), body) => Def(x, b, body)
