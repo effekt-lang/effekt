@@ -381,19 +381,6 @@ trait AnnotationsDB { self: Context =>
   def inferredCaptureOption(t: source.Tree): Option[symbols.CaptureSet] =
     annotationOption(Annotations.InferredCapture, t)
 
-  // TODO maybe move to TyperOps
-  def assignType(s: Symbol, tpe: BlockType): Unit = s match {
-    case b: BlockSymbol =>
-      annotate(Annotations.BlockType, b, tpe)
-      // annotate(Annotations.Captures, b, capt)
-    case _              => panic(s"Trying to store a block type for non block '${s}'")
-  }
-
-  def assignType(s: Symbol, tpe: ValueType): Unit = s match {
-    case b: ValueSymbol => annotate(Annotations.ValueType, b, tpe)
-    case _              => panic(s"Trying to store a value type for non value '${s}'")
-  }
-
   def annotateResolvedType(tree: source.Type)(tpe: symbols.Type): Unit =
     annotate(Annotations.Type, tree, tpe)
 

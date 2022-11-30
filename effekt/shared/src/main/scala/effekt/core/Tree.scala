@@ -6,6 +6,9 @@ import effekt.symbols.{ BlockSymbol, FunctionType, Constructor, Interface, Opera
 /**
  * Tree structure of programs in our internal core representation.
  *
+ * Core uses [[effekt.symbols.Symbol]] as names. The structure of symbols and the contents
+ * in the DB should not be used after translation to core.
+ *
  * ----------[[ effekt.core.Tree ]]----------
  *
  *   ─ [[ Tree ]]
