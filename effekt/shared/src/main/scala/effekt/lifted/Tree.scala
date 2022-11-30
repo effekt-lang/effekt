@@ -36,8 +36,8 @@ enum Extern {
 }
 
 enum Definition {
-  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
-  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr)
+  case Def(id: BlockSymbol, tpe: core.BlockType, block: Block)
+  case Let(id: ValueSymbol, tpe: core.ValueType, binding: Expr)
 }
 
 /**
@@ -51,7 +51,7 @@ sealed trait Argument extends Tree
 sealed trait Expr extends Argument
 case class ValueVar(id: ValueSymbol) extends Expr
 
-case class Literal(value: Any, tpe: symbols.ValueType) extends Expr
+case class Literal(value: Any, tpe: core.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 case class Select(target: Expr, field: Symbol) extends Expr
 case class Box(b: Block) extends Expr
@@ -61,8 +61,8 @@ case class Run(s: Stmt, tpe: ValueType) extends Expr
  * Blocks
  */
 sealed trait Param extends Tree { def id: Symbol }
-case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
-case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
+case class ValueParam(id: ValueSymbol, tpe: core.ValueType) extends Param
+case class BlockParam(id: BlockSymbol, tpe: core.BlockType) extends Param
 case class EvidenceParam(id: EvidenceSymbol) extends Param
 
 sealed trait Block extends Argument
@@ -83,7 +83,7 @@ case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
 
 // Fine-grain CBV
 case class Return(e: Expr) extends Stmt
-case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
+case class Val(id: ValueSymbol, tpe: core.ValueType, binding: Stmt, body: Stmt) extends Stmt
 case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
 
 // Local Control Flow
@@ -92,7 +92,7 @@ case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], defaul
 
 // Effects
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
-case class Try(body: Block, answerType: ValueType, handler: List[Implementation]) extends Stmt
+case class Try(body: Block, answerType: core.ValueType, handler: List[Implementation]) extends Stmt
 case class Region(body: Block, answerType: ValueType) extends Stmt
 
 // Others

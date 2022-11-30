@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol, ValueType }
+import effekt.symbols.{ BlockSymbol, FunctionType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -84,8 +84,8 @@ enum Extern extends Tree {
 
 
 enum Definition {
-  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
-  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr) // PURE on the toplevel?
+  case Def(id: BlockSymbol, block: Block)
+  case Let(id: ValueSymbol, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -101,11 +101,11 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
   case other => Scope(List(definition), other)
 }
 
-def Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) =
-  addToScope(Definition.Def(id, tpe, block), rest)
+def Def(id: BlockSymbol, block: Block, rest: Stmt) =
+  addToScope(Definition.Def(id, block), rest)
 
-def Let(id: ValueSymbol, tpe: ValueType, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id, tpe, binding), rest)
+def Let(id: ValueSymbol, binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(id,  binding), rest)
 
 /**
  * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
@@ -129,7 +129,7 @@ sealed trait Expr extends Tree {
 case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt, annotatedType: ValueType) extends Expr
+case class Run(s: Stmt, annotatedType: symbols.ValueType) extends Expr
 
 
 /**
@@ -149,7 +149,7 @@ case class Run(s: Stmt, annotatedType: ValueType) extends Expr
 enum Pure extends Expr with Argument {
   case ValueVar(id: ValueSymbol) extends Pure
 
-  case Literal(value: Any, annotatedType: symbols.ValueType) extends Pure
+  case Literal(value: Any, annotatedType: ValueType) extends Pure
 
   // invariant, block b is pure.
   case PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
@@ -219,7 +219,7 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: Pure)
-  case Val(id: ValueSymbol, annotatedType: ValueType, binding: Stmt, body: Stmt)
+  case Val(id: ValueSymbol, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[Type], args: List[Argument])
 
   // Local Control Flow
@@ -228,8 +228,8 @@ enum Stmt extends Tree {
 
   // Effects
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?
-  case Try(body: Block, answerType: ValueType, handlers: List[Implementation])
-  case Region(body: Block, answerType: ValueType)
+  case Try(body: Block, handlers: List[Implementation])
+  case Region(body: Block, answerType: symbols.ValueType)
 
   // Others
   case Hole
@@ -309,18 +309,18 @@ object Tree {
 
     def rewrite(d: Definition): Definition = d match {
       case d if defn.isDefinedAt(d) => defn(d)
-      case Definition.Def(id, tpe, block) =>
-        Definition.Def(id, tpe, rewrite(block))
-      case Definition.Let(id, tpe, binding) =>
-        Definition.Let(id, tpe, rewrite(binding))
+      case Definition.Def(id, block) =>
+        Definition.Def(id, rewrite(block))
+      case Definition.Let(id, binding) =>
+        Definition.Let(id, rewrite(binding))
     }
 
     def rewrite(e: Stmt): Stmt =
       e match {
         case e if stmt.isDefinedAt(e) => stmt(e)
         case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
-        case Val(id, tpe, binding, body) =>
-          Val(id, tpe, rewrite(binding), rewrite(body))
+        case Val(id, binding, body) =>
+          Val(id, rewrite(binding), rewrite(body))
         case App(b, targs, args) =>
           App(rewrite(b), targs, args map rewrite)
         case If(cond, thn, els) =>
@@ -329,8 +329,8 @@ object Tree {
           Return(rewrite(e))
         case State(id, init, reg, body) =>
           State(id, rewrite(init), reg, rewrite(body))
-        case Try(body, tpe, handler) =>
-          Try(rewrite(body), tpe, handler map rewrite)
+        case Try(body, handler) =>
+          Try(rewrite(body), handler map rewrite)
         case Region(body, tpe) =>
           Region(rewrite(body), tpe)
         case Match(scrutinee, clauses, default) =>

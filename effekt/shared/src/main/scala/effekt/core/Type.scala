@@ -41,7 +41,9 @@ enum BlockType extends Type {
 object Type {
 
   // The subtyping lattice
-  val Bottom = ValueType.Extern(builtins.BottomSymbol, Nil)
+  val TBottom = ValueType.Extern(builtins.BottomSymbol, Nil)
+  val TUnit = ValueType.Extern(builtins.UnitSymbol, Nil)
+
   def join(tpe1: ValueType, tpe2: ValueType): ValueType = tpe1 // TODO implement properly
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
@@ -109,10 +111,10 @@ object Type {
     case Block.BlockVar(id /*, tpe, capt */ ) => ??? // capt
     case Block.BlockLit(/* tparams, cparams, */ params, body) =>
       // body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
-      ???
-    case Block.Member(block, field) => ???
-    case Block.Unbox(pure) => ???
-    case Block.New(impl) => ???
+      body.capt // -- cparams
+    case Block.Member(block, field) => block.capt
+    case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].capt
+    case Block.New(impl) => impl.capt
   }
 
   /**
@@ -138,7 +140,7 @@ object Type {
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
-    case Stmt.Val(id, annotatedType, binding, body) => body.tpe
+    case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, args) =>
       val bargs = args.collect { case b: Block => b }
       val realTargs = ??? // targs
@@ -147,18 +149,18 @@ object Type {
     case Stmt.If(cond, thn, els) => join(thn.tpe, els.tpe)
     case Stmt.Match(scrutinee, clauses, default) =>
       val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
-      allTypes.fold(Bottom)(join)
+      allTypes.fold(TBottom)(join)
 
     case Stmt.State(id, init, region, body) => body.tpe
-    case Stmt.Try(body, answerType, handler) => body.returnType
+    case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body, answerType) => body.returnType
 
-    case Stmt.Hole => Bottom
+    case Stmt.Hole => TBottom
   }
 
   def inferCapt(defn: Definition): Captures = defn match {
-    case Definition.Def(id, tpe, block) => block.capt
-    case Definition.Let(id, tpe, binding) => binding.capt
+    case Definition.Def(id, block) => block.capt
+    case Definition.Let(id, binding) => binding.capt
   }
 
   def inferCapt(arg: Argument): Captures = arg match {
@@ -170,12 +172,12 @@ object Type {
     case Stmt.Scope(definitions, body) =>
       definitions.foldLeft(body.capt)(_ ++ _.capt)
     case Stmt.Return(expr) => Set.empty
-    case Stmt.Val(id, annotatedType, binding, body) => binding.capt ++ body.capt
+    case Stmt.Val(id, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, args) => callee.capt ++ args.flatMap(inferCapt).toSet
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.State(id, init, region, body) => Set(region) ++ body.capt
-    case Stmt.Try(body, answerType, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
+    case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
     case Stmt.Region(body, answerType) => body.capt
     case Stmt.Hole => Set.empty
   }

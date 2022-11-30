@@ -89,7 +89,7 @@ object Transformer {
           case (lifted.Definition.Def(id, tpe, block @ lifted.New(impl)), rest) =>
             // TODO freeParams?
             // TODO deal with evidenve?
-            val symbols.InterfaceType(symbols.Interface(_, _, interfaceOps), _) = tpe: @unchecked
+            val core.BlockType.Interface(symbols.Interface(_, _, interfaceOps), _) = tpe: @unchecked
             val implTransformed = interfaceOps.map({ op =>
               impl.operations.find(_._1 == op).get
             }).map({
@@ -391,6 +391,9 @@ object Transformer {
       case lifted.EvidenceParam(name) =>
         Variable(transform(name), builtins.Evidence)
     }
+
+  def transform(tpe: core.ValueType)(using Context): Type = ???
+  def transform(tpe: core.BlockType)(using Context): Type = ???
 
   def transform(tpe: symbols.Type)(using Context): Type = tpe match {
 

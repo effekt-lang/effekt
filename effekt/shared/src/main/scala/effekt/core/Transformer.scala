@@ -41,7 +41,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.FunDef(id, _, vps, bps, _, body) =>
       val sym = f.symbol
       val ps = (vps map transform) ++ (bps map transform)
-      List(Definition.Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body))))
+      List(Definition.Def(sym, BlockLit(ps, transform(body))))
 
     case d @ source.DataDef(id, _, ctors) =>
       List(Data(d.symbol, ctors.map { c => c.symbol }))
@@ -52,7 +52,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       val tpe = Context.inferredTypeOf(binding)
-      List(Definition.Let(v.symbol, tpe, Run(transform(binding), tpe)))
+      List(Definition.Let(v.symbol, Run(transform(binding), tpe)))
 
     case v @ source.ValDef(id, _, binding) =>
       Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
@@ -60,14 +60,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.DefDef(id, annot, binding) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
-        Definition.Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding))
+        Definition.Def(sym, transformAsBlock(binding))
       }
 
       // convert binding into Definition.
       val additionalDefinitions = bindings.toList.map {
-        case Binding.Let(name, tpe, binding) => Definition.Let(name, tpe, binding)
-        case Binding.Def(name, tpe, binding) => Definition.Def(name, tpe, binding)
-        case Binding.Val(name, tpe, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
+        case Binding.Let(name, binding) => Definition.Let(name, binding)
+        case Binding.Def(name, binding) => Definition.Def(name, binding)
+        case Binding.Val(name, binding) => Context.at(d) { Context.abort("Effectful bindings not allowed on the toplevel") }
       }
       additionalDefinitions ++ List(definition)
 
@@ -93,7 +93,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // { e; stmt } --> { let _ = e; stmt }
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
-      val let = Let(freshWildcardFor(e), Context.inferredTypeOf(e), expr, transform(rest))
+      val let = Let(freshWildcardFor(e), expr, transform(rest))
       if (bs.isEmpty) { let }
       else { Context.reifyBindings(let, bs) }
 
@@ -113,11 +113,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f @ source.FunDef(id, _, vps, bps, _, body) =>
         val sym = f.symbol
         val ps = (vps map transform) ++ (bps map transform)
-        Def(sym, Context.blockTypeOf(sym), BlockLit(ps, transform(body)), transform(rest))
+        Def(sym, BlockLit(ps, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
         val tpe = Context.inferredTypeOf(binding)
-        Let(v.symbol, tpe, Run(transform(binding), tpe), transform(rest))
+        Let(v.symbol, Run(transform(binding), tpe), transform(rest))
 
       case v @ source.ValDef(id, _, binding) =>
         Val(v.symbol, transform(binding), transform(rest))
@@ -125,7 +125,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol
         insertBindings {
-          Def(sym, Context.blockTypeOf(sym), transformAsBlock(binding), transform(rest))
+          Def(sym, transformAsBlock(binding), transform(rest))
         }
 
       case v @ source.VarDef(id, _, reg, binding) =>
@@ -193,7 +193,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: BlockSymbol => transformBox(tree)
     }
 
-    case source.Literal(value, tpe) => Literal(value, tpe)
+    case source.Literal(value, tpe) => Literal(value, transform(tpe))
 
     case s @ source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), s.definition)
@@ -228,8 +228,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loop = Block.BlockLit(Nil,
         insertBindings {
           Stmt.If(transformAsPure(cond),
-            Stmt.Val(TmpValue(), Context.inferredTypeOf(body), transform(body), loopCall),
-            Return(Literal((), builtins.TUnit)))
+            Stmt.Val(TmpValue(), transform(body), loopCall),
+            Return(Literal((), core.Type.TUnit)))
         }
       )
 
@@ -252,7 +252,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.TryHandle(prog, handlers) =>
       val caps = handlers.map { h =>
         val cap = h.capability.get.symbol
-        core.BlockParam(cap, cap.tpe)
+        BlockParam(cap)
       }
       val body = BlockLit(caps, transform(prog))
 
@@ -266,7 +266,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
               val ps = vps map transform
 
               // introduce a block parameter for resume
-              val resumeParam = BlockParam(resume.symbol.asInstanceOf[BlockSymbol])
+              val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
+              val resumeParam = BlockParam(resumeSymbol)
 
               val opBlock: BlockLit = BlockLit(ps :+ resumeParam, transform(body))
               core.Operation(op.definition, opBlock)
@@ -275,7 +276,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val answerType = Context.inferredTypeOf(tree)
 
-      Context.bind(answerType, Try(body, answerType, handlers map transformHandler))
+      Context.bind(answerType, Try(body, handlers map transformHandler))
 
     case r @ source.Region(name, body) =>
       val sym = r.symbol
@@ -284,7 +285,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case b: SelfParam => builtins.TRegion
         case _ => Context.panic("Continuations cannot be regions")
       }
-      val cap = core.BlockParam(sym, tpe)
+      val cap = core.BlockParam(sym, transform(tpe))
       val answerType = Context.inferredTypeOf(tree)
       Context.bind(answerType, Region(BlockLit(List(cap), transform(body)), answerType))
 
@@ -369,6 +370,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transform(p: source.BlockParam)(using Context): core.BlockParam = BlockParam(p.symbol)
+
   def transform(p: source.ValueParam)(using Context): core.ValueParam = ValueParam(p.symbol)
 
   def freshWildcardFor(e: source.Tree)(using Context): Wildcard = {
@@ -384,6 +386,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val (body, bindings) = Context.withBindings { stmt }
     Context.reifyBindings(body, bindings)
   }
+
+  // Translation on Types
+  // --------------------
+  def transform(sc: ValueType)(using Context): core.ValueType = ???
+
+  def transform(sc: BlockType)(using Context): core.BlockType = ???
+
 
   // Match Compiler
   // --------------
@@ -407,7 +416,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
     val params = boundVars(clause.pattern).map { p => (p, Context.valueTypeOf(p)) }
     val body = transform(clause.body)
-    val blockLit = BlockLit(params.map { case (p, tpe) => core.ValueParam(p, tpe) }, body)
+    val blockLit = BlockLit(params.map { case (p, tpe) => core.ValueParam(p, transform(tpe)) }, body)
     val returnType = Context.inferredTypeOf(clause.body)
     val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
 
@@ -514,13 +523,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   // Helpers to constructed typed trees
   def ValueParam(id: ValueSymbol)(using Context): core.ValueParam =
-    core.ValueParam(id, Context.valueTypeOf(id))
+    core.ValueParam(id, transform(Context.valueTypeOf(id)))
 
   def BlockParam(id: BlockSymbol)(using Context): core.BlockParam =
-    core.BlockParam(id, Context.blockTypeOf(id))
+    core.BlockParam(id, transform(Context.blockTypeOf(id)))
 
   def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
-    core.Val(id, Context.valueTypeOf(id), binding, body)
+    core.Val(id, binding, body)
 
   def optimize(s: Definition)(using Context): Definition = {
 
@@ -535,8 +544,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // rewrite (Val (Return e) s) to (Let e s)
     object directStyleVal extends core.Tree.Rewrite {
       override def stmt = {
-        case core.Val(id, tpe, core.Return(expr), body) =>
-          Let(id, tpe, rewrite(expr), rewrite(body))
+        case core.Val(id, core.Return(expr), body) =>
+          Let(id, rewrite(expr), rewrite(body))
       }
     }
     val opt = eliminateReturnRun.rewrite(s)
@@ -575,9 +584,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 }
 
 private[core] enum Binding {
-  case Val(name: TmpValue, tpe: symbols.ValueType, binding: Stmt)
-  case Let(name: TmpValue, tpe: symbols.ValueType, binding: Expr)
-  case Def(name: BlockSymbol, tpe: symbols.BlockType, binding: Block)
+  case Val(name: TmpValue, binding: Stmt)
+  case Let(name: TmpValue, binding: Expr)
+  case Def(name: BlockSymbol, binding: Block)
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
@@ -604,7 +613,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val x = TmpValue()
     assignType(x, tpe)
 
-    val binding = Binding.Val(x, tpe, s)
+    val binding = Binding.Val(x, s)
     bindings += binding
 
     ValueVar(x)
@@ -616,7 +625,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
     val x = TmpValue()
     assignType(x, tpe)
 
-    val binding = Binding.Let(x, tpe, s)
+    val binding = Binding.Let(x, s)
     bindings += binding
 
     ValueVar(x)
@@ -629,7 +638,7 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def bind(name: BlockSymbol, tpe: symbols.BlockType, b: Block): BlockVar = {
     assignType(name, tpe)
 
-    val binding = Binding.Def(name, tpe, b)
+    val binding = Binding.Def(name, b)
     bindings += binding
 
     BlockVar(name)
@@ -648,12 +657,12 @@ trait TransformerOps extends ContextOps { Context: Context =>
   private[core] def reifyBindings(body: Stmt, bindings: ListBuffer[Binding]): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds
-      case (Binding.Val(x, tpe, b), Return(ValueVar(y))) if x == y => b
-      case (Binding.Val(x, tpe, b), body) => Val(x, tpe, b, body)
-      case (Binding.Let(x, tpe, Run(s, _)), Return(ValueVar(y))) if x == y => s
-      case (Binding.Let(x, tpe, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
-      case (Binding.Let(x, tpe, b), body) => Let(x, tpe, b, body)
-      case (Binding.Def(x, tpe, b), body) => Def(x, tpe, b, body)
+      case (Binding.Val(x, b), Return(ValueVar(y))) if x == y => b
+      case (Binding.Val(x, b), body) => Val(x, b, body)
+      case (Binding.Let(x, Run(s, _)), Return(ValueVar(y))) if x == y => s
+      case (Binding.Let(x, b: Pure), Return(ValueVar(y))) if x == y => Return(b)
+      case (Binding.Let(x, b), body) => Let(x, b, body)
+      case (Binding.Def(x, b), body) => Def(x, b, body)
     }
   }
 }

@@ -148,10 +148,10 @@ object JavaScript extends Backend {
    * Not all statement types can be printed in this context!
    */
   def toJSMonadic(s: core.Stmt)(using Context): monadic.Control = s match {
-    case core.Val(Wildcard(), tpe, binding, body) =>
+    case core.Val(Wildcard(), binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
-    case core.Val(id, tpe, binding, body) =>
+    case core.Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
     case core.App(b, targs, args) =>
@@ -163,7 +163,7 @@ object JavaScript extends Backend {
     case core.Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Try(body, tpe, hs) =>
+    case core.Try(body, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
     case core.Region(body, _) =>
@@ -191,17 +191,17 @@ object JavaScript extends Backend {
   }
 
   def toJS(d: core.Definition)(using Context): js.Stmt = d match {
-    case Definition.Def(id, tpe, BlockLit(ps, body)) =>
+    case Definition.Def(id, BlockLit(ps, body)) =>
       val (stmts, jsBody) = toJSStmt(body)
       monadic.Function(nameDef(id), ps map toJS, stmts, jsBody)
 
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, block) =>
       js.Const(nameDef(id), toJS(block))
 
-    case Definition.Let(Wildcard(), tpe, binding) =>
+    case Definition.Let(Wildcard(), binding) =>
       js.ExprStmt(toJS(binding))
 
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       js.Const(nameDef(id), toJS(binding))
   }
 

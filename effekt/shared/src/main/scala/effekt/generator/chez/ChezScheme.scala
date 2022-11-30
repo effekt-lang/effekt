@@ -103,7 +103,7 @@ trait ChezScheme {
     case Return(e) => pure(toChez(e))
     case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -122,7 +122,7 @@ trait ChezScheme {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Try(body, tpe, handler) =>
+    case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.interface)
         chez.Handler(names.constructor, h.operations.map {
@@ -164,10 +164,10 @@ trait ChezScheme {
   }
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), tpe, binding) =>
+    case Definition.Let(Wildcard(), binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -177,7 +177,7 @@ trait ChezScheme {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 

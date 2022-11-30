@@ -93,11 +93,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, tpe, BlockLit(params, body)) =>
+    case Definition.Def(id, BlockLit(params, body)) =>
       "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
   }
 
@@ -108,11 +108,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Val(Wildcard(), tpe, binding, body) =>
+    case Val(Wildcard(), binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
@@ -122,7 +122,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
-    case Try(body, tpe, hs) =>
+    case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
     case State(id, init, region, body) =>

@@ -62,14 +62,16 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Definition)(using Environment, Context): lifted.Definition = tree match {
-    case core.Definition.Def(id, tpe, block) =>
-      Definition.Def(id, tpe, transform(block))
-    case core.Definition.Let(id, tpe, binding) =>
-      Definition.Let(id, tpe, transform(binding))
+    case core.Definition.Def(id, block) =>
+      Definition.Def(id, block.tpe, transform(block))
+    case core.Definition.Let(id, binding) =>
+      Definition.Let(id, binding.tpe, transform(binding))
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
-    case core.Try(core.BlockLit(params, body), tpe, handler) =>
+    case core.Try(core.BlockLit(params, body), handler) =>
+
+      val tpe = body.tpe
 
       // (1) Transform handlers first in unchanged environment.
       val transformedHandler = handler.map { transform }
@@ -94,7 +96,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       Try(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
 
-    case core.Try(_, _, _) => Context.panic("Should not happen. Handle always take block literals as body.")
+    case core.Try(_, _) => Context.panic("Should not happen. Handle always take block literals as body.")
 
     // [[ region { {cap}... => s } ]] = region { [ev]{cap}... => s }
     case core.Region(core.BlockLit(params, body), tpe) =>
@@ -132,8 +134,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       Scope(definitions.map(d => transform(d)(using env, Context)), body)
 
-    case core.Val(id, tpe, binding, body) =>
-      Val(id, tpe, transform(binding), transform(body))
+    case core.Val(id, binding, body) =>
+      Val(id, binding.tpe, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
       State(id, transform(init), region, transform(body))
@@ -241,7 +243,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    * TODO add mutual blocks to core and lifted. This way we know exactly what to pretransform.
    */
   def pretransform(s: List[core.Definition])(using env: Environment, C: Context): Environment = s match {
-    case core.Definition.Def(id, tpe, block) :: rest =>
+    case core.Definition.Def(id, block) :: rest =>
       // will this ever be non-empty???
       val extendedEnv = env.bind(id, env.evidenceFor(block).scopes)
       pretransform(rest)(using extendedEnv, C)
