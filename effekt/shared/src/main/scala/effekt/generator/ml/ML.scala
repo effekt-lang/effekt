@@ -83,6 +83,8 @@ object ML extends Backend {
     case ValueType.BoxedType(_, _) =>
       C.abort("Boxed type is not supported")
     case ValueType.ValueTypeRef(tvar) =>
+      // Note that types with generic equality needs to be `''a` which is
+      // ... annoying
       ml.Type.Var(name(tvar))
     case ValueType.ValueTypeApp(tc, Nil) =>
       tcToML(tc)
@@ -136,16 +138,24 @@ object ML extends Backend {
     case Decl.Record(_, _) => C.panic("Record symbol is not TypeConstructor.Record")
   }
 
-  def toML(ext: Extern): ml.Binding = ext match {
+  def toML(ext: Extern)(using Context): ml.Binding = ext match {
     case Extern.Def(id, _, params, body) =>
       ml.FunBind(name(id), params map (paramToML(_, false)), RawExpr(body))
     case Extern.Include(contents) =>
       RawBind(contents)
   }
 
-  def paramToML(p: Param, unique: Boolean = true): (ml.MLName, Option[ml.Type]) = {
-    if (unique) (name(p.id), None)
-    else (MLName(p.id.name.toString), None)
+  def paramToML(p: Param, unique: Boolean = true)(using Context): (ml.MLName, Option[ml.Type]) = {
+    val id = if (unique) name(p.id) else MLName(p.id.name.toString)
+    val tpe = p match {
+      case ValueParam(id, tpe) =>
+        None
+      case BlockParam(id, tpe) =>
+        None
+      case EvidenceParam(id) =>
+          None
+    }
+    (id, tpe)
   }
 
   def toMLExpr(stmt: Stmt)(using C: Context): ml.Expr = stmt match {
