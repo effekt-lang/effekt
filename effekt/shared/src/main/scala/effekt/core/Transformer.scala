@@ -7,6 +7,7 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 import effekt.source.MatchPattern
+import effekt.typer.Substitutions
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
 
@@ -309,11 +310,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val operation = c.definition.asOperation
       val opType = transform(asSeenFrom(receiverType, operation.effect, operation))
 
+      // Do not pass type arguments for the type constructor of the receiver.
+      val remainingTypeArgs = typeArgs.drop(operation.effect.tparams.size)
+
       operation match {
         case op if op == TState.put || op == TState.get =>
-          DirectApp(Member(rec, op, opType), Nil, valueArgs ++ blockArgs)
+          DirectApp(Member(rec, op, opType), remainingTypeArgs, valueArgs ++ blockArgs)
         case op: Operation =>
-          Context.bind(App(Member(rec, op, opType), typeArgs, valueArgs ++ blockArgs))
+          Context.bind(App(Member(rec, op, opType), remainingTypeArgs, valueArgs ++ blockArgs))
       }
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
@@ -344,7 +348,27 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.panic("Should have been translated away (to explicit selection `@CAP.op()`) by capability passing.")
   }
 
-  def asSeenFrom(receiver: BlockType, interface: symbols.Interface, member: BlockSymbol): BlockType = ???
+  /**
+   * Computes the block type the selected symbol.
+   *
+   * For instance, receiver can be `State[Int]`, interface could be the symbol of `State` and member could be `get`.
+   * If `member` is an operation, the type arguments of the receiver are substituted for the leading type parameters,
+   * while the remaining type parameters are kept.
+   */
+  def asSeenFrom(receiver: symbols.BlockType, interface: symbols.Interface, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
+    case InterfaceType(i: Interface, targs) => member match {
+      // For operations, we substitute the first type parameters by concrete type args.
+      case Operation(name, tparams, vparams, resultType, effects, _) =>
+        val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
+        val remainingTypeParams = tparams.drop(targs.size)
+        val cparams = Nil
+        val bparams = Nil
+        FunctionType(remainingTypeParams, cparams, vparams.map(t => substitution.substitute(t.tpe.get)), bparams, substitution.substitute(resultType), substitution.substitute(effects))
+    }
+
+    case InterfaceType(i: ExternInterface, targs) =>
+      Context.panic("Cannot select from an extern interface")
+  }
 
   def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
