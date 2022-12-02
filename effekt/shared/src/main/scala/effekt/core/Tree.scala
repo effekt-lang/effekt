@@ -130,7 +130,7 @@ sealed trait Expr extends Tree {
 }
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
+case class DirectApp(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
@@ -156,7 +156,7 @@ enum Pure extends Expr with Argument {
   case Literal(value: Any, annotatedType: ValueType) extends Pure
 
   // invariant, block b is pure.
-  case PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
+  case PureApp(b: Block, targs: List[core.ValueType], args: List[Pure]) extends Pure
   case Select(target: Pure, field: symbols.Field) extends Pure
 
   case Box(b: Block, annotatedCapture: Captures) extends Pure
@@ -224,7 +224,7 @@ enum Stmt extends Tree {
   // Fine-grain CBV
   case Return(expr: Pure)
   case Val(id: Symbol, binding: Stmt, body: Stmt)
-  case App(callee: Block, targs: List[Type], args: List[Argument])
+  case App(callee: Block, targs: List[core.ValueType], args: List[Argument])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)

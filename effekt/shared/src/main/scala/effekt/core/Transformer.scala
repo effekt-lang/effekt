@@ -301,7 +301,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
       val rec = transformAsBlock(receiver)
-      val typeArgs = Context.typeArguments(c)
+      val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
       val blockArgs = bargs.map(transformAsBlock)
 
@@ -323,7 +323,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Should be a boxed function type with a known capture set.")
       }
       val e = transformAsPure(expr)
-      val typeArgs = Context.typeArguments(c)
+      val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
       val blockArgs = bargs.map(transformAsBlock)
 
@@ -348,7 +348,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
-    val targs = Context.typeArguments(call)
+    val targs = Context.typeArguments(call).map(transform)
 
     val vargsT = vargs.map(transformAsPure)
     val bargsT = bargs.map(transformAsBlock)

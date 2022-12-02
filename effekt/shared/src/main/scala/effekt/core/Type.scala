@@ -49,8 +49,10 @@ object Type {
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
-      assert(targs.size != tparams.size, "Wrong number of type arguments")
-      assert(cargs.size != cparams.size, "Wrong number of capture arguments")
+      assert(targs.size == tparams.size, "Wrong number of type arguments")
+      assert(cargs.size == cparams.size, "Wrong number of capture arguments")
+
+
       val vsubst = (tparams zip targs).toMap
       val csubst = (cparams zip cargs).toMap
       BlockType.Function(Nil, Nil,
@@ -144,8 +146,7 @@ object Type {
     case Stmt.Val(id, binding, body) => body.tpe
     case Stmt.App(callee, targs, args) =>
       val bargs = args.collect { case b: Block => b }
-      val realTargs = ??? // targs
-      instantiate(callee.functionType, realTargs, bargs.map(_.capt)).result
+      instantiate(callee.functionType, targs, bargs.map(_.capt)).result
 
     case Stmt.If(cond, thn, els) => join(thn.tpe, els.tpe)
     case Stmt.Match(scrutinee, clauses, default) =>
@@ -185,13 +186,11 @@ object Type {
 
   def inferType(expr: Expr): ValueType = expr match {
     case DirectApp(callee, targs, vargs) =>
-      // TODO use correct type args here
-      instantiate(callee.functionType, Nil /* targs */, Nil).result
+      instantiate(callee.functionType, targs, Nil).result
     case Run(s) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
-      // TODO use correct type args here
-    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, Nil /*targs*/ , Nil).result
+    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
     // TODO use correct type here
     case Pure.Select(target, field /*, annotatedType*/) => TUnit // annotatedType
     case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
