@@ -77,8 +77,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Bool => "bool"
     case Type.Data(name) => toDoc(name)
     case Type.Alias(name) => toDoc(name)
-    case Type.Record(fields) =>
-      "{" <> hsep(fields.map{case (name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)}, ",") <> "}"
     case Type.Tapp(tpe, args) =>
       val ap = tlistDoc(args) <+> toDoc(tpe)
       parens(ap)
@@ -127,12 +125,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Tuple(one :: Nil) => toDoc(one)
     case Expr.Tuple(terms) =>
       parens(hsep(terms map toDoc, ","))
-    case Expr.FieldLookup(record, field) =>
-      val lookup = "#" <> toDoc(field) <+> toDoc(record)
-      parens(lookup)
-    case Expr.MakeRecord(fields) =>
-      val fieldAssignments = fields.map((name, exp) => toDoc(name) <+> "=" <+> toDoc(exp))
-      group(nest("{" <@> vsep(fieldAssignments, ",")) <@> "}")
     case Expr.MakeDatatype(tag, None) =>
         toDoc(tag)
     case Expr.MakeDatatype(tag, Some(arg)) =>
@@ -160,14 +152,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(p: ml.Pattern): Doc = p match {
-    case Pattern.Record(assignments) =>
-      "{" <>
-        hsep(assignments map { case (fname, binder) => toDoc(fname) <+> "=" <+> toDoc(binder) }, ",") <>
-        "}"
-    case Pattern.Datatype(tag, terms) if terms.isEmpty =>
+    case Pattern.Datatype(tag, Nil) =>
       toDoc(tag)
+    case Pattern.Datatype(tag, one :: Nil) =>
+      toDoc(tag) <+> toDoc(one)
     case Pattern.Datatype(tag, terms) =>
-      toDoc(tag) <> parens(hsep(terms map toDoc, ","))
+      toDoc(tag) <+> parens(hsep(terms map toDoc, ","))
   }
 
   /**

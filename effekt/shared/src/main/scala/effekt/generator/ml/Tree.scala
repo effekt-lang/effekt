@@ -32,7 +32,6 @@ enum Type {
   case Bool
   case Data(name: MLName)
   case Alias(name: MLName)
-  case Record(fields: List[(MLName, Type)])
 }
 
 enum Binding {
@@ -83,10 +82,6 @@ enum Expr {
   // e.g x
   case Variable(name: MLName)
 
-  case FieldLookup(record: Expr, field: MLName)
-
-  case MakeRecord(fields: List[(MLName, Expr)])
-
   case MakeDatatype(tag: MLName, arg: Option[Expr])
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
@@ -94,8 +89,6 @@ enum Expr {
 
 case class MatchClause(pattern: Pattern, body: Expr)
 enum Pattern {
-  // ml supports direct binders (`{x, y}`) but we don't need them.
-  case Record(assignments: List[(MLName, MLName)])
   case Datatype(tag: MLName, terms: List[MLName])
 }
 
