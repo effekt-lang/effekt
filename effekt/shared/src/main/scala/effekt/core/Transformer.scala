@@ -222,7 +222,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     //   loop$13()
     case source.While(cond, body) =>
       val loopName = TmpBlock()
-      val loopCall = Stmt.App(BlockVar(loopName), Nil, Nil)
+      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
+      val loopCapt = transform(Context.inferredCapture(body))
+      val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil)
 
       val loop = Block.BlockLit(Nil, Nil,
         insertBindings {
