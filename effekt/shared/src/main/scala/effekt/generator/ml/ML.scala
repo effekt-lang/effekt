@@ -99,7 +99,7 @@ object ML extends Backend {
     case symbols.builtins.BooleanSymbol    => ml.Type.Bool
     case symbols.builtins.StringSymbol     => ml.Type.String
     case TypeConstructor.DataType(_, _, _) => ml.Type.Data(name(tc))
-    case TypeConstructor.Record(_, _, _)   => ml.Type.Alias(name(tc))
+    case TypeConstructor.Record(_, _, _)   => ml.Type.Data(name(tc))
     case TypeConstructor.ExternType(_, _)  => ml.Type.Builtin(name(tc))
   }
 
