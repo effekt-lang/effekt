@@ -34,10 +34,14 @@ enum Type {
   case Alias(name: MLName)
 }
 
+enum Param {
+  case Named(name: MLName)
+}
+
 enum Binding {
   case AnonBind(body: Expr)
   case ValBind(name: MLName, body: Expr)
-  case FunBind(name: MLName, params: List[(MLName, Option[Type])], body: Expr)
+  case FunBind(name: MLName, params: List[Param], body: Expr)
   case RawBind(raw: String)
   case DataBind(name: MLName, tparams: List[Type.Var], constructors: List[(MLName, Option[Type])])
   case TypeBind(name: MLName, tparams: List[Type.Var], tpe: Type)
@@ -74,7 +78,7 @@ enum Expr {
   //  case Let_*(bindings: List[Binding], body: Block)
 
   // e.g. (fn (x y) => body)
-  case Lambda(params: List[(MLName, Option[Type])], body: Expr)
+  case Lambda(params: List[Param], body: Expr)
 
   // e.g. (if COND then THEN else ELSE)
   case If(cond: Expr, thn: Expr, els: Expr)
@@ -99,7 +103,7 @@ object Consts {
   val unitVal: Expr = RawValue("()")
   val trueVal: Expr = RawValue("true")
   val falseVal: Expr = RawValue("false")
-  val id: Expr = ml.Lambda((MLName("x"), None))(Variable(MLName("x")))
+  val id: Expr = ml.Lambda(ml.Param.Named(MLName("x")))(Variable(MLName("x")))
 
   // from effekt.sml
   val bind: Expr = Variable(MLName("bind"))
@@ -112,24 +116,11 @@ object Consts {
 
 }
 
-//enum Def {
-//  // e.g. (define x 42)
-//  case Constant(name: MLName, value: Expr)
-//
-//  // e.g. (define (f x y) ...)
-//  case Function(name: MLName, params: List[MLName], body: Block)
-//
-//  case RawDef(raw: String)
-//
-//  case Record(typeName: MLName, constructorName: MLName, predicateName: MLName, uid: MLName, fields: List[MLName])
-//}
-//export Def.*
-
 // smart constructors
 def Call(name: MLName)(args: Expr*): Expr = Expr.Call(Variable(name), args.toList)
 
 def Call(expr: Expr)(args: Expr*): Expr = Expr.Call(expr, args.toList)
 
-def Lambda(params: (MLName, Option[Type])*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
+def Lambda(params: Param*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
 
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")

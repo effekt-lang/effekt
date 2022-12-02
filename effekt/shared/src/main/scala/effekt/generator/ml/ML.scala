@@ -132,7 +132,7 @@ object ML extends Backend {
           val pattern = ml.Pattern.Datatype(recordConstructorName, terms)
           val clause = ml.MatchClause(pattern, ml.Expr.Variable(fieldName))
           val body = ml.Expr.Match(ml.Expr.Variable(argName), List(clause), None)
-          ml.Binding.FunBind(fieldSelectorName(f), List((argName, None)), body)
+          ml.Binding.FunBind(fieldSelectorName(f), List(ml.Param.Named(argName)), body)
         case _ => C.panic("Record fields are not actually a field")
       }
       dataDecl :: accessors
@@ -151,7 +151,7 @@ object ML extends Backend {
           val pattern = ml.Pattern.Datatype(interfaceName, terms)
           val clause = ml.MatchClause(pattern, ml.Expr.Variable(fieldName))
           val body = ml.Expr.Match(ml.Expr.Variable(argName), List(clause), None)
-          ml.Binding.FunBind(dataSelectorName(id, op), List((argName, None)), body)
+          ml.Binding.FunBind(dataSelectorName(id, op), List(ml.Param.Named(argName)), body)
       }
       dataDecl :: accessors
 
@@ -166,9 +166,9 @@ object ML extends Backend {
       RawBind(contents)
   }
 
-  def paramToML(p: Param, unique: Boolean = true)(using Context): (ml.MLName, Option[ml.Type]) = {
+  def paramToML(p: Param, unique: Boolean = true)(using Context): ml.Param = {
     val id = if (unique) name(p.id) else MLName(p.id.name.toString)
-    (id, None)
+    ml.Param.Named(id)
   }
 
   def toMLExpr(stmt: Stmt)(using C: Context): ml.Expr = stmt match {
@@ -176,7 +176,7 @@ object ML extends Backend {
     case App(b, _, args) => Expr.Call(toML(b), args map toML)
     case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
     case Val(id, _, binding, body) =>
-      Call(Consts.bind)(toMLExpr(binding), ml.Lambda((name(id), None))(toMLExpr(body)))
+      Call(Consts.bind)(toMLExpr(binding), ml.Lambda(ml.Param.Named(name(id)))(toMLExpr(body)))
     case Match(scrutinee, clauses, default) =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
         val (constructor, b) = c
@@ -219,19 +219,19 @@ object ML extends Backend {
             ml.Expr.Variable(evName)
           )(
             ml.Lambda(
-              (kName, None)
+              ml.Param.Named(kName)
             )(
               ml.Expr.Let(
                 List(ml.Binding.FunBind(
                   resumeName,
-                  List((ev1Name, None), (vName, None)),
+                  List(ml.Param.Named(ev1Name), ml.Param.Named(vName)),
                   ml.Call(ev1Name)(ml.Call(kName)(ml.Expr.Variable(vName)))
                 )),
                 toMLExpr(body)
               )
             )
           )
-          ml.Expr.Lambda((evName, None) :: args, newBody)
+          ml.Expr.Lambda(ml.Param.Named(evName) :: args, newBody)
         }
         ml.Expr.MakeDatatype(name(h.id), expsToTupleIsh(fields))
       }
@@ -271,7 +271,7 @@ object ML extends Backend {
   def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
     binding match {
       case BlockLit(params, body) =>
-        ml.FunBind(name(id), params.map(p => (toML(p), None)), toMLExpr(body))
+        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))), toMLExpr(body))
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }

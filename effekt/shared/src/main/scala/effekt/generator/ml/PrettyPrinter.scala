@@ -58,9 +58,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case _ => parens(hsep(tparams map toDoc, ","))
   }
 
-  def paramToDoc(p: (MLName, Option[ml.Type])): Doc = p match {
-    case (pname, None) => toDoc(pname)
-    case (pname, Some(tpe)) => parens(toDoc(pname) <> ":" <+> toDoc(tpe))
+  def paramToDoc(p: ml.Param): Doc = p match {
+    case ml.Param.Named(pname) => toDoc(pname)
   }
 
   def toDoc(tpe: ml.Type): Doc = tpe match {
