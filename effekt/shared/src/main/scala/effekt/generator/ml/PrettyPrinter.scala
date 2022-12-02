@@ -64,12 +64,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(tpe: ml.Type): Doc = tpe match {
-    case Type.Var(n) => toDoc(n)
+    case Type.Var(n) => "'" <> toDoc(n)
     case Type.Tuple(Nil) => ???
-    case Type.Tuple(t :: Nil) => toDoc(t)
+    case Type.Tuple(t :: Nil) => ???
     case Type.Tuple(l) =>
       val d = ssep(l map toDoc, " * ")
       parens(d)
+    case Type.Unit => "()"
     case Type.Integer => "int"
     case Type.Real => "real"
     case Type.String => "string"

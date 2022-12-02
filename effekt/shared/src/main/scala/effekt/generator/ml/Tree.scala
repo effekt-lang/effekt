@@ -25,6 +25,7 @@ enum Type {
   case Builtin(n: MLName)
   case Var(n: MLName)
   case Tuple(l: List[Type])
+  case Unit
   case Integer
   case Real
   case String

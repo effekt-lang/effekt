@@ -1,3 +1,4 @@
+(* CPS STUFF *)
 fun bind m f k = m (fn a => f a k);
 
 fun pure a k = k a;
@@ -12,6 +13,18 @@ fun nested ev1 ev2 m = ev1 (ev2 m);
 
 fun here x = x;
 
+(* REGION STUFF *)
+(* type region = ((() -> () -> ()) list) ref *)
+fun newRegion () = ref nil
+fun backup cell = fn () => let val oldState = !cell in fn () => cell := oldState end
+fun fresh r init = let val cell = ref init in (r := (backup cell) :: (!r); cell) end
+fun withRegion body =
+    let val r = newRegion()
+        fun lift m k = let val fields = map (fn f => f()) (!r) in
+            m (fn a => (map (fn f => f()) fields; k a)) end
+    in body lift r end
+
+(* TOSTRING STUFF *)
 fun effektIntString x =
     let val s = (Int.toString x) in
     case String.sub (s, 0) of
@@ -24,7 +37,6 @@ To alingn with the js backend inf and nan is rewritten
 - `nan` -> `NaN`
 - `inf` -> `Infinity`
 - `~2.1` -> `-2.1`
-
 They do still disagree on the truncating of `2.0` to `2` (ml does not).
 *)
 fun effektDoubleString x =
@@ -37,8 +49,10 @@ fun effektDoubleString x =
             | _ => s
     end;
 
+(* TIMING STUFF *)
 val mlStartTime = Time.toMilliseconds (Time.now ());
 
+(* RANDOM STUFF *)
 fun mlRandomReal () =
    let
       val r = MLton.Random.rand ();
@@ -49,4 +63,5 @@ fun mlRandomReal () =
       shiftRight rreal wsize
    end;
 
+(* HOLE STUFF *)
 exception Hole

@@ -4,7 +4,7 @@ package ml
 
 import effekt.context.Context
 import effekt.lifted.*
-import effekt.symbols.{Module, Symbol, TermSymbol, TypeConstructor, TypeSymbol, ValueType, Wildcard}
+import effekt.symbols.{Anon, Binder, BlockSymbol, Module, Symbol, TermSymbol, TypeConstructor, TypeSymbol, ValueSymbol, ValueType, Wildcard}
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -93,30 +93,22 @@ object ML extends Backend {
   }
 
   def tcToML(tc: symbols.TypeConstructor)(using C: Context): ml.Type = tc match {
-    case symbols.builtins.IntSymbol => ml.Type.Integer
-    case symbols.builtins.DoubleSymbol => ml.Type.Real
-    case symbols.builtins.BooleanSymbol => ml.Type.Bool
-    case symbols.builtins.StringSymbol => ml.Type.String
-    case TypeConstructor.DataType(_, _, _) =>
-      ml.Type.Data(name(tc))
-    case TypeConstructor.Record(_, _, _) =>
-      ml.Type.Alias(name(tc))
-    case TypeConstructor.ExternType(_, _) =>
-      ml.Type.Builtin(name(tc))
+    case symbols.builtins.UnitSymbol       => ml.Type.Unit
+    case symbols.builtins.IntSymbol        => ml.Type.Integer
+    case symbols.builtins.DoubleSymbol     => ml.Type.Real
+    case symbols.builtins.BooleanSymbol    => ml.Type.Bool
+    case symbols.builtins.StringSymbol     => ml.Type.String
+    case TypeConstructor.DataType(_, _, _) => ml.Type.Data(name(tc))
+    case TypeConstructor.Record(_, _, _)   => ml.Type.Alias(name(tc))
+    case TypeConstructor.ExternType(_, _)  => ml.Type.Builtin(name(tc))
   }
 
   def toML(decl: Decl)(using C: Context): List[ml.Binding] = decl match {
     case Data(did: TypeConstructor.DataType, ctors) =>
       def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
         case symbols.Constructor(_, _, fields, _) =>
-          val tpeList = fields.map(f =>
-            tpeToML(f.param.tpe.getOrElse(C.panic("Data constructor is missing types")))
-          )
-          val tpe = tpeList match {
-            case Nil => None
-            case one :: Nil => Some(one)
-            case _ => Some(ml.Type.Tuple(tpeList))
-          }
+          val tpeList = fields.map(fieldSymbolType)
+          val tpe = typesToTupleIsh(tpeList)
           (name(s), tpe)
         case _ => C.panic("Constructor's symbol is not a constructor symbol")
       }
@@ -124,16 +116,45 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
-    case Decl.Record(id: TypeConstructor.Record, fields) => // use the native constructor
-      val tparams: List[ml.Type.Var] = id.tparams.map(p => ml.Type.Var(name(p)))
-      val fieldTypes = fields.map {
-        case f: symbols.Field => (name(f), tpeToML(f.param.tpe.getOrElse(C.panic("No type on record field"))))
+    case Decl.Record(id: TypeConstructor.Record, fields) =>
+      val tvars: List[ml.Type.Var] = fields.map(_ => ml.Type.Var(freshName("arg")))
+      val dataType = typesToTupleIsh(tvars)
+      val recordTypeName = name(id)
+      val recordConstructorName = name(id.constructor)
+      val dataDecl = ml.Binding.DataBind(recordTypeName, tvars, List((recordConstructorName, dataType)))
+      val accessors = fields.zipWithIndex.map {
+        case (f: symbols.Field, i) =>
+          val argName = freshName("data")
+          val fieldName = name(f)
+          val terms = fields.zipWithIndex.map{
+            case (_, j) => if (j==i) fieldName else freshName("unused")
+          }
+          val pattern = ml.Pattern.Datatype(recordConstructorName, terms)
+          val clause = ml.MatchClause(pattern, ml.Expr.Variable(fieldName))
+          val body = ml.Expr.Match(ml.Expr.Variable(argName), List(clause), None)
+          ml.Binding.FunBind(fieldSelectorName(f), List((argName, None)), body)
         case _ => C.panic("Record fields are not actually a field")
       }
-      val tpe = ml.Type.Record(fieldTypes)
-      val binding = ml.Binding.TypeBind(name(id), tparams, tpe)
-      List(binding)
-    case Interface(_, _) => Nil // use native record type
+      dataDecl :: accessors
+    case Decl.Interface(id, operations) =>
+      val tvars: List[ml.Type.Var] = operations.map(_ => ml.Type.Var(freshName("arg")))
+      val dataType = typesToTupleIsh(tvars)
+      val interfaceName = name(id)
+      val dataDecl = ml.Binding.DataBind(interfaceName, tvars, List((interfaceName, dataType)))
+      val accessors = operations.zipWithIndex.map {
+        case (op, i) =>
+          val argName = freshName("data")
+          val fieldName = name(op)
+          val terms = operations.zipWithIndex.map {
+            case (_, j) => if (j == i) fieldName else freshName("unused")
+          }
+          val pattern = ml.Pattern.Datatype(interfaceName, terms)
+          val clause = ml.MatchClause(pattern, ml.Expr.Variable(fieldName))
+          val body = ml.Expr.Match(ml.Expr.Variable(argName), List(clause), None)
+          ml.Binding.FunBind(dataSelectorName(id, op), List((argName, None)), body)
+      }
+      dataDecl :: accessors
+
     case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
     case Decl.Record(_, _) => C.panic("Record symbol is not TypeConstructor.Record")
   }
@@ -147,15 +168,7 @@ object ML extends Backend {
 
   def paramToML(p: Param, unique: Boolean = true)(using Context): (ml.MLName, Option[ml.Type]) = {
     val id = if (unique) name(p.id) else MLName(p.id.name.toString)
-    val tpe = p match {
-      case ValueParam(id, tpe) =>
-        None
-      case BlockParam(id, tpe) =>
-        None
-      case EvidenceParam(id) =>
-          None
-    }
-    (id, tpe)
+    (id, None)
   }
 
   def toMLExpr(stmt: Stmt)(using C: Context): ml.Expr = stmt match {
@@ -170,9 +183,8 @@ object ML extends Backend {
         val binders = b.params.map(p => name(p.id))
         val pattern = constructor.tpe match {
           case symbols.Record(_, _, _) =>
-            val fieldNames = constructor.fields map name
-            assert(fieldNames.length == binders.length)
-            ml.Pattern.Record(fieldNames zip binders)
+            val tag = name(constructor)
+            ml.Pattern.Datatype(tag, binders)
           case symbols.DataType(_, _, _) =>
             val tag = name(constructor)
             ml.Pattern.Datatype(tag, binders)
@@ -195,7 +207,7 @@ object ML extends Backend {
     //      ml.Let(List(Binding(nameDef(id), ml.Builtin("fresh", Variable(nameRef(region)), toML(init)))), toML(body))
 
     case Try(body, _, handler) =>
-      val handlers: List[ml.Expr.MakeRecord] = handler.map { (h: Implementation) =>
+      val handlers: List[ml.Expr.MakeDatatype] = handler.map { (h: Implementation) =>
         val fields = h.operations.map { case Operation(op, BlockLit(params, body)) =>
           val args = params.init.map(paramToML(_))
           val resumeName = name(params.last.id)
@@ -219,9 +231,9 @@ object ML extends Backend {
               )
             )
           )
-          (name(op), ml.Expr.Lambda((evName, None) :: args, newBody))
+          ml.Expr.Lambda((evName, None) :: args, newBody)
         }
-        ml.Expr.MakeRecord(fields)
+        ml.Expr.MakeDatatype(name(h.id), expsToTupleIsh(fields))
       }
       val args = ml.Consts.lift :: handlers
       val tr = ml.Call(toML(body))(args: _*)
@@ -284,7 +296,12 @@ object ML extends Backend {
       toML(b)
 
     case Member(b, field) =>
-      ml.FieldLookup(toML(b), name(field))
+      val selector = field match {
+        case op: symbols.Operation => dataSelectorName(op.effect, op)
+        case f: symbols.Field => fieldSelectorName(f)
+        case _ => ???
+      }
+      ml.Call(selector)(toML(b))
 
     //    case Extern(params, body) =>
     //      ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
@@ -334,24 +351,50 @@ object ML extends Backend {
       }
       b match {
         case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _))) =>
-          if (mlArgs.isEmpty) ml.MakeDatatype(name(id), None)
-          else ml.MakeDatatype(name(id), Some(ml.Expr.Tuple(mlArgs)))
-        case BlockVar(symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, constr))) =>
-          val fieldNames = constr.fields map name
-          assert(fieldNames.length == mlArgs.length)
-          ml.Expr.MakeRecord(fieldNames zip mlArgs)
+          ml.Expr.MakeDatatype(name(id), expsToTupleIsh(mlArgs))
+        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _))) =>
+          ml.Expr.MakeDatatype(name(id), expsToTupleIsh(mlArgs))
         case _ => ml.Call(toML(b), mlArgs)
       }
 
     case Select(b, field) =>
-      ml.FieldLookup(toML(b), name(field))
+      ml.Call(fieldSelectorName(field))(toML(b))
 
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
 
     case Box(b) => C.abort("Box not supported")
   }
 
+  def fieldSymbolType(f: Symbol)(using C: Context): ml.Type = f match {
+    case f: symbols.Field => tpeToML(f.param.tpe.getOrElse(C.panic("No type on record field")))
+    case _ => C.panic("Record fields are not actually a field")
+  }
+
+  def typesToTupleIsh(types: List[ml.Type]): Option[ml.Type] = types match {
+    case Nil => None
+    case one :: Nil => Some(one)
+    case fieldTypes => Some(ml.Type.Tuple(fieldTypes))
+  }
+
+  def expsToTupleIsh(exps: List[ml.Expr]): Option[ml.Expr] = exps match {
+    case Nil => None
+    case one :: Nil => Some(one)
+    case exps => Some(ml.Expr.Tuple(exps))
+  }
+
+  def fieldSelectorName(f: Symbol)(using C: Context): MLName = f match {
+    case f: symbols.Field =>
+      dataSelectorName(f.constructor.tpe, f)
+    case _ => C.panic("Record fields are not actually a field")
+  }
+
+  def dataSelectorName(data: Symbol, selection: Symbol)(using C: Context): MLName = {
+      val dataName = name(data)
+      val selectionName = name(selection)
+      MLName(dataName.name + selectionName.name)
+  }
+
   def freshName(s: String): MLName =
-    name(symbols.Name.local("ev_tmp" + Symbol.fresh.next()))
+    name(symbols.Name.local(s + Symbol.fresh.next()))
 
 }
