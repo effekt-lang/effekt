@@ -189,8 +189,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def transformAsExpr(tree: source.Term)(using Context): Expr = tree match {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
-        val stateType = Context.valueTypeOf(sym)
-        val getType = asSeenFrom(TState(stateType), TState.interface, TState.get)
+        val stateType = Context.blockTypeOf(sym)
+        val getType = asSeenFrom(stateType, TState.interface, TState.get)
         DirectApp(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil)
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
@@ -297,8 +297,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case a @ source.Assign(id, expr) =>
       val e = transformAsPure(expr)
       val sym = a.definition
-      val stateType = Context.valueTypeOf(sym)
-      val putType = asSeenFrom(TState(stateType), TState.interface, TState.put)
+      val stateType = Context.blockTypeOf(sym)
+      val putType = asSeenFrom(stateType, TState.interface, TState.put)
       DirectApp(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e))
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
