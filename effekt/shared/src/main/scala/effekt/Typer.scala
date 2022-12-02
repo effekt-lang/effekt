@@ -398,6 +398,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
           handlerEffects = handlerEffects ++ effs
       }
 
+      // The implementation has the annotated block type
+      Context.annotateInferredType(impl, tpe)
+
       Result(tpe, handlerEffects)
   }
 

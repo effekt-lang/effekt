@@ -69,6 +69,10 @@ object assertions {
       case t: Interface => t
       case t => reporter.abort("Expected an interface")
     }
+    def asOperation: Operation = s match {
+      case t: Operation => t
+      case t => reporter.abort("Expected an operation")
+    }
     def asFun: Callable = s match {
       case t: Callable => t
       case _ => reporter.abort("Expected a function")

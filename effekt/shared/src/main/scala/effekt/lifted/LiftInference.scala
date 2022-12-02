@@ -7,6 +7,8 @@ import effekt.lifted
 import effekt.core
 import effekt.symbols.{ Symbol, builtins }
 
+import effekt.context.assertions.*
+
 object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   val phaseName = "lift-inference"
@@ -33,14 +35,14 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Block)(using Environment, Context): lifted.Block = tree match {
     case b @ core.BlockLit(vps, bps, body) => liftBlockLitTo(b)
-    case core.Member(body, id) => Member(transform(body), id)
+    case core.Member(body, id, tpe) => Member(transform(body), id)
     case core.BlockVar(b, tpe, capt) => BlockVar(b)
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
 
     case core.New(core.Implementation(interface, clauses)) =>
       val transformedMethods = clauses.map { case core.Operation(op, block) => Operation(op, liftBlockLitTo(block)) }
-      New(Implementation(interface, transformedMethods))
+      New(Implementation(interface.symbol.asInterface, transformedMethods))
   }
 
   def transform(tree: core.Declaration)(using Context): lifted.Decl = tree match {
@@ -168,7 +170,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Select(target, field) =>
       Select(transform(target), field)
 
-    case core.Box(b) =>
+    case core.Box(b, _) =>
       Box(transform(b))
 
     case core.Run(s) =>
@@ -226,7 +228,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(h: core.Implementation)(using Environment, Context): Implementation = h match {
     case core.Implementation(id, clauses) =>
-      Implementation(id, clauses.map {
+      Implementation(id.symbol.asInterface, clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
         case core.Operation(op, core.BlockLit(vps, bps, body)) => Operation(op, BlockLit((vps ++ bps) map transform, transform(body)))
@@ -258,7 +260,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       case b: core.BlockVar if Context.blockTypeOf(b.id) == builtins.TRegion => Here()
       case b: core.BlockVar => Evidence(env.getOrElse(b.id, Nil)) //.map { x => Evidence(x) }
       case b: core.BlockLit   => Here()
-      case core.Member(b, id) => evidenceFor(b)
+      case core.Member(b, id, tpe) => evidenceFor(b)
       // TODO check whether this makes any sense
       case b: core.Unbox      => Here()
       case b: core.New => Here()

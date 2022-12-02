@@ -124,7 +124,8 @@ trait ChezScheme {
 
     case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.interface)
+        // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
+        val names = RecordNames(h.interface.symbol)
         chez.Handler(names.constructor, h.operations.map {
           case Operation(op, BlockLit(vps, bps, body)) =>
             // the LAST argument is the continuation...
@@ -205,14 +206,14 @@ trait ChezScheme {
 
     case b @ BlockLit(vps, bps, body) => toChez(b)
 
-    case Member(b, field) =>
+    case Member(b, field, tpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) =>
       toChez(e)
 
-    case New(Implementation(id, clauses)) =>
-      val ChezName(name) = nameRef(id)
+    case New(Implementation(tpe, clauses)) =>
+      val ChezName(name) = nameRef(tpe.symbol)
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
   }
 
@@ -229,7 +230,7 @@ trait ChezScheme {
     case Select(b, field) =>
       chez.Call(nameRef(field), toChez(b))
 
-    case Box(b) => toChez(b)
+    case Box(b, _) => toChez(b)
 
     case Run(s) => run(toChezExpr(s))
   }

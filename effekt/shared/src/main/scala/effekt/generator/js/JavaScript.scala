@@ -106,7 +106,7 @@ object JavaScript extends Backend {
     case BlockLit(vps, bps, body) =>
       val (stmts, ret) = toJSStmt(body)
       monadic.Lambda((vps ++ bps) map toJS, stmts, ret) // TODO
-    case Member(b, id) =>
+    case Member(b, id, tpe) =>
       js.Member(toJS(b), memberNameRef(id))
     case Unbox(e)     => toJS(e)
     case New(handler) => toJS(handler)
@@ -125,7 +125,7 @@ object JavaScript extends Backend {
     case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
-    case Box(b) => toJS(b)
+    case Box(b, _) => toJS(b)
     case Run(s) => monadic.Run(toJSMonadic(s))
   }
 

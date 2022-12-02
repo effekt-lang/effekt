@@ -5,11 +5,12 @@ import effekt.symbols.TrackedParam.BlockParam
 import symbols.{ Symbol, TypeSymbol, builtins }
 import symbols.Name
 
-class Id(n: String) extends symbols.Symbol {
-  val name = Name.local(n)
-}
+type Id = symbols.Symbol
+//class Id(n: String) extends symbols.Symbol {
+//  val name = Name.local(n)
+//}
 
-type Capture = Symbol
+type Capture = symbols.Symbol
 type Captures = Set[Capture]
 
 
@@ -34,8 +35,8 @@ enum BlockType extends Type {
   //  ^^^^^^^   ^^^^^^^     ^^^^^^^^^^^          ^^^
   //  tparams   vparams   cparams zip bparams   result
   case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
-  case Interface(symbol: TypeSymbol, targs: List[ValueType])
-  case Extern(symbol: TypeSymbol, targs: List[ValueType])
+  case Interface(symbol: Id, targs: List[ValueType])
+  case Extern(symbol: Id, targs: List[ValueType])
 }
 
 object Type {
@@ -59,7 +60,7 @@ object Type {
   }
 
   def substitute(capt: Captures, csubst: Map[Id, Captures]): Captures = capt.flatMap {
-    case id: Id if csubst.isDefinedAt(id) => csubst(id)
+    case id if csubst.isDefinedAt(id) => csubst(id)
     case c => Set(c)
   }
 
@@ -103,16 +104,16 @@ object Type {
       val bparams = bps.map { p => p.tpe }
 
       BlockType.Function(tparams, cparams, vparams, bparams, body.tpe)
-    case Block.Member(b, field /*, tpe */) => ??? // tpe
+    case Block.Member(b, field, tpe) => tpe
     case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].tpe
-    case Block.New(impl) => ??? // impl.tpe
+    case Block.New(impl) => impl.tpe
   }
   def inferCapt(block: Block): Captures = block match {
     case Block.BlockVar(id, tpe, capt) => capt
     case Block.BlockLit(/* tparams, cparams, */ vparams, bparams, body) =>
       // body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
       body.capt // -- cparams
-    case Block.Member(block, field) => block.capt
+    case Block.Member(block, field, tpe) => block.capt
     case Block.Unbox(pure) => pure.tpe.asInstanceOf[ValueType.Boxed].capt
     case Block.New(impl) => impl.capt
   }
@@ -184,13 +185,16 @@ object Type {
 
   def inferType(expr: Expr): ValueType = expr match {
     case DirectApp(callee, targs, vargs) =>
-      instantiate(callee.functionType, ??? /* targs */, Nil).result
+      // TODO use correct type args here
+      instantiate(callee.functionType, Nil /* targs */, Nil).result
     case Run(s) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
-    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, ??? /*targs*/ , Nil).result
-    case Pure.Select(target, field /*, annotatedType*/) => ??? // annotatedType
-    case Pure.Box(block /*, capt*/) => ValueType.Boxed(block.tpe, ???)
+      // TODO use correct type args here
+    case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, Nil /*targs*/ , Nil).result
+    // TODO use correct type here
+    case Pure.Select(target, field /*, annotatedType*/) => TUnit // annotatedType
+    case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }
 
   /**

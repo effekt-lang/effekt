@@ -71,6 +71,7 @@ case class ModuleDecl(
 enum Declaration extends Tree {
   def id: Symbol
 
+  // TODO also translate constructors, fields and operations to core.
   case Data(id: Symbol, ctors: List[Symbol])
   case Record(id: Symbol, fields: List[Symbol])
   case Interface(id: Symbol, operations: List[Symbol])
@@ -158,7 +159,7 @@ enum Pure extends Expr with Argument {
   case PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
   case Select(target: Pure, field: symbols.Field) extends Pure
 
-  case Box(b: Block) extends Pure
+  case Box(b: Block, annotatedCapture: Captures) extends Pure
 }
 export Pure.*
 
@@ -179,7 +180,7 @@ export Pure.*
 enum Block extends Argument {
   case BlockVar(id: Symbol, annotatedTpe: BlockType, annotatedCapt: Captures)
   case BlockLit(vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
-  case Member(block: Block, field: symbols.Symbol)
+  case Member(block: Block, field: symbols.Symbol, annotatedTpe: BlockType)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
@@ -247,8 +248,8 @@ export Stmt.*
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(interface: symbols.Interface, operations: List[Operation]) extends Tree {
-  val tpe = interface // TODO this has to become a core.BlockType.Interface
+case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
+  val tpe = interface
   val capt = operations.flatMap(_.capt).toSet
 }
 
@@ -296,7 +297,7 @@ object Tree {
           Select(rewrite(target), field)
         case v: ValueVar   => v
         case l: Literal    => l
-        case Box(b)        => Box(rewrite(b))
+        case Box(b, capt)        => Box(rewrite(b), capt)
       }
 
     // Entrypoints to use the traversal on, defined in terms of the above hooks
@@ -346,8 +347,8 @@ object Tree {
       case e if block.isDefinedAt(e) => block(e)
       case BlockLit(vps, bps, body) =>
         BlockLit(vps, bps, rewrite(body))
-      case Member(b, field) =>
-        Member(rewrite(b), field)
+      case Member(b, field, tpe) =>
+        Member(rewrite(b), field, tpe)
       case Unbox(e) =>
         Unbox(rewrite(e))
       case New(impl) =>
@@ -356,7 +357,7 @@ object Tree {
     }
     def rewrite(e: Implementation): Implementation = e match {
       case e if handler.isDefinedAt(e) => handler(e)
-      case Implementation(id: Symbol, clauses) => Implementation(id, clauses map rewrite)
+      case Implementation(tpe, clauses) => Implementation(tpe, clauses map rewrite)
     }
     def rewrite(o: Operation): Operation = o match {
       case Operation(name, impl) => Operation(name, rewrite(impl).asInstanceOf[BlockLit])

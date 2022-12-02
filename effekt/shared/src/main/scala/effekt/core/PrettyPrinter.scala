@@ -41,7 +41,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case BlockVar(v, _, _) => v.name.toString
     case BlockLit(vps, bps, body) =>
       braces { space <> paramsToDoc(vps, bps) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
-    case Member(b, id) =>
+    case Member(b, id, _) =>
       toDoc(b) <> "." <> id.name.toString
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
@@ -65,7 +65,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
-    case Box(b) => parens("box" <+> toDoc(b))
+    case Box(b, capt) => parens("box" <+> toDoc(b))
     case Run(s) => "run" <+> braces(toDoc(s))
   }
 
@@ -78,7 +78,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
 
   def toDoc(instance: Implementation): Doc = {
-    val handlerName = toDoc(instance.interface.name)
+    val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
       case Operation(id, BlockLit(vps, bps, body)) =>
         "def" <+> toDoc(id.name) <> paramsToDoc(vps, bps) <+> "=" <+> nested(toDoc(body))
@@ -144,6 +144,26 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Hole =>
       "<>"
   }
+
+  def toDoc(s: symbols.Symbol): Doc = s.name.name
+
+  def toDoc(tpe: core.BlockType): Doc = tpe match {
+    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+    case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
+    case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+    case core.BlockType.Extern(symbol, targs) => ???
+  }
+
+  def toDoc(tpe: core.ValueType): Doc = tpe match {
+    case ValueType.Var(name) => toDoc(name)
+    case ValueType.Data(symbol, targs) => ???
+    case ValueType.Record(symbol, targs) => ???
+    case ValueType.Boxed(tpe, capt) => toDoc(tpe) <+> "at" <+> toDoc(capt)
+    case ValueType.Extern(symbol, Nil) => toDoc(symbol)
+    case ValueType.Extern(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+  }
+
+  def toDoc(capt: core.Captures): Doc = braces(hsep(capt.toList.map(toDoc), comma))
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 

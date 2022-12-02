@@ -356,6 +356,14 @@ trait AnnotationsDB { self: Context =>
       panic(s"Internal Error: Missing type of source expression: '${t}'")
     }
 
+  def inferredBlockTypeOption(t: source.Tree): Option[BlockType] =
+    annotationOption(Annotations.InferredBlockType, t)
+
+  def inferredBlockTypeOf(t: source.Tree): BlockType =
+    inferredBlockTypeOption(t).getOrElse {
+      panic(s"Internal Error: Missing type of source block: '${ t }'")
+    }
+
   def inferredEffectOption(t: source.Tree): Option[Effects] =
     annotationOption(Annotations.InferredEffect, t)
 
