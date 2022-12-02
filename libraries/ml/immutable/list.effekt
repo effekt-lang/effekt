@@ -103,15 +103,15 @@ def nonEmpty[A](l: List[A]): Boolean = l match {
   case Cons(a, rest) => true
 }
 
-// def head[A](l: List[A]): A / Exception[EmptyList] = l match {
-//   case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
-//   case Cons(a, rest) => a
-// }
+def head[A](l: List[A]): A / Exception[EmptyList] = l match {
+  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+  case Cons(a, rest) => a
+}
 
-// def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
-//   case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
-//   case Cons(a, rest) => rest
-// }
+def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
+  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+  case Cons(a, rest) => rest
+}
 
 def headOption[A](l: List[A]): Option[A] = l match {
   case Nil() => None()
