@@ -60,6 +60,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def paramToDoc(p: ml.Param): Doc = p match {
     case ml.Param.Named(pname) => toDoc(pname)
+    case ml.Param.Patterned(p) => parens(toDoc(p))
   }
 
   def toDoc(tpe: ml.Type): Doc = tpe match {
@@ -151,6 +152,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(p: ml.Pattern): Doc = p match {
+    case Pattern.Wild() => "_"
+    case Pattern.Named(n) => toDoc(n)
     case Pattern.Datatype(tag, Nil) =>
       toDoc(tag)
     case Pattern.Datatype(tag, one :: Nil) =>

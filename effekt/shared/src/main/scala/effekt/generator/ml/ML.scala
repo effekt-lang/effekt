@@ -116,47 +116,28 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
-    case Decl.Record(id: TypeConstructor.Record, fields) =>
-      val tvars: List[ml.Type.Var] = fields.map(_ => ml.Type.Var(freshName("arg")))
-      val dataType = typesToTupleIsh(tvars)
-      val recordTypeName = name(id)
-      val recordConstructorName = name(id.constructor)
-      val dataDecl = ml.Binding.DataBind(recordTypeName, tvars, List((recordConstructorName, dataType)))
-      val accessors = fields.zipWithIndex.map {
-        case (f: symbols.Field, i) =>
-          val argName = freshName("data")
-          val fieldName = name(f)
-          val terms = fields.zipWithIndex.map{
-            case (_, j) => if (j==i) fieldName else freshName("unused")
-          }
-          val pattern = ml.Pattern.Datatype(recordConstructorName, terms)
-          val clause = ml.MatchClause(pattern, ml.Expr.Variable(fieldName))
-          val body = ml.Expr.Match(ml.Expr.Variable(argName), List(clause), None)
-          ml.Binding.FunBind(fieldSelectorName(f), List(ml.Param.Named(argName)), body)
-        case _ => C.panic("Record fields are not actually a field")
-      }
-      dataDecl :: accessors
-    case Decl.Interface(id, operations) =>
-      val tvars: List[ml.Type.Var] = operations.map(_ => ml.Type.Var(freshName("arg")))
-      val dataType = typesToTupleIsh(tvars)
-      val interfaceName = name(id)
-      val dataDecl = ml.Binding.DataBind(interfaceName, tvars, List((interfaceName, dataType)))
-      val accessors = operations.zipWithIndex.map {
-        case (op, i) =>
-          val argName = freshName("data")
-          val fieldName = name(op)
-          val terms = operations.zipWithIndex.map {
-            case (_, j) => if (j == i) fieldName else freshName("unused")
-          }
-          val pattern = ml.Pattern.Datatype(interfaceName, terms)
-          val clause = ml.MatchClause(pattern, ml.Expr.Variable(fieldName))
-          val body = ml.Expr.Match(ml.Expr.Variable(argName), List(clause), None)
-          ml.Binding.FunBind(dataSelectorName(id, op), List(ml.Param.Named(argName)), body)
-      }
-      dataDecl :: accessors
-
+    case Decl.Record(id: TypeConstructor.Record, fields) => singletonData(id, id.constructor, fields)
+    case Decl.Interface(id, operations) => singletonData(id, id, operations)
     case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
     case Decl.Record(_, _) => C.panic("Record symbol is not TypeConstructor.Record")
+  }
+
+  def singletonData(typeSym: Symbol, caseSym: Symbol, terms: List[Symbol])(using Context): List[ml.Binding] = {
+    val caseName = name(caseSym)
+    val tvars: List[ml.Type.Var] = terms.map(_ => ml.Type.Var(freshName("arg")))
+    val dataDecl = ml.Binding.DataBind(name(typeSym), tvars, List((caseName, typesToTupleIsh(tvars))))
+    val accessors = terms.zipWithIndex.map {
+      case (sym, i) =>
+        val fieldName = name(sym)
+        val patterns = terms.indices.map(
+          j => if (j == i) ml.Pattern.Named(fieldName) else ml.Pattern.Wild()
+        ).toList
+        val pattern = ml.Pattern.Datatype(caseName, patterns)
+        val args = List(ml.Param.Patterned(pattern))
+        val body = ml.Expr.Variable(fieldName)
+        ml.Binding.FunBind(dataSelectorName(caseSym, sym), args, body)
+    }
+    dataDecl :: accessors
   }
 
   def toML(ext: Extern)(using Context): ml.Binding = ext match {
@@ -180,7 +161,7 @@ object ML extends Backend {
     case Match(scrutinee, clauses, default) =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
         val (constructor, b) = c
-        val binders = b.params.map(p => name(p.id))
+        val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
         val pattern = constructor.tpe match {
           case symbols.Record(_, _, _) =>
             val tag = name(constructor)
@@ -384,7 +365,7 @@ object ML extends Backend {
 
   def fieldSelectorName(f: Symbol)(using C: Context): MLName = f match {
     case f: symbols.Field =>
-      dataSelectorName(f.constructor.tpe, f)
+      dataSelectorName(f.constructor, f)
     case _ => C.panic("Record fields are not actually a field")
   }
 

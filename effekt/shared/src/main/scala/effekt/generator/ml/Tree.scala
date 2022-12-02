@@ -36,6 +36,7 @@ enum Type {
 
 enum Param {
   case Named(name: MLName)
+  case Patterned(pattern: Pattern)
 }
 
 enum Binding {
@@ -93,7 +94,9 @@ enum Expr {
 
 case class MatchClause(pattern: Pattern, body: Expr)
 enum Pattern {
-  case Datatype(tag: MLName, terms: List[MLName])
+  case Wild()
+  case Named(name: MLName)
+  case Datatype(tag: MLName, terms: List[Pattern])
 }
 
 export Expr.*
