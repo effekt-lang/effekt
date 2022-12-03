@@ -82,7 +82,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case f @ source.ExternDef(pure, id, _, vps, bps, _, body) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
       assert(effects.isEmpty)
-      List(Extern.Def(sym, tps, vps map transform, bps map transform, transform(ret), transform(capt), body))
+      val cps = bps.map(b => b.symbol.capture)
+      List(Extern.Def(sym, tps, cps, vps map transform, bps map transform, transform(ret), transform(capt), body))
 
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
@@ -201,7 +202,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: VarBinder =>
         val stateType = Context.blockTypeOf(sym)
         val getType = asSeenFrom(stateType, TState.interface, TState.get)
-        DirectApp(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil)
+        DirectApp(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil, Nil)
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -234,7 +235,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val loopName = TmpBlock()
       val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
       val loopCapt = transform(Context.inferredCapture(body))
-      val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil)
+      val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil, Nil)
 
       val loop = Block.BlockLit(Nil, Nil, Nil, Nil,
         insertBindings {
@@ -309,7 +310,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = a.definition
       val stateType = Context.blockTypeOf(sym)
       val putType = asSeenFrom(stateType, TState.interface, TState.put)
-      DirectApp(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e))
+      DirectApp(Member(BlockVar(sym), TState.put, transform(putType)), Nil, Nil, List(e), Nil)
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
@@ -317,6 +318,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
       val blockArgs = bargs.map(transformAsBlock)
+
+      // TODO if we always just use .capt, then why annotate it?
+      val captArgs = bargs.map(b => transform(Context.inferredCapture(b)))
 
       val receiverType = Context.inferredBlockTypeOf(receiver)
       val operation = c.definition.asOperation
@@ -327,9 +331,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       operation match {
         case op if op == TState.put || op == TState.get =>
-          DirectApp(Member(rec, op, opType), remainingTypeArgs, valueArgs ++ blockArgs)
+          DirectApp(Member(rec, op, opType), remainingTypeArgs, captArgs, valueArgs, blockArgs)
         case op: Operation =>
-          Context.bind(App(Member(rec, op, opType), remainingTypeArgs, valueArgs ++ blockArgs))
+          Context.bind(App(Member(rec, op, opType), remainingTypeArgs, captArgs, valueArgs, blockArgs))
       }
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
@@ -342,11 +346,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
       val blockArgs = bargs.map(transformAsBlock)
+      val captArgs = bargs.map(b => transform(Context.inferredCapture(b)))
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
-        Run(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+        Run(App(Unbox(e), typeArgs, captArgs, valueArgs, blockArgs))
       } else {
-        Context.bind(App(Unbox(e), typeArgs, valueArgs ++ blockArgs))
+        Context.bind(App(Unbox(e), typeArgs, captArgs, valueArgs, blockArgs))
       }
 
     case c @ source.Call(fun: source.IdTarget, _, vargs, bargs) =>
@@ -385,6 +390,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   def makeFunctionCall(call: source.CallLike, sym: TermSymbol, vargs: List[source.Term], bargs: List[source.Term])(using Context): Expr = {
     // the type arguments, inferred by typer
     val targs = Context.typeArguments(call).map(transform)
+    val cargs = bargs.map(b => transform(Context.inferredCapture(b)))
 
     val vargsT = vargs.map(transformAsPure)
     val bargsT = bargs.map(transformAsBlock)
@@ -394,7 +400,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: ExternFunction if isPure(f.capture) =>
         PureApp(BlockVar(f), targs, vargsT)
       case f: ExternFunction if pureOrIO(f.capture) =>
-        DirectApp(BlockVar(f), targs, as)
+        DirectApp(BlockVar(f), targs, cargs, vargsT, bargsT)
       case r: Constructor =>
         if (bargs.nonEmpty) Context.abort("Constructors cannot take block arguments.")
         PureApp(BlockVar(r), targs, vargsT)
@@ -403,11 +409,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f: Field =>
         Context.panic("Should have been translated to a select!")
       case f: BlockSymbol if pureOrIO(f) && bargs.forall { pureOrIO } =>
-        Run(App(BlockVar(f), targs, as))
+        Run(App(BlockVar(f), targs, cargs, vargsT, bargsT))
       case f: BlockSymbol =>
-        Context.bind(App(BlockVar(f), targs, as))
+        Context.bind(App(BlockVar(f), targs, cargs, vargsT, bargsT))
       case f: ValueSymbol =>
-        Context.bind(App(Unbox(ValueVar(f)), targs, as))
+        Context.bind(App(Unbox(ValueVar(f)), targs, cargs, vargsT, bargsT))
     }
   }
 
@@ -496,7 +502,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val normalizedClauses = clauses.map(normalize)
 
     def jumpToBranch(target: BlockVar, args: List[ValueVar]) =
-      core.App(target, Nil, args)
+      core.App(target, Nil, Nil, args, Nil)
 
     // (1) Check whether we are already successful
     val Clause(patterns, target, args) = normalizedClauses.head

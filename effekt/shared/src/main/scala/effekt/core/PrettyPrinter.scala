@@ -32,7 +32,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tps, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id.name) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
@@ -59,8 +59,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(value, _)         => value.toString
     case ValueVar(id, _)              => id.name.toString
 
-    case PureApp(b, targs, args)   => toDoc(b) <> parens(hsep(args map argToDoc, comma))
-    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case PureApp(b, targs, args)   => toDoc(b) <> argsToDoc(targs, Nil, args, Nil)
+    case DirectApp(b, targs, cargs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, cargs, vargs, bargs)
 
     case Select(b, field) =>
       toDoc(b) <> "." <> toDoc(field.name)
@@ -68,6 +68,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Box(b, capt) => parens("box" <+> toDoc(b))
     case Run(s) => "run" <+> braces(toDoc(s))
   }
+
+  def argsToDoc(targs: List[core.ValueType], cargs: List[core.Captures], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
+    val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+    val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
+    val vargsDoc = vargs.map(toDoc)
+    val bargsDoc = bargs.map(toDoc)
+    targsDoc <> cargsDoc <> parens(vargsDoc ++ bargsDoc)
 
   def argToDoc(e: Argument): Doc = e match {
     case e: Expr  => toDoc(e)
@@ -124,8 +131,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case App(b, targs, cargs, vargs, bargs) =>
+      toDoc(b) <> argsToDoc(targs, cargs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))

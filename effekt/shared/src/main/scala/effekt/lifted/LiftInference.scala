@@ -60,8 +60,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Extern)(using Environment, Context): lifted.Extern = tree match {
-    case core.Extern.Def(id, tps, vps, bps, ret, capt, body) =>
-      val cps = Nil
+    case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       val funTpe: core.BlockType.Function = core.BlockType.Function(tps, cps, vps.map(_.tpe), bps.map(_.tpe), ret)
       Extern.Def(id, funTpe, (vps ++ bps).map { p => transform(p) }, body)
     case core.Extern.Include(contents) =>
@@ -123,15 +122,13 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Region(_) => Context.panic("Should not happen. Regions always take block literals as body.")
 
-    case core.App(b: core.Block, targs, args: List[core.Argument]) =>
+    case core.App(b: core.Block, targs, cargs, vargs, bargs) =>
 
       // evidence for the function itself
       val ev = env.evidenceFor(b)
 
       // adds evidence parameters for block arguments
-      val transformedArgs = transform(args)
-
-      App(transform(b), targs, ev :: transformedArgs)
+      App(transform(b), targs, ev :: transform(vargs) ++ transform(bargs))
 
     case core.Scope(definitions, rest) =>
       val env = pretransform(definitions)
@@ -166,8 +163,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.ValueVar(sym, tpe) =>
       ValueVar(sym)
 
-    case core.DirectApp(b: core.Block, targs, args: List[core.Argument]) =>
-      PureApp(transform(b), targs, transform(args))
+    case core.DirectApp(b: core.Block, targs, cargs, vargs, bargs) =>
+      PureApp(transform(b), targs, transform(vargs) ++ transform(bargs))
 
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs, transform(args))

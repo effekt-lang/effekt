@@ -140,9 +140,8 @@ object Type {
     case Stmt.Scope(definitions, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
     case Stmt.Val(id, binding, body) => body.tpe
-    case Stmt.App(callee, targs, args) =>
-      val bargs = args.collect { case b: Block => b }
-      instantiate(callee.functionType, targs, bargs.map(_.capt)).result
+    case Stmt.App(callee, targs, cargs, vargs, bargs) =>
+      instantiate(callee.functionType, targs, cargs).result
 
     case Stmt.If(cond, thn, els) => join(thn.tpe, els.tpe)
     case Stmt.Match(scrutinee, clauses, default) =>
@@ -161,17 +160,12 @@ object Type {
     case Definition.Let(id, binding) => binding.capt
   }
 
-  def inferCapt(arg: Argument): Captures = arg match {
-    case pure: Pure => Set.empty
-    case block: Block => block.capt
-  }
-
   def inferCapt(stmt: Stmt): Captures = stmt match {
     case Stmt.Scope(definitions, body) =>
       definitions.foldLeft(body.capt)(_ ++ _.capt)
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, binding, body) => binding.capt ++ body.capt
-    case Stmt.App(callee, targs, args) => callee.capt ++ args.flatMap(inferCapt).toSet
+    case Stmt.App(callee, targs, cargs, vargs, bargs) => callee.capt ++ cargs.flatten.toSet ++ bargs.flatMap(_.capt).toSet
     case Stmt.If(cond, thn, els) => thn.capt ++ els.capt
     case Stmt.Match(scrutinee, clauses, default) => clauses.flatMap { (_, cl) => cl.capt }.toSet ++ default.toSet.flatMap(s => s.capt)
     case Stmt.State(id, init, region, body) => Set(region) ++ body.capt
@@ -181,8 +175,8 @@ object Type {
   }
 
   def inferType(expr: Expr): ValueType = expr match {
-    case DirectApp(callee, targs, vargs) =>
-      instantiate(callee.functionType, targs, Nil).result
+    case DirectApp(callee, targs, cargs, vargs, bargs) =>
+      instantiate(callee.functionType, targs, cargs).result
     case Run(s) => s.tpe
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
@@ -196,10 +190,8 @@ object Type {
    * Invariant: can only be {} or {io}
    */
   def inferCapt(expr: Expr): Captures = expr match {
-    case DirectApp(callee, targs, args) => callee.capt ++ args.flatMap {
-      case p: Pure => Set.empty
-      case b: Block => b.capt
-    }
+    case DirectApp(callee, targs, cargs, vargs, bargs) =>
+       callee.capt ++ cargs.flatten.toSet ++ bargs.flatMap(_.capt).toSet
     case Run(s) => s.capt
     case pure: Pure => Set.empty
   }

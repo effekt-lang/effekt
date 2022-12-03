@@ -93,7 +93,7 @@ object JavaScript extends Backend {
   }
 
   def toJS(e: core.Extern)(using Context): js.Stmt = e match {
-    case Extern.Def(id, tpe, vps, bps, ret, capt, body) =>
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
 
     case Extern.Include(contents) =>
@@ -122,7 +122,7 @@ object JavaScript extends Backend {
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
-    case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
+    case DirectApp(b, targs, cargs, vargs, bargs) => js.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
@@ -158,8 +158,8 @@ object JavaScript extends Backend {
     case core.Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
-    case core.App(b, targs, args) =>
-      monadic.Call(toJS(b), toJS(args))
+    case core.App(b, targs, cargs, vargs, bargs) =>
+      monadic.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
 
     case core.If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))

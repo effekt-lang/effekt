@@ -82,7 +82,7 @@ export Declaration.*
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Symbol, tparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
+  case Def(id: Symbol, tparams: List[Symbol], cparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
   case Include(contents: String)
 }
 
@@ -130,7 +130,7 @@ sealed trait Expr extends Tree {
 }
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Expr
+case class DirectApp(b: Block, targs: List[core.ValueType], cargs: List[core.Captures], vargs: List[Pure], bargs: List[Block]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
@@ -156,7 +156,7 @@ enum Pure extends Expr with Argument {
   case Literal(value: Any, annotatedType: ValueType) extends Pure
 
   // invariant, block b is pure.
-  case PureApp(b: Block, targs: List[core.ValueType], args: List[Pure]) extends Pure
+  case PureApp(b: Block, targs: List[core.ValueType], vargs: List[Pure]) extends Pure
   case Select(target: Pure, field: symbols.Field) extends Pure
 
   case Box(b: Block, annotatedCapture: Captures) extends Pure
@@ -224,7 +224,7 @@ enum Stmt extends Tree {
   // Fine-grain CBV
   case Return(expr: Pure)
   case Val(id: Symbol, binding: Stmt, body: Stmt)
-  case App(callee: Block, targs: List[core.ValueType], args: List[Argument])
+  case App(callee: Block, targs: List[core.ValueType], cargs: List[Captures], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
@@ -307,8 +307,8 @@ object Tree {
     def rewrite(e: Expr): Expr =
       e match {
         case e if expr.isDefinedAt(e) => expr(e)
-        case DirectApp(b, targs, args) =>
-          DirectApp(rewrite(b), targs, args map rewrite)
+        case DirectApp(b, targs, cargs, vargs, bargs) =>
+          DirectApp(rewrite(b), targs, cargs, vargs map rewrite, bargs map rewrite)
         case Run(s) => Run(rewrite(s))
         case p: Pure     => rewrite(p)
       }
@@ -327,8 +327,8 @@ object Tree {
         case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
         case Val(id, binding, body) =>
           Val(id, rewrite(binding), rewrite(body))
-        case App(b, targs, args) =>
-          App(rewrite(b), targs, args map rewrite)
+        case App(b, targs, cargs, vargs, bargs) =>
+          App(rewrite(b), targs, cargs, vargs map rewrite, bargs map rewrite)
         case If(cond, thn, els) =>
           If(rewrite(cond), rewrite(thn), rewrite(els))
         case Return(e: Expr) =>
@@ -364,11 +364,6 @@ object Tree {
     }
     def rewrite(o: Operation): Operation = o match {
       case Operation(name, tps, cps, vps, bps, resume, body) => Operation(name, tps, cps, vps, bps, resume, rewrite(body))
-    }
-
-    def rewrite(e: Argument): Argument = e match {
-      case p: Pure  => rewrite(p)
-      case e: Block => rewrite(e)
     }
   }
 
