@@ -32,15 +32,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tpe, vps, bps, body) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> paramsToDoc(vps, bps) <+> "=" <+> "\"" <> body <> "\""
+    case Extern.Def(id, tps, vps, bps, ret, capt, body) =>
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id.name) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v, _, _) => v.name.toString
-    case BlockLit(vps, bps, body) =>
-      braces { space <> paramsToDoc(vps, bps) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
+    case BlockLit(tps, vps, bps, body) =>
+      braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
     case Member(b, id, _) =>
       toDoc(b) <> "." <> id.name.toString
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
@@ -74,14 +74,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case b: Block => toDoc(b)
   }
 
-  def paramsToDoc(vps: List[Param.ValueParam], bps: List[Param.BlockParam]): Doc =
-    parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
+  def paramsToDoc(tps: List[symbols.Symbol], vps: List[Param.ValueParam], bps: List[Param.BlockParam]): Doc = {
+    val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))
+    tpsDoc <> parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
+  }
 
   def toDoc(instance: Implementation): Doc = {
     val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
-      case Operation(id, BlockLit(vps, bps, body)) =>
-        "def" <+> toDoc(id.name) <> paramsToDoc(vps, bps) <+> "=" <+> nested(toDoc(body))
+      case Operation(id, BlockLit(tps, vps, bps, body)) =>
+        "def" <+> toDoc(id.name) <> paramsToDoc(tps, vps, bps) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
@@ -98,8 +100,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, BlockLit(vps, bps, body)) =>
-      "def" <+> toDoc(id.name) <> paramsToDoc(vps, bps) <+> "=" <> nested(toDoc(body))
+    case Definition.Def(id, BlockLit(tps, vps, bps, body)) =>
+      "def" <+> toDoc(id.name) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
     case Definition.Let(id, binding) =>

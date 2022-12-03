@@ -31,7 +31,7 @@ export Decl.*
  * FFI external definitions
  */
 enum Extern {
-  case Def(id: Symbol, tpe: FunctionType, params: List[Param], body: String)
+  case Def(id: Symbol, tpe: core.BlockType.Function, params: List[Param], body: String)
   case Include(contents: String)
 }
 

@@ -42,7 +42,7 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, Context): Declaration = extern match {
-    case lifted.Extern.Def(name, functionType: FunctionType, params, body) =>
+    case lifted.Extern.Def(name, functionType, params, body) =>
       val transformedParams = params.map {
         case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
         case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")

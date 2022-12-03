@@ -82,7 +82,7 @@ export Declaration.*
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Symbol, tpe: FunctionType, vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: String)
+  case Def(id: Symbol, tparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
   case Include(contents: String)
 }
 
@@ -179,7 +179,7 @@ export Pure.*
  */
 enum Block extends Argument {
   case BlockVar(id: Symbol, annotatedTpe: BlockType, annotatedCapt: Captures)
-  case BlockLit(vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
+  case BlockLit(tparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
   case Member(block: Block, field: symbols.Symbol, annotatedTpe: BlockType)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
@@ -345,8 +345,8 @@ object Tree {
 
     def rewrite(e: Block): Block = e match {
       case e if block.isDefinedAt(e) => block(e)
-      case BlockLit(vps, bps, body) =>
-        BlockLit(vps, bps, rewrite(body))
+      case BlockLit(tps, vps, bps, body) =>
+        BlockLit(tps, vps, bps, rewrite(body))
       case Member(b, field, tpe) =>
         Member(rewrite(b), field, tpe)
       case Unbox(e) =>

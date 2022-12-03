@@ -127,7 +127,7 @@ trait ChezScheme {
         // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
         val names = RecordNames(h.interface.symbol)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, BlockLit(vps, bps, body)) =>
+          case Operation(op, BlockLit(tps, vps, bps, body)) =>
             // the LAST argument is the continuation...
             chez.Operation(nameDef(op), (vps ++ bps.init).map(p => nameDef(p.id)), nameDef(bps.last.id), toChezExpr(body))
         })
@@ -155,7 +155,7 @@ trait ChezScheme {
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, vps, bps, body) =>
+    case Extern.Def(id, tpe, vps, bps, ret, capt, body) =>
       chez.Constant(nameDef(id),
         chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
           chez.RawExpr(body)))
@@ -196,7 +196,7 @@ trait ChezScheme {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(vps, bps, body) =>
+    case BlockLit(tps, vps, bps, body) =>
       chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 
@@ -204,7 +204,7 @@ trait ChezScheme {
     case BlockVar(id, _, _) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(vps, bps, body) => toChez(b)
+    case b @ BlockLit(tps, vps, bps, body) => toChez(b)
 
     case Member(b, field, tpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
