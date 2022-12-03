@@ -173,7 +173,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val tps = tparams.map { p => p.symbol }
           // TODO the operation could be effectful, so needs to take a block param here.
           val bps = Nil
-          core.Operation(op.definition, tps, vps, bps, transform(body))
+          core.Operation(op.definition, tps, vps, bps, None, transform(body))
       }))
 
     case source.Unbox(b) =>
@@ -284,7 +284,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
               // TODO we cannot annotate the transparent capture of resume here somewhere since all
               //  block parameters are automatically tracked by our current encoding of core.Tree.
-              core.Operation(op.definition, tparams, vps map transform, List(resumeParam), transform(body))
+              core.Operation(op.definition, tparams, vps map transform, Nil, Some(resumeParam), transform(body))
           })
       }
 

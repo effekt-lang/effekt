@@ -131,9 +131,9 @@ object JavaScript extends Backend {
 
   def toJS(handler: core.Implementation)(using Context): js.Expr =
     js.Object(handler.operations.map {
-      case Operation(id, tps, vps, bps, body) =>
+      case Operation(id, tps, vps, bps, resume, body) =>
         val (stmts, ret) = toJSStmt(body)
-        nameDef(id) -> monadic.Lambda((vps ++ bps) map toJS, stmts, ret)
+        nameDef(id) -> monadic.Lambda((vps ++ bps ++ resume.toList) map toJS, stmts, ret)
     })
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using Context): js.Module = {

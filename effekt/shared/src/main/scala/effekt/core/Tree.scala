@@ -262,7 +262,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  *   maybe we need to add PlainOperation | ControlOperation, where for now
  *   handlers always have control operations and New always has plain operations.
  */
-case class Operation(name: symbols.Operation, tparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt) {
+case class Operation(name: symbols.Operation, tparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
   val capt = body.capt // TODO -- cparams
 }
 
@@ -363,7 +363,7 @@ object Tree {
       case Implementation(tpe, clauses) => Implementation(tpe, clauses map rewrite)
     }
     def rewrite(o: Operation): Operation = o match {
-      case Operation(name, tps, vps, bps, body) => Operation(name, tps, vps, bps, rewrite(body))
+      case Operation(name, tps, vps, bps, resume, body) => Operation(name, tps, vps, bps, resume, rewrite(body))
     }
 
     def rewrite(e: Argument): Argument = e match {
