@@ -377,8 +377,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case Operation(name, tparams, vparams, resultType, effects, _) =>
         val substitution = Substitutions((tparams zip targs).toMap, Map.empty)
         val remainingTypeParams = tparams.drop(targs.size)
-        val cparams = Nil
         val bparams = Nil
+        // TODO this is exactly like in [[Typer.toType]] -- TODO repeated here:
+        // TODO currently the return type cannot refer to the annotated effects, so we can make up capabilities
+        //   in the future namer needs to annotate the function with the capture parameters it introduced.
+        val cparams = effects.canonical.map { tpe => symbols.CaptureParam(tpe.name) }
+
         FunctionType(remainingTypeParams, cparams, vparams.map(t => substitution.substitute(t.tpe.get)), bparams, substitution.substitute(resultType), substitution.substitute(effects))
     }
 
