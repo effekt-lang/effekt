@@ -423,8 +423,19 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
     case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-      // we ignore effects, is this correct? Do we need to make up capabilities here? Is this done by a previous phase?
-      core.BlockType.Function(tparams, cparams, vparams.map(transform), bparams.map(transform), transform(result))
+
+      val capabilityTypes = effects.canonical.map(transform)
+      val allBlockParams = bparams.map(transform) ++ capabilityTypes
+
+      assert(cparams.size == allBlockParams.size,
+        s"""Internal error: number of block parameters does not match number of capture parameters.
+           |
+           |  Blockparams: ${bparams}
+           |  Effects: ${capabilityTypes}
+           |  Captures: ${cparams}
+           |""".stripMargin)
+
+      core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, transform(result))
     case BlockType.InterfaceType(tc: Interface, args) => core.BlockType.Interface(tc, args.map(transform))
     case BlockType.InterfaceType(tc: ExternInterface, args) => core.BlockType.Extern(tc, args.map(transform))
   }
@@ -459,10 +470,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val body = transform(clause.body)
     val blockLit = BlockLit(params.map(core.ValueParam.apply), Nil, body)
 
-    // val returnType = Context.inferredTypeOf(clause.body)
-    // val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
-
-    // TODO Do we also need to annotate the capture???
     val joinpoint = Context.bind(TmpBlock(), blockLit)
     Clause(Map(sc -> clause.pattern), joinpoint, params.map(core.ValueVar.apply))
   }
@@ -535,7 +542,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // TODO order variants by declaration of constructor.
     val branches = variants.toList.map { v =>
-      // TODO only add defaultVar as `self`, if it is free in the body.
       val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
       val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
       val blockLit: BlockLit = BlockLit(params, Nil, body)
@@ -696,7 +702,9 @@ trait TransformerOps extends ContextOps { Context: Context =>
     (result, b)
   }
 
-  // TODO, when reifying bindings, insert let bindings and use RUN when statement is pure or IO!
+  /**
+   * When reifying bindings, insert let bindings and use RUN when statement is pure or IO.
+   */
   private[core] def reifyBindings(body: Stmt, bindings: ListBuffer[Binding]): Stmt = {
     bindings.foldRight(body) {
       // optimization: remove unnecessary binds

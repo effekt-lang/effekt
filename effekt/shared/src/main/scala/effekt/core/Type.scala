@@ -52,7 +52,6 @@ object Type {
       assert(targs.size == tparams.size, "Wrong number of type arguments")
       assert(cargs.size == cparams.size, "Wrong number of capture arguments")
 
-
       val vsubst = (tparams zip targs).toMap
       val csubst = (cparams zip cargs).toMap
       BlockType.Function(Nil, Nil,
