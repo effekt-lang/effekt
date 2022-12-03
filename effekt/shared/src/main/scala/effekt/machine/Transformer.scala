@@ -401,6 +401,7 @@ object Transformer {
     case core.ValueType.Extern(symbols.builtins.StringSymbol, Nil) => Type.String()
     case core.ValueType.Extern(symbol, _) => Positive(symbol.name.name)
   }
+
   def transform(tpe: core.BlockType)(using Context): Type = tpe match {
     case core.BlockType.Function(Nil, cparams, vparams, Nil, result) => Negative("<function>")
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
