@@ -103,7 +103,7 @@ object JavaScript extends Backend {
   def toJS(b: core.Block)(using Context): js.Expr = b match {
     case BlockVar(v, _, _) =>
       nameRef(v)
-    case BlockLit(tps, vps, bps, body) =>
+    case BlockLit(tps, cps, vps, bps, body) =>
       val (stmts, ret) = toJSStmt(body)
       monadic.Lambda((vps ++ bps) map toJS, stmts, ret) // TODO
     case Member(b, id, tpe) =>
@@ -131,7 +131,7 @@ object JavaScript extends Backend {
 
   def toJS(handler: core.Implementation)(using Context): js.Expr =
     js.Object(handler.operations.map {
-      case Operation(id, tps, vps, bps, resume, body) =>
+      case Operation(id, tps, cps, vps, bps, resume, body) =>
         val (stmts, ret) = toJSStmt(body)
         nameDef(id) -> monadic.Lambda((vps ++ bps ++ resume.toList) map toJS, stmts, ret)
     })
@@ -195,7 +195,7 @@ object JavaScript extends Backend {
   }
 
   def toJS(d: core.Definition)(using Context): js.Stmt = d match {
-    case Definition.Def(id, BlockLit(tps, vps, bps, body)) =>
+    case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
       val (stmts, jsBody) = toJSStmt(body)
       monadic.Function(nameDef(id), (vps++ bps) map toJS, stmts, jsBody)
 

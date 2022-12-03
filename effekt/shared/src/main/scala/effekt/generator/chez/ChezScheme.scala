@@ -127,7 +127,7 @@ trait ChezScheme {
         // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
         val names = RecordNames(h.interface.symbol)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, tps, vps, bps, resume, body) =>
+          case Operation(op, tps, cps, vps, bps, resume, body) =>
             chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
         })
       }
@@ -195,7 +195,7 @@ trait ChezScheme {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(tps, vps, bps, body) =>
+    case BlockLit(tps, cps, vps, bps, body) =>
       chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 
@@ -203,7 +203,7 @@ trait ChezScheme {
     case BlockVar(id, _, _) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(tps, vps, bps, body) => toChez(b)
+    case b @ BlockLit(tps, cps, vps, bps, body) => toChez(b)
 
     case Member(b, field, tpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
@@ -214,7 +214,7 @@ trait ChezScheme {
     case New(Implementation(tpe, clauses)) =>
       val ChezName(name) = nameRef(tpe.symbol)
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map {
-        case Operation(_, tps, vps, bps, resume, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
+        case Operation(_, tps, cps, vps, bps, resume, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
       })
   }
 
