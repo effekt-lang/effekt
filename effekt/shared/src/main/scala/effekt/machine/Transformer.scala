@@ -62,9 +62,9 @@ object Transformer {
           case Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)) =>
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.collect {
-              case id: symbols.ValueSymbol => Variable(transform(id), transform(Context.valueTypeOf(id)))
-              case id: symbols.BlockParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
-              case id: symbols.ResumeParam => Variable(transform(id), transform(Context.blockTypeOf(id)))
+              case id: symbols.ValueSymbol => Variable(transform(id), transform(tpe))
+              case id: symbols.BlockParam => Variable(transform(id), transform(tpe))
+              case id: symbols.ResumeParam => Variable(transform(id), transform(tpe))
               case id: lifted.EvidenceSymbol => Variable(transform(id), builtins.Evidence)
               // we ignore functions since we do not "close" over them.
 
@@ -97,7 +97,7 @@ object Transformer {
                 // TODO we assume that there are no block params in methods
                 Clause(params.map(transform), transform(body))
             })
-            New(Variable(transform(id), transform(Context.blockTypeOf(id))), implTransformed, rest)
+            New(Variable(transform(id), transform(tpe)), implTransformed, rest)
 
           case (d @ lifted.Definition.Def(_, _, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
             Context.abort(s"block definition: $d")
@@ -124,7 +124,7 @@ object Transformer {
               // Here we actually need a substitution to prepare the environment for the jump
               Substitute(environment.zip(values), Jump(Label(transform(id), environment)))
             }
-          case symbols.BlockParam(_, tpe) =>
+          case symbols.BlockParam(_, _) =>
             transform(args).run { values =>
               Invoke(Variable(transform(id), transform(tpe)), builtins.Apply, values)
             }
@@ -308,16 +308,16 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe), List(), args) =>
-      val variable = Variable(freshName("x"), transform(blockName.result))
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function), List(), args) =>
+      val variable = Variable(freshName("x"), transform(tpe.result))
       transform(args).flatMap { values =>
         Binding { k =>
           ForeignCall(variable, transform(blockName), values, k(variable))
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Constructor, tpe), List(), args) =>
-      val variable = Variable(freshName("x"), transform(blockName.returnType));
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Constructor, tpe: core.BlockType.Function), List(), args) =>
+      val variable = Variable(freshName("x"), transform(tpe.result));
       val tag = getTagFor(blockName)
 
       transform(args).flatMap { values =>
