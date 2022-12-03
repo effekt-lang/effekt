@@ -169,7 +169,7 @@ object JavaScript extends Backend {
     case core.Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
 
-    case core.Hole =>
+    case core.Hole() =>
       monadic.Builtin("hole")
 
     case other => toJSStmt(other) match {

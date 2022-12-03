@@ -292,7 +292,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(Region(BlockLit(Nil, List(cap), transform(body))))
 
     case source.Hole(stmts) =>
-      Context.bind(Hole)
+      Context.bind(Hole())
 
     case a @ source.Assign(id, expr) =>
       val e = transformAsPure(expr)
@@ -458,13 +458,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     val params = boundVars(clause.pattern).map { p => (p, transform(Context.valueTypeOf(p))) }
     val body = transform(clause.body)
     val blockLit = BlockLit(params.map(core.ValueParam.apply), Nil, body)
-    val returnType = Context.inferredTypeOf(clause.body)
 
-    ??? // TODO construct core.BlockType
+    // val returnType = Context.inferredTypeOf(clause.body)
     // val blockTpe = symbols.FunctionType(Nil, Nil, params.map { case (_, tpe) => tpe }, Nil, returnType, Effects.Pure)
 
     // TODO Do we also need to annotate the capture???
-    val joinpoint = Context.bind(???, blockLit)
+    val joinpoint = Context.bind(TmpBlock(), blockLit)
     Clause(Map(sc -> clause.pattern), joinpoint, params.map(core.ValueVar.apply))
   }
 
@@ -476,7 +475,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   private def compileMatch(clauses: Seq[Clause])(using Context): core.Stmt = {
 
     // matching on void will result in this case
-    if (clauses.isEmpty) return core.Hole
+    if (clauses.isEmpty) return core.Hole()
 
     val normalizedClauses = clauses.map(normalize)
 

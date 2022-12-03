@@ -151,7 +151,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Return(e) =>
       Return(transform(e))
 
-    case core.Hole => Hole
+    case core.Hole() => Hole
   }
 
   def transform(tree: core.Expr)(using Environment, Context): Expr = tree match {

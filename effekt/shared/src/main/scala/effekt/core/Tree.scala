@@ -236,7 +236,7 @@ enum Stmt extends Tree {
   case Region(body: Block)
 
   // Others
-  case Hole
+  case Hole()
 
   val tpe: core.ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
@@ -340,7 +340,7 @@ object Tree {
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
           }, default map rewrite)
-        case h: Hole.type => h
+        case Hole() => e
       }
 
     def rewrite(e: Block): Block = e match {

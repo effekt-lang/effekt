@@ -157,7 +157,7 @@ object Type {
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
 
-    case Stmt.Hole => TBottom
+    case Stmt.Hole() => TBottom
   }
 
   def inferCapt(defn: Definition): Captures = defn match {
@@ -181,7 +181,7 @@ object Type {
     case Stmt.State(id, init, region, body) => Set(region) ++ body.capt
     case Stmt.Try(body, handlers) => body.capt ++ handlers.flatMap(_.capt).toSet
     case Stmt.Region(body) => body.capt
-    case Stmt.Hole => Set.empty
+    case Stmt.Hole() => Set.empty
   }
 
   def inferType(expr: Expr): ValueType = expr match {

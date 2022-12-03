@@ -114,7 +114,7 @@ trait ChezScheme {
       }
       chez.Cond(cls, default.map(toChezExpr))
 
-    case Hole => chez.Builtin("hole")
+    case Hole() => chez.Builtin("hole")
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
