@@ -257,10 +257,13 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  * Implementation of a method / effect operation.
  *
  * TODO generalize from BlockLit to also allow block definitions
+ *
+ * TODO For handler implementations we cannot simply reuse BlockLit here...
+ *   maybe we need to add PlainOperation | ControlOperation, where for now
+ *   handlers always have control operations and New always has plain operations.
  */
-case class Operation(name: symbols.Operation, implementation: Block.BlockLit) {
-  val tpe = implementation.tpe
-  val capt = implementation.capt
+case class Operation(name: symbols.Operation, tparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt) {
+  val capt = body.capt // TODO -- cparams
 }
 
 
@@ -360,7 +363,7 @@ object Tree {
       case Implementation(tpe, clauses) => Implementation(tpe, clauses map rewrite)
     }
     def rewrite(o: Operation): Operation = o match {
-      case Operation(name, impl) => Operation(name, rewrite(impl).asInstanceOf[BlockLit])
+      case Operation(name, tps, vps, bps, body) => Operation(name, tps, vps, bps, rewrite(body))
     }
 
     def rewrite(e: Argument): Argument = e match {

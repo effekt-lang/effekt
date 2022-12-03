@@ -173,8 +173,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           val tps = tparams.map { p => p.symbol }
           // TODO the operation could be effectful, so needs to take a block param here.
           val bps = Nil
-          val opBlock: BlockLit = BlockLit(tps, vps, bps, transform(body))
-          core.Operation(op.definition, opBlock)
+          core.Operation(op.definition, tps, vps, bps, transform(body))
       }))
 
     case source.Unbox(b) =>
@@ -285,9 +284,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
               // TODO we cannot annotate the transparent capture of resume here somewhere since all
               //  block parameters are automatically tracked by our current encoding of core.Tree.
-
-              val opBlock: BlockLit = BlockLit(tparams, vps map transform, List(resumeParam), transform(body))
-              core.Operation(op.definition, opBlock)
+              core.Operation(op.definition, tparams, vps map transform, List(resumeParam), transform(body))
           })
       }
 
@@ -394,7 +391,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     sym match {
       case f: ExternFunction if isPure(f.capture) =>
-        // if (bargs.nonEmpty) Context.abort("Pure builtin functions cannot take block arguments.")
         PureApp(BlockVar(f), targs, vargsT)
       case f: ExternFunction if pureOrIO(f.capture) =>
         DirectApp(BlockVar(f), targs, as)

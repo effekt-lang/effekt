@@ -48,8 +48,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   // TODO print types
-  def toDoc(p: ValueParam): Doc = p.id.name.toString
-  def toDoc(p: BlockParam): Doc = p.id.name.toString
+  def toDoc(p: ValueParam): Doc = p.id.name.toString <> ":" <+> toDoc(p.tpe)
+  def toDoc(p: BlockParam): Doc = braces(p.id.name.toString)
 
   def toDoc(n: Name): Doc = n.toString
 
@@ -82,7 +82,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(instance: Implementation): Doc = {
     val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
-      case Operation(id, BlockLit(tps, vps, bps, body)) =>
+      case Operation(id, tps, vps, bps, body) =>
         "def" <+> toDoc(id.name) <> paramsToDoc(tps, vps, bps) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
@@ -153,17 +153,20 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
     case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
-    case core.BlockType.Extern(symbol, targs) => ???
+    case core.BlockType.Extern(symbol, targs) => toDoc(symbol, targs)
   }
 
   def toDoc(tpe: core.ValueType): Doc = tpe match {
     case ValueType.Var(name) => toDoc(name)
-    case ValueType.Data(symbol, targs) => ???
-    case ValueType.Record(symbol, targs) => ???
+    case ValueType.Data(symbol, targs) => toDoc(symbol, targs)
+    case ValueType.Record(symbol, targs) => toDoc(symbol, targs)
     case ValueType.Boxed(tpe, capt) => toDoc(tpe) <+> "at" <+> toDoc(capt)
-    case ValueType.Extern(symbol, Nil) => toDoc(symbol)
-    case ValueType.Extern(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+    case ValueType.Extern(symbol, targs) => toDoc(symbol, targs)
   }
+
+  def toDoc(tpeConstructor: symbols.Symbol, targs: List[core.ValueType]): Doc =
+    if (targs.isEmpty) then toDoc(tpeConstructor)
+    else toDoc(tpeConstructor) <> brackets(targs.map(toDoc))
 
   def toDoc(capt: core.Captures): Doc = braces(hsep(capt.toList.map(toDoc), comma))
 

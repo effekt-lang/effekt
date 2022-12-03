@@ -127,7 +127,7 @@ trait ChezScheme {
         // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
         val names = RecordNames(h.interface.symbol)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, BlockLit(tps, vps, bps, body)) =>
+          case Operation(op, tps, vps, bps, body) =>
             // the LAST argument is the continuation...
             chez.Operation(nameDef(op), (vps ++ bps.init).map(p => nameDef(p.id)), nameDef(bps.last.id), toChezExpr(body))
         })
@@ -214,7 +214,9 @@ trait ChezScheme {
 
     case New(Implementation(tpe, clauses)) =>
       val ChezName(name) = nameRef(tpe.symbol)
-      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
+      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map {
+        case Operation(_, tps, vps, bps, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
+      })
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {

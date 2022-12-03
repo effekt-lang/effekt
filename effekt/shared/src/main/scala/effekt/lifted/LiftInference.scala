@@ -41,7 +41,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Unbox(b) => Unbox(transform(b))
 
     case core.New(core.Implementation(interface, clauses)) =>
-      val transformedMethods = clauses.map { case core.Operation(op, block) => Operation(op, liftBlockLitTo(block)) }
+      val transformedMethods = clauses.map { case core.Operation(op, tps, vps, bps, body) =>
+        // for now we reconstruct a block lit
+        Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, vps, bps, body)))
+      }
       New(Implementation(interface.symbol.asInterface, transformedMethods))
   }
 
@@ -233,7 +236,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Implementation(id.symbol.asInterface, clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
-        case core.Operation(op, core.BlockLit(tps, vps, bps, body)) =>
+        case core.Operation(op, tps, vps, bps, body) =>
           Operation(op, BlockLit((vps ++ bps) map transform, transform(body)))
       })
   }
