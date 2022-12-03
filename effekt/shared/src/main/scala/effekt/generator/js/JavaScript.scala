@@ -124,7 +124,7 @@ object JavaScript extends Backend {
     case ValueVar(id, tpe) => nameRef(id)
     case DirectApp(b, targs, cargs, vargs, bargs) => js.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
-    case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
+    case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
     case Run(s) => monadic.Run(toJSMonadic(s))
   }

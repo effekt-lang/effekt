@@ -172,8 +172,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs, args map transform)
 
-    case core.Select(target, field) =>
-      Select(transform(target), field)
+    case core.Select(target, field, tpe) =>
+      Select(transform(target), field, tpe)
 
     case core.Box(b, _) =>
       Box(transform(b))

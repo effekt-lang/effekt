@@ -326,7 +326,8 @@ object Transformer {
         }
       }
 
-    case lifted.Select(target, field: symbols.Field) =>
+    case lifted.Select(target, field: symbols.Field, tpe) =>
+      // TODO all of this can go away, if we desugar records in the translation to core!
       val fields = field.constructor.fields
       val fieldIndex = fields.indexOf(field)
       val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }

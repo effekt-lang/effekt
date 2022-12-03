@@ -228,7 +228,7 @@ trait ChezScheme {
     case DirectApp(b, targs, cargs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
 
-    case Select(b, field) =>
+    case Select(b, field, _) =>
       chez.Call(nameRef(field), toChez(b))
 
     case Box(b, _) => toChez(b)

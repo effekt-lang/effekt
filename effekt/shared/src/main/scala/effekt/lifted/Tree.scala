@@ -53,7 +53,7 @@ case class ValueVar(id: Symbol, tpe: core.ValueType) extends Expr
 
 case class Literal(value: Any, tpe: core.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol) extends Expr
+case class Select(target: Expr, field: Symbol, tpe: core.ValueType) extends Expr
 case class Box(b: Block) extends Expr
 case class Run(s: Stmt, tpe: core.ValueType) extends Expr
 
@@ -155,7 +155,7 @@ def freeVariables(expr: Expr): Set[Symbol] = expr match {
   case ValueVar(id, tpe) => Set(id)
   case Literal(value, tpe) => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
-  case Select(target, field) => freeVariables(target) // we do not count fields in...
+  case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
   case Run(s, tpe) => freeVariables(s)
 }

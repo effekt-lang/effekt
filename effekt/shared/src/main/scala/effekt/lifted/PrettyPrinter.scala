@@ -56,7 +56,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
-    case Select(b, field) =>
+    case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Box(b) => parens("box" <+> toDoc(b))

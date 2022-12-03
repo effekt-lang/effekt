@@ -157,7 +157,7 @@ enum Pure extends Expr with Argument {
 
   // invariant, block b is pure.
   case PureApp(b: Block, targs: List[core.ValueType], vargs: List[Pure]) extends Pure
-  case Select(target: Pure, field: symbols.Field) extends Pure
+  case Select(target: Pure, field: symbols.Field, annotatedType: ValueType) extends Pure
 
   case Box(b: Block, annotatedCapture: Captures) extends Pure
 }
@@ -296,8 +296,8 @@ object Tree {
         case e if pure.isDefinedAt(e) => pure(e)
         case PureApp(b, targs, args) =>
           PureApp(rewrite(b), targs, args map rewrite)
-        case Select(target, field) =>
-          Select(rewrite(target), field)
+        case Select(target, field, tpe) =>
+          Select(rewrite(target), field, tpe)
         case v: ValueVar   => v
         case l: Literal    => l
         case Box(b, capt)        => Box(rewrite(b), capt)

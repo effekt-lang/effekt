@@ -217,7 +217,7 @@ object ChezSchemeLift extends Backend {
       case e: Evidence => toChez(e)
     })
 
-    case Select(b, field) =>
+    case Select(b, field, _) =>
       chez.Call(nameRef(field), toChez(b))
 
     case Box(b) => toChez(b)

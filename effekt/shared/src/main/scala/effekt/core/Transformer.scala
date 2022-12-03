@@ -209,7 +209,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Literal(value, tpe) => Literal(value, transform(tpe))
 
     case s @ source.Select(receiver, selector) =>
-      Select(transformAsPure(receiver), s.definition)
+      Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
 
     case source.Box(capt, block) =>
       transformBox(block)
