@@ -114,7 +114,7 @@ object Transformer {
           Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
             transform(bind)
         )
-      case lifted.App(lifted.BlockVar(id), List(), args) =>
+      case lifted.App(lifted.BlockVar(id, tpe), List(), args) =>
         // TODO deal with BlockLit
         id match {
           case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock() =>
@@ -140,11 +140,10 @@ object Transformer {
             Context.abort(s"Unsupported blocksymbol: $id")
         }
 
-      case lifted.App(lifted.Member(lifted.BlockVar(id), op), List(), args) =>
-        val tpe = Context.blockTypeOf(id)
+      case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op), List(), args) =>
         val opTag = {
           tpe match
-            case symbols.InterfaceType(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
+            case core.BlockType.Interface(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
             case _ => Context.abort(s"Unsupported receiver type $tpe")
         }
         transform(args).run { values =>
@@ -239,8 +238,7 @@ object Transformer {
   }
 
   def transform(block: lifted.Block)(using BlocksParamsContext, Context): Binding[Variable] = block match {
-    case lifted.BlockVar(id) =>
-      val tpe = Context.blockTypeOf(id)
+    case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.BlockLit(params, body) =>
@@ -256,8 +254,7 @@ object Transformer {
   }
 
   def transform(expr: lifted.Expr)(using BlocksParamsContext, Context): Binding[Variable] = expr match {
-    case lifted.ValueVar(id) =>
-      val tpe = Context.valueTypeOf(id);
+    case lifted.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
     case lifted.Literal((), _) =>
@@ -292,16 +289,16 @@ object Transformer {
 
     // hardcoded translation for get and put.
     // TODO remove this when interfaces are correctly translated
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.get), List(), List()) =>
-      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.get), List(), List()) =>
+      val tpe = transform(stateType)
       val variable = Variable(freshName("x"), tpe)
       val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
       Binding { k =>
         Load(variable, stateVariable, k(variable))
       }
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), TState.put), List(), List(arg)) =>
-      val tpe = transform(TState.extractType(Context.blockTypeOf(x)))
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.put), List(), List(arg)) =>
+      val tpe = transform(stateType)
       val variable = Variable(freshName("x"), Positive("Unit"));
       val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
       transform(arg).flatMap { value =>
@@ -311,7 +308,7 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction), List(), args) =>
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe), List(), args) =>
       val variable = Variable(freshName("x"), transform(blockName.result))
       transform(args).flatMap { values =>
         Binding { k =>
@@ -319,7 +316,7 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Constructor), List(), args) =>
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Constructor, tpe), List(), args) =>
       val variable = Variable(freshName("x"), transform(blockName.returnType));
       val tag = getTagFor(blockName)
 

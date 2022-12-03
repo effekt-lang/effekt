@@ -36,7 +36,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(tree: core.Block)(using Environment, Context): lifted.Block = tree match {
     case b @ core.BlockLit(tps, cps, vps, bps, body) => liftBlockLitTo(b)
     case core.Member(body, id, tpe) => Member(transform(body), id)
-    case core.BlockVar(b, tpe, capt) => BlockVar(b)
+    case core.BlockVar(b, tpe, capt) => BlockVar(b, tpe)
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
 
@@ -163,7 +163,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Literal(value, tpe)
 
     case core.ValueVar(sym, tpe) =>
-      ValueVar(sym)
+      ValueVar(sym, tpe)
 
     case core.DirectApp(b: core.Block, targs, cargs, vargs, bargs) =>
       val (ev, bargsT) = transform(bargs)
@@ -221,7 +221,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     val transformedArgs = args map {
       case b: core.BlockVar =>
         evidence = env.evidenceFor(b) :: evidence
-        BlockVar(b.id)
+        BlockVar(b.id, b.tpe)
       case b: core.Block =>
         evidence = Here() :: evidence
         transform(b)

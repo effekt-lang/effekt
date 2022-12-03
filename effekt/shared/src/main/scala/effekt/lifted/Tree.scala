@@ -49,7 +49,7 @@ sealed trait Argument extends Tree
  * Expressions
  */
 sealed trait Expr extends Argument
-case class ValueVar(id: Symbol) extends Expr
+case class ValueVar(id: Symbol, tpe: core.ValueType) extends Expr
 
 case class Literal(value: Any, tpe: core.ValueType) extends Expr
 case class PureApp(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Expr
@@ -66,7 +66,7 @@ case class BlockParam(id: Symbol, tpe: core.BlockType) extends Param
 case class EvidenceParam(id: EvidenceSymbol) extends Param
 
 sealed trait Block extends Argument
-case class BlockVar(id: Symbol) extends Block
+case class BlockVar(id: Symbol, tpe: core.BlockType) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
@@ -152,7 +152,7 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
 }
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
-  case ValueVar(id) => Set(id)
+  case ValueVar(id, tpe) => Set(id)
   case Literal(value, tpe) => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field) => freeVariables(target) // we do not count fields in...
@@ -167,7 +167,7 @@ def freeVariables(arg: Argument): Set[Symbol] = arg match {
 }
 
 def freeVariables(block: Block): Set[Symbol] = block match {
-  case BlockVar(id) => Set(id)
+  case BlockVar(id, _) => Set(id)
   case BlockLit(params, body) =>
     val bound = params.map {
       case ValueParam(id, tpe) => id

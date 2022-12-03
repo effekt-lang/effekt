@@ -183,7 +183,7 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(block: Block): chez.Expr = block match {
-    case BlockVar(id) =>
+    case BlockVar(id, tpe) =>
       Variable(nameRef(id))
 
     case b @ BlockLit(params, body) => toChez(b)
@@ -209,7 +209,7 @@ object ChezSchemeLift extends Backend {
     case Literal(s: String, _) => ChezString(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
-    case ValueVar(id)  => chez.Variable(nameRef(id))
+    case ValueVar(id, _)  => chez.Variable(nameRef(id))
 
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
       case e: Expr  => toChez(e)
