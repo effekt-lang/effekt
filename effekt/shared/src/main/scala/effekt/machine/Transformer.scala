@@ -392,8 +392,24 @@ object Transformer {
         Variable(transform(name), builtins.Evidence)
     }
 
-  def transform(tpe: core.ValueType)(using Context): Type = ???
-  def transform(tpe: core.BlockType)(using Context): Type = ???
+  def transform(tpe: core.ValueType)(using Context): Type = tpe match {
+    case core.ValueType.Var(name) => ???
+    case core.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
+    case core.ValueType.Record(symbol, targs) => Positive(symbol.name.name)
+    case core.ValueType.Boxed(tpe, capt) => ???
+    case core.ValueType.Extern(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
+    case core.ValueType.Extern(symbols.builtins.IntSymbol, Nil) => Type.Int()
+    case core.ValueType.Extern(symbols.builtins.BooleanSymbol, Nil) => builtins.BooleanType
+    case core.ValueType.Extern(symbols.builtins.DoubleSymbol, Nil) => Type.Double()
+    case core.ValueType.Extern(symbols.builtins.StringSymbol, Nil) => Type.String()
+    case core.ValueType.Extern(_, _) => ???
+  }
+  def transform(tpe: core.BlockType)(using Context): Type = tpe match {
+    case core.BlockType.Function(Nil, cparams, vparams, Nil, result) => Negative("<function>")
+    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+    case core.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
+    case core.BlockType.Extern(symbol, targs) => Negative(symbol.name.name)
+  }
 
   def transform(tpe: symbols.Type)(using Context): Type = tpe match {
 
