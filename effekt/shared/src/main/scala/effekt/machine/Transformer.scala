@@ -399,7 +399,7 @@ object Transformer {
     case core.ValueType.Extern(symbols.builtins.BooleanSymbol, Nil) => builtins.BooleanType
     case core.ValueType.Extern(symbols.builtins.DoubleSymbol, Nil) => Type.Double()
     case core.ValueType.Extern(symbols.builtins.StringSymbol, Nil) => Type.String()
-    case core.ValueType.Extern(_, _) => ???
+    case core.ValueType.Extern(symbol, _) => Positive(symbol.name.name)
   }
   def transform(tpe: core.BlockType)(using Context): Type = tpe match {
     case core.BlockType.Function(Nil, cparams, vparams, Nil, result) => Negative("<function>")
