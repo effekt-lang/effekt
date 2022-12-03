@@ -126,9 +126,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       // evidence for the function itself
       val ev = env.evidenceFor(b)
+      val vargsT = vargs map transform
+      val (blockEv, bargsT) = transform(bargs)
 
       // adds evidence parameters for block arguments
-      App(transform(b), targs, ev :: transform(vargs) ++ transform(bargs))
+      App(transform(b), targs, (ev :: blockEv) ++ vargsT ++ bargsT)
 
     case core.Scope(definitions, rest) =>
       val env = pretransform(definitions)
@@ -164,10 +166,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       ValueVar(sym)
 
     case core.DirectApp(b: core.Block, targs, cargs, vargs, bargs) =>
-      PureApp(transform(b), targs, transform(vargs) ++ transform(bargs))
+      val (ev, bargsT) = transform(bargs)
+      PureApp(transform(b), targs, ev ++ vargs.map(transform) ++ bargsT)
 
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
-      PureApp(transform(b), targs, transform(args))
+      PureApp(transform(b), targs, args map transform)
 
     case core.Select(target, field) =>
       Select(transform(target), field)
@@ -213,7 +216,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       BlockLit((vps ++ bps) map transform, transform(body))
   }
 
-  def transform(args: List[core.Argument])(using Environment, Context): List[Argument] = {
+  def transform(args: List[core.Block])(using Environment, Context): (List[Evidence], List[Argument]) = {
     var evidence: List[Evidence] = Nil
     val transformedArgs = args map {
       case b: core.BlockVar =>
@@ -222,10 +225,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       case b: core.Block =>
         evidence = Here() :: evidence
         transform(b)
-      case e: core.Expr  =>
-        transform(e)
     }
-    evidence.reverse ++ transformedArgs
+    (evidence.reverse, transformedArgs)
   }
 
   def transform(h: core.Implementation)(using Environment, Context): Implementation = h match {
