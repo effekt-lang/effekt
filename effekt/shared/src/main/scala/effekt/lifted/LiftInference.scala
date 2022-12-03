@@ -260,7 +260,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     def adapt(a: EvidenceSymbol) = copy(env = env.map { case (s, as) => s -> (a :: as) })
 
     def evidenceFor(b: core.Block)(using Context): Evidence = b match {
-      case b: core.BlockVar if Context.blockTypeOf(b.id) == builtins.TRegion => Here()
+      case core.BlockVar(_, tpe, _) if tpe == core.Type.TRegion => Here()
       case b: core.BlockVar => Evidence(env.getOrElse(b.id, Nil)) //.map { x => Evidence(x) }
       case b: core.BlockLit   => Here()
       case core.Member(b, id, tpe) => evidenceFor(b)

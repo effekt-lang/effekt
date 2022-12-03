@@ -44,6 +44,7 @@ object Type {
   // The subtyping lattice
   val TBottom = ValueType.Extern(builtins.BottomSymbol, Nil)
   val TUnit = ValueType.Extern(builtins.UnitSymbol, Nil)
+  val TRegion = BlockType.Extern(builtins.RegionSymbol, Nil)
 
   def join(tpe1: ValueType, tpe2: ValueType): ValueType = tpe1 // TODO implement properly
 

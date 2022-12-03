@@ -500,7 +500,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       bindings
-  }
+  } match { case res => Context.annotateInferredType(pattern, sc); res }
 
   //</editor-fold>
 

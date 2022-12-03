@@ -98,8 +98,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.ExprStmt(e, rest) if pureOrIO(e) =>
       val (expr, bs) = Context.withBindings { transformAsExpr(e) }
       val let = Let(Wildcard(), expr, transform(rest))
-      if (bs.isEmpty) { let }
-      else { Context.reifyBindings(let, bs) }
+      Context.reifyBindings(let, bs)
 
     // { e; stmt } --> { val _ = e; stmt }
     case source.ExprStmt(e, rest) =>
@@ -165,7 +164,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val clauses = members.map { cl => (cl.definition, cl) }.toMap
       val sig = h.definition
 
-      val coreType = transform(Context.inferredBlockTypeOf(s)) match {
+      val coreType = transform(Context.inferredBlockTypeOf(h)) match {
         case i : core.BlockType.Interface => i
         case _ => Context.panic("Should be an interface type.")
       }
@@ -320,7 +319,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val blockArgs = bargs.map(transformAsBlock)
 
       // TODO if we always just use .capt, then why annotate it?
-      val captArgs = bargs.map(b => transform(Context.inferredCapture(b)))
+      val captArgs = blockArgs.map(_.capt) //bargs.map(b => transform(Context.inferredCapture(b)))
 
       val receiverType = Context.inferredBlockTypeOf(receiver)
       val operation = c.definition.asOperation
@@ -346,7 +345,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
       val blockArgs = bargs.map(transformAsBlock)
-      val captArgs = bargs.map(b => transform(Context.inferredCapture(b)))
+      val captArgs = blockArgs.map(b => b.capt) //transform(Context.inferredCapture(b)))
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
         Run(App(Unbox(e), typeArgs, captArgs, valueArgs, blockArgs))
@@ -532,19 +531,22 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     def addDefault(cl: Clause): Unit =
       defaults = defaults :+ cl
 
-    def freshFields(c: Constructor): List[core.ValueVar] = c.fields.map { f =>
-      val tmp = TmpValue.apply()
-      // TODO We need to perform substitution here, no?
-      //  or we need to annotate the types in typer.
-      core.ValueVar(tmp, transform(f.returnType))
-    }
-    val varsFor: Map[Constructor, List[core.ValueVar]] = variants.map { v => v -> freshFields(v) }.toMap
+    var varsFor: Map[Constructor, List[core.ValueVar]] = Map.empty
+    def fieldVarsFor(c: Constructor, pats: List[MatchPattern]): List[core.ValueVar] =
+      varsFor.getOrElse(c, {
+        val newVars: List[core.ValueVar] = pats.map { pat =>
+          core.ValueVar(TmpValue(), transform(Context.inferredTypeOf(pat)))
+        }
+        varsFor = varsFor.updated(c, newVars)
+        newVars
+      })
 
     normalizedClauses.foreach {
       case c @ Clause(patterns, target, args) => patterns.get(splitVar) match {
         case Some(p @ source.TagPattern(id, ps)) =>
           val constructor = p.definition
-          addClause(constructor, Clause(patterns - splitVar ++ varsFor(constructor).zip(ps), target, args))
+          val fieldVars = fieldVarsFor(constructor, ps)
+          addClause(constructor, Clause(patterns - splitVar ++ fieldVars.zip(ps), target, args))
         case Some(_) => Context.panic("Should not happen")
         case None =>
           // Clauses that don't match on that var are duplicated.
