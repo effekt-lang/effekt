@@ -17,6 +17,9 @@ package core
  *     │  │─ [[ Record ]]
  *     │  │─ [[ Interface ]]
  *     │
+ *     │─ [[ Constructor ]]
+ *     │─ [[ Field ]]
+ *     │─ [[ Property ]]
  *     │─ [[ Extern ]]
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
@@ -169,7 +172,7 @@ enum Pure extends Expr with Argument {
 
   // invariant, block b is pure.
   case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure]) extends Pure
-  case Select(target: Pure, field: symbols.Field, annotatedType: ValueType) extends Pure
+  case Select(target: Pure, field: Id, annotatedType: ValueType) extends Pure
 
   case Box(b: Block, annotatedCapture: Captures) extends Pure
 }

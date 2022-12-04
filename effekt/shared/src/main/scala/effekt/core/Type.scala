@@ -15,6 +15,24 @@ type Captures = Set[Capture]
  * Design Decisions:
  * - TypeConstructor vs. flat ValueType (right now the latter)
  * - Locally Nameless vs. Named (right now the latter)
+ *
+ * ----------[[ effekt.core.Type ]]----------
+ *
+ *   ─ [[ Type ]]
+ *     │─ [[ ValueType ]]
+ *     │  │─ [[ Var ]]
+ *     │  │─ [[ Data ]]
+ *     │  │─ [[ Record ]]
+ *     │  │─ [[ Boxed ]]
+ *     │  │─ [[ Extern ]]
+ *     │
+ *     │─ [[ BlockType ]]
+ *     │  │─ [[ Function ]]
+ *     │  │─ [[ Interface ]]
+ *     │  │─ [[ Extern ]]
+ *     │
+ *
+ * -------------------------------------------
  */
 sealed trait Type
 
