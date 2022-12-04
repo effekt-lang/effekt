@@ -130,7 +130,7 @@ sealed trait Expr extends Tree {
 }
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[core.ValueType], cargs: List[core.Captures], vargs: List[Pure], bargs: List[Block]) extends Expr
+case class DirectApp(b: Block, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
@@ -224,7 +224,7 @@ enum Stmt extends Tree {
   // Fine-grain CBV
   case Return(expr: Pure)
   case Val(id: Symbol, binding: Stmt, body: Stmt)
-  case App(callee: Block, targs: List[core.ValueType], cargs: List[Captures], vargs: List[Pure], bargs: List[Block])
+  case App(callee: Block, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
@@ -307,8 +307,8 @@ object Tree {
     def rewrite(e: Expr): Expr =
       e match {
         case e if expr.isDefinedAt(e) => expr(e)
-        case DirectApp(b, targs, cargs, vargs, bargs) =>
-          DirectApp(rewrite(b), targs, cargs, vargs map rewrite, bargs map rewrite)
+        case DirectApp(b, targs, vargs, bargs) =>
+          DirectApp(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
         case Run(s) => Run(rewrite(s))
         case p: Pure     => rewrite(p)
       }
@@ -327,8 +327,8 @@ object Tree {
         case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
         case Val(id, binding, body) =>
           Val(id, rewrite(binding), rewrite(body))
-        case App(b, targs, cargs, vargs, bargs) =>
-          App(rewrite(b), targs, cargs, vargs map rewrite, bargs map rewrite)
+        case App(b, targs, vargs, bargs) =>
+          App(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
         case If(cond, thn, els) =>
           If(rewrite(cond), rewrite(thn), rewrite(els))
         case Return(e: Expr) =>

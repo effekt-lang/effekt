@@ -122,7 +122,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Region(_) => Context.panic("Should not happen. Regions always take block literals as body.")
 
-    case core.App(b: core.Block, targs, cargs, vargs, bargs) =>
+    case core.App(b: core.Block, targs, vargs, bargs) =>
 
       // evidence for the function itself
       val ev = env.evidenceFor(b)
@@ -165,7 +165,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.ValueVar(sym, tpe) =>
       ValueVar(sym, tpe)
 
-    case core.DirectApp(b: core.Block, targs, cargs, vargs, bargs) =>
+    case core.DirectApp(b: core.Block, targs, vargs, bargs) =>
       val (ev, bargsT) = transform(bargs)
       PureApp(transform(b), targs, ev ++ vargs.map(transform) ++ bargsT)
 

@@ -122,7 +122,7 @@ object JavaScript extends Backend {
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
     case ValueVar(id, tpe) => nameRef(id)
-    case DirectApp(b, targs, cargs, vargs, bargs) => js.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
+    case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
     case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
     case Box(b, _) => toJS(b)
@@ -158,7 +158,7 @@ object JavaScript extends Backend {
     case core.Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
-    case core.App(b, targs, cargs, vargs, bargs) =>
+    case core.App(b, targs, vargs, bargs) =>
       monadic.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
 
     case core.If(cond, thn, els) =>

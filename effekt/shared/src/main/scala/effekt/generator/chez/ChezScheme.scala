@@ -101,7 +101,7 @@ trait ChezScheme {
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
     case Return(e) => pure(toChez(e))
-    case App(b, targs, cargs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
+    case App(b, targs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case Match(scrutinee, clauses, default) =>
@@ -225,7 +225,7 @@ trait ChezScheme {
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
-    case DirectApp(b, targs, cargs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
+    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
 
     case Select(b, field, _) =>

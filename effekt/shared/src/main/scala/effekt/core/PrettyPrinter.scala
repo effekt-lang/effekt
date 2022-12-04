@@ -59,8 +59,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal(value, _)         => value.toString
     case ValueVar(id, _)              => id.name.toString
 
-    case PureApp(b, targs, args)   => toDoc(b) <> argsToDoc(targs, Nil, args, Nil)
-    case DirectApp(b, targs, cargs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, cargs, vargs, bargs)
+    case PureApp(b, targs, vargs)   => toDoc(b) <> argsToDoc(targs, vargs, Nil)
+    case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
@@ -69,12 +69,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Run(s) => "run" <+> braces(toDoc(s))
   }
 
-  def argsToDoc(targs: List[core.ValueType], cargs: List[core.Captures], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
+  def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
     val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
-    val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
+    //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
     val vargsDoc = vargs.map(toDoc)
     val bargsDoc = bargs.map(toDoc)
-    targsDoc <> cargsDoc <> parens(vargsDoc ++ bargsDoc)
+    targsDoc <> parens(vargsDoc ++ bargsDoc)
 
   def argToDoc(e: Argument): Doc = e match {
     case e: Expr  => toDoc(e)
@@ -131,8 +131,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case App(b, targs, cargs, vargs, bargs) =>
-      toDoc(b) <> argsToDoc(targs, cargs, vargs, bargs)
+    case App(b, targs, vargs, bargs) =>
+      toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
