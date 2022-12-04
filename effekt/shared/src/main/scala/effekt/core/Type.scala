@@ -5,28 +5,25 @@ import effekt.symbols.TrackedParam.BlockParam
 import symbols.{ Symbol, TypeSymbol, builtins }
 import symbols.Name
 
-type Id = symbols.Symbol
-//class Id(n: String) extends symbols.Symbol {
-//  val name = Name.local(n)
-//}
-
+/**
+ * In core, all names, including those in capture sets are just symbols.
+ */
 type Capture = symbols.Symbol
 type Captures = Set[Capture]
 
-
 /**
  * Design Decisions:
- * - [ ] TypeConstructor vs. flat ValueType (right now the latter)
- * - [ ] Locally Nameless vs. Named (right now the latter)
+ * - TypeConstructor vs. flat ValueType (right now the latter)
+ * - Locally Nameless vs. Named (right now the latter)
  */
 sealed trait Type
 
 enum ValueType extends Type {
   case Var(name: Id)
-  case Data(symbol: TypeSymbol, targs: List[ValueType])
-  case Record(symbol: TypeSymbol, targs: List[ValueType])
+  case Data(symbol: Id, targs: List[ValueType])
+  case Record(symbol: Id, targs: List[ValueType])
   case Boxed(tpe: BlockType, capt: Captures)
-  case Extern(symbol: TypeSymbol, targs: List[ValueType])
+  case Extern(symbol: Id, targs: List[ValueType])
 }
 
 enum BlockType extends Type {
@@ -43,7 +40,7 @@ object Type {
 
   // The subtyping lattice
   val TBottom = ValueType.Extern(builtins.BottomSymbol, Nil)
-  val TUnit = ValueType.Extern(builtins.UnitSymbol, Nil)
+  val TUnit   = ValueType.Extern(builtins.UnitSymbol, Nil)
   val TRegion = BlockType.Extern(builtins.RegionSymbol, Nil)
 
   def join(tpe1: ValueType, tpe2: ValueType): ValueType = tpe1 // TODO implement properly
@@ -117,26 +114,6 @@ object Type {
     case Block.New(impl) => impl.capt
   }
 
-  /**
-   * def inferType(block: Block): BlockType = block match {
-   *  case Block.BlockVar(name, tpe, capt) => tpe
-   *  case Block.BlockLit(tparams, vparams, bparams, body) =>
-   *  BlockType.Function(tparams, vparams, bparams, body.tpe)
-   *
-   *  case Block.New(instance) => instance.tpe
-   *  case Block.Member(recv, sel, tpe) => tpe
-   *  case Block.Unbox(expr) => expr.tpe.asInstanceOf[ValueType.Boxed].tpe
-   *  }
-   *
-   *  def inferCapt(block: Block): Captures = block match {
-   *  case Block.BlockVar(name, tpe, capt) => capt
-   *  case Block.Member(recv, sel, tpe) => recv.capt
-   *  case Block.BlockLit(tparams, vparams, bparams, body) => body.capt -- bparams.map { case (name, _) => Capture.FreeVar(name) }
-   *  case Block.Unbox(expr) => expr.tpe.asInstanceOf[ValueType.Boxed].capt
-   *  case Block.New(instance) => instance.capt
-   *  }
-   */
-
   def inferType(stmt: Stmt): ValueType = stmt match {
     case Stmt.Scope(definitions, body) => body.tpe
     case Stmt.Return(expr) => expr.tpe
@@ -162,8 +139,7 @@ object Type {
   }
 
   def inferCapt(stmt: Stmt): Captures = stmt match {
-    case Stmt.Scope(definitions, body) =>
-      definitions.foldLeft(body.capt)(_ ++ _.capt)
+    case Stmt.Scope(definitions, body) => definitions.foldLeft(body.capt)(_ ++ _.capt)
     case Stmt.Return(expr) => Set.empty
     case Stmt.Val(id, binding, body) => binding.capt ++ body.capt
     case Stmt.App(callee, targs, vargs, bargs) => callee.capt ++ bargs.flatMap(_.capt).toSet
@@ -182,7 +158,6 @@ object Type {
     case Pure.ValueVar(id, tpe) => tpe
     case Pure.Literal(value, tpe) => tpe
     case Pure.PureApp(callee, targs, args) => instantiate(callee.functionType, targs, Nil).result
-    // TODO use correct type here
     case Pure.Select(target, field, annotatedType) => annotatedType
     case Pure.Box(block, capt) => ValueType.Boxed(block.tpe, capt)
   }

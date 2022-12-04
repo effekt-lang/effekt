@@ -1,7 +1,6 @@
 package effekt
 package core
 
-import effekt.symbols.{ BlockSymbol, FunctionType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol }
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -54,6 +53,16 @@ import effekt.symbols.{ BlockSymbol, FunctionType, Constructor, Interface, Opera
 sealed trait Tree
 
 /**
+ * In core, all symbols are supposed to be "just" names.
+ */
+type Id = symbols.Symbol
+object Id {
+  def apply(n: String): Id = new symbols.Symbol {
+    val name = symbols.Name.local(n)
+  }
+}
+
+/**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
 case class ModuleDecl(
@@ -62,37 +71,37 @@ case class ModuleDecl(
   declarations: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
-  exports: List[Symbol]
+  exports: List[Id]
 ) extends Tree
 
 /**
  * Toplevel data and interface declarations
  */
 enum Declaration extends Tree {
-  def id: Symbol
+  def id: Id
 
-  case Data(id: Symbol, tparams: List[Symbol], constructors: List[Constructor])
-  case Record(id: Symbol, tparams: List[Symbol], constructor: Constructor)
-  case Interface(id: Symbol, tparams: List[Symbol], properties: List[Property])
+  case Data(id: Id, tparams: List[Id], constructors: List[Constructor])
+  case Record(id: Id, tparams: List[Id], constructor: Constructor)
+  case Interface(id: Id, tparams: List[Id], properties: List[Property])
 }
 export Declaration.*
 
-case class Constructor(id: Symbol, fields: List[Field]) extends Tree
-case class Field(id: Symbol, tpe: ValueType) extends Tree
-case class Property(id: Symbol, tpe: BlockType) extends Tree
+case class Constructor(id: Id, fields: List[Field]) extends Tree
+case class Field(id: Id, tpe: ValueType) extends Tree
+case class Property(id: Id, tpe: BlockType) extends Tree
 
 /**
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: Symbol, tparams: List[Symbol], cparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
   case Include(contents: String)
 }
 
 
 enum Definition {
-  case Def(id: Symbol, block: Block)
-  case Let(id: Symbol, binding: Expr) // PURE on the toplevel?
+  case Def(id: Id, block: Block)
+  case Let(id: Id, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
@@ -108,10 +117,10 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
   case other => Scope(List(definition), other)
 }
 
-def Def(id: Symbol, block: Block, rest: Stmt) =
+def Def(id: Id, block: Block, rest: Stmt) =
   addToScope(Definition.Def(id, block), rest)
 
-def Let(id: Symbol, binding: Expr, rest: Stmt) =
+def Let(id: Id, binding: Expr, rest: Stmt) =
   addToScope(Definition.Let(id,  binding), rest)
 
 /**
@@ -154,7 +163,7 @@ case class Run(s: Stmt) extends Expr
  * -------------------------------------------
  */
 enum Pure extends Expr with Argument {
-  case ValueVar(id: Symbol, annotatedType: ValueType) extends Pure
+  case ValueVar(id: Id, annotatedType: ValueType) extends Pure
 
   case Literal(value: Any, annotatedType: ValueType) extends Pure
 
@@ -181,9 +190,9 @@ export Pure.*
  * -------------------------------------------
  */
 enum Block extends Argument {
-  case BlockVar(id: Symbol, annotatedTpe: BlockType, annotatedCapt: Captures)
-  case BlockLit(tparams: List[Symbol], cparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
-  case Member(block: Block, field: symbols.Symbol, annotatedTpe: BlockType)
+  case BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures)
+  case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
+  case Member(block: Block, field: Id, annotatedTpe: BlockType)
   case Unbox(pure: Pure)
   case New(impl: Implementation)
 
@@ -194,10 +203,10 @@ enum Block extends Argument {
 export Block.*
 
 enum Param extends Tree {
-  def id: Symbol
+  def id: Id
 
-  case ValueParam(id: Symbol, tpe: ValueType)
-  case BlockParam(id: Symbol, tpe: BlockType)
+  case ValueParam(id: Id, tpe: ValueType)
+  case BlockParam(id: Id, tpe: BlockType)
 }
 export Param.*
 
@@ -226,15 +235,15 @@ enum Stmt extends Tree {
 
   // Fine-grain CBV
   case Return(expr: Pure)
-  case Val(id: Symbol, binding: Stmt, body: Stmt)
+  case Val(id: Id, binding: Stmt, body: Stmt)
   case App(callee: Block, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Pure, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?
+  case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
   case Try(body: Block, handlers: List[Implementation])
   case Region(body: Block)
 
@@ -265,7 +274,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  *   maybe we need to add PlainOperation | ControlOperation, where for now
  *   handlers always have control operations and New always has plain operations.
  */
-case class Operation(name: symbols.Operation, tparams: List[Symbol], cparams: List[Symbol], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
+case class Operation(name: symbols.Operation, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
 }
 
