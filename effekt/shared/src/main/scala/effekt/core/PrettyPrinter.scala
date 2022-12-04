@@ -98,7 +98,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def typeTemplate(kind: Doc, id: symbols.Symbol, tparams: List[symbols.Symbol], decls: List[Doc]): Doc =
     val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
-    kind <+> toDoc(id) <> tps <+> block(vsep(decls))
+    val body = if decls.isEmpty then string("{}") else block(vsep(decls))
+    kind <+> toDoc(id) <> tps <+> body
 
   def toDoc(d: Declaration): Doc = d match {
     case Data(id, tparams, ctors) =>
