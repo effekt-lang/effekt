@@ -177,26 +177,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case s @ source.Select(receiver, selector) =>
       Member(transformAsBlock(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
 
-    case s @ source.New(h @ source.Implementation(tpe, members)) =>
-      // we need to establish a canonical ordering of methods
-      // we use the order in which they are declared in the signature (like with handlers)
-      val clauses = members.map { cl => (cl.definition, cl) }.toMap
-      val sig = h.definition
-
-      val coreType = transform(Context.inferredBlockTypeOf(h)) match {
-        case i : core.BlockType.Interface => i
-        case _ => Context.panic("Should be an interface type.")
-      }
-
-      New(Implementation(coreType, sig.operations.map(clauses.apply).map {
-        case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
-          val vps = vparams.map(transform)
-          val tps = tparams.map { p => p.symbol }
-          // TODO the operation could be effectful, so needs to take a block param here.
-          val bps = Nil
-          val cps = Nil
-          core.Operation(op.definition, tps, cps, vps, bps, None, transform(body))
-      }))
+    case s @ source.New(impl) =>
+      New(transform(impl, false))
 
     case source.Unbox(b) =>
       Unbox(transformAsPure(b))
@@ -219,13 +201,14 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v: source.Var => v.definition match {
       case sym: VarBinder =>
         val stateType = Context.blockTypeOf(sym)
-        val getType = asSeenFrom(stateType, TState.interface, TState.get)
+        val getType = operationType(stateType, TState.get)
         DirectApp(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil)
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
 
-    case source.Literal(value, tpe) => Literal(value, transform(tpe))
+    case source.Literal(value, tpe) =>
+      Literal(value, transform(tpe))
 
     case s @ source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
@@ -266,8 +249,8 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.bind(loopName, loop)
 
       // captures???
-      if (Context.inferredCapture(cond) == CaptureSet.empty) {
-        Context.at(cond) { Context.warning(pp"Condition to while loop is pure, which might not be intended.") }
+      if (Context.inferredCapture(cond) == CaptureSet.empty) Context.at(cond) {
+        Context.warning(pp"Condition to while loop is pure, which might not be intended.")
       }
 
       Context.bind(loopCall)
@@ -287,32 +270,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val body = BlockLit(Nil, cps, Nil, bps, transform(prog))
 
-      // to obtain a canonical ordering of operation clauses, we use the definition ordering
-      def transformHandler: source.Handler => core.Implementation = {
-        case h @ source.Handler(cap, impl @ source.Implementation(eff, cls)) =>
-          val clauses = cls.map { cl => (cl.definition, cl) }.toMap
-
-          // This is copy-and-paste from New
-          val coreType = transform(Context.inferredBlockTypeOf(impl)) match {
-            case i: core.BlockType.Interface => i
-            case _ => Context.panic("Should be an interface type.")
-          }
-
-          Implementation(coreType, h.definition.operations.map(clauses.apply).map {
-            case op @ source.OpClause(id, tps, vps, ret, body, resume) =>
-              val tparams = tps.map(t => t.symbol)
-              // introduce a block parameter for resume
-              val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
-              val resumeParam = BlockParam(resumeSymbol)
-
-              // We cannot annotate the transparent capture of resume here somewhere since all
-              // block parameters are automatically tracked by our current encoding of core.Tree.
-              // So resume is a separate parameter.
-              core.Operation(op.definition, tparams, Nil, vps map transform, Nil, Some(resumeParam), transform(body))
-          })
+      val transformedHandlers = handlers.map {
+        case h @ source.Handler(cap, impl) => transform(impl, true)
       }
-
-      Context.bind(Try(body, handlers map transformHandler))
+      Context.bind(Try(body, transformedHandlers))
 
     case r @ source.Region(name, body) =>
       val region = r.symbol
@@ -327,7 +288,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsPure(expr)
       val sym = a.definition
       val stateType = Context.blockTypeOf(sym)
-      val putType = asSeenFrom(stateType, TState.interface, TState.put)
+      val putType = operationType(stateType, TState.put)
       DirectApp(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil)
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
@@ -342,10 +303,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
       val receiverType = Context.inferredBlockTypeOf(receiver)
       val operation = c.definition.asOperation
-      val opType = transform(asSeenFrom(receiverType, operation.effect, operation))
+      val opType = transform(operationType(receiverType, operation))
 
       // Do not pass type arguments for the type constructor of the receiver.
-      val remainingTypeArgs = typeArgs.drop(operation.effect.tparams.size)
+      val remainingTypeArgs = typeArgs.drop(operation.interface.tparams.size)
 
       operation match {
         case op if op == TState.put || op == TState.get =>
@@ -384,13 +345,47 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   /**
+   * Establishes a canonical ordering of methods by using
+   * the order in which they are declared in the signature (like with handlers)
+   */
+  def transform(impl: source.Implementation, isHandler: Boolean)(using Context): core.Implementation = {
+    val members = impl.clauses
+    val clauses = members.map { cl => (cl.definition, cl) }.toMap
+    val sig = impl.definition
+
+    val coreType = transform(Context.inferredBlockTypeOf(impl)) match {
+      case i: core.BlockType.Interface => i
+      case _ => Context.panic("Should be an interface type.")
+    }
+
+    Implementation(coreType, sig.operations.map(clauses.apply).map {
+      case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
+        val vps = vparams.map(transform)
+        val tps = tparams.map { p => p.symbol }
+
+        // We cannot annotate the transparent capture of resume here somewhere since all
+        // block parameters are automatically tracked by our current encoding of core.Tree.
+        // So resume is a separate parameter.
+        val resumeParam = if (isHandler) {
+          val resumeSymbol = resume.symbol.asInstanceOf[BlockSymbol]
+          Some(BlockParam(resumeSymbol))
+        } else { None }
+        // TODO the operation could be effectful, so needs to take a block param here.
+        val bps = Nil
+        val cps = Nil
+        core.Operation(op.definition, tps, cps, vps, bps, resumeParam, transform(body))
+    })
+  }
+
+
+  /**
    * Computes the block type the selected symbol.
    *
    * For instance, receiver can be `State[Int]`, interface could be the symbol of `State` and member could be `get`.
    * If `member` is an operation, the type arguments of the receiver are substituted for the leading type parameters,
    * while the remaining type parameters are kept.
    */
-  def asSeenFrom(receiver: symbols.BlockType, interface: symbols.Interface, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
+  def operationType(receiver: symbols.BlockType, member: symbols.Operation)(using Context): BlockType = receiver.asInterfaceType match {
     case InterfaceType(i: Interface, targs) => member match {
       // For operations, we substitute the first type parameters by concrete type args.
       case Operation(name, tparams, vparams, resultType, effects, _) =>
@@ -416,7 +411,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     val vargsT = vargs.map(transformAsPure)
     val bargsT = bargs.map(transformAsBlock)
-    val as = vargsT ++ bargsT
 
     sym match {
       case f: ExternFunction if isPure(f.capture) =>
@@ -451,10 +445,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // Translation on Types
   // --------------------
   def transform(tpe: ValueType)(using Context): core.ValueType = tpe match {
-    case ValueType.BoxedType(tpe, capture) => core.ValueType.Boxed(transform(tpe), transform(capture))
-    case ValueType.ValueTypeRef(tvar) => core.ValueType.Var(tvar)
-    case ValueType.ValueTypeApp(tc: DataType, args) => core.ValueType.Data(tc, args.map(transform))
-    case ValueType.ValueTypeApp(tc: Record, args) => core.ValueType.Record(tc, args.map(transform))
+    case ValueType.BoxedType(tpe, capture)            => core.ValueType.Boxed(transform(tpe), transform(capture))
+    case ValueType.ValueTypeRef(tvar)                 => core.ValueType.Var(tvar)
+    case ValueType.ValueTypeApp(tc: DataType, args)   => core.ValueType.Data(tc, args.map(transform))
+    case ValueType.ValueTypeApp(tc: Record, args)     => core.ValueType.Record(tc, args.map(transform))
     case ValueType.ValueTypeApp(tc: ExternType, args) => core.ValueType.Extern(tc, args.map(transform))
   }
 
@@ -580,7 +574,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     }
 
-    // TODO order variants by declaration of constructor.
     val branches = variants.toList.map { v =>
       val body = compileMatch(clausesFor.getOrElse(v, Vector.empty))
       val params = varsFor(v).map { case ValueVar(id, tpe) => core.ValueParam(id, tpe): core.ValueParam }
@@ -621,9 +614,6 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
   def BlockVar(id: BlockSymbol)(using Context): core.BlockVar =
     core.BlockVar(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
-
-  def Val(id: ValueSymbol, binding: Stmt, body: Stmt)(using Context): core.Val =
-    core.Val(id, binding, body)
 
   def optimize(s: Definition)(using Context): Definition = {
 
@@ -684,8 +674,6 @@ private[core] enum Binding {
 }
 
 trait TransformerOps extends ContextOps { Context: Context =>
-
-
   /**
    * A _mutable_ ListBuffer that stores all bindings to be inserted at the current scope
    */
@@ -721,10 +709,6 @@ trait TransformerOps extends ContextOps { Context: Context =>
     bindings += binding
 
     ValueVar(x, e.tpe)
-  }
-
-  private[core] def bind(b: Block): BlockVar = {
-    bind(TmpBlock(), b)
   }
 
   private[core] def bind(name: BlockSymbol, b: Block): BlockVar = {
