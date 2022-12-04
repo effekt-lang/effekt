@@ -71,7 +71,6 @@ case class ModuleDecl(
 enum Declaration extends Tree {
   def id: Symbol
 
-  // TODO also translate constructors, fields and operations to core.
   case Data(id: Symbol, tparams: List[Symbol], constructors: List[Constructor])
   case Record(id: Symbol, tparams: List[Symbol], constructor: Constructor)
   case Interface(id: Symbol, tparams: List[Symbol], properties: List[Property])
