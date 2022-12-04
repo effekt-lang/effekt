@@ -183,14 +183,14 @@ object JavaScript extends Backend {
   }
 
   def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
-    case core.Data(did, ctors) =>
+    case core.Data(did, tparams, ctors) =>
       ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
 
-    case core.Record(did, ctor) =>
+    case core.Record(did, tparams, ctor) =>
       List(generateConstructor(ctor, 0))
 
     // interfaces are structurally typed at the moment, no need to generate anything.
-    case core.Interface(id, operations) =>
+    case core.Interface(id, tparams, operations) =>
       Nil
   }
 

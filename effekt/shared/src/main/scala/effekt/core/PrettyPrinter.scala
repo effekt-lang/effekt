@@ -18,13 +18,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
-  def format(defs: List[Definition]): String =
-    pretty(toDoc(defs), 60).layout
-
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
-    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
+    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }) <> emptyline <>
+      vsep(m.declarations.map(toDoc)) <>
       emptyline <> toDoc(m.definitions)
   }
 
@@ -52,6 +50,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(p: BlockParam): Doc = braces(p.id.name.toString)
 
   def toDoc(n: Name): Doc = n.toString
+
+  def toDoc(s: symbols.Symbol): Doc = toDoc(s.name)
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
@@ -96,15 +96,19 @@ object PrettyPrinter extends ParenPrettyPrinter {
     handlerName <+> block(vsep(clauses))
   }
 
+  def typeTemplate(kind: Doc, id: symbols.Symbol, tparams: List[symbols.Symbol], decls: List[Doc]): Doc =
+    val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+    kind <+> toDoc(id) <> tps <+> block(vsep(decls))
+
   def toDoc(d: Declaration): Doc = d match {
-    case Data(did, ctors) =>
-      "type" <+> toDoc(did.name) <> braces(vsep(ctors.map(toDoc)))
+    case Data(id, tparams, ctors) =>
+      typeTemplate("type", id, tparams, ctors.map(toDoc))
 
-    case Record(did, ctor) =>
-      "record" <+> toDoc(did.name) <> braces(toDoc(ctor))
+    case Record(id, tparams, ctor) =>
+      typeTemplate("record", id, tparams, List(toDoc(ctor)))
 
-    case Interface(id, properties) =>
-      "interface" <+> toDoc(id.name) <> braces(vsep(properties.map(toDoc)))
+    case Interface(id, tparams, properties) =>
+      typeTemplate("interface", id, tparams, properties.map(toDoc))
   }
 
   def toDoc(c: Constructor): Doc = c match {
@@ -165,10 +169,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
       "<>"
   }
 
-  def toDoc(s: symbols.Symbol): Doc = s.name.name
-
   def toDoc(tpe: core.BlockType): Doc = tpe match {
-    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      val vps = parens(vparams.map(toDoc))
+      val bps = hcat((cparams zip bparams).map { case (id, tpe) => braces(toDoc(id) <> ":" <+> toDoc(tpe)) })
+      val res = toDoc(result)
+      tps <> vps <> bps <+> "=>" <+> res
     case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
     case core.BlockType.Extern(symbol, targs) => toDoc(symbol, targs)

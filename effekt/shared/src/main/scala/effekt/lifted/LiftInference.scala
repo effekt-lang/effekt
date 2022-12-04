@@ -49,13 +49,13 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Declaration)(using Context): lifted.Decl = tree match {
-    case core.Data(id, ctors) =>
+    case core.Data(id, tparams, ctors) =>
       Data(id, ctors.map(c => c.id))
 
-    case core.Record(id, ctor) =>
+    case core.Record(id, tparams, ctor) =>
       Record(id, ctor.fields.map(f => f.id))
 
-    case core.Interface(id, operations) =>
+    case core.Interface(id, tparams, operations) =>
       Interface(id, operations.map(o => o.id))
   }
 

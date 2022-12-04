@@ -139,14 +139,14 @@ trait ChezScheme {
   }
 
   def toChez(decl: core.Declaration): List[chez.Def] = decl match {
-    case Data(did, ctors) =>
+    case Data(did, tparams, ctors) =>
       ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
 
-    case Record(did, ctor) =>
+    case Record(did, tparams, ctor) =>
       generateConstructor(ctor.id, ctor.fields.map(f => f.id))
 
     // We use chez scheme records to also represent capabilities.
-    case Declaration.Interface(id, operations) =>
+    case Declaration.Interface(id, tparams, operations) =>
       generateConstructor(id, operations.map(op => op.id))
   }
 
