@@ -39,20 +39,20 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   }
 
   def transformToplevel(d: source.Def)(using Context): List[Definition | Declaration | Extern] = d match {
-    // TODO this is duplicated with transform(Def)
     case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
-      val sym = f.symbol
       val tparams = tps.map { p => p.symbol }
       val cparams = bps.map { b => b.symbol.capture }
-      List(Definition.Def(sym, BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))))
+      val vparams = vps map transform
+      val bparams = bps map transform
+      List(Definition.Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body))))
 
     case d @ source.DataDef(id, _, ctors) =>
       val datatype = d.symbol
-      List(Data(datatype, datatype.tparams, datatype.constructors.map { c => core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType)))) }))
+      List(Data(datatype, datatype.tparams, datatype.constructors.map(transform)))
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      List(core.Record(rec, rec.tparams, core.Constructor(rec.constructor, rec.constructor.fields.map(f => core.Field(f, transform(f.returnType))))))
+      List(core.Record(rec, rec.tparams, transform(rec.constructor)))
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       List(Definition.Let(v.symbol, Run(transform(binding))))
@@ -80,13 +80,16 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d @ source.InterfaceDef(id, tparamsInterface, ops, isEffect) =>
       val interface = d.symbol
       List(core.Interface(interface, interface.tparams, interface.operations.map {
-        case op @ symbols.Operation(name, tparams, vparams, resultType, effects, interface) =>
+        case op @ symbols.Operation(name, tps, vps, resultType, effects, interface) =>
           // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
-          val bparams = effects.canonical
-          val cparams = bparams.map { tpe => symbols.CaptureParam(tpe.name) }
+          val capabilities = effects.canonical
+          val tparams = tps.drop(tparamsInterface.size)
+          val bparams = capabilities.map(transform)
+          val vparams = vps.map(p => transform(p.tpe.get))
+          val cparams = capabilities.map { tpe => symbols.CaptureParam(tpe.name) }
 
           // here we reconstruct the block type
-          val btpe = core.BlockType.Function(tparams.drop(tparamsInterface.size), cparams, vparams.map(p => transform(p.tpe.get)), bparams.map(transform), transform(resultType))
+          val btpe = core.BlockType.Function(tparams, cparams, vparams, bparams, transform(resultType))
           core.Property(op, btpe)
       }))
 
@@ -103,6 +106,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
   }
+
+  def transform(c: symbols.Constructor)(using Context): core.Constructor =
+    core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType))))
 
   def transform(tree: source.Stmt)(using Context): Stmt = tree match {
     // { e; stmt } --> { let _ = e; stmt }
@@ -127,7 +133,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case f @ source.FunDef(id, tps, vps, bps, ret, body) =>
         val tparams = tps.map { p => p.symbol }
         val cparams = bps.map { b => b.symbol.capture }
-        Def(f.symbol, BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body)), transform(rest))
+        val vparams = vps map transform
+        val bparams = bps map transform
+        Def(f.symbol, BlockLit(tparams, cparams, vparams, bparams, transform(body)), transform(rest))
 
       case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
         Let(v.symbol, Run(transform(binding)), transform(rest))
