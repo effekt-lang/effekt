@@ -72,11 +72,15 @@ enum Declaration extends Tree {
   def id: Symbol
 
   // TODO also translate constructors, fields and operations to core.
-  case Data(id: Symbol, ctors: List[Symbol])
-  case Record(id: Symbol, fields: List[Symbol])
-  case Interface(id: Symbol, operations: List[Symbol])
+  case Data(id: Symbol, constructors: List[Constructor])
+  case Record(id: Symbol, fields: List[Field])
+  case Interface(id: Symbol, properties: List[Property])
 }
 export Declaration.*
+
+case class Constructor(id: Symbol, fields: List[Field]) extends Tree
+case class Field(id: Symbol, tpe: ValueType) extends Tree
+case class Property(id: Symbol, tpe: BlockType) extends Tree
 
 /**
  * FFI external definitions
@@ -228,7 +232,7 @@ enum Stmt extends Tree {
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Pure, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
 
   // Effects
   case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?

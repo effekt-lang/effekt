@@ -300,7 +300,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (3) check all operations are covered
       val covered = clauses.map { _.definition }
-      val notCovered = interface.ops.toSet -- covered.toSet
+      val notCovered = interface.operations.toSet -- covered.toSet
 
       if (notCovered.nonEmpty) {
         val explanation = notCovered.map { op => pp"${op.name} of interface ${op.effect.name}" }.mkString(", ")
@@ -549,7 +549,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.bind(d.symbol)
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      d.symbol.ops.foreach { op =>
+      d.symbol.operations.foreach { op =>
         if (op.otherEffects.toList contains op.appliedEffect) {
           Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
         }

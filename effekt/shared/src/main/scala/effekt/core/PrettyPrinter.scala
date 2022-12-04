@@ -98,13 +98,23 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(d: Declaration): Doc = d match {
     case Data(did, ctors) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
+      "type" <+> toDoc(did.name) <> braces(vsep(ctors.map(toDoc)))
 
     case Record(did, fields) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) })
+      "record" <+> toDoc(did.name) <> parens(fields.map(toDoc))
 
-    case Interface(id, operations) =>
-      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
+    case Interface(id, properties) =>
+      "interface" <+> toDoc(id.name) <> braces(vsep(properties.map(toDoc)))
+  }
+
+  def toDoc(c: Constructor): Doc = c match {
+    case Constructor(id, fields) => toDoc(id) <> parens(fields.map(toDoc))
+  }
+  def toDoc(f: Field): Doc = f match {
+    case Field(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
+  }
+  def toDoc(f: Property): Doc = f match {
+    case Property(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
   }
 
   def toDoc(d: Definition): Doc = d match {

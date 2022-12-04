@@ -140,17 +140,14 @@ trait ChezScheme {
 
   def toChez(decl: core.Declaration): List[chez.Def] = decl match {
     case Data(did, ctors) =>
-      ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
-      }
+      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
 
     case Record(did, fields) =>
-      generateConstructor(did, fields)
+      generateConstructor(did, fields.map(f => f.id))
 
     // We use chez scheme records to also represent capabilities.
     case Declaration.Interface(id, operations) =>
-      generateConstructor(id, operations)
+      generateConstructor(id, operations.map(op => op.id))
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {

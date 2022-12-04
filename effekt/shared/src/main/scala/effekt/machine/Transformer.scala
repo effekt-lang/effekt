@@ -365,7 +365,7 @@ object Transformer {
   def transform(handler: lifted.Implementation)(using BlocksParamsContext, Context): List[Clause] = {
     handler.operations.sortBy[Int]({
       case lifted.Operation(operationName, _) =>
-        handler.id.ops.indexOf(operationName)
+        handler.id.operations.indexOf(operationName)
     }).map({
       case lifted.Operation(operationName, lifted.BlockLit(params :+ resume, body))=>
         // TODO we assume here that resume is the last param

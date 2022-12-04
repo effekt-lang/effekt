@@ -184,10 +184,10 @@ object JavaScript extends Backend {
 
   def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
     case core.Data(did, ctors) =>
-      ctors.map { ctor => generateConstructor(ctor.asConstructor) }
+      ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor.id, ctor.fields, index) }
 
     case core.Record(did, fields) =>
-      List(generateConstructor(did, fields))
+      List(generateConstructor(did, fields, 0))
 
     // interfaces are structurally typed at the moment, no need to generate anything.
     case core.Interface(id, operations) =>
@@ -237,7 +237,7 @@ object JavaScript extends Backend {
           (tagFor(c), js.Return(js.Call(toJS(block), Nil)))
 
         // f17.apply(null, sc.__data)
-        case (c: symbols.Constructor, block) =>
+        case (c, block) =>
           (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
       }, None)
 
@@ -249,39 +249,23 @@ object JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  def generateConstructor(ctor: symbols.Constructor): js.Stmt =
-    generateConstructor(ctor, ctor.fields)
-
-  def tagFor(c: symbols.Constructor): js.Expr = c.tpe match {
+  // TODO replace this by a lookup in the global declarations
+  def tagFor(c: Symbol)(using Context): js.Expr = c.asConstructor.tpe match {
     case TypeConstructor.DataType(name, tparams, constructors) => js.RawExpr(constructors.indexOf(c).toString)
     case TypeConstructor.Record(name, tparams, constructor) => js.RawExpr("0")
     case TypeConstructor.ExternType(name, tparams) => ???
   }
 
-  def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt = {
-
-    // TODO we really need to stop using records for capabilities in core!
-    val tagValue = ctor match {
-      case c: symbols.Constructor => tagFor(c)
-      case _ => js.RawExpr("0") // this case is only necessary since records are also used to represent capabilities
-    }
-
-    val constructor = ctor match {
-      case c: symbols.Constructor => c
-      case c: symbols.Record => c.constructor
-      case _ => ???
-    }
-
+  def generateConstructor(constructor: Symbol, fields: List[core.Field], tagValue: Int): js.Stmt =
     js.Function(
       nameDef(constructor),
-      fields.map { f => nameDef(f) },
+      fields.map { f => nameDef(f.id) },
       List(js.Return(js.Object(List(
-        `tag`  -> tagValue,
-        `name` -> JsString(ctor.name.name),
-        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f)) })
-      ) ++ fields.map { f => (nameDef(f), Variable(nameDef(f))) })))
+        `tag`  -> js.RawExpr(tagValue.toString),
+        `name` -> JsString(constructor.name.name),
+        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f.id)) })
+      ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) })))
     )
-  }
 
   // const $getOp = "get$1234"
   // const $putOp = "put$7554"

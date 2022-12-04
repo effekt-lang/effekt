@@ -50,13 +50,13 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Declaration)(using Context): lifted.Decl = tree match {
     case core.Data(id, ctors) =>
-      Data(id, ctors)
+      Data(id, ctors.map(c => c.id))
 
     case core.Record(id, fields) =>
-      Record(id, fields)
+      Record(id, fields.map(f => f.id))
 
     case core.Interface(id, operations) =>
-      Interface(id, operations)
+      Interface(id, operations.map(o => o.id))
   }
 
   def transform(tree: core.Extern)(using Environment, Context): lifted.Extern = tree match {
@@ -146,7 +146,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),
-        clauses.map { case (c, b) => (c, transformBody(b)) },
+        clauses.map { case (c, b) => (c.asConstructor, transformBody(b)) },
         default.map { s => transform(s) })
 
     case core.If(cond, thn, els) =>

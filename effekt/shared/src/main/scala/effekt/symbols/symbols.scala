@@ -241,7 +241,7 @@ case class Field(name: Name, param: ValueParam, constructor: Constructor) extend
 enum BlockTypeConstructor extends BlockTypeSymbol {
   def tparams: List[TypeParam]
 
-  case Interface(name: Name, tparams: List[TypeParam], var ops: List[Operation] = Nil)
+  case Interface(name: Name, tparams: List[TypeParam], var operations: List[Operation] = Nil)
   case ExternInterface(name: Name, tparams: List[TypeParam])
 }
 export BlockTypeConstructor.*

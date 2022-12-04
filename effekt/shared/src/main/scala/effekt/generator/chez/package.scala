@@ -58,48 +58,6 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
   // Record
   val record = chez.Record(names.typeName, names.constructor, names.predicate, names.uid, fields map nameDef)
 
-  // Matcher (old implementation generating a combinator)
-  def matcherFull = {
-
-    var fresh = 0;
-    val fieldNames = fields map { _ => fresh += 1; ChezName("p" + fresh) }
-    val sc = ChezName("sc")
-    val matched = ChezName("matched")
-    val failed = ChezName("failed")
-    val k = ChezName("k")
-
-    val matcherBody = fields match {
-
-      // (define (<MATCHER-NAME>)
-      //   (lambda (sc matched failed k)
-      //     (if (pred sc) (k matched) (failed))))
-      case Nil => chez.Call(k, Variable(matched))
-
-      // (define (name p1 p2 ...)
-      //   (lambda (sc matched failed k)
-      //     ;; has correct tag?
-      //     (if (pred sc)
-      //       (match-fields sc matched failed k ([p1 sel1] [p2 sel2] ...))
-      //       (failed))))]))
-      case _ =>
-        def matchFields(fields: List[(ChezName, Symbol)]): chez.Expr = fields match {
-          case Nil => chez.Call(k, Variable(matched))
-          case (p, field) :: fields =>
-            val sel = nameRef(field)
-            chez.Call(p, chez.Call(sel, Variable(sc)), Variable(matched), Variable(failed),
-              chez.Lambda(List(matched), // the continuation shadows `matched`
-                matchFields(fields)))
-        }
-        matchFields(fieldNames zip fields)
-    }
-    chez.Function(names.matcher, fieldNames,
-          chez.Lambda(List(sc, matched, failed, k),
-            chez.If(
-              chez.Call(names.predicate, Variable(sc)),
-              matcherBody,
-              chez.Call(failed))))
-  }
-
   // The matcher only applies the given block with the extracted fields
   // (define (<MATCHER-NAME> sc block) (block (field-1 sc) (field-2 sc) ...)))
   def matcher = {

@@ -47,11 +47,12 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       List(Definition.Def(sym, BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))))
 
     case d @ source.DataDef(id, _, ctors) =>
-      List(Data(d.symbol, ctors.map { c => c.symbol }))
+      val datatype = d.symbol
+      List(Data(datatype, datatype.constructors.map { c => core.Constructor(c, c.fields.map(f => core.Field(f, transform(f.returnType)))) }))
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      List(core.Record(rec, rec.constructor.fields))
+      List(core.Record(rec, rec.constructor.fields.map(f => core.Field(f, transform(f.returnType)))))
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       List(Definition.Let(v.symbol, Run(transform(binding))))
@@ -77,7 +78,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       Context.at(d) { Context.abort("Mutable variable bindings currently not allowed on the toplevel") }
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      List(core.Interface(d.symbol, ops.map { e => e.symbol }))
+      val interface = d.symbol
+      List(core.Interface(interface, interface.operations.map {
+        case op @ symbols.Operation(name, tparams, vparams, resultType, effects, interface) =>
+          // like in asSeenFrom we need to make up cparams, they cannot occur free in the result type
+          val bparams = effects.canonical
+          val cparams = bparams.map { tpe => symbols.CaptureParam(tpe.name) }
+
+          // here we reconstruct the block type
+          val btpe = core.BlockType.Function(tparams, cparams, vparams.map(p => transform(p.tpe.get)), bparams.map(transform), transform(resultType))
+          core.Property(op, btpe)
+      }))
 
     case f @ source.ExternDef(pure, id, _, vps, bps, _, body) =>
       val sym@ExternFunction(name, tps, _, _, ret, effects, capt, _) = f.symbol
@@ -169,7 +180,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case _ => Context.panic("Should be an interface type.")
       }
 
-      New(Implementation(coreType, sig.ops.map(clauses.apply).map {
+      New(Implementation(coreType, sig.operations.map(clauses.apply).map {
         case op @ source.OpClause(id, tparams, vparams, ret, body, resume) =>
           val vps = vparams.map(transform)
           val tps = tparams.map { p => p.symbol }
@@ -279,7 +290,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
             case _ => Context.panic("Should be an interface type.")
           }
 
-          Implementation(coreType, h.definition.ops.map(clauses.apply).map {
+          Implementation(coreType, h.definition.operations.map(clauses.apply).map {
             case op @ source.OpClause(id, tps, vps, ret, body, resume) =>
               val tparams = tps.map(t => t.symbol)
               // introduce a block parameter for resume
