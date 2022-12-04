@@ -73,7 +73,7 @@ enum Declaration extends Tree {
 
   // TODO also translate constructors, fields and operations to core.
   case Data(id: Symbol, constructors: List[Constructor])
-  case Record(id: Symbol, fields: List[Field])
+  case Record(id: Symbol, constructor: Constructor)
   case Interface(id: Symbol, properties: List[Property])
 }
 export Declaration.*

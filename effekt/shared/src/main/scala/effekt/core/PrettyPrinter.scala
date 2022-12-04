@@ -100,8 +100,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Data(did, ctors) =>
       "type" <+> toDoc(did.name) <> braces(vsep(ctors.map(toDoc)))
 
-    case Record(did, fields) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map(toDoc))
+    case Record(did, ctor) =>
+      "record" <+> toDoc(did.name) <> braces(toDoc(ctor))
 
     case Interface(id, properties) =>
       "interface" <+> toDoc(id.name) <> braces(vsep(properties.map(toDoc)))

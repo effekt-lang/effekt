@@ -184,10 +184,10 @@ object JavaScript extends Backend {
 
   def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
     case core.Data(did, ctors) =>
-      ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor.id, ctor.fields, index) }
+      ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
 
-    case core.Record(did, fields) =>
-      List(generateConstructor(did, fields, 0))
+    case core.Record(did, ctor) =>
+      List(generateConstructor(ctor, 0))
 
     // interfaces are structurally typed at the moment, no need to generate anything.
     case core.Interface(id, operations) =>
@@ -256,16 +256,18 @@ object JavaScript extends Backend {
     case TypeConstructor.ExternType(name, tparams) => ???
   }
 
-  def generateConstructor(constructor: Symbol, fields: List[core.Field], tagValue: Int): js.Stmt =
+  def generateConstructor(constructor: core.Constructor, tagValue: Int): js.Stmt = {
+    val fields = constructor.fields
     js.Function(
-      nameDef(constructor),
+      nameDef(constructor.id),
       fields.map { f => nameDef(f.id) },
       List(js.Return(js.Object(List(
         `tag`  -> js.RawExpr(tagValue.toString),
-        `name` -> JsString(constructor.name.name),
+        `name` -> JsString(constructor.id.name.name),
         `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f.id)) })
       ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) })))
     )
+  }
 
   // const $getOp = "get$1234"
   // const $putOp = "put$7554"

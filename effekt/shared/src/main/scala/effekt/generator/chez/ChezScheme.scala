@@ -142,8 +142,8 @@ trait ChezScheme {
     case Data(did, ctors) =>
       ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
 
-    case Record(did, fields) =>
-      generateConstructor(did, fields.map(f => f.id))
+    case Record(did, ctor) =>
+      generateConstructor(ctor.id, ctor.fields.map(f => f.id))
 
     // We use chez scheme records to also represent capabilities.
     case Declaration.Interface(id, operations) =>

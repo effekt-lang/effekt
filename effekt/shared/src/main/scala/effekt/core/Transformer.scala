@@ -52,7 +52,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      List(core.Record(rec, rec.constructor.fields.map(f => core.Field(f, transform(f.returnType)))))
+      List(core.Record(rec, core.Constructor(rec.constructor, rec.constructor.fields.map(f => core.Field(f, transform(f.returnType))))))
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       List(Definition.Let(v.symbol, Run(transform(binding))))
