@@ -137,12 +137,12 @@ sealed trait Argument extends Tree
  * - [[Pure]]
  */
 sealed trait Expr extends Tree {
-  val tpe: core.ValueType = Type.inferType(this)
-  val capt: core.Captures = Type.inferCapt(this)
+  val tpe: ValueType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
 }
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
+case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
 case class Run(s: Stmt) extends Expr
@@ -168,7 +168,7 @@ enum Pure extends Expr with Argument {
   case Literal(value: Any, annotatedType: ValueType) extends Pure
 
   // invariant, block b is pure.
-  case PureApp(b: Block, targs: List[core.ValueType], vargs: List[Pure]) extends Pure
+  case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure]) extends Pure
   case Select(target: Pure, field: symbols.Field, annotatedType: ValueType) extends Pure
 
   case Box(b: Block, annotatedCapture: Captures) extends Pure
@@ -197,7 +197,7 @@ enum Block extends Argument {
   case New(impl: Implementation)
 
 
-  val tpe: core.BlockType = Type.inferType(this)
+  val tpe: BlockType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
 export Block.*
@@ -236,7 +236,7 @@ enum Stmt extends Tree {
   // Fine-grain CBV
   case Return(expr: Pure)
   case Val(id: Id, binding: Stmt, body: Stmt)
-  case App(callee: Block, targs: List[core.ValueType], vargs: List[Pure], bargs: List[Block])
+  case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
@@ -250,7 +250,7 @@ enum Stmt extends Tree {
   // Others
   case Hole()
 
-  val tpe: core.ValueType = Type.inferType(this)
+  val tpe: ValueType = Type.inferType(this)
   val capt: Captures = Type.inferCapt(this)
 }
 export Stmt.*
