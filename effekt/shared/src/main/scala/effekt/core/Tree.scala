@@ -14,7 +14,6 @@ package core
  *     │─ [[ ModuleDecl ]]
  *     │─ [[ Declaration ]]
  *     │  │─ [[ Data ]]
- *     │  │─ [[ Record ]]
  *     │  │─ [[ Interface ]]
  *     │
  *     │─ [[ Constructor ]]

@@ -23,12 +23,10 @@ type Captures = Set[Capture]
  *     │  │─ [[ Var ]]
  *     │  │─ [[ Data ]]
  *     │  │─ [[ Boxed ]]
- *     │  │─ [[ Extern ]]
  *     │
  *     │─ [[ BlockType ]]
  *     │  │─ [[ Function ]]
  *     │  │─ [[ Interface ]]
- *     │  │─ [[ Extern ]]
  *     │
  *
  * -------------------------------------------
