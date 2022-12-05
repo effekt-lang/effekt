@@ -57,6 +57,7 @@ enum BlockType extends Type {
 object Type {
 
   // The subtyping lattice
+  val TTop = ValueType.Extern(builtins.TopSymbol, Nil)
   val TBottom = ValueType.Extern(builtins.BottomSymbol, Nil)
   val TUnit   = ValueType.Extern(builtins.UnitSymbol, Nil)
   val TRegion = BlockType.Extern(builtins.RegionSymbol, Nil)
@@ -67,7 +68,16 @@ object Type {
   def merge(tpe1: ValueType, tpe2: ValueType, covariant: Boolean): ValueType = (tpe1, tpe2) match {
     case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) =>
       ValueType.Boxed(merge(btpe1, btpe2, covariant), merge(capt1, capt2, covariant))
-    case (tpe1, tpe2) => tpe1 // TODO we could also fail here.
+    case (tpe1, tpe2) if covariant =>
+      if (isSubtype(tpe1, tpe2)) tpe2 else tpe1
+    case (tpe1, tpe2) if !covariant =>
+      if (isSubtype(tpe1, tpe2)) tpe1 else tpe2
+    case _ => tpe1
+  }
+  private def isSubtype(tpe1: ValueType, tpe2: ValueType): Boolean = (tpe1, tpe2) match {
+    case (tpe1, TTop) => true
+    case (TBottom, tpe1) => true
+    case _ => false // conservative :)
   }
 
   def merge(tpe1: BlockType, tpe2: BlockType, covariant: Boolean): BlockType = (tpe1, tpe2) match {
