@@ -179,13 +179,15 @@ object ML extends Backend {
 
     case Hole => ml.Expr.RawExpr("raise Hole")
 
-    case Scope(definitions, body) => ml.Expr.Let(definitions.map(toML), toMLExpr(body))
+    case Scope(definitions, body) => ml.mkLet(definitions.map(toML), toMLExpr(body))
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion => C.abort("State is not supported")
-    //      ml.Let(List(Binding(nameDef(id), ml.Builtin("box", toML(init)))), toML(body))
+    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+      val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
+      ml.mkLet(List(bind), toMLExpr(body))
 
-    case State(id, init, region, body) => C.abort("State is not supported")
-    //      ml.Let(List(Binding(nameDef(id), ml.Builtin("fresh", Variable(nameRef(region)), toML(init)))), toML(body))
+    case State(id, init, region, body) =>
+      val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
+      ml.mkLet(List(bind), toMLExpr(body))
 
     case Try(body, _, handler) =>
       val handlers: List[ml.Expr.MakeDatatype] = handler.map { (h: Implementation) =>
@@ -202,7 +204,7 @@ object ML extends Backend {
             ml.Lambda(
               ml.Param.Named(kName)
             )(
-              ml.Expr.Let(
+              ml.mkLet(
                 List(ml.Binding.FunBind(
                   resumeName,
                   List(ml.Param.Named(ev1Name), ml.Param.Named(vName)),
@@ -220,29 +222,9 @@ object ML extends Backend {
       val tr = ml.Call(toML(body))(args: _*)
       ml.Call(ml.Consts.reset)(tr)
 
-    case Region(body, answerType) => C.abort("Region is not supported")
-    //      ml.Builtin("with-region")(toML(body))
+    case Region(body, _) =>
+      ml.Call(ml.Consts.withRegion)(toML(body))
 
-//    case Val(Wildcard(), _, binding, body) =>
-//      val mlBinding = toMLExpr(binding)
-//      toMLExpr(body) match {
-//        case ml.Sequence(exps, rest) => ml.Sequence(mlBinding :: exps, rest)
-//        case mlbody => ml.Sequence(List(mlBinding), mlbody)
-//      }
-//
-//    case Val(id, _, binding, body) =>
-//      val mlBinding = createBinder(id, binding)
-//      toMLExpr(body) match {
-//        case ml.Let(bindings, body) => ml.Let(mlBinding :: bindings, body)
-//        case mlbody => ml.Let(List(mlBinding), mlbody)
-//      }
-
-    //    case Def(id, _, block, rest) =>
-    //      val constDef = createBinder(id, block)
-    //      toMLExpr(rest) match {
-    //        case ml.Let(bindings, body) => ml.Let(constDef :: bindings, body)
-    //        case mlbody => ml.Let(List(constDef), mlbody)
-    //      }
   }
 
   def createBinder(id: Symbol, binding: Expr)(using Context): Binding = {
@@ -280,7 +262,7 @@ object ML extends Backend {
       val selector = field match {
         case op: symbols.Operation => dataSelectorName(op.effect, op)
         case f: symbols.Field => fieldSelectorName(f)
-        case _ => ???
+        case other => C.panic("TermSymbol Member is not supported")
       }
       ml.Call(selector)(toML(b))
 
@@ -323,6 +305,12 @@ object ML extends Backend {
         case _ => ml.RawValue(l.value.toString)
       }
     case ValueVar(id) => ml.Variable(name(id))
+
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), symbols.builtins.TState.get), List(), List()) =>
+      ml.Expr.Deref(ml.Variable(name(x)))
+
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), symbols.builtins.TState.put), List(), List(arg)) =>
+      ml.Expr.Assign(ml.Variable(name(x)), toML(arg))
 
     case PureApp(b, _, args) =>
       val mlArgs = args map {

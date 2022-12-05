@@ -145,6 +145,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
         ssep(clauses map toDoc, line <> "| ") <> mlDefault
       )
       group(nest("(" <@> mlMatch <@> ")"))
+    case Expr.Ref(exp) =>
+      val ref = "ref" <+> toDoc(exp)
+      parens(ref)
+    case Expr.Deref(exp) =>
+      val mlDeref = "!" <> toDoc(exp)
+      parens(mlDeref)
+    case Expr.Assign(asignee, value) =>
+      val assign = toDoc(asignee) <+> ":=" <+> toDoc(value)
+      parens(assign)
   }
 
   def toDoc(mc: ml.MatchClause): Doc = {

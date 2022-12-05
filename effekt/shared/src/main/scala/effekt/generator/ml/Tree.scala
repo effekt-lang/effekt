@@ -2,6 +2,8 @@ package effekt
 package generator
 package ml
 
+import scala.annotation.tailrec
+
 // TODO choose appropriate representation and apply conversions
 class MLName(n: String) {
   private def fixName(nn: String): String = {
@@ -90,7 +92,15 @@ enum Expr {
   case MakeDatatype(tag: MLName, arg: Option[Expr])
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
+  
+  case Ref(exp: Expr)
+
+  case Deref(exp: Expr)
+
+  case Assign(asignee: Expr, value: Expr)
 }
+
+export Expr.*
 
 case class MatchClause(pattern: Pattern, body: Expr)
 enum Pattern {
@@ -98,8 +108,6 @@ enum Pattern {
   case Named(name: MLName)
   case Datatype(tag: MLName, terms: List[Pattern])
 }
-
-export Expr.*
 
 object Consts {
 
@@ -116,6 +124,9 @@ object Consts {
   val run: Expr = Variable(MLName("run"))
   val nested: Expr = Variable(MLName("nested"))
   val here: Expr = Variable(MLName("here"))
+  val withRegion: Expr = Variable(MLName("withRegion"))
+  val fresh: Expr = Variable(MLName("fresh"))
+  val backup: Expr = Variable(MLName("backup"))
 
 }
 
@@ -127,3 +138,9 @@ def Call(expr: Expr)(args: Expr*): Expr = Expr.Call(expr, args.toList)
 def Lambda(params: Param*)(body: Expr): Lambda = Expr.Lambda(params.toList, body)
 
 def MLString(mlString: String): Expr = RawValue(s"\"$mlString\"")
+
+@tailrec
+def mkLet(bindings: List[Binding], body: Expr): Expr = body match {
+  case Let(bindings1, body1) => mkLet(bindings ++ bindings1, body1)
+  case _ => ml.Expr.Let(bindings, body)
+}
