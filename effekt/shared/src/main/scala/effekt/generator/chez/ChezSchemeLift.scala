@@ -42,8 +42,8 @@ object ChezSchemeLift extends Backend {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(using C: Context) =
-    C.using(module = input.mod) { Some(chez.PrettyPrinter.format(compile(input))) }
+  def compileSeparate(input: AllTransformed)(using C: Context) =
+    C.using(module = input.main.mod) { Some(chez.PrettyPrinter.format(compile(input.main))) }
 
   /**
    * Compiles only the given module, does not compile dependencies
