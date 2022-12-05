@@ -39,7 +39,6 @@ enum ValueType extends Type {
   case Var(name: Id)
   case Data(symbol: Id, targs: List[ValueType])
   case Boxed(tpe: BlockType, capt: Captures)
-  case Extern(symbol: Id, targs: List[ValueType])
 }
 
 enum BlockType extends Type {
@@ -55,9 +54,9 @@ enum BlockType extends Type {
 object Type {
 
   // The subtyping lattice
-  val TTop = ValueType.Extern(builtins.TopSymbol, Nil)
-  val TBottom = ValueType.Extern(builtins.BottomSymbol, Nil)
-  val TUnit   = ValueType.Extern(builtins.UnitSymbol, Nil)
+  val TTop = ValueType.Data(builtins.TopSymbol, Nil)
+  val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
+  val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
   val TRegion = BlockType.Extern(builtins.RegionSymbol, Nil)
 
   /**
@@ -130,9 +129,7 @@ object Type {
     case ValueType.Var(id) if vsubst.isDefinedAt(id) => vsubst(id)
     case ValueType.Var(id) => tpe
 
-    case ValueType.Data(sym, targs)   => ValueType.Data(sym, targs.map(t => substitute(t, vsubst, csubst)))
-    case ValueType.Extern(sym, targs) => ValueType.Extern(sym, targs.map(t => substitute(t, vsubst, csubst)))
-
+    case ValueType.Data(sym, targs) => ValueType.Data(sym, targs.map(t => substitute(t, vsubst, csubst)))
 
     case ValueType.Boxed(tpe, capt) =>
       ValueType.Boxed(substitute(tpe, vsubst, csubst), substitute(capt, csubst))

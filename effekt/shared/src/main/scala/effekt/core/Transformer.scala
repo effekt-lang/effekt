@@ -445,11 +445,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
   // Translation on Types
   // --------------------
   def transform(tpe: ValueType)(using Context): core.ValueType = tpe match {
-    case ValueType.BoxedType(tpe, capture)            => core.ValueType.Boxed(transform(tpe), transform(capture))
-    case ValueType.ValueTypeRef(tvar)                 => core.ValueType.Var(tvar)
-    case ValueType.ValueTypeApp(tc: DataType, args)   => core.ValueType.Data(tc, args.map(transform))
-    case ValueType.ValueTypeApp(tc: Record, args)     => core.ValueType.Data(tc, args.map(transform))
-    case ValueType.ValueTypeApp(tc: ExternType, args) => core.ValueType.Extern(tc, args.map(transform))
+    case ValueType.BoxedType(tpe, capture) => core.ValueType.Boxed(transform(tpe), transform(capture))
+    case ValueType.ValueTypeRef(tvar)      => core.ValueType.Var(tvar)
+    case ValueType.ValueTypeApp(tc, args)  => core.ValueType.Data(tc, args.map(transform))
   }
 
   def transform(tpe: BlockType)(using Context): core.BlockType = tpe match {
