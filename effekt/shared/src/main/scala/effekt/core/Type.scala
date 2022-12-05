@@ -61,7 +61,26 @@ object Type {
   val TUnit   = ValueType.Extern(builtins.UnitSymbol, Nil)
   val TRegion = BlockType.Extern(builtins.RegionSymbol, Nil)
 
-  def join(tpe1: ValueType, tpe2: ValueType): ValueType = tpe1 // TODO implement properly
+  /**
+   * Function types are the only type constructor that we have subtyping on.
+   */
+  def merge(tpe1: ValueType, tpe2: ValueType, covariant: Boolean): ValueType = (tpe1, tpe2) match {
+    case (ValueType.Boxed(btpe1, capt1), ValueType.Boxed(btpe2, capt2)) =>
+      ValueType.Boxed(merge(btpe1, btpe2, covariant), merge(capt1, capt2, covariant))
+    case (tpe1, tpe2) => tpe1 // TODO we could also fail here.
+  }
+
+  def merge(tpe1: BlockType, tpe2: BlockType, covariant: Boolean): BlockType = (tpe1, tpe2) match {
+    case (BlockType.Function(tparams1, cparams1, vparams1, bparams1, result1), tpe2: BlockType.Function) =>
+      val BlockType.Function(_, _, vparams2, bparams2, result2) = instantiate(tpe2, tparams1.map(ValueType.Var.apply), cparams1.map(c => Set(c)))
+      val vparams = (vparams1 zip vparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
+      val bparams = (bparams1 zip bparams2).map { case (tpe1, tpe2) => merge(tpe1, tpe2, !covariant) }
+      BlockType.Function(tparams1, cparams1, vparams, bparams, merge(result1, result2, covariant))
+    case (tpe1, tpe2) => tpe1
+  }
+
+  def merge(capt1: Captures, capt2: Captures, covariant: Boolean): Captures =
+    if covariant then capt1 union capt2 else capt1 intersect capt2
 
   def instantiate(f: BlockType.Function, targs: List[ValueType], cargs: List[Captures]): BlockType.Function = f match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
@@ -139,10 +158,10 @@ object Type {
     case Stmt.App(callee, targs, vargs, bargs) =>
       instantiate(callee.functionType, targs, bargs.map(_.capt)).result
 
-    case Stmt.If(cond, thn, els) => join(thn.tpe, els.tpe)
+    case Stmt.If(cond, thn, els) => merge(thn.tpe, els.tpe, covariant = true)
     case Stmt.Match(scrutinee, clauses, default) =>
       val allTypes = clauses.map { case (_, cl) => cl.returnType } ++ default.map(_.tpe).toList
-      allTypes.fold(TBottom)(join)
+      allTypes.fold(TBottom) { case (tpe1, tpe2) => merge(tpe1, tpe2, covariant = true) }
 
     case Stmt.State(id, init, region, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
