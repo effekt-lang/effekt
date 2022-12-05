@@ -259,7 +259,6 @@ object JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  // TODO replace this by a lookup in the global declarations
   def tagFor(constructor: Id)(using C: GeneratorContext): js.Expr = {
     val position = C.declarations.collectFirst {
       case Declaration.Data(_, _, cs) if cs.exists(c => c.id == constructor) =>
