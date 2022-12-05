@@ -49,11 +49,11 @@ trait ChezScheme {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, mainSym: TermSymbol)(using C: Context) = {
+  def compileWhole(main: CoreTransformed, mainSym: TermSymbol)(using C: Context): Option[Compiled] = {
     val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core)))
     val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
     val mainFile = path(main.mod)
-    Some(Compiled(mainFile, Map(mainFile -> result)))
+    Some(Compiled(main.source, mainFile, Map(mainFile -> result)))
   }
 
   /**

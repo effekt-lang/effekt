@@ -39,7 +39,7 @@ object JavaScript extends Backend {
     given GeneratorContext = GeneratorContext(C, input.core.declarations)
 
     val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
-    Some(Compiled(mainFile, Map(mainFile -> result)))
+    Some(Compiled(input.source, mainFile, Map(mainFile -> result)))
   }
 
   /**

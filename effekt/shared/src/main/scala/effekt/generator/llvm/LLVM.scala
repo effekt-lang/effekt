@@ -23,7 +23,7 @@ object LLVM extends Backend {
 
     val result = Document(llvmString, emptyLinks)
 
-    Some(Compiled(mainFile, Map(mainFile -> result)))
+    Some(Compiled(main.source, mainFile, Map(mainFile -> result)))
   }
 
   def path(m: Module)(using C: Context): String =

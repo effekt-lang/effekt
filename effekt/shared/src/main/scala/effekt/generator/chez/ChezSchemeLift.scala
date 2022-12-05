@@ -36,7 +36,7 @@ object ChezSchemeLift extends Backend {
       val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
       val mainFile = path(main.mod)
-      Compiled(mainFile, Map(mainFile -> result))
+      Compiled(main.source, mainFile, Map(mainFile -> result))
     }
 
   /**

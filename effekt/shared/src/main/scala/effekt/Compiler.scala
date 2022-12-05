@@ -19,48 +19,51 @@ import kiama.util.{ Positions, Source }
  *
  * All phases have a source field, which is mostly used to invalidate caches based on the timestamp.
  */
-sealed trait PhaseResult { val source: Source }
+enum PhaseResult {
 
-/**
- * The result of [[Parser]] parsing a single file into a [[effekt.source.Tree]].
- */
-case class Parsed(source: Source, tree: ModuleDecl) extends PhaseResult
+  val source: Source
 
-/**
- * The result of [[Namer]] resolving all names in a given syntax tree. The resolved symbols are
- * annotated in the [[Context]] using [[effekt.context.Annotations]].
- */
-case class NameResolved(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
+  /**
+   * The result of [[Parser]] parsing a single file into a [[effekt.source.Tree]].
+   */
+  case Parsed(source: Source, tree: ModuleDecl)
 
-/**
- * The result of [[Typer]] type checking a given syntax tree.
- *
- * We can notice that [[NameResolved]] and [[Typechecked]] haave the same fields.
- * Like, [[Namer]], [[Typer]] writes to the types of each tree into the DB, using [[effekt.context.Annotations]].
- * This might change in the future, when we switch to elaboration.
- */
-case class Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
+  /**
+   * The result of [[Namer]] resolving all names in a given syntax tree. The resolved symbols are
+   * annotated in the [[Context]] using [[effekt.context.Annotations]].
+   */
+  case NameResolved(source: Source, tree: ModuleDecl, mod: symbols.Module)
 
-/**
- * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
- */
-case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl) extends PhaseResult
+  /**
+   * The result of [[Typer]] type checking a given syntax tree.
+   *
+   * We can notice that [[NameResolved]] and [[Typechecked]] haave the same fields.
+   * Like, [[Namer]], [[Typer]] writes to the types of each tree into the DB, using [[effekt.context.Annotations]].
+   * This might change in the future, when we switch to elaboration.
+   */
+  case Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module)
 
-/**
- * The result of running the [[Compiler.Middleend]] on all dependencies.
- */
-case class AllTransformed(source: Source, main: CoreTransformed, dependencies: List[CoreTransformed]) extends PhaseResult
+  /**
+   * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
+   */
+  case CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl)
 
-/**
- * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
- */
-case class CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl) extends PhaseResult
+  /**
+   * The result of running the [[Compiler.Middleend]] on all dependencies.
+   */
+  case AllTransformed(source: Source, main: PhaseResult.CoreTransformed, dependencies: List[PhaseResult.CoreTransformed])
 
-/**
- * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
- */
-case class Compiled(mainFile: String, outputFiles: Map[String, Document])
+  /**
+   * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
+   */
+  case CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl)
 
+  /**
+   * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
+   */
+  case Compiled(source: Source, mainFile: String, outputFiles: Map[String, Document])
+}
+export PhaseResult.*
 
 /**
  * The compiler for the Effekt language.
