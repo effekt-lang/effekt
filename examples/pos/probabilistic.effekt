@@ -32,6 +32,11 @@ type Var {
   Observed(value: Boolean)
 }
 
+def show(v: Var) = v match {
+  case Unobserved() => "Unobserved()"
+  case Observed(value) => "Observed(" ++ show(value) ++ ")"
+}
+
 type Ref { MkRef(n: Int) }
 
 effect Heap {
@@ -74,6 +79,16 @@ def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
   if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
 
 type Weighted[R] { MkWeighted(weight: Double, value: R) }
+
+def show(w: Weighted[Var]) = {
+  val MkWeighted(weight, value) = w;
+  "MkWeighted(" ++ show(weight) ++ ", " ++ show(value) ++ ")"
+}
+
+def show(l: List[Weighted[Var]]): String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
 
 def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
   val empty: List[Weighted[R]] = Nil();
@@ -162,7 +177,7 @@ def main() = {
   val res = handleProb {
     test()
   };
-  println(res);
+  println(show(res));
 
   catch {
     heapTest()
@@ -174,7 +189,7 @@ def main() = {
         do Disj(do Flip(0.2), r)
       }
     };
-    println(res)
+    println(show(res))
   }
 
 }

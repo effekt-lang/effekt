@@ -13,7 +13,7 @@ def isDefined[A](self: Option[A]): Boolean = self match {
 }
 
 def isEmpty[A](self: Option[A]): Boolean =
- self.isEmpty.not
+ self.isDefined.not
 
 def orElse[A](self: Option[A]) { that: => Option[A] }: Option[A] = self match {
  case None()  => that()

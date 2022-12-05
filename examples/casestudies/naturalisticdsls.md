@@ -79,6 +79,8 @@ We start by describing the language (DSL) of nominal phrases as the following da
 module examples/casestudies/naturalisticdsls
 
 record Person(name: String)
+
+def show(p: Person) = "Person(" ++ p.name ++ ")"
 ```
 
 Let us define some example people:
@@ -90,6 +92,17 @@ val Mary = Person("Mary")
 
 Next, we define the sentence DSL:
 ```
+
+type Predicate {
+  InLoveWith(p: Person)
+  Woman()
+}
+
+def show(pred: Predicate) = pred match {
+  case InLoveWith(p) => "InLoveWith(" ++ show(p) ++ ")"
+  case Woman() => "Woman()"
+}
+
 type Sentence {
   Say(speaker: Person, sentence: Sentence)
   Is(person: Person, predicate: Predicate)
@@ -97,10 +110,18 @@ type Sentence {
   ForAll(individual: Person, s: Sentence)
   Implies(a: Sentence, b: Sentence)
 }
-type Predicate {
-  InLoveWith(p: Person)
-  Woman()
+
+def show(s: Sentence): String = s match {
+  case Say(speaker, sentence) =>
+    "Say(" ++ show(speaker) ++ ", " ++ show(sentence) ++ ")"
+  case Is(person, predicate) =>
+    "Is(" ++ show(person) ++ ", " ++ show(predicate) ++ ")"
+  case ForAll(individual, s) =>
+    "ForAll(" ++ show(individual) ++ ", " ++ show(s) ++ ")"
+  case Implies(a, b) =>
+    "Implies(" ++ show(a) ++ ", " ++ show(b) ++ ")"
 }
+
 def loves(lover: Person, loved: Person) = Is(lover, InLoveWith(loved))
 ```
 

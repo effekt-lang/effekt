@@ -70,13 +70,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.Tuple(l) =>
       val d = ssep(l map toDoc, " * ")
       parens(d)
-    case Type.Unit => "()"
+    case Type.Unit => "unit"
     case Type.Integer => "int"
     case Type.Real => "real"
     case Type.String => "string"
     case Type.Bool => "bool"
     case Type.Data(name) => toDoc(name)
-    case Type.Alias(name) => toDoc(name)
     case Type.Tapp(tpe, args) =>
       val ap = tlistDoc(args) <+> toDoc(tpe)
       parens(ap)

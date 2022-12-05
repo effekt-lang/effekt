@@ -1,36 +1,40 @@
 module text/string
 
 import immutable/option
-//import mutable/array
+import mutable/array
 
-//def charAt(str: String, index: Int): Option[String] =
-//    str.unsafeCharAt(index).undefinedToOption
+def charAt(str: String, index: Int): Option[String] =
+    if (index < 0 || length(str) <= index)
+        Some(unsafeCharAt(str, index))
+    else None()
 
-//extern pure def length(str: String): Int =
-//  "str.length"
+extern pure def length(str: String): Int =
+    "String.size(str)"
 
-//extern pure def repeat(str: String, n: Int): String =
-//  "if ("
+extern pure def repeat(str: String, n: Int): String =
+    "???"
 
-// out of bounds input result in empty or complete strings
-//extern pure def substring(str: String, from: Int): String =
-//"""if from < 0
-//  then str
-//  else if from > ((size str) - 1)
-//  then \"\"
-//  else String.substring(str, from, (size str) - from)"""
+def substring(str: String, from: Int): String =
+    if (from < 0 || length(str) <= from)
+        unsafeSubstring(str, from)
+    else str
 
-//extern pure def split(str: String, sep: String): Array[String] =
-//  "str.split(sep)"
+extern pure def unsafeSubstring(str: String, from: Int): String =
+    "String.extract(str, from, NONE)"
 
-//extern pure def trim(str: String): String =
-//  "str.trim()"
+// extern pure def split(str: String, sep: String): Array[String] =
+//     "Array.fromList (map (String.str) (String.explode str))"
 
-//def toInt(str: String): Option[Int] =
-//  str.unsafeToInt.undefinedToOption
+// extern pure def trim(str: String): String =
+//     "???"
 
-//extern pure def unsafeCharAt(str: String, n: Int): String =
-//  "str[n]"
+def toInt(str: String): Option[Int] = {
+    val (test, v) = unsafeToInt(str);
+    if (test) Some(v) else None()
+}
 
-//extern pure def unsafeToInt(str: String): Int =
-//  "Number.isNaN(parseInt(str)) ? undefined : parseInt(str)"
+extern pure def unsafeToInt(str: String): (Boolean, Int) =
+    """case Int.fromString str of NONE => (false, ~1) | SOME v => (true, v)"""
+
+extern pure def unsafeCharAt(str: String, n: Int): String =
+    "String.sub(str, n)"

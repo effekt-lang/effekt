@@ -8,19 +8,16 @@ def locally[R] { f: => R }: R = f()
 
 // Side effecting ops
 // ==================
-extern io def println(value: String): Unit =
-  """print (value ^ "\n")"""
-
 extern io def println(value: Int): Unit =
-  """print ((effektIntString value) ^ "\n")"""
-
+  """print ((show'int value) ^ "\n")"""
+extern io def println(value: Unit): Unit =
+  """print ((show'unit value) ^ "\n")"""
 extern io def println(value: Double): Unit =
-  """print ((effektDoubleString value) ^ "\n")"""
-
+  """print ((show'real value) ^ "\n")"""
+extern io def println(value: String): Unit =
+  """print ((show'string value) ^ "\n")"""
 extern io def println(value: Boolean): Unit =
-  """print ((Bool.toString value) ^ "\n")"""
-
-// TODO: generic println
+  """print ((show'bool value) ^ "\n")"""
 
 extern io def random(): Double =
   "mlRandomReal ()"
@@ -30,9 +27,17 @@ extern io def timestamp(): Int =
   "IntInf.toInt ((Time.toMilliseconds (Time.now ())) - mlStartTime)"
 
 // String ops
-// ========== TODO
-// // extern pure def show[R](value: R): String =
-// //   "show$impl(value)"
+// ==========
+extern pure def show(value: Int): String =
+  "show'int value"
+extern pure def show(value: Unit): String =
+  "show'unit value"
+extern pure def show(value: Double): String =
+  "show'real value"
+extern pure def show(value: String): String =
+  "show'string value"
+extern pure def show(value: Boolean): String =
+  "show'bool value"
 
 extern pure def infixConcat(s1: String, s2: String): String =
   "s1 ^ s2"

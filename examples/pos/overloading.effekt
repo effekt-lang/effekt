@@ -3,9 +3,19 @@ module examples/pos/overloading
 import immutable/list
 import immutable/option
 
+def show(l: List[Int]): String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
+
+def show(opt: Option[Int]): String = opt match {
+    case None() => "None()"
+    case Some(value) => "Some(" ++ show(value) ++ ")"
+}
+
 def main() = {
     val l = [1,2,3];
     val o = Some(4);
-    println(l.map { x => x + 1 });
-    println(o.map { x => x + 1 })
+    println(show(l.map { x => x + 1 }));
+    println(show(o.map { x => x + 1 }))
 }

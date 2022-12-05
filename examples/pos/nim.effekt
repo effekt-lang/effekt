@@ -8,6 +8,11 @@ type Player {
   Alice()
 }
 
+def show(p: Player) = p match {
+  case Bob() => "Bob()"
+  case Alice() => "Alice()"
+}
+
 effect Move(p: Player, sticks: Int): Int
 
 def aliceTurn(n: Int): Player / Move =

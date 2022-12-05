@@ -25,7 +25,7 @@ fun withRegion body =
     in body lift r end
 
 (* TOSTRING STUFF *)
-fun effektIntString x =
+fun show'int x =
     let val s = (Int.toString x) in
     case String.sub (s, 0) of
           #"~" => "-" ^ String.extract (s, 1, NONE)
@@ -39,7 +39,7 @@ To alingn with the js backend inf and nan is rewritten
 - `~2.1` -> `-2.1`
 They do still disagree on the truncating of `2.0` to `2` (ml does not).
 *)
-fun effektDoubleString x =
+fun show'real x =
     let val s = (Real.toString x) in
     case s of
           "nan" => "NaN"
@@ -48,6 +48,12 @@ fun effektDoubleString x =
               #"~" => "-" ^ String.extract (s, 1, NONE)
             | _ => s
     end;
+
+fun show'unit x = ""
+
+fun show'bool x = Bool.toString x
+
+fun show'string x = x
 
 (* TIMING STUFF *)
 val mlStartTime = Time.toMilliseconds (Time.now ());

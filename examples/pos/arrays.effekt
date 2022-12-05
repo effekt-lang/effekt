@@ -2,13 +2,18 @@ module examples/pos/arrays
 
 import mutable/array
 
+def show(o: Option[Int]) = o match {
+    case None() => "None()"
+    case Some(v) => "Some(" ++ show(v) ++ ")"
+}
+
 def main() = {
     val arr = emptyArray[String]();
     put(arr, 0, "hello");
     put(arr, 2, "world");
-    println(get(arr, 0));
-    println(get(arr, 2));
-    println(get(arr, 4));
+    println(show(get(arr, 0)));
+    println(show(get(arr, 2)));
+    println(show(get(arr, 4)));
     put(arr, 4, "foo");
-    println(get(arr, 4))
+    println(show(get(arr, 4)))
 }
