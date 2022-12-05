@@ -185,7 +185,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(tpe: core.ValueType): Doc = tpe match {
     case ValueType.Var(name) => toDoc(name)
     case ValueType.Data(symbol, targs) => toDoc(symbol, targs)
-    case ValueType.Record(symbol, targs) => toDoc(symbol, targs)
     case ValueType.Boxed(tpe, capt) => toDoc(tpe) <+> "at" <+> toDoc(capt)
     case ValueType.Extern(symbol, targs) => toDoc(symbol, targs)
   }

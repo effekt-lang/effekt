@@ -393,7 +393,6 @@ object Transformer {
   def transform(tpe: core.ValueType)(using Context): Type = tpe match {
     case core.ValueType.Var(name) => ???
     case core.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
-    case core.ValueType.Record(symbol, targs) => Positive(symbol.name.name)
     case core.ValueType.Boxed(tpe, capt) => ???
     case core.ValueType.Extern(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
     case core.ValueType.Extern(symbols.builtins.IntSymbol, Nil) => Type.Int()

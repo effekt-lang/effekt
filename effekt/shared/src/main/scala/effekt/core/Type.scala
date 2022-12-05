@@ -22,7 +22,6 @@ type Captures = Set[Capture]
  *     │─ [[ ValueType ]]
  *     │  │─ [[ Var ]]
  *     │  │─ [[ Data ]]
- *     │  │─ [[ Record ]]
  *     │  │─ [[ Boxed ]]
  *     │  │─ [[ Extern ]]
  *     │
@@ -39,7 +38,6 @@ sealed trait Type
 enum ValueType extends Type {
   case Var(name: Id)
   case Data(symbol: Id, targs: List[ValueType])
-  case Record(symbol: Id, targs: List[ValueType])
   case Boxed(tpe: BlockType, capt: Captures)
   case Extern(symbol: Id, targs: List[ValueType])
 }
@@ -133,7 +131,6 @@ object Type {
     case ValueType.Var(id) => tpe
 
     case ValueType.Data(sym, targs)   => ValueType.Data(sym, targs.map(t => substitute(t, vsubst, csubst)))
-    case ValueType.Record(sym, targs) => ValueType.Record(sym, targs.map(t => substitute(t, vsubst, csubst)))
     case ValueType.Extern(sym, targs) => ValueType.Extern(sym, targs.map(t => substitute(t, vsubst, csubst)))
 
 
