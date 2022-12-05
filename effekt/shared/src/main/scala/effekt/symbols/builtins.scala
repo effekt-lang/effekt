@@ -34,10 +34,10 @@ object builtins {
   val StringSymbol = ExternType(name("String"), Nil)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
-  val TopSymbol = ExternType(name("⊤"), Nil)
+  val TopSymbol = ExternType(name("Top"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  val BottomSymbol = ExternType(name("⊥"), Nil)
+  val BottomSymbol = ExternType(name("Bottom"), Nil)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
@@ -71,6 +71,8 @@ object builtins {
     "Int" -> IntSymbol,
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,
+    "Bottom" -> BottomSymbol,
+    "Top" -> TopSymbol,
     "IO" -> IOSymbol,
     "Region" -> RegionSymbol,
     "Ref" -> TState.interface
