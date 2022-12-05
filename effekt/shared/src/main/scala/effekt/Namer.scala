@@ -262,9 +262,9 @@ object Namer extends Phase[Parsed, NameResolved] {
         resolveGeneric(body)
       }
 
-    case source.InterfaceDef(id, tparams, ops, isEffect) =>
+    case source.InterfaceDef(id, tparams, operations, isEffect) =>
       val effectSym = Context.resolveType(id).asControlEffect
-      effectSym.ops = ops.map {
+      effectSym.operations = operations.map {
         case source.Operation(id, tparams, params, ret) =>
           val name = Context.nameFor(id)
 
@@ -284,7 +284,7 @@ object Namer extends Phase[Parsed, NameResolved] {
             op
           }
       }
-      if (isEffect) effectSym.ops.foreach { op => Context.bind(op) }
+      if (isEffect) effectSym.operations.foreach { op => Context.bind(op) }
 
     case source.TypeDef(id, tparams, tpe) => ()
     case source.EffectDef(id, tparams, effs)       => ()
@@ -364,7 +364,7 @@ object Namer extends Phase[Parsed, NameResolved] {
         case source.OpClause(op, tparams, params, ret, body, resumeId) =>
 
           // try to find the operation in the handled effect:
-          eff.ops.find { o => o.name.toString == op.name } map { opSym =>
+          eff.operations.find { o => o.name.toString == op.name } map { opSym =>
             Context.assignSymbol(op, opSym)
           } getOrElse {
             Context.abort(pretty"Operation ${op} is not part of interface ${eff}.")
@@ -877,7 +877,7 @@ trait NamerOps extends ContextOps { Context: Context =>
     val syms = eff match {
       case Some(tpe) =>
         val interface = tpe.typeConstructor.asInterface
-        val operations = interface.ops.filter { op => op.name.name == id.name }
+        val operations = interface.operations.filter { op => op.name.name == id.name }
         if (operations.isEmpty) Nil else List(operations.toSet)
       case None => scope.lookupEffectOp(id.name)
     }

@@ -101,9 +101,9 @@ trait ChezScheme {
 
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
     case Return(e) => pure(toChez(e))
-    case App(b, targs, args) => chez.Call(toChez(b), toChez(args))
+    case App(b, targs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, tpe, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
+    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case Match(scrutinee, clauses, default) =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
@@ -114,7 +114,7 @@ trait ChezScheme {
       }
       chez.Cond(cls, default.map(toChezExpr))
 
-    case Hole => chez.Builtin("hole")
+    case Hole() => chez.Builtin("hole")
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
@@ -122,41 +122,38 @@ trait ChezScheme {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Try(body, tpe, handler) =>
+    case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.interface)
+        // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
+        val names = RecordNames(h.interface.symbol)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, BlockLit(params, body)) =>
-            // the LAST argument is the continuation...
-            chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
+          case Operation(op, tps, cps, vps, bps, resume, body) =>
+            chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
         })
       }
       chez.Handle(handlers, toChez(body))
 
-    case Region(body, _) => chez.Builtin("with-region", toChez(body))
+    case Region(body) => chez.Builtin("with-region", toChez(body))
 
     case other => chez.Let(Nil, toChez(other))
   }
 
   def toChez(decl: core.Declaration): List[chez.Def] = decl match {
-    case Data(did, ctors) =>
-      ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
-      }
+    case Data(did, tparams, ctors) =>
+      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(f => f.id)) }
 
-    case Record(did, fields) =>
-      generateConstructor(did, fields)
+    case Record(did, tparams, ctor) =>
+      generateConstructor(ctor.id, ctor.fields.map(f => f.id))
 
     // We use chez scheme records to also represent capabilities.
-    case Declaration.Interface(id, operations) =>
-      generateConstructor(id, operations)
+    case Declaration.Interface(id, tparams, operations) =>
+      generateConstructor(id, operations.map(op => op.id))
   }
 
   def toChez(decl: core.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, params, body) =>
+    case Extern.Def(id, tpe, cps, vps, bps, ret, capt, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda(params map { p => ChezName(p.id.name.name) },
+        chez.Lambda((vps ++ bps) map { p => ChezName(p.id.name.name) },
           chez.RawExpr(body)))
 
     case Extern.Include(contents) =>
@@ -164,10 +161,10 @@ trait ChezScheme {
   }
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), tpe, binding) =>
+    case Definition.Let(Wildcard(), binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -177,7 +174,7 @@ trait ChezScheme {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 
@@ -195,25 +192,27 @@ trait ChezScheme {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(params, body) =>
-      chez.Lambda(params map toChez, toChez(body))
+    case BlockLit(tps, cps, vps, bps, body) =>
+      chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 
   def toChez(block: Block): chez.Expr = block match {
-    case BlockVar(id) =>
+    case BlockVar(id, _, _) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(params, body) => toChez(b)
+    case b @ BlockLit(tps, cps, vps, bps, body) => toChez(b)
 
-    case Member(b, field) =>
+    case Member(b, field, tpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) =>
       toChez(e)
 
-    case New(Implementation(id, clauses)) =>
-      val ChezName(name) = nameRef(id)
-      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
+    case New(Implementation(tpe, clauses)) =>
+      val ChezName(name) = nameRef(tpe.symbol)
+      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map {
+        case Operation(_, tps, cps, vps, bps, resume, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
+      })
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
@@ -221,16 +220,16 @@ trait ChezScheme {
     case Literal(s: String, _)  => ChezString(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal             => chez.RawValue(l.value.toString)
-    case ValueVar(id)           => chez.Variable(nameRef(id))
+    case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
-    case DirectApp(b, targs, args) => chez.Call(toChez(b), toChez(args))
+    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
 
-    case Select(b, field) =>
+    case Select(b, field, _) =>
       chez.Call(nameRef(field), toChez(b))
 
-    case Box(b) => toChez(b)
+    case Box(b, _) => toChez(b)
 
-    case Run(s, tpe) => run(toChezExpr(s))
+    case Run(s) => run(toChezExpr(s))
   }
 }

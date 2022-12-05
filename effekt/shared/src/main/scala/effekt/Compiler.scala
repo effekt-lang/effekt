@@ -125,20 +125,23 @@ trait Compiler {
        * Wellformedness checks (exhaustivity, non-escape)
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      PostTyper andThen
-      /**
-       * Uses annotated effects to translate to explicit capability passing
-       *   [[Typechecked]] --> [[Typechecked]]
-       */
-      Elaborator
+      PostTyper
   }
 
   /**
    * Middleend
    */
   private val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
+    /**
+     * Uses annotated effects to translate to explicit capability passing
+     * [[Typechecked]] --> [[Typechecked]]
+     */
+    Elaborator andThen
+    /**
+     * Translates a source program to a core program
+     * [[Typechecked]] --> [[CoreTransformed]]
+     */
     Transformer
-    // here optimization passes on Core will be added.
   }
 
   /**

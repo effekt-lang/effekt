@@ -74,13 +74,13 @@ object ExplicitCapabilities extends Rewrite {
       val others = Context.annotation(Annotations.CapabilityArguments, c)
 
       // the remaining capabilities are provided as arguments
-      val capabilityArgs = others.map { e => Var(Context.freshReferenceTo(e)) }
+      val capabilityArgs = others.map(referenceToCapability)
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
 
       // construct the member selection on the capability as receiver
-      MethodCall(Var(Context.freshReferenceTo(receiver)).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
+      MethodCall(referenceToCapability(receiver).inheritPosition(id), id, typeArgs, transformedValueArgs, capabilityArgs)
 
     // the function is a field, desugar to select
     case c @ Call(fun: IdTarget, targs, List(receiver), Nil) if fun.definition.isInstanceOf[Field] =>
@@ -91,7 +91,7 @@ object ExplicitCapabilities extends Rewrite {
       val blockArgs = bargs.map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => Var(Context.freshReferenceTo(e)) }
+      val capabilityArgs = capabilities.map(referenceToCapability)
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
@@ -106,7 +106,7 @@ object ExplicitCapabilities extends Rewrite {
       val blockArgs = bargs.map { a => rewrite(a) }
 
       val capabilities = Context.annotation(Annotations.CapabilityArguments, c)
-      val capabilityArgs = capabilities.map { e => Var(Context.freshReferenceTo(e)) }
+      val capabilityArgs = capabilities.map(referenceToCapability)
 
       val typeArguments = Context.annotation(Annotations.TypeArguments, c)
       val typeArgs = typeArguments.map { e => ValueTypeTree(e) }
@@ -136,6 +136,11 @@ object ExplicitCapabilities extends Rewrite {
       val capParams = capabilities.map(Context.definitionFor)
       source.BlockLiteral(tps, vps, bps ++ capParams, rewrite(body))
   }
+
+  def referenceToCapability(capability: BlockParam)(using Context): Var =
+    val ref: Var = Var(Context.freshReferenceTo(capability))
+    Context.annotate(Annotations.InferredBlockType, ref, Context.blockTypeOf(capability))
+    ref
 }
 
 object ExplicitRegions extends Rewrite {

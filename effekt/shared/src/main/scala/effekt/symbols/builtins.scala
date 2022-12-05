@@ -51,7 +51,7 @@ object builtins {
     val interface: Interface = Interface(Name.local("Ref"), List(S), Nil)
     val get = Operation(name("get"), List(S), Nil, ValueTypeRef(S), Effects.Pure, interface)
     val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), TUnit, Effects.Pure, interface)
-    interface.ops = List(get, put)
+    interface.operations = List(get, put)
 
     def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))
 

@@ -93,20 +93,20 @@ object JavaScript extends Backend {
   }
 
   def toJS(e: core.Extern)(using Context): js.Stmt = e match {
-    case Extern.Def(id, tpe, params, body) =>
-      js.Function(nameDef(id), params map externParams, List(js.Return(js.RawExpr(body))))
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
+      js.Function(nameDef(id), (vps ++ bps) map externParams, List(js.Return(js.RawExpr(body))))
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
   }
 
   def toJS(b: core.Block)(using Context): js.Expr = b match {
-    case BlockVar(v) =>
+    case BlockVar(v, _, _) =>
       nameRef(v)
-    case BlockLit(ps, body) =>
+    case BlockLit(tps, cps, vps, bps, body) =>
       val (stmts, ret) = toJSStmt(body)
-      monadic.Lambda(ps map toJS, stmts, ret) // TODO
-    case Member(b, id) =>
+      monadic.Lambda((vps ++ bps) map toJS, stmts, ret) // TODO
+    case Member(b, id, tpe) =>
       js.Member(toJS(b), memberNameRef(id))
     case Unbox(e)     => toJS(e)
     case New(handler) => toJS(handler)
@@ -121,16 +121,20 @@ object JavaScript extends Backend {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
-    case ValueVar(id) => nameRef(id)
-    case DirectApp(b, targs, args) => js.Call(toJS(b), toJS(args))
+    case ValueVar(id, tpe) => nameRef(id)
+    case DirectApp(b, targs, vargs, bargs) => js.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
     case PureApp(b, targs, args) => js.Call(toJS(b), args map toJS)
-    case Select(target, field) => js.Member(toJS(target), memberNameRef(field))
-    case Box(b) => toJS(b)
-    case Run(s, tpe) => monadic.Run(toJSMonadic(s))
+    case Select(target, field, _) => js.Member(toJS(target), memberNameRef(field))
+    case Box(b, _) => toJS(b)
+    case Run(s) => monadic.Run(toJSMonadic(s))
   }
 
   def toJS(handler: core.Implementation)(using Context): js.Expr =
-    js.Object(handler.operations.map { case Operation(id, b) => nameDef(id) -> toJS(b) })
+    js.Object(handler.operations.map {
+      case Operation(id, tps, cps, vps, bps, resume, body) =>
+        val (stmts, ret) = toJSStmt(body)
+        nameDef(id) -> monadic.Lambda((vps ++ bps ++ resume.toList) map toJS, stmts, ret)
+    })
 
   def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using Context): js.Module = {
     val name    = JSName(jsModuleName(module.path))
@@ -148,14 +152,14 @@ object JavaScript extends Backend {
    * Not all statement types can be printed in this context!
    */
   def toJSMonadic(s: core.Stmt)(using Context): monadic.Control = s match {
-    case core.Val(Wildcard(), tpe, binding, body) =>
+    case core.Val(Wildcard(), binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
-    case core.Val(id, tpe, binding, body) =>
+    case core.Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
-    case core.App(b, targs, args) =>
-      monadic.Call(toJS(b), toJS(args))
+    case core.App(b, targs, vargs, bargs) =>
+      monadic.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
 
     case core.If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
@@ -163,13 +167,13 @@ object JavaScript extends Backend {
     case core.Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Try(body, tpe, hs) =>
+    case core.Try(body, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
-    case core.Region(body, _) =>
+    case core.Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
 
-    case core.Hole =>
+    case core.Hole() =>
       monadic.Builtin("hole")
 
     case other => toJSStmt(other) match {
@@ -179,29 +183,29 @@ object JavaScript extends Backend {
   }
 
   def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
-    case core.Data(did, ctors) =>
-      ctors.map { ctor => generateConstructor(ctor.asConstructor) }
+    case core.Data(did, tparams, ctors) =>
+      ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
 
-    case core.Record(did, fields) =>
-      List(generateConstructor(did, fields))
+    case core.Record(did, tparams, ctor) =>
+      List(generateConstructor(ctor, 0))
 
     // interfaces are structurally typed at the moment, no need to generate anything.
-    case core.Interface(id, operations) =>
+    case core.Interface(id, tparams, operations) =>
       Nil
   }
 
   def toJS(d: core.Definition)(using Context): js.Stmt = d match {
-    case Definition.Def(id, tpe, BlockLit(ps, body)) =>
+    case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
       val (stmts, jsBody) = toJSStmt(body)
-      monadic.Function(nameDef(id), ps map toJS, stmts, jsBody)
+      monadic.Function(nameDef(id), (vps++ bps) map toJS, stmts, jsBody)
 
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, block) =>
       js.Const(nameDef(id), toJS(block))
 
-    case Definition.Let(Wildcard(), tpe, binding) =>
+    case Definition.Let(Wildcard(), binding) =>
       js.ExprStmt(toJS(binding))
 
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       js.Const(nameDef(id), toJS(binding))
   }
 
@@ -233,7 +237,7 @@ object JavaScript extends Backend {
           (tagFor(c), js.Return(js.Call(toJS(block), Nil)))
 
         // f17.apply(null, sc.__data)
-        case (c: symbols.Constructor, block) =>
+        case (c, block) =>
           (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
       }, None)
 
@@ -245,37 +249,23 @@ object JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  def generateConstructor(ctor: symbols.Constructor): js.Stmt =
-    generateConstructor(ctor, ctor.fields)
-
-  def tagFor(c: symbols.Constructor): js.Expr = c.tpe match {
+  // TODO replace this by a lookup in the global declarations
+  def tagFor(c: Symbol)(using Context): js.Expr = c.asConstructor.tpe match {
     case TypeConstructor.DataType(name, tparams, constructors) => js.RawExpr(constructors.indexOf(c).toString)
     case TypeConstructor.Record(name, tparams, constructor) => js.RawExpr("0")
     case TypeConstructor.ExternType(name, tparams) => ???
   }
 
-  def generateConstructor(ctor: Symbol, fields: List[Symbol]): js.Stmt = {
-
-    // TODO we really need to stop using records for capabilities in core!
-    val tagValue = ctor match {
-      case c: symbols.Constructor => tagFor(c)
-      case _ => js.RawExpr("0") // this case is only necessary since records are also used to represent capabilities
-    }
-
-    val constructor = ctor match {
-      case c: symbols.Constructor => c
-      case c: symbols.Record => c.constructor
-      case _ => ???
-    }
-
+  def generateConstructor(constructor: core.Constructor, tagValue: Int): js.Stmt = {
+    val fields = constructor.fields
     js.Function(
-      nameDef(constructor),
-      fields.map { f => nameDef(f) },
+      nameDef(constructor.id),
+      fields.map { f => nameDef(f.id) },
       List(js.Return(js.Object(List(
-        `tag`  -> tagValue,
-        `name` -> JsString(ctor.name.name),
-        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f)) })
-      ) ++ fields.map { f => (nameDef(f), Variable(nameDef(f))) })))
+        `tag`  -> js.RawExpr(tagValue.toString),
+        `name` -> JsString(constructor.id.name.name),
+        `data` -> js.ArrayLiteral(fields map { f => Variable(nameDef(f.id)) })
+      ) ++ fields.map { f => (nameDef(f.id), Variable(nameDef(f.id))) })))
     )
   }
 
@@ -340,17 +330,17 @@ object JavaScript extends Backend {
    *
    * Necessary for generating the linker code (separate compilation for the web)
    */
-  private def usedImports(input: CoreTransformed): Map[Module, Set[TermSymbol]] = {
+  private def usedImports(input: CoreTransformed): Map[Module, Set[Symbol]] = {
     val dependencies = input.mod.dependencies
 
     // Create a mapping Termsymbol -> Module
     val publicDependencySymbols = dependencies.flatMap {
-      m => m.terms.values.flatten.map(sym => sym -> m)
+      m => m.terms.values.flatten.map(sym => (sym : Symbol) -> m)
     }.toMap
 
-    var usedFrom: Map[Module, Set[TermSymbol]] = Map.empty
+    var usedFrom: Map[Module, Set[Symbol]] = Map.empty
 
-    def register(m: Module, sym: TermSymbol) = {
+    def register(m: Module, sym: Symbol) = {
       val before = usedFrom.getOrElse(m, Set.empty)
       usedFrom = usedFrom.updated(m, before + sym)
     }
@@ -358,9 +348,9 @@ object JavaScript extends Backend {
     // Traverse tree once more to find all used symbols, defined in other modules.
     def findUsedDependencies(t: Definition) =
       Tree.visit(t) {
-        case BlockVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+        case BlockVar(x, tpe, capt) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
-        case ValueVar(x) if publicDependencySymbols.isDefinedAt(x) =>
+        case ValueVar(x, tpe) if publicDependencySymbols.isDefinedAt(x) =>
           register(publicDependencySymbols(x), x)
       }
 
