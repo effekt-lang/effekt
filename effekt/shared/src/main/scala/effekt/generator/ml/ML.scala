@@ -190,8 +190,8 @@ object ML extends Backend {
       ml.mkLet(List(bind), toMLExpr(body))
 
     case Try(body, _, handler) =>
-      val handlers: List[ml.Expr.MakeDatatype] = handler.map { (h: Implementation) =>
-        val fields = h.operations.map { case Operation(op, BlockLit(params, body)) =>
+      val handlers: List[ml.Expr.MakeDatatype] = handler.map { (impl: Implementation) =>
+        val fields = impl.operations.map { case Operation(op, BlockLit(params, body)) =>
           val args = params.init.map(paramToML(_))
           val resumeName = name(params.last.id)
           val evName = freshName("ev_tmp")
@@ -216,7 +216,7 @@ object ML extends Backend {
           )
           ml.Expr.Lambda(ml.Param.Named(evName) :: args, newBody)
         }
-        ml.Expr.MakeDatatype(name(h.id), expsToTupleIsh(fields))
+        ml.Expr.MakeDatatype(name(impl.id), expsToTupleIsh(fields))
       }
       val args = ml.Consts.lift :: handlers
       val tr = ml.Call(toML(body))(args: _*)
@@ -262,7 +262,7 @@ object ML extends Backend {
       val selector = field match {
         case op: symbols.Operation => dataSelectorName(op.effect, op)
         case f: symbols.Field => fieldSelectorName(f)
-        case other => C.panic("TermSymbol Member is not supported")
+        case _: symbols.TermSymbol => C.panic("TermSymbol Member is not supported")
       }
       ml.Call(selector)(toML(b))
 
@@ -272,9 +272,13 @@ object ML extends Backend {
     case Unbox(e) =>
       toML(e)
 
-    case New(Implementation(id, operations)) => C.abort("New is not supported")
-    //      val MLName(name) = nameRef(id)
-    //      ml.Call(Variable(MLName(s"make-${name}")), clauses.map { case (_, block) => toML(block) })
+    case New(Implementation(id, operations)) =>
+      ml.Expr.MakeDatatype(name(id), expsToTupleIsh(operations map toML))
+  }
+
+  def toML(op: Operation)(using Context): ml.Expr = {
+    val Operation(_, implementation) = op
+    toML(implementation)
   }
 
   def toML(scope: Evidence): ml.Expr = scope match {
