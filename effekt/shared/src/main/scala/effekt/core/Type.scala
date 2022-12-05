@@ -48,7 +48,6 @@ enum BlockType extends Type {
   //  tparams   vparams   cparams zip bparams   result
   case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
   case Interface(symbol: Id, targs: List[ValueType])
-  case Extern(symbol: Id, targs: List[ValueType])
 }
 
 object Type {
@@ -57,7 +56,7 @@ object Type {
   val TTop = ValueType.Data(builtins.TopSymbol, Nil)
   val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
   val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
-  val TRegion = BlockType.Extern(builtins.RegionSymbol, Nil)
+  val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
 
   /**
    * Function types are the only type constructor that we have subtyping on.
@@ -120,9 +119,6 @@ object Type {
 
     case BlockType.Interface(sym, targs) =>
       BlockType.Interface(sym, targs map { tpe => substitute(tpe, vsubst, csubst) })
-
-    case BlockType.Extern(sym, targs) =>
-      BlockType.Extern(sym, targs map { tpe => substitute(tpe, vsubst, csubst) })
   }
 
   def substitute(tpe: ValueType, vsubst: Map[Id, ValueType], csubst: Map[Id, Captures]): ValueType = tpe match {

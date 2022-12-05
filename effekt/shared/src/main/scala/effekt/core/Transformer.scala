@@ -465,8 +465,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
            |""".stripMargin)
 
       core.BlockType.Function(tparams, cparams, vparams.map(transform), allBlockParams, transform(result))
-    case BlockType.InterfaceType(tc: Interface, args) => core.BlockType.Interface(tc, args.map(transform))
-    case BlockType.InterfaceType(tc: ExternInterface, args) => core.BlockType.Extern(tc, args.map(transform))
+    case BlockType.InterfaceType(tc, args) => core.BlockType.Interface(tc, args.map(transform))
   }
 
   def transform(capt: Captures)(using Context): core.Captures = capt match {

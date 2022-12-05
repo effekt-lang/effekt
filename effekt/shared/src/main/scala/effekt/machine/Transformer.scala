@@ -405,7 +405,6 @@ object Transformer {
     case core.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
     case core.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
-    case core.BlockType.Extern(symbol, targs) => Negative(symbol.name.name)
   }
 
   def transform(tpe: symbols.Type)(using Context): Type = tpe match {

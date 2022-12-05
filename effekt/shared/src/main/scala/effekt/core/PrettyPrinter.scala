@@ -179,7 +179,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
       tps <> vps <> bps <+> "=>" <+> res
     case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
-    case core.BlockType.Extern(symbol, targs) => toDoc(symbol, targs)
   }
 
   def toDoc(tpe: core.ValueType): Doc = tpe match {
