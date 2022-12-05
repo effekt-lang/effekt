@@ -52,9 +52,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Data(id, tparams, ctors) =>
       Data(id, ctors.map(c => c.id))
 
-    case core.Record(id, tparams, ctor) =>
-      Record(id, ctor.fields.map(f => f.id))
-
     case core.Interface(id, tparams, operations) =>
       Interface(id, operations.map(o => o.id))
   }

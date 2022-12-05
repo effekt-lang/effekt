@@ -22,7 +22,6 @@ case class ModuleDecl(
  */
 enum Decl {
   case Data(id: Symbol, ctors: List[Symbol])
-  case Record(id: Symbol, fields: List[Symbol])
   case Interface(id: Symbol, operations: List[Symbol])
 }
 export Decl.*

@@ -52,7 +52,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     case d @ source.RecordDef(id, _, _) =>
       val rec = d.symbol
-      List(core.Record(rec, rec.tparams, transform(rec.constructor)))
+      List(Data(rec, rec.tparams, List(transform(rec.constructor))))
 
     case v @ source.ValDef(id, _, binding) if pureOrIO(binding) =>
       List(Definition.Let(v.symbol, Run(transform(binding))))

@@ -108,9 +108,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Data(id, tparams, ctors) =>
       typeTemplate("type", id, tparams, ctors.map(toDoc))
 
-    case Record(id, tparams, ctor) =>
-      typeTemplate("record", id, tparams, List(toDoc(ctor)))
-
     case Interface(id, tparams, properties) =>
       typeTemplate("interface", id, tparams, properties.map(toDoc))
   }

@@ -87,9 +87,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Data(did, ctors) =>
       "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
 
-    case Record(did, fields) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) })
-
     case Interface(id, operations) =>
       "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
   }

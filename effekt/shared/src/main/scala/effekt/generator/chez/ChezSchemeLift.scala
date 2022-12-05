@@ -128,9 +128,6 @@ object ChezSchemeLift extends Backend {
         case other => sys error s"Wrong type, expected constructor but got: ${ other }"
       }
 
-    case Record(did, fields) =>
-      generateConstructor(did, fields)
-
     // We use chez scheme records to also represent capabilities.
     case Decl.Interface(id, operations) =>
       generateConstructor(id, operations)

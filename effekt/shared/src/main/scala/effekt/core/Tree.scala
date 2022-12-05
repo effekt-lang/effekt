@@ -84,7 +84,6 @@ enum Declaration extends Tree {
   def id: Id
 
   case Data(id: Id, tparams: List[Id], constructors: List[Constructor])
-  case Record(id: Id, tparams: List[Id], constructor: Constructor)
   case Interface(id: Id, tparams: List[Id], properties: List[Property])
 }
 export Declaration.*
