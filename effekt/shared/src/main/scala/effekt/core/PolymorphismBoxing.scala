@@ -238,7 +238,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.PureApp(Block.BlockVar(box(valueType).unbox, boxer.unboxTpe, Set()), List(), List(t))
+      Pure.Select(t, boxer.unbox, to)
     }
   }
 
