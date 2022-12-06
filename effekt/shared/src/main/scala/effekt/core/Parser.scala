@@ -107,8 +107,6 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
 
   // Statements
   // ----------
-  //  case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
-
   lazy val stmt: P[Stmt] =
     ( `{` ~/> many(definition) ~ stmt <~ `}` ^^ Stmt.Scope.apply // curly braces induce scopes!
     | `return` ~> pure ^^ Stmt.Return.apply
@@ -119,7 +117,10 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
     | `try` ~> blockLit ~ many(`with` ~> implementation) ^^ Stmt.Try.apply
     | `var` ~> id ~ (`in` ~> id) ~ (`=` ~> pure) ~ (`;` ~> stmt) ^^ { case id ~ region ~ init ~ body => State(id, init, region, body) }
     | `<>` ^^^ Hole()
+    | (pure <~ `match`) ~/ (`{` ~> many(clause) <~ `}`) ~ (`else` ~> stmt).? ^^ Stmt.Match.apply
     )
+
+  lazy val clause: P[(Id, BlockLit)] = (id <~ `:`) ~ blockLit ^^ { case id ~ cl => id -> cl }
 
   // Implementations
   // ---------------
