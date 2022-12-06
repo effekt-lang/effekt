@@ -405,7 +405,7 @@ object Transformer {
     }
 
   def transform(tpe: core.ValueType)(using ErrorReporter): Type = tpe match {
-    case core.ValueType.Var(name) => ???
+    case core.ValueType.Var(name) => Positive(name.name.name) // assume all value parameters are data
     case core.ValueType.Boxed(tpe, capt) => ???
     case core.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
     case core.ValueType.Data(symbols.builtins.IntSymbol, Nil) => Type.Int()
