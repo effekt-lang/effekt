@@ -161,7 +161,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val externCapture: P[CaptureSet] =
-    ( `pure` ^^^ CaptureSet(Nil)
+    ( "pure" ^^^ CaptureSet(Nil)
     | idRef ^^ { id => CaptureSet(List(id)) }
     | captureSet
     | success(CaptureSet(List(IdRef("io"))))
@@ -643,13 +643,16 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `[` = literal("[")
   lazy val `]` = literal("]")
   lazy val `,` = literal(",")
+  lazy val `'` = literal("'")
   lazy val `.` = literal(".")
   lazy val `/` = literal("/")
   lazy val `=>` = literal("=>")
   lazy val `<>` = literal("<>")
   lazy val `<{` = literal("<{")
   lazy val `}>` = literal("}>")
+  lazy val `!` = literal("!")
 
+  lazy val `let` = keyword("let")
   lazy val `true` = keyword("true")
   lazy val `false` = keyword("false")
   lazy val `val` = keyword("val")
@@ -673,9 +676,6 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `export` = keyword("export")
   lazy val `extern` = keyword("extern")
   lazy val `include` = keyword("include")
-  lazy val `pure` = keyword("pure")
-  lazy val `control` = keyword("control")
-  lazy val `io` = keyword("io")
   lazy val `record` = keyword("record")
   lazy val `at` = keyword("at")
   lazy val `in` = keyword("in")
@@ -687,9 +687,9 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
   lazy val `new` = keyword("new")
 
   def keywordStrings: List[String] = List(
-    "def", "val", "var", "handle", "true", "false", "else", "type",
+    "def", "let", "val", "var", "true", "false", "else", "type",
     "effect", "interface", "try", "with", "case", "do", "if", "while",
-    "match", "module", "import", "extern", "fun", "for",
+    "match", "module", "import", "extern", "fun",
     "at", "box", "unbox", "return", "region", "new", "resource"
   )
 
