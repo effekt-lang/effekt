@@ -78,8 +78,13 @@ def fails() = {
   transduce[Int, Int, List[Int]] {inRange(0, 5)} {mapping[Int, Int] {x => x * x}} {intoList()}
 }
 
+def show(l: List[Int]): String = l match {
+    case Nil() => "Nil()"
+    case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
+
 def main() = {
-  println(works());
+  println(show(works()));
   println("---");
-  println(fails())
+  println(show(fails()))
 }

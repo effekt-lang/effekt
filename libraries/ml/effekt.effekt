@@ -195,6 +195,7 @@ effect Exception[E] {
 record RuntimeError()
 
 def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg) match {}
+def raise[A, E](exception: E, msg: String): A / Exception[E] = do raise(exception, msg) match {}
 
 // converts exceptions of (static) type E to an uncatchable panic that aborts the program
 def panicOn[E] { prog: => Unit / Exception[E] }: Unit =

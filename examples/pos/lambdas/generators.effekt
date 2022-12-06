@@ -5,6 +5,11 @@ type Result {
   Done()
 }
 
+def show(r: Result) = r match {
+  case Next(n) => "Next(" ++ show(n) ++ ")"
+  case Done() => "Done()"
+}
+
 def numbers() = {
   do Yield(1);
   do Yield(2);
@@ -25,9 +30,9 @@ def main() = {
   // right now we do not infer unbox for a mutable variable since it
   // already is of block type.
   def gen() = (unbox generator)()
-  println(gen())
-  println(gen())
-  println(gen())
-  println(gen())
-  println(gen())
+  println(show(gen()))
+  println(show(gen()))
+  println(show(gen()))
+  println(show(gen()))
+  println(show(gen()))
 }

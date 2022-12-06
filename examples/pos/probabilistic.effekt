@@ -85,6 +85,16 @@ def show(w: Weighted[Var]) = {
   "MkWeighted(" ++ show(weight) ++ ", " ++ show(value) ++ ")"
 }
 
+def show(w: Weighted[Boolean]) = {
+  val MkWeighted(weight, value) = w;
+  "MkWeighted(" ++ show(weight) ++ ", " ++ show(value) ++ ")"
+}
+
+def show(l: List[Weighted[Boolean]]): String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
+
 def show(l: List[Weighted[Var]]): String = l match {
   case Nil() => "Nil()"
   case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
