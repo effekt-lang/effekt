@@ -164,15 +164,15 @@ case class Run(s: Stmt) extends Expr
  * -------------------------------------------
  */
 enum Pure extends Expr with Argument {
-  case ValueVar(id: Id, annotatedType: ValueType) extends Pure
+  case ValueVar(id: Id, annotatedType: ValueType)
 
-  case Literal(value: Any, annotatedType: ValueType) extends Pure
+  case Literal(value: Any, annotatedType: ValueType)
 
   // invariant, block b is pure.
-  case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure]) extends Pure
-  case Select(target: Pure, field: Id, annotatedType: ValueType) extends Pure
+  case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+  case Select(target: Pure, field: Id, annotatedType: ValueType)
 
-  case Box(b: Block, annotatedCapture: Captures) extends Pure
+  case Box(b: Block, annotatedCapture: Captures)
 }
 export Pure.*
 
@@ -275,7 +275,7 @@ case class Implementation(interface: BlockType.Interface, operations: List[Opera
  *   maybe we need to add PlainOperation | ControlOperation, where for now
  *   handlers always have control operations and New always has plain operations.
  */
-case class Operation(name: symbols.Operation, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
+case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
   val capt = body.capt -- cparams.toSet
 }
 

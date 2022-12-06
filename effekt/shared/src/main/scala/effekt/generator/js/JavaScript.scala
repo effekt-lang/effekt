@@ -5,9 +5,10 @@ package js
 import effekt.context.Context
 import effekt.context.assertions.*
 import effekt.core.*
-import effekt.symbols.{ LocalName, Module, Name, NoName, QualifiedName, Symbol, TermSymbol, TypeConstructor, TypeSymbol, Wildcard }
 import effekt.util.paths.*
 import effekt.{ Compiled, CoreTransformed, symbols }
+import effekt.symbols.{ Symbol, Module, Wildcard }
+
 import kiama.output.ParenPrettyPrinter
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.Source
@@ -16,26 +17,42 @@ import scala.language.implicitConversions
 
 object JavaScript extends Backend {
 
+  case class GeneratorContext(
+    // for error messages
+    context: Context,
+
+    // for (type) declarations
+    declarations: List[Declaration]
+  )
+  given (using C: GeneratorContext): Context = C.context
+
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(input: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) = {
+  def compileWhole(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using C: Context) = {
 
     assert(input.core.imports.isEmpty, "All dependencies should have been inlined by now.")
 
     val module = input.mod
     val mainFile = path(module)
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
+    given GeneratorContext = GeneratorContext(C, input.core.declarations)
 
     val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
-    Some(Compiled(mainFile, Map(mainFile -> result)))
+    Some(Compiled(input.source, mainFile, Map(mainFile -> result)))
   }
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(using C: Context) = {
-    val module = input.mod
+  def compileSeparate(input: AllTransformed)(using C: Context) = {
+    val module = input.main.mod
+
+    val allDeclarations = input.dependencies.foldLeft(input.main.core.declarations) {
+      case (decls, dependency) => decls ++ dependency.core.declarations
+    }
+
+    given GeneratorContext = GeneratorContext(C, allDeclarations)
 
     def shouldExport(sym: Symbol) = sym match {
       // do not export fields, since they are no defined functions
@@ -48,11 +65,11 @@ object JavaScript extends Backend {
     }
 
     // also search all mains and use last one (shadowing), if any.
-    val allMains = input.core.exports.collect {
+    val allMains = input.main.core.exports.collect {
       case sym if sym.name.name == "main" => js.Export(JSName("main"), nameRef(sym))
     }
 
-    val required = usedImports(input)
+    val required = usedImports(input.main)
 
     // this is mostly to import $effekt
     val dependencies = module.dependencies.map {
@@ -68,8 +85,8 @@ object JavaScript extends Backend {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }
 
-    C.using(module = input.mod) {
-      val result = toJS(input.core, imports, exports).virtual
+    C.using(module = input.main.mod) {
+      val result = toJS(input.main.core, imports, exports).virtual
       Some(js.PrettyPrinter.format(result))
     }
   }
@@ -77,7 +94,7 @@ object JavaScript extends Backend {
   /**
    * This is used for both: writing the files to and generating the `require` statements.
    */
-  def path(m: Module)(implicit C: Context): String =
+  def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / jsModuleFile(m.path)).unixPath
 
   def toJS(p: Param): JSName = nameDef(p.id)
@@ -100,7 +117,7 @@ object JavaScript extends Backend {
       js.RawStmt(contents)
   }
 
-  def toJS(b: core.Block)(using Context): js.Expr = b match {
+  def toJS(b: core.Block)(using GeneratorContext): js.Expr = b match {
     case BlockVar(v, _, _) =>
       nameRef(v)
     case BlockLit(tps, cps, vps, bps, body) =>
@@ -112,12 +129,12 @@ object JavaScript extends Backend {
     case New(handler) => toJS(handler)
   }
 
-  def toJS(args: List[Argument])(using Context): List[js.Expr] = args map {
+  def toJS(args: List[Argument])(using GeneratorContext): List[js.Expr] = args map {
     case b: Block => toJS(b)
     case e: Expr => toJS(e)
   }
 
-  def toJS(expr: core.Expr)(using Context): js.Expr = expr match {
+  def toJS(expr: core.Expr)(using GeneratorContext): js.Expr = expr match {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
@@ -129,14 +146,14 @@ object JavaScript extends Backend {
     case Run(s) => monadic.Run(toJSMonadic(s))
   }
 
-  def toJS(handler: core.Implementation)(using Context): js.Expr =
+  def toJS(handler: core.Implementation)(using GeneratorContext): js.Expr =
     js.Object(handler.operations.map {
       case Operation(id, tps, cps, vps, bps, resume, body) =>
         val (stmts, ret) = toJSStmt(body)
         nameDef(id) -> monadic.Lambda((vps ++ bps ++ resume.toList) map toJS, stmts, ret)
     })
 
-  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using Context): js.Module = {
+  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using GeneratorContext): js.Module = {
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.map(toJS)
     val decls   = module.declarations.flatMap(toJS)
@@ -151,29 +168,29 @@ object JavaScript extends Backend {
    *
    * Not all statement types can be printed in this context!
    */
-  def toJSMonadic(s: core.Stmt)(using Context): monadic.Control = s match {
-    case core.Val(Wildcard(), binding, body) =>
+  def toJSMonadic(s: core.Stmt)(using GeneratorContext): monadic.Control = s match {
+    case Val(Wildcard(), binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
-    case core.Val(id, binding, body) =>
+    case Val(id, binding, body) =>
       monadic.Bind(toJSMonadic(binding), nameDef(id), toJSMonadic(body))
 
-    case core.App(b, targs, vargs, bargs) =>
+    case App(b, targs, vargs, bargs) =>
       monadic.Call(toJS(b), toJS(vargs) ++ toJS(bargs))
 
-    case core.If(cond, thn, els) =>
+    case If(cond, thn, els) =>
       monadic.If(toJS(cond), toJSMonadic(thn), toJSMonadic(els))
 
-    case core.Return(e) =>
+    case Return(e) =>
       monadic.Pure(toJS(e))
 
-    case core.Try(body, hs) =>
+    case Try(body, hs) =>
       monadic.Handle(hs map toJS, toJS(body))
 
-    case core.Region(body) =>
+    case Region(body) =>
       monadic.Builtin("withRegion", toJS(body))
 
-    case core.Hole() =>
+    case Hole() =>
       monadic.Builtin("hole")
 
     case other => toJSStmt(other) match {
@@ -183,15 +200,15 @@ object JavaScript extends Backend {
   }
 
   def toJS(d: core.Declaration)(using Context): List[js.Stmt] = d match {
-    case core.Data(did, tparams, ctors) =>
+    case Data(did, tparams, ctors) =>
       ctors.zipWithIndex.map { case (ctor, index) => generateConstructor(ctor, index) }
 
     // interfaces are structurally typed at the moment, no need to generate anything.
-    case core.Interface(id, tparams, operations) =>
+    case Interface(id, tparams, operations) =>
       Nil
   }
 
-  def toJS(d: core.Definition)(using Context): js.Stmt = d match {
+  def toJS(d: core.Definition)(using GeneratorContext): js.Stmt = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
       val (stmts, jsBody) = toJSStmt(body)
       monadic.Function(nameDef(id), (vps++ bps) map toJS, stmts, jsBody)
@@ -211,7 +228,7 @@ object JavaScript extends Backend {
    *
    * That is, multiple statements that end in one monadic return
    */
-  def toJSStmt(s: core.Stmt)(using Context): (List[js.Stmt], monadic.Control) = s match {
+  def toJSStmt(s: core.Stmt)(using GeneratorContext): (List[js.Stmt], monadic.Control) = s match {
     case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
@@ -225,14 +242,10 @@ object JavaScript extends Backend {
       (js.Const(nameDef(id), js.MethodCall(nameRef(region), `fresh`, toJS(init))) :: stmts, ret)
 
     // (function () { switch (sc.tag) {  case 0: return f17.apply(null, sc.data) }
-    case core.Match(sc, clauses, default) =>
+    case Match(sc, clauses, default) =>
       val scrutinee = toJS(sc)
 
       val sw = js.Switch(js.Member(scrutinee, `tag`), clauses map {
-        // f17()
-        case (c: symbols.Constructor, block) if c.fields.isEmpty =>
-          (tagFor(c), js.Return(js.Call(toJS(block), Nil)))
-
         // f17.apply(null, sc.__data)
         case (c, block) =>
           (tagFor(c), js.Return(js.MethodCall(toJS(block), JSName("apply"), js.RawExpr("null"), js.Member(scrutinee, `data`))))
@@ -246,14 +259,17 @@ object JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  // TODO replace this by a lookup in the global declarations
-  def tagFor(c: Symbol)(using Context): js.Expr = c.asConstructor.tpe match {
-    case TypeConstructor.DataType(name, tparams, constructors) => js.RawExpr(constructors.indexOf(c).toString)
-    case TypeConstructor.Record(name, tparams, constructor) => js.RawExpr("0")
-    case TypeConstructor.ExternType(name, tparams) => ???
+  def tagFor(constructor: Id)(using C: GeneratorContext): js.Expr = {
+    val position = C.declarations.collectFirst {
+      case Declaration.Data(_, _, cs) if cs.exists(c => c.id == constructor) =>
+        cs.indexWhere(c => c.id == constructor)
+    }.getOrElse {
+      C.context.panic(s"Cannot find constructor ${constructor} in data type declarations.")
+    }
+    js.RawExpr(position.toString)
   }
 
-  def generateConstructor(constructor: core.Constructor, tagValue: Int): js.Stmt = {
+  def generateConstructor(constructor: Constructor, tagValue: Int): js.Stmt = {
     val fields = constructor.fields
     js.Function(
       nameDef(constructor.id),

@@ -107,7 +107,7 @@ case class Implementation(id: symbols.Interface, operations: List[Operation]) ex
 /**
  * Implementation of a method / effect operation.
  */
-case class Operation(name: symbols.Operation, implementation: BlockLit)
+case class Operation(name: symbols.Symbol, implementation: BlockLit)
 
 
 
