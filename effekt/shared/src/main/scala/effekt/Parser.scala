@@ -5,9 +5,9 @@ import effekt.source.*
 import effekt.util.{ SourceTask, VirtualSource }
 import effekt.util.messages.ParseError
 import kiama.parsing.{ Failure, Input, NoSuccess, ParseResult, Parsers, Success }
-import kiama.util.{ Position, Positions, Range, Source }
-import scala.util.matching.Regex
+import kiama.util.{ Position, Positions, Range, Source, StringSource }
 
+import scala.util.matching.Regex
 import scala.language.implicitConversions
 
 object Parser extends Phase[Source, Parsed] {
@@ -794,6 +794,9 @@ class EffektLexers(positions: Positions) extends Parsers(positions) {
       checkPositions(t)
       t
     })
+
+  def parseAll[T](p: Parser[T], input: String): ParseResult[T] =
+    parseAll(p, StringSource(input, "input-string"))
 
   lazy val path = someSep(ident, `/`)
 

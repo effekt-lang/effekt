@@ -276,3 +276,32 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   lazy val maybeTypeArgs: P[List[ValueType]] =
     typeArgs.? ^^ { o => o.getOrElse(Nil) }
 }
+
+object CoreParsers {
+
+  def apply(names: Map[String, Id]): CoreParsers = apply(Names(names))
+
+  def apply(names: Names): CoreParsers =
+    object pos extends Positions
+    object parsers extends CoreParsers(pos, names)
+    parsers
+
+  // Some alternative main entry points for most common usages
+  def module(input: String, names: Map[String, Id] = Map.empty): ParseResult[ModuleDecl] =
+    val in = StringSource(input, "input-string")
+    val parsers = CoreParsers(names)
+    parsers.parseAll(parsers.program, in)
+
+  def module(input: String, names: Names): ParseResult[ModuleDecl] =
+    val parsers = CoreParsers(names)
+    parsers.parseAll(parsers.program, input)
+
+  def statement(input: String, names: Map[String, Id] = Map.empty): ParseResult[Stmt] =
+    val parsers = CoreParsers(names)
+    parsers.parseAll(parsers.stmt, input)
+
+  def definition(input: String, names: Map[String, Id] = Map.empty): ParseResult[Definition] =
+    val parsers = CoreParsers(names)
+    parsers.parseAll(parsers.definition, input)
+}
+
