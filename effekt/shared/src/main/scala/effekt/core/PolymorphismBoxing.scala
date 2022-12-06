@@ -127,9 +127,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(targs: List[ValueType])(operation: Operation)(using PContext): Operation = operation match {
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       val blockTpe = BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), body.tpe)
-      val transformed: Block.BlockLit = instantiate(
-        Block.BlockLit(tparams, cparams, vparams, bparams, body),
-        targs)
+      val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, body)
+      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock) // instantiate(implBlock, targs)(implBlock) // TODO wrong
       Operation(name, transformed.tparams, transformed.cparams, transformed.vparams, transformed.bparams,
         resume map transform,
         transformed.body)
@@ -141,7 +140,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Return(expr) => Stmt.Return(transform(expr))
     case Stmt.Val(id, binding, body) => Stmt.Val(id, transform(binding), transform(body))
     case Stmt.App(callee, targs, vargs, bargs) =>
-      Stmt.App(instantiate(callee, targs), targs, vargs map transform, bargs map transform)
+      instantiate(callee, targs).call(callee, vargs map transform, bargs map transform)
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, clauses, default) =>
@@ -168,7 +167,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transform(expr: Expr)(using PContext): Expr = expr match {
     case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(instantiate(b, targs), targs, vargs map transform, bargs map transform)
+      instantiate(b, targs).callDirect(b, vargs map transform, bargs map transform)
     case Run(s) => Run(transform(s))
     case pure: Pure => transform(pure)
   }
@@ -177,7 +176,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Pure.ValueVar(id, annotatedType) => Pure.ValueVar(id, transform(annotatedType))
     case Pure.Literal(value, annotatedType) => Pure.Literal(value, transform(annotatedType))
     case Pure.PureApp(b, targs, vargs) =>
-      Pure.PureApp(instantiate(b, targs), targs, vargs map transform)
+      instantiate(b, targs).callPure(b, vargs map transform)
     case Pure.Select(target, field, annotatedType) => ???
     case Pure.Box(b, annotatedCapture) => ???
   }
@@ -201,10 +200,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case ValueType.Boxed(tpe, capt) => ValueType.Boxed(transform(tpe), capt)
   }
 
-  def instantiate[B >: BlockLit <: Block](block: B, targs: List[ValueType])(using PContext): B = {
+  def instantiate[B >: BlockLit <: Block](block: B, targs: List[ValueType])(using PContext): FunctionCoercer[BlockType, B] = {
     block.tpe match {
       case tpe: BlockType.Function =>
-        coercer(tpe, Type.instantiate(tpe, targs, tpe.cparams.map(Set(_))), targs)(block)
+        coercer(tpe, Type.instantiate(tpe, targs, tpe.cparams.map(Set(_))), targs)
       case BlockType.Interface(symbol, targs) => ???
     }
   }
@@ -218,7 +217,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     def apply(t: Te): Te
     def isIdentity: Boolean = false
   }
-  case class IdentityCoercer[Ty <: Type, Te <: Tree](
+  class IdentityCoercer[Ty <: Type, Te <: Tree](
       override val from: Ty,
       override val to: Ty) extends Coercer[Ty, Te] {
     override def apply(t: Te): Te = t
@@ -244,18 +243,34 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def coercer(from: ValueType, to: ValueType)(using PContext): Coercer[ValueType, Pure] = (from, to) match {
-    case (f,t) if f==t => IdentityCoercer(f,t)
-    case (_: ValueType.Var, _: ValueType.Var) => IdentityCoercer(from, to) // are always boxed
+    case (f,t) if f==t => new IdentityCoercer(f,t)
+    case (_: ValueType.Var, _: ValueType.Var) => new IdentityCoercer(from, to) // are always boxed
     case (unboxed, boxed) if box.isDefinedAt(unboxed) && box(unboxed).boxedTpe == boxed => BoxCoercer(unboxed)
     case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
     case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).boxedTpe == boxed => UnboxCoercer(unboxed)
     case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
     case _ =>
       //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
-      IdentityCoercer(from, to)
+      new IdentityCoercer(from, to)
   }
-  def coercer[B >: Block.BlockLit <: Block](fromtpe: BlockType, totpe: BlockType, targs: List[ValueType] = List())(using PContext): Coercer[BlockType, B] = (fromtpe, totpe) match {
-    case (f,t) if f == t => IdentityCoercer(fromtpe, totpe)
+
+  trait FunctionCoercer[Ty <: BlockType, Te <: Block] extends Coercer[Ty, Te] {
+    def callPure(block: Te, vargs: List[Pure])(using PContext): Pure
+    def callDirect(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Expr
+    def call(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt
+  }
+  class FunctionIdentityCoercer[Ty <: BlockType, Te <: Block](
+      from: Ty, to: Ty, targs: List[ValueType]) extends IdentityCoercer[Ty, Te](from, to) with FunctionCoercer[Ty, Te] {
+    override def call(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt =
+      Stmt.App(block, targs map transformArg, vargs.map(transform(_)), bargs map transform)
+    override def callPure(block: Te, vargs: List[Pure])(using PContext): Pure =
+      Pure.PureApp(block, targs map transformArg, vargs map transform)
+    override def callDirect(block: Te, vargs: List[Pure], bargs: List[Block])(using PContext): Expr =
+      DirectApp(block, targs map transformArg, vargs map transform, bargs map transform)
+  }
+  def coercer[B >: Block.BlockLit <: Block](fromtpe: BlockType, totpe: BlockType, targs: List[ValueType] = List())(using PContext): FunctionCoercer[BlockType, B] =
+    (fromtpe, totpe) match {
+    case (f,t) if f == t => new FunctionIdentityCoercer(fromtpe, totpe, targs)
     case (BlockType.Function(ftparams, fcparams, fvparams, fbparams, fresult),
           BlockType.Function(ttparams, tcparams, tvparams, tbparams, tresult)) =>
 
@@ -270,10 +285,10 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       val rcoercer = coercer(fresult, tresult)
 
       if((rcoercer +: (vcoercers ++ bcoercers)).forall(_.isIdentity)) {
-        return IdentityCoercer(fromtpe, totpe) // nothing to do here
+        return new FunctionIdentityCoercer(fromtpe, totpe, targs) // nothing to do here
       }
 
-      new Coercer[BlockType, B] {
+      new FunctionCoercer[BlockType, B] {
         override def from = fromtpe
         override def to = totpe
 
@@ -287,6 +302,27 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
             Stmt.Val(result, Stmt.App(block, targs map transformArg, vargs, bargs),
               Stmt.Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
         }
+
+        override def callPure(block: B, vargs: List[Pure])(using PContext): Pure = {
+          rcoercer(Pure.PureApp(block, targs map transformArg, (vcoercers zip vargs).map{case (c,v)=> c(v)}))
+        }
+
+        override def callDirect(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Expr = {
+          val result = TmpValue()
+          Run(Let(result, DirectApp(block, targs map transformArg,
+            (vcoercers zip vargs).map{case (c,v) => c(v)},
+            (bcoercers zip bargs).map{case (c,b) => c(b)}),
+            Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
+        }
+
+        override def call(block: B, vargs: List[Pure], bargs: List[Block])(using PContext): Stmt = {
+          val result = TmpValue()
+          Stmt.Val(result, Stmt.App(block, targs map transformArg,
+            (vcoercers zip vargs).map{case (c,v) => c(v)},
+            (bcoercers zip bargs).map{case (c,b) => c(b)}),
+            Return(rcoercer(Pure.ValueVar(result, rcoercer.from))))
+        }
+
       }
     case _ => Context.abort(s"Unsupported coercion from ${PrettyPrinter.format(fromtpe)} to ${PrettyPrinter.format(totpe)}")
   }
