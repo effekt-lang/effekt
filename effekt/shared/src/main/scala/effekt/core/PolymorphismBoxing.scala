@@ -175,8 +175,22 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Pure.Literal(value, annotatedType) => Pure.Literal(value, transform(annotatedType))
     case Pure.PureApp(b, targs, vargs) =>
       instantiate(b, targs).callPure(b, vargs map transform)
-    case Pure.Select(target, field, annotatedType) => ???
-    case Pure.Box(b, annotatedCapture) => ???
+    case Pure.Select(target, field, annotatedType) => {
+      val (symbol, targs) = target.tpe match {
+        case ValueType.Data(symbol, targs) => (symbol, targs)
+        case t => Context.abort(s"Select on value of type ${PrettyPrinter.format(t)} is not supported.")
+      }
+      PContext.getDataLikeDeclaration(symbol) match {
+        case Declaration.Data(id, tparams, List(Constructor(cns, fields))) =>
+          val f = fields.find(_.id == field).getOrElse{
+            Context.abort(s"${id} has no field ${field}.")
+          }
+          coercer(f.tpe, Type.substitute(f.tpe, (tparams zip targs).toMap, Map()))(Pure.Select(target, field, transform(annotatedType)))
+        case t => Context.abort(s"Select on data type ${t.id} is not supported.")
+      }
+    }
+    case Pure.Box(b, annotatedCapture) =>
+      Pure.Box(transform(b), annotatedCapture)
   }
 
   def transform(valueType: ValueType)(using PContext): ValueType = valueType match {
