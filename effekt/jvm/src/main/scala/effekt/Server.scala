@@ -1,16 +1,15 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.PrettyPrinter
+import effekt.core.{PrettyPrinter, Optimizer}
 import effekt.lifted.LiftInference
-import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging, getOrElseAborting }
+import effekt.source.{FunDef, Hole, ModuleDecl, Tree}
+import effekt.util.{PlainMessaging, getOrElseAborting}
 import effekt.util.messages.EffektError
 
 import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
-
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind}
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
