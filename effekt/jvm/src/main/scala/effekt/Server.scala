@@ -1,16 +1,14 @@
 package effekt
 
 import effekt.context.Context
-import effekt.core.PrettyPrinter
+import effekt.core.{PrettyPrinter, Optimizer}
 import effekt.lifted.LiftInference
-import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
-import effekt.util.{ PlainMessaging, getOrElseAborting }
+import effekt.source.{FunDef, Hole, ModuleDecl, Tree}
+import effekt.util.{PlainMessaging, getOrElseAborting}
 import effekt.util.messages.EffektError
-
-import kiama.util.{ Position, Services, Source }
+import kiama.util.{Position, Services, Source}
 import kiama.output.PrettyPrinterTypes.Document
-
-import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
+import org.eclipse.lsp4j.{Diagnostic, DocumentSymbol, ExecuteCommandParams, SymbolKind}
 
 /**
  * effekt.Intelligence <--- gathers information -- LSPServer --- provides LSP interface ---> kiama.Server
@@ -60,7 +58,8 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
 
     if (List("target", "core", "lifted-core") contains showIR) {
 
-      val (transformed, out) = C.compileSeparate(source).getOrElseAborting { return; }
+      val (transformedUnoptimized, out) = C.compileSeparate(source).getOrElseAborting { return; }
+      val transformed = (C.CoreDependencies andThen C.Aggregate andThen Optimizer).apply(transformedUnoptimized).getOrElseAborting { return; }
 
       if (showIR == "target") {
         val extension = C.config.backend() match {

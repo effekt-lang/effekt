@@ -149,8 +149,7 @@ trait Compiler {
      * Translates a source program to a core program
      * [[Typechecked]] --> [[CoreTransformed]]
      */
-    Transformer andThen // transforms a source tree to a core tree (establishing some form of ANF)
-    Optimizer // some optimizations from Core -> Core
+    Transformer
   }
 
   /**
@@ -239,8 +238,8 @@ trait Compiler {
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
   def compileWhole(source: Source)(using Context): Option[Compiled] =
-    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
+    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Optimizer andThen Backend.whole).apply(source)
 
   def compileAll(source: Source)(using Context): Option[CoreTransformed] =
-    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
+    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Optimizer).apply(source)
 }
