@@ -296,11 +296,13 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
           val vparams: List[Param.ValueParam] = vcoercers.map{ c => Param.ValueParam(TmpValue(), transform(c.from)) }
           val bparams: List[Param.BlockParam] = bcoercers.map{ c => Param.BlockParam(TmpBlock(), transform(c.from)) }
           val result = TmpValue()
+          val inner = TmpBlock()
           val vargs = (vcoercers zip vparams).map{ case (c, p) => c(Pure.ValueVar(p.id, p.tpe)) }
           val bargs = (bcoercers zip bparams).map{ case (c, p) => c(Block.BlockVar(p.id, p.tpe, Set.empty)) }
           Block.BlockLit(ftparams, fcparams, vparams, bparams,
-            Stmt.Val(result, Stmt.App(block, targs map transformArg, vargs, bargs),
-              Stmt.Return(rcoercer(Pure.ValueVar(result, rcoercer.from)))))
+            Def(inner, block,
+              Stmt.Val(result, Stmt.App(Block.BlockVar(inner, block.tpe, block.capt), targs map transformArg, vargs, bargs),
+                Stmt.Return(rcoercer(Pure.ValueVar(result, rcoercer.from))))))
         }
 
         override def callPure(block: B, vargs: List[Pure])(using PContext): Pure = {
