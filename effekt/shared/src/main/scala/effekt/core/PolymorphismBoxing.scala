@@ -11,19 +11,17 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   override val phaseName: String = "polymorphism boxing"
 
-  case class Boxer(boxedTpe: ValueType, box: Id, boxTpe: BlockType, unbox: Id, unboxTpe: BlockType)
-  object Boxer{
-    def from(declaration: Declaration.Data)(using PContext): Boxer = declaration match {
-      case Declaration.Data(tpeCons, List(), List(Constructor(box, List(Field(unbox, tpe))))) =>
-        Boxer(ValueType.Data(tpeCons, List()),
-          box, BlockType.Function(List(), List(), List(tpe), List(), ValueType.Data(tpeCons, List())),
-          unbox, BlockType.Function(List(), List(), List(ValueType.Data(tpeCons, List())), List(), tpe))
-      case _ => Context.abort(s"Unsupported box type ${declaration.id}")
-    }
-  }
+  case class Boxer(tpe: ValueType, constructor: Id, field: Id)
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case ValueType.Data(name, List()) if symbols.builtins.rootTypes.values.exists(_ == name) =>
-      Boxer.from(PContext.getDataLikeDeclaration(Context.module.findPrelude.types("Boxed" + name)))
+      Context.module.findPrelude.types("Boxed" + name) match {
+        case tpeCns @ symbols.TypeConstructor.Record(_, List(), cns @ symbols.Constructor(_, List(), List(field), _)) =>
+          Boxer(ValueType.Data(tpeCns,List()), cns, field)
+        case tpeCns @ symbols.TypeConstructor.DataType(_, List(), List(cns @ symbols.Constructor(_, List(), List(field), _))) =>
+          Boxer(ValueType.Data(tpeCns,List()), cns, field)
+        case _ =>
+          Context.abort(s"No appropriate Boxed${name} type, but ${name} used as type parameter.")
+      }
   }
 
   class PContext(val declarations: List[Declaration])(using val context: Context){
@@ -195,7 +193,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   def transformArg(valueType: ValueType)(using PContext): ValueType = valueType match {
     case ValueType.Var(name) => ValueType.Var(name) // assume vars are always OK
-    case t if box.isDefinedAt(t) => box(t).boxedTpe
+    case t if box.isDefinedAt(t) => box(t).tpe
     case ValueType.Data(symbol, targs) => ValueType.Data(symbol, targs map transformArg)
     case ValueType.Boxed(tpe, capt) => ValueType.Boxed(transform(tpe), capt)
   }
@@ -225,29 +223,30 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
   case class BoxCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
     override def from = valueType
-    override def to = box(valueType).boxedTpe
+    override def to = box(valueType).tpe
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.PureApp(Block.BlockVar(boxer.box, boxer.boxTpe, Set()), List(), List(t))
+      val blockTpe = BlockType.Function(List(), List(), List(from), List(), to)
+      Pure.PureApp(Block.BlockVar(boxer.constructor, blockTpe, Set()), List(), List(t))
     }
   }
   case class UnboxCoercer(valueType: ValueType)(using PContext) extends Coercer[ValueType, Pure] {
-    override def from = box(valueType).boxedTpe
+    override def from = box(valueType).tpe
     override def to = valueType
 
     override def apply(t: Pure): Pure = {
       val boxer = box(valueType)
-      Pure.Select(t, boxer.unbox, to)
+      Pure.Select(t, boxer.field, to)
     }
   }
 
   def coercer(from: ValueType, to: ValueType)(using PContext): Coercer[ValueType, Pure] = (from, to) match {
     case (f,t) if f==t => new IdentityCoercer(f,t)
     case (_: ValueType.Var, _: ValueType.Var) => new IdentityCoercer(from, to) // are always boxed
-    case (unboxed, boxed) if box.isDefinedAt(unboxed) && box(unboxed).boxedTpe == boxed => BoxCoercer(unboxed)
+    case (unboxed, boxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => BoxCoercer(unboxed)
     case (unboxed, _: ValueType.Var) if box.isDefinedAt(unboxed) => BoxCoercer(unboxed)
-    case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).boxedTpe == boxed => UnboxCoercer(unboxed)
+    case (boxed, unboxed) if box.isDefinedAt(unboxed) && box(unboxed).tpe == boxed => UnboxCoercer(unboxed)
     case (_: ValueType.Var, unboxed) if box.isDefinedAt(unboxed) => UnboxCoercer(unboxed)
     case _ =>
       //Context.warning(s"Coercing ${PrettyPrinter.format(from)} to ${PrettyPrinter.format(to)}")
