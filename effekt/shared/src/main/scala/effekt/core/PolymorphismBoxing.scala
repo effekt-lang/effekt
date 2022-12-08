@@ -63,7 +63,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       }
       if (decls.length != 1) {
         context.abort(s"No unique declaration for ${id}. Options: \n" +
-          (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n")) // TODO nicer message
+          (decls.map(d => PrettyPrinter.pretty(PrettyPrinter.indent(PrettyPrinter.toDoc(d)), 60).layout)).mkString("\n\n"))
       } else {
         decls.head
       }
@@ -106,7 +106,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   }
 
   def transform(extern: Extern)(using PContext): Extern = extern match {
-    // TODO: Should we transform externs?
     case Extern.Def(id, tparams, cparams, vparams, bparams, ret, annotatedCapture, body) =>
       Extern.Def(id, tparams, cparams, vparams map transform, bparams map transform, transform(ret),
         annotatedCapture, body)
@@ -135,7 +134,6 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
       Block.BlockVar(id, transform(annotatedTpe), annotatedCapt)
     case b: Block.BlockLit => transform(b)
     case Block.Member(block, field, annotatedTpe) =>
-      // TODO: Should we potentially coerce field?
       Block.Member(transform(block), field, transform(annotatedTpe))
     case Block.Unbox(pure) =>
       Block.Unbox(transform(pure))
@@ -153,7 +151,7 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       val blockTpe = BlockType.Function(tparams, cparams, vparams.map(_.tpe), bparams.map(_.tpe), body.tpe)
       val implBlock: Block.BlockLit = Block.BlockLit(tparams, cparams, vparams, bparams, body)
-      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock) // instantiate(implBlock, targs)(implBlock) // TODO wrong
+      val transformed: Block.BlockLit = coercer(implBlock.tpe, blockTpe)(implBlock)
       Operation(name, transformed.tparams, transformed.cparams, transformed.vparams, transformed.bparams,
         resume map transform,
         transformed.body)
