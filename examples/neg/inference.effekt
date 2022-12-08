@@ -1,5 +1,7 @@
 module inference
 
+import immutable/list
+
 def triple(n: Int, s: Int) = {
   val i = 1;
   val j = 2;
