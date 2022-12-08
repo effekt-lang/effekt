@@ -160,6 +160,7 @@ extern pure def infixAnd(adt_p: Boolean, adt_q: Boolean): Boolean = """
 """
 
 // For boxing polymorphic values
+record BoxedUnit(unboxUnit: Unit)
 record BoxedInt(unboxInt: Int)
 record BoxedDouble(unboxDouble: Double)
 record BoxedString(unboxString: String)
