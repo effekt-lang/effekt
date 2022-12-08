@@ -17,11 +17,6 @@ import scala.language.implicitConversions
  */
 object ML extends Backend {
 
-  //  // TODO we use the $then variant, for now, since the `then` variant is a macro and would
-  //  // require adding it to the syntax ml.Tree
-  //  def bind(binding: ml.Expr, param: MLName, body: ml.Block): ml.Expr =
-  //    Builtin("$then", binding, ml.Lambda(List(param), body))
-
   def runMain(main: MLName): ml.Expr =
     ml.Call(Consts.run)(ml.Call(main)(Consts.here))
 
@@ -29,22 +24,25 @@ object ML extends Backend {
    * Returns [[Compiled]], containing the files that should be written to.
    */
   def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Option[Compiled] = {
+
+    assert(main.core.imports.isEmpty, "All dependencies should have been inlined by now.")
+
     val mainSymbol = C.checkMain(main.mod)
 
     LiftInference(main).map { lifted =>
       val mlModule = compilationUnit(mainSymbol, lifted.core)
       val result = ml.PrettyPrinter.pretty(ml.PrettyPrinter.toDoc(mlModule), 100)
       val mainFile = path(main.mod)
-      Compiled(mainFile, Map(mainFile -> result))
+      Compiled(main.source, mainFile, Map(mainFile -> result))
     }
   }
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(using C: Context): Option[Document] =
-    C.using(module = input.mod) {
-      Some(ml.PrettyPrinter.format(ml.PrettyPrinter.toDoc(compile(input))))
+  def compileSeparate(input: AllTransformed)(using C: Context): Option[Document] =
+    C.using(module = input.main.mod) {
+      Some(ml.PrettyPrinter.format(ml.PrettyPrinter.toDoc(compile(input.main))))
     }
 
   /**
@@ -116,10 +114,9 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
-    case Decl.Record(id: TypeConstructor.Record, fields) => singletonData(id, id.constructor, fields)
+    case Decl.Data(id: TypeConstructor.Record, fields) => singletonData(id, id.constructor, fields)
     case Decl.Interface(id, operations) => singletonData(id, id, operations)
     case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
-    case Decl.Record(_, _) => C.panic("Record symbol is not TypeConstructor.Record")
   }
 
   def singletonData(typeSym: Symbol, caseSym: Symbol, terms: List[Symbol])(using Context): List[ml.Binding] = {
@@ -252,7 +249,7 @@ object ML extends Backend {
   }
 
   def toML(block: Block)(using C: Context): ml.Expr = block match {
-    case BlockVar(id) =>
+    case BlockVar(id, _) =>
       Variable(name(id))
 
     case b@BlockLit(_, _) =>
@@ -260,7 +257,8 @@ object ML extends Backend {
 
     case Member(b, field) =>
       val selector = field match {
-        case op: symbols.Operation => dataSelectorName(op.effect, op)
+        case op: symbols.Operation =>
+          dataSelectorName(op.interface, op)
         case f: symbols.Field => fieldSelectorName(f)
         case _: symbols.TermSymbol => C.panic("TermSymbol Member is not supported")
       }
@@ -308,12 +306,12 @@ object ML extends Backend {
         case v: Boolean => if (v) Consts.trueVal else Consts.falseVal
         case _ => ml.RawValue(l.value.toString)
       }
-    case ValueVar(id) => ml.Variable(name(id))
+    case ValueVar(id, _) => ml.Variable(name(id))
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), symbols.builtins.TState.get), List(), List()) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get), List(), List()) =>
       ml.Expr.Deref(ml.Variable(name(x)))
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x), symbols.builtins.TState.put), List(), List(arg)) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put), List(), List(arg)) =>
       ml.Expr.Assign(ml.Variable(name(x)), toML(arg))
 
     case PureApp(b, _, args) =>
@@ -323,14 +321,14 @@ object ML extends Backend {
         case e: Evidence => toML(e)
       }
       b match {
-        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _))) =>
+        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _)), _) =>
           ml.Expr.MakeDatatype(name(id), expsToTupleIsh(mlArgs))
-        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _))) =>
+        case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _)), _) =>
           ml.Expr.MakeDatatype(name(id), expsToTupleIsh(mlArgs))
         case _ => ml.Call(toML(b), mlArgs)
       }
 
-    case Select(b, field) =>
+    case Select(b, field, _) =>
       ml.Call(fieldSelectorName(field))(toML(b))
 
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
