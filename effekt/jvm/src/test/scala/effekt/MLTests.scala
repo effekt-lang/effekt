@@ -25,14 +25,17 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "lambdas" / "annotated.effekt",
     examplesDir / "pos" / "lambdas" / "effects.effekt",
     examplesDir / "pos" / "lambdas" / "generators.effekt",
-    examplesDir / "pos" / "lambdas" / "higherOrder.effekt",
-    examplesDir / "pos" / "lambdas" / "localState.effekt",
+    examplesDir / "pos" / "lambdas" / "higherorder.effekt",
+    examplesDir / "pos" / "lambdas" / "localstate.effekt",
     examplesDir / "pos" / "lambdas" / "scheduler.effekt",
     examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
     examplesDir / "pos" / "triples.effekt",
+
+    // mutual recursion
+    examplesDir / "pos" / "mutualrecursion.effekt",
 
     // heap
     examplesDir / "casestudies" / "ad.md",
@@ -43,6 +46,7 @@ class MLTests extends EffektTests {
     examplesDir / "casestudies" / "parser.md",
     examplesDir / "casestudies" / "prettyprinter.md",
     examplesDir / "pos" / "simpleparser.effekt",
+    examplesDir / "neg" / "unbound_type.effekt",
 
     // cslist
     examplesDir / "chez" / "libraries.effekt",
@@ -60,9 +64,27 @@ class MLTests extends EffektTests {
     // mut map
     examplesDir / "pos" / "maps.effekt",
 
-    // Difficult fix
-    examplesDir / "pos" / "nim.effekt",
+    // parsing error
+    examplesDir / "neg" / "scoped.effekt",
+
+    // Unclear issue
+    examplesDir / "pos" / "arrays.effekt",
+    examplesDir / "pos" / "build.effekt",
+    examplesDir / "pos" / "emptymatch.effekt",
+    examplesDir / "pos" / "imports.effekt",
+    examplesDir / "pos" / "liftinference.effekt",
+    examplesDir / "pos" / "lists.effekt",
+    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "multieffects.effekt",
+    examplesDir / "pos" / "multiline_extern_definition.effekt",
+    examplesDir / "pos" / "nim.effekt",
+    examplesDir / "pos" / "parametrized.effekt",
+    examplesDir / "pos" / "parser.effekt",
+    examplesDir / "pos" / "probabilistic.effekt",
+    examplesDir / "pos" / "stream_pull.effekt",
+
+    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
+    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
   )
 
   def runTestFor(input: java.io.File, check: File, expected: String): Unit =

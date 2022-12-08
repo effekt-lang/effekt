@@ -114,9 +114,10 @@ object ML extends Backend {
       val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
-    case Decl.Data(id: TypeConstructor.Record, fields) => singletonData(id, id.constructor, fields)
+    case Decl.Data(id: TypeConstructor.Record, List(ctor: symbols.Constructor)) =>
+      singletonData(id, id.constructor, ctor.fields)
     case Decl.Interface(id, operations) => singletonData(id, id, operations)
-    case Data(_, _) => C.panic("Data symbol is not TypeConstructor.DataType")
+    case Data(_, _) => C.panic("Data symbol is not DataType or Record")
   }
 
   def singletonData(typeSym: Symbol, caseSym: Symbol, terms: List[Symbol])(using Context): List[ml.Binding] = {
