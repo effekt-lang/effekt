@@ -36,14 +36,14 @@ object ChezSchemeLift extends Backend {
       val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
       val mainFile = path(main.mod)
-      Compiled(mainFile, Map(mainFile -> result))
+      Compiled(main.source, mainFile, Map(mainFile -> result))
     }
 
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(using C: Context) =
-    C.using(module = input.mod) { Some(chez.PrettyPrinter.format(compile(input))) }
+  def compileSeparate(input: AllTransformed)(using C: Context) =
+    C.using(module = input.main.mod) { Some(chez.PrettyPrinter.format(compile(input.main))) }
 
   /**
    * Compiles only the given module, does not compile dependencies
@@ -128,9 +128,6 @@ object ChezSchemeLift extends Backend {
         case other => sys error s"Wrong type, expected constructor but got: ${ other }"
       }
 
-    case Record(did, fields) =>
-      generateConstructor(did, fields)
-
     // We use chez scheme records to also represent capabilities.
     case Decl.Interface(id, operations) =>
       generateConstructor(id, operations)
@@ -183,7 +180,7 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(block: Block): chez.Expr = block match {
-    case BlockVar(id) =>
+    case BlockVar(id, tpe) =>
       Variable(nameRef(id))
 
     case b @ BlockLit(params, body) => toChez(b)
@@ -209,7 +206,7 @@ object ChezSchemeLift extends Backend {
     case Literal(s: String, _) => ChezString(s)
     case Literal(b: Boolean, _) => if (b) chez.RawValue("#t") else chez.RawValue("#f")
     case l: Literal => chez.RawValue(l.value.toString)
-    case ValueVar(id)  => chez.Variable(nameRef(id))
+    case ValueVar(id, _)  => chez.Variable(nameRef(id))
 
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map {
       case e: Expr  => toChez(e)
@@ -217,7 +214,7 @@ object ChezSchemeLift extends Backend {
       case e: Evidence => toChez(e)
     })
 
-    case Select(b, field) =>
+    case Select(b, field, _) =>
       chez.Call(nameRef(field), toChez(b))
 
     case Box(b) => toChez(b)

@@ -22,7 +22,7 @@ trait BackendPhase {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def separate: Phase[CoreTransformed, (CoreTransformed, Document)]
+  def separate: Phase[AllTransformed, (CoreTransformed, Document)]
 }
 
 /**
@@ -39,7 +39,7 @@ trait Backend extends BackendPhase {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: CoreTransformed)(using Context): Option[Document]
+  def compileSeparate(input: AllTransformed)(using Context): Option[Document]
 
   // Using the methods above, we can implement the required phases.
   val whole = Phase("compile-whole") { input =>
@@ -47,5 +47,5 @@ trait Backend extends BackendPhase {
     compileWhole(input, mainSymbol)
   }
 
-  val separate = Phase("compile-separate") { core => compileSeparate(core) map { doc => (core, doc) } }
+  val separate = Phase("compile-separate") { all => compileSeparate(all) map { doc => (all.main, doc) } }
 }

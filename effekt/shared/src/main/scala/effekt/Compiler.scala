@@ -19,43 +19,51 @@ import kiama.util.{ Positions, Source }
  *
  * All phases have a source field, which is mostly used to invalidate caches based on the timestamp.
  */
-sealed trait PhaseResult { val source: Source }
+enum PhaseResult {
 
-/**
- * The result of [[Parser]] parsing a single file into a [[effekt.source.Tree]].
- */
-case class Parsed(source: Source, tree: ModuleDecl) extends PhaseResult
+  val source: Source
 
-/**
- * The result of [[Namer]] resolving all names in a given syntax tree. The resolved symbols are
- * annotated in the [[Context]] using [[effekt.context.Annotations]].
- */
-case class NameResolved(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
+  /**
+   * The result of [[Parser]] parsing a single file into a [[effekt.source.Tree]].
+   */
+  case Parsed(source: Source, tree: ModuleDecl)
 
-/**
- * The result of [[Typer]] type checking a given syntax tree.
- *
- * We can notice that [[NameResolved]] and [[Typechecked]] haave the same fields.
- * Like, [[Namer]], [[Typer]] writes to the types of each tree into the DB, using [[effekt.context.Annotations]].
- * This might change in the future, when we switch to elaboration.
- */
-case class Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module) extends PhaseResult
+  /**
+   * The result of [[Namer]] resolving all names in a given syntax tree. The resolved symbols are
+   * annotated in the [[Context]] using [[effekt.context.Annotations]].
+   */
+  case NameResolved(source: Source, tree: ModuleDecl, mod: symbols.Module)
 
-/**
- * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
- */
-case class CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl) extends PhaseResult
+  /**
+   * The result of [[Typer]] type checking a given syntax tree.
+   *
+   * We can notice that [[NameResolved]] and [[Typechecked]] haave the same fields.
+   * Like, [[Namer]], [[Typer]] writes to the types of each tree into the DB, using [[effekt.context.Annotations]].
+   * This might change in the future, when we switch to elaboration.
+   */
+  case Typechecked(source: Source, tree: ModuleDecl, mod: symbols.Module)
 
-/**
- * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
- */
-case class CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl) extends PhaseResult
+  /**
+   * The result of [[Transformer]] ANF transforming [[source.Tree]] into the core representation [[core.Tree]].
+   */
+  case CoreTransformed(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.core.ModuleDecl)
 
-/**
- * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
- */
-case class Compiled(mainFile: String, outputFiles: Map[String, Document])
+  /**
+   * The result of running the [[Compiler.Middleend]] on all dependencies.
+   */
+  case AllTransformed(source: Source, main: PhaseResult.CoreTransformed, dependencies: List[PhaseResult.CoreTransformed])
 
+  /**
+   * The result of [[LiftInference]] transforming [[core.Tree]] into the lifted core representation [[lifted.Tree]].
+   */
+  case CoreLifted(source: Source, tree: ModuleDecl, mod: symbols.Module, core: effekt.lifted.ModuleDecl)
+
+  /**
+   * The result of [[effekt.generator.Backend]], consisting of a mapping from filename to output to be written.
+   */
+  case Compiled(source: Source, mainFile: String, outputFiles: Map[String, Document])
+}
+export PhaseResult.*
 
 /**
  * The compiler for the Effekt language.
@@ -125,20 +133,23 @@ trait Compiler {
        * Wellformedness checks (exhaustivity, non-escape)
        *   [[Typechecked]] --> [[Typechecked]]
        */
-      PostTyper andThen
-      /**
-       * Uses annotated effects to translate to explicit capability passing
-       *   [[Typechecked]] --> [[Typechecked]]
-       */
-      Elaborator
+      PostTyper
   }
 
   /**
    * Middleend
    */
-  private val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
+  val Middleend = Phase.cached("middleend", cacheBy = (in: Typechecked) => paths.lastModified(in.source)) {
+    /**
+     * Uses annotated effects to translate to explicit capability passing
+     * [[Typechecked]] --> [[Typechecked]]
+     */
+    Elaborator andThen
+    /**
+     * Translates a source program to a core program
+     * [[Typechecked]] --> [[CoreTransformed]]
+     */
     Transformer
-    // here optimization passes on Core will be added.
   }
 
   /**
@@ -153,8 +164,8 @@ trait Compiler {
     case "ml"           => effekt.generator.ml.ML
   }
 
-  object Aggregate extends Phase[CoreTransformed, CoreTransformed] {
-    val phaseName = "aggregate"
+  object CoreDependencies extends Phase[CoreTransformed, AllTransformed] {
+    val phaseName = "core-dependencies"
 
     def run(input: CoreTransformed)(using Context) = {
       val CoreTransformed(src, tree, mod, main) = input
@@ -163,10 +174,18 @@ trait Compiler {
         // We already ran the frontend on the dependencies (since they are discovered
         // dynamically). The results are cached, so it doesn't hurt dramatically to run
         // the frontend again. However, the indirection via dep.source is not very elegant.
-        (Frontend andThen Middleend) (dep.source)
+        (Frontend andThen Middleend).apply(dep.source)
       }
+      Some(AllTransformed(input.source, input, dependencies))
+    }
+  }
 
-      val deps = dependencies.map(d => d.core)
+  object Aggregate extends Phase[AllTransformed, CoreTransformed] {
+    val phaseName = "aggregate"
+
+    def run(input: AllTransformed)(using Context) = {
+      val CoreTransformed(src, tree, mod, main) = input.main
+      val dependencies = input.dependencies.map(d => d.core)
 
       // collect all information
       var declarations: List[core.Declaration] = Nil
@@ -174,7 +193,7 @@ trait Compiler {
       var definitions: List[core.Definition] = Nil
       var exports: List[symbols.Symbol] = Nil
 
-      (deps :+ main).foreach { module =>
+      (dependencies :+ main).foreach { module =>
         externs ++= module.externs
         declarations ++= module.declarations
         definitions ++= module.definitions
@@ -184,7 +203,6 @@ trait Compiler {
       val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
 
       // TODO in the future check for duplicate exports
-
       Some(CoreTransformed(src, tree, mod, aggregated))
     }
   }
@@ -215,14 +233,14 @@ trait Compiler {
    * This is achieved by `compileWhole`.
    */
   def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    (Frontend andThen Middleend andThen Backend.separate).apply(source)
+    (Frontend andThen Middleend andThen CoreDependencies andThen Backend.separate).apply(source)
 
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
   def compileWhole(source: Source)(using Context): Option[Compiled] =
-    (Frontend andThen Middleend andThen Aggregate andThen Backend.whole).apply(source)
+    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
 
   def compileAll(source: Source)(using Context): Option[CoreTransformed] =
-    (Frontend andThen Middleend andThen Aggregate).apply(source)
+    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
 }

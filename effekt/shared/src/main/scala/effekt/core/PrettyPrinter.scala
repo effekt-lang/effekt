@@ -15,16 +15,17 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(t: ModuleDecl): Document =
     pretty(toDoc(t), 4)
 
-  def format(s: Stmt): String =
-    pretty(toDoc(s), 60).layout
-
   def format(defs: List[Definition]): String =
     pretty(toDoc(defs), 60).layout
+
+  def format(s: Stmt): String =
+    pretty(toDoc(s), 60).layout
 
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
-    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
+    "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }) <> emptyline <>
+      vsep(m.declarations.map(toDoc)) <>
       emptyline <> toDoc(m.definitions)
   }
 
@@ -32,72 +33,101 @@ object PrettyPrinter extends ParenPrettyPrinter {
     vsep(definitions map toDoc, semi)
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tpe, ps, body) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\""
+    case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
+      "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id.name) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
 
   def toDoc(b: Block): Doc = b match {
-    case BlockVar(v) => v.name.toString
-    case BlockLit(ps, body) =>
-      braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
-    case Member(b, id) =>
+    case BlockVar(v, _, _) => v.name.toString
+    case BlockLit(tps, cps, vps, bps, body) =>
+      braces { space <> paramsToDoc(tps, vps, bps) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
+    case Member(b, id, _) =>
       toDoc(b) <> "." <> id.name.toString
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
-  def toDoc(p: Param): Doc = p.id.name.toString
+  // TODO print types
+  def toDoc(p: ValueParam): Doc = p.id.name.toString <> ":" <+> toDoc(p.tpe)
+  def toDoc(p: BlockParam): Doc = braces(p.id.name.toString)
 
   def toDoc(n: Name): Doc = n.toString
+
+  def toDoc(s: symbols.Symbol): Doc = toDoc(s.name)
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)            => "()"
     case Literal(s: String, _)     => "\"" + s + "\""
     case Literal(value, _)         => value.toString
-    case ValueVar(id)              => id.name.toString
+    case ValueVar(id, _)              => id.name.toString
 
-    case PureApp(b, targs, args)   => toDoc(b) <> parens(hsep(args map argToDoc, comma))
-    case DirectApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case PureApp(b, targs, vargs)   => toDoc(b) <> argsToDoc(targs, vargs, Nil)
+    case DirectApp(b, targs, vargs, bargs) => toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
-    case Select(b, field) =>
+    case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
-    case Box(b)      => parens("box" <+> toDoc(b))
-    case Run(s, tpe) => "run" <+> braces(toDoc(s))
+    case Box(b, capt) => parens("box" <+> toDoc(b))
+    case Run(s) => "run" <+> braces(toDoc(s))
   }
+
+  def argsToDoc(targs: List[core.ValueType], vargs: List[core.Pure], bargs: List[core.Block]): Doc =
+    val targsDoc = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+    //val cargsDoc = if cargs.isEmpty then emptyDoc else brackets(cargs.map(toDoc))
+    val vargsDoc = vargs.map(toDoc)
+    val bargsDoc = bargs.map(toDoc)
+    targsDoc <> parens(vargsDoc ++ bargsDoc)
 
   def argToDoc(e: Argument): Doc = e match {
     case e: Expr  => toDoc(e)
     case b: Block => toDoc(b)
   }
 
+  def paramsToDoc(tps: List[symbols.Symbol], vps: List[Param.ValueParam], bps: List[Param.BlockParam]): Doc = {
+    val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))
+    tpsDoc <> parens(hsep(vps map toDoc, comma)) <> hcat(bps map toDoc)
+  }
+
   def toDoc(instance: Implementation): Doc = {
-    val handlerName = toDoc(instance.interface.name)
+    val handlerName = toDoc(instance.interface)
     val clauses = instance.operations.map {
-      case Operation(id, BlockLit(params, body)) =>
-        "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
+      case Operation(id, tps, cps, vps, bps, resume, body) =>
+        val k = resume.map(toDoc).getOrElse(emptyDoc)
+        "def" <+> toDoc(id.name) <> paramsToDoc(tps, vps, bps) <> k <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
 
+  def typeTemplate(kind: Doc, id: symbols.Symbol, tparams: List[symbols.Symbol], decls: List[Doc]): Doc =
+    val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+    val body = if decls.isEmpty then string("{}") else block(vsep(decls))
+    kind <+> toDoc(id) <> tps <+> body
+
   def toDoc(d: Declaration): Doc = d match {
-    case Data(did, ctors) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
+    case Data(id, tparams, ctors) =>
+      typeTemplate("type", id, tparams, ctors.map(toDoc))
 
-    case Record(did, fields) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) })
+    case Interface(id, tparams, properties) =>
+      typeTemplate("interface", id, tparams, properties.map(toDoc))
+  }
 
-    case Interface(id, operations) =>
-      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
+  def toDoc(c: Constructor): Doc = c match {
+    case Constructor(id, fields) => toDoc(id) <> parens(fields.map(toDoc))
+  }
+  def toDoc(f: Field): Doc = f match {
+    case Field(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
+  }
+  def toDoc(f: Property): Doc = f match {
+    case Property(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, tpe, BlockLit(params, body)) =>
-      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
+      "def" <+> toDoc(id.name) <> paramsToDoc(tps, vps, bps) <+> "=" <> nested(toDoc(body))
+    case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
   }
 
@@ -108,27 +138,27 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Val(Wildcard(), tpe, binding, body) =>
+    case Val(Wildcard(), binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case App(b, targs, vargs, bargs) =>
+      toDoc(b) <> argsToDoc(targs, vargs, bargs)
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
 
-    case Try(body, tpe, hs) =>
+    case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
     case State(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 
-    case Region(body, _) =>
+    case Region(body) =>
       "region" <+> toDoc(body)
 
     case Match(sc, clauses, default) =>
@@ -136,9 +166,32 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDoc(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <+> cs <> d
 
-    case Hole =>
+    case Hole() =>
       "<>"
   }
+
+  def toDoc(tpe: core.BlockType): Doc = tpe match {
+    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      val vps = parens(vparams.map(toDoc))
+      val bps = hcat((cparams zip bparams).map { case (id, tpe) => braces(toDoc(id) <> ":" <+> toDoc(tpe)) })
+      val res = toDoc(result)
+      tps <> vps <> bps <+> "=>" <+> res
+    case core.BlockType.Interface(symbol, Nil) => toDoc(symbol)
+    case core.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+  }
+
+  def toDoc(tpe: core.ValueType): Doc = tpe match {
+    case ValueType.Var(name) => toDoc(name)
+    case ValueType.Data(symbol, targs) => toDoc(symbol, targs)
+    case ValueType.Boxed(tpe, capt) => toDoc(tpe) <+> "at" <+> toDoc(capt)
+  }
+
+  def toDoc(tpeConstructor: symbols.Symbol, targs: List[core.ValueType]): Doc =
+    if (targs.isEmpty) then toDoc(tpeConstructor)
+    else toDoc(tpeConstructor) <> brackets(targs.map(toDoc))
+
+  def toDoc(capt: core.Captures): Doc = braces(hsep(capt.toList.map(toDoc), comma))
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 

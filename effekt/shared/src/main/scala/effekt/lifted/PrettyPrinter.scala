@@ -35,7 +35,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(b: Block): Doc = b match {
-    case BlockVar(v) => v.name.toString
+    case BlockVar(v, _) => v.name.toString
     case BlockLit(ps, body) =>
       braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
     case Member(b, id) =>
@@ -52,11 +52,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal((), _)          => "()"
     case Literal(s: String, _)   => "\"" + s + "\""
     case l: Literal              => l.value.toString
-    case ValueVar(id)            => id.name.toString
+    case ValueVar(id, _)         => id.name.toString
 
     case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
-    case Select(b, field) =>
+    case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Box(b) => parens("box" <+> toDoc(b))
@@ -86,9 +86,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(d: Decl): Doc = d match {
     case Data(did, ctors) =>
       "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
-
-    case Record(did, fields) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) })
 
     case Interface(id, operations) =>
       "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })

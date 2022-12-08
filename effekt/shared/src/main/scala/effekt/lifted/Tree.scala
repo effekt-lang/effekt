@@ -22,7 +22,6 @@ case class ModuleDecl(
  */
 enum Decl {
   case Data(id: Symbol, ctors: List[Symbol])
-  case Record(id: Symbol, fields: List[Symbol])
   case Interface(id: Symbol, operations: List[Symbol])
 }
 export Decl.*
@@ -31,13 +30,13 @@ export Decl.*
  * FFI external definitions
  */
 enum Extern {
-  case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
+  case Def(id: Symbol, tpe: core.BlockType.Function, params: List[Param], body: String)
   case Include(contents: String)
 }
 
 enum Definition {
-  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
-  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr)
+  case Def(id: Symbol, tpe: core.BlockType, block: Block)
+  case Let(id: Symbol, tpe: core.ValueType, binding: Expr)
 }
 
 /**
@@ -49,28 +48,28 @@ sealed trait Argument extends Tree
  * Expressions
  */
 sealed trait Expr extends Argument
-case class ValueVar(id: ValueSymbol) extends Expr
+case class ValueVar(id: Symbol, tpe: core.ValueType) extends Expr
 
-case class Literal(value: Any, tpe: symbols.ValueType) extends Expr
-case class PureApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol) extends Expr
+case class Literal(value: Any, tpe: core.ValueType) extends Expr
+case class PureApp(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Expr
+case class Select(target: Expr, field: Symbol, tpe: core.ValueType) extends Expr
 case class Box(b: Block) extends Expr
-case class Run(s: Stmt, tpe: ValueType) extends Expr
+case class Run(s: Stmt, tpe: core.ValueType) extends Expr
 
 /**
  * Blocks
  */
 sealed trait Param extends Tree { def id: Symbol }
-case class ValueParam(id: ValueSymbol, tpe: ValueType) extends Param
-case class BlockParam(id: BlockSymbol, tpe: BlockType) extends Param
+case class ValueParam(id: Symbol, tpe: core.ValueType) extends Param
+case class BlockParam(id: Symbol, tpe: core.BlockType) extends Param
 case class EvidenceParam(id: EvidenceSymbol) extends Param
 
 sealed trait Block extends Argument
-case class BlockVar(id: BlockSymbol) extends Block
+case class BlockVar(id: Symbol, tpe: core.BlockType) extends Block
 
 // TODO add type params here
 case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: TermSymbol) extends Block
+case class Member(b: Block, field: Symbol) extends Block
 case class Unbox(e: Expr) extends Block
 case class New(impl: Implementation) extends Block
 
@@ -83,8 +82,8 @@ case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
 
 // Fine-grain CBV
 case class Return(e: Expr) extends Stmt
-case class Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt) extends Stmt
-case class App(b: Block, targs: List[Type], args: List[Argument]) extends Stmt
+case class Val(id: Symbol, tpe: core.ValueType, binding: Stmt, body: Stmt) extends Stmt
+case class App(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Stmt
 
 // Local Control Flow
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
@@ -92,8 +91,8 @@ case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], defaul
 
 // Effects
 case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
-case class Try(body: Block, answerType: ValueType, handler: List[Implementation]) extends Stmt
-case class Region(body: Block, answerType: ValueType) extends Stmt
+case class Try(body: Block, answerType: core.ValueType, handler: List[Implementation]) extends Stmt
+case class Region(body: Block, answerType: core.ValueType) extends Stmt
 
 // Others
 case object Hole extends Stmt
@@ -108,7 +107,7 @@ case class Implementation(id: symbols.Interface, operations: List[Operation]) ex
 /**
  * Implementation of a method / effect operation.
  */
-case class Operation(name: symbols.Operation, implementation: BlockLit)
+case class Operation(name: symbols.Symbol, implementation: BlockLit)
 
 
 
@@ -152,10 +151,10 @@ def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
 }
 
 def freeVariables(expr: Expr): Set[Symbol] = expr match {
-  case ValueVar(id) => Set(id)
+  case ValueVar(id, tpe) => Set(id)
   case Literal(value, tpe) => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
-  case Select(target, field) => freeVariables(target) // we do not count fields in...
+  case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
   case Run(s, tpe) => freeVariables(s)
 }
@@ -167,7 +166,7 @@ def freeVariables(arg: Argument): Set[Symbol] = arg match {
 }
 
 def freeVariables(block: Block): Set[Symbol] = block match {
-  case BlockVar(id) => Set(id)
+  case BlockVar(id, _) => Set(id)
   case BlockLit(params, body) =>
     val bound = params.map {
       case ValueParam(id, tpe) => id

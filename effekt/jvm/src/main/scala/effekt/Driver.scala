@@ -61,7 +61,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     C.setup(config)
 
     def compile(): Option[String] = C.compileWhole(src) map {
-      case Compiled(main, outputFiles) =>
+      case Compiled(_, main, outputFiles) =>
         outputFiles.foreach {
           case (filename, doc) =>
             saveOutput(filename, doc.layout)

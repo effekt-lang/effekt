@@ -23,7 +23,7 @@ object LLVM extends Backend {
 
     val result = Document(llvmString, emptyLinks)
 
-    Some(Compiled(mainFile, Map(mainFile -> result)))
+    Some(Compiled(main.source, mainFile, Map(mainFile -> result)))
   }
 
   def path(m: Module)(using C: Context): String =
@@ -36,8 +36,8 @@ object LLVM extends Backend {
    * This could be optimized in the future to (for instance) not show the standard library
    * and the prelude.
    */
-  def compileSeparate(main: CoreTransformed)(using Context): Option[Document] = {
-    val machine.Program(decls, prog) = machine.Transformer.transform(main, symbols.TmpValue())
+  def compileSeparate(main: AllTransformed)(using Context): Option[Document] = {
+    val machine.Program(decls, prog) = machine.Transformer.transform(main.main, symbols.TmpValue())
 
     // we don't print declarations here.
     val llvmDefinitions = Transformer.transform(machine.Program(Nil, prog))

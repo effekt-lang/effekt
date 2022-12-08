@@ -1,10 +1,12 @@
 package effekt
 package core
 
-import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Interface, Operation, Symbol, TermSymbol, Type, ValueSymbol, ValueType }
 
 /**
  * Tree structure of programs in our internal core representation.
+ *
+ * Core uses [[effekt.symbols.Symbol]] as names. The structure of symbols and the contents
+ * in the DB should not be used after translation to core.
  *
  * ----------[[ effekt.core.Tree ]]----------
  *
@@ -12,9 +14,11 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
  *     │─ [[ ModuleDecl ]]
  *     │─ [[ Declaration ]]
  *     │  │─ [[ Data ]]
- *     │  │─ [[ Record ]]
  *     │  │─ [[ Interface ]]
  *     │
+ *     │─ [[ Constructor ]]
+ *     │─ [[ Field ]]
+ *     │─ [[ Property ]]
  *     │─ [[ Extern ]]
  *     │  │─ [[ Def ]]
  *     │  │─ [[ Include ]]
@@ -51,6 +55,16 @@ import effekt.symbols.{ BlockSymbol, FunctionType, BlockType, Constructor, Inter
 sealed trait Tree
 
 /**
+ * In core, all symbols are supposed to be "just" names.
+ */
+type Id = symbols.Symbol
+object Id {
+  def apply(n: String): Id = new symbols.Symbol {
+    val name = symbols.Name.local(n)
+  }
+}
+
+/**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
  */
 case class ModuleDecl(
@@ -59,39 +73,43 @@ case class ModuleDecl(
   declarations: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
-  exports: List[Symbol]
+  exports: List[Id]
 ) extends Tree
 
 /**
  * Toplevel data and interface declarations
  */
 enum Declaration extends Tree {
-  def id: Symbol
+  def id: Id
 
-  case Data(id: Symbol, ctors: List[Symbol])
-  case Record(id: Symbol, fields: List[Symbol])
-  case Interface(id: Symbol, operations: List[Symbol])
+  case Data(id: Id, tparams: List[Id], constructors: List[Constructor])
+  case Interface(id: Id, tparams: List[Id], properties: List[Property])
 }
 export Declaration.*
+
+case class Constructor(id: Id, fields: List[Field]) extends Tree
+case class Field(id: Id, tpe: ValueType) extends Tree
+case class Property(id: Id, tpe: BlockType) extends Tree
 
 /**
  * FFI external definitions
  */
 enum Extern extends Tree {
-  case Def(id: BlockSymbol, tpe: FunctionType, params: List[Param], body: String)
+  case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
   case Include(contents: String)
 }
 
 
 enum Definition {
-  case Def(id: BlockSymbol, tpe: BlockType, block: Block)
-  case Let(id: ValueSymbol, tpe: ValueType, binding: Expr) // PURE on the toplevel?
+  case Def(id: Id, block: Block)
+  case Let(id: Id, binding: Expr) // PURE on the toplevel?
 
   // TBD
   // case Var(id: Symbol,  region: Symbol, init: Pure) // TOPLEVEL could only be {global}, or not at all.
 
   // TDB
   // case Mutual(defs: List[Definition.Def])
+  val capt: Captures = Type.inferCapt(this)
 }
 
 // Some smart constructors
@@ -100,11 +118,11 @@ private def addToScope(definition: Definition, body: Stmt): Stmt = body match {
   case other => Scope(List(definition), other)
 }
 
-def Def(id: BlockSymbol, tpe: BlockType, block: Block, rest: Stmt) =
-  addToScope(Definition.Def(id, tpe, block), rest)
+def Def(id: Id, block: Block, rest: Stmt) =
+  addToScope(Definition.Def(id, block), rest)
 
-def Let(id: ValueSymbol, tpe: ValueType, binding: Expr, rest: Stmt) =
-  addToScope(Definition.Let(id, tpe, binding), rest)
+def Let(id: Id, binding: Expr, rest: Stmt) =
+  addToScope(Definition.Let(id,  binding), rest)
 
 /**
  * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
@@ -119,13 +137,16 @@ sealed trait Argument extends Tree
  * - [[Run]]
  * - [[Pure]]
  */
-sealed trait Expr extends Tree
+sealed trait Expr extends Tree {
+  val tpe: ValueType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
+}
 
 // invariant, block b is {io}.
-case class DirectApp(b: Block, targs: List[Type], args: List[Argument]) extends Expr
+case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
 
 // only inserted by the transformer if stmt is pure / io
-case class Run(s: Stmt, tpe: ValueType) extends Expr
+case class Run(s: Stmt) extends Expr
 
 
 /**
@@ -142,17 +163,16 @@ case class Run(s: Stmt, tpe: ValueType) extends Expr
  *
  * -------------------------------------------
  */
-sealed trait Pure extends Expr with Argument
-object Pure {
-  case class ValueVar(id: ValueSymbol) extends Pure
+enum Pure extends Expr with Argument {
+  case ValueVar(id: Id, annotatedType: ValueType)
 
-  case class Literal(value: Any, tpe: symbols.ValueType) extends Pure
+  case Literal(value: Any, annotatedType: ValueType)
 
   // invariant, block b is pure.
-  case class PureApp(b: Block, targs: List[Type], args: List[Pure]) extends Pure
-  case class Select(target: Pure, field: symbols.Field) extends Pure
+  case PureApp(b: Block, targs: List[ValueType], vargs: List[Pure])
+  case Select(target: Pure, field: Id, annotatedType: ValueType)
 
-  case class Box(b: Block) extends Pure
+  case Box(b: Block, annotatedCapture: Captures)
 }
 export Pure.*
 
@@ -171,19 +191,23 @@ export Pure.*
  * -------------------------------------------
  */
 enum Block extends Argument {
-  case BlockVar(id: BlockSymbol)
-  case BlockLit(params: List[Param], body: Stmt)
-  case Member(b: Block, field: TermSymbol)
-  case Unbox(p: Pure)
+  case BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures)
+  case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
+  case Member(block: Block, field: Id, annotatedTpe: BlockType)
+  case Unbox(pure: Pure)
   case New(impl: Implementation)
+
+
+  val tpe: BlockType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
 }
 export Block.*
 
 enum Param extends Tree {
-  def id: TermSymbol
+  def id: Id
 
-  case ValueParam(id: ValueSymbol, tpe: ValueType)
-  case BlockParam(id: BlockSymbol, tpe: BlockType)
+  case ValueParam(id: Id, tpe: ValueType)
+  case BlockParam(id: Id, tpe: BlockType)
 }
 export Param.*
 
@@ -211,21 +235,24 @@ enum Stmt extends Tree {
   case Scope(definitions: List[Definition], body: Stmt)
 
   // Fine-grain CBV
-  case Return(e: Pure)
-  case Val(id: ValueSymbol, tpe: ValueType, binding: Stmt, body: Stmt)
-  case App(b: Block, targs: List[Type], args: List[Argument])
+  case Return(expr: Pure)
+  case Val(id: Id, binding: Stmt, body: Stmt)
+  case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
-  case Match(scrutinee: Pure, clauses: List[(Constructor, BlockLit)], default: Option[Stmt])
+  case Match(scrutinee: Pure, clauses: List[(Id, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Symbol, init: Pure, region: Symbol, body: Stmt) // TODO maybe rename to Var?
-  case Try(body: Block, answerType: ValueType, handler: List[Implementation])
-  case Region(body: Block, answerType: ValueType)
+  case State(id: Id, init: Pure, region: Id, body: Stmt) // TODO maybe rename to Var?
+  case Try(body: Block, handlers: List[Implementation])
+  case Region(body: Block)
 
   // Others
-  case Hole
+  case Hole()
+
+  val tpe: ValueType = Type.inferType(this)
+  val capt: Captures = Type.inferCapt(this)
 }
 export Stmt.*
 
@@ -234,14 +261,23 @@ export Stmt.*
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(interface: symbols.Interface, operations: List[Operation]) extends Tree
+case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
+  val tpe = interface
+  val capt = operations.flatMap(_.capt).toSet
+}
 
 /**
  * Implementation of a method / effect operation.
  *
  * TODO generalize from BlockLit to also allow block definitions
+ *
+ * TODO For handler implementations we cannot simply reuse BlockLit here...
+ *   maybe we need to add PlainOperation | ControlOperation, where for now
+ *   handlers always have control operations and New always has plain operations.
  */
-case class Operation(name: symbols.Operation, implementation: Block.BlockLit)
+case class Operation(name: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], resume: Option[Param.BlockParam], body: Stmt) {
+  val capt = body.capt -- cparams.toSet
+}
 
 
 object Tree {
@@ -265,7 +301,6 @@ object Tree {
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
-    def param: PartialFunction[Param, Param] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
@@ -274,66 +309,62 @@ object Tree {
         case e if pure.isDefinedAt(e) => pure(e)
         case PureApp(b, targs, args) =>
           PureApp(rewrite(b), targs, args map rewrite)
-        case Select(target, field) =>
-          Select(rewrite(target), field)
+        case Select(target, field, tpe) =>
+          Select(rewrite(target), field, tpe)
         case v: ValueVar   => v
         case l: Literal    => l
-        case Box(b)        => Box(rewrite(b))
+        case Box(b, capt)        => Box(rewrite(b), capt)
       }
 
     // Entrypoints to use the traversal on, defined in terms of the above hooks
     def rewrite(e: Expr): Expr =
       e match {
         case e if expr.isDefinedAt(e) => expr(e)
-        case DirectApp(b, targs, args) =>
-          DirectApp(rewrite(b), targs, args map rewrite)
-        case Run(s, tpe) => Run(rewrite(s), tpe)
+        case DirectApp(b, targs, vargs, bargs) =>
+          DirectApp(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
+        case Run(s) => Run(rewrite(s))
         case p: Pure     => rewrite(p)
       }
 
     def rewrite(d: Definition): Definition = d match {
       case d if defn.isDefinedAt(d) => defn(d)
-      case Definition.Def(id, tpe, block) =>
-        Definition.Def(id, tpe, rewrite(block))
-      case Definition.Let(id, tpe, binding) =>
-        Definition.Let(id, tpe, rewrite(binding))
+      case Definition.Def(id, block) =>
+        Definition.Def(id, rewrite(block))
+      case Definition.Let(id, binding) =>
+        Definition.Let(id, rewrite(binding))
     }
 
     def rewrite(e: Stmt): Stmt =
       e match {
         case e if stmt.isDefinedAt(e) => stmt(e)
         case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
-        case Val(id, tpe, binding, body) =>
-          Val(id, tpe, rewrite(binding), rewrite(body))
-        case App(b, targs, args) =>
-          App(rewrite(b), targs, args map rewrite)
+        case Val(id, binding, body) =>
+          Val(id, rewrite(binding), rewrite(body))
+        case App(b, targs, vargs, bargs) =>
+          App(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
         case If(cond, thn, els) =>
           If(rewrite(cond), rewrite(thn), rewrite(els))
         case Return(e: Expr) =>
           Return(rewrite(e))
         case State(id, init, reg, body) =>
           State(id, rewrite(init), reg, rewrite(body))
-        case Try(body, tpe, handler) =>
-          Try(rewrite(body), tpe, handler map rewrite)
-        case Region(body, tpe) =>
-          Region(rewrite(body), tpe)
+        case Try(body, handler) =>
+          Try(rewrite(body), handler map rewrite)
+        case Region(body) =>
+          Region(rewrite(body))
         case Match(scrutinee, clauses, default) =>
           Match(rewrite(scrutinee), clauses map {
             case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
           }, default map rewrite)
-        case h: Hole.type => h
+        case Hole() => e
       }
 
-    def rewrite(e: Param): Param = e match {
-      case e if param.isDefinedAt(e) => param(e)
-      case e => e
-    }
     def rewrite(e: Block): Block = e match {
       case e if block.isDefinedAt(e) => block(e)
-      case BlockLit(params, body) =>
-        BlockLit(params map rewrite, rewrite(body))
-      case Member(b, field) =>
-        Member(rewrite(b), field)
+      case BlockLit(tps, cps, vps, bps, body) =>
+        BlockLit(tps, cps, vps, bps, rewrite(body))
+      case Member(b, field, tpe) =>
+        Member(rewrite(b), field, tpe)
       case Unbox(e) =>
         Unbox(rewrite(e))
       case New(impl) =>
@@ -342,15 +373,10 @@ object Tree {
     }
     def rewrite(e: Implementation): Implementation = e match {
       case e if handler.isDefinedAt(e) => handler(e)
-      case Implementation(id: Symbol, clauses) => Implementation(id, clauses map rewrite)
+      case Implementation(tpe, clauses) => Implementation(tpe, clauses map rewrite)
     }
     def rewrite(o: Operation): Operation = o match {
-      case Operation(name, impl) => Operation(name, rewrite(impl).asInstanceOf[BlockLit])
-    }
-
-    def rewrite(e: Argument): Argument = e match {
-      case p: Pure  => rewrite(p)
-      case e: Block => rewrite(e)
+      case Operation(name, tps, cps, vps, bps, resume, body) => Operation(name, tps, cps, vps, bps, resume, rewrite(body))
     }
   }
 

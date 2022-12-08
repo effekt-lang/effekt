@@ -555,7 +555,7 @@ object Named {
     // CallLike
     case Do         => symbols.Operation
     case Select     => symbols.Field
-    case MethodCall => symbols.TermSymbol
+    case MethodCall => symbols.Operation | symbols.CallTarget
     case IdTarget   => symbols.TermSymbol
 
     // Others
