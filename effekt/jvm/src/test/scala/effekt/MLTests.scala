@@ -33,9 +33,12 @@ class MLTests extends EffektTests {
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
     examplesDir / "pos" / "triples.effekt",
+    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
+    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
 
     // mutual recursion
     examplesDir / "pos" / "mutualrecursion.effekt",
+    examplesDir / "llvm" / "mutual.effekt",
 
     // heap
     examplesDir / "casestudies" / "ad.md",
@@ -68,6 +71,12 @@ class MLTests extends EffektTests {
     examplesDir / "neg" / "scoped.effekt",
 
     // Unclear issue
+    examplesDir / "casestudies" / "buildsystem.md",
+    examplesDir / "casestudies" / "naturalisticdsls.md",
+    examplesDir / "features" / "adt.md",
+    examplesDir / "llvm" / "erasing.effekt",
+    examplesDir / "llvm" / "stored.effekt",
+    examplesDir / "llvm" / "triples.effekt",
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
     examplesDir / "pos" / "emptymatch.effekt",
@@ -82,9 +91,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
     examplesDir / "pos" / "stream_pull.effekt",
-
-    examplesDir / "pos" / "bidirectional" / "pingpong.effekt",
-    examplesDir / "pos" / "bidirectional" / "iterators.effekt",
+    examplesDir / "neg" / "stream_pull.effekt",
   )
 
   def runTestFor(input: java.io.File, check: File, expected: String): Unit =
