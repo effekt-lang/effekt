@@ -1,5 +1,6 @@
 package effekt.core
 
+import effekt.PhaseResult.CoreTransformed
 import effekt.context.Context
 import effekt.symbols
 import effekt.symbols.{TmpBlock, TmpValue}
@@ -7,11 +8,34 @@ import effekt.{CoreTransformed, Phase}
 
 import scala.annotation.targetName
 
+/**
+ * [[Phase]] on [[CoreTransformed]] to automatically box values when used polymorphically
+ * (i.e., their types are type parameters).
+ *
+ * By default, it will box all primitive types (i.e. all types of the form [[ValueType.Data]]`(T,List())`
+ * with `T` in [[symbols.builtins.rootTypes]]) using the data type `BoxedT` found in the prelude
+ * (see [[symbols.Module.findPrelude]]).
+ * This behavior can be changed by overriding [[box]].
+ */
 object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
 
   override val phaseName: String = "polymorphism boxing"
 
+  /**
+   * Describes how to box/unbox values
+   * @param tpe The type of the values to be boxed
+   * @param constructor The constructor to box the values with
+   * @param field The field to access for unboxing
+   */
   case class Boxer(tpe: ValueType, constructor: Id, field: Id)
+
+  /**
+   * Partial function to describe which values to box and how.
+   * Is defined iff values of the given type should be boxed.
+   *
+   * @param tpe The [[ValueType]] of the value
+   * @return a [[Boxer]] that describes how to box values of that type
+   */
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case ValueType.Data(name, List()) if symbols.builtins.rootTypes.values.exists(_ == name) =>
       if(!Context.module.findPrelude.types.contains("Boxed" + name)) {
@@ -219,7 +243,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     block.tpe match {
       case tpe: BlockType.Function =>
         coercer(tpe, Type.instantiate(tpe, targs, tpe.cparams.map(Set(_))), targs)
-      case BlockType.Interface(symbol, targs) => ???
+      case tpe: BlockType.Interface =>
+        Context.abort(s"Using interface of type ${tpe} in function position.")
     }
   }
 
