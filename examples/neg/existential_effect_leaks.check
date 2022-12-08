@@ -1,3 +1,0 @@
-[error] examples/neg/existential_effect_leaks.effekt:29:17: Unhandled effect GiveInt
-        println(do GiveInt())
-                ^^^^^^^^^^^^
