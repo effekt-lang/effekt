@@ -14,6 +14,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   case class Boxer(tpe: ValueType, constructor: Id, field: Id)
   def box(using PContext): PartialFunction[ValueType, Boxer] = {
     case ValueType.Data(name, List()) if symbols.builtins.rootTypes.values.exists(_ == name) =>
+      if(!Context.module.findPrelude.types.contains("Boxed" + name)) {
+        Context.abort(s"Primitive ${name} is used as type parameter but Boxed${name} is not defined.")
+      }
       Context.module.findPrelude.types("Boxed" + name) match {
         case tpeCns @ symbols.TypeConstructor.Record(_, List(), cns @ symbols.Constructor(_, List(), List(field), _)) =>
           Boxer(ValueType.Data(tpeCns,List()), cns, field)
