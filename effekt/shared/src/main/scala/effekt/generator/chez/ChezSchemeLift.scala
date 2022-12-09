@@ -185,7 +185,7 @@ object ChezSchemeLift extends Backend {
 
     case b @ BlockLit(tparams, params, body) => toChez(b)
 
-    case Member(b, field) =>
+    case Member(b, field, annotatedTpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) =>

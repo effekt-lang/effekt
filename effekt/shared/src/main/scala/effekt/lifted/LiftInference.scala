@@ -35,7 +35,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Block)(using Environment, Context): lifted.Block = tree match {
     case b @ core.BlockLit(tps, cps, vps, bps, body) => liftBlockLitTo(b)
-    case core.Member(body, id, tpe) => Member(transform(body), id)
+    case core.Member(body, id, tpe) => Member(transform(body), id, tpe)
     case core.BlockVar(b, tpe, capt) => BlockVar(b, tpe)
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))

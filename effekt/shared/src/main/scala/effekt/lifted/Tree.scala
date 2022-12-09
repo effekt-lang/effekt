@@ -67,7 +67,7 @@ case class EvidenceParam(id: EvidenceSymbol) extends Param
 sealed trait Block extends Argument
 case class BlockVar(id: Symbol, tpe: core.BlockType) extends Block
 case class BlockLit(tparams: List[Symbol], params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: Symbol) extends Block
+case class Member(b: Block, field: Symbol, annotatedTpe: core.BlockType) extends Block
 case class Unbox(e: Expr) extends Block
 case class New(impl: Implementation) extends Block
 
@@ -175,7 +175,7 @@ def freeVariables(block: Block): Set[Param] = block match {
   case BlockVar(id, tpe) => Set(BlockParam(id, tpe))
   case BlockLit(tparams, params, body) =>
     freeVariables(body) -- params
-  case Member(b, field) => freeVariables(b)
+  case Member(b, field, tpe) => freeVariables(b)
   case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case New(impl) => freeVariables(impl) // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }

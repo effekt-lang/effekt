@@ -140,7 +140,7 @@ object Transformer {
             Context.abort(s"Unsupported blocksymbol: $id")
         }
 
-      case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op), List(), args) =>
+      case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), List(), args) =>
         val opTag = {
           tpe match
             case core.BlockType.Interface(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
@@ -248,7 +248,7 @@ object Transformer {
         New(variable, List(Clause(parameters, transform(body))), k(variable))
       }
 
-    case lifted.Member(b, field) => ???
+    case lifted.Member(b, field, annotatedTpe) => ???
     case lifted.Unbox(e) => ???
     case lifted.New(impl) => ???
   }
@@ -289,7 +289,7 @@ object Transformer {
 
     // hardcoded translation for get and put.
     // TODO remove this when interfaces are correctly translated
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.get), List(), List()) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), List(), List()) =>
       val tpe = transform(stateType)
       val variable = Variable(freshName("x"), tpe)
       val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
@@ -297,7 +297,7 @@ object Transformer {
         Load(variable, stateVariable, k(variable))
       }
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.put), List(), List(arg)) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), List(), List(arg)) =>
       val tpe = transform(stateType)
       val variable = Variable(freshName("x"), Positive("Unit"));
       val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
