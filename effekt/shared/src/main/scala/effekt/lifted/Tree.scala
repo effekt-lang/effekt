@@ -2,6 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
+import effekt.core.BlockType
 import effekt.symbols.{BlockSymbol, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType}
 
 sealed trait Tree
@@ -118,6 +119,22 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
+private def getTparamsForCall(block: Block): List[Symbol] = block match {
+  case BlockVar(id, tpe) => tpe match {
+    case BlockType.Function(tparams, cparams, vparams, bparams, result) => tparams
+    case t =>
+      ??? //Context.panic(s"Should not happen. Calling value of non-function type ${core.PrettyPrinter.format(t)}")
+  }
+  case BlockLit(tparams, params, body) => tparams
+  case Member(b, field, annotatedTpe) => annotatedTpe match {
+    case BlockType.Function(tparams, cparams, vparams, bparams, result) => tparams
+    case t =>
+      ??? //Context.panic(s"Should not happen. Calling value of non-function type ${core.PrettyPrinter.format(t)}")
+  }
+  case Unbox(e) => Nil // TODO do we support polymorphic boxes???
+  case o @ New(impl) =>
+    ??? //Context.panic(s"Should not happen. Calling non-function ${core.PrettyPrinter.format(o)}")
+}
 private def substitute(params: Set[Param], tsubsts: Map[Symbol, core.ValueType]): Set[Param] = params map {
   case ValueParam(id, tpe) => ValueParam(id, core.Type.substitute(tpe, tsubsts, Map.empty))
   case BlockParam(id, tpe) => BlockParam(id, core.Type.substitute(tpe, tsubsts, Map.empty))
@@ -143,7 +160,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
     }
     freeVariables(body) -- bound ++ free
   case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(ValueParam(id, tpe))
-  case App(b, targs, args) => substitute(freeVariables(b), (??? zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
+  case App(b, targs, args) => substitute(freeVariables(b), (getTparamsForCall(b) zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
@@ -159,7 +176,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
 def freeVariables(expr: Expr): Set[Param] = expr match {
   case ValueVar(id, tpe) => Set(ValueParam(id, tpe))
   case Literal(value, tpe) => Set.empty
-  case PureApp(b, targs, args) => substitute(freeVariables(b), (??? zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
+  case PureApp(b, targs, args) => substitute(freeVariables(b), (getTparamsForCall(b) zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
   case Run(s, tpe) => freeVariables(s)
