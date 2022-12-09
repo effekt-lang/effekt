@@ -99,10 +99,10 @@ object ChezSchemeLift extends Backend {
 
     case Hole => chez.Builtin("hole")
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case State(id, init, stateTpe, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
 
-    case State(id, init, region, body) =>
+    case State(id, init, stateTpe, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, tpe, handler) =>

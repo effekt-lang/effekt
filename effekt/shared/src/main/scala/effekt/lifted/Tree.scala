@@ -2,7 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ BlockSymbol, BlockType, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType }
+import effekt.symbols.{BlockSymbol, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType}
 
 sealed trait Tree
 /**
@@ -88,7 +88,7 @@ case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
 
 // Effects
-case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
+case class State(id: Symbol, init: Expr, stateTpe: core.ValueType, region: Symbol, body: Stmt) extends Stmt
 case class Try(body: Block, answerType: core.ValueType, handler: List[Implementation]) extends Stmt
 case class Region(body: Block, answerType: core.ValueType) extends Stmt
 
@@ -148,9 +148,9 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
   case Hole => Set.empty
-  case State(id, init, region, body) =>
+  case State(id, init, stateTpe, region, body) =>
     freeVariables(init) ++ freeVariables(body) --
-      Set(BlockParam(id, core.BlockType.Interface(symbols.builtins.TState.interface, List(???))),
+      Set(BlockParam(id, core.BlockType.Interface(symbols.builtins.TState.interface, List(stateTpe))),
         BlockParam(region, core.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
   case Region(body, _) => freeVariables(body)

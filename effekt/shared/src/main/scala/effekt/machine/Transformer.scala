@@ -189,7 +189,7 @@ object Transformer {
           NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter, transform(body))))
 
-      case lifted.State(id, init, region, body) =>
+      case lifted.State(id, init, stateTpe, region, body) =>
         transform(init).run { value =>
           val tpe = value.tpe;
           val name = transform(id)
