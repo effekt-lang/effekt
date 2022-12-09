@@ -72,7 +72,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(tree: core.Stmt)(using Environment, Context): Stmt = tree match {
-    case core.Try(core.BlockLit(_, _, _, params, body), handler) =>
+    case core.Try(core.BlockLit(tparams, _, _, params, body), handler) =>
 
       val tpe = body.tpe
 
@@ -96,12 +96,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // [[ try { {cap}... => s } with ... ]] = try { [ev]{cap}... => s } with ...
       val transformedBody = transform(body)(using environment, Context) // lift is provided by the handler runtime
 
-      Try(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
+      Try(lifted.BlockLit(tparams, EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
 
     case core.Try(_, _) => Context.panic("Should not happen. Handle always take block literals as body.")
 
     // [[ region { {cap}... => s } ]] = region { [ev]{cap}... => s }
-    case core.Region(core.BlockLit(_, _, _, params, body)) =>
+    case core.Region(core.BlockLit(tparams, _, _, params, body)) =>
       var environment = env
 
       // evidence for the region body itself
@@ -115,7 +115,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
           environment = environment.bind(id)
           transform(p)
       }
-      Region(lifted.BlockLit(EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, Context)), body.tpe)
+      Region(lifted.BlockLit(tparams, EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, Context)), body.tpe)
 
     case core.Region(_) => Context.panic("Should not happen. Regions always take block literals as body.")
 
@@ -201,7 +201,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
       val transformedParams = EvidenceParam(selfEvidence) :: evidenceParams ++ vps.map(transform) ++ bps.map(transform)
 
-      BlockLit(transformedParams, transform(body)(using environment, Context))
+      BlockLit(tps, transformedParams, transform(body)(using environment, Context))
   }
 
   /**
@@ -210,7 +210,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    */
   def transformBody(tree: core.BlockLit)(using Environment, Context): BlockLit = tree match {
     case core.BlockLit(tps, cps, vps, bps, body) =>
-      BlockLit((vps ++ bps) map transform, transform(body))
+      BlockLit(tps, (vps ++ bps) map transform, transform(body))
   }
 
   def transform(args: List[core.Block])(using Environment, Context): (List[Evidence], List[Argument]) = {
@@ -232,7 +232,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
         case core.Operation(op, tps, cps, vps, bps, resume, body) =>
-          Operation(op, BlockLit((vps ++ bps ++ resume.toList) map transform, transform(body)))
+          Operation(op, BlockLit(tps, (vps ++ bps ++ resume.toList) map transform, transform(body)))
       })
   }
 

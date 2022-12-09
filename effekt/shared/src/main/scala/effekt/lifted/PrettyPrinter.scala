@@ -36,7 +36,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v, _) => v.name.toString
-    case BlockLit(ps, body) =>
+    case BlockLit(tps, ps, body) =>
       braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
     case Member(b, id) =>
       toDoc(b) <> "." <> id.name.toString
@@ -77,7 +77,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(impl: Implementation): Doc = {
     val handlerName = toDoc(impl.id.name)
     val clauses = impl.operations.map {
-      case Operation(id, BlockLit(params, body)) =>
+      case Operation(id, BlockLit(tparams, params, body)) =>
         "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
@@ -92,7 +92,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, tpe, BlockLit(params, body)) =>
+    case Definition.Def(id, tpe, BlockLit(tparams, params, body)) =>
       "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, tpe, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)

@@ -32,7 +32,7 @@ object Transformer {
     findToplevelBlocksParams(definitions)
 
     val transformedDefinitions = definitions.foldLeft(mainEntry) {
-      case (rest, lifted.Definition.Def(id, _, lifted.BlockLit(params, body))) =>
+      case (rest, lifted.Definition.Def(id, _, lifted.BlockLit(tparams, params, body))) =>
         Def(Label(transform(id), params.map(transform)), transform(body), rest)
       case (rest, d) =>
         Context.abort(s"Toplevel def and let bindings not yet supported: ${d}")
@@ -59,7 +59,7 @@ object Transformer {
       case lifted.Scope(definitions, rest) =>
 
         definitions.foreach {
-          case Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)) =>
+          case Definition.Def(id, tpe, block @ lifted.BlockLit(tparams, params, body)) =>
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.collect {
               case lifted.ValueParam(id, tpe) => Variable(transform(id), transform(tpe))
@@ -82,7 +82,7 @@ object Transformer {
               Substitute(List(Variable(transform(id), transform(tpe)) -> value), rest)
             }
 
-          case (lifted.Definition.Def(id, tpe, block @ lifted.BlockLit(params, body)), rest) =>
+          case (lifted.Definition.Def(id, tpe, block @ lifted.BlockLit(tparams, params, body)), rest) =>
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
           case (lifted.Definition.Def(id, tpe, block @ lifted.New(impl)), rest) =>
@@ -92,7 +92,7 @@ object Transformer {
             val implTransformed = interfaceOps.map({ op =>
               impl.operations.find(_._1 == op).get
             }).map({
-              case lifted.Operation(_, lifted.BlockLit(params, body)) =>
+              case lifted.Operation(_, lifted.BlockLit(tparams, params, body)) =>
                 // TODO we assume that there are no block params in methods
                 Clause(params.map(transform), transform(body))
             })
@@ -155,7 +155,7 @@ object Transformer {
         }
 
       case lifted.Match(scrutinee, clauses, default) =>
-        val transformedClauses = clauses.map { case (constr, lifted.BlockLit(params, body)) =>
+        val transformedClauses = clauses.map { case (constr, lifted.BlockLit(tparams, params, body)) =>
           getTagFor(constr) -> Clause(params.map(transform), transform(body))
         }
         val transformedDefault = default.map { clause =>
@@ -166,7 +166,7 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case lifted.Try(lifted.BlockLit(List(ev, id), body), tpe, List(handler)) =>
+      case lifted.Try(lifted.BlockLit(tparams, List(ev, id), body), tpe, List(handler)) =>
         // TODO more than one handler
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
@@ -179,7 +179,7 @@ object Transformer {
               New(transform(id), transform(handler),
                 transform(body)))))
 
-      case lifted.Region(lifted.BlockLit(List(ev, id), body), tpe) =>
+      case lifted.Region(lifted.BlockLit(tparams, List(ev, id), body), tpe) =>
         val variable = Variable(freshName("a"), transform(tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
@@ -240,7 +240,7 @@ object Transformer {
     case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
-    case lifted.BlockLit(params, body) =>
+    case lifted.BlockLit(tparams, params, body) =>
       val parameters = params.map(transform);
       val variable = Variable(freshName("g"), Negative("<function>"))
       Binding { k =>
@@ -366,7 +366,7 @@ object Transformer {
       case lifted.Operation(operationName, _) =>
         handler.id.operations.indexOf(operationName)
     }).map({
-      case lifted.Operation(operationName, lifted.BlockLit(params :+ resume, body))=>
+      case lifted.Operation(operationName, lifted.BlockLit(tparams, params :+ resume, body))=>
         // TODO we assume here that resume is the last param
         // TODO we assume that there are no block params in handlers
         // TODO we assume that evidence has to be passed as first param
@@ -435,7 +435,7 @@ object Transformer {
 
   def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, Context): Unit =
     definitions.foreach {
-      case Definition.Def(blockName, tpe, lifted.BlockLit(params, body)) =>
+      case Definition.Def(blockName, tpe, lifted.BlockLit(tparams, params, body)) =>
         noteBlockParams(blockName, params.map(transform))
       case _ => ()
     }

@@ -109,7 +109,7 @@ object ChezSchemeLift extends Backend {
       val handlers: List[chez.Handler] = handler.map { h =>
         val names = RecordNames(h.id)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, BlockLit(params, body)) =>
+          case Operation(op, BlockLit(tparams, params, body)) =>
             // the LAST parameter is the continuation...
             chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
         })
@@ -175,7 +175,7 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(params, body) =>
+    case BlockLit(tparams, params, body) =>
       chez.Lambda(params map toChez, toChez(body))
   }
 
@@ -183,7 +183,7 @@ object ChezSchemeLift extends Backend {
     case BlockVar(id, tpe) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(params, body) => toChez(b)
+    case b @ BlockLit(tparams, params, body) => toChez(b)
 
     case Member(b, field) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
