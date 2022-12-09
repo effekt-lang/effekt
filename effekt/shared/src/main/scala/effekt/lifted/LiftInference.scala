@@ -45,7 +45,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         // for now we reconstruct a block lit
         Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, cps, vps, bps ++ resume.toList, body)))
       }
-      New(Implementation(interface.symbol.asInterface, transformedMethods))
+      New(Implementation(interface, transformedMethods))
   }
 
   def transform(tree: core.Declaration)(using Context): lifted.Decl = tree match {
@@ -228,7 +228,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(h: core.Implementation)(using Environment, Context): Implementation = h match {
     case core.Implementation(id, clauses) =>
-      Implementation(id.symbol.asInterface, clauses.map {
+      Implementation(id, clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
         case core.Operation(op, tps, cps, vps, bps, resume, body) =>

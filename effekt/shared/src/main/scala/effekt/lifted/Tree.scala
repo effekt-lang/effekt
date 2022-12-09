@@ -100,7 +100,7 @@ case object Hole extends Stmt
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(id: symbols.Interface, operations: List[Operation]) extends Tree
+case class Implementation(id: core.BlockType.Interface, operations: List[Operation]) extends Tree
 
 /**
  * Implementation of a method / effect operation.
