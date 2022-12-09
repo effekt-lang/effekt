@@ -120,72 +120,75 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-def freeVariables(d: Definition): Set[Symbol] = d match {
+private def substitute(params: Set[Param], tsubsts: Map[Symbol, core.ValueType]): Set[Param] = params map {
+  case ValueParam(id, tpe) => ValueParam(id, core.Type.substitute(tpe, tsubsts, Map.empty))
+  case BlockParam(id, tpe) => BlockParam(id, core.Type.substitute(tpe, tsubsts, Map.empty))
+  case EvidenceParam(id) => EvidenceParam(id)
+}
+def freeVariables(d: Definition): Set[Param] = d match {
   case Definition.Def(id, tpe, block) => freeVariables(block)
   case Definition.Let(id, tpe, binding) => freeVariables(binding)
 }
 
-def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
+def freeVariables(stmt: Stmt): Set[Param] = stmt match {
   // TODO fix
   case Scope(definitions, body) =>
-    var free: Set[Symbol] = Set.empty
+    var free: Set[Param] = Set.empty
     // we assume definitions can be mutually recursive, for now.
-    var bound: Set[Symbol] = definitions.collect { case Definition.Def(id, _, _) => id }.toSet
+    var bound: Set[Param] = definitions.collect { case Definition.Def(id, tpe, _) => BlockParam(id, tpe) }.toSet
     definitions.foreach {
       case Definition.Def(id, tpe, block) =>
         free ++= freeVariables(block) -- bound
       case Definition.Let(id, tpe, binding) =>
         free ++= freeVariables(binding) -- bound
-        bound ++= Set(id)
+        bound ++= Set(ValueParam(id, tpe))
     }
     freeVariables(body) -- bound ++ free
-  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
-  case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(ValueParam(id, tpe))
+  case App(b, targs, args) => substitute(freeVariables(b), (??? zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
   case Hole => Set.empty
-  case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
+  case State(id, init, region, body) =>
+    freeVariables(init) ++ freeVariables(body) --
+      Set(BlockParam(id, core.BlockType.Interface(symbols.builtins.TState.interface, List(???))),
+        BlockParam(region, core.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
   case Region(body, _) => freeVariables(body)
 }
 
-def freeVariables(expr: Expr): Set[Symbol] = expr match {
-  case ValueVar(id, tpe) => Set(id)
+def freeVariables(expr: Expr): Set[Param] = expr match {
+  case ValueVar(id, tpe) => Set(ValueParam(id, tpe))
   case Literal(value, tpe) => Set.empty
-  case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case PureApp(b, targs, args) => substitute(freeVariables(b), (??? zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
   case Run(s, tpe) => freeVariables(s)
 }
 
-def freeVariables(arg: Argument): Set[Symbol] = arg match {
+def freeVariables(arg: Argument): Set[Param] = arg match {
   case expr: Expr => freeVariables(expr)
   case block: Block => freeVariables(block)
   case ev: Evidence => freeVariables(ev)
 }
 
-def freeVariables(block: Block): Set[Symbol] = block match {
-  case BlockVar(id, _) => Set(id)
+def freeVariables(block: Block): Set[Param] = block match {
+  case BlockVar(id, tpe) => Set(BlockParam(id, tpe))
   case BlockLit(params, body) =>
-    val bound = params.map {
-      case ValueParam(id, tpe) => id
-      case BlockParam(id, tpe) => id
-      case EvidenceParam(id) => id
-    }
-    freeVariables(body) -- bound
+    freeVariables(body) -- params
   case Member(b, field) => freeVariables(b)
   case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case New(impl) => freeVariables(impl) // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }
 
-def freeVariables(op: Operation): Set[Symbol] = op match {
+def freeVariables(op: Operation): Set[Param] = op match {
   case Operation(name, body) => freeVariables(body)
 }
 
-def freeVariables(impl: Implementation): Set[Symbol] = impl match {
+def freeVariables(impl: Implementation): Set[Param] = impl match {
   case Implementation(id, operations) => operations.flatMap(freeVariables).toSet
 }
 
-def freeVariables(ev: Evidence): Set[Symbol] = ev.scopes.toSet
+def freeVariables(ev: Evidence): Set[Param] = ev.scopes.toSet.map(EvidenceParam(_))
 
