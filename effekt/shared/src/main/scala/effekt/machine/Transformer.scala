@@ -64,7 +64,9 @@ object Transformer {
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.collect {
               case lifted.ValueParam(id, tpe) => Variable(transform(id), transform(tpe))
-              case lifted.BlockParam(id, tpe) => Variable(transform(id), transform(tpe))
+              case lifted.BlockParam(id: symbols.BlockParam, tpe) =>
+                // TODO find out if this is a block parameter or a function without inspecting the symbol
+                Variable(transform(id), transform(tpe))
               case lifted.EvidenceParam(id) => Variable(transform(id), builtins.Evidence)
               // we ignore functions since we do not "close" over them.
 
