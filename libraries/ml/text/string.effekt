@@ -1,7 +1,7 @@
 module text/string
 
 import immutable/option
-import mutable/array
+import internal/option
 
 def charAt(str: String, index: Int): Option[String] =
     if (index < 0 || length(str) <= index)
@@ -11,8 +11,8 @@ def charAt(str: String, index: Int): Option[String] =
 extern pure def length(str: String): Int =
     "String.size(str)"
 
-extern pure def repeat(str: String, n: Int): String =
-    "???"
+// extern pure def repeat(str: String, n: Int): String =
+//     "???"
 
 def substring(str: String, from: Int): String =
     if (from < 0 || length(str) <= from)
@@ -28,13 +28,11 @@ extern pure def unsafeSubstring(str: String, from: Int): String =
 // extern pure def trim(str: String): String =
 //     "???"
 
-def toInt(str: String): Option[Int] = {
-    val (test, v) = unsafeToInt(str);
-    if (test) Some(v) else None()
-}
+// also accepts sml style `~2` for unary minus along with `+2` and `-2`
+extern pure def internalStringToInt(str: String): MLOption[Int] =
+    "Int.fromString str"
 
-extern pure def unsafeToInt(str: String): (Boolean, Int) =
-    """case Int.fromString str of NONE => (false, ~1) | SOME v => (true, v)"""
+def toInt(str: String): Option[Int] = toOption(internalStringToInt(str))
 
 extern pure def unsafeCharAt(str: String, n: Int): String =
     "String.sub(str, n)"

@@ -1,5 +1,6 @@
 module io/args
 
+import internal/option
 import immutable/option
 import immutable/list
 
@@ -15,35 +16,22 @@ import immutable/list
 // ml Ref of ml list
 extern type Args
 
-// ml option of R
-extern type MlOpt[R]
-
 // Works like an iterator
-extern pure def mlArgs(): Args =
+extern pure def nativeArgs(): Args =
   "ref (CommandLine.arguments ())"
 
 // consumes the next arg if present
-extern pure def mlUnsafeNext(a: Args): String =
+extern pure def nativeNext(a: Args): MLOption[String] =
 """
 case !a of
-    [] => raise Fail "mlUnsafeNext error" |
-    x :: xs => (a := xs; x)
+    [] => NONE |
+    x :: xs => (a := xs; SOME x)
 """
 
-extern pure def mlHasNext(a: Args): Boolean =
-    "case !a of [] => false | _ => true"
-
-// consumes the next arg if present
-def mlNext(a: Args): Option[String] = {
-    if (mlHasNext(a)) Some(mlUnsafeNext(a)) else None()
-}
-
-// consumes all args into a reversed list
-def mlArgsToRevList(a: Args, acc: List[String]): List[String] = mlNext(a) match {
-    case None() => acc
-    case Some(v) => mlArgsToRevList(a, Cons(v, acc))
-}
-
 def commandLineArgs(): List[String] = {
-    reverse(mlArgsToRevList(mlArgs(), Nil()))
+    def argsToRevList(a: Args, acc: List[String]): List[String] = toOption(nativeNext(a)) match {
+        case None() => acc
+        case Some(v) => argsToRevList(a, Cons(v, acc))
+    }
+    reverse(argsToRevList(nativeArgs(), Nil()))
 }
