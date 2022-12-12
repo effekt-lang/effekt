@@ -4,28 +4,30 @@ import java.io.File
 import effekt.core.PolymorphismBoxing
 import effekt.context.Context
 import effekt.source.{IdDef, Import, ModuleDecl}
-import kiama.util
+import kiama.{parsing, util}
 import effekt.symbols.{Module, Name, TypeConstructor, TypeSymbol, ValueType}
 import effekt.source
 import effekt.util.messages
-import kiama.parsing.{NoSuccess, Success}
+import effekt.util.messages.DebugMessaging
+import kiama.parsing.{Failure, NoSuccess, Success}
 import kiama.util.Severities
 
 abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
 
-  def boxDef(tpe: ValueType.ValueTypeApp): symbols.TypeConstructor = {
+  def boxDef(tpe: ValueType.ValueTypeApp): List[symbols.Symbol] = {
     val tpeCns: symbols.TypeConstructor.Record =
       symbols.TypeConstructor.Record(symbols.LocalName("Boxed" ++ tpe.constructor.name.name), List(), null)
     tpeCns.constructor =
-      symbols.Constructor(symbols.LocalName("Boxed" ++ tpe.constructor.name.name), List(), null, tpeCns)
+      symbols.Constructor(symbols.LocalName("MkBoxed" ++ tpe.constructor.name.name), List(), null, tpeCns)
     tpeCns.constructor.fields = List(
       symbols.Field(symbols.LocalName("unbox" ++ tpe.constructor.name.name),
         symbols.ValueParam(symbols.LocalName("value"), Some(tpe)), tpeCns.constructor))
-    tpeCns
+    List(tpeCns, tpeCns.constructor, tpeCns.constructor.fields.head)
   }
 
-  val boxtpes = symbols.builtins.rootTypes.values.collect {
+  val boxtpes = symbols.builtins.rootTypes.values.flatMap {
     case t: TypeConstructor.ExternType => boxDef(ValueType.ValueTypeApp(t, List()))
+    case _ => Nil
   }.map { c => (c.name.name, c) }.toMap
 
   /** Mock context for Polymorphism boxing.
@@ -34,38 +36,36 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
   object context extends Context(new util.Positions()) {
     this.module = new Module(ModuleDecl("test", List(Import("effekt")), List()), util.StringSource("", "test")) {
       override def findPrelude: Module = new Module(ModuleDecl("effekt", List(), List()), util.StringSource("", "effekt")) {
-        override def types: Map[String, TypeSymbol] = boxtpes
+        override def types: Map[String, TypeSymbol] = boxtpes.collect[String, symbols.TypeSymbol]{
+          case (k,t: symbols.TypeSymbol) => (k,t)
+        }
       }
     }
 
-    val messaging: effekt.util.messages.BufferedMessaging[effekt.util.messages.EffektError] =
-      new messages.BufferedMessaging[effekt.util.messages.EffektError] {
-        override def formatContent(msg: messages.EffektError): String = ???
-
-        override def message(range: Option[util.Range], content: String, severity: Severities.Severity): messages.EffektError = ???
-      }
+    object messaging extends DebugMessaging
 
     def contentsOf(path: String): Option[String] = None
 
     def findSource(path: String): Option[kiama.util.Source] = None
   }
 
-  val names = new core.Names(boxtpes ++ Map(
+  val names = new core.Names(boxtpes ++
+    symbols.builtins.rootTypes ++ Map(
     // TODO maybe add used names
   ))
 
   def assertTransformsTo(input: String, expected: String): Unit = {
     val pInput = core.CoreParsers.module(input, names) match {
       case Success(result, next) => result
-      case nosuccess: NoSuccess => fail(nosuccess.message)
+      case nosuccess: NoSuccess => fail(nosuccess.toMessage)
     }
     val pExpected = core.CoreParsers.module(expected, names) match {
       case Success(result, next) => result
-      case nosuccess: NoSuccess => fail(nosuccess.message)
+      case nosuccess: NoSuccess => fail(nosuccess.toMessage)
     }
     given core.PolymorphismBoxing.PContext = new PolymorphismBoxing.PContext(List())(using context)
     val got = PolymorphismBoxing.transform(pInput)
-    assertNoDiff(pExpected.toString, got.toString)
+    assertEquals(got, pExpected)
   }
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
