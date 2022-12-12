@@ -196,4 +196,27 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |""".stripMargin
     assertTransformsTo(from, to)
   }
+
+  test("block parameters get wrapped \"inversely\""){
+    val from =
+      """module main
+        |def test = { () =>
+        |    (hof: ['A](){ b : ('A) => 'A } => 'A @ {} )[Int](){ (x: Int) => return x: Int }
+        |}
+        |""".stripMargin
+    val to =
+      """module main
+        |def test = { () =>
+        |    val r = (hof: ['A](){ b : ('A) => 'A } => 'A @ {} )[BoxedInt](){ (boxedX: BoxedInt) =>
+        |      {
+        |         def originalFn = { (x: Int) => return x: Int }
+        |         val result = (originalFn: (Int) => Int @ {})(boxedX: BoxedInt.unboxInt: Int);
+        |         return (MkBoxedInt: (Int) => BoxedInt @ {})(result: Int)
+        |      }
+        |    };
+        |    return r:BoxedInt.unboxInt: Int
+        |}
+        |""".stripMargin
+    assertTransformsTo(from, to)
+  }
 }
