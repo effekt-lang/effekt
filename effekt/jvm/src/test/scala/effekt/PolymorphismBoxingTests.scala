@@ -86,4 +86,37 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     assertTransformsTo(code, code)
   }
 
+  test("if only data types are used, code should stay the same"){
+    val code =
+      """module main
+        |
+        |type Foo { X() B() }
+        |
+        |def baz = { ['b](){ f@f: MyInterface } => (f: () => Unit @ {})() }
+        |def bar = { ['b](){ f@f: MyInterface } => return box {f} (f : MyInterface @ {f}) }
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |
+        |def returnA = { () => return (id: ['A]('A) => 'A @ {})[Foo]((X: () => Foo @ {})()) }
+        |def pReturnA = { ['B](b: 'B) => return (id: ['A]('A) => 'A @ {})['A](b: 'B) }
+        |
+        |""".stripMargin
+    assertTransformsTo(code,code)
+  }
+
+  test("simple pure app with int gets wrapped"){
+    val from =
+      """module main
+        |
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |def idInt = { (x: Int) => return (id: ['A]('A) => 'A @ {})[Int](x: Int) }
+        |""".stripMargin
+    val to =
+      """module main
+        |
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |def idInt = { (x: Int) => return (id: ['A]('A) => 'A @ {})[BoxedInt]((MkBoxedInt: (Int) => BoxedInt @ {})(x: Int)).unboxInt: Int }
+        |""".stripMargin
+    assertTransformsTo(from, to)
+  }
+
 }
