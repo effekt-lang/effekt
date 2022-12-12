@@ -1,11 +1,11 @@
 package effekt
 
 import java.io.File
-import effekt.core.PolymorphismBoxing
+import effekt.core.{Block, Definition, DirectApp, PolymorphismBoxing, Pure, Run, Stmt}
 import effekt.context.Context
 import effekt.source.{IdDef, Import, ModuleDecl}
 import kiama.{parsing, util}
-import effekt.symbols.{Module, Name, TypeConstructor, TypeSymbol, ValueType}
+import effekt.symbols.{Module, Name, TypeConstructor, TypeSymbol, ValueSymbol, ValueType}
 import effekt.source
 import effekt.util.messages
 import effekt.util.messages.DebugMessaging
@@ -54,6 +54,67 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
     // TODO maybe add used names
   ))
 
+  class Renamer(names: core.Names, prefix: String = "l") extends core.Tree.Rewrite {
+    var bound: List[symbols.Symbol] = Nil
+    def withBindings[R](ids: List[symbols.Symbol])( f: => R ): R = {
+      val oldBound = bound
+      bound = ids ++ bound
+      val res = f
+      bound = oldBound
+      res
+    }
+    def withBinding[R](id: symbols.Symbol)( f: => R ): R = withBindings(List(id))(f)
+
+    override def pure: PartialFunction[Pure, Pure] = {
+      case Pure.ValueVar(id, tpe) => Pure.ValueVar(rewrite(id), tpe)
+    }
+    override def defn: PartialFunction[Definition, Definition] = {
+      case Definition.Def(id, block) =>
+        Definition.Def(rewrite(id), rewrite(block))
+      case Definition.Let(id, block) =>
+        Definition.Let(rewrite(id), rewrite(block))
+    }
+
+    override def stmt: PartialFunction[Stmt, Stmt] = {
+      case core.Scope(definitions, rest) => withBindings(definitions.map{
+          case core.Definition.Def(id, _) => id
+          case core.Definition.Let(id, _) => id
+        }){
+        core.Scope(definitions map rewrite, rewrite(rest))
+      }
+      case core.Val(id, binding, body) => withBinding(id){
+        core.Val(rewrite(id), rewrite(binding), rewrite(body))
+      }
+      case core.State(id, init, reg, body) => withBinding(id){
+        core.State(rewrite(id), rewrite(init), rewrite(reg), rewrite(body))
+      }
+    }
+    override def block: PartialFunction[Block, Block] = {
+      case Block.BlockVar(id, tpe, capt) => Block.BlockVar(rewrite(id), tpe, capt map rewrite)
+      case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
+        withBindings(cparams ++ vparams.map(_.id) ++ bparams.map(_.id)){
+          Block.BlockLit(tparams, cparams map rewrite, vparams map rewrite, bparams map rewrite,
+            rewrite(body))
+        }
+    }
+    def rewrite(id: symbols.Symbol): symbols.Symbol = {
+      if(bound.contains(id)){
+        names.idFor(prefix ++ (bound.length - bound.indexOf(id)).toString)
+      } else id
+    }
+    def rewrite(b: core.Param.BlockParam): core.Param.BlockParam = b match {
+      case core.Param.BlockParam(id, tpe) => core.Param.BlockParam(rewrite(id), tpe)
+    }
+    def rewrite(b: core.Param.ValueParam): core.Param.ValueParam = b match {
+      case core.Param.ValueParam(id, tpe) => core.Param.ValueParam(rewrite(id), tpe)
+    }
+
+    def apply(m: core.ModuleDecl): core.ModuleDecl = m match {
+      case core.ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
+        core.ModuleDecl(path, imports, declarations, externs, definitions map rewrite, exports)
+    }
+  }
+
   def assertTransformsTo(input: String, expected: String): Unit = {
     val pInput = core.CoreParsers.module(input, names) match {
       case Success(result, next) => result
@@ -65,7 +126,8 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
     }
     given core.PolymorphismBoxing.PContext = new PolymorphismBoxing.PContext(List())(using context)
     val got = PolymorphismBoxing.transform(pInput)
-    assertEquals(got, pExpected)
+    val renamer: Renamer = Renamer(names)
+    assertEquals(renamer(got), renamer(pExpected))
   }
 }
 class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
@@ -103,7 +165,7 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     assertTransformsTo(code,code)
   }
 
-  test("simple pure app with int gets wrapped"){
+  test("simple PureApp with int gets wrapped"){
     val from =
       """module main
         |
@@ -119,4 +181,19 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     assertTransformsTo(from, to)
   }
 
+  test("simple App with int gets wrapped"){
+    val from =
+      """module main
+        |
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |def idInt = { (x: Int) => (id: ['A]('A) => 'A @ {})[Int](x: Int) }
+        |""".stripMargin
+    val to =
+      """module main
+        |
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |def idInt = { (x: Int) => val tmp = (id: ['A]('A) => 'A @ {})[BoxedInt]((MkBoxedInt: (Int) => BoxedInt @ {})(x: Int)) ; return tmp:BoxedInt.unboxInt: Int }
+        |""".stripMargin
+    assertTransformsTo(from, to)
+  }
 }
