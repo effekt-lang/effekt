@@ -169,7 +169,16 @@ object Transformer {
 
       case machine.Allocate(ref @ machine.Variable(name, machine.Type.Reference(tpe)), init, region, rest) =>
         val ptr = freshName("ptr");
-        emit(Call(name, PointerType(), alloc, List(ConstantInt(typeSize(tpe)), transform(region))));
+        val idx = tpe match {
+          case machine.Type.Int() => 0
+          case machine.Type.Double() => 0
+          case machine.Type.Positive(_) => 1
+          case machine.Type.Negative(_) => 1
+          case machine.Type.String() => 2
+          case _ => ???
+        }
+
+        emit(Call(name, PointerType(), alloc, List(ConstantInt(idx), transform(region))));
 
         emit(Store(transform(ref), transform(init)))
         transform(rest);

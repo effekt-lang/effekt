@@ -56,28 +56,35 @@
 ; Pointers for a heap allocated stack
 %Mem = type { %Sp, %Base, %Limit }
 
-; This is part of a linked list containing all states in a region.
+%Bounds = type { %Base, %Limit }
+
+; The garbage collector differentiates three groups of types:
+; - Values (Integer, Double)
+; - Objects (Positive, Negative)
+; - Strings
+; For each group we have a linked list of arenas where mutable state is allocated
 ;
-;   +[ StateHeader ]+--------------+
-;   | Next  | Size  | Payload ...  |
-;   +---------------+--------------+
-%State = type ptr
-
-%StateHeader = type { %State, i64 }
-
-; Linked list of states and the total size of allocated space (without state headers)
-%RegionVal = type { %State, i64 }
+;   +-------+    -----> +---------+      ,--> +---------+
+;   | Sp    |   /       | Base    |-----´     | Base    |-----> ...
+;   | Base  |---        | Limit   |-----      | Limit   |-----> ...
+;   | Limit |---        +---------+     \     +---------+
+;   +-------+   \       | data... |      \    | data... |
+;                -----> +---------+       --> +---------+
+;
+; In addition, the total size of all arenas are tracked
+; (excluding the first arena in each list and the pointers to the following arena)
+%RegionVal = type { [ 3 x %Mem ], i64 }
 
 ; Fixed pointer used to allocate states
 %Region = type ptr
 
-; A region backup stores the region value followed by the content of its states.
+; A region backup stores the region value followed by the content of its arenas.
 ;
-;   +[ RegionVal ]-+--------------+
-;   | State | Size | Payload ...  |
-;   +--------------+--------------+
+;   +---[ RegionVal ]--+--------------+
+;   | Mem | Mem | Size | Payload ...  |
+;   +------------------+--------------+
 ;
-; Restoring a backup deletes all states allocated after its creation.
+; Restoring a backup deletes all arenas allocated after its creation.
 %RegionBackup = type ptr
 
 ; This is used for two purposes:
@@ -233,27 +240,52 @@ define void @eraseNegative(%Neg %val) alwaysinline {
 
 
 ; Arena management
-define %Ref @alloc(i64 %size, %Region %region) alwaysinline {
-    %fullsize = add i64 %size, 16 ; add the size of the state header
-    %state = call ptr @malloc(i64 %fullsize)
+define %Ref @alloc(i8 %idx, %Region %region) alwaysinline {
+    %spp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i8 %idx, i32 0
+    %basep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i8 %idx, i32 1
+    %limitp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i8 %idx, i32 2
+    %sizep = getelementptr %RegionVal, %Region %region, i64 0, i32 1
 
-    %statenext = getelementptr %StateHeader, %State %state, i64 0, i32 0
-    %statesize = getelementptr %StateHeader, %State %state, i64 0, i32 1
+    %sp = load %Sp, ptr %spp
+    %base = load %Base, ptr %basep
+    %limit = load %Limit, ptr %limitp
+    %regionsize = load i64, ptr %sizep
 
-    %regionval = load %RegionVal, %Region %region
-    %oldstate = extractvalue %RegionVal %regionval, 0
-    %oldsize = extractvalue %RegionVal %regionval, 1
+    %obj = icmp ne i8 %idx, 0
+    %size = select i1 %obj, i64 16, i64 8
 
-    %newsize = add i64 %oldsize, %size
-    %newregionval.0 = insertvalue %RegionVal undef, %State %state, 0
-    %newregionval = insertvalue %RegionVal %newregionval.0, i64 %newsize, 1
-    store %RegionVal %newregionval, %Region %region
+    %nextsp = getelementptr i8, %Sp %sp, i64 %size
 
-    store %State %oldstate, ptr %statenext
-    store i64 %size, ptr %statesize
+    %cmp = icmp ule %Sp %nextsp, %limit
+    br i1 %cmp, label %continue, label %newmem
 
-    %ptr = getelementptr i8, ptr %state, i64 16
-    ret %Ref %ptr
+continue:
+    store %Sp %nextsp, ptr %spp
+    ret %Ref %sp
+
+newmem:
+    %mem = call %Mem @newMem()
+    %newbase = extractvalue %Mem %mem, 1
+    %newlimit = extractvalue %Mem %mem, 2
+
+    %bounds.0 = insertvalue %Bounds undef, %Base %base, 0
+    %bounds = insertvalue %Bounds %bounds.0, %Limit %limit, 1
+    store %Bounds %bounds, ptr %newbase
+
+    %ref = getelementptr %Bounds, %Base %newbase, i64 1
+    %newsp = getelementptr i8, %Sp %ref, i64 %size
+
+    %intbase = ptrtoint %Base %base to i64
+    %intlimit = ptrtoint %Limit %limit to i64
+    %memsize = sub i64 %intlimit, %intbase
+    %newregionsize = add i64 %regionsize, %memsize
+
+    store %Sp %newsp, ptr %spp
+    store %Base %newbase, ptr %basep
+    store %Limit %newlimit, ptr %limitp
+    store i64 %newregionsize, ptr %sizep
+
+    ret %Ref %ref
 }
 
 
@@ -275,7 +307,7 @@ define %Stk @newStack() alwaysinline {
     ; TODO find actual size of stack
     %stk = call ptr @malloc(i64 56)
 
-    %region = call ptr @malloc(i64 16)
+    %region = call ptr @malloc(i64 80)
     store %RegionVal zeroinitializer, %Region %region
 
     ; TODO initialize to zero and grow later
@@ -292,60 +324,77 @@ define %Stk @newStack() alwaysinline {
     ret %Stk %stk
 }
 
-define void @deleteUntil(%State %state, %State %end) {
-    %cmp = icmp eq %State %state, %end
+define void @deleteUntil(%Base %base, %Base %end) {
+    %cmp = icmp eq %Base %base, %end
     br i1 %cmp, label %done, label %delete
 
 delete:
-    %nextp = getelementptr %StateHeader, %State %state, i64 0, i32 0
-    %next = load %State, ptr %nextp
-    call void @free(%State %state)
-    tail call void @deleteUntil(%State %next, %State %end)
+    %next = load %Base, ptr %base
+    call void @free(%Base %base)
+    tail call void @deleteUntil(%Base %next, %Base %end)
     ret void
 
 done:
     ret void
 }
 
-define void @restoreBackup(%State %state, ptr %backup) {
-    %cmp = icmp eq %State %state, null
+define ptr @restoreBackup(%Bounds %bounds, ptr %backup) {
+    %base = extractvalue %Bounds %bounds, 0
+    %limit = extractvalue %Bounds %bounds, 1
+    %cmp = icmp eq %Base %base, null
     br i1 %cmp, label %done, label %restore
 
 done:
-    ret void
+    ret ptr %backup
 
 restore:
-    %stateheader = load %StateHeader, %State %state
-    %nextstate = extractvalue %StateHeader %stateheader, 0
-    %size = extractvalue %StateHeader %stateheader, 1
-    %statep = getelementptr %StateHeader, %State %state, i64 1
+    %nextbounds = load %Bounds, %Base %base
+    %data = getelementptr %Bounds, %Base %base, i64 1
+    %intdata = ptrtoint %Sp %data to i64
+    %intlimit = ptrtoint %Limit %limit to i64
+    %size = sub i64 %intlimit, %intdata
 
-    call void @memcpy(ptr %statep, ptr %backup, i64 %size)
+    call void @memcpy(ptr %data, ptr %backup, i64 %size)
     %restbackup = getelementptr i8, ptr %backup, i64 %size
-    tail call void @restoreBackup(%State %nextstate, ptr %restbackup)
-    ret void
+    %end = tail call ptr @restoreBackup(%Bounds %nextbounds, ptr %restbackup)
+    ret ptr %end
 }
 
 define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
 
     %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
     %backup = load %RegionBackup, ptr %backupp
-    %cmp = icmp eq %RegionBackup %backup, null
-    br i1 %cmp, label %push, label %restore
+    %isnull = icmp eq %RegionBackup %backup, null
+    br i1 %isnull, label %push, label %restore
 
 restore:
-    %backupheader = load %RegionVal, %RegionBackup %backup
-    %backupstate = extractvalue %RegionVal %backupheader, 0
-    %backupdata = getelementptr %RegionVal, %RegionBackup %backup, i64 1
-
     %regionp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
     %region = load %Region, ptr %regionp
-    %oldstatep = getelementptr %RegionVal, %Region %region, i64 0, i32 0
-    %oldstate = load %State, ptr %oldstatep
-    call void @deleteUntil(%State %oldstate, %State %backupstate)
-    call void @restoreBackup(%State %backupstate, ptr %backupdata)
-    store %RegionVal %backupheader, %Region %region
-    br label %push
+
+    %backupdata = getelementptr %RegionVal, %RegionBackup %backup, i64 1
+
+    br label %loop
+
+loop:
+    %i = phi i64 [0, %restore], [1, %loop]
+    %ptr = phi ptr [%backupdata, %restore], [%nextdata, %loop]
+
+    %backupbasep = getelementptr %RegionVal, %RegionBackup %backup, i64 0, i32 0, i64 %i, i32 1
+    %backupspp = getelementptr %RegionVal, %RegionBackup %backup, i64 0, i32 0, i64 %i, i32 0
+
+    %backupbase = load %Base, ptr %backupbasep
+    %backupsp = load %Sp, ptr %backupspp
+
+    %oldbasep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1
+    %oldbase = load %Base, ptr %oldbasep
+    call void @deleteUntil(%Base %oldbase, %Base %backupbase)
+
+    %bounds.0 = insertvalue %Bounds undef, %Base %backupbase, 0
+    %bounds = insertvalue %Bounds %bounds.0, %Limit %backupsp, 1
+    %nextdata = call ptr @restoreBackup(%Bounds %bounds, ptr %backupdata)
+
+    %cmp = icmp eq i64 %i, 0
+    br i1 %cmp, label %loop, label %push
 
 push:
     %newstk.0 = load %StkVal, %Stk %stk
@@ -457,14 +506,8 @@ copy:
     br i1 %cmp, label %backupRegion, label %done
 
 backupRegion:
-    %regionval = load %RegionVal, %Region %region
-    %regionstate = extractvalue %RegionVal %regionval, 0
-    %regionsize = extractvalue %RegionVal %regionval, 1
-    %backupsize = add i64 %regionsize, 16
-    %backupmem = call ptr @malloc(i64 %backupsize)
-    store %RegionVal %regionval, %RegionBackup %backupmem
-    %backupdata = getelementptr i8, ptr %backupmem, i64 16
-    call void @backupRegion(%State %regionstate, ptr %backupdata)
+    %newbackup = call %RegionBackup @backupRegion(%Region %region)
+    store %RegionBackup %newbackup, ptr %stkbackup
     ret %Stk %newstk
 
 done:
@@ -473,22 +516,74 @@ done:
 
 }
 
-define void @backupRegion(%State %state, ptr %backup) {
-    %cmp = icmp eq %State %state, null
+define %RegionBackup @backupRegion(%Region %region) {
+entry:
+    %regionval = load %RegionVal, %Region %region
+    %size.0 = extractvalue %RegionVal %regionval, 1
+    %size.1 = add i64 %size.0, 80 ; add size of a RegionVal
+    br label %loop
+
+loop:
+    %i = phi i64 [0, %entry], [1, %loop]
+    %prevsize = phi i64 [%size.1, %entry], [%size, %loop]
+    %basep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1
+    %spp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1
+
+    %base = load %Base, ptr %basep
+    %sp = load %Sp, ptr %spp
+    %intbase = ptrtoint %Base %base to i64
+    %intsp = ptrtoint %Sp %sp to i64
+    %used = sub i64 %intsp, %intbase
+    %size = add i64 %prevsize, %used
+
+    %cmp.0 = icmp eq i64 %i, 0
+    br i1 %cmp.0, label %loop, label %alloc
+
+alloc:
+    %backup = call ptr @malloc(i64 %size)
+    store %RegionVal %regionval, %RegionBackup %backup
+    %backupdata.0 = getelementptr %RegionVal, ptr %backup, i64 1
+    br label %loop2
+
+loop2:
+    %j = phi i64 [0, %alloc], [1, %loop2]
+    %backupdata = phi ptr [%backupdata.0, %alloc], [%backupnext, %loop2]
+
+    %basejp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %j, i32 1
+    %spjp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %j, i32 1
+
+    %basej = load %Base, ptr %basejp
+    %spj = load %Sp, ptr %spjp
+    %bounds.0 = insertvalue %Bounds undef, %Base %basej, 0
+    %bounds = insertvalue %Bounds %bounds.0, %Sp %spj, 1
+    %backupnext = call ptr @backupList(%Bounds %bounds, ptr %backupdata)
+    %cmp.1 = icmp eq i64 %j, 0
+    br i1 %cmp.1, label %loop2, label %done
+
+done:
+    ret %RegionBackup %backup
+}
+
+define ptr @backupList(%Bounds %bounds, ptr %backup) {
+    %base = extractvalue %Bounds %bounds, 0
+    %limit = extractvalue %Bounds %bounds, 1
+    %cmp = icmp eq %Base %base, null
     br i1 %cmp, label %done, label %backupState
 
 backupState:
-    %header = load %StateHeader, %State %state
-    %next = extractvalue %StateHeader %header, 0
-    %size = extractvalue %StateHeader %header, 1
-    %statedata = getelementptr %StateHeader, %State %state, i64 1
-    call void @memcpy(ptr %backup, ptr %statedata, i64 %size)
+    %data = getelementptr %Bounds, %Base %base, i64 1
+    %intdata = ptrtoint ptr %data to i64
+    %intlimit = ptrtoint %Limit %limit to i64
+    %size = sub i64 %intlimit, %intdata
+    call void @memcpy(ptr %backup, ptr %data, i64 %size)
+
     %backuprest = getelementptr i8, ptr %backup, i64 %size
-    tail call void @backupRegion(%State %next, ptr %backuprest)
-    ret void
+    %next = load %Bounds, %Base %base
+    %end = tail call ptr @backupList(%Bounds %next, ptr %backuprest)
+    ret ptr %end
 
 done:
-    ret void
+    ret ptr %backup
 }
 
 define void @shareStack(%Stk %stk) alwaysinline {
@@ -540,9 +635,12 @@ define fastcc void @topLevel(%Env %env, %Sp noalias %sp) {
     call void @free(%Base %base)
 
     %region = load %Region, ptr @region
-    %statep = getelementptr %RegionVal, %Region %region, i64 0, i32 0
-    %state = load %State, ptr %statep
-    call void @deleteUntil(%State %state, %State null)
+    %basep.0 = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i32 0, i32 1
+    %base.0 = load %Base, ptr %basep.0
+    call void @deleteUntil(%Base %base.0, %Base null)
+    %basep.1 = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i32 1, i32 1
+    %base.1 = load %Base, ptr %basep.1
+    call void @deleteUntil(%Base %base.1, %Base null)
 
     call void @free(%Region %region)
 
@@ -561,7 +659,7 @@ define fastcc void @topLevelEraser(%Env %env) {
 }
 
 define void @initRegion() alwaysinline {
-    %region = call ptr @malloc(i64 16)
+    %region = call ptr @malloc(i64 80)
     store %RegionVal zeroinitializer, %Region %region
 
     store %Region %region, ptr @region
