@@ -91,6 +91,7 @@ class ReplTests extends munit.FunSuite {
          |
          |Imported Functions
          |==================
+         |def show(c: Color): String / {}
          |def main(): Unit / {}
          |""".stripMargin
 

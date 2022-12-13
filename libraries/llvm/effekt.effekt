@@ -45,7 +45,7 @@ extern io def println(str: String): Unit = """
 
 // strings
 
-extern pure def infixAdd(s: String, z: String): String = """
+extern pure def infixConcat(s: String, z: String): String = """
     %spz = call %Pos @c_buffer_concatenate(%Pos %s, %Pos %z)
     call void @c_buffer_refcount_decrement(%Pos %s)
     call void @c_buffer_refcount_decrement(%Pos %z)
