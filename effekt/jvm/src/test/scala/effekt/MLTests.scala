@@ -9,7 +9,9 @@ import scala.language.implicitConversions
 
 class MLTests extends EffektTests {
 
-  override lazy val included: List[File] = List(examplesDir)
+  override lazy val included: List[File] = List(
+//    examplesDir
+  )
 
   override lazy val ignored: List[File] = List(
     // Tests with box

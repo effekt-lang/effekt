@@ -28,9 +28,6 @@ jobs:
     - name: Install Chez Scheme
       run: sudo apt-get install chezscheme
 
-    - name: Install Mlton
-      run: sudo apt-get update && sudo apt-get install mlton
-
     - name: Run tests and assemble jar file
       run: sbt clean deploy
 

@@ -25,9 +25,6 @@ jobs:
     - name: Install Chez Scheme
       run: sudo apt-get install chezscheme
 
-    - name: Install Mlton
-      run: sudo apt-get update && sudo apt-get install mlton
-
     - name: Install latest LLVM
       run: sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
