@@ -2,7 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ BlockSymbol, BlockType, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType }
+import effekt.symbols.{ Constructor, Name, Symbol }
 
 sealed trait Tree
 /**
@@ -66,10 +66,8 @@ case class EvidenceParam(id: EvidenceSymbol) extends Param
 
 sealed trait Block extends Argument
 case class BlockVar(id: Symbol, tpe: core.BlockType) extends Block
-
-// TODO add type params here
-case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: Symbol) extends Block
+case class BlockLit(tparams: List[Symbol], params: List[Param], body: Stmt) extends Block
+case class Member(b: Block, field: Symbol, annotatedTpe: core.BlockType) extends Block
 case class Unbox(e: Expr) extends Block
 case class New(impl: Implementation) extends Block
 
@@ -90,7 +88,7 @@ case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
 case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
 
 // Effects
-case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
+case class State(id: Symbol, init: Expr, stateTpe: core.ValueType, region: Symbol, body: Stmt) extends Stmt
 case class Try(body: Block, answerType: core.ValueType, handler: List[Implementation]) extends Stmt
 case class Region(body: Block, answerType: core.ValueType) extends Stmt
 
@@ -102,7 +100,7 @@ case object Hole extends Stmt
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(id: symbols.Interface, operations: List[Operation]) extends Tree
+case class Implementation(id: core.BlockType.Interface, operations: List[Operation]) extends Tree
 
 /**
  * Implementation of a method / effect operation.
@@ -120,38 +118,41 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-def freeVariables(d: Definition): Set[Symbol] = d match {
+def freeVariables(d: Definition): Set[Param] = d match {
   case Definition.Def(id, tpe, block) => freeVariables(block)
   case Definition.Let(id, tpe, binding) => freeVariables(binding)
 }
 
-def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
+def freeVariables(stmt: Stmt): Set[Param] = stmt match {
   // TODO fix
   case Scope(definitions, body) =>
-    var free: Set[Symbol] = Set.empty
+    var free: Set[Param] = Set.empty
     // we assume definitions can be mutually recursive, for now.
-    var bound: Set[Symbol] = definitions.collect { case Definition.Def(id, _, _) => id }.toSet
+    var bound: Set[Param] = definitions.collect { case Definition.Def(id, tpe, _) => BlockParam(id, tpe) }.toSet
     definitions.foreach {
       case Definition.Def(id, tpe, block) =>
         free ++= freeVariables(block) -- bound
       case Definition.Let(id, tpe, binding) =>
         free ++= freeVariables(binding) -- bound
-        bound ++= Set(id)
+        bound ++= Set(ValueParam(id, tpe))
     }
     freeVariables(body) -- bound ++ free
-  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
+  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(ValueParam(id, tpe))
   case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
   case Hole => Set.empty
-  case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
+  case State(id, init, stateTpe, region, body) =>
+    freeVariables(init) ++ freeVariables(body) --
+      Set(BlockParam(id, core.BlockType.Interface(symbols.builtins.TState.interface, List(stateTpe))),
+        BlockParam(region, core.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
   case Region(body, _) => freeVariables(body)
 }
 
-def freeVariables(expr: Expr): Set[Symbol] = expr match {
-  case ValueVar(id, tpe) => Set(id)
+def freeVariables(expr: Expr): Set[Param] = expr match {
+  case ValueVar(id, tpe) => Set(ValueParam(id, tpe))
   case Literal(value, tpe) => Set.empty
   case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
@@ -159,33 +160,28 @@ def freeVariables(expr: Expr): Set[Symbol] = expr match {
   case Run(s, tpe) => freeVariables(s)
 }
 
-def freeVariables(arg: Argument): Set[Symbol] = arg match {
+def freeVariables(arg: Argument): Set[Param] = arg match {
   case expr: Expr => freeVariables(expr)
   case block: Block => freeVariables(block)
   case ev: Evidence => freeVariables(ev)
 }
 
-def freeVariables(block: Block): Set[Symbol] = block match {
-  case BlockVar(id, _) => Set(id)
-  case BlockLit(params, body) =>
-    val bound = params.map {
-      case ValueParam(id, tpe) => id
-      case BlockParam(id, tpe) => id
-      case EvidenceParam(id) => id
-    }
-    freeVariables(body) -- bound
-  case Member(b, field) => freeVariables(b)
+def freeVariables(block: Block): Set[Param] = block match {
+  case BlockVar(id, tpe) => Set(BlockParam(id, tpe))
+  case BlockLit(tparams, params, body) =>
+    freeVariables(body) -- params
+  case Member(b, field, tpe) => freeVariables(b)
   case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case New(impl) => freeVariables(impl) // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }
 
-def freeVariables(op: Operation): Set[Symbol] = op match {
+def freeVariables(op: Operation): Set[Param] = op match {
   case Operation(name, body) => freeVariables(body)
 }
 
-def freeVariables(impl: Implementation): Set[Symbol] = impl match {
+def freeVariables(impl: Implementation): Set[Param] = impl match {
   case Implementation(id, operations) => operations.flatMap(freeVariables).toSet
 }
 
-def freeVariables(ev: Evidence): Set[Symbol] = ev.scopes.toSet
+def freeVariables(ev: Evidence): Set[Param] = ev.scopes.toSet.map(EvidenceParam(_))
 

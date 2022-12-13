@@ -99,17 +99,17 @@ object ChezSchemeLift extends Backend {
 
     case Hole => chez.Builtin("hole")
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case State(id, init, stateTpe, region, body) if region == symbols.builtins.globalRegion =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
 
-    case State(id, init, region, body) =>
+    case State(id, init, stateTpe, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, tpe, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.id)
+        val names = RecordNames(h.id.symbol)
         chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, BlockLit(params, body)) =>
+          case Operation(op, BlockLit(tparams, params, body)) =>
             // the LAST parameter is the continuation...
             chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
         })
@@ -175,7 +175,7 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(params, body) =>
+    case BlockLit(tparams, params, body) =>
       chez.Lambda(params map toChez, toChez(body))
   }
 
@@ -183,16 +183,16 @@ object ChezSchemeLift extends Backend {
     case BlockVar(id, tpe) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(params, body) => toChez(b)
+    case b @ BlockLit(tparams, params, body) => toChez(b)
 
-    case Member(b, field) =>
+    case Member(b, field, annotatedTpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) =>
       toChez(e)
 
     case New(Implementation(id, clauses)) =>
-      val ChezName(name) = nameRef(id)
+      val ChezName(name) = nameRef(id.symbol)
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
   }
 
