@@ -118,11 +118,6 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-private def substitute(params: Set[Param], tsubsts: Map[Symbol, core.ValueType]): Set[Param] = params map {
-  case ValueParam(id, tpe) => ValueParam(id, core.Type.substitute(tpe, tsubsts, Map.empty))
-  case BlockParam(id, tpe) => BlockParam(id, core.Type.substitute(tpe, tsubsts, Map.empty))
-  case EvidenceParam(id) => EvidenceParam(id)
-}
 def freeVariables(d: Definition): Set[Param] = d match {
   case Definition.Def(id, tpe, block) => freeVariables(block)
   case Definition.Let(id, tpe, binding) => freeVariables(binding)
@@ -143,7 +138,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
     }
     freeVariables(body) -- bound ++ free
   case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(ValueParam(id, tpe))
-  case App(b, targs, args) => substitute(freeVariables(b), (??? zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
+  case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
@@ -159,7 +154,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
 def freeVariables(expr: Expr): Set[Param] = expr match {
   case ValueVar(id, tpe) => Set(ValueParam(id, tpe))
   case Literal(value, tpe) => Set.empty
-  case PureApp(b, targs, args) => substitute(freeVariables(b), (??? zip targs).toMap) ++ args.flatMap(freeVariables) // TODO substitute in types
+  case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
   case Run(s, tpe) => freeVariables(s)
