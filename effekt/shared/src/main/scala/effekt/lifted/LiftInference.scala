@@ -246,9 +246,13 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def pretransform(s: List[core.Definition])(using env: Environment, C: Context): Environment = s match {
     case core.Definition.Def(id, block) :: rest =>
       // will this ever be non-empty???
-      val extendedEnv = env.bind(id, env.evidenceFor(block).scopes)
+      val ev = env.evidenceFor(block).scopes
+      val extendedEnv = env.bind(id, ev)
       pretransform(rest)(using extendedEnv, C)
-    case _ => env
+    // even if defs cannot be mutually recursive across lets, we still have to pretransform them.
+    case core.Definition.Let(id, _) :: rest =>
+      pretransform(rest)
+    case Nil => env
   }
 
   case class Environment(env: Map[Symbol, List[EvidenceSymbol]]) {

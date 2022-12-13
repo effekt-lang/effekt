@@ -4,7 +4,7 @@ package ml
 
 import effekt.context.Context
 import effekt.lifted.*
-import effekt.symbols.{Anon, Binder, BlockSymbol, Module, Symbol, TermSymbol, TypeConstructor, TypeSymbol, ValueSymbol, ValueType, Wildcard}
+import effekt.symbols.{Anon, Binder, BlockSymbol, BlockType, Module, Symbol, TermSymbol, TypeConstructor, TypeSymbol, ValueSymbol, ValueType, Wildcard}
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -77,9 +77,22 @@ object ML extends Backend {
     decls ++ externs ++ rest
   }
 
-  def tpeToML(tpe: symbols.ValueType)(using C: Context): ml.Type = tpe match {
-    case ValueType.BoxedType(_, _) =>
-      C.abort("Boxed type is not supported")
+  def tpeToML(tpe: symbols.BlockType)(using C: Context): ml.Type = tpe match {
+    case BlockType.FunctionType(tparams, _, _, _, _, _) if tparams.nonEmpty =>
+      C.abort("polymorphic functions not supported")
+    case BlockType.FunctionType(Nil, Nil, Nil, Nil, resType, _) =>
+      ml.Type.Fun(List(ml.Type.Unit), tpeToML(resType))
+    case BlockType.FunctionType(Nil, Nil, vtpes, Nil, resType, _) =>
+      ml.Type.Fun(vtpes.map(tpeToML), tpeToML(resType))
+    case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
+      ???
+    case BlockType.InterfaceType(typeConstructor, args) =>
+        ml.Type.Tapp(ml.Type.Data(name(typeConstructor)), args.map(tpeToML))
+  }
+
+  def tpeToML(tpe: symbols.ValueType)(using Context): ml.Type = tpe match {
+    case ValueType.BoxedType(blockType, _) =>
+      tpeToML(blockType)
     case ValueType.ValueTypeRef(tvar) =>
       // Note that types with generic equality needs to be `''a` which is
       // ... annoying
@@ -90,7 +103,7 @@ object ML extends Backend {
       ml.Type.Tapp(tcToML(tc), args.map(tpeToML))
   }
 
-  def tcToML(tc: symbols.TypeConstructor)(using C: Context): ml.Type = tc match {
+  def tcToML(tc: symbols.TypeConstructor): ml.Type = tc match {
     case symbols.builtins.UnitSymbol       => ml.Type.Unit
     case symbols.builtins.IntSymbol        => ml.Type.Integer
     case symbols.builtins.DoubleSymbol     => ml.Type.Real
@@ -115,12 +128,12 @@ object ML extends Backend {
       List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
 
     case Decl.Data(id: TypeConstructor.Record, List(ctor: symbols.Constructor)) =>
-      singletonData(id, id.constructor, ctor.fields)
-    case Decl.Interface(id, operations) => singletonData(id, id, operations)
+      recordRep(id, id.constructor, ctor.fields)
+    case Decl.Interface(id, operations) => recordRep(id, id, operations)
     case Data(_, _) => C.panic("Data symbol is not DataType or Record")
   }
 
-  def singletonData(typeSym: Symbol, caseSym: Symbol, terms: List[Symbol])(using Context): List[ml.Binding] = {
+  def recordRep(typeSym: Symbol, caseSym: Symbol, terms: List[Symbol])(using Context): List[ml.Binding] = {
     val caseName = name(caseSym)
     val tvars: List[ml.Type.Var] = terms.map(_ => ml.Type.Var(freshName("arg")))
     val dataDecl = ml.Binding.DataBind(name(typeSym), tvars, List((caseName, typesToTupleIsh(tvars))))
@@ -265,11 +278,7 @@ object ML extends Backend {
       }
       ml.Call(selector)(toML(b))
 
-    //    case Extern(params, body) =>
-    //      ml.Lambda(params map { p => MLName(p.id.name.name) }: _*)(ml.RawExpr(body))
-
-    case Unbox(e) =>
-      toML(e)
+    case Unbox(e) => toML(e) // not sound
 
     case New(Implementation(id, operations)) =>
       ml.Expr.MakeDatatype(name(id), expsToTupleIsh(operations map toML))
@@ -283,7 +292,8 @@ object ML extends Backend {
   def toML(scope: Evidence): ml.Expr = scope match {
     case Evidence(Nil) => Consts.here
     case Evidence(ev :: Nil) => Variable(name(ev))
-    case Evidence(scopes) => ml.Call(Consts.nested)(scopes map { s => ml.Variable(name(s)) }: _*)
+    case Evidence(scopes) =>
+      scopes.map(s => ml.Variable(name(s))).reduce(ml.Call(Consts.nested)(_, _))
   }
 
   def toML(expr: Expr)(using C: Context): ml.Expr = expr match {
@@ -334,7 +344,7 @@ object ML extends Backend {
 
     case Run(s, _) => Call(Consts.run)(toMLExpr(s))
 
-    case Box(b) => C.abort("Box not supported")
+    case Box(b) => toML(b) // not sound
   }
 
   def fieldSymbolType(f: Symbol)(using C: Context): ml.Type = f match {
@@ -361,9 +371,9 @@ object ML extends Backend {
   }
 
   def dataSelectorName(data: Symbol, selection: Symbol)(using C: Context): MLName = {
-      val dataName = name(data)
-      val selectionName = name(selection)
-      MLName(dataName.name + selectionName.name)
+    val dataName = name(data)
+    val selectionName = name(selection)
+    MLName(dataName.name + selectionName.name)
   }
 
   def freshName(s: String): MLName =

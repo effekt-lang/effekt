@@ -80,6 +80,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val ap = tlistDoc(args) <+> toDoc(tpe)
       parens(ap)
     case Type.Builtin(t) => toDoc(t)
+    case Type.Fun(Nil, res) => ???
+    case Type.Fun(args, res) =>
+      val fn = folddoc(args.map(a => toDoc(a) <+> "-> "), _ <> _) <+> toDoc(res)
+      parens(fn)
   }
 
   def toDoc(expr: Expr): Doc = expr match {

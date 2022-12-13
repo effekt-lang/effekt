@@ -12,23 +12,24 @@ class MLTests extends EffektTests {
   override lazy val included: List[File] = List(examplesDir)
 
   override lazy val ignored: List[File] = List(
-    // Box is not supported
-    examplesDir / "pos" / "capture" / "defdef.effekt",
+    // Tests with box
+    //    examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
-    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
+    //    examplesDir / "pos" / "capture" / "optimizing_unbox.effekt",
     examplesDir / "pos" / "capture" / "regions.effekt",
     examplesDir / "pos" / "capture" / "resources.effekt",
-    examplesDir / "pos" / "capture" / "selfregion.effekt",
-    examplesDir / "pos" / "infer" / "infer_boxed.effekt",
-    examplesDir / "pos" / "infer" / "infer_effect_polymorphic.effekt",
+    //    examplesDir / "pos" / "capture" / "selfregion.effekt",
+    //    examplesDir / "pos" / "infer" / "infer_boxed.effekt",
+    //    examplesDir / "pos" / "infer" / "infer_effect_polymorphic.effekt",
     examplesDir / "pos" / "issue108.effekt",
-    examplesDir / "pos" / "lambdas" / "annotated.effekt",
-    examplesDir / "pos" / "lambdas" / "effects.effekt",
-    examplesDir / "pos" / "lambdas" / "generators.effekt",
-    examplesDir / "pos" / "lambdas" / "higherorder.effekt",
-    examplesDir / "pos" / "lambdas" / "localstate.effekt",
+    //    examplesDir / "pos" / "lambdas" / "annotated.effekt",
+    //    examplesDir / "pos" / "lambdas" / "effects.effekt",
+    //    examplesDir / "pos" / "lambdas" / "generators.effekt",
+    //    examplesDir / "pos" / "lambdas" / "higherorder.effekt",
+    //    examplesDir / "pos" / "lambdas" / "localstate.effekt",
     examplesDir / "pos" / "lambdas" / "scheduler.effekt",
-    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+    //    examplesDir / "pos" / "lambdas" / "simpleclosure.effekt",
+    examplesDir / "benchmarks" / "generator.effekt",
 
     // polymorphic effect operation not supported
     examplesDir / "pos" / "existentials.effekt",
@@ -80,10 +81,10 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
     examplesDir / "pos" / "emptymatch.effekt",
-    examplesDir / "pos" / "imports.effekt",
+//    examplesDir / "pos" / "imports.effekt",
     examplesDir / "pos" / "liftinference.effekt",
-    examplesDir / "pos" / "lists.effekt",
-    examplesDir / "pos" / "matchdef.effekt",
+//    examplesDir / "pos" / "lists.effekt",
+//    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
     examplesDir / "pos" / "nim.effekt",
@@ -91,7 +92,7 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
     examplesDir / "pos" / "stream_pull.effekt",
-    examplesDir / "neg" / "stream_pull.effekt",
+//    examplesDir / "neg" / "stream_pull.effekt",
   )
 
   def runTestFor(input: java.io.File, check: File, expected: String): Unit =
