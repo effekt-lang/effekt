@@ -197,6 +197,35 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
     assertTransformsTo(from, to)
   }
 
+  test("DirectApp with [Int] gets wrapped correctly"){
+    val from =
+      """module main
+        |
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |def idInt = { (x: Int) =>
+        |    {
+        |        let res = !(id: ['A]('A) => 'A @ {})[Int](x: Int)
+        |        return res: Int
+        |    }
+        |}
+        |""".stripMargin
+    val to =
+      """module main
+        |
+        |def id = { ['A](a: 'A) => return a: 'A }
+        |def idInt = { (x: Int) =>
+        |    {
+        |        let res = run {
+        |            let boxedRes = !(id: ['A]('A) => 'A @ {})[BoxedInt]((MkBoxedInt: (Int) => BoxedInt @ {})(x: Int))
+        |            return boxedRes:BoxedInt.unboxInt: Int
+        |        }
+        |        return res: Int
+        |    }
+        |}
+        |""".stripMargin
+    assertTransformsTo(from,to)
+  }
+
   test("block parameters get wrapped \"inversely\""){
     val from =
       """module main
@@ -215,6 +244,41 @@ class PolymorphismBoxingTests extends AbstractPolymorphismBoxingTests {
         |      }
         |    };
         |    return r:BoxedInt.unboxInt: Int
+        |}
+        |""".stripMargin
+    assertTransformsTo(from, to)
+  }
+
+  test("higher higher order functions get wrapped correctly"){
+    val from =
+      """module main
+        |
+        |def hhof_caller = { () =>
+        |    (hhof: ['A](){ b: (){ hhofarg: ('A) => 'A } => 'A } => 'A @ {})[Int](){
+        |        (){ hhofarg: (Int) => Int } => (hhofarg: (Int) => Int @ {})(5)
+        |    }
+        |}
+        |""".stripMargin
+    val to =
+      """module main
+        |
+        |def hhof_caller = { () =>
+        |    val result = (hhof: ['A](){ b: (){ hhofarg: ('A) => 'A } => 'A } => 'A @ {})[BoxedInt](){
+        |        (){ hhofargB: ('A) => 'A } =>
+        |          {
+        |              def originalFn = { (){ hhofarg: (Int) => Int } => (hhofarg: (Int) => Int @ {})(5) }
+        |              val res = (originalFn: (){ hhofarg: (Int) => Int } => Int @ {})(){
+        |                  (hhofargarg: Int) =>
+        |                      {
+        |                        def tmp = hhofargB: ('A) => 'A @ {}
+        |                        val rres = (tmp: ('A) => 'A @ {})((MkBoxedInt: (Int) => BoxedInt @ {})(hhofargarg: Int));
+        |                        return rres:BoxedInt.unboxInt: Int
+        |                      }
+        |              };
+        |              return (MkBoxedInt: (Int) => BoxedInt @ {})(res:Int)
+        |          }
+        |    };
+        |    return result:BoxedInt.unboxInt: Int
         |}
         |""".stripMargin
     assertTransformsTo(from, to)
