@@ -304,4 +304,3 @@ object CoreParsers {
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.definition, input)
 }
-

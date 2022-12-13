@@ -2,7 +2,7 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{BlockSymbol, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType}
+import effekt.symbols.{ Constructor, Name, Symbol }
 
 sealed trait Tree
 /**
