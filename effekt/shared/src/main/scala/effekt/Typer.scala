@@ -94,6 +94,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  
   //<editor-fold desc="expressions">
 
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
