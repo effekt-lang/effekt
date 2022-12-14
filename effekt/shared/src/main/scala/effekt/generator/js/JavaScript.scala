@@ -251,7 +251,7 @@ object JavaScript extends Backend {
   }
 
   def tagFor(constructor: Id)(using C: CoreContext): js.Expr = {
-    val position = C.getData(C.getConstructor(constructor)).constructors.indexWhere(_.id == constructor)
+    val position = C.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
     js.RawExpr(position.toString)
   }
 

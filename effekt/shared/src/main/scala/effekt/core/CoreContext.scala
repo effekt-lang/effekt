@@ -67,5 +67,16 @@ class CoreContext(val declarations: List[Declaration])(using val context: Contex
   def getProperty(id: Id): Property = findProperty(id).getOrElse{
     context.panic(s"No declaration found for property ${id}")
   }
+
+  extension(field: Field) {
+    def constructor: Constructor = getConstructor(field)
+    def data: Declaration.Data = getData(field)
+  }
+  extension(constructor: Constructor) {
+    def data: Declaration.Data = getData(constructor)
+  }
+  extension(property: Property) {
+    def interface: Declaration.Interface = getInterface(property)
+  }
 }
 given (using C: CoreContext): Context = C.context
