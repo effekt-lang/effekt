@@ -5,6 +5,9 @@ import effekt.context.Context
 /**
  * Context for transformations of a [[core.ModuleDecl]] that provides the declarations for this module.
  * Also wraps the [[effekt.context.Context]] for convenience.
+ *
+ * The `find*` methods return `Option[*]`, the `get*` call `Context.panic` if no matching declaration can be found.
+ * Also provides some extension methods for convenience.
  */
 class CoreContext(val declarations: List[Declaration])(using val context: Context) {
   // TODO This might be quite inefficient (searching through everything for each operation)?
