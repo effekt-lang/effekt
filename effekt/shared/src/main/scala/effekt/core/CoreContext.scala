@@ -7,7 +7,7 @@ import effekt.context.Context
  * Also wraps the [[effekt.context.Context]] for convenience.
  */
 class CoreContext(val declarations: List[Declaration])(using val context: Context) {
-  // TODO This might be quite inperformant (searching through everything for each operation)?
+  // TODO This might be quite inefficient (searching through everything for each operation)?
 
   lazy val datas = declarations.collect {
     case data: Declaration.Data => data
