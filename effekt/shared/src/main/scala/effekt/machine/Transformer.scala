@@ -3,10 +3,11 @@ package machine
 
 import scala.collection.mutable
 import effekt.context.Context
+import effekt.core.DeclarationContext
 import effekt.lifted
-import effekt.lifted.{ Definition, LiftInference }
+import effekt.lifted.{Definition, LiftInference}
 import effekt.symbols
-import effekt.symbols.{ BlockSymbol, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol }
+import effekt.symbols.{BlockSymbol, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol}
 import effekt.symbols.builtins.TState
 
 object Transformer {
@@ -23,7 +24,7 @@ object Transformer {
 
     val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
-    given MC: ModuleContext = ModuleContext(mod.decls)
+    given DC: DeclarationContext = core.DeclarationContext(mod.decls)
 
     // collect all information
     val declarations = mod.externs.map(transform)
@@ -55,7 +56,7 @@ object Transformer {
       Include(contents)
   }
 
-  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, ModuleContext, Context): Statement =
+  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, Context): Statement =
     stmt match {
       case lifted.Scope(definitions, rest) =>
 
@@ -219,7 +220,7 @@ object Transformer {
         Context.abort(s"Unsupported statement: $stmt")
     }
 
-  def transform(arg: lifted.Argument)(using BlocksParamsContext, ModuleContext, Context): Binding[Variable] = arg match {
+  def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, Context): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
@@ -239,7 +240,7 @@ object Transformer {
     }
   }
 
-  def transform(block: lifted.Block)(using BlocksParamsContext, ModuleContext, Context): Binding[Variable] = block match {
+  def transform(block: lifted.Block)(using BlocksParamsContext, DeclarationContext, Context): Binding[Variable] = block match {
     case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -255,7 +256,7 @@ object Transformer {
     case lifted.New(impl) => ???
   }
 
-  def transform(expr: lifted.Expr)(using BlocksParamsContext, ModuleContext, Context): Binding[Variable] = expr match {
+  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, Context): Binding[Variable] = expr match {
     case lifted.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -358,16 +359,16 @@ object Transformer {
     case t @ symbols.ExternType(name, tparams) => Context.abort(s"Application to an unknown symbol: $t")
   }
 
-  def transform(args: List[lifted.Argument])(using BlocksParamsContext, ModuleContext, Context): Binding[List[Variable]] =
+  def transform(args: List[lifted.Argument])(using BlocksParamsContext, DeclarationContext, Context): Binding[List[Variable]] =
     args match {
       case Nil => pure(Nil)
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Implementation)(using BlocksParamsContext, ModuleContext, Context): List[Clause] = {
+  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, Context): List[Clause] = {
     handler.operations.sortBy[Int]({
       case lifted.Operation(operationName, _) =>
-        ModuleContext.findInterface(handler.id.symbol).operations.indexOf(operationName)
+        DeclarationContext.getInterface(handler.id.symbol).properties.indexWhere(_.id == operationName)
     }).map({
       case lifted.Operation(operationName, lifted.BlockLit(tparams, params :+ resume, body))=>
         // TODO we assume here that resume is the last param
@@ -455,19 +456,7 @@ object Transformer {
     var blocksParams: Map[Symbol, Environment] = Map()
   }
 
-  case class ModuleContext(val declarations: List[lifted.Decl]) {
-    def findInterface(id: Symbol)(using Context): lifted.Decl.Interface = {
-      declarations.collectFirst {
-        case i: lifted.Decl.Interface if i.id == id => i
-      }.getOrElse{ Context.abort(s"Expected an interface, got ${id}") }
-    }
-    def findData(id: Symbol)(using Context): lifted.Decl.Data = {
-      declarations.collectFirst {
-        case i: lifted.Decl.Data if i.id == id => i
-      }.getOrElse{ Context.abort(s"Expected a data type, got ${id}") }
-    }
-  }
-  def ModuleContext(using MC: ModuleContext): ModuleContext = MC
+  def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
   def noteBlockParams(id: Symbol, params: Environment)(using BC: BlocksParamsContext): Unit = {
     BC.blocksParams = BC.blocksParams + (id -> params)

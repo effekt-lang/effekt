@@ -121,16 +121,13 @@ object ChezSchemeLift extends Backend {
     case other => chez.Let(Nil, toChez(other))
   }
 
-  def toChez(decl: lifted.Decl): List[chez.Def] = decl match {
-    case Data(did, ctors) =>
-      ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
-      }
+  def toChez(decl: core.Declaration): List[chez.Def] = decl match {
+    case core.Declaration.Data(did, _, ctors) =>
+      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(_.id)) }
 
     // We use chez scheme records to also represent capabilities.
-    case Decl.Interface(id, operations) =>
-      generateConstructor(id, operations)
+    case core.Declaration.Interface(id, _, operations) =>
+      generateConstructor(id, operations.map(_.id))
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {

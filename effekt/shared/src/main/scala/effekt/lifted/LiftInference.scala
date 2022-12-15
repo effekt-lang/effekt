@@ -25,7 +25,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     // TODO drop once we also ported lifted to use [[core.Definition]]
     val env = pretransform(mod.definitions)
     val definitions = mod.definitions.map(d => transform(d)(using env, Context))
-    ModuleDecl(mod.path, mod.imports, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
+    ModuleDecl(mod.path, mod.imports, mod.declarations, mod.externs.map(transform), definitions, mod.exports)
   }
 
   def transform(param: core.Param): Param = param match {
@@ -46,14 +46,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, cps, vps, bps ++ resume.toList, body)))
       }
       New(Implementation(interface, transformedMethods))
-  }
-
-  def transform(tree: core.Declaration)(using Context): lifted.Decl = tree match {
-    case core.Data(id, tparams, ctors) =>
-      Data(id, ctors.map(c => c.id))
-
-    case core.Interface(id, tparams, operations) =>
-      Interface(id, operations.map(o => o.id))
   }
 
   def transform(tree: core.Extern)(using Environment, Context): lifted.Extern = tree match {
