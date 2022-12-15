@@ -1,4 +1,3 @@
-extern pure def myId(): Int = "42"
 type Foo { A() }
 
 def hof{ a : () => Foo }: Foo = a()
