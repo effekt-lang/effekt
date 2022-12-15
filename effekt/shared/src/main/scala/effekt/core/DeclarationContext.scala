@@ -1,16 +1,14 @@
 package effekt.core
 
-import effekt.context.Context
+import effekt.util.messages.ErrorReporter
 
 /**
  * Context for transformations of a [[core.ModuleDecl]] that provides the declarations for this module.
- * Also wraps the [[effekt.context.Context]] for convenience.
  *
  * The `find*` methods return `Option[*]`, the `get*` call `Context.panic` if no matching declaration can be found.
  * Also provides some extension methods for convenience.
  */
-// TODO drop Context
-class DeclarationContext(val declarations: List[Declaration])(using val context: Context) {
+class DeclarationContext(val declarations: List[Declaration]) {
   // TODO This might be quite inefficient (searching through everything for each operation)?
 
   lazy val datas = declarations.collect {
@@ -37,50 +35,49 @@ class DeclarationContext(val declarations: List[Declaration])(using val context:
   def findField(id: Id): Option[Field] = fields.find(_.id == id)
   def findProperty(id: Id): Option[Property] = properties.find(_.id == id)
 
-  def getDeclaration(id: Id): Declaration = findDeclaration(id).getOrElse{
+  def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse{
     context.panic(s"No declaration found for ${id}.")
   }
-  def getData(id: Id): Declaration.Data = findData(id).getOrElse{
+  def getData(id: Id)(using context: ErrorReporter): Declaration.Data = findData(id).getOrElse{
     context.panic(s"No declaration found for data type ${id}.")
   }
-  def getData(constructor: Constructor): Declaration.Data = findData(constructor).getOrElse{
+  def getData(constructor: Constructor)(using context: ErrorReporter): Declaration.Data = findData(constructor).getOrElse{
     import PrettyPrinter.*
     context.panic(s"No declaration found for data type with constructor ${pretty(toDoc(constructor)).layout}")
   }
-  def getData(field: Field): Declaration.Data = findData(field).getOrElse{
+  def getData(field: Field)(using context: ErrorReporter): Declaration.Data = findData(field).getOrElse{
     import PrettyPrinter.*
     context.panic(s"No declaration found for data type with field ${pretty(toDoc(field)).layout}")
   }
-  def getInterface(id: Id): Declaration.Interface = findInterface(id).getOrElse{
+  def getInterface(id: Id)(using context: ErrorReporter): Declaration.Interface = findInterface(id).getOrElse{
     context.panic(s"No declaration found for interface ${id}")
   }
-  def getInterface(property: Property): Declaration.Interface = findInterface(property).getOrElse{
+  def getInterface(property: Property)(using context: ErrorReporter): Declaration.Interface = findInterface(property).getOrElse{
     import PrettyPrinter.*
     context.panic(s"No declaration found for interface with property ${pretty(toDoc(property)).layout}")
   }
-  def getConstructor(id: Id): Constructor = findConstructor(id).getOrElse{
+  def getConstructor(id: Id)(using context: ErrorReporter): Constructor = findConstructor(id).getOrElse{
     context.panic(s"No declaration found for constructor ${id}")
   }
-  def getConstructor(field: Field): Constructor = findConstructor(field).getOrElse{
+  def getConstructor(field: Field)(using context: ErrorReporter): Constructor = findConstructor(field).getOrElse{
     import PrettyPrinter.*
     context.panic(s"No declaration found for constructor with field ${pretty(toDoc(field)).layout}")
   }
-  def getField(id: Id): Field = findField(id).getOrElse{
+  def getField(id: Id)(using context: ErrorReporter): Field = findField(id).getOrElse{
     context.panic(s"No declaration found for field ${id}")
   }
-  def getProperty(id: Id): Property = findProperty(id).getOrElse{
+  def getProperty(id: Id)(using context: ErrorReporter): Property = findProperty(id).getOrElse{
     context.panic(s"No declaration found for property ${id}")
   }
 
   extension(field: Field) {
-    def constructor: Constructor = getConstructor(field)
-    def data: Declaration.Data = getData(field)
+    def constructor(using context: ErrorReporter): Constructor = getConstructor(field)
+    def data(using context: ErrorReporter): Declaration.Data = getData(field)
   }
   extension(constructor: Constructor) {
-    def data: Declaration.Data = getData(constructor)
+    def data(using context: ErrorReporter): Declaration.Data = getData(constructor)
   }
   extension(property: Property) {
-    def interface: Declaration.Interface = getInterface(property)
+    def interface(using context: ErrorReporter): Declaration.Interface = getInterface(property)
   }
 }
-given (using C: DeclarationContext): Context = C.context
