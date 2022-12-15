@@ -170,10 +170,45 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
 
   def transformAsBlock(tree: source.Term)(using Context): Block = tree match {
-    case v: source.Var => v.definition match {
-      case sym: ValueSymbol => transformUnbox(tree)
-      case sym: BlockSymbol => BlockVar(sym)
-    }
+    case v: source.Var =>
+      val sym = v.definition
+      val tpe = Context.blockTypeOf(sym)
+      tpe match {
+        case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
+          // if this block argument expects to be called using PureApp or DirectApp, make sure it is
+          // by wrapping it in a BlockLit
+          lazy val targs = tparams.map(core.ValueType.Var.apply)
+          lazy val vparams: List[Param.ValueParam] = vparamtps.map{ t => Param.ValueParam(TmpValue(), transform(t))}
+          lazy val vargs = vparams.map{ case Param.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
+          sym match {
+            case _: ValueSymbol => transformUnbox(tree)
+            case cns: Constructor =>
+              assert(bparamtps.isEmpty)
+              assert(effects.isEmpty)
+              assert(cparams.isEmpty)
+              BlockLit(tparams, Nil, vparams, Nil,
+                Stmt.Return(PureApp(BlockVar(cns), targs, vargs)))
+            case f: ExternFunction if isPure(f.capture) =>
+              assert(bparamtps.isEmpty)
+              assert(effects.isEmpty)
+              assert(cparams.isEmpty)
+              BlockLit(tparams, Nil, vparams, Nil,
+                Stmt.Return(PureApp(BlockVar(f), targs, vargs)))
+            case f: ExternFunction if pureOrIO(f.capture) =>
+              assert(effects.isEmpty)
+              val bparams: List[Param.BlockParam] = bparamtps.map{ t => Param.BlockParam(TmpBlock(), transform(t)) }
+              val bargs = bparams.map{
+                case Param.BlockParam(id, tpe) => Block.BlockVar(id, tpe, Set(id))
+              }
+              val result = TmpValue()
+              BlockLit(tparams, bparams.map(_.id), vparams, bparams,
+                core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs),
+                  Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
+            case sym: BlockSymbol => BlockVar(sym)
+          }
+        case BlockType.InterfaceType(typeConstructor, args) =>
+          BlockVar(sym.asInstanceOf) // leave interfaces alone (also extern ones)
+      }
     case s @ source.Select(receiver, selector) =>
       Member(transformAsBlock(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
 
