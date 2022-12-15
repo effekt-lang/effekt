@@ -9,31 +9,46 @@ import effekt.util.messages.ErrorReporter
  * Also provides some extension methods for convenience.
  */
 class DeclarationContext(val declarations: List[Declaration]) {
-  // TODO This might be quite inefficient (searching through everything for each operation)?
 
-  lazy val datas = declarations.collect {
-    case data: Declaration.Data => data
-  }
-  lazy val interfaces = declarations.collect{
-    case ifce: Declaration.Interface => ifce
-  }
-  lazy val constructors = datas.flatMap(_.constructors)
-  lazy val fields = constructors.flatMap(_.fields)
-  lazy val properties = interfaces.flatMap(_.properties)
+  // Maps to speed-up lookup. Assumes that, if we ever lookup a Constructor/Field/Interface/...,
+  // we will eventually lookup most of them (and caches all in a respective map).
+
+  lazy val datas: Map[Id, Declaration.Data] = declarations.collect {
+    case data: Declaration.Data => (data.id -> data)
+  }.toMap
+  lazy val interfaces: Map[Id, Declaration.Interface] = declarations.collect{
+    case ifce: Declaration.Interface => (ifce.id -> ifce)
+  }.toMap
+
+  case class ConstructorRef(data: Declaration.Data, constructor: Constructor)
+  lazy val constructors: Map[Id, ConstructorRef] = datas.values.flatMap{ data =>
+    data.constructors.map{ cns => (cns.id -> ConstructorRef(data, cns)) }
+  }.toMap
+  case class FieldRef(constructorRef: ConstructorRef, field: Field) { export constructorRef.* }
+  lazy val fields: Map[Id, FieldRef] = constructors.values.flatMap{ cns =>
+    cns.constructor.fields.map{ f => (f.id -> FieldRef(cns, f)) }
+  }.toMap
+  case class PropertyRef(interface: Declaration.Interface, property: Property)
+  lazy val properties: Map[Id, PropertyRef] = interfaces.values.flatMap{ ifce =>
+    ifce.properties.map{ p => (p.id -> PropertyRef(ifce, p)) }
+  }.toMap
 
   def findDeclaration(id: Id): Option[Declaration] = declarations.find(_.id == id)
-  def findData(id: Id): Option[Declaration.Data] = datas.find(_.id == id)
+  def findData(id: Id): Option[Declaration.Data] = datas.get(id)
   def findData(constructor: Constructor): Option[Declaration.Data] =
-    datas.find(_.constructors contains constructor)
+    constructors.get(constructor.id).map(_.data)
+
   def findData(field: Field): Option[Declaration.Data] =
-    datas.find(_.constructors.exists(_.fields contains field))
-  def findInterface(id: Id): Option[Declaration.Interface] = interfaces.find(_.id == id)
+    fields.get(field.id).map(_.data)
+  def findInterface(id: Id): Option[Declaration.Interface] = interfaces.get(id)
   def findInterface(property: Property): Option[Declaration.Interface] =
-    interfaces.find(_.properties contains property)
-  def findConstructor(id: Id): Option[Constructor] = constructors.find(_.id == id)
-  def findConstructor(field: Field): Option[Constructor] = constructors.find(_.fields contains field)
-  def findField(id: Id): Option[Field] = fields.find(_.id == id)
-  def findProperty(id: Id): Option[Property] = properties.find(_.id == id)
+    properties.get(property.id).map(_.interface)
+
+  def findConstructor(id: Id): Option[Constructor] = constructors.get(id).map(_.constructor)
+  def findConstructor(field: Field): Option[Constructor] =
+    fields.get(field.id).map(_.constructor)
+  def findField(id: Id): Option[Field] = fields.get(id).map(_.field)
+  def findProperty(id: Id): Option[Property] = properties.get(id).map(_.property)
 
   def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse{
     context.panic(s"No declaration found for ${id}.")
