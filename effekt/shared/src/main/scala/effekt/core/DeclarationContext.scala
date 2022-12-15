@@ -9,7 +9,8 @@ import effekt.context.Context
  * The `find*` methods return `Option[*]`, the `get*` call `Context.panic` if no matching declaration can be found.
  * Also provides some extension methods for convenience.
  */
-class CoreContext(val declarations: List[Declaration])(using val context: Context) {
+// TODO drop Context
+class DeclarationContext(val declarations: List[Declaration])(using val context: Context) {
   // TODO This might be quite inefficient (searching through everything for each operation)?
 
   lazy val datas = declarations.collect {
@@ -82,4 +83,4 @@ class CoreContext(val declarations: List[Declaration])(using val context: Contex
     def interface: Declaration.Interface = getInterface(property)
   }
 }
-given (using C: CoreContext): Context = C.context
+given (using C: DeclarationContext): Context = C.context

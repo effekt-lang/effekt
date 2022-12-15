@@ -27,7 +27,7 @@ object JavaScript extends Backend {
     val module = input.mod
     val mainFile = path(module)
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
-    given CoreContext = CoreContext(input.core.declarations)
+    given DeclarationContext = DeclarationContext(input.core.declarations)
 
     val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
     Some(Compiled(input.source, mainFile, Map(mainFile -> result)))
@@ -43,7 +43,7 @@ object JavaScript extends Backend {
       case (decls, dependency) => decls ++ dependency.core.declarations
     }
 
-    given CoreContext = CoreContext(allDeclarations)
+    given DeclarationContext = DeclarationContext(allDeclarations)
 
     def shouldExport(sym: Symbol) = sym match {
       // do not export fields, since they are no defined functions
@@ -108,7 +108,7 @@ object JavaScript extends Backend {
       js.RawStmt(contents)
   }
 
-  def toJS(b: core.Block)(using CoreContext): js.Expr = b match {
+  def toJS(b: core.Block)(using DeclarationContext): js.Expr = b match {
     case BlockVar(v, _, _) =>
       nameRef(v)
     case BlockLit(tps, cps, vps, bps, body) =>
@@ -120,12 +120,12 @@ object JavaScript extends Backend {
     case New(handler) => toJS(handler)
   }
 
-  def toJS(args: List[Argument])(using CoreContext): List[js.Expr] = args map {
+  def toJS(args: List[Argument])(using DeclarationContext): List[js.Expr] = args map {
     case b: Block => toJS(b)
     case e: Expr => toJS(e)
   }
 
-  def toJS(expr: core.Expr)(using CoreContext): js.Expr = expr match {
+  def toJS(expr: core.Expr)(using DeclarationContext): js.Expr = expr match {
     case Literal((), _) => js.Member($effekt, JSName("unit"))
     case Literal(s: String, _) => JsString(s)
     case literal: Literal => js.RawExpr(literal.value.toString)
@@ -137,14 +137,14 @@ object JavaScript extends Backend {
     case Run(s) => monadic.Run(toJSMonadic(s))
   }
 
-  def toJS(handler: core.Implementation)(using CoreContext): js.Expr =
+  def toJS(handler: core.Implementation)(using DeclarationContext): js.Expr =
     js.Object(handler.operations.map {
       case Operation(id, tps, cps, vps, bps, resume, body) =>
         val (stmts, ret) = toJSStmt(body)
         nameDef(id) -> monadic.Lambda((vps ++ bps ++ resume.toList) map toJS, stmts, ret)
     })
 
-  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using CoreContext): js.Module = {
+  def toJS(module: core.ModuleDecl, imports: List[js.Import], exports: List[js.Export])(using DeclarationContext): js.Module = {
     val name    = JSName(jsModuleName(module.path))
     val externs = module.externs.map(toJS)
     val decls   = module.declarations.flatMap(toJS)
@@ -159,7 +159,7 @@ object JavaScript extends Backend {
    *
    * Not all statement types can be printed in this context!
    */
-  def toJSMonadic(s: core.Stmt)(using CoreContext): monadic.Control = s match {
+  def toJSMonadic(s: core.Stmt)(using DeclarationContext): monadic.Control = s match {
     case Val(Wildcard(), binding, body) =>
       monadic.Bind(toJSMonadic(binding), toJSMonadic(body))
 
@@ -199,7 +199,7 @@ object JavaScript extends Backend {
       Nil
   }
 
-  def toJS(d: core.Definition)(using CoreContext): js.Stmt = d match {
+  def toJS(d: core.Definition)(using DeclarationContext): js.Stmt = d match {
     case Definition.Def(id, BlockLit(tps, cps, vps, bps, body)) =>
       val (stmts, jsBody) = toJSStmt(body)
       monadic.Function(nameDef(id), (vps++ bps) map toJS, stmts, jsBody)
@@ -219,7 +219,7 @@ object JavaScript extends Backend {
    *
    * That is, multiple statements that end in one monadic return
    */
-  def toJSStmt(s: core.Stmt)(using CoreContext): (List[js.Stmt], monadic.Control) = s match {
+  def toJSStmt(s: core.Stmt)(using DeclarationContext): (List[js.Stmt], monadic.Control) = s match {
     case Scope(definitions, body) =>
       val (stmts, ret) = toJSStmt(body)
       (definitions.map(toJS) ++ stmts, ret)
@@ -250,7 +250,7 @@ object JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  def tagFor(constructor: Id)(using C: CoreContext): js.Expr = {
+  def tagFor(constructor: Id)(using C: DeclarationContext): js.Expr = {
     val position = C.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
     js.RawExpr(position.toString)
   }
