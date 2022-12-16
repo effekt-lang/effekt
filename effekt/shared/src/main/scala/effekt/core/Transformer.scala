@@ -198,13 +198,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
    */
   def transformAsObject(tree: source.Term)(using Context): Block = tree match {
     case v: source.Var =>
-      val sym = v.definition
-      val tpe = Context.blockTypeOf(sym)
-      tpe match {
-        case _: BlockType.FunctionType =>
-          Context.panic(s"Using function symbol ${sym} but an object was expected.")
-        case _: BlockType.InterfaceType => BlockVar(sym.asInstanceOf)
-      }
+      BlockVar(v.definition.asInstanceOf[BlockSymbol])
 
     case source.BlockLiteral(tparams, vparams, bparams, body) =>
       Context.panic(s"Using block literal ${tree} but an object was expected.")
