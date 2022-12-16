@@ -155,6 +155,10 @@ trait ChezScheme {
 
     case Extern.Include(contents) =>
       RawDef(contents)
+
+    case Extern.Type(id,_) => RawDef(s"#|extern type ${id.name.name}|#")
+    case Extern.Interface(id,_) => RawDef(s"#|extern interface ${id.name.name}|#")
+    case Extern.Resource(id,_) => RawDef(s"#|extern resource ${id.name.name}|#")
   }
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {

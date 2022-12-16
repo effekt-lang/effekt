@@ -36,6 +36,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       "extern" <+> toDoc(capt) <+> "def" <+> toDoc(id.name) <+> "=" <+> paramsToDoc(tps, vps, bps) <> ":" <+> toDoc(ret) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
+    case Extern.Type(id, Nil) =>
+      "extern" <+> "type" <+> toDoc(id)
+    case Extern.Type(id, tparams) =>
+      "extern" <+> "type" <+> toDoc(id) <> brackets(tparams map toDoc)
+    case Extern.Interface(id, Nil) =>
+      "extern" <+> "interface" <+> toDoc(id)
+    case Extern.Interface(id, tparams) =>
+      "extern" <+> "interface" <+> toDoc(id) <> brackets(tparams map toDoc)
+    case Extern.Resource(id, tpe) =>
+      "extern" <+> "resource" <+> toDoc(id) <> ":" <+> toDoc(tpe)
   }
 
   def toDoc(b: Block): Doc = b match {

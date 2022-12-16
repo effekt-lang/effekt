@@ -57,6 +57,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Extern.Def(id, funTpe, (vps ++ bps).map { p => transform(p) }, body)
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
+    case core.Extern.Type(id, tparams) =>
+      Extern.Type(id, tparams)
+    case core.Extern.Interface(id, tparams) =>
+      Extern.Interface(id, tparams)
+    case core.Extern.Resource(id, tpe) =>
+      Extern.Resource(id, tpe)
   }
 
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {

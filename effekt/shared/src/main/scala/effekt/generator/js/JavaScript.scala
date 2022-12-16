@@ -104,6 +104,15 @@ object JavaScript extends Backend {
 
     case Extern.Include(contents) =>
       js.RawStmt(contents)
+
+    case Extern.Type(id, _) =>
+      js.RawStmt(s"/* extern type ${id.name.name} */")
+
+    case Extern.Interface(id, _) =>
+      js.RawStmt(s"/* extern interface ${id.name.name} */")
+
+    case Extern.Resource(id, _) =>
+      js.RawStmt(s"/* extern resource ${id.name.name} */")
   }
 
   def toJS(b: core.Block)(using DeclarationContext, Context): js.Expr = b match {

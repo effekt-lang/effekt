@@ -2,7 +2,7 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
@@ -102,8 +102,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
 
+    case source.Def.ExternType(id, tparams) =>
+      List(Extern.Type(id.symbol, tparams.map(_.symbol)))
+
+    case source.Def.ExternInterface(id, tparams) =>
+      List(Extern.Interface(id.symbol, tparams.map(_.symbol)))
+
+    case source.Def.ExternResource(id, _) =>
+      val btpe = Context.blockTypeOf(id.symbol)
+      List(Extern.Resource(id.symbol, transform(btpe)))
+
     // For now we forget about all of the following definitions in core:
-    case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
   }
 

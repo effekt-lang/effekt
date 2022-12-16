@@ -23,6 +23,9 @@ case class ModuleDecl(
 enum Extern {
   case Def(id: Symbol, tpe: core.BlockType.Function, params: List[Param], body: String)
   case Include(contents: String)
+  case Type(id: Symbol, tparams: List[Symbol])
+  case Interface(id: Symbol, tparams: List[Symbol])
+  case Resource(id: Symbol, tpe: core.BlockType)
 }
 
 enum Definition {

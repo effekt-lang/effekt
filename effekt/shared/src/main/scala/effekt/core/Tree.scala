@@ -99,6 +99,9 @@ case class Property(id: Id, tpe: BlockType) extends Tree
 enum Extern extends Tree {
   case Def(id: Id, tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, annotatedCapture: Captures, body: String)
   case Include(contents: String)
+  case Type(id: Id, tparams: List[Id])
+  case Interface(id: Id, tparams: List[Id])
+  case Resource(id: Id, tpe: BlockType)
 }
 
 

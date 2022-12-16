@@ -31,7 +31,7 @@ object Transformer {
     given DC: DeclarationContext = core.DeclarationContext(mod.decls)
 
     // collect all information
-    val declarations = mod.externs.map(transform)
+    val declarations = mod.externs.flatMap(transform)
     val definitions = mod.definitions
     val mainEntry = Jump(Label(mainName, List()))
 
@@ -54,10 +54,12 @@ object Transformer {
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
-      Extern(transform(name), transformedParams, transform(functionType.result), body)
+      List(Extern(transform(name), transformedParams, transform(functionType.result), body))
 
     case lifted.Extern.Include(contents) =>
-      Include(contents)
+      List(Include(contents))
+
+    case lifted.Extern.Type(_,_) | lifted.Extern.Interface(_,_) | lifted.Extern.Resource(_,_) => Nil
   }
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Statement =
