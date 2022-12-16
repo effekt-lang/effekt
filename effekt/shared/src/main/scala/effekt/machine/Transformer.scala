@@ -93,12 +93,12 @@ object Transformer {
           case (lifted.Definition.Def(id, tpe, block @ lifted.BlockLit(tparams, params, body)), rest) =>
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
-          case (lifted.Definition.Def(id, tpe, block @ lifted.New(impl)), rest) =>
+          case (lifted.Definition.Def(id, tpe @ core.BlockType.Interface(ifceId, _), block @ lifted.New(impl)), rest) =>
             // TODO freeParams?
             // TODO deal with evidenve?
-            val core.BlockType.Interface(symbols.Interface(_, _, interfaceOps), _) = tpe: @unchecked
-            val implTransformed = interfaceOps.map({ op =>
-              impl.operations.find(_._1 == op).get
+            val properties = DeclarationContext.getInterface(ifceId).properties
+            val implTransformed = properties.map({ prop =>
+              impl.operations.find(_._1 == prop.id).get
             }).map({
               case lifted.Operation(_, lifted.BlockLit(tparams, params, body)) =>
                 // TODO we assume that there are no block params in methods
@@ -108,6 +108,8 @@ object Transformer {
 
           case (d @ lifted.Definition.Def(_, _, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
+          case (d @ lifted.Definition.Def(_,_: core.BlockType.Function, lifted.New(_)), _) =>
+              ErrorReporter.abort(s"Interface with function type in block definition: $d")
         }
 
       case lifted.Return(lifted.Run(stmt, tpe)) =>
@@ -150,7 +152,8 @@ object Transformer {
       case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), List(), args) =>
         val opTag = {
           tpe match
-            case core.BlockType.Interface(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
+            case core.BlockType.Interface(ifceId, _) =>
+              DeclarationContext.getInterface(ifceId).properties.indexWhere(_.id == op)
             case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
         }
         transform(args).run { values =>
