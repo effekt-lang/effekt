@@ -4,13 +4,17 @@ package machine
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.core.DeclarationContext
+import effekt.core.given
 import effekt.lifted
 import effekt.lifted.{Definition, LiftInference}
 import effekt.symbols
 import effekt.symbols.{BlockSymbol, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol}
 import effekt.symbols.builtins.TState
+import effekt.util.messages.ErrorReporter
 
 object Transformer {
+
+  private def ErrorReporter(using E: ErrorReporter): ErrorReporter = E
 
   def transform(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Program = {
     val Some(CoreLifted(_, _, _, liftedMain)) = LiftInference(main) : @unchecked
@@ -20,7 +24,7 @@ object Transformer {
     }
   }
 
-  def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl)(using C: Context): Program = {
+  def transform(mainSymbol: TermSymbol, mod: lifted.ModuleDecl)(using E: ErrorReporter): Program = {
 
     val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
@@ -37,17 +41,17 @@ object Transformer {
       case (rest, lifted.Definition.Def(id, _, lifted.BlockLit(tparams, params, body))) =>
         Def(Label(transform(id), params.map(transform)), transform(body), rest)
       case (rest, d) =>
-        Context.abort(s"Toplevel def and let bindings not yet supported: ${d}")
+        ErrorReporter.abort(s"Toplevel def and let bindings not yet supported: ${d}")
     }
 
     Program(declarations, transformedDefinitions)
   }
 
-  def transform(extern: lifted.Extern)(using BlocksParamsContext, Context): Declaration = extern match {
+  def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
     case lifted.Extern.Def(name, functionType, params, body) =>
       val transformedParams = params.map {
         case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
-        case lifted.BlockParam(id, tpe) => Context.abort("Foreign functions currently cannot take block arguments.")
+        case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
       Extern(transform(name), transformedParams, transform(functionType.result), body)
@@ -56,7 +60,7 @@ object Transformer {
       Include(contents)
   }
 
-  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, Context): Statement =
+  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Statement =
     stmt match {
       case lifted.Scope(definitions, rest) =>
 
@@ -103,7 +107,7 @@ object Transformer {
             New(Variable(transform(id), transform(tpe)), implTransformed, rest)
 
           case (d @ lifted.Definition.Def(_, _, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
-            Context.abort(s"block definition: $d")
+            ErrorReporter.abort(s"block definition: $d")
         }
 
       case lifted.Return(lifted.Run(stmt, tpe)) =>
@@ -140,14 +144,14 @@ object Transformer {
                 Return(returnedValues))
             }
           case _ =>
-            Context.abort(s"Unsupported blocksymbol: $id")
+            ErrorReporter.abort(s"Unsupported blocksymbol: $id")
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), List(), args) =>
         val opTag = {
           tpe match
             case core.BlockType.Interface(symbols.Interface(_, _, ops), _) => ops.indexOf(op)
-            case _ => Context.abort(s"Unsupported receiver type $tpe")
+            case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
         }
         transform(args).run { values =>
           Invoke(Variable(transform(id), transform(tpe)), opTag, values)
@@ -217,10 +221,10 @@ object Transformer {
         }
 
       case _ =>
-        Context.abort(s"Unsupported statement: $stmt")
+        ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
-  def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, Context): Binding[Variable] = arg match {
+  def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
@@ -240,7 +244,7 @@ object Transformer {
     }
   }
 
-  def transform(block: lifted.Block)(using BlocksParamsContext, DeclarationContext, Context): Binding[Variable] = block match {
+  def transform(block: lifted.Block)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = block match {
     case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -256,7 +260,7 @@ object Transformer {
     case lifted.New(impl) => ???
   }
 
-  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, Context): Binding[Variable] = expr match {
+  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match {
     case lifted.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -319,7 +323,8 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.Constructor, tpe: core.BlockType.Function), List(), args) =>
+    case lifted.PureApp(lifted.BlockVar(blockName, tpe: core.BlockType.Function), List(), args)
+    if DeclarationContext.findConstructor(blockName).isDefined =>
       val variable = Variable(freshName("x"), transform(tpe.result));
       val tag = getTagFor(blockName)
 
@@ -329,11 +334,12 @@ object Transformer {
         }
       }
 
-    case lifted.Select(target, field: symbols.Field, tpe) =>
+    case lifted.Select(target, field, tpe)
+    if DeclarationContext.findField(field).isDefined =>
       // TODO all of this can go away, if we desugar records in the translation to core!
-      val fields = field.constructor.fields
-      val fieldIndex = fields.indexOf(field)
-      val variables = fields.map { f => Variable(freshName("n"), transform(f.returnType)) }
+      val fields = DeclarationContext.getField(field).constructor.fields
+      val fieldIndex = fields.indexWhere(_.id == field)
+      val variables = fields.map { f => Variable(freshName("n"), transform(tpe)) }
       transform(target).flatMap { value =>
         Binding { k =>
           Switch(value, List(0 -> Clause(variables, k(variables(fieldIndex)))), None)
@@ -348,24 +354,19 @@ object Transformer {
       }
 
     case _ =>
-      Context.abort(s"Unsupported expression: $expr")
+      ErrorReporter.abort(s"Unsupported expression: $expr")
   }
 
-  def getTagFor(constructor: symbols.Constructor)(using Context): Int = constructor.tpe match {
-    case symbols.DataType(name, Nil, constructors) => constructors.indexOf(constructor)
-    case symbols.DataType(name, tparams, constructors) => Context.abort("Not yet supported: (data) type polymorphism")
-    case symbols.Record(name, Nil, constructor) => builtins.SingletonRecord
-    case symbols.Record(name, tparams, constructor) => Context.abort("Not yet supported: (data) type polymorphism")
-    case t @ symbols.ExternType(name, tparams) => Context.abort(s"Application to an unknown symbol: $t")
-  }
+  def getTagFor(constructor: core.Id)(using DeclarationContext, ErrorReporter): Int =
+    DeclarationContext.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
 
-  def transform(args: List[lifted.Argument])(using BlocksParamsContext, DeclarationContext, Context): Binding[List[Variable]] =
+  def transform(args: List[lifted.Argument])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[List[Variable]] =
     args match {
       case Nil => pure(Nil)
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, Context): List[Clause] = {
+  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] = {
     handler.operations.sortBy[Int]({
       case lifted.Operation(operationName, _) =>
         DeclarationContext.getInterface(handler.id.symbol).properties.indexWhere(_.id == operationName)
@@ -379,11 +380,11 @@ object Transformer {
           PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
             transform(body)))
       case _ =>
-        Context.abort(s"Unsupported handler $handler")
+        ErrorReporter.abort(s"Unsupported handler $handler")
     })
   }
 
-  def transform(param: lifted.Param)(using Context): Variable =
+  def transform(param: lifted.Param)(using ErrorReporter): Variable =
     param match {
       case lifted.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
@@ -393,7 +394,7 @@ object Transformer {
         Variable(transform(name), builtins.Evidence)
     }
 
-  def transform(tpe: core.ValueType)(using Context): Type = tpe match {
+  def transform(tpe: core.ValueType)(using ErrorReporter): Type = tpe match {
     case core.ValueType.Var(name) => ???
     case core.ValueType.Boxed(tpe, capt) => ???
     case core.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
@@ -404,32 +405,10 @@ object Transformer {
     case core.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
   }
 
-  def transform(tpe: core.BlockType)(using Context): Type = tpe match {
+  def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
     case core.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
     case core.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
-  }
-
-  def transform(tpe: symbols.Type)(using Context): Type = tpe match {
-
-    case symbols.builtins.TUnit => builtins.UnitType
-
-    case symbols.builtins.TInt => Type.Int()
-
-    case symbols.builtins.TBoolean => builtins.BooleanType
-
-    case symbols.builtins.TDouble => Type.Double()
-
-    case symbols.builtins.TString => Type.String()
-
-    case symbols.FunctionType(Nil, _, vparams, Nil, _, _) => Negative("<function>")
-
-    case symbols.InterfaceType(interface, List()) => Negative(interface.name.name)
-
-    case symbols.ValueTypeApp(typeConstructor, List()) => Positive(typeConstructor.name.name)
-
-    case _ =>
-      Context.abort(s"unsupported type: $tpe (class = ${tpe.getClass})")
   }
 
   def transform(id: Symbol): String =
@@ -437,7 +416,7 @@ object Transformer {
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, Context): Unit =
+  def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
       case Definition.Def(blockName, tpe, lifted.BlockLit(tparams, params, body)) =>
         noteBlockParams(blockName, params.map(transform))
@@ -449,7 +428,7 @@ object Transformer {
    * Extra info in context
    */
 
-  def abort(message: String)(using C: Context) =
+  def abort(message: String)(using C: ErrorReporter) =
     C.abort(message)
 
   class BlocksParamsContext() {
@@ -474,7 +453,4 @@ object Transformer {
   }
 
   def pure[A](a: A): Binding[A] = Binding(k => k(a))
-
-
-  def Context(using C: Context) = C
 }
