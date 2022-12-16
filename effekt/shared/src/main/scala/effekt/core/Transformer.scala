@@ -63,7 +63,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.DefDef(id, annot, binding) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
-        Definition.Def(sym, transformAsBlock(binding))
+        Definition.Def(sym, transformAsControlBlock(binding))
       }
 
       // convert binding into Definition.
@@ -146,7 +146,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol
         insertBindings {
-          Def(sym, transformAsBlock(binding), transform(rest))
+          Def(sym, transformAsControlBlock(binding), transform(rest))
         }
 
       case v @ source.VarDef(id, _, reg, binding) =>
@@ -167,9 +167,13 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Unbox(transformAsPure(tree))
 
   def transformBox(tree: source.Term)(implicit C: Context): Pure =
-    Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
+    Box(transformAsControlBlock(tree), transform(Context.inferredCapture(tree)))
 
-  def transformAsBlock(tree: source.Term)(using Context): Block = tree match {
+  /**
+   * Transforms the source to a function block that expects to be called using [[core.Stmt.App]]
+   * or to an interface block. Generates a wrapper if necessary.
+   */
+  def transformAsControlBlock(tree: source.Term)(using Context): Block = tree match {
     case v: source.Var =>
       val sym = v.definition
       val tpe = Context.blockTypeOf(sym)
@@ -210,7 +214,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
           BlockVar(sym.asInstanceOf) // leave interfaces alone (also extern ones)
       }
     case s @ source.Select(receiver, selector) =>
-      Member(transformAsBlock(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
+      Member(transformAsControlBlock(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
 
     case s @ source.New(impl) =>
       New(transform(impl, false))
@@ -328,10 +332,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
-      val rec = transformAsBlock(receiver)
+      val rec = transformAsControlBlock(receiver)
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
-      val blockArgs = bargs.map(transformAsBlock)
+      val blockArgs = bargs.map(transformAsControlBlock)
 
       // TODO if we always just use .capt, then why annotate it?
       // val captArgs = blockArgs.map(_.capt) //bargs.map(b => transform(Context.inferredCapture(b)))
@@ -359,7 +363,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsPure(expr)
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
-      val blockArgs = bargs.map(transformAsBlock)
+      val blockArgs = bargs.map(transformAsControlBlock)
       // val captArgs = blockArgs.map(b => b.capt) //transform(Context.inferredCapture(b)))
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
@@ -445,7 +449,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // val cargs = bargs.map(b => transform(Context.inferredCapture(b)))
 
     val vargsT = vargs.map(transformAsPure)
-    val bargsT = bargs.map(transformAsBlock)
+    val bargsT = bargs.map(transformAsControlBlock)
 
     sym match {
       case f: ExternFunction if isPure(f.capture) =>
