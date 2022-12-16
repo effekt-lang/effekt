@@ -2,11 +2,11 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
-import effekt.source.MatchPattern
+import effekt.source.{MatchPattern, Term}
 import effekt.typer.Substitutions
 
 object Transformer extends Phase[Typechecked, CoreTransformed] {
@@ -63,7 +63,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case v @ source.DefDef(id, annot, binding) =>
       val sym = v.symbol
       val (definition, bindings) = Context.withBindings {
-        Definition.Def(sym, transformAsControlBlock(binding))
+        Definition.Def(sym, transformAsBlock(binding))
       }
 
       // convert binding into Definition.
@@ -146,7 +146,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case v @ source.DefDef(id, annot, binding) =>
         val sym = v.symbol
         insertBindings {
-          Def(sym, transformAsControlBlock(binding), transform(rest))
+          Def(sym, transformAsBlock(binding), transform(rest))
         }
 
       case v @ source.VarDef(id, _, reg, binding) =>
@@ -167,11 +167,60 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Unbox(transformAsPure(tree))
 
   def transformBox(tree: source.Term)(implicit C: Context): Pure =
-    Box(transformAsControlBlock(tree), transform(Context.inferredCapture(tree)))
+    Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
 
   /**
-   * Transforms the source to a function block that expects to be called using [[core.Stmt.App]]
-   * or to an interface block. Generates a wrapper if necessary.
+   * Transforms the soruce to a function (expecting to be called using [[core.Stmt.App]] or an interface.
+   */
+  def transformAsBlock(tree: source.Term)(using Context): Block = tree match {
+    case v: source.Var =>
+      val sym = v.definition
+      Context.blockTypeOf(sym) match {
+        case _: BlockType.FunctionType => transformAsControlBlock(tree)
+        case _: BlockType.InterfaceType => transformAsObject(tree)
+      }
+    case _: source.BlockLiteral => transformAsControlBlock(tree)
+    case _: source.New => transformAsObject(tree)
+
+    case s @ source.Select(receiver, id) =>
+      Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
+
+    case source.Unbox(b) =>
+      Unbox(transformAsPure(b))
+
+    case _ =>
+      transformUnbox(tree)
+  }
+  /**
+   * Transforms the source to an interface block
+   */
+  def transformAsObject(tree: source.Term)(using Context): Block = tree match {
+    case v: source.Var =>
+      val sym = v.definition
+      val tpe = Context.blockTypeOf(sym)
+      tpe match {
+        case _: BlockType.FunctionType =>
+          Context.panic(s"Using function symbol ${sym} but an object was expected.")
+        case _: BlockType.InterfaceType => BlockVar(sym.asInstanceOf)
+      }
+
+    case source.BlockLiteral(tparams, vparams, bparams, body) =>
+      Context.panic(s"Using block literal ${tree} but an object was expected.")
+
+    case s @ source.Select(receiver, id) =>
+      Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
+
+    case source.New(impl) =>
+      New(transform(impl, false))
+
+    case source.Unbox(b) =>
+      Unbox(transformAsPure(b))
+
+    case _ =>
+      transformUnbox(tree)
+  }
+  /**
+   * Transforms the source to a function block that expects to be called using [[core.Stmt.App]].
    */
   def transformAsControlBlock(tree: source.Term)(using Context): Block = tree match {
     case v: source.Var =>
@@ -210,22 +259,23 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
                   Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
             case sym: BlockSymbol => BlockVar(sym)
           }
-        case BlockType.InterfaceType(typeConstructor, args) =>
-          BlockVar(sym.asInstanceOf) // leave interfaces alone (also extern ones)
+        case t: BlockType.InterfaceType =>
+          Context.abort(s"Expected a function but got an object of type ${t}")
       }
-    case s @ source.Select(receiver, selector) =>
-      Member(transformAsControlBlock(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
-
-    case s @ source.New(impl) =>
-      New(transform(impl, false))
-
-    case source.Unbox(b) =>
-      Unbox(transformAsPure(b))
 
     case source.BlockLiteral(tps, vps, bps, body) =>
       val tparams = tps.map(t => t.symbol)
       val cparams = bps.map { b => b.symbol.capture }
       BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))
+
+    case s @ source.Select(receiver, selector) =>
+      Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
+
+    case s @ source.New(impl) =>
+      Context.abort(s"Expected a function but got an object instantiation: ${s}")
+
+    case source.Unbox(b) =>
+      Unbox(transformAsPure(b))
 
     case _ =>
       transformUnbox(tree)
@@ -332,10 +382,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
-      val rec = transformAsControlBlock(receiver)
+      val rec = transformAsObject(receiver)
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
-      val blockArgs = bargs.map(transformAsControlBlock)
+      val blockArgs = bargs.map(transformAsBlock)
 
       // TODO if we always just use .capt, then why annotate it?
       // val captArgs = blockArgs.map(_.capt) //bargs.map(b => transform(Context.inferredCapture(b)))
@@ -363,7 +413,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val e = transformAsPure(expr)
       val typeArgs = Context.typeArguments(c).map(transform)
       val valueArgs = vargs.map(transformAsPure)
-      val blockArgs = bargs.map(transformAsControlBlock)
+      val blockArgs = bargs.map(transformAsBlock)
       // val captArgs = blockArgs.map(b => b.capt) //transform(Context.inferredCapture(b)))
 
       if (pureOrIO(capture) && bargs.forall { pureOrIO }) {
@@ -449,7 +499,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     // val cargs = bargs.map(b => transform(Context.inferredCapture(b)))
 
     val vargsT = vargs.map(transformAsPure)
-    val bargsT = bargs.map(transformAsControlBlock)
+    val bargsT = bargs.map(transformAsBlock)
 
     sym match {
       case f: ExternFunction if isPure(f.capture) =>
