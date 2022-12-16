@@ -170,7 +170,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     Box(transformAsBlock(tree), transform(Context.inferredCapture(tree)))
 
   /**
-   * Transforms the soruce to a function (expecting to be called using [[core.Stmt.App]] or an interface.
+   * Transforms the source to a function (expecting to be called using [[core.Stmt.App]] or an interface.
    */
   def transformAsBlock(tree: source.Term)(using Context): Block = tree match {
     case v: source.Var =>
