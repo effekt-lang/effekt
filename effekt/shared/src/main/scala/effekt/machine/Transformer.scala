@@ -431,9 +431,6 @@ object Transformer {
    * Extra info in context
    */
 
-  def abort(message: String)(using C: ErrorReporter) =
-    C.abort(message)
-
   class BlocksParamsContext() {
     var blocksParams: Map[Symbol, Environment] = Map()
   }
