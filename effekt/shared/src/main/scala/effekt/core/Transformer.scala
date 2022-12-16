@@ -181,7 +181,9 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       }
     case _: source.BlockLiteral => transformAsControlBlock(tree)
     case _: source.New => transformAsObject(tree)
-
+    case _ => transformUnboxOrSelect(tree)
+  }
+  private def transformUnboxOrSelect(tree: source.Term)(using Context): Block = tree match {
     case s @ source.Select(receiver, id) =>
       Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
 
@@ -207,17 +209,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.BlockLiteral(tparams, vparams, bparams, body) =>
       Context.panic(s"Using block literal ${tree} but an object was expected.")
 
-    case s @ source.Select(receiver, id) =>
-      Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
-
     case source.New(impl) =>
       New(transform(impl, false))
 
-    case source.Unbox(b) =>
-      Unbox(transformAsPure(b))
-
-    case _ =>
-      transformUnbox(tree)
+    case _ => transformUnboxOrSelect(tree)
   }
   /**
    * Transforms the source to a function block that expects to be called using [[core.Stmt.App]].
@@ -268,17 +263,10 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val cparams = bps.map { b => b.symbol.capture }
       BlockLit(tparams, cparams, vps map transform, bps map transform, transform(body))
 
-    case s @ source.Select(receiver, selector) =>
-      Member(transformAsObject(receiver), s.definition, transform(Context.inferredBlockTypeOf(tree)))
-
     case s @ source.New(impl) =>
       Context.abort(s"Expected a function but got an object instantiation: ${s}")
 
-    case source.Unbox(b) =>
-      Unbox(transformAsPure(b))
-
-    case _ =>
-      transformUnbox(tree)
+    case _ => transformUnboxOrSelect(tree)
   }
 
   def transformAsPure(tree: source.Term)(using Context): Pure = transformAsExpr(tree) match {
