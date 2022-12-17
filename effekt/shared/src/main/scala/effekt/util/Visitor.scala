@@ -16,6 +16,8 @@ import scala.quoted.*
  * Tipp: replace [[structural]] by [[structuralDebug]] to have the generated
  *   code be printed at compile time.
  *
+ *   If there is a bug in the macro, try uncommenting `-Xcheck-macros` in [[build.sbt]].
+ *
  * Here are some useful resources explaining details of the Scala 3 macro system:
  *
  * @see https://eed3si9n.com/intro-to-scala-3-macros/
@@ -28,11 +30,15 @@ import scala.quoted.*
  *   it should result in
  *     case v @ ValueVar(id, annotatedType) => v
  *
- * TODO also support a visit-method, like in [[generator.chez.Tree.Rewrite]]
- *
  * TODO also support context parameters, like in [[generator.chez.Tree.Rewrite]]
  */
 trait Visitor {
+
+  /**
+   * Hook that can be overridden to perform an action at every node in the tree
+   */
+  def visit[T](source: T)(visitor: T => T): T = visitor(source)
+
   inline def structural[T](sc: T, p: PartialFunction[T, T]): T =
     ${structuralImpl[this.type, T]('{sc}, '{p}, false)}
 
@@ -48,7 +54,17 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
 
   case class RewriteMethod(tpe: TypeRepr, method: Symbol)
 
-  val rewrites: List[RewriteMethod] = TypeRepr.of[Self].typeSymbol.methodMember("rewrite").map { m =>
+  val owner = Symbol.spliceOwner
+  val self = TypeRepr.of[Self].typeSymbol
+
+  val visit: Symbol = self.methodMember("visit") match {
+    case Nil => report.errorAndAbort("Method visit not found.")
+    case v :: Nil => v
+    case _ => report.errorAndAbort("Multiple visit methods found.")
+  }
+
+  val rewrites: List[RewriteMethod] = self.methodMember("rewrite").map { m =>
+    // TODO using .tree is discouraged. Find type differently!
     m.tree match {
       case DefDef(name, params, tpe, rhs) =>
         RewriteMethod(tpe.tpe, m)
@@ -81,22 +97,19 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
     def isCaseClass: Boolean = !isSumType && sym.isClassDef
   }
 
-  def freshBind(name: String, tpt: TypeRepr): Symbol =
-    Symbol.newBind(Symbol.noSymbol, name, Flags.Local, tpt)
-
   // { (x: [[tpe]]) => [[body]](x) : [[tpe]] }
-  def makeClosure(tpe: TypeRepr, body: Term => Term): Term = {
-    val methodSym = Symbol.newMethod(Symbol.noSymbol, "rewrite",
+  def makeClosure(tpe: TypeRepr, owner: Symbol, body: (Symbol, Term) => Term): Term = {
+    val methodSym = Symbol.newMethod(owner, "rewrite",
       MethodType(List("t"))(m => List(tpe), m => tpe))
     Block(List(
       DefDef(methodSym, {
-        case List(List(t: Term)) => Some(body(t))
+        case List(List(t: Term)) => Some(body(methodSym, t))
         case _ => ???
       })
     ), Closure(Ref(methodSym), None))
   }
 
-  def rewriteExpression(term: Term, tpe: TypeRepr): Term = {
+  def rewriteExpression(term: Term, tpe: TypeRepr, owner: Symbol): Term = {
     // base case: we can directly rewrite this type: rewrite(e)
     if (hasRewriteFor(tpe))
       return Apply(Ref(rewriteFor(tpe).get.method), List(term))
@@ -105,7 +118,7 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
     if (tpe <:< TypeRepr.of[List[Any]] || tpe <:< TypeRepr.of[Option[Any]]) tpe.typeArgs match {
       case List(elTpe) if hasRewriteFor(elTpe) =>
         return Select.overloaded(term, "map", List(elTpe),
-          List(makeClosure(elTpe, t => rewriteExpression(t, elTpe))), tpe)
+          List(makeClosure(elTpe, owner, (owner, t) => rewriteExpression(t, elTpe, owner))), tpe)
       case _ =>
         ()
     }
@@ -114,12 +127,12 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
     term
   }
 
-  def rewriteCase(sym: Symbol): CaseDef =
-    if (sym.isCaseClass) rewriteCaseCaseClass(sym)
-    else rewriteCaseTrait(sym)
+  def rewriteCase(sym: Symbol, owner: Symbol): CaseDef =
+    if (sym.isCaseClass) rewriteCaseCaseClass(sym, owner)
+    else rewriteCaseTrait(sym, owner)
 
   // case Return.unapply(e) => Return.apply(rewrite(e))
-  def rewriteCaseCaseClass(typeSym: Symbol): CaseDef =
+  def rewriteCaseCaseClass(typeSym: Symbol, owner: Symbol): CaseDef =
     val tpt = typeSym.typeRef
 
     val companion = typeSym.companionModule
@@ -131,7 +144,7 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
     // Expr
     val fieldTypes: List[TypeRepr] = fields.map { f => tpt.memberType(f) }
     // e: Expr
-    val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => freshBind(f.name, tpt) }
+    val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => Symbol.newBind(owner, f.name, Flags.Local, tpt) }
     // e @ _
     // TODO not sure this is needed:
     //   Typed(Wildcard(), Inferred(tpt))
@@ -140,13 +153,13 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
     // case Return.unapply(e @ _) => Return.apply(REWRITE[[e]])
     CaseDef(TypedOrTest(Unapply(destructor, Nil, bindFields), TypeIdent(typeSym)), None,
       Block(Nil, Apply(constructor, (fieldSym zip fieldTypes).map {
-        case (f, tpt) => rewriteExpression(Ref(f), tpt)
+        case (f, tpt) => rewriteExpression(Ref(f), tpt, owner)
       })))
 
   // case e: Expr => rewrite(e)
-  def rewriteCaseTrait(sym: Symbol): CaseDef = {
+  def rewriteCaseTrait(sym: Symbol, owner: Symbol): CaseDef = {
     val tpt = sym.typeRef
-    val e = freshBind("e", tpt)
+    val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
     val rewrite = rewriteFor(tpt).getOrElse { report.errorAndAbort(s"No rewrite method for type ${sym}!") }
 
     // case e @ (_: Expr) => rewrite(e)
@@ -173,18 +186,29 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
       if (!canTraverse(tpt)) { report.errorAndAbort(s"Don't know how to generate traversal for case ${ v }") }
     }
 
+    val partial = pf.asTerm
+    val scrutinee = sc.asTerm
+
+    // case _ if pf.isDefinedAt(sc) => pf.apply(sc)
+    val userTraversal = CaseDef(
+      Wildcard(), Some(Apply(Select.unique(partial, "isDefinedAt"), List(scrutinee))),
+        Block(Nil, Apply(Select.unique(partial, "apply"), List(scrutinee))))
+
     // We add a case that should never occur, only because exhaustivity checks seem not
     // to work for generated matches.
     // case _ => sys.error("Should never happen!")
     val catchall = CaseDef(Wildcard(), None,
       Block(Nil, '{ sys.error("Should never happen!") }.asTerm))
 
-    val rewritten = Match(sc.asTerm, variants.map(rewriteCase) :+ catchall).asExprOf[T]
+    // this.visit[tpt](sc) { x => x match { ... } }
+    val rewritten = Apply(Apply(TypeApply(Select.unique(This(self), "visit"),
+      List(Inferred(tpt))),
+        List(scrutinee)),
+          List(makeClosure(tpt, owner, (owner, t) => Match(t,
+            (userTraversal :: variants.map(v => rewriteCase(v, owner))) :+ catchall))))
 
-    val generated = '{ if (${pf}.isDefinedAt(${sc})) { ${pf}(${sc}) } else { ${rewritten} } }
-
-    if (debug) { report.info(Printer.TreeShortCode.show(generated.asTerm)) }
-    generated
+    if (debug) { report.info(Printer.TreeShortCode.show(rewritten)) }
+    rewritten.asExprOf[T]
   }
 }
 
