@@ -1,6 +1,8 @@
 package effekt
 package core
 
+import effekt.util.Visitor
+
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -294,90 +296,33 @@ object Tree {
     case leaf => ()
   }
 
-  // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite {
-    // Hooks to override
+  class Rewrite extends Visitor {
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
+
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
-    def rewrite(p: Pure): Pure =
-      p match {
-        case e if pure.isDefinedAt(e) => pure(e)
-        case PureApp(b, targs, args) =>
-          PureApp(rewrite(b), targs, args map rewrite)
-        case Select(target, field, tpe) =>
-          Select(rewrite(target), field, tpe)
-        case v: ValueVar   => v
-        case l: Literal    => l
-        case Box(b, capt)        => Box(rewrite(b), capt)
-      }
+    def rewrite(p: Pure): Pure = structural(p, pure)
+    def rewrite(e: Expr): Expr = structural(e, expr)
+    def rewrite(s: Stmt): Stmt = structural(s, stmt)
+    def rewrite(b: Block): Block = structural(b, block)
+    def rewrite(d: Definition): Definition = structural(d, defn)
 
-    // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: Expr): Expr =
-      e match {
-        case e if expr.isDefinedAt(e) => expr(e)
-        case DirectApp(b, targs, vargs, bargs) =>
-          DirectApp(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
-        case Run(s) => Run(rewrite(s))
-        case p: Pure     => rewrite(p)
-      }
-
-    def rewrite(d: Definition): Definition = d match {
-      case d if defn.isDefinedAt(d) => defn(d)
-      case Definition.Def(id, block) =>
-        Definition.Def(id, rewrite(block))
-      case Definition.Let(id, binding) =>
-        Definition.Let(id, rewrite(binding))
+    def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
+      case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
     }
 
-    def rewrite(e: Stmt): Stmt =
-      e match {
-        case e if stmt.isDefinedAt(e) => stmt(e)
-        case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
-        case Val(id, binding, body) =>
-          Val(id, rewrite(binding), rewrite(body))
-        case App(b, targs, vargs, bargs) =>
-          App(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
-        case If(cond, thn, els) =>
-          If(rewrite(cond), rewrite(thn), rewrite(els))
-        case Return(e: Expr) =>
-          Return(rewrite(e))
-        case State(id, init, reg, body) =>
-          State(id, rewrite(init), reg, rewrite(body))
-        case Try(body, handler) =>
-          Try(rewrite(body), handler map rewrite)
-        case Region(body) =>
-          Region(rewrite(body))
-        case Match(scrutinee, clauses, default) =>
-          Match(rewrite(scrutinee), clauses map {
-            case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
-          }, default map rewrite)
-        case Hole() => e
-      }
-
-    def rewrite(e: Block): Block = e match {
-      case e if block.isDefinedAt(e) => block(e)
-      case BlockLit(tps, cps, vps, bps, body) =>
-        BlockLit(tps, cps, vps, bps, rewrite(body))
-      case Member(b, field, tpe) =>
-        Member(rewrite(b), field, tpe)
-      case Unbox(e) =>
-        Unbox(rewrite(e))
-      case New(impl) =>
-        New(rewrite(impl))
-      case b: BlockVar => b
-    }
+    // TODO generate those:
     def rewrite(e: Implementation): Implementation = e match {
       case e if handler.isDefinedAt(e) => handler(e)
       case Implementation(tpe, clauses) => Implementation(tpe, clauses map rewrite)
     }
+
     def rewrite(o: Operation): Operation = o match {
       case Operation(name, tps, cps, vps, bps, resume, body) => Operation(name, tps, cps, vps, bps, resume, rewrite(body))
     }
   }
-
 }
