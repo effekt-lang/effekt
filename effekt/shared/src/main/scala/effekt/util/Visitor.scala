@@ -3,9 +3,6 @@ package util
 
 import scala.quoted.*
 
-final class NoContext
-given NoContext = new NoContext
-
 /**
  * Automatically generates traversal code.
  *
@@ -80,11 +77,22 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
   }
 
   val rewrites: List[RewriteMethod] = self.methodMember(rewriteName).map { m =>
-    // TODO using .tree is discouraged. Find type differently!
-    m.tree match {
-      case DefDef(name, params, tpe, rhs) =>
-        RewriteMethod(tpe.tpe, m)
-      case _ => report.errorAndAbort("Not supported.")
+    TypeRepr.of[Self].memberType(m) match {
+      case tpe: MethodType =>
+        def findResult(tpe: TypeRepr): TypeRepr = tpe match {
+          case tpe: LambdaType => findResult(tpe.resType)
+          case _ => tpe
+        }
+        // Here we check that first argument and return type are equal.
+        val argType = tpe.paramTypes.head
+        val resType = findResult(tpe)
+        if (!(resType <:< argType)) {
+          val msg = s"To be a valid rewrite, the return type of method '${m.name}' should be a subtype of its argument type."
+          val pos= m.pos.getOrElse(Position.ofMacroExpansion)
+          report.errorAndAbort(msg, pos)
+        }
+        RewriteMethod(argType, m)
+      case _ => report.errorAndAbort("Needs to be a method")
     }
   }
 
