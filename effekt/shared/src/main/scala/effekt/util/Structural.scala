@@ -18,7 +18,7 @@ import scala.quoted.*
  * The following example will increment all integer literals in a tree:
  * {{{
  *   enum Exp { case Lit(n: Int); case Add(l: Exp, r: Exp) }
- *   object Test extends Visitor {
+ *   object Test extends Structural {
  *     def increment(e: Exp): Exp = structural(e)
  *     def increment(n: Int): Int = n + 1
  *   }
@@ -56,7 +56,7 @@ import scala.quoted.*
  *   it should result in
  *     case v @ ValueVar(id, annotatedType) => v
  */
-trait Visitor {
+trait Structural {
 
   /**
    * Performs structural recursion on [[sc]] and reconstructs a value of [[T]]
@@ -80,7 +80,7 @@ trait Visitor {
 }
 
 
-class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
+class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   import q.reflect.*
 
   case class RewriteMethod(tpe: TypeRepr, method: Symbol)
@@ -253,7 +253,7 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
 
 def structuralImpl[Self: Type, T: Type](
   sc: quoted.Expr[T], debug: Boolean
-)(using q: Quotes): quoted.Expr[T] = new StructuralVisitor[Self, q.type](debug).structural[T](sc)
+)(using q: Quotes): quoted.Expr[T] = new StructuralMacro[Self, q.type](debug).structural[T](sc)
 
 /**
  * For debugging and development.

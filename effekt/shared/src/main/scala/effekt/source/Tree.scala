@@ -623,7 +623,7 @@ object Tree {
   }
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite extends util.Visitor {
+  trait Rewrite extends util.Structural {
 
     def Context(using C: Context): Context = C
 

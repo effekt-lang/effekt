@@ -1,7 +1,7 @@
 package effekt
 package core
 
-import effekt.util.Visitor
+import effekt.util.Structural
 
 
 /**
@@ -296,7 +296,7 @@ object Tree {
     case leaf => ()
   }
 
-  class Rewrite extends Visitor {
+  class Rewrite extends Structural {
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty

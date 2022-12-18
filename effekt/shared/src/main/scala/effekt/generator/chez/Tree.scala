@@ -187,7 +187,7 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
 object Tree {
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite[Ctx] extends util.Visitor {
+  trait Rewrite[Ctx] extends util.Structural {
 
     // Hooks to override
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
