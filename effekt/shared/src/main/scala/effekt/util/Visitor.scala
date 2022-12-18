@@ -31,24 +31,21 @@ given NoContext = new NoContext
  *   it should result in
  *     case v @ ValueVar(id, annotatedType) => v
  */
-trait Visitor[C] {
+trait Visitor {
 
   /**
-   * Hook that can be overridden to perform an action at every node in the tree
+   * Performs structural recursion on [[sc]] and reconstructs a value of [[T]]
+   * while doing so.
    */
-  def visit[T](source: T)(visitor: T => T)(using C): T = visitor(source)
-
-  inline def structural[T](sc: T, p: PartialFunction[T, T]): T =
-    if (p.isDefinedAt(sc)) { p(sc) } else { structural(sc) }
-
   inline def structural[T](sc: T): T =
     ${structuralImpl[this.type, T]('{sc}, false)}
 
-  inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using C): T =
-    visit(sc) { t => structural(t, p) }
-
-  inline def structuralVisit[T](sc: T)(using C): T =
-    visit(sc) { t => structural(t) }
+  /**
+   * Like structural without [[p]], but first consults the partial function before
+   * destructing [[sc]]
+   */
+  inline def structural[T](sc: T, inline p: PartialFunction[T, T]): T =
+    if (p.isDefinedAt(sc)) { p(sc) } else { structural(sc) }
 
   /**
    * Same as structural, but prints the generated code.

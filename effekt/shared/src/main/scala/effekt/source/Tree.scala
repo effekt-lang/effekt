@@ -623,7 +623,7 @@ object Tree {
   }
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite extends util.Visitor[Context] {
+  trait Rewrite extends util.Visitor {
 
     def Context(using C: Context): Context = C
 
@@ -649,7 +649,7 @@ object Tree {
      *
      * Copies all annotations and position information from source to target
      */
-    override def visit[T](source: T)(visitor: T => T)(using Context): T =
+    def visit[T](source: T)(visitor: T => T)(using Context): T =
       val target = visitor(source)
       (source, target) match {
         case (src: Tree, tgt: Tree) =>
@@ -658,6 +658,12 @@ object Tree {
         case _ =>
       }
       target
+
+    inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using Context): T =
+      visit(sc) { t => structural(t, p) }
+
+    inline def structuralVisit[T](sc: T)(using Context): T =
+      visit(sc) { t => structural(t) }
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {

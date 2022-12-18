@@ -105,7 +105,7 @@ object DeadCodeElimination extends Tree.Rewrite[Unit] {
       Let(bs, transformedBody)
   }
 
-  override def rewrite(block: Block)(using Unit): Block = visit(block) {
+  override def rewrite(block: Block)(using Unit): Block = block match {
 
     case Block(defs, exprs, result) =>
       val transformedResult = rewrite(result)
@@ -187,7 +187,7 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
 object Tree {
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite[Ctx] extends util.Visitor[Ctx] {
+  trait Rewrite[Ctx] extends util.Visitor {
 
     // Hooks to override
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty

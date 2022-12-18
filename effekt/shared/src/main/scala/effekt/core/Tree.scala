@@ -296,9 +296,7 @@ object Tree {
     case leaf => ()
   }
 
-  import effekt.context.Context
-
-  class Rewrite extends Visitor[Context] {
+  class Rewrite extends Visitor {
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
@@ -307,15 +305,15 @@ object Tree {
 
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
-    def rewrite(p: Pure)(using Context): Pure = structural(p, pure)
-    def rewrite(e: Expr)(using Context): Expr = structural(e, expr)
-    def rewrite(s: Stmt)(using Context): Stmt = structural(s, stmt)
-    def rewrite(b: Block)(using Context): Block = structural(b, block)
-    def rewrite(d: Definition)(using Context): Definition = structural(d, defn)
-    def rewrite(e: Implementation)(using Context): Implementation = structural(e, handler)
-    def rewrite(o: Operation)(using Context): Operation = structural(o)
+    def rewrite(p: Pure): Pure = structural(p, pure)
+    def rewrite(e: Expr): Expr = structural(e, expr)
+    def rewrite(s: Stmt): Stmt = structural(s, stmt)
+    def rewrite(b: Block): Block = structural(b, block)
+    def rewrite(d: Definition): Definition = structural(d, defn)
+    def rewrite(e: Implementation): Implementation = structural(e, handler)
+    def rewrite(o: Operation): Operation = structural(o)
 
-    def rewrite(matchClause: (Id, BlockLit))(using Context): (Id, BlockLit) = matchClause match {
+    def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
     }
   }
