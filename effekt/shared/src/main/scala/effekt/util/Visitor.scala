@@ -36,6 +36,11 @@ given NoContext = new NoContext
  * TODO also support context parameters, like in [[generator.chez.Tree.Rewrite]]
  *
  * TODO add a variant without partial function (like in source.Rewrite.rewrite(Handler))
+ *
+ *
+ * TODO maybe do not specialize to "rewrite", but make work in general for:
+ *
+ *   def <name>(<structuralarg>, <otherargs>, ...)(<otherargs>...) = structural
  */
 trait Visitor[C] {
 
@@ -45,13 +50,19 @@ trait Visitor[C] {
   def visit[T](source: T)(visitor: T => T)(using C): T = visitor(source)
 
   inline def structural[T](sc: T, p: PartialFunction[T, T])(using ctx: C): T =
-    ${structuralImpl[this.type, T, C]('{sc}, '{p}, '{ctx}, false)}
+    if (p.isDefinedAt(sc)) { p(sc) } else { structural(sc) }
+
+  inline def structural[T](sc: T)(using ctx: C): T =
+    ${structuralImpl[this.type, T, C]('{sc}, '{ctx}, false)}
+
+  inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using ctx: C): T =
+    visit(sc) { t => structural(t, p) }
 
   /**
    * Same as structural, but prints the generated code.
    */
-  inline def structuralDebug[T](sc: T, p: PartialFunction[T, T])(using ctx: C): T =
-    ${structuralImpl[this.type, T, C]('{sc}, '{p}, '{ctx}, true)}
+  inline def structuralDebug[T](sc: T)(using ctx: C): T =
+    ${structuralImpl[this.type, T, C]('{sc}, '{ctx}, true)}
 }
 
 class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], debug: Boolean)(using val q: Q) {
@@ -59,19 +70,21 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
 
   case class RewriteMethod(tpe: TypeRepr, method: Symbol)
 
+  val rewriteName = {
+    // TODO find method that has this.type == Self
+    def findMethod(sym: Symbol): Symbol =
+      if (sym.isDefDef && !sym.isAnonymousFunction) sym else findMethod(sym.owner)
+
+    findMethod(Symbol.spliceOwner).name
+  }
+
   val owner = Symbol.spliceOwner
   val self = TypeRepr.of[Self].typeSymbol
 
   // the context we pass around to all recursive function calls
   val context = ctx.asTerm
 
-  val visit: Symbol = self.methodMember("visit") match {
-    case Nil => report.errorAndAbort("Method visit not found.")
-    case v :: Nil => v
-    case _ => report.errorAndAbort("Multiple visit methods found.")
-  }
-
-  val rewrites: List[RewriteMethod] = self.methodMember("rewrite").map { m =>
+  val rewrites: List[RewriteMethod] = self.methodMember(rewriteName).map { m =>
     // TODO using .tree is discouraged. Find type differently!
     m.tree match {
       case DefDef(name, params, tpe, rhs) =>
@@ -107,7 +120,7 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
 
   // { (x: [[tpe]]) => [[body]](x) : [[tpe]] }
   def makeClosure(tpe: TypeRepr, owner: Symbol, body: (Symbol, Term) => Term): Term = {
-    val methodSym = Symbol.newMethod(owner, "rewrite",
+    val methodSym = Symbol.newMethod(owner, rewriteName,
       MethodType(List("t"))(m => List(tpe), m => tpe))
     Block(List(
       DefDef(methodSym, {
@@ -181,7 +194,7 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
   }
 
   // the main entry point of this macro
-  def structural[T: Type](sc: quoted.Expr[T], pf: quoted.Expr[PartialFunction[T, T]]): quoted.Expr[T] = {
+  def structural[T: Type](sc: quoted.Expr[T]): quoted.Expr[T] = {
 
     val tpt = TypeRepr.of[T]
     val typeSym: Symbol = tpt.typeSymbol
@@ -195,14 +208,7 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
       val tpt = v.typeRef
       if (!canTraverse(tpt)) { report.errorAndAbort(s"Don't know how to generate traversal for case ${ v }") }
     }
-
-    val partial = pf.asTerm
     val scrutinee = sc.asTerm
-
-    // case _ if pf.isDefinedAt(sc) => pf.apply(sc)
-    val userTraversal = CaseDef(
-      Wildcard(), Some(Apply(Select.unique(partial, "isDefinedAt"), List(scrutinee))),
-        Block(Nil, Apply(Select.unique(partial, "apply"), List(scrutinee))))
 
     // We add a case that should never occur, only because exhaustivity checks seem not
     // to work for generated matches.
@@ -210,22 +216,16 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
     val catchall = CaseDef(Wildcard(), None,
       Block(Nil, '{ sys.error("Should never happen!") }.asTerm))
 
-    // this.visit[tpt](sc) { x => x match { ... } } (ctx)
-    val rewritten = Apply(Apply(Apply(TypeApply(Select.unique(This(self), "visit"),
-      List(Inferred(tpt))),
-        List(scrutinee)),
-          List(makeClosure(tpt, owner, (owner, t) => Match(t,
-            (userTraversal :: variants.map(v => rewriteCase(v, owner))) :+ catchall)))),
-              List(context))
-
+    // x match { ... }
+    val rewritten = Match(scrutinee, variants.map(v => rewriteCase(v, owner)) :+ catchall)
     if (debug) { report.info(Printer.TreeShortCode.show(rewritten)) }
     rewritten.asExprOf[T]
   }
 }
 
 def structuralImpl[Self: Type, T: Type, C: Type](
-  sc: quoted.Expr[T], pf: quoted.Expr[PartialFunction[T, T]], c: quoted.Expr[C], debug: Boolean
-)(using q: Quotes): quoted.Expr[T] = new StructuralVisitor[Self, q.type, C](c, debug).structural[T](sc, pf)
+  sc: quoted.Expr[T], c: quoted.Expr[C], debug: Boolean
+)(using q: Quotes): quoted.Expr[T] = new StructuralVisitor[Self, q.type, C](c, debug).structural[T](sc)
 
 /**
  * For debugging and development.

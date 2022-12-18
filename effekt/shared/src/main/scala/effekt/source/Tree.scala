@@ -632,9 +632,9 @@ object Tree {
     def stmt(using C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn(using C: Context): PartialFunction[Def, Def] = PartialFunction.empty
 
-    def rewrite(e: Term)(using Context): Term = structural(e, expr)
-    def rewrite(t: Def)(using C: Context): Def = structural(t, defn)
-    def rewrite(t: Stmt)(using C: Context): Stmt = structural(t, stmt)
+    def rewrite(e: Term)(using Context): Term = structuralVisit(e, expr)
+    def rewrite(t: Def)(using C: Context): Def = structuralVisit(t, defn)
+    def rewrite(t: Stmt)(using C: Context): Stmt = structuralVisit(t, stmt)
 
     /**
      * Hook that can be overriden to perform an action at every node in the tree
