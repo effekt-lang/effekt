@@ -26,21 +26,10 @@ given NoContext = new NoContext
  * @see https://eed3si9n.com/intro-to-scala-3-macros/
  * @see https://docs.scala-lang.org/scala3/guides/macros/best-practices.html
  *
- * TODO also support single product types, like [[effekt.core.Constructor]].
- *
  * TODO if nothing is transformed, as in
  *     case ValueVar(id, annotatedType) => ValueVar.apply(id, annotatedType)
  *   it should result in
  *     case v @ ValueVar(id, annotatedType) => v
- *
- * TODO also support context parameters, like in [[generator.chez.Tree.Rewrite]]
- *
- * TODO add a variant without partial function (like in source.Rewrite.rewrite(Handler))
- *
- *
- * TODO maybe do not specialize to "rewrite", but make work in general for:
- *
- *   def <name>(<structuralarg>, <otherargs>, ...)(<otherargs>...) = structural
  */
 trait Visitor[C] {
 
@@ -49,43 +38,49 @@ trait Visitor[C] {
    */
   def visit[T](source: T)(visitor: T => T)(using C): T = visitor(source)
 
-  inline def structural[T](sc: T, p: PartialFunction[T, T])(using ctx: C): T =
+  inline def structural[T](sc: T, p: PartialFunction[T, T]): T =
     if (p.isDefinedAt(sc)) { p(sc) } else { structural(sc) }
 
-  inline def structural[T](sc: T)(using ctx: C): T =
-    ${structuralImpl[this.type, T, C]('{sc}, '{ctx}, false)}
+  inline def structural[T](sc: T): T =
+    ${structuralImpl[this.type, T]('{sc}, false)}
 
-  inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using ctx: C): T =
+  inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using C): T =
     visit(sc) { t => structural(t, p) }
 
-  inline def structuralVisit[T](sc: T)(using ctx: C): T =
+  inline def structuralVisit[T](sc: T)(using C): T =
     visit(sc) { t => structural(t) }
 
   /**
    * Same as structural, but prints the generated code.
    */
-  inline def structuralDebug[T](sc: T)(using ctx: C): T =
-    ${structuralImpl[this.type, T, C]('{sc}, '{ctx}, true)}
+  inline def structuralDebug[T](sc: T): T =
+    ${structuralImpl[this.type, T]('{sc}, true)}
 }
 
-class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], debug: Boolean)(using val q: Q) {
+
+class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   import q.reflect.*
 
   case class RewriteMethod(tpe: TypeRepr, method: Symbol)
 
-  val rewriteName = {
+  val owner = Symbol.spliceOwner
+  val self = TypeRepr.of[Self].typeSymbol
+
+  val rewriteMethod =
     // TODO find method that has this.type == Self
     def findMethod(sym: Symbol): Symbol =
       if (sym.isDefDef && !sym.isAnonymousFunction) sym else findMethod(sym.owner)
 
-    findMethod(Symbol.spliceOwner).name
+    findMethod(Symbol.spliceOwner)
+
+  val rewriteName = rewriteMethod.name
+
+  val rewriteParams = rewriteMethod.paramSymss match {
+    case (rec :: rest) :: sections =>
+      if (rec.isTypeParam) report.errorAndAbort(s"For now, structurally recursive functions cannot be polymorphic, but got ${rec.name}.")
+      (rest, sections)
+    case _ => report.errorAndAbort(s"Parameters of structurally recursive function ${rewriteName} must not be empty.")
   }
-
-  val owner = Symbol.spliceOwner
-  val self = TypeRepr.of[Self].typeSymbol
-
-  // the context we pass around to all recursive function calls
-  val context = ctx.asTerm
 
   val rewrites: List[RewriteMethod] = self.methodMember(rewriteName).map { m =>
     // TODO using .tree is discouraged. Find type differently!
@@ -133,10 +128,14 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
     ), Closure(Ref(methodSym), None))
   }
 
-  // rewrite(arg: tpe)(context)
+  // rewrite(arg: tpe, OTHERARGS, ...)(OTHERARGS, ...)
   def rewrite(tpe: TypeRepr, arg: Term): Term = {
     val m = rewriteFor(tpe).getOrElse { report.errorAndAbort(s"No rewrite method for type ${tpe}!") }
-    Apply(Apply(Ref(m.method), List(arg)), List(context))
+    val (sameSection, otherSections) = rewriteParams
+    val baseCall = Apply(Ref(m.method), arg :: sameSection.map(Ref.apply))
+    otherSections.foldLeft(baseCall) {
+      case (call, args) => Apply(call, args.map(Ref.apply))
+    }
   }
 
   def rewriteExpression(term: Term, tpe: TypeRepr, owner: Symbol): Term = {
@@ -226,9 +225,9 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
   }
 }
 
-def structuralImpl[Self: Type, T: Type, C: Type](
-  sc: quoted.Expr[T], c: quoted.Expr[C], debug: Boolean
-)(using q: Quotes): quoted.Expr[T] = new StructuralVisitor[Self, q.type, C](c, debug).structural[T](sc)
+def structuralImpl[Self: Type, T: Type](
+  sc: quoted.Expr[T], debug: Boolean
+)(using q: Quotes): quoted.Expr[T] = new StructuralVisitor[Self, q.type](debug).structural[T](sc)
 
 /**
  * For debugging and development.
