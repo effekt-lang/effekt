@@ -184,14 +184,11 @@ class StructuralVisitor[Self: Type, Q <: Quotes, C: Type](ctx: quoted.Expr[C], d
   def structural[T: Type](sc: quoted.Expr[T], pf: quoted.Expr[PartialFunction[T, T]]): quoted.Expr[T] = {
 
     val tpt = TypeRepr.of[T]
-    val typeSym: q.reflect.Symbol = tpt.typeSymbol
+    val typeSym: Symbol = tpt.typeSymbol
 
-    // for now we don't support generating traversals for case classes. Only sum types!
-    if (!typeSym.isSumType) {
-      report.errorAndAbort(s"${typeSym} is not a sum type, so we cannot generate a traversal for it.")
-    }
-
-    val variants: List[q.reflect.Symbol] = typeSym.children
+    val variants: List[Symbol] =
+      if (typeSym.isSumType) typeSym.children
+      else List(typeSym)
 
     // TODO check probably not necessary. Drop?
     variants.foreach { v =>
