@@ -628,16 +628,24 @@ object Tree {
     def Context(using C: Context): Context = C
 
     // Hooks to override
-    def expr(using C: Context): PartialFunction[Term, Term] = PartialFunction.empty
-    def stmt(using C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
-    def defn(using C: Context): PartialFunction[Def, Def] = PartialFunction.empty
+    def expr(using Context): PartialFunction[Term, Term] = PartialFunction.empty
+    def stmt(using Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
+    def defn(using Context): PartialFunction[Def, Def] = PartialFunction.empty
 
+    // Entrypoints to use the traversal on, defined in terms of the above hooks
     def rewrite(e: Term)(using Context): Term = structuralVisit(e, expr)
-    def rewrite(t: Def)(using C: Context): Def = structuralVisit(t, defn)
-    def rewrite(t: Stmt)(using C: Context): Stmt = structuralVisit(t, stmt)
+    def rewrite(t: Def)(using Context): Def = structuralVisit(t, defn)
+    def rewrite(t: Stmt)(using Context): Stmt = structuralVisit(t, stmt)
+
+    def rewrite(e: ModuleDecl)(using Context): ModuleDecl = structuralVisit(e)
+    def rewrite(h: Handler)(using Context): Handler = structuralVisit(h)
+    def rewrite(i: Implementation)(using Context): Implementation = structuralVisit(i)
+    def rewrite(h: OpClause)(using Context): OpClause = structuralVisit(h)
+    def rewrite(c: MatchClause)(using Context): MatchClause = structuralVisit(c)
+    def rewrite(t: source.CallTarget)(using Context): source.CallTarget = structuralVisit(t)
 
     /**
-     * Hook that can be overriden to perform an action at every node in the tree
+     * Hook that can be overridden to perform an action at every node in the tree
      *
      * Copies all annotations and position information from source to target
      */
@@ -650,38 +658,6 @@ object Tree {
         case _ =>
       }
       target
-
-    //
-    // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: ModuleDecl)(using Context): ModuleDecl = visit(e) {
-      case ModuleDecl(path, imports, defs) =>
-        ModuleDecl(path, imports, defs.map(rewrite))
-    }
-
-    def rewrite(h: Handler)(using C: Context): Handler = visit(h) {
-      case Handler(capability, impl) =>
-        Handler(capability, rewrite(impl))
-    }
-
-    def rewrite(impl: Implementation)(using Context): Implementation = visit(impl) {
-      case source.Implementation(interface, clauses) =>
-        Implementation(interface, clauses.map(rewrite))
-    }
-
-    def rewrite(h: OpClause)(using C: Context): OpClause = visit(h) {
-      case OpClause(id, tparams, params, ret, body, resume) =>
-        OpClause(id, tparams, params, ret, rewrite(body), resume)
-    }
-
-    def rewrite(c: MatchClause)(using C: Context): MatchClause = visit(c) {
-      case MatchClause(pattern, body) =>
-        MatchClause(pattern, rewrite(body))
-    }
-
-    def rewrite(target: source.CallTarget)(implicit C: Context): source.CallTarget = visit(target) {
-      case i: IdTarget => target
-      case ExprTarget(expr) => ExprTarget(rewrite(expr))
-    }
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {

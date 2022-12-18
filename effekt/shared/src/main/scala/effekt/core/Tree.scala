@@ -313,14 +313,10 @@ object Tree {
     def rewrite(b: Block)(using Context): Block = structural(b, block)
     def rewrite(d: Definition)(using Context): Definition = structural(d, defn)
     def rewrite(e: Implementation)(using Context): Implementation = structural(e, handler)
+    def rewrite(o: Operation)(using Context): Operation = structural(o)
 
-    // TODO generate those non-dispatching versions:
     def rewrite(matchClause: (Id, BlockLit))(using Context): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
-    }
-
-    def rewrite(o: Operation)(using Context): Operation = o match {
-      case Operation(name, tps, cps, vps, bps, resume, body) => Operation(name, tps, cps, vps, bps, resume, rewrite(body))
     }
   }
 }

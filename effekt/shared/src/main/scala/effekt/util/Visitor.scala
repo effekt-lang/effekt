@@ -58,6 +58,9 @@ trait Visitor[C] {
   inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using ctx: C): T =
     visit(sc) { t => structural(t, p) }
 
+  inline def structuralVisit[T](sc: T)(using ctx: C): T =
+    visit(sc) { t => structural(t) }
+
   /**
    * Same as structural, but prints the generated code.
    */

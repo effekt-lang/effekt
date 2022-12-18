@@ -193,28 +193,17 @@ object Tree {
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
     def defn(using C: Ctx): PartialFunction[Def, Def] = PartialFunction.empty
 
-    def rewrite(block: Block)(using Ctx): Block = visit(block) {
-      case Block(defs, exprs, result) => Block(defs map rewrite, exprs map rewrite, rewrite(result))
-    }
-
-    def rewrite(binding: Binding)(using Ctx): Binding = visit(binding) {
-      case Binding(name, expr) => Binding(name, rewrite(expr))
-    }
-
-    def rewrite(h: Handler)(using Ctx): Handler = visit(h) {
-      case Handler(constructorName, operations) => Handler(constructorName, operations map rewrite)
-    }
-    def rewrite(op: Operation)(using Ctx): Operation = visit(op) {
-      case Operation(name, params, k, body) => Operation(name, params, k, rewrite(body))
-    }
+    def rewrite(block: Block)(using Ctx): Block = structural(block)
+    def rewrite(binding: Binding)(using Ctx): Binding = structural(binding)
+    def rewrite(h: Handler)(using Ctx): Handler = structural(h)
+    def rewrite(op: Operation)(using Ctx): Operation = structural(op)
 
     def rewrite(e: Expr)(using Ctx): Expr = structural(e, expr)
+    def rewrite(t: Def)(using C: Ctx): Def = structural(t, defn)
 
     def rewrite(clause: (Expr, Expr))(using Ctx): (Expr, Expr) = clause match {
       case (c, t) => (rewrite(c), rewrite(t))
     }
-
-    def rewrite(t: Def)(using C: Ctx): Def = structural(t, defn)
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {
