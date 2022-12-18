@@ -623,7 +623,7 @@ object Tree {
   }
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite {
+  trait Rewrite extends util.Visitor[Context] {
 
     def Context(using C: Context): Context = C
 
@@ -632,118 +632,30 @@ object Tree {
     def stmt(using C: Context): PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn(using C: Context): PartialFunction[Def, Def] = PartialFunction.empty
 
+    def rewrite(e: Term)(using Context): Term = structural(e, expr)
+    def rewrite(t: Def)(using C: Context): Def = structural(t, defn)
+    def rewrite(t: Stmt)(using C: Context): Stmt = structural(t, stmt)
+
     /**
      * Hook that can be overriden to perform an action at every node in the tree
      *
      * Copies all annotations and position information from source to target
      */
-    def visit[T <: Tree](source: T)(visitor: T => T)(using Context): T = {
+    override def visit[T](source: T)(visitor: T => T)(using Context): T =
       val target = visitor(source)
-      target.inheritPosition(source)
-      Context.copyAnnotations(source, target)
+      (source, target) match {
+        case (src: Tree, tgt: Tree) =>
+          tgt.inheritPosition(src)
+          Context.copyAnnotations(src, tgt)
+        case _ =>
+      }
       target
-    }
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
     def rewrite(e: ModuleDecl)(using Context): ModuleDecl = visit(e) {
       case ModuleDecl(path, imports, defs) =>
         ModuleDecl(path, imports, defs.map(rewrite))
-    }
-
-    def rewrite(e: Term)(using Context): Term = visit(e) {
-      case e if expr.isDefinedAt(e) => expr(e)
-      case v: Var                   => v
-      case l: Literal               => l
-
-      case Assign(id, expr) =>
-        Assign(id, rewrite(expr))
-
-      case If(cond, thn, els) =>
-        If(rewrite(cond), rewrite(thn), rewrite(els))
-
-      case While(cond, body) =>
-        While(rewrite(cond), rewrite(body))
-
-      case Match(sc, clauses) =>
-        Match(rewrite(sc), clauses.map(rewrite))
-
-      case Select(recv, name) =>
-        Select(rewrite(recv), name)
-
-      case Do(effect, id, targs, vargs) =>
-        Do(effect, id, targs, vargs.map(rewrite))
-
-      case Call(fun, targs, vargs, bargs) =>
-        Call(rewrite(fun), targs, vargs.map(rewrite), bargs.map(rewrite))
-
-      case MethodCall(receiver, id, targs, vargs, bargs) =>
-        MethodCall(rewrite(receiver), id, targs, vargs.map(rewrite), bargs.map(rewrite))
-
-      case TryHandle(prog, handlers) =>
-        TryHandle(rewrite(prog), handlers.map(rewrite))
-
-      case New(impl) =>
-        New(rewrite(impl))
-
-      case BlockLiteral(tps, vps, bps, body) =>
-        BlockLiteral(tps, vps, bps, rewrite(body))
-
-      case Region(name, body) =>
-        Region(name, rewrite(body))
-
-      case Hole(stmts) =>
-        Hole(rewrite(stmts))
-
-      case Box(c, b) =>
-        Box(c, rewrite(b))
-
-      case Unbox(b) =>
-        Unbox(rewrite(b))
-    }
-
-    def rewrite(t: Def)(using C: Context): Def = visit(t) {
-      case t if defn.isDefinedAt(t) => defn(t)
-
-      case FunDef(id, tparams, vparams, bparams, ret, body) =>
-        FunDef(id, tparams, vparams, bparams, ret, rewrite(body))
-
-      case ValDef(id, annot, binding) =>
-        ValDef(id, annot, rewrite(binding))
-
-      case VarDef(id, annot, region, binding) =>
-        VarDef(id, annot, region, rewrite(binding))
-
-      case DefDef(id, annot, block) =>
-        DefDef(id, annot, rewrite(block))
-
-      case d: InterfaceDef   => d
-      case d: DataDef        => d
-      case d: RecordDef      => d
-      case d: TypeDef        => d
-      case d: EffectDef      => d
-
-      case d: ExternType     => d
-      case d: ExternDef      => d
-      case d: ExternResource => d
-      case d: ExternInterface => d
-      case d: ExternInclude  => d
-    }
-
-    def rewrite(t: Stmt)(using C: Context): Stmt = visit(t) {
-      case s if stmt.isDefinedAt(s) => stmt(s)
-
-      case DefStmt(d, rest) =>
-        DefStmt(rewrite(d), rewrite(rest))
-
-      case ExprStmt(e, rest) =>
-        ExprStmt(rewrite(e), rewrite(rest))
-
-      case Return(e) =>
-        Return(rewrite(e))
-
-      case BlockStmt(b) =>
-        BlockStmt(rewrite(b))
     }
 
     def rewrite(h: Handler)(using C: Context): Handler = visit(h) {

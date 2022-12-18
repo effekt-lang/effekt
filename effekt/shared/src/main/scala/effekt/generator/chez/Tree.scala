@@ -187,16 +187,11 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
 object Tree {
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite[Ctx] {
+  trait Rewrite[Ctx] extends util.Visitor[Ctx] {
 
     // Hooks to override
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
     def defn(using C: Ctx): PartialFunction[Def, Def] = PartialFunction.empty
-
-    /**
-     * Hook that can be overridden to perform an action at every node in the tree
-     */
-    def visit[T](source: T)(visitor: T => T)(using Ctx): T = visitor(source)
 
     def rewrite(block: Block)(using Ctx): Block = visit(block) {
       case Block(defs, exprs, result) => Block(defs map rewrite, exprs map rewrite, rewrite(result))
@@ -213,28 +208,13 @@ object Tree {
       case Operation(name, params, k, body) => Operation(name, params, k, rewrite(body))
     }
 
-    def rewrite(e: Expr)(using Ctx): Expr = visit(e) {
-      case e if expr.isDefinedAt(e) => expr(e)
-      case e: Variable => e
-      case e: RawExpr => e
-      case e: RawValue => e
+    def rewrite(e: Expr)(using Ctx): Expr = structural(e, expr)
 
-      case Call(callee, arguments) => Call(rewrite(callee), arguments map rewrite)
-      case Let(bindings, body) => Let(bindings map rewrite, rewrite(body))
-      case Let_*(bindings, body) => Let_*(bindings map rewrite, rewrite(body))
-      case Lambda(params, body) => Lambda(params, rewrite(body))
-      case If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-      case Cond(clauses, default) => Cond(clauses map { case (c, t) => (rewrite(c), rewrite(t)) }, default map rewrite)
-      case Handle(handlers, body) => Handle(handlers map rewrite, rewrite(body))
+    def rewrite(clause: (Expr, Expr))(using Ctx): (Expr, Expr) = clause match {
+      case (c, t) => (rewrite(c), rewrite(t))
     }
 
-    def rewrite(t: Def)(using C: Ctx): Def = visit(t) {
-      case t if defn.isDefinedAt(t) => defn(t)
-      case r : RawDef => r
-      case r : Record => r
-      case Constant(name, value) => Constant(name, rewrite(value))
-      case Function(name, params, body) => Function(name, params, rewrite(body))
-    }
+    def rewrite(t: Def)(using C: Ctx): Def = structural(t, defn)
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {
