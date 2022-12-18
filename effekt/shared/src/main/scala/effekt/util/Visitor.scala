@@ -7,11 +7,39 @@ import scala.quoted.*
  * Automatically generates traversal code.
  *
  * Use macro [[structural]] to generate traversal code.
- * See [[effekt.core.Tree.Rewrite]] for an example how to use it. The generated
- * traversal automatically uses all (and only those) methods that are called [[rewrite]]
- * to traverse the tree and rewrite it. The traversal stops when there is no [[rewrite]]
- * method to be called. It also automatically traverses lists and options if the
- * payload can be traversed.
+ * See [[effekt.core.Tree.Rewrite]] for an example how to use it.
+ * To traverse the tree and rewrite it, he generated traversal automatically uses all
+ * (and only those) methods that are called the same as the method the macro is used in.
+ * The traversal stops when there is no such method to be called. It also automatically
+ * traverses lists and options if the payload can be traversed.
+ *
+ * ==Usage Example==
+ *
+ * The following example will increment all integer literals in a tree:
+ * {{{
+ *   enum Exp { case Lit(n: Int); case Add(l: Exp, r: Exp) }
+ *   object Test extends Visitor {
+ *     def increment(e: Exp): Exp = structural(e)
+ *     def increment(n: Int): Int = n + 1
+ *   }
+ * }}}
+ *
+ * The call to [[structural]] above generates the following code (output of [[structuralDebug]]))
+ * {{{
+ *   e match {
+ *     case Lit(n)    => Lit.apply(increment(n))
+ *     case Add(l, r) => Add.apply(increment(l), increment(r))
+ *     case _ => sys.error("Should never happen!")
+ *   }
+ * }}}
+ *
+ * As can be seen, `increment` is also called on the integer `n` since the function
+ * `increment(n: Int)` is present in `Test`.
+ *
+ * The recursive functions (`increment` in the example above) can take arbitrary
+ * (term-level) arguments that are passed along to recursive calls.
+ *
+ * ==Debugging==
  *
  * Tipp: replace [[structural]] by [[structuralDebug]] to have the generated
  *   code be printed at compile time.
@@ -180,8 +208,6 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
     // e: Expr
     val fieldSym = (fields zip fieldTypes).map { case (f, tpt) => Symbol.newBind(owner, f.name, Flags.Local, tpt) }
     // e @ _
-    // TODO not sure this is needed:
-    //   Typed(Wildcard(), Inferred(tpt))
     val bindFields = (fieldSym zip fieldTypes).map { case (f, tpt) => Bind(f, Wildcard()) }
 
     // case Return.unapply(e @ _) => Return.apply(REWRITE[[e]])
@@ -210,11 +236,6 @@ class StructuralVisitor[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q)
       if (typeSym.isSumType) typeSym.children
       else List(typeSym)
 
-    // TODO check probably not necessary. Drop?
-    variants.foreach { v =>
-      val tpt = v.typeRef
-      if (!canTraverse(tpt)) { report.errorAndAbort(s"Don't know how to generate traversal for case ${ v }") }
-    }
     val scrutinee = sc.asTerm
 
     // We add a case that should never occur, only because exhaustivity checks seem not
