@@ -37,9 +37,15 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
     }
 
     val opt = eliminateReturnRun.rewrite(d)
-    val res = directStyleVal.rewrite(opt)
+    val start = directStyleVal.rewrite(opt)
+
+    val aliases = collectAliases(start) - Id("main") //TODO: remove main using wrapper instead?
+    val dealiased = dealiasing(start)(using aliases)
+
+    val calls = countFunctionCalls(dealiased)//TODO: Fix ambiguous overload
+    val unused_removed = removeUnusedFunctions(dealiased, calls)
 
     // More optimizations can go here.
-    res
+    unused_removed
   }
 }
