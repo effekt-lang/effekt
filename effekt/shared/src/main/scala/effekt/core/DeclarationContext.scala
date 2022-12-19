@@ -1,6 +1,7 @@
 package effekt.core
 
 import effekt.util.messages.ErrorReporter
+import PrettyPrinter.*
 
 /**
  * Context for transformations of a [[core.ModuleDecl]] that provides the declarations for this module.
@@ -16,21 +17,24 @@ class DeclarationContext(val declarations: List[Declaration]) {
   lazy val datas: Map[Id, Declaration.Data] = declarations.collect {
     case data: Declaration.Data => (data.id -> data)
   }.toMap
-  lazy val interfaces: Map[Id, Declaration.Interface] = declarations.collect{
+
+  lazy val interfaces: Map[Id, Declaration.Interface] = declarations.collect {
     case ifce: Declaration.Interface => (ifce.id -> ifce)
   }.toMap
 
   case class ConstructorRef(data: Declaration.Data, constructor: Constructor)
   lazy val constructors: Map[Id, ConstructorRef] = datas.values.flatMap{ data =>
-    data.constructors.map{ cns => (cns.id -> ConstructorRef(data, cns)) }
+    data.constructors.map { cns => (cns.id -> ConstructorRef(data, cns)) }
   }.toMap
+
   case class FieldRef(constructorRef: ConstructorRef, field: Field) { export constructorRef.* }
-  lazy val fields: Map[Id, FieldRef] = constructors.values.flatMap{ cns =>
-    cns.constructor.fields.map{ f => (f.id -> FieldRef(cns, f)) }
+  lazy val fields: Map[Id, FieldRef] = constructors.values.flatMap { c =>
+    c.constructor.fields.map { f => (f.id -> FieldRef(c, f)) }
   }.toMap
+
   case class PropertyRef(interface: Declaration.Interface, property: Property)
-  lazy val properties: Map[Id, PropertyRef] = interfaces.values.flatMap{ ifce =>
-    ifce.properties.map{ p => (p.id -> PropertyRef(ifce, p)) }
+  lazy val properties: Map[Id, PropertyRef] = interfaces.values.flatMap { i =>
+    i.properties.map { p => (p.id -> PropertyRef(i, p)) }
   }.toMap
 
   def findDeclaration(id: Id): Option[Declaration] = declarations.find(_.id == id)
@@ -38,50 +42,43 @@ class DeclarationContext(val declarations: List[Declaration]) {
   def findData(constructor: Constructor): Option[Declaration.Data] =
     constructors.get(constructor.id).map(_.data)
 
-  def findData(field: Field): Option[Declaration.Data] =
-    fields.get(field.id).map(_.data)
+  def findData(field: Field): Option[Declaration.Data] = fields.get(field.id).map(_.data)
   def findInterface(id: Id): Option[Declaration.Interface] = interfaces.get(id)
-  def findInterface(property: Property): Option[Declaration.Interface] =
-    properties.get(property.id).map(_.interface)
+  def findInterface(property: Property): Option[Declaration.Interface] = properties.get(property.id).map(_.interface)
 
   def findConstructor(id: Id): Option[Constructor] = constructors.get(id).map(_.constructor)
-  def findConstructor(field: Field): Option[Constructor] =
-    fields.get(field.id).map(_.constructor)
+  def findConstructor(field: Field): Option[Constructor] = fields.get(field.id).map(_.constructor)
   def findField(id: Id): Option[Field] = fields.get(id).map(_.field)
   def findProperty(id: Id): Option[Property] = properties.get(id).map(_.property)
 
-  def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse{
+  def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse {
     context.panic(s"No declaration found for ${id}.")
   }
-  def getData(id: Id)(using context: ErrorReporter): Declaration.Data = findData(id).getOrElse{
+  def getData(id: Id)(using context: ErrorReporter): Declaration.Data = findData(id).getOrElse {
     context.panic(s"No declaration found for data type ${id}.")
   }
-  def getData(constructor: Constructor)(using context: ErrorReporter): Declaration.Data = findData(constructor).getOrElse{
-    import PrettyPrinter.*
+  def getData(constructor: Constructor)(using context: ErrorReporter): Declaration.Data = findData(constructor).getOrElse {
     context.panic(s"No declaration found for data type with constructor ${pretty(toDoc(constructor)).layout}")
   }
-  def getData(field: Field)(using context: ErrorReporter): Declaration.Data = findData(field).getOrElse{
-    import PrettyPrinter.*
+  def getData(field: Field)(using context: ErrorReporter): Declaration.Data = findData(field).getOrElse {
     context.panic(s"No declaration found for data type with field ${pretty(toDoc(field)).layout}")
   }
-  def getInterface(id: Id)(using context: ErrorReporter): Declaration.Interface = findInterface(id).getOrElse{
+  def getInterface(id: Id)(using context: ErrorReporter): Declaration.Interface = findInterface(id).getOrElse {
     context.panic(s"No declaration found for interface ${id}")
   }
-  def getInterface(property: Property)(using context: ErrorReporter): Declaration.Interface = findInterface(property).getOrElse{
-    import PrettyPrinter.*
+  def getInterface(property: Property)(using context: ErrorReporter): Declaration.Interface = findInterface(property).getOrElse {
     context.panic(s"No declaration found for interface with property ${pretty(toDoc(property)).layout}")
   }
-  def getConstructor(id: Id)(using context: ErrorReporter): Constructor = findConstructor(id).getOrElse{
+  def getConstructor(id: Id)(using context: ErrorReporter): Constructor = findConstructor(id).getOrElse {
     context.panic(s"No declaration found for constructor ${id}")
   }
-  def getConstructor(field: Field)(using context: ErrorReporter): Constructor = findConstructor(field).getOrElse{
-    import PrettyPrinter.*
+  def getConstructor(field: Field)(using context: ErrorReporter): Constructor = findConstructor(field).getOrElse {
     context.panic(s"No declaration found for constructor with field ${pretty(toDoc(field)).layout}")
   }
-  def getField(id: Id)(using context: ErrorReporter): Field = findField(id).getOrElse{
+  def getField(id: Id)(using context: ErrorReporter): Field = findField(id).getOrElse {
     context.panic(s"No declaration found for field ${id}")
   }
-  def getProperty(id: Id)(using context: ErrorReporter): Property = findProperty(id).getOrElse{
+  def getProperty(id: Id)(using context: ErrorReporter): Property = findProperty(id).getOrElse {
     context.panic(s"No declaration found for property ${id}")
   }
 

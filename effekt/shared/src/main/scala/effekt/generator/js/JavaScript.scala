@@ -27,7 +27,7 @@ object JavaScript extends Backend {
     val module = input.mod
     val mainFile = path(module)
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
-    given DeclarationContext = DeclarationContext(input.core.declarations)
+    given DeclarationContext = new DeclarationContext(input.core.declarations)
 
     val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
     Some(Compiled(input.source, mainFile, Map(mainFile -> result)))
@@ -36,20 +36,20 @@ object JavaScript extends Backend {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: AllTransformed)(using C: Context) = {
+  def compileSeparate(input: AllTransformed)(using Context) = {
     val module = input.main.mod
 
     val allDeclarations = input.dependencies.foldLeft(input.main.core.declarations) {
       case (decls, dependency) => decls ++ dependency.core.declarations
     }
 
-    given DC: DeclarationContext = DeclarationContext(allDeclarations)
+    given D: DeclarationContext = new DeclarationContext(allDeclarations)
 
     def shouldExport(sym: Symbol) = sym match {
       // do not export fields, since they are no defined functions
-      case fld if DC.findField(fld).isDefined => false
+      case fld if D.findField(fld).isDefined => false
       // do not export effect operations, since they are translated to field selection as well.
-      case op if DC.findProperty(op).isDefined => false
+      case op if D.findProperty(op).isDefined => false
 
       // all others are fine
       case _ => true
@@ -248,8 +248,8 @@ object JavaScript extends Backend {
       (Nil, toJSMonadic(other))
   }
 
-  def tagFor(constructor: Id)(using C: DeclarationContext, E: Context): js.Expr = {
-    val position = C.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
+  def tagFor(constructor: Id)(using D: DeclarationContext, C: Context): js.Expr = {
+    val position = D.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
     js.RawExpr(position.toString)
   }
 
