@@ -48,8 +48,20 @@ class DeclarationContext(val declarations: List[Declaration]) {
 
   def findConstructor(id: Id): Option[Constructor] = constructors.get(id).map(_.constructor)
   def findConstructor(field: Field): Option[Constructor] = fields.get(field.id).map(_.constructor)
+  def findConstructorTag(id: Id): Option[Int] = {
+    constructors.get(id).flatMap{ case ConstructorRef(data, constructor) =>
+      val tag = data.constructors.indexOf(constructor)
+      if tag == -1 then None else Some(tag)
+    }
+  }
   def findField(id: Id): Option[Field] = fields.get(id).map(_.field)
   def findProperty(id: Id): Option[Property] = properties.get(id).map(_.property)
+  def findPropertyTag(id: Id): Option[Int] = {
+    properties.get(id).flatMap{ case PropertyRef(interface, property) =>
+      val tag = interface.properties.indexOf(property)
+      if tag == -1 then None else Some(tag)
+    }
+  }
 
   def getDeclaration(id: Id)(using context: ErrorReporter): Declaration = findDeclaration(id).getOrElse {
     context.panic(s"No declaration found for ${id}.")
@@ -75,10 +87,16 @@ class DeclarationContext(val declarations: List[Declaration]) {
   def getConstructor(field: Field)(using context: ErrorReporter): Constructor = findConstructor(field).getOrElse {
     context.panic(s"No declaration found for constructor with field ${pretty(toDoc(field)).layout}")
   }
+  def getConstructorTag(id: Id)(using context: ErrorReporter): Int = findConstructorTag(id).getOrElse {
+    context.panic(s"No declaration found for constructor ${id}")
+  }
   def getField(id: Id)(using context: ErrorReporter): Field = findField(id).getOrElse {
     context.panic(s"No declaration found for field ${id}")
   }
   def getProperty(id: Id)(using context: ErrorReporter): Property = findProperty(id).getOrElse {
+    context.panic(s"No declaration found for property ${id}")
+  }
+  def getPropertyTag(id: Id)(using context: ErrorReporter): Int = findPropertyTag(id).getOrElse{
     context.panic(s"No declaration found for property ${id}")
   }
 

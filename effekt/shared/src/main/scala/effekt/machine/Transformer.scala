@@ -153,7 +153,7 @@ object Transformer {
         val opTag = {
           tpe match
             case core.BlockType.Interface(ifceId, _) =>
-              DeclarationContext.getInterface(ifceId).properties.indexWhere(_.id == op)
+              DeclarationContext.getPropertyTag(op)
             case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
         }
         transform(args).run { values =>
@@ -167,7 +167,7 @@ object Transformer {
 
       case lifted.Match(scrutinee, clauses, default) =>
         val transformedClauses = clauses.map { case (constr, lifted.BlockLit(tparams, params, body)) =>
-          getTagFor(constr) -> Clause(params.map(transform), transform(body))
+          DeclarationContext.getConstructorTag(constr) -> Clause(params.map(transform), transform(body))
         }
         val transformedDefault = default.map { clause =>
           Clause(List(), transform(clause))
@@ -329,7 +329,7 @@ object Transformer {
     case lifted.PureApp(lifted.BlockVar(blockName, tpe: core.BlockType.Function), List(), args)
     if DeclarationContext.findConstructor(blockName).isDefined =>
       val variable = Variable(freshName("x"), transform(tpe.result));
-      val tag = getTagFor(blockName)
+      val tag = DeclarationContext.getConstructorTag(blockName)
 
       transform(args).flatMap { values =>
         Binding { k =>
@@ -359,9 +359,6 @@ object Transformer {
     case _ =>
       ErrorReporter.abort(s"Unsupported expression: $expr")
   }
-
-  def getTagFor(constructor: core.Id)(using DeclarationContext, ErrorReporter): Int =
-    DeclarationContext.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
 
   def transform(args: List[lifted.Argument])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[List[Variable]] =
     args match {

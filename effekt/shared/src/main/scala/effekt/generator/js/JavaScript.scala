@@ -249,8 +249,7 @@ object JavaScript extends Backend {
   }
 
   def tagFor(constructor: Id)(using D: DeclarationContext, C: Context): js.Expr = {
-    val position = D.getConstructor(constructor).data.constructors.indexWhere(_.id == constructor)
-    js.RawExpr(position.toString)
+    js.RawExpr(D.getConstructorTag(constructor).toString)
   }
 
   def generateConstructor(constructor: Constructor, tagValue: Int): js.Stmt = {
