@@ -43,13 +43,13 @@ object JavaScript extends Backend {
       case (decls, dependency) => decls ++ dependency.core.declarations
     }
 
-    given DeclarationContext = DeclarationContext(allDeclarations)
+    given DC: DeclarationContext = DeclarationContext(allDeclarations)
 
     def shouldExport(sym: Symbol) = sym match {
       // do not export fields, since they are no defined functions
-      case _: symbols.Field => false
+      case fld if DC.findField(fld).isDefined => false
       // do not export effect operations, since they are translated to field selection as well.
-      case _: symbols.Operation => false
+      case op if DC.findProperty(op).isDefined => false
 
       // all others are fine
       case _ => true
