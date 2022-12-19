@@ -209,14 +209,12 @@ object Tree {
   trait Visit[Ctx] extends Query[Ctx, Unit] {
     override def empty = ()
     override def combine = (_, _) => ()
-    override def combineAll(rs: List[Unit]): Unit = ()
   }
 
-  trait Query[Ctx, Res] {
+  trait Query[Ctx, Res] extends util.Structural {
 
     def empty: Res
     def combine: (Res, Res) => Res
-    def combineAll(rs: List[Res]): Res = rs.foldLeft(empty)(combine)
 
     // Hooks to override
     def expr(using Ctx): PartialFunction[Expr, Res] = PartialFunction.empty
@@ -227,51 +225,19 @@ object Tree {
      */
     def visit[T](t: T)(visitor: T => Res)(using Ctx): Res = visitor(t)
 
-    /**
-     * Hook that can be overridden to perform something for each new lexical scope
-     */
-    def scoped(action: => Res)(using Ctx): Res = action
-
-    def query(e: Expr)(using Ctx): Res = visit(e) {
-
-      case e if expr.isDefinedAt(e) => expr.apply(e)
-
-      case e: RawExpr => empty
-      case e: RawValue => empty
-      case e: Variable => empty
-
-      case Let(bindings, body) => combineAll(query(body) :: bindings.map(query))
-      case Let_*(bindings, body) => combineAll(query(body) :: bindings.map(query))
-      case Lambda(params, body) => query(body)
-
-      case Call(callee, arguments) => combineAll(query(callee) :: arguments.map(query))
-      case If(cond, thn, els) => combineAll(List(query(cond), query(thn), query(els)))
-      case Cond(clauses, default) => combineAll(default.toList.map(query) ++ clauses.map { case (p, e) => combine(query(p), query(e)) })
-
-      case Handle(handlers, body) =>
-        combineAll(query(body) :: handlers.map {
-          case Handler(name, ops) => combineAll(ops map {
-            case Operation(name, params, k, body) => query(body)
-          })
-        })
+    inline def visitQuery[T](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Ctx): Res = visit(el) { t =>
+      if pf.isDefinedAt(el) then pf.apply(el) else structuralQuery(t, empty, combine)
     }
 
-    def query(d: Def)(using Ctx): Res = visit(d) {
+    def query(e: Expr)(using Ctx): Res = visitQuery(e, expr)
+    def query(d: Def)(using Ctx): Res = visitQuery(d, defn)
+    def query(b: Block)(using Ctx): Res = visitQuery(b)
+    def query(b: Binding)(using Ctx): Res = visitQuery(b)
+    def query(e: Handler)(using Ctx): Res = visitQuery(e)
+    def query(e: Operation)(using Ctx): Res = visitQuery(e)
 
-      case d if defn.isDefinedAt(d) => defn.apply(d)
-
-      case Constant(name, value) => query(value)
-      case Function(name, params, body) => query(body)
-      case RawDef(raw) => empty
-      case Record(typeName, constructorName, predicateName, uid, fields) => empty
-    }
-
-    def query(b: Block)(using Ctx): Res = visit(b) {
-      case Block(defs, exprs, result) => scoped { combineAll(query(result) :: defs.map(query) ++ exprs.map(query)) }
-    }
-
-    def query(b: Binding)(using Ctx): Res = visit(b) {
-      case Binding(name, expr) => query(expr)
+    def query(clause: (Expr, Expr))(using Ctx): Res = clause match {
+      case (p, e) => combine(query(p), query(e))
     }
   }
 }

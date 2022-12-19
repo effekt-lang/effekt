@@ -296,6 +296,22 @@ object Tree {
     case leaf => ()
   }
 
+  class Query extends Structural {
+    def empty: Set[Id] = Set.empty
+    def combine(r1: Set[Id], r2: Set[Id]): Set[Id] = r1 ++ r2
+
+    def query(p: Pure): Set[Id] = structuralQuery(p, empty, combine)
+    def query(e: Expr): Set[Id] = structuralQuery(e, empty, combine)
+    def query(s: Stmt): Set[Id] = structuralQuery(s, empty, combine)
+    def query(b: Block): Set[Id] = structuralQuery(b, empty, combine)
+    def query(d: Definition): Set[Id] = structuralQuery(d, empty, combine)
+    def query(d: Implementation): Set[Id] = structuralQuery(d, empty, combine)
+    def query(d: Operation): Set[Id] = structuralQuery(d, empty, combine)
+    def query(matchClause: (Id, BlockLit)): Set[Id] = matchClause match {
+      case (id, lit) => query(lit)
+    }
+  }
+
   class Rewrite extends Structural {
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
