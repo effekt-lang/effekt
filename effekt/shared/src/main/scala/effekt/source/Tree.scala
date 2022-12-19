@@ -660,10 +660,10 @@ object Tree {
       target
 
     inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using Context): T =
-      visit(sc) { t => structural(t, p) }
+      visit(sc) { t => structuralRewrite(t, p) }
 
     inline def structuralVisit[T](sc: T)(using Context): T =
-      visit(sc) { t => structural(t) }
+      visit(sc) { t => structuralRewrite(t) }
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {
@@ -672,7 +672,7 @@ object Tree {
     override def combineAll(rs: List[Unit]): Unit = ()
   }
 
-  trait Query[Ctx, Res] {
+  trait Query[Ctx, Res] extends util.Structural {
 
     def empty: Res
     def combine(r1: Res, r2: Res): Res
@@ -686,7 +686,7 @@ object Tree {
     /**
      * Hook that can be overridden to perform an action at every node in the tree
      */
-    def visit[T <: Tree](t: T)(visitor: T => Res)(using Context, Ctx): Res = visitor(t)
+    def visit[T <: Tree](t: T)(visitor: T => Res)(using Context, Ctx): Res = scoped { visitor(t) }
 
     /**
      * Hook that can be overriden to perform something for each new lexical scope
@@ -695,121 +695,19 @@ object Tree {
 
     //
     // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def query(e: ModuleDecl)(using Context, Ctx): Res = visit(e) {
-      case ModuleDecl(path, imports, defs) => scoped { combineAll(defs.map(query)) }
-    }
+    def query(e: Term)(using C: Context, ctx: Ctx): Res = structuralQuery(e, expr)
+    def query(t: Def)(using C: Context, ctx: Ctx): Res = structuralQuery(t, defn)
+    def query(t: Stmt)(using C: Context, ctx: Ctx): Res = structuralQuery(t, stmt)
 
-    def query(e: Term)(using C: Context, ctx: Ctx): Res = visit(e) {
-      case e if expr.isDefinedAt(e) => expr.apply(e)
-      case v: Var                   => empty
-      case l: Literal               => empty
+    def query(e: ModuleDecl)(using Context, Ctx): Res = structuralQuery(e)
+    def query(h: Handler)(using Context, Ctx): Res = structuralQuery(h)
+    def query(h: Implementation)(using Context, Ctx): Res = structuralQuery(h)
+    def query(h: OpClause)(using Context, Ctx): Res = structuralQuery(h)
+    def query(c: MatchClause)(using Context, Ctx): Res = structuralQuery(c)
 
-      case Assign(id, expr) => scoped { query(expr) }
-
-      case If(cond, thn, els) =>
-        combineAll(query(cond) :: scoped { query(thn) } :: scoped { query(els) } :: Nil)
-
-      case While(cond, body) =>
-        combineAll(scoped { query(cond) } :: scoped { query(body) } :: Nil)
-
-      case Match(sc, clauses) =>
-        combineAll(query(sc) :: clauses.map(cl => scoped { query(cl) }))
-
-      case Select(recv, name) =>
-        query(recv)
-
-      case Do(effect, id, targs, vargs) =>
-        combineAll(vargs.map(query))
-
-      case Call(fun, targs, vargs, bargs) =>
-        combineAll(vargs.map(query) ++ bargs.map(query))
-
-      case MethodCall(receiver, id, targs, vargs, bargs) =>
-        combineAll(query(receiver) :: vargs.map(query) ++ bargs.map(query))
-
-      case TryHandle(prog, handlers) =>
-        combineAll(scoped { query(prog) } :: handlers.map(h => scoped { query(h) }))
-
-      case New(impl) =>
-        query(impl)
-
-      case BlockLiteral(tps, vps, bps, body) =>
-        scoped { query(body) }
-
-      case Region(name, body) =>
-        query(body)
-
-      case Hole(stmts) =>
-        query(stmts)
-
-      case Box(c, b) =>
-        query(b)
-
-      case Unbox(b) =>
-        query(b)
-    }
-
-    def query(t: Def)(using C: Context, ctx: Ctx): Res = visit(t) {
-      case t if defn.isDefinedAt(t) => defn.apply(t)
-
-      case FunDef(id, tparams, vparams, bparams, ret, body) =>
-        scoped { query(body) }
-
-      case ValDef(id, annot, binding) =>
-        scoped { query(binding) }
-
-      case VarDef(id, annot, region, binding) =>
-        scoped { query(binding) }
-
-      case DefDef(id, annot, block) =>
-        scoped { query(block) }
-
-      case d: InterfaceDef   => empty
-      case d: DataDef        => empty
-      case d: RecordDef      => empty
-      case d: TypeDef        => empty
-      case d: EffectDef      => empty
-
-      case d: ExternType     => empty
-      case d: ExternDef      => empty
-      case d: ExternResource => empty
-      case d: ExternInterface => empty
-      case d: ExternInclude  => empty
-    }
-
-    def query(t: Stmt)(using C: Context, ctx: Ctx): Res = visit(t) {
-      case s if stmt.isDefinedAt(s) => stmt.apply(s)
-
-      case DefStmt(d, rest) =>
-        combineAll(query(d) :: query(rest) :: Nil)
-
-      case ExprStmt(e, rest) =>
-        combineAll(query(e) :: query(rest) :: Nil)
-
-      case Return(e) =>
-        query(e)
-
-      case BlockStmt(b) =>
-        scoped { query(b) }
-    }
-
-    def query(h: Handler)(using Context, Ctx): Res = visit(h) {
-      case Handler(capability, impl) => query(impl)
-    }
-
-    def query(h: Implementation)(using Context, Ctx): Res = visit(h) {
-      case Implementation(interface, clauses) =>
-        combineAll(clauses.map(cl => scoped { query(cl) }))
-    }
-
-    def query(h: OpClause)(using Context, Ctx): Res = visit(h) {
-      case OpClause(id, tparams, params, ret, body, resume) =>
-        scoped { query(body) }
-    }
-
-    def query(c: MatchClause)(using Context, Ctx): Res = visit(c) {
-      case MatchClause(pattern, body) =>
-        scoped { query(body) }
-    }
+    inline def structuralQuery[T <: Tree](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Context, Ctx): Res =
+      visit(el) { t =>
+        if pf.isDefinedAt(el) then pf.apply(el) else structuralQuery(t, empty, combine)
+      }
   }
 }

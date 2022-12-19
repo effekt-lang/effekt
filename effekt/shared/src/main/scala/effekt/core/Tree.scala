@@ -321,13 +321,13 @@ object Tree {
 
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
-    def rewrite(p: Pure): Pure = structural(p, pure)
-    def rewrite(e: Expr): Expr = structural(e, expr)
-    def rewrite(s: Stmt): Stmt = structural(s, stmt)
-    def rewrite(b: Block): Block = structural(b, block)
-    def rewrite(d: Definition): Definition = structural(d, defn)
-    def rewrite(e: Implementation): Implementation = structural(e, handler)
-    def rewrite(o: Operation): Operation = structural(o)
+    def rewrite(p: Pure): Pure = structuralRewrite(p, pure)
+    def rewrite(e: Expr): Expr = structuralRewrite(e, expr)
+    def rewrite(s: Stmt): Stmt = structuralRewrite(s, stmt)
+    def rewrite(b: Block): Block = structuralRewrite(b, block)
+    def rewrite(d: Definition): Definition = structuralRewrite(d, defn)
+    def rewrite(e: Implementation): Implementation = structuralRewrite(e, handler)
+    def rewrite(o: Operation): Operation = structuralRewrite(o)
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])

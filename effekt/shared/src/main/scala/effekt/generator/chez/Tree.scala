@@ -193,13 +193,13 @@ object Tree {
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
     def defn(using C: Ctx): PartialFunction[Def, Def] = PartialFunction.empty
 
-    def rewrite(block: Block)(using Ctx): Block = structural(block)
-    def rewrite(binding: Binding)(using Ctx): Binding = structural(binding)
-    def rewrite(h: Handler)(using Ctx): Handler = structural(h)
-    def rewrite(op: Operation)(using Ctx): Operation = structural(op)
+    def rewrite(block: Block)(using Ctx): Block = structuralRewrite(block)
+    def rewrite(binding: Binding)(using Ctx): Binding = structuralRewrite(binding)
+    def rewrite(h: Handler)(using Ctx): Handler = structuralRewrite(h)
+    def rewrite(op: Operation)(using Ctx): Operation = structuralRewrite(op)
 
-    def rewrite(e: Expr)(using Ctx): Expr = structural(e, expr)
-    def rewrite(t: Def)(using C: Ctx): Def = structural(t, defn)
+    def rewrite(e: Expr)(using Ctx): Expr = structuralRewrite(e, expr)
+    def rewrite(t: Def)(using C: Ctx): Def = structuralRewrite(t, defn)
 
     def rewrite(clause: (Expr, Expr))(using Ctx): (Expr, Expr) = clause match {
       case (c, t) => (rewrite(c), rewrite(t))
@@ -225,16 +225,16 @@ object Tree {
      */
     def visit[T](t: T)(visitor: T => Res)(using Ctx): Res = visitor(t)
 
-    inline def visitQuery[T](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Ctx): Res = visit(el) { t =>
+    inline def structuralQuery[T](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Ctx): Res = visit(el) { t =>
       if pf.isDefinedAt(el) then pf.apply(el) else structuralQuery(t, empty, combine)
     }
 
-    def query(e: Expr)(using Ctx): Res = visitQuery(e, expr)
-    def query(d: Def)(using Ctx): Res = visitQuery(d, defn)
-    def query(b: Block)(using Ctx): Res = visitQuery(b)
-    def query(b: Binding)(using Ctx): Res = visitQuery(b)
-    def query(e: Handler)(using Ctx): Res = visitQuery(e)
-    def query(e: Operation)(using Ctx): Res = visitQuery(e)
+    def query(e: Expr)(using Ctx): Res = structuralQuery(e, expr)
+    def query(d: Def)(using Ctx): Res = structuralQuery(d, defn)
+    def query(b: Block)(using Ctx): Res = structuralQuery(b)
+    def query(b: Binding)(using Ctx): Res = structuralQuery(b)
+    def query(e: Handler)(using Ctx): Res = structuralQuery(e)
+    def query(e: Operation)(using Ctx): Res = structuralQuery(e)
 
     def query(clause: (Expr, Expr))(using Ctx): Res = clause match {
       case (p, e) => combine(query(p), query(e))

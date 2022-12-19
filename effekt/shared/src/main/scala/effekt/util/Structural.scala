@@ -6,12 +6,16 @@ import scala.quoted.*
 /**
  * Automatically generates traversal code.
  *
- * Use macro [[structural]] to generate traversal code.
+ * Use macro [[structuralRewrite]] to generate traversal code.
  * See [[effekt.core.Tree.Rewrite]] for an example how to use it.
  * To traverse the tree and rewrite it, he generated traversal automatically uses all
  * (and only those) methods that are called the same as the method the macro is used in.
  * The traversal stops when there is no such method to be called. It also automatically
  * traverses lists and options if the payload can be traversed.
+ *
+ * WARNING: if there is no recursive function with a matching type, the subtree will
+ *   stay untouched. This often is not what you want. Use [[structuralRewriteDebug]] to identify
+ *   these situations.
  *
  * ==Usage Example==
  *
@@ -19,12 +23,12 @@ import scala.quoted.*
  * {{{
  *   enum Exp { case Lit(n: Int); case Add(l: Exp, r: Exp) }
  *   object Test extends Structural {
- *     def increment(e: Exp): Exp = structural(e)
+ *     def increment(e: Exp): Exp = structuralRewrite(e)
  *     def increment(n: Int): Int = n + 1
  *   }
  * }}}
  *
- * The call to [[structural]] above generates the following code (output of [[structuralDebug]]))
+ * The call to [[structuralRewrite]] above generates the following code (output of [[structuralRewriteDebug]]))
  * {{{
  *   e match {
  *     case Lit(n)    => Lit.apply(increment(n))
@@ -65,7 +69,7 @@ import scala.quoted.*
  *
  * ==Debugging==
  *
- * Tipp: replace [[structural]] by [[structuralDebug]] to have the generated
+ * Tipp: replace [[structuralRewrite]] by [[structuralRewriteDebug]] to have the generated
  *   code be printed at compile time.
  *
  *   If there is a bug in the macro, try uncommenting `-Xcheck-macros` in [[build.sbt]].
@@ -78,27 +82,29 @@ import scala.quoted.*
 trait Structural {
 
   /**
-   * Performs structural recursion on [[sc]] and reconstructs a value of [[T]]
+   * Macro that performs structural recursion on [[sc]] and reconstructs a value of [[T]]
    * while doing so.
+   * @see [[effekt.util.Structural]]
    */
-  inline def structural[T](sc: T): T =
-    ${structuralImpl[this.type, T]('{sc}, false)}
+  inline def structuralRewrite[T](sc: T): T =
+    ${rewriteImpl[this.type, T]('{sc}, false)}
 
   /**
    * Like structural without [[p]], but first consults the partial function before
    * destructing [[sc]]
    */
-  inline def structural[T](sc: T, inline p: PartialFunction[T, T]): T =
-    if (p.isDefinedAt(sc)) { p(sc) } else { structural(sc) }
+  inline def structuralRewrite[T](sc: T, inline p: PartialFunction[T, T]): T =
+    if (p.isDefinedAt(sc)) { p(sc) } else { structuralRewrite(sc) }
 
   /**
-   * Same as structural, but prints the generated code.
+   * Same as [[structuralRewrite]], but prints the generated code.
    */
-  inline def structuralDebug[T](sc: T): T =
-    ${structuralImpl[this.type, T]('{sc}, true)}
+  inline def structuralRewriteDebug[T](sc: T): T =
+    ${rewriteImpl[this.type, T]('{sc}, true)}
 
   /**
-   * Performs structural recursion on [[sc]] and collects the result in a monoid [[R]].
+   * Macro that performs structural recursion on [[sc]] and collects the result in a monoid [[R]].
+   * @see [[effekt.util.Structural]]
    */
   inline def structuralQuery[T, R](sc: T, empty: R, combine: (R, R) => R): R =
     structuralQuery[T, R](sc, empty, (all: Seq[R]) => all.fold(empty)(combine))
@@ -182,7 +188,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   /**
    * The main entry point of this macro
    */
-  def structural[T: Type](sc: quoted.Expr[T]): quoted.Expr[T] = {
+  def rewrite[T: Type](sc: quoted.Expr[T]): quoted.Expr[T] = {
 
     val tpt = TypeRepr.of[T]
     val typeSym: Symbol = tpt.typeSymbol
@@ -400,9 +406,9 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   }
 }
 
-def structuralImpl[Self: Type, T: Type](
+def rewriteImpl[Self: Type, T: Type](
   sc: quoted.Expr[T], debug: Boolean
-)(using q: Quotes): quoted.Expr[T] = new StructuralMacro[Self, q.type](debug).structural[T](sc)
+)(using q: Quotes): quoted.Expr[T] = new StructuralMacro[Self, q.type](debug).rewrite[T](sc)
 
 def queryImpl[Self: Type, T: Type, R: Type](
   sc: quoted.Expr[T], empty: quoted.Expr[R], combine: quoted.Expr[Seq[R] => R], debug: Boolean
