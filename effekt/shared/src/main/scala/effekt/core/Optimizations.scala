@@ -13,20 +13,22 @@ def dealiasing(module: ModuleDecl)(using aliases: Map[Id, Id]): ModuleDecl =
 
 def dealiasing(definition: Definition)(using aliases: Map[Id, Id]): Definition =
   definition match
-    case Definition.Def(id, block) => Definition.Def(id, dealiasing(block))
+    case Definition.Def(id, block) =>
+      Definition.Def(id, dealiasing(block))
 
-    case Definition.Let(id, binding) => Definition.Let(id, dealiasing(binding))
+    case Definition.Let(id, binding) =>
+      Definition.Let(id, dealiasing(binding))
 
 def dealiasing(expression: Expr)(using aliases: Map[Id, Id]): Expr =
   expression match
     case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(dealiasing(b), targs, vargs, bargs.map(dealiasing))
+      DirectApp(dealiasing(b), targs, vargs.map(dealiasing), bargs.map(dealiasing))
 
     case Run(s) =>
       Run(dealiasing(s))
 
     case p: Pure =>
-      p
+      dealiasing(p)
 
 def dealiasing(statement: Stmt)(using aliases: Map[Id, Id]): Stmt =
   statement match
@@ -36,27 +38,27 @@ def dealiasing(statement: Stmt)(using aliases: Map[Id, Id]): Stmt =
         case _ => true
       }.map(dealiasing), dealiasing(body))
 
-    case r: Return =>
-      r
+    case Return(p) =>
+      Return(dealiasing(p))
 
     case Val(id, binding, body) =>
       Val(id, dealiasing(binding), dealiasing(body))
 
     case App(callee, targs, vargs, bargs) =>
-      App(dealiasing(callee), targs, vargs, bargs.map(dealiasing))
+      App(dealiasing(callee), targs, vargs.map(dealiasing), bargs.map(dealiasing))
 
     case If(cond, thn, els) =>
-      If(cond, dealiasing(thn), dealiasing(els))
+      If(dealiasing(cond), dealiasing(thn), dealiasing(els))
 
     case Match(scrutinee, clauses, default) =>
-      Match(scrutinee, clauses.map{(c,b) => (c, dealiasing(b).asInstanceOf[BlockLit])},
+      Match(dealiasing(scrutinee), clauses.map{(c,b) => (c, dealiasing(b).asInstanceOf[BlockLit])},
         default match
           case Some(s) => Some(dealiasing(s))
           case None => None
       )
 
     case State(id, init, region, body) =>
-      State(id, init, region, dealiasing(body))
+      State(id, dealiasing(init), region, dealiasing(body))
 
     case Try(body, handlers) =>
       Try(dealiasing(body), handlers)
@@ -84,21 +86,66 @@ def dealiasing(block: Block)(using aliases: Map[Id, Id]): Block =
     case Member(b, field, annotatedType) =>
       Member(dealiasing(b), field, annotatedType)
 
-    case u: Unbox =>
-      u
+    case Unbox(p) =>
+      Unbox(dealiasing(p))
 
     case n:New =>
       n
 
-def removeUnusedFunctions(module: ModuleDecl)(using count: Map[Id, Int]): ModuleDecl =
+def dealiasing(pure: Pure)(using aliases: Map[Id, Id]): Pure =
+  pure match
+    case v: ValueVar =>
+      v
+
+    case l: Literal =>
+      l
+
+    case PureApp(b, targs, vargs) =>
+      PureApp(dealiasing(b), targs, vargs.map(dealiasing))
+
+    case Select(target, field, annotatedType) =>
+      Select(dealiasing(target), field, annotatedType)
+
+    case Box(b, annotatedCapture) =>
+      Box(dealiasing(b), annotatedCapture)
+
+def removeUnusedFunctions(tree: Tree, count: Map[Id, Int]): Tree =
   val rm = count.filter((_, n) => n == 0).keySet
 
+  tree match
+    case m: ModuleDecl =>
+      removeUnusedFunctions(m)(using rm)
+
+    case a: Argument =>
+      removeUnusedFunctions(a)(using rm)
+
+    case e: Expr =>
+      removeUnusedFunctions(e)(using rm)
+
+    case s: Stmt =>
+      removeUnusedFunctions(s)(using rm)
+
+    case x => x
+
+def removeUnusedFunctions(definition: Definition, count: Map[Id, Int]): Definition =
+  val rm = count.filter((_, n) => n == 0).keySet
+  removeUnusedFunctions(definition)(using rm)
+
+def removeUnusedFunctions(arg: Argument)(using rm: Set[Id]): Argument =
+  arg match
+    case p: Pure =>
+      removeUnusedFunctions(p)
+
+    case b: Block =>
+      removeUnusedFunctions(b)
+
+def removeUnusedFunctions(module: ModuleDecl)(using rm: Set[Id]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
       ModuleDecl(path, imports, declarations, externs, definitions.filter{
         case Definition.Def(id, _) => !rm.contains(id)
         case _ => true
-      }.map(removeUnusedFunctions(_)(using rm)), exports)
+      }.map(removeUnusedFunctions), exports)
 
 def removeUnusedFunctions(definition: Definition)(using rm: Set[Id]): Definition =
   definition match
@@ -111,42 +158,42 @@ def removeUnusedFunctions(definition: Definition)(using rm: Set[Id]): Definition
 def removeUnusedFunctions(expression: Expr)(using rm:Set[Id]): Expr =
   expression match
     case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(removeUnusedFunctions(b), targs, vargs, bargs.map(removeUnusedFunctions))
+      DirectApp(removeUnusedFunctions(b), targs, vargs.map(removeUnusedFunctions), bargs.map(removeUnusedFunctions))
 
     case Run(s) =>
       Run(removeUnusedFunctions(s))
 
     case p: Pure =>
-      p
+      removeUnusedFunctions(p)
 
 def removeUnusedFunctions(statement: Stmt)(using rm: Set[Id]): Stmt =
   statement match
-    case Scope(definitions, body) =>
+    case Scope(definitions, body) => // TODO: if definitions = empty return only body?
       Scope(definitions.filter {
         case Definition.Def(id, _) => !rm.contains(id)
         case _ => true
       }.map(removeUnusedFunctions), removeUnusedFunctions(body))
 
-    case r: Return =>
-      r
+    case Return(p) =>
+      Return(removeUnusedFunctions(p))
 
     case Val(id, binding, body) =>
       Val(id, removeUnusedFunctions(binding), removeUnusedFunctions(body))
 
     case App(callee, targs, vargs, bargs) =>
-      App(removeUnusedFunctions(callee), targs, vargs, bargs.map(removeUnusedFunctions))
+      App(removeUnusedFunctions(callee), targs, vargs.map(removeUnusedFunctions), bargs.map(removeUnusedFunctions))
 
     case If(cond, thn, els) =>
-      If(cond, removeUnusedFunctions(thn), removeUnusedFunctions(els))
+      If(removeUnusedFunctions(cond), removeUnusedFunctions(thn), removeUnusedFunctions(els))
 
     case Match(scrutinee, clauses, default) =>
-      Match(scrutinee, clauses.map{case (c, b) => (c, removeUnusedFunctions(b).asInstanceOf[BlockLit])},
+      Match(removeUnusedFunctions(scrutinee), clauses.map{case (c, b) => (c, removeUnusedFunctions(b).asInstanceOf[BlockLit])},
         default match
           case Some(s) => Some(removeUnusedFunctions(s))
           case None => None)
 
     case State(id, init, region, body) =>
-      State(id, init, region, removeUnusedFunctions(body))
+      State(id, removeUnusedFunctions(init), region, removeUnusedFunctions(body))
 
     case Try(body, handlers) =>
       Try(removeUnusedFunctions(body), handlers)
@@ -168,11 +215,30 @@ def removeUnusedFunctions(block: Block)(using rm: Set[Id]): Block =
     case Member(b, field, annotatedType) =>
       Member(removeUnusedFunctions(b), field, annotatedType)
 
-    case u: Unbox =>
-      u
+    case Unbox(p) =>
+      Unbox(removeUnusedFunctions(p))
 
     case n: New =>
       n
+
+def removeUnusedFunctions(pure: Pure)(using rm: Set[Id]): Pure =
+  pure match
+    case v: ValueVar =>
+      v
+
+    case l: Literal =>
+      l
+
+    case PureApp(b, targs, vargs) =>
+      PureApp(removeUnusedFunctions(b), targs, vargs.map(removeUnusedFunctions))
+
+    case Select(target, field, annotatedType) =>
+      Select(removeUnusedFunctions(target), field, annotatedType)
+
+    case Box(b, annotatedCapture) =>
+      Box(removeUnusedFunctions(b), annotatedCapture)
+
+//TODO: rework wrapper
 
 def inlineUniqueFunctions(module: ModuleDecl, summary: Map[Id, Block], count: Map[Id, Int]): ModuleDecl =
   var sum = summary.filter((id, _) => count.contains(id) && count(id) == 1)
@@ -277,7 +343,7 @@ def substitute(tree: Tree,
   var tSubst = (tparams zip targs).toMap
   var cSubst = (cparams zip bargs.map(_.capt)).toMap
   var vSubst = (vparams.map(_.id) zip vargs).toMap
-  var bSubst = (bparams.map(_.id) zip bargs).toMap //TODO: does substitution require Param tpe?
+  var bSubst = (bparams.map(_.id) zip bargs).toMap
 
   //substitute(tree)(using tSubst, cSubst, vSubst, bSubst) TODO: is match necessary here?
   tree match
