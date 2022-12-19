@@ -208,7 +208,7 @@ class AnnotateCaptures(src: Source) extends Query[Unit, CaptureSet] {
       case x: ValueSymbol => CaptureSet.empty
     }
 
-    case e @ source.Assign(id, expr) =>
+    case e @ source.Assign(id, expr, returnTpe) =>
       query(expr) ++ captureOf(id.symbol.asBlockSymbol)
 
     case l @ source.Box(annotatedCapture, block) =>

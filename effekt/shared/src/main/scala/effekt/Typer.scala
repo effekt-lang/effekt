@@ -105,17 +105,32 @@ object Typer extends Phase[NameResolved, Typechecked] {
           Context.panic(pretty"Literal has block type ${blockType}. This should not happen.")
       }
 
-      case source.If(cond, thn, els) =>
-        val Result(cndTpe, cndEffs) = cond checkAgainst TBoolean
+      case source.If(cond, condTpe, thn, els) =>
+        val rCondTpe = Context.resolvedType(condTpe) match {
+          case valueType: ValueType => valueType
+          case blockType: BlockType =>
+            Context.panic(pretty"If condition has annotated a block type: ${blockType}")
+        }
+        val Result(cndTpe, cndEffs) = cond checkAgainst rCondTpe
         val Result(thnTpe, thnEffs) = checkStmt(thn, expected)
         val Result(elsTpe, elsEffs) = checkStmt(els, expected)
 
         Result(Context.join(thnTpe, elsTpe), cndEffs ++ thnEffs ++ elsEffs)
 
-      case source.While(cond, body) =>
-        val Result(_, condEffs) = cond checkAgainst TBoolean
-        val Result(_, bodyEffs) = body checkAgainst TUnit
-        Result(TUnit, condEffs ++ bodyEffs)
+      case source.While(cond, condTpe, body, returnTpe) =>
+        val rCondTpe = Context.resolvedType(condTpe) match {
+          case valueType: ValueType => valueType
+          case blockType: BlockType =>
+            Context.panic(pretty"While condition has annotated a block type: ${blockType}")
+        }
+        val rReturnTpe = Context.resolvedType(returnTpe) match {
+          case valueType: ValueType => valueType
+          case blockType: BlockType =>
+            Context.panic(pretty"While result has annotated a block type: ${blockType}")
+        }
+        val Result(_, condEffs) = cond checkAgainst rCondTpe
+        val Result(_, bodyEffs) = body checkAgainst rReturnTpe
+        Result(rReturnTpe, condEffs ++ bodyEffs)
 
       case source.Var(id) => id.symbol match {
         case x: VarBinder => Context.lookup(x) match {
@@ -128,7 +143,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         case x: ValueSymbol => Result(Context.lookup(x), Pure)
       }
 
-      case e @ source.Assign(id, expr) => e.definition match {
+      case e @ source.Assign(id, expr, returnTpe) => e.definition match {
         case x: VarBinder =>
           val stTpe = Context.lookup(x) match {
             case (btpe, capt) =>
@@ -136,7 +151,12 @@ object Typer extends Phase[NameResolved, Typechecked] {
               TState.extractType(btpe)
           }
           val Result(_, eff) = expr checkAgainst stTpe
-          Result(TUnit, eff)
+          val tReturnTpe = Context.resolvedType(returnTpe) match {
+            case valueType: ValueType => valueType
+            case blockType: BlockType =>
+              Context.panic(pretty"Return type of assignment is not a value type, but block type ${blockType}.")
+          }
+          Result(tReturnTpe, eff)
       }
 
       case l @ source.Box(annotatedCapture, block) =>

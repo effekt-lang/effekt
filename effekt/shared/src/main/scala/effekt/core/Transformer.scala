@@ -238,16 +238,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.BlockLiteral(tps, vps, bps, body) =>
       transformBox(tree)
 
-    case source.If(cond, thn, els) =>
+    case source.If(cond, condTpe, thn, els) =>
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
 
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
-    case source.While(cond, body) =>
+    case source.While(cond, condTpe, body, returnTpe) =>
+      val tReturnTpe = Context.resolvedType(returnTpe) match {
+        case valueType: ValueType => transform(valueType)
+        case blockType: BlockType =>
+          Context.panic(s"While with non-value return type ${blockType}.")
+      }
       val loopName = TmpBlock()
-      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
+      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, tReturnTpe)
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
@@ -255,7 +260,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         insertBindings {
           Stmt.If(transformAsPure(cond),
             Stmt.Val(TmpValue(), transform(body), loopCall),
-            Return(Literal((), core.Type.TUnit)))
+            Return(Literal((), tReturnTpe)))
         }
       )
 
@@ -297,7 +302,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(stmts) =>
       Context.bind(Hole())
 
-    case a @ source.Assign(id, expr) =>
+    case a @ source.Assign(id, expr, returnTpe) =>
       val e = transformAsPure(expr)
       val sym = a.definition
       val stateType = Context.blockTypeOf(sym)

@@ -317,12 +317,14 @@ object Namer extends Phase[Parsed, NameResolved] {
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
-    case source.If(cond, thn, els) =>
+    case source.If(cond, condTpe, thn, els) =>
+      resolveGeneric(condTpe);
       resolveGeneric(cond);
       Context scoped { resolveGeneric(thn) }
       Context scoped { resolveGeneric(els) }
 
-    case source.While(cond, block) =>
+    case source.While(cond, condTpe, block, returnTpe) =>
+      resolveGeneric(condTpe); resolveGeneric(returnTpe);
       resolveGeneric(cond);
       Context scoped { resolveGeneric(block) }
 
@@ -449,7 +451,7 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Literal(v, tpe) => resolve(tpe)
 
-    case source.Assign(id, expr) => Context.resolveVar(id) match {
+    case source.Assign(id, expr, returnTpe) => resolve(returnTpe); Context.resolveVar(id) match {
       case x: VarBinder => resolveGeneric(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")

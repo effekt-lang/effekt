@@ -269,7 +269,7 @@ enum Term extends Tree {
 
   // Variable / Value use (can now also stand for blocks)
   case Var(id: IdRef) extends Term, Reference
-  case Assign(id: IdRef, expr: Term) extends Term, Reference
+  case Assign(id: IdRef, expr: Term, returnTpe: ValueType) extends Term, Reference
 
   case Literal(value: Any, tpe: ValueType)
   case Hole(stmts: Stmt)
@@ -310,8 +310,8 @@ enum Term extends Tree {
   case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
-  case If(cond: Term, thn: Stmt, els: Stmt)
-  case While(cond: Term, block: Stmt)
+  case If(cond: Term, condTpe: ValueType, thn: Stmt, els: Stmt)
+  case While(cond: Term, condTpe: ValueType, block: Stmt, returnTpe: ValueType)
   case Match(scrutinee: Term, clauses: List[MatchClause])
 
   /**
