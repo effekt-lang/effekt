@@ -123,7 +123,6 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   val self = TypeRepr.of[Self].typeSymbol
 
   val rewriteMethod =
-    // TODO find method that has this.type == Self
     def findMethod(sym: Symbol): Symbol =
       if (sym.isDefDef && !sym.isAnonymousFunction) sym else findMethod(sym.owner)
 
@@ -202,7 +201,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
 
 
   // rewrite(arg: tpe, OTHERARGS, ...)(OTHERARGS, ...)
-  def rewrite(tpe: TypeRepr, arg: Term): Term = {
+  def rewrite(arg: Term, tpe: TypeRepr): Term = {
     val m = rewriteFor(tpe).getOrElse { report.errorAndAbort(s"No rewrite method called '${rewriteName}' for type ${tpe}!") }
     val (sameSection, otherSections) = rewriteParams
     val baseCall = Apply(Ref(m.method), arg :: sameSection.map(Ref.apply))
@@ -214,7 +213,7 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
   def tryRewriteExpression(term: Term, tpe: TypeRepr, owner: Symbol): Option[Term] = {
     // base case: we can directly rewrite this type: rewrite(e)(context)
     if (hasRewriteFor(tpe)) {
-      Some(rewrite(tpe, term))
+      Some(rewrite(term, tpe))
 
     // it is a list or option: term.map({ t => rewrite(t) })
     } else if (tpe <:< TypeRepr.of[List[Any]] || tpe <:< TypeRepr.of[Option[Any]]) tpe.typeArgs match {
@@ -278,14 +277,17 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
 
     // case e @ (_: Expr) => rewrite(e)
     CaseDef(Bind(e, Typed(Wildcard(), TypeIdent(typeSym))), None,
-      Block(Nil, rewrite(tpt, Ref(e))))
+      Block(Nil, rewrite(Ref(e), tpt)))
   }
+
 
   // Structural queries
   // ------------------
+  case class QueryInfo(empty: Term, combine: Term, domain: TypeRepr)
+
   def query[T: Type, R: Type](sc: quoted.Expr[T], empty: quoted.Expr[R], combine: quoted.Expr[Seq[R] => R]): quoted.Expr[R] = {
     val tpt = TypeRepr.of[T]
-    val domainType = TypeRepr.of[R]
+    val info = QueryInfo(empty.asTerm, combine.asTerm, TypeRepr.of[R])
     val typeSym: Symbol = tpt.typeSymbol
 
     val variants: List[Symbol] =
@@ -295,17 +297,17 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     val scrutinee = sc.asTerm
 
     // x match { ... }
-    val result = Match(scrutinee, variants.map(v => queryCase(v, domainType, empty.asTerm, combine.asTerm, owner)) :+ catchAll)
+    val result = Match(scrutinee, variants.map(v => queryCase(v, info, owner)) :+ catchAll)
     if (debug) { report.info(Printer.TreeShortCode.show(result)) }
     result.asExprOf[R]
   }
 
-  def queryCase(sym: Symbol, domainType: TypeRepr, empty: Term, combine: Term, owner: Symbol): CaseDef =
-    if (sym.isCaseClass) queryCaseCaseClass(sym, domainType, empty, combine, owner)
-    else queryCaseTrait(sym, empty, combine, owner)
+  def queryCase(sym: Symbol, info: QueryInfo, owner: Symbol): CaseDef =
+    if (sym.isCaseClass) queryCaseCaseClass(sym, info, owner)
+    else queryCaseTrait(sym, info, owner)
 
   // case Foo.unapply(a, b, c) => combine(List())
-  def queryCaseCaseClass(typeSym: Symbol, domainType: TypeRepr, empty: Term, combine: Term, owner: Symbol): CaseDef =
+  def queryCaseCaseClass(typeSym: Symbol, info: QueryInfo, owner: Symbol): CaseDef =
     val tpt = typeSym.typeRef
 
     val companion = typeSym.companionModule
@@ -321,11 +323,11 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
     val bindFields = (fieldSym zip fieldTypes).map { case (f, tpt) => Bind(f, Wildcard()) }
 
     val queriedFields = (fieldSym zip fieldTypes).toList.flatMap {
-      case (f, tpt) => tryQueryExpression(Ref(f), tpt, domainType, empty, combine, owner)
+      case (f, tpt) => tryQueryExpression(Ref(f), tpt, info, owner)
     } match {
-      case Nil => empty
+      case Nil => info.empty
       case el :: Nil => el
-      case other => Apply(Select.unique(combine, "apply"), List(reifyList(other, domainType)))
+      case other => Apply(Select.unique(info.combine, "apply"), List(reifyList(other, info.domain)))
     }
 
     // case Return.unapply(e @ _) => combine(REWRITE[[e]])
@@ -333,36 +335,37 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
       Block(Nil, queriedFields))
 
 
-  def queryCaseTrait(sym: Symbol, empty: Term, combine: Term, owner: Symbol): CaseDef = {
+  def queryCaseTrait(sym: Symbol, info: QueryInfo, owner: Symbol): CaseDef = {
     val tpt = sym.typeRef
     val e = Symbol.newBind(owner, "e", Flags.Local, tpt)
 
     // case e @ (_: Expr) => query(e)
     CaseDef(Bind(e, Typed(Wildcard(), TypeIdent(sym))), None,
-      Block(Nil, rewrite(tpt, Ref(e))))
+      Block(Nil, rewrite(Ref(e), tpt)))
   }
 
-  def queryExpression(term: Term, tpe: TypeRepr, domainType: TypeRepr, empty: Term, combine: Term, owner: Symbol): Term =
-    tryQueryExpression(term, tpe, domainType, empty, combine, owner).getOrElse(empty)
+  def queryExpression(term: Term, tpe: TypeRepr, info: QueryInfo, owner: Symbol): Term =
+    tryQueryExpression(term, tpe, info, owner).getOrElse(info.empty)
 
-  def tryQueryExpression(term: Term, tpe: TypeRepr, domainType: TypeRepr, empty: Term, combine: Term, owner: Symbol): Option[Term] = {
+  def tryQueryExpression(term: Term, tpe: TypeRepr, info: QueryInfo, owner: Symbol): Option[Term] = {
     // base case: we can directly rewrite this type: query(e)(context)
     if (hasRewriteFor(tpe)) {
-      Some(rewrite(tpe, term))
+      Some(rewrite(term, tpe))
 
     // it is a list or option: combine(term.toList.map({ t => query(t) }))
     } else if (tpe <:< TypeRepr.of[List[Any]] || tpe <:< TypeRepr.of[Option[Any]]) tpe.typeArgs match {
       case List(elTpe) if hasRewriteFor(elTpe) =>
         def toList(term: Term): Term = if (tpe <:< TypeRepr.of[List[Any]]) term else Select.unique(term, "toList")
-        Some(Apply(Select.unique(combine, "apply"), List(
-          Select.overloaded(toList(term), "map", List(domainType),
-            List(makeClosure(elTpe, domainType, owner, (owner, t) => queryExpression(t, elTpe, domainType, empty, combine, owner))), tpe))))
+        Some(Apply(Select.unique(info.combine, "apply"), List(
+          Select.overloaded(toList(term), "map", List(info.domain),
+            List(makeClosure(elTpe, info.domain, owner, (owner, t) => queryExpression(t, elTpe, info, owner))), tpe))))
       case _ =>
         None
     } else {
       None
     }
   }
+
 
   // Util
   // ----
