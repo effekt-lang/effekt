@@ -76,10 +76,8 @@ object JavaScript extends Backend {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }
 
-    C.using(module = input.main.mod) {
       val result = toJS(input.main.core, imports, exports).virtual
       Some(js.PrettyPrinter.format(result))
-    }
   }
 
   /**

@@ -59,16 +59,16 @@ trait ChezScheme {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: AllTransformed)(using C: Context) =
-    C.using(module = input.main.mod) { Some(chez.PrettyPrinter.format(compile(input.main))) }
+  def compileSeparate(input: AllTransformed)(using Context) =
+    Some(chez.PrettyPrinter.format(compile(input.main)))
 
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
+  private def compile(in: CoreTransformed): List[chez.Def] =
     toChez(in.core)
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }

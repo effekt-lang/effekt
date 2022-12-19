@@ -31,7 +31,7 @@ object ChezSchemeLift extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) =
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using Context) =
     LiftInference(main).map { lifted =>
       val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
@@ -42,8 +42,8 @@ object ChezSchemeLift extends Backend {
   /**
    * Entrypoint used by the LSP server to show the compiled output
    */
-  def compileSeparate(input: AllTransformed)(using C: Context) =
-    C.using(module = input.main.mod) { Some(chez.PrettyPrinter.format(compile(input.main))) }
+  def compileSeparate(input: AllTransformed)(using Context) =
+    Some(chez.PrettyPrinter.format(compile(input.main)))
 
   /**
    * Compiles only the given module, does not compile dependencies
@@ -51,7 +51,7 @@ object ChezSchemeLift extends Backend {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     LiftInference(in).toList.flatMap { lifted => toChez(lifted.core) }
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
