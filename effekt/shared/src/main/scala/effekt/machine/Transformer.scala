@@ -6,7 +6,7 @@ import effekt.context.Context
 import effekt.core.DeclarationContext
 import effekt.core.given
 import effekt.lifted
-import effekt.lifted.{Definition, LiftInference}
+import effekt.lifted.{Definition, ExternContext, LiftInference}
 import effekt.symbols
 import effekt.symbols.{BlockSymbol, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol}
 import effekt.symbols.builtins.TState
@@ -29,6 +29,7 @@ object Transformer {
     val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
     given DC: DeclarationContext = core.DeclarationContext(mod.decls)
+    given EC: ExternContext = ExternContext(mod.externs)
 
     // collect all information
     val declarations = mod.externs.flatMap(transform)
@@ -47,7 +48,7 @@ object Transformer {
     Program(declarations, transformedDefinitions)
   }
 
-  def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): List[Declaration] = extern match {
+  def transform(extern: lifted.Extern)(using BlocksParamsContext, ExternContext, ErrorReporter): List[Declaration] = extern match {
     case lifted.Extern.Def(name, functionType, params, body) =>
       val transformedParams = params.map {
         case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
@@ -62,7 +63,7 @@ object Transformer {
     case lifted.Extern.Type(_,_,_) | lifted.Extern.Interface(_,_,_) | lifted.Extern.Resource(_,_) => Nil
   }
 
-  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Statement =
+  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, ExternContext, DeclarationContext, ErrorReporter): Statement =
     stmt match {
       case lifted.Scope(definitions, rest) =>
 
@@ -229,7 +230,7 @@ object Transformer {
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
-  def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
+  def transform(arg: lifted.Argument)(using BlocksParamsContext, ExternContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
@@ -249,7 +250,7 @@ object Transformer {
     }
   }
 
-  def transform(block: lifted.Block)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = block match {
+  def transform(block: lifted.Block)(using BlocksParamsContext, ExternContext, DeclarationContext, ErrorReporter): Binding[Variable] = block match {
     case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
@@ -265,36 +266,36 @@ object Transformer {
     case lifted.New(impl) => ???
   }
 
-  def transform(expr: lifted.Expr)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = expr match {
+  def transform(expr: lifted.Expr)(using BPC: BlocksParamsContext, EC: ExternContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = expr match {
     case lifted.ValueVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
-    case lifted.Literal((), _) =>
-      val variable = Variable(freshName("x"), Positive("Unit"));
+    case lifted.Literal((), tpe) =>
+      val variable = Variable(freshName("x"), transform(tpe));
       Binding { k =>
         Construct(variable, builtins.Unit, List(), k(variable))
       }
 
-    case lifted.Literal(value: Int, _) =>
-      val variable = Variable(freshName("x"), Type.Int());
+    case lifted.Literal(value: Int, tpe) =>
+      val variable = Variable(freshName("x"), transform(tpe));
       Binding { k =>
         LiteralInt(variable, value, k(variable))
       }
 
-    case lifted.Literal(value: Boolean, _) =>
-      val variable = Variable(freshName("x"), Positive("Boolean"))
+    case lifted.Literal(value: Boolean, tpe) =>
+      val variable = Variable(freshName("x"), transform(tpe))
       Binding { k =>
         Construct(variable, if (value) builtins.True else builtins.False, List(), k(variable))
       }
 
-    case lifted.Literal(v: Double, _) =>
-      val literal_binding = Variable(freshName("x"), Type.Double());
+    case lifted.Literal(v: Double, tpe) =>
+      val literal_binding = Variable(freshName("x"), transform(tpe));
       Binding { k =>
         LiteralDouble(literal_binding, v, k(literal_binding))
       }
 
-    case lifted.Literal(javastring: String, _) =>
-      val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
+    case lifted.Literal(javastring: String, tpe) =>
+      val literal_binding = Variable(freshName("utf8_string_literal"), transform(tpe));
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
       }
@@ -362,13 +363,13 @@ object Transformer {
       ErrorReporter.abort(s"Unsupported expression: $expr")
   }
 
-  def transform(args: List[lifted.Argument])(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[List[Variable]] =
+  def transform(args: List[lifted.Argument])(using BlocksParamsContext, ExternContext, DeclarationContext, ErrorReporter): Binding[List[Variable]] =
     args match {
       case Nil => pure(Nil)
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] = {
+  def transform(handler: lifted.Implementation)(using BlocksParamsContext, ExternContext, DeclarationContext, ErrorReporter): List[Clause] = {
     handler.operations.sortBy[Int]({
       case lifted.Operation(operationName, _) =>
         DeclarationContext.getInterface(handler.id.symbol).properties.indexWhere(_.id == operationName)
@@ -386,7 +387,7 @@ object Transformer {
     })
   }
 
-  def transform(param: lifted.Param)(using ErrorReporter): Variable =
+  def transform(param: lifted.Param)(using ExternContext, ErrorReporter): Variable =
     param match {
       case lifted.ValueParam(name, tpe) =>
         Variable(transform(name), transform(tpe))
@@ -396,29 +397,28 @@ object Transformer {
         Variable(transform(name), builtins.Evidence)
     }
 
-  def transform(tpe: core.ValueType)(using ErrorReporter): Type = tpe match {
+  def transform(tpe: core.ValueType)(using E: ErrorReporter, EC: ExternContext): Type = tpe match {
     case core.ValueType.Var(name) => ???
     case core.ValueType.Boxed(tpe, capt) => ???
+    case core.ValueType.Data(t, Nil) if EC.findExternType(t).isDefined =>
+      Type.Extern(EC.getExternType(t).body.getOrElse{
+        s"Invalid extern type decl for machine-based backend"
+      })
     case core.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
-    case core.ValueType.Data(symbols.builtins.IntSymbol, Nil) => Type.Int()
-    case core.ValueType.Data(symbols.builtins.BooleanSymbol, Nil) => builtins.BooleanType
-    case core.ValueType.Data(symbols.builtins.DoubleSymbol, Nil) => Type.Double()
-    case core.ValueType.Data(symbols.builtins.StringSymbol, Nil) => Type.String()
     case core.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
   }
 
-  def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
+  def transform(tpe: core.BlockType)(using ErrorReporter, ExternContext): Type = tpe match {
     case core.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
     case core.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
   }
-
   def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
 
-  def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
+  def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ExternContext, ErrorReporter): Unit =
     definitions.foreach {
       case Definition.Def(blockName, tpe, lifted.BlockLit(tparams, params, body)) =>
         noteBlockParams(blockName, params.map(transform))

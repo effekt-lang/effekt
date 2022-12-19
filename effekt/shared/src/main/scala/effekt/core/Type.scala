@@ -55,10 +55,6 @@ object Type {
   val TBottom = ValueType.Data(builtins.BottomSymbol, Nil)
 
   val TUnit   = ValueType.Data(builtins.UnitSymbol, Nil)
-  val TInt = ValueType.Data(builtins.IntSymbol, Nil)
-  val TBoolean = ValueType.Data(builtins.BooleanSymbol, Nil)
-  val TString = ValueType.Data(builtins.StringSymbol, Nil)
-  val TDouble = ValueType.Data(builtins.DoubleSymbol, Nil)
 
   val TRegion = BlockType.Interface(builtins.RegionSymbol, Nil)
 

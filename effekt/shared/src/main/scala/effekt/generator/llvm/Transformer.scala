@@ -362,11 +362,9 @@ object Transformer {
   def regionType = NamedType("Region");
 
   def transform(tpe: machine.Type): Type = tpe match {
+    case machine.Type.Extern(name)   => RawType(name.split(" ")(0))
     case machine.Positive(_)         => positiveType
     case machine.Negative(_)         => negativeType
-    case machine.Type.Int()          => NamedType("Int")
-    case machine.Type.Double()       => NamedType("Double")
-    case machine.Type.String()       => positiveType
     case machine.Type.Stack()        => stkType
     case machine.Type.Reference(tpe) => PointerType()
     case machine.Type.Region()       => regionType
@@ -377,11 +375,9 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
+      case machine.Type.Extern(name) => name.split(" ")(1).toInt
       case machine.Positive(_)       => 16
       case machine.Negative(_)       => 16
-      case machine.Type.Int()        => 8 // TODO Make fat?
-      case machine.Type.Double()     => 8 // TODO Make fat?
-      case machine.Type.String()     => 16
       case machine.Type.Stack()      => 8 // TODO Make fat?
       case machine.Type.Reference(_) => 8
       case machine.Type.Region()     => 8
@@ -548,12 +544,15 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
+      case machine.Type.Extern(name) => {
+        val decl = name.split(" ")
+        if (decl.length > 2) {
+          emit(Call("_", VoidType(), ConstantGlobal(PointerType(), decl(2)), List(transform(value))))
+        } else ()
+      }
       case machine.Positive(_)       => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
       case machine.Negative(_)       => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
       case machine.Type.Stack()      => emit(Call("_", VoidType(), shareStack, List(transform(value))))
-      case machine.Type.Int()        => ()
-      case machine.Type.Double()     => ()
-      case machine.Type.String()     => emit(Call("_", VoidType(), shareString, List(transform(value))))
       case machine.Type.Reference(_) => ()
       case machine.Type.Region()     => ()
     }
@@ -561,12 +560,15 @@ object Transformer {
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
+      case machine.Type.Extern(name) => {
+        val decl = name.split(" ")
+        if (decl.length > 3) {
+          emit(Call("_", VoidType(), ConstantGlobal(PointerType(), decl(3)), List(transform(value))))
+        }
+      }
       case machine.Positive(_)       => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
       case machine.Negative(_)       => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
       case machine.Type.Stack()      => emit(Call("_", VoidType(), eraseStack, List(transform(value))))
-      case machine.Type.Int()        => ()
-      case machine.Type.Double()     => ()
-      case machine.Type.String()     => emit(Call("_", VoidType(), eraseString, List(transform(value))))
       case machine.Type.Reference(_) => ()
       case machine.Type.Region()     => ()
     }

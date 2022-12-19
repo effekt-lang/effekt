@@ -70,5 +70,6 @@ enum Type {
   case StructureType(elementTypes: List[Type])
   case FunctionType(resultType: Type, argumentTypes: List[Type])
   case NamedType(name: String)
+  case RawType(name: String)
 }
 export Type.*

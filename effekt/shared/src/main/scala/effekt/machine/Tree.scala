@@ -203,12 +203,10 @@ export Statement.*
  * Types
  */
 enum Type {
+  case Extern(name: Predef.String)
   case Positive(name: Predef.String)
   case Negative(name: Predef.String)
   case Stack()
-  case Int()
-  case Double()
-  case String()
   case Reference(tpe: Type)
   case Region()
 }
@@ -217,7 +215,7 @@ export Type.{ Positive, Negative }
 type Evidence = Int
 object builtins {
 
-  val Evidence = Type.Int()
+  val Evidence = Type.Extern("%Int 8")
   val Here: Evidence = 0
   val There: Evidence = 1
 

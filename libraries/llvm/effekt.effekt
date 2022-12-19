@@ -1,5 +1,10 @@
 module effekt
 
+extern type Boolean = "%Pos 16 sharePositive erasePositive"
+extern type Int = "%Int 8"
+extern type Double = "%Double 8"
+extern type String = "%Pos 16 c_buffer_refcount_increment c_buffer_refcount_decrement"
+
 extern include "rts.ll"
 extern include "forward-declare-c.ll"
 

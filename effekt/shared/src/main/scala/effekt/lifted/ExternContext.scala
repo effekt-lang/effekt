@@ -1,5 +1,6 @@
-package effekt.core
+package effekt.lifted
 
+import effekt.core.Id
 import effekt.util.messages.ErrorReporter
 
 class ExternContext(val externs: List[Extern]) {
