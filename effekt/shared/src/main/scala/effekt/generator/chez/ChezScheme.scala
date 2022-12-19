@@ -65,10 +65,10 @@ trait ChezScheme {
   /**
    * Compiles only the given module, does not compile dependencies
    */
-  private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
+  private def compile(in: CoreTransformed): List[chez.Def] =
     toChez(in.core)
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }

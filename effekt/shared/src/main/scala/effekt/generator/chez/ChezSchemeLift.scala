@@ -31,7 +31,7 @@ object ChezSchemeLift extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) =
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using Context) =
     LiftInference(main).map { lifted =>
       val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
@@ -51,7 +51,7 @@ object ChezSchemeLift extends Backend {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     LiftInference(in).toList.flatMap { lifted => toChez(lifted.core) }
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
@@ -121,16 +121,13 @@ object ChezSchemeLift extends Backend {
     case other => chez.Let(Nil, toChez(other))
   }
 
-  def toChez(decl: lifted.Decl): List[chez.Def] = decl match {
-    case Data(did, ctors) =>
-      ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
-      }
+  def toChez(decl: core.Declaration): List[chez.Def] = decl match {
+    case core.Declaration.Data(did, _, ctors) =>
+      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(_.id)) }
 
     // We use chez scheme records to also represent capabilities.
-    case Decl.Interface(id, operations) =>
-      generateConstructor(id, operations)
+    case core.Declaration.Interface(id, _, operations) =>
+      generateConstructor(id, operations.map(_.id))
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {

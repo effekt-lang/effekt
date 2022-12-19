@@ -11,20 +11,11 @@ sealed trait Tree
 case class ModuleDecl(
   path: String,
   imports: List[String],
-  decls: List[Decl],
+  decls: List[core.Declaration],
   externs: List[Extern],
   definitions: List[Definition],
   exports: List[Symbol]
 ) extends Tree
-
-/**
- * Toplevel data and interface declarations
- */
-enum Decl {
-  case Data(id: Symbol, ctors: List[Symbol])
-  case Interface(id: Symbol, operations: List[Symbol])
-}
-export Decl.*
 
 /**
  * FFI external definitions

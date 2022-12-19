@@ -83,12 +83,12 @@ object PrettyPrinter extends ParenPrettyPrinter {
     handlerName <+> block(vsep(clauses))
   }
 
-  def toDoc(d: Decl): Doc = d match {
-    case Data(did, ctors) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
+  def toDoc(d: core.Declaration): Doc = d match {
+    case core.Declaration.Data(did, _, ctors) =>
+      "type" <+> toDoc(did.name) <> parens(ctors.map { ctor => toDoc(ctor.id.name) })
 
-    case Interface(id, operations) =>
-      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
+    case core.Declaration.Interface(id, _, operations) =>
+      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.id.name) })
   }
 
   def toDoc(d: Definition): Doc = d match {
