@@ -190,13 +190,13 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: List[Id])
+  case ExternType(id: IdDef, tparams: List[Id], body: Option[String])
 
   case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
-  case ExternInterface(id: IdDef, tparams: List[Id])
+  case ExternInterface(id: IdDef, tparams: List[Id], body: Option[String])
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]

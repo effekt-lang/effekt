@@ -19,25 +19,25 @@ object builtins {
 
   private def name(s: String) = Name.qualified(s, prelude)
 
-  val UnitSymbol = ExternType(name("Unit"), Nil)
+  val UnitSymbol = ExternType(name("Unit"), Nil, None)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val BooleanSymbol = ExternType(name("Boolean"), Nil)
+  val BooleanSymbol = ExternType(name("Boolean"), Nil, None)
   val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
 
-  val IntSymbol = ExternType(name("Int"), Nil)
+  val IntSymbol = ExternType(name("Int"), Nil, None)
   val TInt = ValueTypeApp(IntSymbol, Nil)
 
-  val DoubleSymbol = ExternType(name("Double"), Nil)
+  val DoubleSymbol = ExternType(name("Double"), Nil, None)
   val TDouble = ValueTypeApp(DoubleSymbol, Nil)
 
-  val StringSymbol = ExternType(name("String"), Nil)
+  val StringSymbol = ExternType(name("String"), Nil, None)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
-  val TopSymbol = ExternType(name("Top"), Nil)
+  val TopSymbol = ExternType(name("Top"), Nil, None)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  val BottomSymbol = ExternType(name("Bottom"), Nil)
+  val BottomSymbol = ExternType(name("Bottom"), Nil, None)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)

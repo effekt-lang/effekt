@@ -105,10 +105,10 @@ object JavaScript extends Backend {
     case Extern.Include(contents) =>
       js.RawStmt(contents)
 
-    case Extern.Type(id, _) =>
+    case Extern.Type(id, _, _) =>
       js.RawStmt(s"/* extern type ${id.name.name} */")
 
-    case Extern.Interface(id, _) =>
+    case Extern.Interface(id, _, _) =>
       js.RawStmt(s"/* extern interface ${id.name.name} */")
 
     case Extern.Resource(id, _) =>

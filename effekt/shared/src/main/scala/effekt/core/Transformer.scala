@@ -102,11 +102,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
 
-    case source.Def.ExternType(id, tparams) =>
-      List(Extern.Type(id.symbol, tparams.map(_.symbol)))
+    case source.Def.ExternType(id, tparams, body) =>
+      List(Extern.Type(id.symbol, tparams.map(_.symbol), body))
 
-    case source.Def.ExternInterface(id, tparams) =>
-      List(Extern.Interface(id.symbol, tparams.map(_.symbol)))
+    case source.Def.ExternInterface(id, tparams, body) =>
+      List(Extern.Interface(id.symbol, tparams.map(_.symbol), body))
 
     case source.Def.ExternResource(id, _) =>
       val btpe = Context.blockTypeOf(id.symbol)

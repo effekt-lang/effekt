@@ -154,16 +154,16 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.ExternType(id, tparams) =>
+    case source.ExternType(id, tparams, body) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternType(Context.nameFor(id), tps)
+        ExternType(Context.nameFor(id), tps, body)
       })
 
-    case source.ExternInterface(id, tparams) =>
+    case source.ExternInterface(id, tparams, body) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternInterface(Context.nameFor(id), tps)
+        ExternInterface(Context.nameFor(id), tps, body)
       })
 
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
@@ -311,8 +311,8 @@ object Namer extends Phase[Parsed, NameResolved] {
       record.constructor = constructor
       constructor.fields = resolveFields(fs, constructor)
 
-    case source.ExternType(id, tparams) => ()
-    case source.ExternInterface(id, tparams) => ()
+    case source.ExternType(id, tparams, body) => ()
+    case source.ExternInterface(id, tparams, body) => ()
     case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()

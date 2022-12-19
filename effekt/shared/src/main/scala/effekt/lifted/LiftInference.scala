@@ -57,10 +57,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Extern.Def(id, funTpe, (vps ++ bps).map { p => transform(p) }, body)
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
-    case core.Extern.Type(id, tparams) =>
-      Extern.Type(id, tparams)
-    case core.Extern.Interface(id, tparams) =>
-      Extern.Interface(id, tparams)
+    case core.Extern.Type(id, tparams, body) =>
+      Extern.Type(id, tparams, body)
+    case core.Extern.Interface(id, tparams, body) =>
+      Extern.Interface(id, tparams, body)
     case core.Extern.Resource(id, tpe) =>
       Extern.Resource(id, tpe)
   }

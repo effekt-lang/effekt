@@ -139,10 +139,10 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val externType: P[Def] =
-    `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
+    `extern` ~> `type` ~/> idDef ~ maybeTypeParams ~ opt(`=` ~> externBody) ^^ ExternType.apply
 
   lazy val externInterface: P[Def] =
-    `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
+    `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ~ opt(`=` ~> externBody) ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
     `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {

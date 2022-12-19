@@ -47,7 +47,7 @@ object Transformer {
     Program(declarations, transformedDefinitions)
   }
 
-  def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
+  def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): List[Declaration] = extern match {
     case lifted.Extern.Def(name, functionType, params, body) =>
       val transformedParams = params.map {
         case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
@@ -59,7 +59,7 @@ object Transformer {
     case lifted.Extern.Include(contents) =>
       List(Include(contents))
 
-    case lifted.Extern.Type(_,_) | lifted.Extern.Interface(_,_) | lifted.Extern.Resource(_,_) => Nil
+    case lifted.Extern.Type(_,_,_) | lifted.Extern.Interface(_,_,_) | lifted.Extern.Resource(_,_) => Nil
   }
 
   def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Statement =
