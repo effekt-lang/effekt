@@ -217,7 +217,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
 
     case source.Literal(value, tpe) =>
-      Literal(value, transform(tpe))
+      Context.resolvedType(tpe) match {
+        case valueType: ValueType => Literal(value, transform(valueType))
+        case blockType: BlockType =>
+          Context.abort(s"Literal has block type ${blockType}. This should not happen.")
+      }
 
     case s @ source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))

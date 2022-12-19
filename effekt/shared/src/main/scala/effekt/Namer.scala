@@ -447,6 +447,8 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Var(id) => Context.resolveVar(id)
 
+    case source.Literal(v, tpe) => resolve(tpe)
+
     case source.Assign(id, expr) => Context.resolveVar(id) match {
       case x: VarBinder => resolveGeneric(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
