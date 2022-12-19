@@ -147,7 +147,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val externFun: P[Def] =
     `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
-        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
     }
 
   lazy val externResource: P[Def] =
@@ -158,7 +158,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( multilineString
     | s"(?!${multi})\"([^\"\n]*)\"".r // single-line strings
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
-    )
+    ) ^^ { c => c.stripPrefix("\"").stripSuffix("\"")}
 
   lazy val externCapture: P[CaptureSet] =
     ( "pure" ^^^ CaptureSet(Nil)
