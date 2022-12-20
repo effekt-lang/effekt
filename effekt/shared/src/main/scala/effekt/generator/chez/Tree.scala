@@ -193,13 +193,13 @@ object Tree {
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
     def defn(using C: Ctx): PartialFunction[Def, Def] = PartialFunction.empty
 
-    def rewrite(block: Block)(using Ctx): Block = structuralRewrite(block)
-    def rewrite(binding: Binding)(using Ctx): Binding = structuralRewrite(binding)
-    def rewrite(h: Handler)(using Ctx): Handler = structuralRewrite(h)
-    def rewrite(op: Operation)(using Ctx): Operation = structuralRewrite(op)
+    def rewrite(block: Block)(using Ctx): Block = rewriteStructurally(block)
+    def rewrite(binding: Binding)(using Ctx): Binding = rewriteStructurally(binding)
+    def rewrite(h: Handler)(using Ctx): Handler = rewriteStructurally(h)
+    def rewrite(op: Operation)(using Ctx): Operation = rewriteStructurally(op)
 
-    def rewrite(e: Expr)(using Ctx): Expr = structuralRewrite(e, expr)
-    def rewrite(t: Def)(using C: Ctx): Def = structuralRewrite(t, defn)
+    def rewrite(e: Expr)(using Ctx): Expr = rewriteStructurally(e, expr)
+    def rewrite(t: Def)(using C: Ctx): Def = rewriteStructurally(t, defn)
 
     def rewrite(clause: (Expr, Expr))(using Ctx): (Expr, Expr) = clause match {
       case (c, t) => (rewrite(c), rewrite(t))
@@ -226,7 +226,7 @@ object Tree {
     def visit[T](t: T)(visitor: T => Res)(using Ctx): Res = visitor(t)
 
     inline def structuralQuery[T](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Ctx): Res = visit(el) { t =>
-      if pf.isDefinedAt(el) then pf.apply(el) else structuralQuery(t, empty, combine)
+      if pf.isDefinedAt(el) then pf.apply(el) else queryStructurally(t, empty, combine)
     }
 
     def query(e: Expr)(using Ctx): Res = structuralQuery(e, expr)

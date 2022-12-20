@@ -300,13 +300,13 @@ object Tree {
     def empty: Set[Id] = Set.empty
     def combine(r1: Set[Id], r2: Set[Id]): Set[Id] = r1 ++ r2
 
-    def query(p: Pure): Set[Id] = structuralQuery(p, empty, combine)
-    def query(e: Expr): Set[Id] = structuralQuery(e, empty, combine)
-    def query(s: Stmt): Set[Id] = structuralQuery(s, empty, combine)
-    def query(b: Block): Set[Id] = structuralQuery(b, empty, combine)
-    def query(d: Definition): Set[Id] = structuralQuery(d, empty, combine)
-    def query(d: Implementation): Set[Id] = structuralQuery(d, empty, combine)
-    def query(d: Operation): Set[Id] = structuralQuery(d, empty, combine)
+    def query(p: Pure): Set[Id] = queryStructurally(p, empty, combine)
+    def query(e: Expr): Set[Id] = queryStructurally(e, empty, combine)
+    def query(s: Stmt): Set[Id] = queryStructurally(s, empty, combine)
+    def query(b: Block): Set[Id] = queryStructurally(b, empty, combine)
+    def query(d: Definition): Set[Id] = queryStructurally(d, empty, combine)
+    def query(d: Implementation): Set[Id] = queryStructurally(d, empty, combine)
+    def query(d: Operation): Set[Id] = queryStructurally(d, empty, combine)
     def query(matchClause: (Id, BlockLit)): Set[Id] = matchClause match {
       case (id, lit) => query(lit)
     }
@@ -321,13 +321,13 @@ object Tree {
 
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
 
-    def rewrite(p: Pure): Pure = structuralRewrite(p, pure)
-    def rewrite(e: Expr): Expr = structuralRewrite(e, expr)
-    def rewrite(s: Stmt): Stmt = structuralRewrite(s, stmt)
-    def rewrite(b: Block): Block = structuralRewrite(b, block)
-    def rewrite(d: Definition): Definition = structuralRewrite(d, defn)
-    def rewrite(e: Implementation): Implementation = structuralRewrite(e, handler)
-    def rewrite(o: Operation): Operation = structuralRewrite(o)
+    def rewrite(p: Pure): Pure = rewriteStructurally(p, pure)
+    def rewrite(e: Expr): Expr = rewriteStructurally(e, expr)
+    def rewrite(s: Stmt): Stmt = rewriteStructurally(s, stmt)
+    def rewrite(b: Block): Block = rewriteStructurally(b, block)
+    def rewrite(d: Definition): Definition = rewriteStructurally(d, defn)
+    def rewrite(e: Implementation): Implementation = rewriteStructurally(e, handler)
+    def rewrite(o: Operation): Operation = rewriteStructurally(o)
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])

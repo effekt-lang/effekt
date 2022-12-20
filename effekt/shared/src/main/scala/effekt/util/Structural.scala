@@ -6,7 +6,7 @@ import scala.quoted.*
 /**
  * Automatically generates traversal code.
  *
- * Use macro [[structuralRewrite]] to generate traversal code.
+ * Use macro [[rewriteStructurally]] to generate traversal code.
  * See [[effekt.core.Tree.Rewrite]] for an example how to use it.
  * To traverse the tree and rewrite it, he generated traversal automatically uses all
  * (and only those) methods that are called the same as the method the macro is used in.
@@ -14,7 +14,7 @@ import scala.quoted.*
  * traverses lists and options if the payload can be traversed.
  *
  * WARNING: if there is no recursive function with a matching type, the subtree will
- *   stay untouched. This often is not what you want. Use [[structuralRewriteDebug]] to identify
+ *   stay untouched. This often is not what you want. Use [[rewriteStructurallyDebug]] to identify
  *   these situations.
  *
  * ==Usage Example==
@@ -23,12 +23,12 @@ import scala.quoted.*
  * {{{
  *   enum Exp { case Lit(n: Int); case Add(l: Exp, r: Exp) }
  *   object Test extends Structural {
- *     def increment(e: Exp): Exp = structuralRewrite(e)
+ *     def increment(e: Exp): Exp = rewriteStructurally(e)
  *     def increment(n: Int): Int = n + 1
  *   }
  * }}}
  *
- * The call to [[structuralRewrite]] above generates the following code (output of [[structuralRewriteDebug]]))
+ * The call to [[rewriteStructurally]] above generates the following code (output of [[rewriteStructurallyDebug]]))
  * {{{
  *   e match {
  *     case Lit(n)    => Lit.apply(increment(n))
@@ -47,7 +47,7 @@ import scala.quoted.*
  * {{{
  *   enum Exp { case Lit(n: Int); case Add(exp: Exp, exps: List[Exp]) }
  *   object AllLiterals extends util.Structural {
- *     def allLits(e: Exp): Set[Int] = structuralQuery(e, Set.empty, _ ++ _)
+ *     def allLits(e: Exp): Set[Int] = queryStructurally(e, Set.empty, _ ++ _)
  *     def allLits(n: Int): Set[Int] = Set(n)
  *   }
  *   def demo() = AllLiterals.allLits(Add(Lit(0), List(Lit(1), Lit(2), Lit(3))))
@@ -69,7 +69,7 @@ import scala.quoted.*
  *
  * ==Debugging==
  *
- * Tipp: replace [[structuralRewrite]] by [[structuralRewriteDebug]] to have the generated
+ * Tipp: replace [[rewriteStructurally]] by [[rewriteStructurallyDebug]] to have the generated
  *   code be printed at compile time.
  *
  *   If there is a bug in the macro, try uncommenting `-Xcheck-macros` in [[build.sbt]].
@@ -86,33 +86,33 @@ trait Structural {
    * while doing so.
    * @see [[effekt.util.Structural]]
    */
-  inline def structuralRewrite[T](sc: T): T =
+  inline def rewriteStructurally[T](sc: T): T =
     ${rewriteImpl[this.type, T]('{sc}, false)}
 
   /**
    * Like structural without [[p]], but first consults the partial function before
    * destructing [[sc]]
    */
-  inline def structuralRewrite[T](sc: T, inline p: PartialFunction[T, T]): T =
-    if (p.isDefinedAt(sc)) { p(sc) } else { structuralRewrite(sc) }
+  inline def rewriteStructurally[T](sc: T, inline p: PartialFunction[T, T]): T =
+    if (p.isDefinedAt(sc)) { p(sc) } else { rewriteStructurally(sc) }
 
   /**
-   * Same as [[structuralRewrite]], but prints the generated code.
+   * Same as [[rewriteStructurally]], but prints the generated code.
    */
-  inline def structuralRewriteDebug[T](sc: T): T =
+  inline def rewriteStructurallyDebug[T](sc: T): T =
     ${rewriteImpl[this.type, T]('{sc}, true)}
 
   /**
    * Macro that performs structural recursion on [[sc]] and collects the result in a monoid [[R]].
    * @see [[effekt.util.Structural]]
    */
-  inline def structuralQuery[T, R](sc: T, empty: R, combine: (R, R) => R): R =
-    structuralQuery[T, R](sc, empty, (all: Seq[R]) => all.fold(empty)(combine))
+  inline def queryStructurally[T, R](sc: T, empty: R, combine: (R, R) => R): R =
+    queryStructurally[T, R](sc, empty, (all: Seq[R]) => all.fold(empty)(combine))
 
-  inline def structuralQuery[T, R](sc: T, empty: R, combine: Seq[R] => R): R =
+  inline def queryStructurally[T, R](sc: T, empty: R, combine: Seq[R] => R): R =
     ${queryImpl[this.type, T, R]('{sc}, '{empty}, '{combine}, false)}
 
-  inline def structuralQueryDebug[T, R](sc: T, empty: R, combine: Seq[R] => R): R =
+  inline def queryStructurallyDebug[T, R](sc: T, empty: R, combine: Seq[R] => R): R =
     ${queryImpl[this.type, T, R]('{sc}, '{empty}, '{combine}, true)}
 }
 

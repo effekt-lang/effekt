@@ -660,10 +660,10 @@ object Tree {
       target
 
     inline def structuralVisit[T](sc: T, p: PartialFunction[T, T])(using Context): T =
-      visit(sc) { t => structuralRewrite(t, p) }
+      visit(sc) { t => rewriteStructurally(t, p) }
 
     inline def structuralVisit[T](sc: T)(using Context): T =
-      visit(sc) { t => structuralRewrite(t) }
+      visit(sc) { t => rewriteStructurally(t) }
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {
@@ -707,7 +707,7 @@ object Tree {
 
     inline def structuralQuery[T <: Tree](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Context, Ctx): Res =
       visit(el) { t =>
-        if pf.isDefinedAt(el) then pf.apply(el) else structuralQuery(t, empty, combine)
+        if pf.isDefinedAt(el) then pf.apply(el) else queryStructurally(t, empty, combine)
       }
   }
 }
