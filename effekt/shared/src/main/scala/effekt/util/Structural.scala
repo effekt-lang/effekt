@@ -14,7 +14,7 @@ import scala.quoted.*
  * traverses lists and options if the payload can be traversed.
  *
  * WARNING: if there is no recursive function with a matching type, the subtree will
- *   stay untouched. This often is not what you want. Use [[rewriteStructurallyDebug]] to identify
+ *   stay untouched. This often is not what you want. Pass argument [[debug = true]] to identify
  *   these situations.
  *
  * ==Usage Example==
@@ -28,7 +28,7 @@ import scala.quoted.*
  *   }
  * }}}
  *
- * The call to [[rewriteStructurally]] above generates the following code (output of [[rewriteStructurallyDebug]]))
+ * The call to [[rewriteStructurally]] above generates the following code (output of [[debug = true]]))
  * {{{
  *   e match {
  *     case Lit(n)    => Lit.apply(increment(n))
@@ -69,7 +69,7 @@ import scala.quoted.*
  *
  * ==Debugging==
  *
- * Tipp: replace [[rewriteStructurally]] by [[rewriteStructurallyDebug]] to have the generated
+ * Tipp: When calling [[rewriteStructurally]], pass `true` for argument [[debug]] to have the generated
  *   code be printed at compile time.
  *
  *   If there is a bug in the macro, try uncommenting `-Xcheck-macros` in [[build.sbt]].
@@ -82,38 +82,37 @@ import scala.quoted.*
 trait Structural {
 
   /**
-   * Macro that performs structural recursion on [[sc]] and reconstructs a value of [[T]]
+   * Macro that performs structural recursion on [[scrutinee]] and reconstructs a value of [[T]]
    * while doing so.
+   *
+   * @param scrutinee the ADT to be destructed; can be an instance of a closed sum type or a case class (enum case).
+   * @param debug should the generated tree be printed?
+   *
    * @see [[effekt.util.Structural]]
    */
-  inline def rewriteStructurally[T](sc: T): T =
-    ${rewriteImpl[this.type, T]('{sc}, false)}
+  inline def rewriteStructurally[T](scrutinee: T, inline debug: Boolean = false): T =
+    ${rewriteImpl[this.type, T]('{scrutinee}, '{debug})}
 
   /**
    * Like structural without [[p]], but first consults the partial function before
-   * destructing [[sc]]
+   * destructing [[scrutinee]]
    */
-  inline def rewriteStructurally[T](sc: T, inline p: PartialFunction[T, T]): T =
-    if (p.isDefinedAt(sc)) { p(sc) } else { rewriteStructurally(sc) }
+  inline def rewriteStructurally[T](scrutinee: T, inline p: PartialFunction[T, T]): T =
+    if (p.isDefinedAt(scrutinee)) { p(scrutinee) } else { rewriteStructurally(scrutinee, false) }
 
   /**
-   * Same as [[rewriteStructurally]], but prints the generated code.
-   */
-  inline def rewriteStructurallyDebug[T](sc: T): T =
-    ${rewriteImpl[this.type, T]('{sc}, true)}
-
-  /**
-   * Macro that performs structural recursion on [[sc]] and collects the result in a monoid [[R]].
+   * Macro that performs structural recursion on [[scrutinee]] and collects the result in a monoid [[R]].
+   *
+   * @param scrutinee the ADT to be queried; can be an instance of a closed sum type or a case class (enum case).
+   * @param debug should the generated tree be printed?
+   *
    * @see [[effekt.util.Structural]]
    */
-  inline def queryStructurally[T, R](sc: T, empty: R, combine: (R, R) => R): R =
-    queryStructurally[T, R](sc, empty, (all: Seq[R]) => all.fold(empty)(combine))
+  inline def queryStructurally[T, R](scrutinee: T, empty: R, combine: (R, R) => R, inline debug: Boolean = false): R =
+    queryStructurally[T, R](scrutinee, empty, (all: Seq[R]) => all.fold(empty)(combine), debug)
 
-  inline def queryStructurally[T, R](sc: T, empty: R, combine: Seq[R] => R): R =
-    ${queryImpl[this.type, T, R]('{sc}, '{empty}, '{combine}, false)}
-
-  inline def queryStructurallyDebug[T, R](sc: T, empty: R, combine: Seq[R] => R): R =
-    ${queryImpl[this.type, T, R]('{sc}, '{empty}, '{combine}, true)}
+  inline def queryStructurally[T, R](scrutinee: T, empty: R, combine: Seq[R] => R, inline debug: Boolean): R =
+    ${queryImpl[this.type, T, R]('{scrutinee}, '{empty}, '{combine}, '{debug})}
 }
 
 
@@ -407,12 +406,12 @@ class StructuralMacro[Self: Type, Q <: Quotes](debug: Boolean)(using val q: Q) {
 }
 
 def rewriteImpl[Self: Type, T: Type](
-  sc: quoted.Expr[T], debug: Boolean
-)(using q: Quotes): quoted.Expr[T] = new StructuralMacro[Self, q.type](debug).rewrite[T](sc)
+  sc: quoted.Expr[T], debug: quoted.Expr[Boolean]
+)(using q: Quotes): quoted.Expr[T] = new StructuralMacro[Self, q.type](debug.valueOrAbort).rewrite[T](sc)
 
 def queryImpl[Self: Type, T: Type, R: Type](
-  sc: quoted.Expr[T], empty: quoted.Expr[R], combine: quoted.Expr[Seq[R] => R], debug: Boolean
-)(using q: Quotes): quoted.Expr[R] = new StructuralMacro[Self, q.type](debug).query[T, R](sc, empty, combine)
+  sc: quoted.Expr[T], empty: quoted.Expr[R], combine: quoted.Expr[Seq[R] => R], debug: quoted.Expr[Boolean]
+)(using q: Quotes): quoted.Expr[R] = new StructuralMacro[Self, q.type](debug.valueOrAbort).query[T, R](sc, empty, combine)
 
 /**
  * For debugging and development.
