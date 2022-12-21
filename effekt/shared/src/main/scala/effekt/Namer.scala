@@ -154,16 +154,16 @@ object Namer extends Phase[Parsed, NameResolved] {
       }
       Context.define(id, sym)
 
-    case source.ExternType(id, tparams) =>
+    case source.ExternType(id, tparams, body) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternType(Context.nameFor(id), tps)
+        ExternType(Context.nameFor(id), tps, body)
       })
 
-    case source.ExternInterface(id, tparams) =>
+    case source.ExternInterface(id, tparams, body) =>
       Context.define(id, Context scoped {
         val tps = tparams map resolve
-        ExternInterface(Context.nameFor(id), tps)
+        ExternInterface(Context.nameFor(id), tps, body)
       })
 
     case source.ExternDef(capture, id, tparams, vparams, bparams, ret, body) => {
@@ -311,18 +311,20 @@ object Namer extends Phase[Parsed, NameResolved] {
       record.constructor = constructor
       constructor.fields = resolveFields(fs, constructor)
 
-    case source.ExternType(id, tparams) => ()
-    case source.ExternInterface(id, tparams) => ()
+    case source.ExternType(id, tparams, body) => ()
+    case source.ExternInterface(id, tparams, body) => ()
     case source.ExternDef(pure, id, tps, vps, bps, ret, body) => ()
     case source.ExternResource(id, tpe) => ()
     case source.ExternInclude(path, _, _) => ()
 
-    case source.If(cond, thn, els) =>
+    case source.If(cond, condTpe, thn, els) =>
+      resolveGeneric(condTpe);
       resolveGeneric(cond);
       Context scoped { resolveGeneric(thn) }
       Context scoped { resolveGeneric(els) }
 
-    case source.While(cond, block) =>
+    case source.While(cond, condTpe, block, returnTpe) =>
+      resolveGeneric(condTpe); resolveGeneric(returnTpe);
       resolveGeneric(cond);
       Context scoped { resolveGeneric(block) }
 
@@ -447,7 +449,9 @@ object Namer extends Phase[Parsed, NameResolved] {
 
     case source.Var(id) => Context.resolveVar(id)
 
-    case source.Assign(id, expr) => Context.resolveVar(id) match {
+    case source.Literal(v, tpe) => resolve(tpe)
+
+    case source.Assign(id, expr, returnTpe) => resolve(returnTpe); Context.resolveVar(id) match {
       case x: VarBinder => resolveGeneric(expr)
       case _: ValBinder | _: ValueParam => Context.abort(pretty"Can only assign to mutable variables, but ${id.name} is a constant.")
       case y: Wildcard => Context.abort(s"Trying to assign to a wildcard, which is not allowed.")

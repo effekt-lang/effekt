@@ -50,11 +50,11 @@ object DeclPrinter extends ParenPrettyPrinter {
     case f: ExternFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
-    case ExternType(name, tparams) =>
+    case ExternType(name, tparams, body) =>
       val tps = show(tparams)
       pp"extern type ${name}$tps"
 
-    case ExternInterface(name, tparams) =>
+    case ExternInterface(name, tparams, body) =>
       pp"extern interface ${name}${show(tparams)}"
 
     case ExternResource(name, tpe) =>

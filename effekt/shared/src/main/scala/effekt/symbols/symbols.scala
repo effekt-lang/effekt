@@ -211,7 +211,7 @@ enum TypeConstructor extends TypeSymbol {
 
   case DataType(name: Name, tparams: List[TypeParam], var constructors: List[Constructor] = Nil)
   case Record(name: Name, tparams: List[TypeParam], var constructor: Constructor)
-  case ExternType(name: Name, tparams: List[TypeParam])
+  case ExternType(name: Name, tparams: List[TypeParam], body: Option[String])
 }
 export TypeConstructor.*
 
@@ -242,7 +242,7 @@ enum BlockTypeConstructor extends BlockTypeSymbol {
   def tparams: List[TypeParam]
 
   case Interface(name: Name, tparams: List[TypeParam], var operations: List[Operation] = Nil)
-  case ExternInterface(name: Name, tparams: List[TypeParam])
+  case ExternInterface(name: Name, tparams: List[TypeParam], body: Option[String])
 }
 export BlockTypeConstructor.*
 

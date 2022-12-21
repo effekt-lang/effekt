@@ -37,11 +37,14 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   /**
    * Literals
    */
-  lazy val int    = integerLiteral ^^ { n => Literal(n.toInt, Type.TInt) }
-  lazy val bool   = `true` ^^^ Literal(true, Type.TBoolean) | `false` ^^^ Literal(false, Type.TBoolean)
-  lazy val unit   = literal("()") ^^^ Literal((), Type.TUnit)
-  lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, Type.TDouble) }
-  lazy val string = stringLiteral ^^ { s => Literal(s.substring(1, s.size - 1), Type.TString) }
+  lazy val int    = integerLiteral ^^ { n => Literal(n.toInt, ValueType.Data(names.idFor("Int"), Nil)) }
+  lazy val bool   =
+    ( `true` ^^^ Literal(true, ValueType.Data(names.idFor("Boolean"), Nil))
+    | `false` ^^^ Literal(false, ValueType.Data(names.idFor("Boolean"), Nil))
+    )
+  lazy val unit   = literal("()") ^^^ Literal((), ValueType.Data(names.idFor("Unit"), Nil))
+  lazy val double = doubleLiteral ^^ { n => Literal(n.toDouble, ValueType.Data(names.idFor("Double"), Nil)) }
+  lazy val string = stringLiteral ^^ { s => Literal(s.substring(1, s.size - 1), ValueType.Data(names.idFor("String"), Nil)) }
 
   /**
    * Names

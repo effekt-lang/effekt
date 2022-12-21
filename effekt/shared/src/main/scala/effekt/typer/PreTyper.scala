@@ -63,14 +63,14 @@ class BoxUnboxInference {
 
     case l: Literal => l
 
-    case Assign(id, expr) =>
-      Assign(id, rewriteAsExpr(expr))
+    case Assign(id, expr, returnTpe) =>
+      Assign(id, rewriteAsExpr(expr), returnTpe)
 
-    case If(cond, thn, els) =>
-      If(rewriteAsExpr(cond), rewrite(thn), rewrite(els))
+    case If(cond, condTpe, thn, els) =>
+      If(rewriteAsExpr(cond), condTpe, rewrite(thn), rewrite(els))
 
-    case While(cond, body) =>
-      While(rewriteAsExpr(cond), rewrite(body))
+    case While(cond, condTpe, body, returnTpe) =>
+      While(rewriteAsExpr(cond), condTpe, rewrite(body), returnTpe)
 
     case Match(sc, clauses) =>
       Match(rewriteAsExpr(sc), clauses.map(rewrite))

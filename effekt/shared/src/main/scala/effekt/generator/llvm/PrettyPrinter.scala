@@ -132,6 +132,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(show))}}"
     case FunctionType(returnType, argumentTypes) => s"${show(returnType)} (${commaSeparated(argumentTypes.map(show))})"
     case NamedType(name) => localName(name)
+    case RawType(name) => name
   }
 
   def show(parameter: Parameter): LLVMString = parameter match {

@@ -139,15 +139,15 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val externType: P[Def] =
-    `extern` ~> `type` ~/> idDef ~ maybeTypeParams ^^ ExternType.apply
+    `extern` ~> `type` ~/> idDef ~ maybeTypeParams ~ opt(`=` ~> externBody) ^^ ExternType.apply
 
   lazy val externInterface: P[Def] =
-    `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ^^ ExternInterface.apply
+    `extern` ~> `interface` ~/> idDef ~ maybeTypeParams ~ opt(`=` ~> externBody) ^^ ExternInterface.apply
 
   lazy val externFun: P[Def] =
     `extern` ~> (externCapture <~ `def`) ~/ idDef ~ maybeTypeParams ~ params ~ (`:` ~> effectful) ~ ( `=` ~/> externBody) ^^ {
       case pure ~ id ~ tparams ~ (vparams ~ bparams) ~ tpe ~ body =>
-        ExternDef(pure, id, tparams, vparams, bparams, tpe, body.stripPrefix("\"").stripSuffix("\""))
+        ExternDef(pure, id, tparams, vparams, bparams, tpe, body)
     }
 
   lazy val externResource: P[Def] =
@@ -158,7 +158,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     ( multilineString
     | s"(?!${multi})\"([^\"\n]*)\"".r // single-line strings
     | failure(s"Expected an extern definition, which can either be a single-line string (e.g., \"x + y\") or a multi-line string (e.g., $multi...$multi)")
-    )
+    ) ^^ { c => c.stripPrefix("\"").stripSuffix("\"")}
 
   lazy val externCapture: P[CaptureSet] =
     ( "pure" ^^^ CaptureSet(Nil)
@@ -444,13 +444,19 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
 
 
   lazy val assignExpr: P[Term] =
-    idRef ~ (`=` ~> expr) ^^ Assign.apply
+    idRef ~ (`=` ~> expr) ^^ { case lhs ~ rhs => Assign(lhs, rhs, ValueType.ValueTypeRef(IdRef("Unit"), Nil)) }
 
   lazy val ifExpr: P[Term] =
-    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ If.apply
+    `if` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ~ (`else` ~/> stmt | success(Return(UnitLit()))) ^^ {
+      case cond ~ thn ~ els => If(cond, ValueType.ValueTypeRef(IdRef("Boolean"), Nil), thn, els)
+    }
 
   lazy val whileExpr: P[Term] =
-    `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ While.apply
+    `while` ~/> (`(` ~/> expr <~ `)`) ~/ stmt ^^ {
+      case cond ~ body => While(
+        cond, ValueType.ValueTypeRef(IdRef("Boolean"), Nil),
+        body, ValueType.ValueTypeRef(IdRef("Unit"), Nil))
+    }
 
   lazy val primExpr: P[Term] =
     variable | literals | tupleLiteral | listLiteral | hole | `(` ~/> expr <~ `)`

@@ -1,5 +1,10 @@
 module effekt
 
+extern type Boolean
+extern type String
+extern type Int
+extern type Double
+
 // shift-0 based implementation
 extern include "../common/effekt_primitives.ss"
 // extern include "datatype.ss"

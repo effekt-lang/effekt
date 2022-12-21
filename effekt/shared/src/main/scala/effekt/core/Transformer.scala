@@ -2,7 +2,7 @@ package effekt
 package core
 
 import scala.collection.mutable.ListBuffer
-import effekt.context.{ Annotations, Context, ContextOps }
+import effekt.context.{Annotations, Context, ContextOps}
 import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
@@ -102,8 +102,17 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case e @ source.ExternInclude(path, contents, _) =>
       List(Extern.Include(contents.get))
 
+    case source.Def.ExternType(id, tparams, body) =>
+      List(Extern.Type(id.symbol, tparams.map(_.symbol), body))
+
+    case source.Def.ExternInterface(id, tparams, body) =>
+      List(Extern.Interface(id.symbol, tparams.map(_.symbol), body))
+
+    case source.Def.ExternResource(id, _) =>
+      val btpe = Context.blockTypeOf(id.symbol)
+      List(Extern.Resource(id.symbol, transform(btpe)))
+
     // For now we forget about all of the following definitions in core:
-    case d: source.Def.Extern => Nil
     case d: source.Def.Alias => Nil
   }
 
@@ -208,7 +217,11 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     }
 
     case source.Literal(value, tpe) =>
-      Literal(value, transform(tpe))
+      Context.resolvedType(tpe) match {
+        case valueType: ValueType => Literal(value, transform(valueType))
+        case blockType: BlockType =>
+          Context.abort(s"Literal has block type ${blockType}. This should not happen.")
+      }
 
     case s @ source.Select(receiver, selector) =>
       Select(transformAsPure(receiver), s.definition, transform(Context.inferredTypeOf(s)))
@@ -225,16 +238,21 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.BlockLiteral(tps, vps, bps, body) =>
       transformBox(tree)
 
-    case source.If(cond, thn, els) =>
+    case source.If(cond, condTpe, thn, els) =>
       val c = transformAsPure(cond)
       Context.bind(If(c, transform(thn), transform(els)))
 
     // [[ while(cond) { body } ]] =
     //   def loop$13() = if ([[cond]]) { [[ body ]]; loop$13() } else { return () }
     //   loop$13()
-    case source.While(cond, body) =>
+    case source.While(cond, condTpe, body, returnTpe) =>
+      val tReturnTpe = Context.resolvedType(returnTpe) match {
+        case valueType: ValueType => transform(valueType)
+        case blockType: BlockType =>
+          Context.panic(s"While with non-value return type ${blockType}.")
+      }
       val loopName = TmpBlock()
-      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, core.Type.TUnit)
+      val loopType = core.BlockType.Function(Nil, Nil, Nil, Nil, tReturnTpe)
       val loopCapt = transform(Context.inferredCapture(body))
       val loopCall = Stmt.App(core.BlockVar(loopName, loopType, loopCapt), Nil, Nil, Nil)
 
@@ -242,7 +260,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         insertBindings {
           Stmt.If(transformAsPure(cond),
             Stmt.Val(TmpValue(), transform(body), loopCall),
-            Return(Literal((), core.Type.TUnit)))
+            Return(Literal((), tReturnTpe)))
         }
       )
 
@@ -284,7 +302,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     case source.Hole(stmts) =>
       Context.bind(Hole())
 
-    case a @ source.Assign(id, expr) =>
+    case a @ source.Assign(id, expr, returnTpe) =>
       val e = transformAsPure(expr)
       val sym = a.definition
       val stateType = Context.blockTypeOf(sym)

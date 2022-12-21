@@ -190,13 +190,13 @@ enum Def extends Definition {
   /**
    * Only valid on the toplevel!
    */
-  case ExternType(id: IdDef, tparams: List[Id])
+  case ExternType(id: IdDef, tparams: List[Id], body: Option[String])
 
   case ExternDef(capture: CaptureSet, id: IdDef, tparams: List[Id], vparams: List[ValueParam], bparams: List[BlockParam], ret: Effectful, body: String) extends Def
 
   case ExternResource(id: IdDef, tpe: BlockType)
 
-  case ExternInterface(id: IdDef, tparams: List[Id])
+  case ExternInterface(id: IdDef, tparams: List[Id], body: Option[String])
 
   /**
    * Namer resolves the path and loads the contents in field [[contents]]
@@ -269,9 +269,9 @@ enum Term extends Tree {
 
   // Variable / Value use (can now also stand for blocks)
   case Var(id: IdRef) extends Term, Reference
-  case Assign(id: IdRef, expr: Term) extends Term, Reference
+  case Assign(id: IdRef, expr: Term, returnTpe: ValueType) extends Term, Reference
 
-  case Literal(value: Any, tpe: symbols.ValueType)
+  case Literal(value: Any, tpe: ValueType)
   case Hole(stmts: Stmt)
 
   // Boxing and unboxing to represent first-class values
@@ -310,8 +310,8 @@ enum Term extends Tree {
   case MethodCall(receiver: Term, id: IdRef, targs: List[ValueType], vargs: List[Term], bargs: List[Term]) extends Term, Reference
 
   // Control Flow
-  case If(cond: Term, thn: Stmt, els: Stmt)
-  case While(cond: Term, block: Stmt)
+  case If(cond: Term, condTpe: ValueType, thn: Stmt, els: Stmt)
+  case While(cond: Term, condTpe: ValueType, block: Stmt, returnTpe: ValueType)
   case Match(scrutinee: Term, clauses: List[MatchClause])
 
   /**
@@ -336,11 +336,11 @@ export Term.*
 
 // Smart Constructors for literals
 // -------------------------------
-def UnitLit(): Literal = Literal((), symbols.builtins.TUnit)
-def IntLit(value: Int): Literal = Literal(value, symbols.builtins.TInt)
-def BooleanLit(value: Boolean): Literal = Literal(value, symbols.builtins.TBoolean)
-def DoubleLit(value: Double): Literal = Literal(value, symbols.builtins.TDouble)
-def StringLit(value: String): Literal = Literal(value, symbols.builtins.TString)
+def UnitLit(): Literal = Literal((), ValueType.ValueTypeRef(IdRef("Unit"), Nil))
+def IntLit(value: Int): Literal = Literal(value, ValueType.ValueTypeRef(IdRef("Int"), Nil))
+def BooleanLit(value: Boolean): Literal = Literal(value, ValueType.ValueTypeRef(IdRef("Boolean"), Nil))
+def DoubleLit(value: Double): Literal = Literal(value, ValueType.ValueTypeRef(IdRef("Double"), Nil))
+def StringLit(value: String): Literal = Literal(value, ValueType.ValueTypeRef(IdRef("String"), Nil))
 
 type CallLike = Call | Do | Select | MethodCall
 

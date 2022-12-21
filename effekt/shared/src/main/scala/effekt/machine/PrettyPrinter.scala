@@ -31,11 +31,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
   })
 
   def toDoc(tpe: Type): Doc = tpe match {
+    case Type.Extern(name)   => s"extern(${name})"
     case Positive(name)      => name
     case Negative(name)      => name
-    case Type.Int()          => "Int"
-    case Type.Double()       => "Double"
-    case Type.String()       => "String"
     case Type.Stack()        => "Stack"
     case Type.Reference(tpe) => toDoc(tpe) <> "*"
     case Type.Region()       => "Region"

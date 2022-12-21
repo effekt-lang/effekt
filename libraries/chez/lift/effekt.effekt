@@ -1,5 +1,10 @@
 module effekt
 
+extern type Boolean
+extern type String
+extern type Int
+extern type Double
+
 extern include "../common/effekt_primitives.ss"
 extern include "effekt.ss"
 extern include "../common/effekt_matching.ss"

@@ -19,25 +19,13 @@ object builtins {
 
   private def name(s: String) = Name.qualified(s, prelude)
 
-  val UnitSymbol = ExternType(name("Unit"), Nil)
+  val UnitSymbol = ExternType(name("Unit"), Nil, None)
   val TUnit = ValueTypeApp(UnitSymbol, Nil)
 
-  val BooleanSymbol = ExternType(name("Boolean"), Nil)
-  val TBoolean = ValueTypeApp(BooleanSymbol, Nil)
-
-  val IntSymbol = ExternType(name("Int"), Nil)
-  val TInt = ValueTypeApp(IntSymbol, Nil)
-
-  val DoubleSymbol = ExternType(name("Double"), Nil)
-  val TDouble = ValueTypeApp(DoubleSymbol, Nil)
-
-  val StringSymbol = ExternType(name("String"), Nil)
-  val TString = ValueTypeApp(StringSymbol, Nil)
-
-  val TopSymbol = ExternType(name("Top"), Nil)
+  val TopSymbol = ExternType(name("Top"), Nil, None)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  val BottomSymbol = ExternType(name("Bottom"), Nil)
+  val BottomSymbol = ExternType(name("Bottom"), Nil, None)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
@@ -67,10 +55,6 @@ object builtins {
 
   val rootTypes: Map[String, TypeSymbol] = Map(
     "Unit" -> UnitSymbol,
-    "Boolean" -> BooleanSymbol,
-    "Int" -> IntSymbol,
-    "Double" -> DoubleSymbol,
-    "String" -> StringSymbol,
     "Bottom" -> BottomSymbol,
     "Top" -> TopSymbol,
     "IO" -> IOSymbol,
