@@ -448,6 +448,7 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     %newstk = load %StkVal, %Stk %stk
 
     %region = load %Region, ptr @region
+    call void @eraseRegion(%Region %region)
 
     call void @setStk(%StkVal %newstk)
 
@@ -643,6 +644,65 @@ define fastcc void @eraseFrames(%Sp %sp) alwaysinline {
     %eraser = load %Eraser, ptr %stkeraser
     tail call fastcc void %eraser(%Sp %newsp)
     ret void
+}
+
+define void @eraseRegion(%Region %region) {
+entry:
+    br label %loop0
+
+loop0:
+    %i = phi i64 [1, %entry], [%nexti, %loop0.end]
+    %firstbasep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1, i32 0
+    %firstlimitp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1, i32 1
+    %firstbase = load %Base, ptr %firstbasep
+    %firstlimit = load %Limit, ptr %firstlimitp
+
+    %lastbasep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 0, i32 1
+    %spp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 0, i32 0
+    %lastbase = load %Base, ptr %lastbasep
+    %sp = load %Limit, ptr %spp
+
+    %isstring = icmp eq i64 %i, 2
+    %eraser = select i1 %isstring, ptr @c_buffer_refcount_decrement, ptr @erasePositive
+
+    %isnull = icmp eq %Base %firstbase, null
+    br i1 %isnull, label %loop0.end, label %loop1
+
+loop1:
+    %base = phi %Base [%firstbase, %loop0], [%nextbase, %loop1.end]
+    %limit = phi %Limit [%firstlimit, %loop0], [%nextlimit, %loop1.end]
+    %islast = icmp eq %Base %base, %lastbase
+    %end = select i1 %islast, %Sp %sp, %Limit %limit
+    %start = getelementptr %Bounds, %Base %base, i64 1
+    br label %loop2.pred
+
+loop2.pred:
+    %elementp = phi ptr [%start, %loop1], [%nextelementp, %loop2]
+    %done = icmp uge ptr %elementp, %end
+    br i1 %done, label %loop1.end, label %loop2
+
+loop2:
+    %element = load %Pos, ptr %elementp
+    call void %eraser(%Pos %element)
+
+    %nextelementp = getelementptr %Pos, ptr %elementp, i64 1
+    br label %loop2.pred
+
+loop1.end:
+    %nextbasep = getelementptr %Bounds, %Base %base, i64 0, i32 0
+    %nextlimitp = getelementptr %Bounds, %Base %base, i64 0, i32 1
+    %nextbase = load %Base, ptr %nextbasep
+    %nextlimit = load %Limit, ptr %nextlimitp
+    br i1 %islast, label %loop0.end, label %loop1
+
+loop0.end:
+    %nexti = add i64 %i, 1
+    %done0 = icmp uge i64 %nexti, 2
+    br i1 %done0, label %return, label %loop0
+
+return:
+    ret void
+
 }
 
 ; RTS initialization
