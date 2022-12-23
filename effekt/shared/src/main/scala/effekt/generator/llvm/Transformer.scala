@@ -181,9 +181,8 @@ object Transformer {
         emit(Call(name, PointerType(), alloc, List(ConstantInt(idx), transform(region))));
 
         emit(Store(transform(ref), transform(init)))
-        shareValue(init)
 
-        eraseValues(List(ref), freeVariables(rest))
+        shareValues(List(init), freeVariables(rest))
         transform(rest);
 
       case machine.Allocate(_, _, _, _) =>
@@ -191,7 +190,6 @@ object Transformer {
 
       case machine.Load(name, ref, rest) =>
         emit(Load(name.name, transform(name.tpe), transform(ref)))
-        shareValue(name)
         eraseValues(List(name), freeVariables(rest))
         transform(rest)
 
@@ -201,7 +199,7 @@ object Transformer {
         eraseValue(oldVal)
 
         emit(Store(transform(ref), transform(value)))
-        shareValue(value)
+        shareValues(List(value), freeVariables(rest))
         transform(rest)
 
       case machine.PushFrame(frame, rest) =>
