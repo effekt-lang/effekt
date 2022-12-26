@@ -124,7 +124,7 @@ def obsLst(lRef: List[Ref], lB: List[Boolean]): Unit / { Heap, Fail } = {
 //// 0               000            [false,false,false]
 //// 1               001            [false,false,true]
 //// 5               101            [true,false,true]
-def toBoolLst(len: Int, num: Int): List[Boolean] / Console  = try {
+def toBoolLst(len: Int, num: Int): List[Boolean] = try {
   if (num < 0) { do Fail() }
   else {
     if (len < 0) { do Fail() }
@@ -145,7 +145,7 @@ def toBoolLst(len: Int, num: Int): List[Boolean] / Console  = try {
 //// with the probability at the corresponding position in lProb.
 //// Usually this function is called with idx = (2^n - 1) where n is the
 //// length of lRef, to observe all possibilitites.
-def obsSco(idx: Int, lRef: List[Ref], lProb: List[Double]): Unit / { IndexOutOfBounds, Heap, Fail, Fork, Score, Console } = {
+def obsSco(idx: Int, lRef: List[Ref], lProb: List[Double]): Unit / { IndexOutOfBounds, Heap, Fail, Fork, Score } = {
   if (idx < 0) { () }
   else if (idx >= pow(2, size(lRef))) {
     obsSco(pow(2, size(lRef)) - 1, lRef, lProb)
@@ -170,7 +170,7 @@ def fresh(): Ref / Heap = do empty(Unobserved())
 // constructs, then observe the result RV in prog to be as expected and then
 // go backwards through the program enumerating all possible possible ways
 // how the result could have come about from the input RV.
-def handleLang(expected: Boolean) { prog: Ref => Ref / { Cond, Conj, Disj, Prior }}: Var / { IndexOutOfBounds, Score, Fail, Fork, Console } = heap {
+def handleLang(expected: Boolean) { prog: Ref => Ref / { Cond, Conj, Disj, Prior }}: Var / { IndexOutOfBounds, Score, Fail, Fork } = heap {
   val input = fresh();
   try { do put(prog(input), Observed(expected)) }
   with Cond { (lRef, lProb) =>
@@ -317,7 +317,7 @@ def grassModelCondSpr(rain: Ref) = {
   grassIsWet
 }
 
-def printGrassModel(res: List[Weighted[Var]]): Unit / Console = {
+def printGrassModel(res: List[Weighted[Var]]): Unit = {
   val pri = 0.2;
   val priTru = MkWeighted(pri, true);
   val priFls = MkWeighted(1.0 - pri, false);
@@ -344,7 +344,7 @@ def heapTest() = heap {
   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
 }
 
-def catch[R] { p: => R / IndexOutOfBounds }: Unit / Console =
+def catch[R] { p: => R / IndexOutOfBounds }: Unit =
   try { p(); () }
   with IndexOutOfBounds[A] { () => println("Index out of bounds!") }
 
