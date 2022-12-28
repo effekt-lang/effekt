@@ -132,7 +132,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
       List("effekt", "immutable/option", "immutable/list")
     case "ml" =>
-      List("effekt", "immutable/option", "immutable/list", "io/args")
+      List("effekt", "immutable/option", "immutable/list")
     case b =>
       List("effekt")
   }

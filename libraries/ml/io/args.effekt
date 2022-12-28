@@ -1,5 +1,6 @@
 module io/args
 
+import effekt
 import internal/option
 import immutable/option
 import immutable/list
@@ -17,11 +18,11 @@ import immutable/list
 extern type Args
 
 // Works like an iterator
-extern pure def nativeArgs(): Args =
+extern io def nativeArgs(): Args =
   "ref (CommandLine.arguments ())"
 
 // consumes the next arg if present
-extern pure def nativeNext(a: Args): MLOption[String] =
+extern io def nativeNext(a: Args): MLOption[String] =
 """
 case !a of
     [] => NONE |

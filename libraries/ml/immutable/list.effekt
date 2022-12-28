@@ -106,16 +106,7 @@ def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
   (lefts.reverse, rights.reverse)
 }
 
-// // this implementation is not stacksafe!
-// def sortBy[A](l: List[A]) { compare: (A, A) => Boolean }: List[A] =
-//   l match {
-//     case Nil() => Nil()
-//     case Cons(pivot, rest) =>
-//       val (lt, gt) = rest.partition { el => compare(el, pivot) };
-//       val leftSorted = sortBy(lt) { (a, b) => compare(a, b) }
-//       val rightSorted = sortBy(gt) { (a, b) => compare(a, b) }
-//       leftSorted.append(Cons(pivot, rightSorted))
-//   }
-
-// def sort(l: List[Int]): List[Int] = l.sortBy { (a, b) => a < b }
-// def sort(l: List[Double]): List[Double] = l.sortBy { (a, b) => a < b }
+def show[A](l: List[A]) { showA: A => String }: String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ showA(x) ++ ", " ++ show(xs){showA} ++ ")"
+}
