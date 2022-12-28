@@ -16,7 +16,6 @@ class MLTests extends EffektTests {
   override lazy val ignored: List[File] = List(
 
     // Broken tests
-    examplesDir / "ml" / "triples.effekt",
     examplesDir / "ml" / "naturalisticdsls.md",
     examplesDir / "ml" / "probabilistic.effekt",
     examplesDir / "ml" / "nim.effekt",

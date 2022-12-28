@@ -1,7 +1,7 @@
 module triples
 
 effect Flip(): Boolean
-effect Fail[A](): A
+effect Fail(): Nothing
 
 type Triple {
   MkTriple(x: Int, y: Int, z: Int)
@@ -32,7 +32,7 @@ def triple(n: Int, s: Int) = {
   if ((i + j + k) == s) {
     MkTriple(i, j ,k)
   } else {
-    do Fail[Triple]()
+    do Fail(); MkTriple(-1, -1 , -1)
   }
 }
 
@@ -43,7 +43,7 @@ def handledTriple(n : Int, s : Int) =
     // what if a local function closes over some capabilities and receives a few others?
     // what if that function is used under a handler?
     try { Cons(triple(n, s), Nil[Triple]()) }
-    with Fail[A] { () => Nil[Triple]() }
+    with Fail { () => Nil[Triple]() }
   } with Flip { () => concat(resume(true), resume(false)) }
 
 def show(t: Triple): String = {
