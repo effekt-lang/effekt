@@ -19,6 +19,7 @@ class MLTests extends EffektTests {
     examplesDir / "ml" / "triples.effekt",
     examplesDir / "ml" / "naturalisticdsls.md",
     examplesDir / "ml" / "probabilistic.effekt",
+    examplesDir / "ml" / "nim.effekt",
 
     // Tests with box
     //    examplesDir / "pos" / "capture" / "defdef.effekt",
@@ -84,7 +85,6 @@ class MLTests extends EffektTests {
 //    examplesDir / "pos" / "matchdef.effekt",
     examplesDir / "pos" / "multieffects.effekt",
     examplesDir / "pos" / "multiline_extern_definition.effekt",
-    examplesDir / "pos" / "nim.effekt",
     examplesDir / "pos" / "parametrized.effekt",
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",

@@ -8,13 +8,6 @@ type Player {
   Alice()
 }
 
-def show(p: Player) = p match {
-  case Bob() => "Bob()"
-  case Alice() => "Alice()"
-}
-
-def println(p: Player) = println(show(p))
-
 effect Move(p: Player, sticks: Int): Int
 
 def aliceTurn(n: Int): Player / Move =
@@ -140,12 +133,6 @@ type Scoreboard {
   Board(alice: Int, bob: Int)
 }
 
-def show(s: Scoreboard) = s match {
-  case Board(alice, bob) => "Board(" ++ show(alice) ++ ", " ++ show(bob) ++ ")"
-}
-
-def println(s: Scoreboard) = println(show(s))
-
 effect GetScore(): Scoreboard
 effect UpdateScore(p: Player): Unit
 
@@ -176,7 +163,7 @@ def testPrint2() = {
         bobChooses { val p = game(7); do UpdateScore(p); p }; ()
       }
     };
-    println(show(do GetScore()))
+    println(do GetScore())
   }
 }
 
