@@ -2,12 +2,7 @@ module namespaces
 
 type Person { Person(name: String, id: Int) }
 
-def show(p: Person) = {
-  val Person(name, id) = p;
-  "Person(" ++ show(name) ++ ", " ++ show(id) ++ ")"
-}
-
 def somePerson(): Person =
   Person("Jonathan", 1334579)
 
-def main() = println(show(somePerson()))
+def main() = println(somePerson())

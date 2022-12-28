@@ -1,3 +1,3 @@
-[warning] examples/neg/match_unreachable.effekt:7:3: Unreachable case.
+[warning] examples/neg/match_unreachable.effekt:5:3: Unreachable case.
   case Cons(_, Cons(_, _)) => 1
   ^

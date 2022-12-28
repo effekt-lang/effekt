@@ -1,4 +1,4 @@
-[error] examples/neg/inference.effekt:20:33: Different arms of a conditional/match have incompatible types.
+[error] examples/neg/inference.effekt:18:33: Different arms of a conditional/match have incompatible types.
 
 One arm has type
   Int
@@ -6,16 +6,16 @@ while another one has type
   String
 def test2(l1: List[Int]): Int = l1 match {
                                 ^
-[error] examples/neg/inference.effekt:20:33: Expected Int but got String.
+[error] examples/neg/inference.effekt:18:33: Expected Int but got String.
 def test2(l1: List[Int]): Int = l1 match {
                                 ^
-[error] examples/neg/inference.effekt:22:17: Expected Int but got String.
+[error] examples/neg/inference.effekt:20:17: Expected Int but got String.
   case Nil() => ""
                 ^^
-[error] examples/neg/inference.effekt:22:17: Expected Int but got String.
+[error] examples/neg/inference.effekt:20:17: Expected Int but got String.
   case Nil() => ""
                 ^
-[error] examples/neg/inference.effekt:53:25: Expected List[String] but got List[Int].
+[error] examples/neg/inference.effekt:51:25: Expected List[String] but got List[Int].
 
 Type mismatch between String and Int.
   case Cons(a, rest) => Nil[Int]() // failing to check the call here aborts type checking, so this example goes last

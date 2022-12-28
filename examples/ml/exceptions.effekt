@@ -1,21 +1,17 @@
 module examples/pos/polymorphic/exceptions
 
-effect Exception[E] {
-  def raise[A](e: E): A
-}
-
 record DivByZero()
 
 def saveDiv(x: Int, y: Int): Int / Exception[DivByZero] =
   if (y == 0) {
-    do raise(DivByZero())
+    do raise(DivByZero(), "DivByZero()")
   } else {
     x / y
   }
 
 def report[E] { prog: => Unit / Exception[E] }: Unit =
   try { prog() } with Exception[E] {
-    def raise[A](e) = println(e.show)
+    def raise(e, msg) = println(msg)
   }
 
 def main() = report[DivByZero] {

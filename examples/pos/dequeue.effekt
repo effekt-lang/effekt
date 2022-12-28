@@ -1,43 +1,13 @@
 module examples/pos/dequeue
 
-import immutable/option
-import immutable/list
 import immutable/dequeue
-
-def show(l: List[Int]): String = l match {
-    case Nil() => "Nil()"
-    case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
-}
-
-def show(d: Dequeue[Int]) = {
-    val Dequeue(front, frontSize, rear, rearSize) = d;
-    "Dequeue(" ++ show(front) ++ ", " ++ show(frontSize) ++ ", " ++
-        show(rear) ++ ", " ++ show(rearSize) ++ ")"
-}
-
-def show(t: (Int, Dequeue[Int])) = {
-    val (a, b) = t;
-    "Tuple2(" ++ show(a) ++ ", " ++ show(b) ++ ")"
-}
-
-def show(o: Option[(Int, Dequeue[Int])]) = o match {
-    case None() => "None()"
-    case Some(v) => "Some(" ++ show(v) ++ ")"
-
-}
-
-def show(o: Option[Int]) = o match {
-    case None() => "None()"
-    case Some(v) => "Some(" ++ show(v) ++ ")"
-
-}
 
 def main() = {
     val dq = emptyQueue[Int]();
-    println(show(dq.pushFront(1).pushFront(2)));
-    println(show(dq.pushFront(1).pushFront(2).popFront));
-    println(show(dq.pushFront(1).pushFront(2).pushBack(3).popFront));
-    println(show(dq.pushFront(1).pushFront(2).pushBack(3).popBack));
-    println(show(dq.pushFront(1).pushFront(2).pushBack(3).first));
-    println(show(dq.pushFront(1).pushFront(2).pushBack(3).last))
+    println(dq.pushFront(1).pushFront(2));
+    println(dq.pushFront(1).pushFront(2).popFront);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).popFront);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).popBack);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).first);
+    println(dq.pushFront(1).pushFront(2).pushBack(3).last)
 }

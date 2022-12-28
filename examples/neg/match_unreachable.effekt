@@ -1,7 +1,5 @@
 module unreachable
 
-import immutable/list
-
 def test(l: List[Int]) = l match {
   case Cons(x, y) => 0
   case Cons(_, Cons(_, _)) => 1

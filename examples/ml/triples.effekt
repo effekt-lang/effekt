@@ -46,4 +46,14 @@ def handledTriple(n : Int, s : Int) =
     with Fail[A] { () => Nil[Triple]() }
   } with Flip { () => concat(resume(true), resume(false)) }
 
-def main() = println(handledTriple(10, 15))
+def show(t: Triple): String = {
+  val MkTriple(x, y, z) = t;
+  "MkTriple(" ++ show(x) ++ ", " ++ show(y) ++ ", " ++ show(z) ++ ")"
+}
+
+def show(triples: List[Triple]): String = triples match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
+
+def main() = println(show(handledTriple(10, 15)))

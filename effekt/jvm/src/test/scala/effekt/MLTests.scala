@@ -10,10 +10,16 @@ import scala.language.implicitConversions
 class MLTests extends EffektTests {
 
   override lazy val included: List[File] = List(
-//    examplesDir
+    examplesDir / "ml"
   )
 
   override lazy val ignored: List[File] = List(
+
+    // Broken tests
+    examplesDir / "ml" / "triples.effekt",
+    examplesDir / "ml" / "naturalisticdsls.md",
+    examplesDir / "ml" / "probabilistic.effekt",
+
     // Tests with box
     //    examplesDir / "pos" / "capture" / "defdef.effekt",
     examplesDir / "pos" / "capture" / "mbed.effekt",
@@ -41,7 +47,6 @@ class MLTests extends EffektTests {
 
     // mutual recursion
     examplesDir / "pos" / "mutualrecursion.effekt",
-    examplesDir / "llvm" / "mutual.effekt",
 
     // heap
     examplesDir / "casestudies" / "ad.md",
@@ -52,10 +57,6 @@ class MLTests extends EffektTests {
     examplesDir / "casestudies" / "parser.md",
     examplesDir / "casestudies" / "prettyprinter.md",
     examplesDir / "pos" / "simpleparser.effekt",
-    examplesDir / "neg" / "unbound_type.effekt",
-
-    // cslist
-    examplesDir / "chez" / "libraries.effekt",
 
     // cont
     examplesDir / "pos" / "unsafe_cont.effekt",
@@ -70,16 +71,10 @@ class MLTests extends EffektTests {
     // mut map
     examplesDir / "pos" / "maps.effekt",
 
-    // parsing error
-    examplesDir / "neg" / "scoped.effekt",
-
     // Unclear issue
     examplesDir / "casestudies" / "buildsystem.md",
     examplesDir / "casestudies" / "naturalisticdsls.md",
     examplesDir / "features" / "adt.md",
-    examplesDir / "llvm" / "erasing.effekt",
-    examplesDir / "llvm" / "stored.effekt",
-    examplesDir / "llvm" / "triples.effekt",
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "build.effekt",
     examplesDir / "pos" / "emptymatch.effekt",
@@ -94,7 +89,6 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "parser.effekt",
     examplesDir / "pos" / "probabilistic.effekt",
     examplesDir / "pos" / "stream_pull.effekt",
-//    examplesDir / "neg" / "stream_pull.effekt",
   )
 
   def runTestFor(input: java.io.File, check: File, expected: String): Unit =
