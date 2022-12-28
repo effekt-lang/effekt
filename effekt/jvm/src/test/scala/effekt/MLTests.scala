@@ -18,7 +18,6 @@ class MLTests extends EffektTests {
     // Broken tests
     examplesDir / "ml" / "naturalisticdsls.md",
     examplesDir / "ml" / "probabilistic.effekt",
-    examplesDir / "ml" / "nim.effekt",
 
     // Tests with box
     //    examplesDir / "pos" / "capture" / "defdef.effekt",
