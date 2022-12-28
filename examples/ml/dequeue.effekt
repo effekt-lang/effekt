@@ -1,7 +1,5 @@
 module examples/pos/dequeue
 
-import immutable/option
-import immutable/list
 import immutable/dequeue
 
 def show(l: List[Int]): String = l match {

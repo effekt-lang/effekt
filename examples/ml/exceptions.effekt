@@ -1,4 +1,4 @@
-module examples/pos/polymorphic/exceptions
+module examples/ml/exceptions
 
 record DivByZero()
 

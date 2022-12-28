@@ -131,6 +131,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   private def backendPrelude() = backend() match {
     case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
       List("effekt", "immutable/option", "immutable/list")
+    case "ml" =>
+      List("effekt", "immutable/option", "immutable/list", "io/args")
     case b =>
       List("effekt")
   }

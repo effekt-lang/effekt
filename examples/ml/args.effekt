@@ -1,4 +1,3 @@
-import immutable/list
 import io/args
 
 def show(l: List[String]): String = l match {
