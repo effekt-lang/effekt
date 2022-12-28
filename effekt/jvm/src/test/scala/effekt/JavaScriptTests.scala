@@ -18,7 +18,7 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "casestudies"
   )
 
-  override lazy val ignored: List[File] = List(
+  override def ignored: List[File] = List(
     // we deprecated locally defined type and effect declarations, for now.
     examplesDir / "neg" / "existential_effect_leaks.effekt",
     examplesDir / "neg" / "scoped.effekt",
@@ -34,7 +34,10 @@ class JavaScriptTests extends EffektTests {
     // this resets the caches before each test:
     // effekt.util.Task.reset()
     val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq("--Koutput", "string", "--lib", "libraries/js"))
+    val configs = compiler.createConfig(Seq(
+      "--Koutput", "string",
+      "--lib", "libraries/js",
+      "--out", output.getPath))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result()

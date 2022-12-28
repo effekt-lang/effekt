@@ -122,7 +122,8 @@ class LLVMTests extends EffektTests {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--backend", "llvm",
-      "--lib", "libraries/llvm"
+      "--lib", "libraries/llvm",
+      "--out", output.getPath
     ))
     configs.verify()
     compiler.compileFile(f.getPath, configs)

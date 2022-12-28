@@ -57,7 +57,8 @@ abstract class ChezSchemeTests extends EffektTests {
       "--backend", s"chez-$variant",
       "--includes", "libraries/chez/common",
       "--includes", ".",
-      "--lib", s"libraries/chez/$variant"
+      "--lib", s"libraries/chez/$variant",
+      "--out", output.getPath
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)

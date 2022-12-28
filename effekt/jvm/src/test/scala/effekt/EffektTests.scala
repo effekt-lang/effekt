@@ -9,8 +9,10 @@ import scala.language.implicitConversions
 
 trait EffektTests extends munit.FunSuite {
 
+  def output: File = new File(".") / "out" / "tests" / getClass.getName.toLowerCase
+
   // The sources of all testfiles are stored here:
-  lazy val examplesDir = new File("examples")
+  def examplesDir = new File("examples")
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
   def ignored: List[File] = List()

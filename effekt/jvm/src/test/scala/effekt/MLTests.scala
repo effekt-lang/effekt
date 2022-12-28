@@ -101,7 +101,8 @@ class MLTests extends EffektTests {
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
-      "--backend", "ml"
+      "--backend", "ml",
+      "--out", output.getPath
     ))
     configs.verify()
     compiler.compileFile(input.getPath, configs)
