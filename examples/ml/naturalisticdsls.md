@@ -78,16 +78,20 @@ We start by describing the language (DSL) of nominal phrases as the following da
 ```
 module examples/casestudies/naturalisticdsls
 
-record Person(name: String)
+type Person { MkPerson(name: String) }
+def name(p: Person): String = p match {
+  case MkPerson(n) => n
+}
+
 
 def show(p: Person) = "Person(" ++ p.name ++ ")"
 ```
 
 Let us define some example people:
 ```
-val John = Person("John")
-val Peter = Person("Peter")
-val Mary = Person("Mary")
+val John = MkPerson("John")
+val Peter = MkPerson("Peter")
+val Mary = MkPerson("Mary")
 ```
 
 Next, we define the sentence DSL:
@@ -211,10 +215,6 @@ effect Quantification {
 }
 def every(who: Predicate) = do quantify(who)
 ```
-We can use it as follows:
-```
-def s2(): Sentence = scoped { John.said { every(Woman()).loves(me()) } }
-```
 The effect operation `every` takes a predicate (&ie;, `Woman`)
 and introduces a universal quantification at the position of the handler `scoped`.
 
@@ -222,7 +222,7 @@ The quantification effect is handled by `scoped`:
 ```
 def scoped { s: => Sentence / Quantification }: Sentence = {
   var tmp = 0;
-  def fresh(): Person = { val x = Person("x" ++ show(tmp)); tmp = tmp + 1; x }
+  def fresh(): Person = { val x = MkPerson("x" ++ show(tmp)); tmp = tmp + 1; x }
   try { s() } with Quantification {
     def quantify(who) = {
       val x = fresh()
@@ -231,6 +231,11 @@ def scoped { s: => Sentence / Quantification }: Sentence = {
   }
 }
 ```
+We can use it as follows:
+```
+def s2(): Sentence = scoped { John.said { every(Woman()).loves(me()) } }
+```
+
 This is already a more involved handler. It generates a fresh person name and
 then systematically rewrites the syntax tree, moving the introduced
 binder and the predicate up to the handler:

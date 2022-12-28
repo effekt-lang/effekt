@@ -173,6 +173,8 @@ def withScore[R] { prog: => R / { GetScore, UpdateScore } }: R = {
 def replay(n: Int) { action: => Unit }: Unit =
   if (n > 0) { action(); replay(n - 1) { action() } } else { () }
 
+// This function causes an issue with the ML backend:
+//
 // def testPrint2() = {
 //   withScore {
 //     deterministic {
