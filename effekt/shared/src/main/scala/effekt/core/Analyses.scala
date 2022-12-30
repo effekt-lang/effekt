@@ -5,8 +5,6 @@ import scala.annotation.targetName
 import scala.collection.{GenMap, mutable}
 //TODO: reorder functions
 //TODO: List().flatMap{...} ? flatMap{...}.toMap ?
-
-//TODO: add wrapper to remove main?
 def collectAliases(module: ModuleDecl): Map[Id, Id] =
   module.definitions.map(collectAliases).fold(Map[Id, Id]())(_ ++ _)
 
@@ -204,137 +202,135 @@ def collectFunctionDefinitions(pure: Pure): Map[Id, Block] =
     case Box(b, _) =>
       collectFunctionDefinitions(b)
 
-def countFunctionCalls(tree: Tree): Map[Id, Int] =
+def countFunctionCalls(start: Tree|Definition): Map[Id, Int] =
   val res = mutable.Map[Id, Int]()
 
-  tree match
+  start match
     case m: ModuleDecl =>
-      countFunctionCalls(m)(using res)
+      countFunctionCallsWorker(m)(using res)
 
     case a: Argument =>
-      countFunctionCalls(a)(using res)
+      countFunctionCallsWorker(a)(using res)
 
     case e: Expr =>
-      countFunctionCalls(e)(using res)
+      countFunctionCallsWorker(e)(using res)
 
     case s: Stmt =>
-      countFunctionCalls(s)(using res)
+      countFunctionCallsWorker(s)(using res)
+
+    case d: Definition =>
+      countFunctionCallsWorker(d)(using res)
 
     case _ =>
+  res.toMap[Id, Int]
 
-  res.toMap[Id, Int] - Id("main")
+def countFunctionCallsWorker(module: ModuleDecl)(using count: mutable.Map[Id, Int]): Unit =
+  module.definitions.foreach(countFunctionCallsWorker(_)(using count))
 
-def countFunctionCalls(definition: Definition): Map[Id, Int] =
-  val res = mutable.Map[Id, Int]()
-  countFunctionCalls(definition)(using res)
-  res.toMap[Id, Int] - Id("main")
-
-def countFunctionCalls(module: ModuleDecl)(using count: mutable.Map[Id, Int]): Unit =
-  module.definitions.foreach(countFunctionCalls(_)(using count))
-
-def countFunctionCalls(definition: Definition)(using count: mutable.Map[Id, Int]): Unit =
+def countFunctionCallsWorker(definition: Definition)(using count: mutable.Map[Id, Int]): Unit =
   definition match
     case Definition.Def(id, block) =>
-      if(!count.contains(id)) count += (id -> 0)
-      else countFunctionCalls(block)
+      if(!count.contains(id))
+        count += (id -> 0)
+      countFunctionCallsWorker(block)
 
     case Definition.Let(_, binding) =>
-      countFunctionCalls(binding)
+      countFunctionCallsWorker(binding)
 
-def countFunctionCalls(expr: Expr)(using count: mutable.Map[Id, Int]): Unit =
+def countFunctionCallsWorker(expr: Expr)(using count: mutable.Map[Id, Int]): Unit =
   expr match
     case DirectApp(b, _, vargs, bargs) =>
-      countFunctionCalls(b)
-      vargs.foreach(countFunctionCalls)
-      bargs.foreach(countFunctionCalls)
+      countFunctionCallsWorker(b)
+      vargs.foreach(countFunctionCallsWorker)
+      bargs.foreach(countFunctionCallsWorker)
 
     case Run(s) =>
-      countFunctionCalls(s)
+      countFunctionCallsWorker(s)
 
     case p: Pure =>
-      countFunctionCalls(p)
+      countFunctionCallsWorker(p)
 
-def countFunctionCalls(statement: Stmt)(using count: mutable.Map[Id, Int]): Unit =
+def countFunctionCallsWorker(statement: Stmt)(using count: mutable.Map[Id, Int]): Unit =
   statement match
     case Scope(definitions, body) =>
-      definitions.foreach(countFunctionCalls(_)(using count))
-      countFunctionCalls(body)
+      definitions.foreach(countFunctionCallsWorker(_)(using count))
+      countFunctionCallsWorker(body)
 
     case Return(p) =>
-      countFunctionCalls(p)
+      countFunctionCallsWorker(p)
 
     case Val(_, binding, body) =>
-      countFunctionCalls(binding)
-      countFunctionCalls(body)
+      countFunctionCallsWorker(binding)
+      countFunctionCallsWorker(body)
 
     case App(b, _, vargs, bargs) =>
-      countFunctionCalls(b)
-      vargs.foreach(countFunctionCalls)
-      bargs.foreach(countFunctionCalls)
+      countFunctionCallsWorker(b)
+      vargs.foreach(countFunctionCallsWorker)
+      bargs.foreach(countFunctionCallsWorker)
 
     case If(cond, thn, els) =>
-      countFunctionCalls(cond)
-      countFunctionCalls(thn)
-      countFunctionCalls(els)
+      countFunctionCallsWorker(cond)
+      countFunctionCallsWorker(thn)
+      countFunctionCallsWorker(els)
 
     case Match(scrutinee, clauses, default) =>
-      countFunctionCalls(scrutinee)
-      clauses.foreach{(_, b) => countFunctionCalls(b)}
+      countFunctionCallsWorker(scrutinee)
+      clauses.foreach{(_, b) => countFunctionCallsWorker(b)}
       default match
-        case Some(s: Stmt) => countFunctionCalls(s)
+        case Some(s: Stmt) => countFunctionCallsWorker(s)
         case _ =>
 
     case State(_, init, _, body) =>
-      countFunctionCalls(init)
-      countFunctionCalls(body)
+      countFunctionCallsWorker(init)
+      countFunctionCallsWorker(body)
 
     case Try(body, _) =>
-      countFunctionCalls(body)
+      countFunctionCallsWorker(body)
 
     case Region(body) =>
-      countFunctionCalls(body)
+      countFunctionCallsWorker(body)
 
     case _: Hole =>
 
-def countFunctionCalls(block: Block)(using count: mutable.Map[Id, Int]): Unit =
+def countFunctionCallsWorker(block: Block)(using count: mutable.Map[Id, Int]): Unit =
   block match
     case BlockVar(id, _, _) =>
       if(count.contains(id)) count(id) += 1
       else count += (id -> 1)
 
     case BlockLit(_, _, _, _, body) =>
-      countFunctionCalls(body)
+      countFunctionCallsWorker(body)
 
     case Member(b, _, _) =>
-      countFunctionCalls(b)
+      countFunctionCallsWorker(b)
 
     case Unbox(p) =>
-      countFunctionCalls(p)
+      countFunctionCallsWorker(p)
 
     case _: New =>
 
-def countFunctionCalls(arg: Argument)(using count: mutable.Map[Id, Int]): Unit =
+def countFunctionCallsWorker(arg: Argument)(using count: mutable.Map[Id, Int]): Unit =
   arg match
     case p: Pure =>
-      countFunctionCalls(p)
+      countFunctionCallsWorker(p)
 
     case b: Block =>
-      countFunctionCalls(b)
+      countFunctionCallsWorker(b)
 
-def countFunctionCalls(pure: Pure)(using count: mutable.Map[Id, Int]): Unit =
+def countFunctionCallsWorker(pure: Pure)(using count: mutable.Map[Id, Int]): Unit =
   pure match
     case _: ValueVar =>
     case _: Literal =>
 
     case PureApp(b, _, vargs) =>
-      countFunctionCalls(b)
-      vargs.foreach(countFunctionCalls)
+      countFunctionCallsWorker(b)
+      vargs.foreach(countFunctionCallsWorker)
 
     case Select(target, _, _) =>
-      countFunctionCalls(target)
+      countFunctionCallsWorker(target)
 
     case Box(b, _) =>
-      countFunctionCalls(b)
+      countFunctionCallsWorker(b)
 
 
 // TODO: Detect Mutual Recursion (call graph)

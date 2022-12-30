@@ -109,119 +109,123 @@ def dealiasing(pure: Pure)(using aliases: Map[Id, Id]): Pure =
     case Box(b, annotatedCapture) =>
       Box(dealiasing(b), annotatedCapture)
 
-def removeUnusedFunctions(tree: Tree, count: Map[Id, Int]): Tree =
+def removeUnusedFunctions(start: Tree|Definition, count: Map[Id, Int]): Tree|Definition =
   val rm = count.filter((_, n) => n == 0).keySet
+  println("\nremove:")
+  println(rm)
 
-  tree match
+  start match
     case m: ModuleDecl =>
-      removeUnusedFunctions(m)(using rm)
+      removeUnusedFunctionsWorker(m)(using rm)
 
     case a: Argument =>
-      removeUnusedFunctions(a)(using rm)
+      removeUnusedFunctionsWorker(a)(using rm)
 
     case e: Expr =>
-      removeUnusedFunctions(e)(using rm)
+      removeUnusedFunctionsWorker(e)(using rm)
 
     case s: Stmt =>
-      removeUnusedFunctions(s)(using rm)
+      removeUnusedFunctionsWorker(s)(using rm)
+
+    case d: Definition =>
+      removeUnusedFunctionsWorker(d)(using rm)
 
     case x => x
 
-def removeUnusedFunctions(definition: Definition, count: Map[Id, Int]): Definition =
-  val rm = count.filter((_, n) => n == 0).keySet
-  removeUnusedFunctions(definition)(using rm)
-
-def removeUnusedFunctions(arg: Argument)(using rm: Set[Id]): Argument =
+def removeUnusedFunctionsWorker(arg: Argument)(using rm: Set[Id]): Argument =
   arg match
     case p: Pure =>
-      removeUnusedFunctions(p)
+      removeUnusedFunctionsWorker(p)
 
     case b: Block =>
-      removeUnusedFunctions(b)
+      removeUnusedFunctionsWorker(b)
 
-def removeUnusedFunctions(module: ModuleDecl)(using rm: Set[Id]): ModuleDecl =
+def removeUnusedFunctionsWorker(module: ModuleDecl)(using rm: Set[Id]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
       ModuleDecl(path, imports, declarations, externs, definitions.filter{
         case Definition.Def(id, _) => !rm.contains(id)
         case _ => true
-      }.map(removeUnusedFunctions), exports)
+      }.map(removeUnusedFunctionsWorker), exports)
 
-def removeUnusedFunctions(definition: Definition)(using rm: Set[Id]): Definition =
+def removeUnusedFunctionsWorker(definition: Definition)(using rm: Set[Id]): Definition =
   definition match
     case Definition.Def(id, block) =>
-      Definition.Def(id, removeUnusedFunctions(block))
+      Definition.Def(id, removeUnusedFunctionsWorker(block))
 
     case Definition.Let(id, binding) =>
-      Definition.Let(id, removeUnusedFunctions(binding))
+      Definition.Let(id, removeUnusedFunctionsWorker(binding))
 
-def removeUnusedFunctions(expression: Expr)(using rm:Set[Id]): Expr =
+def removeUnusedFunctionsWorker(expression: Expr)(using rm:Set[Id]): Expr =
   expression match
     case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(removeUnusedFunctions(b), targs, vargs.map(removeUnusedFunctions), bargs.map(removeUnusedFunctions))
+      DirectApp(removeUnusedFunctionsWorker(b), targs, vargs.map(removeUnusedFunctionsWorker), bargs.map(removeUnusedFunctionsWorker))
 
     case Run(s) =>
-      Run(removeUnusedFunctions(s))
+      Run(removeUnusedFunctionsWorker(s))
 
     case p: Pure =>
-      removeUnusedFunctions(p)
+      removeUnusedFunctionsWorker(p)
 
-def removeUnusedFunctions(statement: Stmt)(using rm: Set[Id]): Stmt =
+def removeUnusedFunctionsWorker(statement: Stmt)(using rm: Set[Id]): Stmt =
   statement match
-    case Scope(definitions, body) => // TODO: if definitions = empty return only body?
-      Scope(definitions.filter {
+    case Scope(definitions, body) =>
+      val defs = definitions.filter {
         case Definition.Def(id, _) => !rm.contains(id)
         case _ => true
-      }.map(removeUnusedFunctions), removeUnusedFunctions(body))
+      }.map(removeUnusedFunctionsWorker)
+
+      if(defs.isEmpty) removeUnusedFunctionsWorker(body)
+      else Scope(defs, removeUnusedFunctionsWorker(body))
 
     case Return(p) =>
-      Return(removeUnusedFunctions(p))
+      Return(removeUnusedFunctionsWorker(p))
 
     case Val(id, binding, body) =>
-      Val(id, removeUnusedFunctions(binding), removeUnusedFunctions(body))
+      Val(id, removeUnusedFunctionsWorker(binding), removeUnusedFunctionsWorker(body))
 
     case App(callee, targs, vargs, bargs) =>
-      App(removeUnusedFunctions(callee), targs, vargs.map(removeUnusedFunctions), bargs.map(removeUnusedFunctions))
+      App(removeUnusedFunctionsWorker(callee), targs, vargs.map(removeUnusedFunctionsWorker), bargs.map(removeUnusedFunctionsWorker))
 
     case If(cond, thn, els) =>
-      If(removeUnusedFunctions(cond), removeUnusedFunctions(thn), removeUnusedFunctions(els))
+      If(removeUnusedFunctionsWorker(cond), removeUnusedFunctionsWorker(thn), removeUnusedFunctionsWorker(els))
 
     case Match(scrutinee, clauses, default) =>
-      Match(removeUnusedFunctions(scrutinee), clauses.map{case (c, b) => (c, removeUnusedFunctions(b).asInstanceOf[BlockLit])},
+      Match(removeUnusedFunctionsWorker(scrutinee), clauses.map{case (c, b) => (c, removeUnusedFunctionsWorker(b).asInstanceOf[BlockLit])},
         default match
-          case Some(s) => Some(removeUnusedFunctions(s))
+          case Some(s) => Some(removeUnusedFunctionsWorker(s))
           case None => None)
 
     case State(id, init, region, body) =>
-      State(id, removeUnusedFunctions(init), region, removeUnusedFunctions(body))
+      State(id, removeUnusedFunctionsWorker(init), region, removeUnusedFunctionsWorker(body))
 
     case Try(body, handlers) =>
-      Try(removeUnusedFunctions(body), handlers)
+      Try(removeUnusedFunctionsWorker(body), handlers)
 
     case Region(body) =>
-      Region(removeUnusedFunctions(body))
+      Region(removeUnusedFunctionsWorker(body))
 
     case h: Hole =>
       h
 
-def removeUnusedFunctions(block: Block)(using rm: Set[Id]): Block =
+def removeUnusedFunctionsWorker(block: Block)(using rm: Set[Id]): Block =
   block match
     case b: BlockVar =>
       b
 
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams, bparams, removeUnusedFunctions(body))
+      BlockLit(tparams, cparams, vparams, bparams, removeUnusedFunctionsWorker(body))
 
     case Member(b, field, annotatedType) =>
-      Member(removeUnusedFunctions(b), field, annotatedType)
+      Member(removeUnusedFunctionsWorker(b), field, annotatedType)
 
     case Unbox(p) =>
-      Unbox(removeUnusedFunctions(p))
+      Unbox(removeUnusedFunctionsWorker(p))
 
     case n: New =>
       n
 
-def removeUnusedFunctions(pure: Pure)(using rm: Set[Id]): Pure =
+def removeUnusedFunctionsWorker(pure: Pure)(using rm: Set[Id]): Pure =
   pure match
     case v: ValueVar =>
       v
@@ -230,15 +234,13 @@ def removeUnusedFunctions(pure: Pure)(using rm: Set[Id]): Pure =
       l
 
     case PureApp(b, targs, vargs) =>
-      PureApp(removeUnusedFunctions(b), targs, vargs.map(removeUnusedFunctions))
+      PureApp(removeUnusedFunctionsWorker(b), targs, vargs.map(removeUnusedFunctionsWorker))
 
     case Select(target, field, annotatedType) =>
-      Select(removeUnusedFunctions(target), field, annotatedType)
+      Select(removeUnusedFunctionsWorker(target), field, annotatedType)
 
     case Box(b, annotatedCapture) =>
-      Box(removeUnusedFunctions(b), annotatedCapture)
-
-//TODO: rework wrapper
+      Box(removeUnusedFunctionsWorker(b), annotatedCapture)
 
 def inlineUniqueFunctions(module: ModuleDecl, summary: Map[Id, Block], count: Map[Id, Int]): ModuleDecl =
   var sum = summary.filter((id, _) => count.contains(id) && count(id) == 1)
@@ -294,7 +296,7 @@ def inlineUniqueFunctions(statement: Stmt)(using summary: Map[Id, Block]): Stmt 
               substitute(body, tparams, cparams, vparams, bparams, targs, vargs, bargs).asInstanceOf[Stmt]
 
             case _ =>
-              ??? //TODO: Does summary only contain BlockLit after dealiasing?
+              ??? //TODO: Does summary only contain BlockLit after dealiasing? Andere Typen können auftrete, aber keine substitution
           else App(callee, targs, vargs, bargs.map(inlineUniqueFunctions))
 
         case _ => App(inlineUniqueFunctions(callee), targs, vargs, bargs.map(inlineUniqueFunctions))
@@ -404,7 +406,7 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
       Return(substitute(expr))
 
     case Val(id, binding, body) =>
-      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst - id)) //TODO: Val id in which map?
+      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst - id)) //TODO: Val id in which map? Val in cSubst
 
     case App(callee, targs, vargs, bargs) =>
       App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))

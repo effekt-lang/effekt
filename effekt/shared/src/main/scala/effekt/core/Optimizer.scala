@@ -7,18 +7,20 @@ import effekt.symbols.*
 import effekt.symbols.builtins.*
 import effekt.context.assertions.*
 
+def rmIdKey[T](input: Map[Id, T], rm: Set[String]): Map[Id, T] =
+  input.filter((x, _) => !rm.contains(x.name.name))
+
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   val phaseName: String = "core-optimizer"
 
   def run(input: CoreTransformed)(using Context): Option[CoreTransformed] =
     input match {
-      case CoreTransformed(source, tree, mod, ModuleDecl(path, imports, decls, externs, defs, exports)) =>
-        val optimized = defs map optimize
-        Some(CoreTransformed(source, tree, mod, ModuleDecl(path, imports, decls, externs, optimized, exports)))
+      case CoreTransformed(source, tree, mod, module) =>
+        Some(CoreTransformed(source, tree, mod, optimize(module)))
     }
 
-  def optimize(d: Definition)(using Context): Definition = {
+  def optimize(m: ModuleDecl)(using Context): ModuleDecl = {
 
     // a very small and easy post processing step...
     // reduces run-return pairs
@@ -36,16 +38,20 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       }
     }
 
-    val opt = eliminateReturnRun.rewrite(d)
-    val start = directStyleVal.rewrite(opt)
+    //TODO: rewrites laufen auf defs. hier map auf defs von m
+    m match
+      case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
+        val opt = definitions.map(eliminateReturnRun.rewrite(_))
+        val start = ModuleDecl(path, imports, declarations, externs, opt.map(directStyleVal.rewrite(_)), exports)
 
-    val aliases = collectAliases(start) - Id("main") //TODO: remove main using wrapper instead?
-    val dealiased = dealiasing(start)(using aliases)
+        val aliases = rmIdKey[Id](collectAliases(start), Set("main"))
+        val dealiased = dealiasing(start)(using aliases)
 
-    val calls = countFunctionCalls(dealiased)//TODO: Fix ambiguous overload
-    val unused_removed = removeUnusedFunctions(dealiased, calls)
+        val calls = rmIdKey[Int](countFunctionCalls(dealiased), Set("main"))
+        println("\nCalls:")
+        println(calls)
+        val unused_removed = removeUnusedFunctions(dealiased, calls).asInstanceOf[ModuleDecl]
 
-    // More optimizations can go here.
-    unused_removed
+        unused_removed
   }
 }
