@@ -10,6 +10,9 @@ import effekt.core.Pure.ValueVar
 import effekt.symbols.TmpValue
 import effekt.util.messages.INTERNAL_ERROR
 
+def rmIdKey[T](input: Map[Id, T], rm: Set[String]): Map[Id, T] =
+  input.filter((x, _) => !rm.contains(x.name.name))
+
 object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
   val phaseName: String = "core-optimizer"
