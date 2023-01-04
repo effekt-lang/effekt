@@ -1,6 +1,6 @@
 package effekt.llvm
 
-import effekt.llvm.Operand.LocalReference
+import effekt.llvm.Operand.{ConstantGlobal, LocalReference}
 import effekt.machine
 import effekt.machine.analysis.*
 
@@ -361,8 +361,33 @@ object Transformer {
   def stkType = NamedType("Stk");
   def regionType = NamedType("Region");
 
+  case class ExternTypeDecl(
+     tpe: Type,
+     size: Int,
+     share: Option[Operand.ConstantGlobal],
+     erase: Option[Operand.ConstantGlobal])
+  /**
+   * Parses the body of a `extern type` declaration.
+   *
+   * For LLVM, this has the form:
+   * `llvm-type-name bit-size [refcount-increase refcount-decrease]`
+   * (`[]` marking the last two parameters as optional)
+   */
+  def parseExternTypeDecl(machineTpe: machine.Type.Extern): ExternTypeDecl = {
+      machineTpe.name.split(" ").toList match {
+        case List(tpeName, size, share, erase) =>
+          ExternTypeDecl(RawType(tpeName), size.toInt,
+            Some(ConstantGlobal(PointerType(), share)),
+            Some(ConstantGlobal(PointerType(), erase)))
+        case List(tpeName, size) =>
+          ExternTypeDecl(RawType(tpeName), size.toInt, None, None)
+        case _ =>
+          ??? // TODO thread error reporter through to here
+      }
+  }
+
   def transform(tpe: machine.Type): Type = tpe match {
-    case machine.Type.Extern(name)   => RawType(name.split(" ")(0))
+    case e: machine.Type.Extern   => parseExternTypeDecl(e).tpe
     case machine.Positive(_)         => positiveType
     case machine.Negative(_)         => negativeType
     case machine.Type.Stack()        => stkType
@@ -375,7 +400,7 @@ object Transformer {
 
   def typeSize(tpe: machine.Type): Int =
     tpe match {
-      case machine.Type.Extern(name) => name.split(" ")(1).toInt
+      case e: machine.Type.Extern => parseExternTypeDecl(e).size
       case machine.Positive(_)       => 16
       case machine.Negative(_)       => 16
       case machine.Type.Stack()      => 8 // TODO Make fat?
@@ -544,11 +569,8 @@ object Transformer {
 
   def shareValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Type.Extern(name) => {
-        val decl = name.split(" ")
-        if (decl.length > 2) {
-          emit(Call("_", VoidType(), ConstantGlobal(PointerType(), decl(2)), List(transform(value))))
-        } else ()
+      case e: machine.Type.Extern => parseExternTypeDecl(e).share.foreach{ share =>
+          emit(Call("_", VoidType(), share, List(transform(value))))
       }
       case machine.Positive(_)       => emit(Call("_", VoidType(), sharePositive, List(transform(value))))
       case machine.Negative(_)       => emit(Call("_", VoidType(), shareNegative, List(transform(value))))
@@ -560,11 +582,8 @@ object Transformer {
 
   def eraseValue(value: machine.Variable)(using FunctionContext, BlockContext): Unit = {
     value.tpe match {
-      case machine.Type.Extern(name) => {
-        val decl = name.split(" ")
-        if (decl.length > 3) {
-          emit(Call("_", VoidType(), ConstantGlobal(PointerType(), decl(3)), List(transform(value))))
-        }
+      case e: machine.Type.Extern => parseExternTypeDecl(e).erase.foreach{ erase =>
+        emit(Call("_", VoidType(), erase, List(transform(value))))
       }
       case machine.Positive(_)       => emit(Call("_", VoidType(), erasePositive, List(transform(value))))
       case machine.Negative(_)       => emit(Call("_", VoidType(), eraseNegative, List(transform(value))))
