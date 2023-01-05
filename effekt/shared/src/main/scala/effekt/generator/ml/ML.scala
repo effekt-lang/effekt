@@ -163,13 +163,24 @@ object ML extends Backend {
     ml.Param.Named(id)
   }
 
-  def toMLExpr(stmt: Stmt)(using C: Context): ml.Expr = stmt match {
-    case Return(e) => Call(Consts.pure)(toML(e))
-    case App(b, _, args) => Expr.Call(toML(b), args map toML)
-    case If(cond, thn, els) => ml.If(toML(cond), toMLExpr(thn), toMLExpr(els))
+  def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
+    case Return(e) => CPS.pure(toML(e))
+
+    case App(b, _, args) => CPS.inline { k => Expr.Call(Expr.Call(toML(b), args map toML), List(k.reify)) }
+
+    case If(cond, thn, els) =>
+      CPS.join { k =>
+        ml.If(toML(cond), toMLExpr(thn)(k), toMLExpr(els)(k))
+      }
+
     case Val(id, _, binding, body) =>
-      Call(Consts.bind)(toMLExpr(binding), ml.Lambda(ml.Param.Named(name(id)))(toMLExpr(body)))
-    case Match(scrutinee, clauses, default) =>
+      toMLExpr(binding).flatMap { value =>
+        CPS.inline { k =>
+          ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k))
+        }
+      }
+
+    case Match(scrutinee, clauses, default) => CPS.join { k =>
       def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
         val (constructor, b) = c
         val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
@@ -182,60 +193,71 @@ object ML extends Backend {
             ml.Pattern.Datatype(tag, binders)
           case _: symbols.ExternType => C.abort("Match on ExternType is not supported")
         }
-        val body = toMLExpr(b.body)
+        val body = toMLExpr(b.body)(k)
         ml.MatchClause(pattern, body)
       }
 
-      ml.Match(toML(scrutinee), clauses map clauseToML, default map toMLExpr)
+      ml.Match(toML(scrutinee), clauses map clauseToML, default map { d => toMLExpr(d)(k) })
+    }
 
-    case Hole => ml.Expr.RawExpr("raise Hole")
+    // TODO maybe don't drop the continuation here? Although, it is dead code.
+    case Hole => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case Scope(definitions, body) => ml.mkLet(definitions.map(toML), toMLExpr(body))
+    case Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
-      ml.mkLet(List(bind), toMLExpr(body))
+      CPS.inline { k =>
+        val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
+        ml.mkLet(List(bind), toMLExpr(body)(k))
+      }
 
     case State(id, init, region, body) =>
-      val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
-      ml.mkLet(List(bind), toMLExpr(body))
+      CPS.inline { k =>
+        val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
+        ml.mkLet(List(bind), toMLExpr(body)(k))
+      }
 
     case Try(body, _, handler) =>
       val handlers: List[ml.Expr.MakeDatatype] = handler.map { (impl: Implementation) =>
         val fields = impl.operations.map { case Operation(op, BlockLit(params, body)) =>
           val args = params.init.map(paramToML(_))
           val resumeName = name(params.last.id)
-          val evName = freshName("ev_tmp")
-          val ev1Name = freshName("ev1_tmp")
-          val vName = freshName("vName")
-          val kName = freshName("k_tmp")
+          val ev = freshName("ev")
+          val evResume = freshName("ev_resume")
+          val v = freshName("v")
+          val k1 = freshName("k1")
+          val k2 = freshName("k2")
+
+          // ev (fn k1 => fn k2 => let fun resume ev_res v = ev_res k1(v); in body[[k2]] end)
           val newBody = ml.Call(
-            ml.Expr.Variable(evName)
+            ml.Expr.Variable(ev)
           )(
             ml.Lambda(
-              ml.Param.Named(kName)
-            )(
-              ml.mkLet(
+              ml.Param.Named(k1)
+            )(ml.Lambda(
+                ml.Param.Named(k2)
+              )(ml.mkLet(
                 List(ml.Binding.FunBind(
                   resumeName,
-                  List(ml.Param.Named(ev1Name), ml.Param.Named(vName)),
-                  ml.Call(ev1Name)(ml.Call(kName)(ml.Expr.Variable(vName)))
+                  List(ml.Param.Named(evResume), ml.Param.Named(v)),
+                  ml.Call(evResume)(ml.Call(k1)(ml.Expr.Variable(v)))
                 )),
-                toMLExpr(body)
+                toMLExpr(body)(ml.Variable(k2)))
               )
             )
           )
-          ml.Expr.Lambda(ml.Param.Named(evName) :: args, newBody)
+          ml.Expr.Lambda(ml.Param.Named(ev) :: args, newBody)
         }
         ml.Expr.MakeDatatype(name(impl.id), expsToTupleIsh(fields))
       }
       val args = ml.Consts.lift :: handlers
-      val tr = ml.Call(toML(body))(args: _*)
-      ml.Call(ml.Consts.reset)(tr)
+
+      CPS.inline { k =>
+        ml.Call(CPS.reset(ml.Call(toML(body))(args: _*)), List(k.reify))
+      }
 
     case Region(body, _) =>
-      ml.Call(ml.Consts.withRegion)(toML(body))
-
+      CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
   }
 
   def createBinder(id: Symbol, binding: Expr)(using Context): Binding = {
@@ -245,7 +267,8 @@ object ML extends Backend {
   def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
     binding match {
       case BlockLit(params, body) =>
-        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))), toMLExpr(body))
+        val k = freshName("k")
+        ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
       case _ =>
         ml.ValBind(name(id), toML(binding))
     }
@@ -259,7 +282,8 @@ object ML extends Backend {
 
   def toML(block: BlockLit)(using Context): ml.Lambda = block match {
     case BlockLit(params, body) =>
-      ml.Lambda(params map (paramToML(_)), toMLExpr(body))
+      val k = freshName("k")
+      ml.Lambda(params.map(paramToML(_)) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
   }
 
   def toML(block: Block)(using C: Context): ml.Expr = block match {
@@ -342,9 +366,63 @@ object ML extends Backend {
     case Select(b, field, _) =>
       ml.Call(fieldSelectorName(field))(toML(b))
 
-    case Run(s, _) => Call(Consts.run)(toMLExpr(s))
+    case Run(s, _) => toMLExpr(s).run
 
     case Box(b) => toML(b) // not sound
+  }
+
+  enum Continuation {
+    case Dynamic(cont: ml.Expr)
+    case Static(cont: ml.Expr => ml.Expr)
+
+    def apply(e: ml.Expr): ml.Expr = this match {
+      case Continuation.Dynamic(k) => ml.Call(k)(e)
+      case Continuation.Static(k) => k(e)
+    }
+    def reify: ml.Expr = this match {
+      case Continuation.Dynamic(k) => k
+      case Continuation.Static(k) =>
+        val a = freshName("a")
+        ml.Lambda(ml.Param.Named(a))(k(ml.Variable(a)))
+    }
+    def reflect: ml.Expr => ml.Expr = this match {
+      case Continuation.Static(k) => k
+      case Continuation.Dynamic(k) => a => ml.Call(k)(a)
+    }
+  }
+
+  class CPS(prog: Continuation => ml.Expr) {
+    def apply(k: Continuation): ml.Expr = prog(k)
+    def apply(k: ml.Expr): ml.Expr = prog(Continuation.Dynamic(k))
+    def apply(k: ml.Expr => ml.Expr): ml.Expr = prog(Continuation.Static(k))
+
+    def flatMap(f: ml.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
+    def map(f: ml.Expr => ml.Expr): CPS = flatMap(a => CPS.pure(f(a)))
+    def run: ml.Expr = prog(Continuation.Static(a => a))
+  }
+
+  object CPS {
+
+    def inline(prog: Continuation => ml.Expr): CPS = CPS(prog)
+    def join(prog: Continuation => ml.Expr): CPS = CPS {
+      case k: Continuation.Dynamic => prog(k)
+      case k: Continuation.Static =>
+        val kName = freshName("k")
+        mkLet(List(ValBind(kName, k.reify)), prog(Continuation.Dynamic(ml.Variable(kName))))
+    }
+
+    def reset(prog: ml.Expr): ml.Expr =
+      val a = freshName("a")
+      val k2 = freshName("k2")
+      // fn a => fn k2 => k2(a)
+      val pure = ml.Lambda(Param.Named(a)) { ml.Lambda(Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
+      ml.Call(prog, List(pure))
+
+    def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
+
+    def id =
+      val a = MLName("a")
+      ml.Lambda(ml.Param.Named(a))(ml.Variable(a))
   }
 
   def fieldSymbolType(f: Symbol)(using C: Context): ml.Type = f match {
