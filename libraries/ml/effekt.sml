@@ -1,19 +1,9 @@
-(* CPS STUFF *)
-fun bind m f k = m (fn a => f a k);
-
-fun pure a k = k a;
-
+(* EVIDENCE *)
 fun lift m k1 k2 = m (fn a => k1 a k2);
-
-fun reset m = m pure;
-
-fun run m = m (fn a => a);
-
 fun nested ev1 ev2 m = ev1 (ev2 m);
-
 fun here x = x;
 
-(* REGION STUFF *)
+(* REGIONS *)
 (* type region = ((() -> () -> ()) list) ref *)
 fun newRegion () = ref nil
 fun backup cell = fn () => let val oldState = !cell in fn () => cell := oldState end
@@ -24,7 +14,7 @@ fun withRegion body =
             m (fn a => (map (fn f => f()) fields; k a)) end
     in body lift r end
 
-(* TOSTRING STUFF *)
+(* SHOW INSTANCES *)
 fun show'int x =
     let val s = (Int.toString x) in
     case String.sub (s, 0) of
@@ -33,7 +23,7 @@ fun show'int x =
     end;
 
 (*
-To alingn with the js backend inf and nan is rewritten
+To align with the js backend inf and nan is rewritten
 - `nan` -> `NaN`
 - `inf` -> `Infinity`
 - `~2.1` -> `-2.1`
@@ -55,10 +45,10 @@ fun show'bool x = Bool.toString x
 
 fun show'string x = x
 
-(* TIMING STUFF *)
+(* TIMING *)
 val mlStartTime = Time.toMilliseconds (Time.now ());
 
-(* RANDOM STUFF *)
+(* RANDOM *)
 fun mlRandomReal () =
    let
       val r = MLton.Random.rand ();
@@ -69,5 +59,5 @@ fun mlRandomReal () =
       shiftRight rreal wsize
    end;
 
-(* HOLE STUFF *)
+(* HOLES *)
 exception Hole

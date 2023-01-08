@@ -17,8 +17,7 @@ import scala.language.implicitConversions
  */
 object ML extends Backend {
 
-  def runMain(main: MLName): ml.Expr =
-    ml.Call(Consts.run)(ml.Call(main)(Consts.here))
+  def runMain(main: MLName): ml.Expr = CPS.runMain(main)
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
@@ -419,6 +418,8 @@ object ML extends Backend {
       ml.Call(prog, List(pure))
 
     def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
+
+    def runMain(main: MLName): ml.Expr = ml.Call(main)(id, id)
 
     def id =
       val a = MLName("a")
