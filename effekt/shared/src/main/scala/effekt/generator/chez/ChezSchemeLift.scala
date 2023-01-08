@@ -17,14 +17,6 @@ import kiama.output.PrettyPrinterTypes.Document
  */
 object ChezSchemeLift extends Backend {
 
-  def run(expr: chez.Expr): chez.Expr = chez.Builtin("run", expr)
-  def pure(expr: chez.Expr): chez.Expr = chez.Builtin("pure", expr)
-
-  // TODO we use the $then variant, for now, since the `then` variant is a macro and would
-  // require adding it to the syntax chez.Tree
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    Builtin("$then", binding, chez.Lambda(List(param), body))
-
   def runMain(main: ChezName): chez.Expr = CPS.runMain(main)
 
   /**
@@ -122,11 +114,10 @@ object ChezSchemeLift extends Backend {
     case Try(body, tpe, handler) =>
       val handlers = handler.map { h =>
         val names = RecordNames(h.id)
-        // (let ()
-        //   (define ([[raise]] ev args...) ((ev (lambda k1 => lambda k2 =>
+        // (let ((OPNAME (lambda (ev args...)  ((ev (lambda k1 => lambda k2 =>
         //      (define ([[resume]] ev v) (ev (k1 v)))
-        //      [[body]]_k2)))
-        // (CONSTRUCTOR [[raise]])
+        //      [[BODY]]_k2))))
+        //   (CONSTRUCTOR OPNAME ...)
         val operations = h.operations.map {
           case Operation(op, BlockLit(params, body)) =>
             val opName = freshName(op.name.name)
@@ -210,8 +201,6 @@ object ChezSchemeLift extends Backend {
 
   // Scheme Blocks in CPS
   // [[ { def foo; ...; IOEXPR ...; CPSEXPR } ]]_k = { [[def foo; ...]]; [[IOEXPR ...]]; [[CPSEXPR]]_k }
-
-
   def toChez(stmt: Stmt, k: Continuation): chez.Block = stmt match {
 
     case Scope(definitions, body) =>
