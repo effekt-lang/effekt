@@ -252,6 +252,7 @@ object ChezSchemeLift extends Backend {
 
   def toChez(scope: Evidence): chez.Expr = scope match {
     case Evidence(Nil) => Variable(ChezName("here"))
+    case Evidence(ev :: Nil) => chez.Variable(nameRef(ev))
     case Evidence(scopes) => chez.Builtin("nested", scopes map { s => chez.Variable(nameRef(s)) }:_*)
   }
 
