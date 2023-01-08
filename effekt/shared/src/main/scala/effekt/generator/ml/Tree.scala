@@ -92,7 +92,7 @@ enum Expr {
   case MakeDatatype(tag: MLName, arg: Option[Expr])
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
-  
+
   case Ref(exp: Expr)
 
   case Deref(exp: Expr)

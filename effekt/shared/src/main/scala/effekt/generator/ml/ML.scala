@@ -456,6 +456,5 @@ object ML extends Backend {
   }
 
   def freshName(s: String): MLName =
-    name(symbols.Name.local(s + Symbol.fresh.next()))
-
+    MLName(s + Symbol.fresh.next())
 }
