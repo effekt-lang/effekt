@@ -15,7 +15,8 @@ class JavaScriptTests extends EffektTests {
   override def included: List[File] = List(
     examplesDir / "pos",
     examplesDir / "neg",
-    examplesDir / "casestudies"
+    examplesDir / "casestudies",
+    examplesDir / "benchmarks"
   )
 
   override def ignored: List[File] = List(

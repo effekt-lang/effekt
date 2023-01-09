@@ -12,7 +12,8 @@ abstract class ChezSchemeTests extends EffektTests {
   override def included: List[File] = List(
     examplesDir / "pos",
     examplesDir / "casestudies",
-    examplesDir / "chez"
+    examplesDir / "chez",
+    examplesDir / "benchmarks"
   )
 
   // Test files which are to be ignored (since features are missing or known bugs exist)

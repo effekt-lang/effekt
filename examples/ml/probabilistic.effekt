@@ -1,30 +1,19 @@
 module probabilistic
 
-effect IndexOutOfBounds[A](): A
+effect IndexOutOfBounds(): Unit
 
-type List[A] {
-  Nil();
-  Cons(head: A, tail: List[A])
-}
-
-def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
-  case Nil() => l2
-  case Cons(a, rest) => concat(rest, Cons(a, l2))
+def indexOutOfBounds[A](): A / IndexOutOfBounds = {
+  do IndexOutOfBounds(); <>
 }
 
 def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
-  case Nil() => do IndexOutOfBounds()
+  case Nil() => indexOutOfBounds()
   case Cons(n, rest) => if (idx == 0) n else lookup(rest, idx - 1)
 }
 
 def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l match {
-  case Nil() => do IndexOutOfBounds()
+  case Nil() => indexOutOfBounds()
   case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
-}
-
-def length[A](l: List[A]): Int = l match {
-  case Nil() => 0
-  case Cons(_, rest) => 1 + length(rest)
 }
 
 type Var {

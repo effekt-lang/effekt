@@ -1,66 +1,39 @@
-// Jonathan Frech, 2022-08-17, 2022-08-25
-// adapted from: https://raw.githubusercontent.com/effect-handlers/effect-handlers-bench/a61925f19c60600cd0bdaf8b3a6b82eea9aefcf0/benchmarks/koka/007_simple_counter/benchmark.kk
-
 import immutable/list
 import immutable/option
 import text/string
 import io/args
 
-// missing Effekt stdlib features
-
-def abs(n: Int): Int = if (n < 0) 0 - n else n
-
-
-// manually transpiled koka
-
 effect Increment {
-    def increment(j: Int): Unit
+  def increment(j: Int): Unit
 }
 
-def operator(x: Int, y: Int): Int =
-    mod(abs(x - (503 * y) + 37), 1009)
-
-def looper(i: Int, s: Int): Int / Increment = {
-    if (i == 0) {
-        s
-    } else {
-        do increment(i)
-        looper(i-1, s)
-    }
-}
-
-def incrementHandler { action: () => Int / {Increment} }: Int = {
-    try {
-        action()
-    } with Increment {
-        def increment(j: Int) = operator(j, resume(()))
-    }
-}
 
 def count(n: Int): Int = {
-    def step(l: Int, s: Int): Int = {
-        if (l == 0) {
-            s
-        } else {
-            step(l-1, incrementHandler { looper(n, s) })
-        }
-    }
-    step(1000, 0)
+
+  def abs(n: Int): Int = if (n < 0) 0 - n else n
+
+  def op(x: Int, y: Int): Int =
+    mod(abs(x - (503 * y) + 37), 1009)
+
+  def step(l: Int, s: Int): Int =
+    if (l == 0) { s }
+    else step(l - 1, try {
+      def looper(i: Int): Int / Increment =
+        if (i == 0) { s }
+        else { do increment(i); looper(i - 1) }
+      looper(n)
+    } with Increment {
+      def increment(j) = op(j, resume(()))
+    })
+
+  step(1000, 0)
 }
 
-
-// // deviating invocation
-
-// def main() = {
-//     val n = 1000
-//     println(count(n))
-// }
-
 def main() = commandLineArgs() match {
-    case Nil() => println(count(20000))
-    case Cons(x, Nil()) => toInt(x) match {
-        case Some(i) => println(count(i))
-        case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "'")
-    }
-    case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
+  case Nil() => println(count(1000))
+  case Cons(x, Nil()) => toInt(x) match {
+    case Some(i) => println(count(i))
+    case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "'")
+  }
+  case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
 }
