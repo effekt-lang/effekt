@@ -1,7 +1,5 @@
 module effekt
 
-type Void {}
-
 // Side effection ops
 // ==================
 extern io def random(): Int = "random(): Int"
@@ -95,6 +93,7 @@ extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = "infixAnd(Boolean, B
 
 // operations on strings
 // =====================
+// TODO make safe
 extern pure def infixConcat(s1: String, s2: String): String = "infixConcat(String, String): String"
 extern pure def show(value: Int): String = "show(Int): String"
 extern pure def read(s: String): Int = "read(String): Int"
@@ -109,14 +108,58 @@ extern io def currentTimeNanos(): Int = "currentTimeNanos(): Int"
 
 // System
 // ======
-extern io def exit(code: Int): Void = "exit(Int): Void" // should probably be control, but this is unsupported as of now
-def panic(msg: String): Void = {
+extern io def exit(code: Int): Bottom = "exit(Int): Void" // should probably be control, but this is unsupported as of now
+def panic(msg: String): Bottom = {
   printlnErr("Panic: " ++ msg);
   exit(1)
 }
 
+// Pairs
+// =====
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+
+// Exceptions
+// ==========
+effect Exception[E] {
+  def raise[A](exception: E, msg: String): A
+}
+record RuntimeError()
+
+def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
+
+// converts exceptions of (static) type E to an uncatchable panic that aborts the program
+def panicOn[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = panic(msg) }
+
+// reports exceptions of (static) type E to the console
+def report[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = println(msg) }
+
+// ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = () }
+
+// Control Flow
+// ============
+def each(start: Int, end: Int) { action: (Int) => Unit } = {
+  var i = start;
+  while (i < end) {
+      action(i)
+      i = i + 1
+  }
+}
+
+def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }
+
+
 // For boxing polymorphic values
 record BoxedUnit(unboxUnit: Unit)
+record BoxedBoolean(unboxBoolean: Boolean)
 record BoxedInt(unboxInt: Int)
 record BoxedDouble(unboxDouble: Double)
 record BoxedString(unboxString: String)
