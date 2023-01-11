@@ -1,0 +1,16 @@
+type ListInt {
+    Nil(); Cons(hd: Int, tl: ListInt)
+}
+
+def foldr(l: ListInt, init: Int){ f: (Int, Int) => Int }: Int = {
+    l match {
+        case Nil() => init
+        case Cons(hd, tl) => f(hd, foldr(tl, init){f})
+    }
+}
+
+def main() = {
+   val lst = [1,2,3,4,5,6,7,8,9,10]
+   val sum = foldr(lst, 0){ (x,y) => x + y}
+   println(sum)
+}

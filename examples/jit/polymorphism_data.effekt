@@ -1,0 +1,40 @@
+type Integer {
+   InjInt(x: Int)
+}
+
+type List[A] {
+  Nil(); Cons(a: A, tail: List[A])
+}
+
+def map[A,B](l: List[A]){ f: A => B }: List[B] = {
+  l match {
+    case Nil() => Nil()
+    case Cons(hd, tl) => Cons(f(hd), map(tl){f})
+  }
+}
+
+def show(i: Integer): String = {
+  i match {
+    case InjInt(j) => show(j)
+  }
+}
+
+def show(l: List[Integer]): String = {
+  def impl(t: List[Integer]): String = {
+    t match {
+      case Nil() => "]"
+      case Cons(hd, tl) => ", " ++ show(hd) ++ impl(tl)
+    }
+  }
+
+  l match {
+    case Nil() => "[]"
+    case Cons(hd,tl) => "[" ++ show(hd) ++ impl(tl)
+  }
+}
+
+def main(): Unit = {
+  val x = [InjInt(12), InjInt(4)]
+  val y = map(x){ x => x }
+  println(show(y))
+}
