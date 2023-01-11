@@ -212,11 +212,10 @@ def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
 // Control Flow
 // ============
 def each(start: Int, end: Int) { action: (Int) => Unit } = {
-  var i = start;
-  while (i < end) {
-      action(i)
-      i = i + 1
+  def loop(i: Int): Unit = if (i < end) {
+    action(i); loop(i + 1)
   }
+  loop(start)
 }
 
 def repeat(n: Int) { action: () => Unit } = each(0, n) { n => action() }

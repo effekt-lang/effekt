@@ -17,31 +17,37 @@ def isEmpty[A](l: List[A]): Boolean = l match {
 }
 
 def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
-  var remainder = l
-  while(not(remainder.isEmpty)) {
-    remainder match {
-      case Nil() => ()
-      case Cons(a, as) => f(a); remainder = as
-    }
+  def loop(remainder: List[A]): Unit =
+   if (not(remainder.isEmpty)) remainder match {
+    case Nil() => ()
+    case Cons(a, as) => f(a); loop(as)
   }
+
+  loop(l)
 }
 
 def size[A](l: List[A]): Int = {
-  var n = 0;
-  l.foreach { _ => n = n + 1 };
-  n
+  def loop(lst: List[A], acc: Int): Int = lst match {
+    case Nil() => acc
+    case Cons(a, as) => loop(as, acc + 1)
+  }
+  loop(l, 0)
 }
 
 def reverse[A](l: List[A]): List[A] = {
-  var res = Nil[A]()
-  l.foreach { el => res = Cons(el, res) }
-  res
+  def loop(lst: List[A], acc: List[A]): List[A] = lst match {
+    case Nil() => acc
+    case Cons(a, as) => loop(as, Cons(a, acc))
+  }
+  loop(l, Nil())
 }
 
 def map[A, B](l: List[A]) { f: A => B } : List[B] = {
-  var acc = Nil[B]()
-  l.foreach { el => acc = Cons(f(el), acc) }
-  acc.reverse
+  def loop(lst: List[A], acc: List[B]): List[B] = lst match {
+    case Nil() => acc
+    case Cons(a, as) => loop(as, Cons(f(a), acc))
+  }
+  loop(l, Nil()).reverse
 }
 
 // [1,2,3].reverseOnto([4,5,6])
