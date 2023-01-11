@@ -191,4 +191,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case BlockIndex(index) => index.toString
     case _ => throw Error("Internal error: Unexpected non-index block")
   }
+
+  def format(prog: Program): Document = {
+    pretty(toDoc(prog))
+  }
 }

@@ -18,20 +18,20 @@ object JIT extends Backend {
     val machineMod = machine.Transformer.transform(main, mainSymbol)
 
     val jitProgram = Transformer.transform(machineMod);
-    val doc = PrettyPrinter.toDocument(jitProgram);
+    val doc = PrettyPrinter.format(jitProgram);
 
-    Some(Compiled(mainFile, Map(mainFile -> doc)))
+    Some(Compiled(main.source, mainFile, Map(mainFile -> doc)))
   }
 
-  override def compileSeparate(main: CoreTransformed)(implicit C: Context): Option[Document] = {
-    val machine.Program(decls, prog) = machine.Transformer.transform(main, symbols.TmpValue())
+  override def compileSeparate(main: AllTransformed)(implicit C: Context): Option[Document] = {
+    val machine.Program(decls, prog) = machine.Transformer.transform(main.main, symbols.TmpValue())
 
     // we don't print declarations here.
     val jitDefinitions = Transformer.transform(machine.Program(Nil, prog))
 
-    val jitString = PrettyPrinter.toDoc(jitDefinitions).toString()
+    val jitString = PrettyPrinter.format(jitDefinitions)
 
-    Some(Document(jitString, emptyLinks))
+    Some(Document(jitString.layout, emptyLinks))
   }
 
   def path(m: Module)(implicit C: Context): String =
