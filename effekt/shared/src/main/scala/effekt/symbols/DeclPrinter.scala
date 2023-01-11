@@ -47,6 +47,11 @@ object DeclPrinter extends ParenPrettyPrinter {
       }
       "type" <+> name.toString <> tps <+> braces(nest(line <> vsep(ctrs)) <> line)
 
+    case Record(name, tparams, ctor) =>
+      val tps = show(tparams)
+      val ctrs = format("def", ctor, ctor.annotatedResult, ctor.annotatedEffects)
+      "type" <+> name.toString <> tps <+> braces(nest(line <> ctrs) <> line)
+
     case f: ExternFunction =>
       format("extern def", f, f.annotatedResult, f.annotatedEffects)
 
