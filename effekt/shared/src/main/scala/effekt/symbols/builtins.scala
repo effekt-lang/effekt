@@ -34,10 +34,10 @@ object builtins {
   val StringSymbol = ExternType(name("String"), Nil)
   val TString = ValueTypeApp(StringSymbol, Nil)
 
-  val TopSymbol = ExternType(name("⊤"), Nil)
+  val TopSymbol = ExternType(name("Top"), Nil)
   val TTop = ValueTypeApp(TopSymbol, Nil)
 
-  val BottomSymbol = ExternType(name("⊥"), Nil)
+  val BottomSymbol = ExternType(name("Bottom"), Nil)
   val TBottom = ValueTypeApp(BottomSymbol, Nil)
 
   val IOSymbol = Interface(Name.local("IO"), Nil, Nil)
@@ -51,7 +51,7 @@ object builtins {
     val interface: Interface = Interface(Name.local("Ref"), List(S), Nil)
     val get = Operation(name("get"), List(S), Nil, ValueTypeRef(S), Effects.Pure, interface)
     val put = Operation(name("put"), List(S), List(ValueParam(Name.local("s"), Some(ValueTypeRef(S)))), TUnit, Effects.Pure, interface)
-    interface.ops = List(get, put)
+    interface.operations = List(get, put)
 
     def apply(stateType: ValueType) = InterfaceType(interface, List(stateType))
 
@@ -71,6 +71,8 @@ object builtins {
     "Int" -> IntSymbol,
     "Double" -> DoubleSymbol,
     "String" -> StringSymbol,
+    "Bottom" -> BottomSymbol,
+    "Top" -> TopSymbol,
     "IO" -> IOSymbol,
     "Region" -> RegionSymbol,
     "Ref" -> TState.interface

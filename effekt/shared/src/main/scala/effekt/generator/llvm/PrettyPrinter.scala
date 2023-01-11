@@ -62,21 +62,17 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case TailCall(nonglobal, _) => C.abort(s"can only tail call references, not: $nonglobal")
     // TODO [jfrech, 2022-07-26] Why does tail call even have a return type if we do not use it?
 
-    case Load(result, LocalReference(PointerType(tpe), name)) =>
-      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}"
-    case Load(_, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
+    case Load(result, tpe, LocalReference(PointerType(), name)) =>
+      s"${localName(result)} = load ${show(tpe)}, ${show(LocalReference(PointerType(), name))}"
+    case Load(_, _, operand) => C.abort(s"WIP: loading anything but local references not yet implemented: $operand")
 
     // TODO [jfrech, 2022-07-26] Why does `Load` explicitly check for a local reference and `Store` does not?
     case Store(address, value) =>
       s"store ${show(value)}, ${show(address)}"
 
-    case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0)) =>
-      s"${localName(result)} = getelementptr ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}, i64 $i0"
-    case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0, i1)) =>
-      s"${localName(result)} = getelementptr ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}, i64 $i0, i32 $i1"
-    case GetElementPtr(result, LocalReference(PointerType(tpe), name), List(i0, i1, i2)) =>
-      s"${localName(result)} = getelementptr ${show(tpe)}, ${show(LocalReference(PointerType(tpe), name))}, i64 $i0, i32 $i1, i32 $i2"
-    case GetElementPtr(_, operand, _) => C.abort(s"can only form a pointer to a local reference, not: $operand")
+    case GetElementPtr(result, tpe, ptr @ LocalReference(_, name), i :: is) =>
+      s"${localName(result)} = getelementptr ${show(tpe)}, ${show(ptr)}, i64 $i" + is.map(", i32 " + _).mkString
+    case GetElementPtr(_, _, operand, _) => C.abort(s"can only form a pointer to a local reference, not: $operand")
 
     case BitCast(result, operand, tpe) =>
       s"${localName(result)} = bitcast ${show(operand)} to ${show(tpe)}"
@@ -132,7 +128,7 @@ ${indentedLines(instructions.map(show).mkString("\n"))}
     case IntegerType1() => "i1"
     case IntegerType8() => "i8"
     case IntegerType64() => "i64"
-    case PointerType(referentType) => s"${show(referentType)}*"
+    case PointerType() => "ptr"
     case ArrayType(size, of) => s"[$size x ${show(of)}]"
     case StructureType(elementTypes) => s"{${commaSeparated(elementTypes.map(show))}}"
     case FunctionType(returnType, argumentTypes) => s"${show(returnType)} (${commaSeparated(argumentTypes.map(show))})"

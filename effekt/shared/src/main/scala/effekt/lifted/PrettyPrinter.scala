@@ -35,10 +35,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(b: Block): Doc = b match {
-    case BlockVar(v) => v.name.toString
-    case BlockLit(ps, body) =>
+    case BlockVar(v, _) => v.name.toString
+    case BlockLit(tps, ps, body) =>
       braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
-    case Member(b, id) =>
+    case Member(b, id, tpe) =>
       toDoc(b) <> "." <> id.name.toString
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
@@ -52,11 +52,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Literal((), _)          => "()"
     case Literal(s: String, _)   => "\"" + s + "\""
     case l: Literal              => l.value.toString
-    case ValueVar(id)            => id.name.toString
+    case ValueVar(id, _)         => id.name.toString
 
     case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
 
-    case Select(b, field) =>
+    case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Box(b) => parens("box" <+> toDoc(b))
@@ -75,27 +75,24 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(impl: Implementation): Doc = {
-    val handlerName = toDoc(impl.id.name)
+    val handlerName = toDoc(impl.id.symbol.name)
     val clauses = impl.operations.map {
-      case Operation(id, BlockLit(params, body)) =>
+      case Operation(id, BlockLit(tparams, params, body)) =>
         "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
 
-  def toDoc(d: Decl): Doc = d match {
-    case Data(did, ctors) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { id => toDoc(id.name) })
+  def toDoc(d: core.Declaration): Doc = d match {
+    case core.Declaration.Data(did, _, ctors) =>
+      "type" <+> toDoc(did.name) <> parens(ctors.map { ctor => toDoc(ctor.id.name) })
 
-    case Record(did, fields) =>
-      "record" <+> toDoc(did.name) <> parens(fields.map { f => toDoc(f.name) })
-
-    case Interface(id, operations) =>
-      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.name) })
+    case core.Declaration.Interface(id, _, operations) =>
+      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.id.name) })
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, tpe, BlockLit(params, body)) =>
+    case Definition.Def(id, tpe, BlockLit(tparams, params, body)) =>
       "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
     case Definition.Def(id, tpe, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
@@ -130,7 +127,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Try(body, tpe, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
-    case State(id, init, region, body) =>
+    case State(id, init, stateTpe, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 
     case Region(body, _) =>

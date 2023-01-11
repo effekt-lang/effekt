@@ -74,7 +74,7 @@ trait Intelligence {
   def getDefinitionOf(s: Symbol)(implicit C: Context): Option[Tree] = s match {
     case u: UserFunction => Some(u.decl)
     case u: Binder       => Some(u.decl)
-    case d: Operation    => C.definitionTreeOption(d.effect)
+    case d: Operation    => C.definitionTreeOption(d.interface)
     case a: Anon         => Some(a.decl)
     case s: SelfParam => s.tree match {
       case d: source.Def => Some(d.id)
@@ -134,7 +134,7 @@ trait Intelligence {
              |Other than blocks, the implementation of an effect operation is provided by
              |the closest
              |```effekt
-             |try { EXPR } with ${f.effect.name} { def ${f.name}(...) => ...  }
+             |try { EXPR } with ${f.interface.name} { def ${f.name}(...) => ...  }
              |```
              |that _dynamically_ surrounds the call-site `do ${f.name}(...)`.
              |
@@ -143,7 +143,7 @@ trait Intelligence {
              |```effekt
              |def f(): Int / {}
              |```
-             |does not mention the effect `${f.effect.name}`, then this effect will not be
+             |does not mention the effect `${f.interface.name}`, then this effect will not be
              |handled by the handler. This is important when considering higher-order functions.
              |""".stripMargin
 

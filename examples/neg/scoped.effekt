@@ -1,6 +1,0 @@
-def main() = {
-  effect Exc { def raise(): Unit }
-  def foo() = do raise()
-
-  foo()
-}

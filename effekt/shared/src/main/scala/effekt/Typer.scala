@@ -94,6 +94,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+  
   //<editor-fold desc="expressions">
 
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
@@ -163,7 +164,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
         val subst = Substitutions.types(operation.tparams, typeArgs)
 
         // (2b) substitute into effect type of operation
-        val effect = subst.substitute(operation.appliedEffect)
+        val effect = subst.substitute(operation.appliedInterface)
         // (2c) search capability
         val capability = Context.capabilityReceiver(c, effect)
         // (2d) register capability as being used
@@ -300,10 +301,10 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
       // (3) check all operations are covered
       val covered = clauses.map { _.definition }
-      val notCovered = interface.ops.toSet -- covered.toSet
+      val notCovered = interface.operations.toSet -- covered.toSet
 
       if (notCovered.nonEmpty) {
-        val explanation = notCovered.map { op => pp"${op.name} of interface ${op.effect.name}" }.mkString(", ")
+        val explanation = notCovered.map { op => pp"${op.name} of interface ${op.interface.name}" }.mkString(", ")
         Context.error(pretty"Missing definitions for operations: ${explanation}")
       }
 
@@ -397,6 +398,9 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
           handlerEffects = handlerEffects ++ effs
       }
+
+      // The implementation has the annotated block type
+      Context.annotateInferredType(impl, tpe)
 
       Result(tpe, handlerEffects)
   }
@@ -497,7 +501,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
       }
 
       bindings
-  }
+  } match { case res => Context.annotateInferredType(pattern, sc); res }
 
   //</editor-fold>
 
@@ -546,8 +550,8 @@ object Typer extends Phase[NameResolved, Typechecked] {
       Context.bind(d.symbol)
 
     case d @ source.InterfaceDef(id, tparams, ops, isEffect) =>
-      d.symbol.ops.foreach { op =>
-        if (op.otherEffects.toList contains op.appliedEffect) {
+      d.symbol.operations.foreach { op =>
+        if (op.effects.toList contains op.appliedInterface) {
           Context.error("Bidirectional effects that mention the same effect recursively are not (yet) supported.")
         }
 
@@ -895,7 +899,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
 
     val interface = recvTpe.asInterfaceType.typeConstructor
     // filter out operations that do not fit the receiver
-    val candidates = methods.filter(op => op.effect == interface)
+    val candidates = methods.filter(op => op.interface == interface)
 
     val (successes, errors) = tryEach(candidates) { op =>
       val (funTpe, capture) = findFunctionTypeFor(op)
