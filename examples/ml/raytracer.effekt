@@ -10,6 +10,8 @@ module examples/pos/raytracer
 import immutable/option
 import immutable/list
 import mutable/array
+import io/args
+import text/string
 
 // replacing all vector operations by `inline pure def` buys us 20%
 record Vector(x: Double, y: Double, z: Double)
@@ -187,18 +189,6 @@ def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
   }
 }
 
-def exampleScene() = Scene(
-    64,
-    48,
-    Camera(Point(0.0, 1.8, 10.0), 45.0, Vector(0.0, 3.0, 0.0)),
-    [ Point(-30.0, -10.0, 20.0) ],
-    [
-      SceneObject("Earth", Point(0.0, 3.5, -3.0), 3.0, Material(Color(100, 230, 155), 0.5, 0.7, 0.1)),
-      SceneObject("Moon 1", Point(-4.0, 2.0, -1.0), 0.2, Material(Color(155, 155, 155), 0.0, 0.9, 0.0)),
-      SceneObject("Moon 2", Point(-4.0, 3.0, -1.0), 0.1, Material(Color(255, 255, 255), 0.2, 0.7, 0.1))
-    ]
-  )
-
 type Buffer = Array[Int]
 
 def render(scene: Scene, image: Buffer) = {
@@ -253,18 +243,21 @@ def render(scene: Scene, image: Buffer) = {
   }
 }
 
-def bench() = {
-  val scene = exampleScene();
+def exampleScene(width: Int, height: Int) = Scene(
+    width,
+    height,
+    Camera(Point(0.0, 1.8, 10.0), 45.0, Vector(0.0, 3.0, 0.0)),
+    [ Point(-30.0, -10.0, 20.0) ],
+    [
+      SceneObject("Earth", Point(0.0, 3.5, -3.0), 3.0, Material(Color(100, 230, 155), 0.5, 0.7, 0.1)),
+      SceneObject("Moon 1", Point(-4.0, 2.0, -1.0), 0.2, Material(Color(155, 155, 155), 0.0, 0.9, 0.0)),
+      SceneObject("Moon 2", Point(-4.0, 3.0, -1.0), 0.1, Material(Color(255, 255, 255), 0.2, 0.7, 0.1))
+    ]
+  )
 
-  measure(5, 10) {
-    val buffer: Buffer = array(scene.width * scene.height * 4, 0);
-    render(scene, buffer)
-  }
-}
-
-def main() = {
-  val scene = exampleScene();
-  val buffer: Buffer = array(scene.width * scene.height * 4, 0);
+def renderExample(width: Int, height: Int): Unit = {
+  val scene = exampleScene(width, height);
+  val buffer: Buffer = array(width * height * 4, 0);
   render(scene, buffer);
 
   var i = 0;
@@ -272,4 +265,13 @@ def main() = {
     println(buffer.unsafeGet(i).show ++ ", " ++ buffer.unsafeGet(i + 1).show ++ ", " ++ buffer.unsafeGet(i + 2).show);
     i = i + 4
   }
+}
+
+def main() = commandLineArgs() match {
+  case Nil() => renderExample(64, 48)
+  case Cons(x, Cons(y, Nil())) =>
+    val width = x.toInt.getOrElse { panic("First argument is not an integer.") }
+    val height = y.toInt.getOrElse { panic("Second argument is not an integer.") }
+    renderExample(width, height)
+  case other => println("Expects zero or two arguments, not '" ++ show(size(other)) ++ "'")
 }
