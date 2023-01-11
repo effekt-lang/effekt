@@ -244,14 +244,14 @@ trait Compiler {
    */
   def compileWhole(source: Source)(using C: Context): Option[Compiled] = C.config.backend() match {
     case "llvm" | "jit" =>
-      (Frontend andThen Middleend andThen core.PolymorphismBoxing andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
+      (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen core.PolymorphismBoxing andThen Backend.whole).apply(source)
     case _ =>
       (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
   }
 
   def compileAll(source: Source)(using C: Context): Option[CoreTransformed] = C.config.backend() match {
     case "llvm" | "jit" =>
-      (Frontend andThen Middleend andThen core.PolymorphismBoxing andThen CoreDependencies andThen Aggregate).apply (source)
+      (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen core.PolymorphismBoxing).apply (source)
     case _ =>
       (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
   }
