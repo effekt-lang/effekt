@@ -114,3 +114,9 @@ def panic(msg: String): Void = {
   printlnErr("Panic: " ++ msg);
   exit(1)
 }
+
+// For boxing polymorphic values
+record BoxedUnit(unboxUnit: Unit)
+record BoxedInt(unboxInt: Int)
+record BoxedDouble(unboxDouble: Double)
+record BoxedString(unboxString: String)

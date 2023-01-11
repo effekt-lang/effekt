@@ -233,7 +233,7 @@ trait Compiler {
    * This is achieved by `compileWhole`.
    */
   def compileSeparate(source: Source)(using C: Context): Option[(CoreTransformed, Document)] = C.config.backend() match {
-    case "llvm" =>
+    case "llvm" | "jit" =>
       (Frontend andThen Middleend andThen core.PolymorphismBoxing andThen CoreDependencies andThen Backend.separate).apply(source)
     case _ =>
       (Frontend andThen Middleend andThen CoreDependencies andThen Backend.separate).apply(source)
@@ -243,14 +243,14 @@ trait Compiler {
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
   def compileWhole(source: Source)(using C: Context): Option[Compiled] = C.config.backend() match {
-    case "llvm" =>
+    case "llvm" | "jit" =>
       (Frontend andThen Middleend andThen core.PolymorphismBoxing andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
     case _ =>
       (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
   }
 
   def compileAll(source: Source)(using C: Context): Option[CoreTransformed] = C.config.backend() match {
-    case "llvm" =>
+    case "llvm" | "jit" =>
       (Frontend andThen Middleend andThen core.PolymorphismBoxing andThen CoreDependencies andThen Aggregate).apply (source)
     case _ =>
       (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
