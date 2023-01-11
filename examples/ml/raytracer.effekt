@@ -1,0 +1,275 @@
+
+// In this case study, we translate the raytracer as implemented by
+//   [Tom Macwright](https://tmcw.github.io/literate-raytracer/)
+// from Javascript to Effekt. The original JS source code can be found on github:
+//
+//   <https://tmcw.github.io/literate-raytracer/>
+//
+module examples/pos/raytracer
+
+import immutable/option
+import immutable/list
+import mutable/array
+
+// replacing all vector operations by `inline pure def` buys us 20%
+record Vector(x: Double, y: Double, z: Double)
+
+val UP = Vector(0.0, 1.0, 0.0)
+val ZERO = Vector(0.0, 0.0, 0.0)
+
+def dot(a: Vector, b: Vector): Double =
+  (a.x * b.x) + (a.y * b.y) + (a.z * b.z)
+
+def cross(a: Vector, b: Vector): Vector =
+  Vector((a.y * b.z) - (a.z * b.y), (a.z * b.x) - (a.x * b.z), (a.x * b.y) - (a.y * b.x))
+
+def scale(a: Vector, t: Double): Vector =
+  Vector(a.x * t, a.y * t, a.z * t)
+
+def add(a: Vector, b: Vector): Vector =
+  Vector(a.x + b.x, a.y + b.y, a.z + b.z)
+
+def add3(a: Vector, b: Vector, c: Vector): Vector =
+  Vector(a.x + b.x + c.x, a.y + b.y + c.y, a.z + b.z + c.z)
+
+def sub(a: Vector, b: Vector): Vector =
+  Vector(a.x - b.x, a.y - b.y, a.z - b.z)
+
+
+// def infixMul(a: Vector, b: Vector): Double = dot(a, b)
+def infixMul(a: Vector, t: Double): Vector = a.scale(t)
+def infixMul(t: Double, a: Vector): Vector = a.scale(t)
+def infixAdd(a: Vector, b: Vector): Vector = add(a, b)
+def infixSub(a: Vector, b: Vector): Vector = sub(a, b)
+
+
+def length(a: Vector): Double = dot(a, a).sqrt
+
+def unit(a: Vector): Vector = a.scale(1.0 / a.length)
+
+def reflectThrough(a: Vector, normal: Vector): Vector =
+  normal.scale(dot(a, normal)).scale(2.0) - a
+
+
+
+// this should be moved to the standard library
+
+def min(x: Double, y: Double): Double = if (x < y) x else y
+
+
+type Point = Vector
+def Point(x: Double, y: Double, z: Double) = Vector(x, y, z)
+
+
+// 0 -- 255
+record Color(red: Int, green: Int, blue: Int)
+
+// for precision, we are working with double values between 0.0 and 255.0
+// we only translate back at the very end.
+type ColorV = Vector
+val BLACK = Vector(0.0, 0.0, 0.0)
+val WHITE = Vector(255.0, 255.0, 255.0)
+
+// we perform color computation on vectors, however
+def toVector(c: Color): ColorV = Vector(c.red.toDouble, c.green.toDouble, c.blue.toDouble)
+
+// TODO here we should check for the range of 0-255
+def toColor(c: ColorV): Color = Color(c.x.toInt, c.y.toInt, c.z.toInt)
+
+type Light = Point
+
+// The unit interval 0.0 - 1.0
+type Percent = Double
+
+record Camera(position: Point, fieldOfView: Double, direction: Vector)
+
+// for now all objects are spheres
+record Material(
+  color: Color,
+  specular: Percent,
+  lambert: Percent,
+  ambient: Percent
+)
+record SceneObject(name: String, position: Point, radius: Double, material: Material)
+val DUMMY = SceneObject("DUMMY", Point(0.0, 0.0, 0.0), 0.0, Material(Color(0, 0, 0), 0.0, 0.0, 0.0))
+
+record Scene(width: Int, height: Int, camera: Camera, lights: List[Light], objects: List[SceneObject])
+
+
+record Intersection(distance: Double, pointAtTime: Point, normal: Vector, object: SceneObject)
+
+
+def sphereNormal(sphere: SceneObject, surface: Point) = (surface - sphere.position).unit
+
+def intersectSphere(pos: Point, dir: Vector, sphere: SceneObject): Option[Double] = {
+  val distance = sphere.position - pos;
+  val v = dot(distance, dir);
+  val discriminant = (sphere.radius * sphere.radius) - dot(distance, distance) + (v * v)
+  if (discriminant < 0.0) { None() } else {
+    Some(v - sqrt(discriminant))
+  }
+}
+
+def intersectScene(pos: Point, dir: Vector, scene: Scene): Option[Intersection] = {
+
+  // TODO this is still way to Javascripty
+  var bestDist in global = 0.0;
+  var bestObj in global = DUMMY;
+  var found in global = false;
+
+  scene.objects.foreach { sphere =>
+    intersectSphere(pos, dir, sphere).foreach { dist =>
+      if (not(found) || dist < bestDist) {
+        bestDist = dist;
+        bestObj = sphere;
+        found = true
+      } else {  () }
+    }
+  };
+
+  if (found) {
+    val pointAtTime = pos + dir.scale(bestDist);
+    val normal = sphereNormal(bestObj, pointAtTime);
+    Some(Intersection(bestDist, pointAtTime, normal, bestObj))
+  } else { None() }
+}
+
+
+def trace(pos: Point, dir: Vector, scene: Scene, depth: Int): ColorV = {
+
+  def surface(pos: Point, dir: Vector, scene: Scene, depth: Int, intersection: Intersection): ColorV = {
+    val material = intersection.object.material;
+    val pointAtTime = intersection.pointAtTime;
+    val normal = intersection.normal;
+
+
+    def isLightVisible(pos: Point, scene: Scene, light: Point): Boolean =
+      intersectScene(pos, (pos - light).unit, scene).map { i => i.distance > -0.005 }.getOrElse { () => false }
+
+    def lambert(): Double = {
+      var lambertAmount = 0.0;
+      scene.lights.foreach { light =>
+        if (isLightVisible(pointAtTime, scene, light)) {
+          lambertAmount = lambertAmount + dot((light - pointAtTime).unit, normal)
+        } else { () }
+      };
+
+      // normalize lambert
+      min(1.0, lambertAmount)
+    }
+
+    def reflect(): ColorV = trace(pointAtTime, reflectThrough(dir, normal), scene, depth + 1);
+
+    val baseColor = material.color.toVector;
+
+    // we could omit the following computation if material.lambert == 0.0
+    val lambertColor = if (material.lambert > 0.0)
+      baseColor.scale(lambert() * material.lambert)
+    else BLACK;
+
+    // we could omit the following computation if material.specular == 0.0
+    val reflectedColor = if (material.specular > 0.0)
+      reflect().scale(material.specular)
+    else BLACK;
+
+    // we could omit the following computation if material.ambient == 0.0
+    val ambientColor = if (material.ambient > 0.0)
+      baseColor.scale(material.ambient)
+    else BLACK;
+
+    add3(lambertColor, reflectedColor, ambientColor)
+  }
+
+  if (depth > 2) BLACK else {
+    intersectScene(pos, dir, scene).map { intersection =>
+      surface(pos, dir, scene, depth, intersection)
+    }.getOrElse { () => WHITE }
+  }
+}
+
+def exampleScene() = Scene(
+    64,
+    48,
+    Camera(Point(0.0, 1.8, 10.0), 45.0, Vector(0.0, 3.0, 0.0)),
+    [ Point(-30.0, -10.0, 20.0) ],
+    [
+      SceneObject("Earth", Point(0.0, 3.5, -3.0), 3.0, Material(Color(100, 230, 155), 0.5, 0.7, 0.1)),
+      SceneObject("Moon 1", Point(-4.0, 2.0, -1.0), 0.2, Material(Color(155, 155, 155), 0.0, 0.9, 0.0)),
+      SceneObject("Moon 2", Point(-4.0, 3.0, -1.0), 0.1, Material(Color(255, 255, 255), 0.2, 0.7, 0.1))
+    ]
+  )
+
+type Buffer = Array[Int]
+
+def render(scene: Scene, image: Buffer) = {
+  val camera = scene.camera;
+  val pos = camera.position;
+
+  val width = scene.width;
+  val height = scene.height;
+  val ratio = height.toDouble / width.toDouble;
+
+  val vpStraight = (camera.direction - camera.position).unit;
+  val vpRight = cross(vpStraight, UP).unit;
+  val vpUp   = cross(vpRight, vpStraight).unit;
+
+  val fovRadians = (PI * (camera.fieldOfView / 2.0)) / 180.0;
+
+  val halfWidth = fovRadians.tan;
+  val halfHeight = ratio * halfWidth;
+
+  val cameraWidth = halfWidth * 2.0;
+  val cameraHeight = halfHeight * 2.0;
+
+  val pixelWidth = cameraWidth / (width - 1).toDouble
+  val pixelHeight = cameraHeight / (height - 1).toDouble
+
+  def castRay(x: Double, y: Double): Color = {
+    val xcomp = vpRight.scale(x * pixelWidth - halfWidth);
+    val ycomp = vpUp.scale(y * pixelHeight - halfHeight);
+    val dir = add3(vpStraight, xcomp, ycomp).unit;
+
+    trace(pos, dir, scene, 0).toColor
+  }
+
+  def storeAt(color: Color, x: Int, y: Int): Unit = {
+    val opaque = 255;
+    val index = x * 4 + y * width * 4;
+    put(image, index + 0, color.red);
+    put(image, index + 1, color.green);
+    put(image, index + 2, color.blue);
+    put(image, index + 3, opaque)
+  }
+
+  // now this is a real stress-test of backtrackable state
+  var x: Int = 0;
+  while (x < width) {
+    var y: Int = 0;
+    while (y < height) {
+      castRay(x.toDouble, y.toDouble).storeAt(x, y);
+      y = y + 1
+    };
+    x = x + 1
+  }
+}
+
+def bench() = {
+  val scene = exampleScene();
+
+  measure(5, 10) {
+    val buffer: Buffer = array(scene.width * scene.height * 4, 0);
+    render(scene, buffer)
+  }
+}
+
+def main() = {
+  val scene = exampleScene();
+  val buffer: Buffer = array(scene.width * scene.height * 4, 0);
+  render(scene, buffer);
+
+  var i = 0;
+  while (i < buffer.size) {
+    println(buffer.unsafeGet(i).show ++ ", " ++ buffer.unsafeGet(i + 1).show ++ ", " ++ buffer.unsafeGet(i + 2).show);
+    i = i + 4
+  }
+}
