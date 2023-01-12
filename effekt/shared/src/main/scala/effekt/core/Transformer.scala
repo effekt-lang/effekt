@@ -219,33 +219,38 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
         case BlockType.FunctionType(tparams, cparams, vparamtps, bparamtps, restpe, effects) =>
           // if this block argument expects to be called using PureApp or DirectApp, make sure it is
           // by wrapping it in a BlockLit
-          lazy val targs = tparams.map(core.ValueType.Var.apply)
-          lazy val vparams: List[Param.ValueParam] = vparamtps.map{ t => Param.ValueParam(TmpValue(), transform(t))}
-          lazy val vargs = vparams.map{ case Param.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
+          val targs = tparams.map(core.ValueType.Var.apply)
+          val vparams: List[Param.ValueParam] = vparamtps.map { t => Param.ValueParam(TmpValue(), transform(t))}
+          val vargs = vparams.map { case Param.ValueParam(id, tpe) => Pure.ValueVar(id, tpe) }
+
+          // [[ f ]] = { (x) => f(x) }
+          def etaExpandPure(b: Constructor | ExternFunction): BlockLit = {
+            assert(bparamtps.isEmpty)
+            assert(effects.isEmpty)
+            assert(cparams.isEmpty)
+            BlockLit(tparams, Nil, vparams, Nil,
+              Stmt.Return(PureApp(BlockVar(b), targs, vargs)))
+          }
+
+          // [[ f ]] = { (x){g} => let r = f(x){g}; return r }
+          def etaExpandDirect(f: ExternFunction): BlockLit = {
+            assert(effects.isEmpty)
+            val bparams: List[Param.BlockParam] = bparamtps.map { t => Param.BlockParam(TmpBlock(), transform(t)) }
+            val bargs = bparams.map {
+              case Param.BlockParam(id, tpe) => Block.BlockVar(id, tpe, Set(id))
+            }
+            val result = TmpValue()
+            BlockLit(tparams, bparams.map(_.id), vparams, bparams,
+              core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs),
+                Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
+          }
+
           sym match {
             case _: ValueSymbol => transformUnbox(tree)
-            case cns: Constructor =>
-              assert(bparamtps.isEmpty)
-              assert(effects.isEmpty)
-              assert(cparams.isEmpty)
-              BlockLit(tparams, Nil, vparams, Nil,
-                Stmt.Return(PureApp(BlockVar(cns), targs, vargs)))
-            case f: ExternFunction if isPure(f.capture) =>
-              assert(bparamtps.isEmpty)
-              assert(effects.isEmpty)
-              assert(cparams.isEmpty)
-              BlockLit(tparams, Nil, vparams, Nil,
-                Stmt.Return(PureApp(BlockVar(f), targs, vargs)))
-            case f: ExternFunction if pureOrIO(f.capture) =>
-              assert(effects.isEmpty)
-              val bparams: List[Param.BlockParam] = bparamtps.map{ t => Param.BlockParam(TmpBlock(), transform(t)) }
-              val bargs = bparams.map{
-                case Param.BlockParam(id, tpe) => Block.BlockVar(id, tpe, Set(id))
-              }
-              val result = TmpValue()
-              BlockLit(tparams, bparams.map(_.id), vparams, bparams,
-                core.Let(result, DirectApp(BlockVar(f), targs, vargs, bargs),
-                  Stmt.Return(Pure.ValueVar(result, transform(restpe)))))
+            case cns: Constructor => etaExpandPure(cns)
+            case f: ExternFunction if isPure(f.capture) => etaExpandPure(f)
+            case f: ExternFunction if pureOrIO(f.capture) => etaExpandDirect(f)
+            // does not require change of calling convention, so no eta expansion
             case sym: BlockSymbol => BlockVar(sym)
           }
         case t: BlockType.InterfaceType =>
