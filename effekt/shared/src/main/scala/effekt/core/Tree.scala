@@ -313,14 +313,16 @@ object Tree {
   }
 
   class Rewrite extends Structural {
+    def id: PartialFunction[Id, Id] = PartialFunction.empty
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
-
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
+    def param: PartialFunction[Param, Param] = PartialFunction.empty
 
+    def rewrite(x: Id): Id = if id.isDefinedAt(x) then id(x) else x
     def rewrite(p: Pure): Pure = rewriteStructurally(p, pure)
     def rewrite(e: Expr): Expr = rewriteStructurally(e, expr)
     def rewrite(s: Stmt): Stmt = rewriteStructurally(s, stmt)
@@ -328,6 +330,9 @@ object Tree {
     def rewrite(d: Definition): Definition = rewriteStructurally(d, defn)
     def rewrite(e: Implementation): Implementation = rewriteStructurally(e, handler)
     def rewrite(o: Operation): Operation = rewriteStructurally(o)
+    def rewrite(p: Param): Param = rewriteStructurally(p, param)
+    def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
+    def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])

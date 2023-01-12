@@ -65,14 +65,10 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
     }
     def withBinding[R](id: symbols.Symbol)( f: => R ): R = withBindings(List(id))(f)
 
-    override def pure: PartialFunction[Pure, Pure] = {
-      case Pure.ValueVar(id, tpe) => Pure.ValueVar(rewrite(id), tpe)
-    }
-    override def defn: PartialFunction[Definition, Definition] = {
-      case Definition.Def(id, block) =>
-        Definition.Def(rewrite(id), rewrite(block))
-      case Definition.Let(id, block) =>
-        Definition.Let(rewrite(id), rewrite(block))
+    override def id: PartialFunction[core.Id, core.Id] = { id =>
+      if (bound.contains(id)) {
+        names.idFor(prefix ++ (bound.length - bound.indexOf(id)).toString)
+      } else id
     }
 
     override def stmt: PartialFunction[Stmt, Stmt] = {
@@ -90,23 +86,11 @@ abstract class AbstractPolymorphismBoxingTests extends munit.FunSuite {
       }
     }
     override def block: PartialFunction[Block, Block] = {
-      case Block.BlockVar(id, tpe, capt) => Block.BlockVar(rewrite(id), tpe, capt map rewrite)
       case Block.BlockLit(tparams, cparams, vparams, bparams, body) =>
         withBindings(cparams ++ vparams.map(_.id) ++ bparams.map(_.id)){
           Block.BlockLit(tparams, cparams map rewrite, vparams map rewrite, bparams map rewrite,
             rewrite(body))
         }
-    }
-    def rewrite(id: symbols.Symbol): symbols.Symbol = {
-      if(bound.contains(id)){
-        names.idFor(prefix ++ (bound.length - bound.indexOf(id)).toString)
-      } else id
-    }
-    def rewrite(b: core.Param.BlockParam): core.Param.BlockParam = b match {
-      case core.Param.BlockParam(id, tpe) => core.Param.BlockParam(rewrite(id), tpe)
-    }
-    def rewrite(b: core.Param.ValueParam): core.Param.ValueParam = b match {
-      case core.Param.ValueParam(id, tpe) => core.Param.ValueParam(rewrite(id), tpe)
     }
 
     def apply(m: core.ModuleDecl): core.ModuleDecl = m match {
