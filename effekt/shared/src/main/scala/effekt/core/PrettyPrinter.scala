@@ -21,6 +21,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
+  def format(t: ValueType): String =
+    pretty(toDoc(t), 60).layout
+
+  def format(t: BlockType): String =
+    pretty(toDoc(t), 60).layout
+
+  def format(t: Block): String =
+    pretty(toDoc(t), 60).layout
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
