@@ -71,6 +71,12 @@ extern pure def infixLt(x: Int, y: Int): Boolean = "infixLt(Int, Int): Boolean"
 extern pure def infixLte(x: Int, y: Int): Boolean = "infixLte(Int, Int): Boolean"
 extern pure def infixGt(x: Int, y: Int): Boolean = "infixGt(Int, Int): Boolean"
 extern pure def infixGte(x: Int, y: Int): Boolean = "infixGte(Int, Int): Boolean"
+def min(x: Int, y: Int): Int = {
+  if (x < y) { x } else { y }
+}
+def max(x: Int, y: Int): Int = {
+  if (x > y) { x } else { y }
+}
 
 // ordering on doubles
 // ===================
@@ -95,6 +101,7 @@ extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = "infixAnd(Boolean, B
 // =====================
 // TODO make safe
 extern pure def infixConcat(s1: String, s2: String): String = "infixConcat(String, String): String"
+extern pure def infixEq(s1: String, s2: String): Boolean = "infixEq(String, String): Boolean"
 extern pure def show(value: Int): String = "show(Int): String"
 extern pure def read(s: String): Int = "read(String): Int"
 extern pure def show(value: Double): String = "show(Double): String"
