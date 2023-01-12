@@ -79,3 +79,21 @@ def split(str: String, sep: String): List[String] = {
         rec(0,0) 
     }
 }
+
+def show(s: String): String =
+ "\x22" ++ map(s){ c =>
+   if(c == "\x22") {
+    "\\\x22"
+   } else if (c == "\\") {
+    "\\\\"
+   } else c
+ } ++ "\x22"
+
+
+extern pure def unsafeRead(s: String): Int = "read(String): Int"
+extern pure def unsafeRead(s: String): Double = "read(String): Double"
+extern pure def unsafeRead(s: String): Boolean = "read(String): Boolean"
+
+def read(s: String): Option[Int] = unsafeToOption{ () => unsafeRead(s) }
+def read(s: String): Option[Double] = unsafeToOption{ () => unsafeRead(s) }
+def read(s: String): Option[Boolean] = unsafeToOption{ () => unsafeRead(s) }

@@ -1,6 +1,7 @@
 module immutable/option
 
 import effekt
+import unsafe/internal
 
 type Option[A] {
   None();
@@ -48,3 +49,17 @@ def println(o: Option[Int]): Unit = println(show(o))
 def println(o: Option[Double]): Unit = println(show(o))
 def println(o: Option[Boolean]): Unit = println(show(o))
 def println(o: Option[String]): Unit = println(show(o))
+
+def unsafeToOption[A]{ body: () => A }: Option[A] = {
+  clearErrorFlag()
+  val r = body()
+  if (checkErrorFlag()) {
+    None()
+  } else {
+    Some(r)
+  }
+}
+def safeDiv(num: Int, denom: Int): Option[Int] = unsafeToOption{ num / denom }
+def safeDiv(num: Double, denom: Double): Option[Double] = unsafeToOption{ num / denom }
+def safeMod(num: Int, denom: Int): Option[Int] = unsafeToOption{ mod(num, denom) }
+def safeMod(num: Double, denom: Double): Option[Double] = unsafeToOption{ mod(num, denom) }
