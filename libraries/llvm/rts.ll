@@ -646,63 +646,58 @@ define fastcc void @eraseFrames(%Sp %sp) alwaysinline {
     ret void
 }
 
-define void @eraseRegion(%Region %region) {
-entry:
-    br label %loop0
-
-loop0:
-    %i = phi i64 [1, %entry], [%nexti, %loop0.end]
-    %firstbasep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1, i32 0
-    %firstlimitp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1, i32 1
-    %firstbase = load %Base, ptr %firstbasep
-    %firstlimit = load %Limit, ptr %firstlimitp
-
-    %lastbasep = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 0, i32 1
-    %spp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 0, i32 0
-    %lastbase = load %Base, ptr %lastbasep
-    %sp = load %Limit, ptr %spp
-
-    %isstring = icmp eq i64 %i, 2
-    %eraser = select i1 %isstring, ptr @c_buffer_refcount_decrement, ptr @erasePositive
-
-    %isnull = icmp eq %Base %firstbase, null
-    br i1 %isnull, label %loop0.end, label %loop1
-
-loop1:
-    %base = phi %Base [%firstbase, %loop0], [%nextbase, %loop1.end]
-    %limit = phi %Limit [%firstlimit, %loop0], [%nextlimit, %loop1.end]
-    %islast = icmp eq %Base %base, %lastbase
-    %end = select i1 %islast, %Sp %sp, %Limit %limit
-    %start = getelementptr %Bounds, %Base %base, i64 1
-    br label %loop2.pred
-
-loop2.pred:
-    %elementp = phi ptr [%start, %loop1], [%nextelementp, %loop2]
+define void @eraseObjects(ptr %elementp, ptr %end, %Eraser %eraser) alwaysinline {
     %done = icmp uge ptr %elementp, %end
-    br i1 %done, label %loop1.end, label %loop2
+    br i1 %done, label %return, label %erase
 
-loop2:
+erase:
     %element = load %Pos, ptr %elementp
     call void %eraser(%Pos %element)
 
     %nextelementp = getelementptr %Pos, ptr %elementp, i64 1
-    br label %loop2.pred
+    tail call void @eraseObjects(ptr %nextelementp, ptr %end, %Eraser %eraser)
+    ret void
 
-loop1.end:
-    %nextbasep = getelementptr %Bounds, %Base %base, i64 0, i32 0
-    %nextlimitp = getelementptr %Bounds, %Base %base, i64 0, i32 1
-    %nextbase = load %Base, ptr %nextbasep
-    %nextlimit = load %Limit, ptr %nextlimitp
-    br i1 %islast, label %loop0.end, label %loop1
+return:
+    ret void
+}
 
-loop0.end:
-    %nexti = add i64 %i, 1
-    %done0 = icmp uge i64 %nexti, 2
-    br i1 %done0, label %return, label %loop0
+define void @eraseArenas(%Bounds %bounds, %Mem %mem, %Eraser %eraser) alwaysinline {
+    %base = extractvalue %Bounds %bounds, 0
+    %limit = extractvalue %Bounds %bounds, 1
+    %lastbase = extractvalue %Mem %mem, 1
+    %sp = extractvalue %Mem %mem, 0
+
+    %islast = icmp eq %Base %base, %lastbase
+    %end = select i1 %islast, %Sp %sp, %Limit %limit
+    %start = getelementptr %Bounds, %Base %base, i64 1
+    call void @eraseObjects(ptr %start, ptr %end, %Eraser %eraser)
+
+    br i1 %islast, label %return, label %continue
 
 return:
     ret void
 
+continue:
+    %nextbounds = load %Bounds, ptr %base
+    tail call void @eraseArenas(%Bounds %nextbounds, %Mem %mem, %Eraser %eraser)
+    ret void
+
+}
+
+define void @eraseRegion(%Region %region) alwaysinline {
+entry:
+    %regionval = load %RegionVal, %Region %region
+
+    %objectsstart = extractvalue %RegionVal %regionval, 0, 1, 1
+    %objectsend = extractvalue %RegionVal %regionval, 0, 1, 0
+    call void @eraseArenas(%Bounds %objectsstart, %Mem %objectsend, %Eraser @erasePositive)
+
+    %stringsstart = extractvalue %RegionVal %regionval, 0, 2, 1
+    %stringsend = extractvalue %RegionVal %regionval, 0, 2, 0
+    call void @eraseArenas(%Bounds %stringsstart, %Mem %stringsend, %Eraser @c_buffer_refcount_decrement)
+
+    ret void
 }
 
 ; RTS initialization
