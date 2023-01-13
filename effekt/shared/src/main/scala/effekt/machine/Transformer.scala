@@ -124,7 +124,7 @@ object Transformer {
             transform(bind)
         )
       case lifted.App(lifted.BlockVar(id, tpe), targs, args) =>
-        if(!targs.forall(isSimpleDataType)){ ErrorReporter.abort(s"Polymorphism is only supported over data types, got ${targs}.") }
+        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
         // TODO deal with BlockLit
         id match {
           case symbols.UserFunction(_, _, _, _, _, _, _)  | symbols.TmpBlock() =>
@@ -151,7 +151,7 @@ object Transformer {
         }
 
       case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), targs, args) =>
-        if(!targs.forall(isSimpleDataType)){ ErrorReporter.abort(s"Polymorphism is only supported over data types, got ${targs}.") }
+        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
         val opTag = {
           tpe match
             case core.BlockType.Interface(ifceId, _) =>
@@ -302,7 +302,7 @@ object Transformer {
     // hardcoded translation for get and put.
     // TODO remove this when interfaces are correctly translated
     case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), targs, List()) =>
-      if(!targs.forall(isSimpleDataType)){ ErrorReporter.abort(s"Polymorphism is only supported over data types, got ${targs}.") }
+      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val tpe = transform(stateType)
       val variable = Variable(freshName("x"), tpe)
@@ -312,7 +312,7 @@ object Transformer {
       }
 
     case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(arg)) =>
-      if(!targs.forall(isSimpleDataType)){ ErrorReporter.abort(s"Polymorphism is only supported over data types, got ${targs}.") }
+      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val tpe = transform(stateType)
       val variable = Variable(freshName("x"), Positive("Unit"));
@@ -325,7 +325,7 @@ object Transformer {
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function), targs, args) =>
-      if(!targs.forall(isSimpleDataType)){ ErrorReporter.abort(s"Polymorphism is only supported over data types, got ${targs}.") }
+      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val variable = Variable(freshName("x"), transform(tpe.result))
       transform(args).flatMap { values =>
@@ -336,7 +336,7 @@ object Transformer {
 
     case lifted.PureApp(lifted.BlockVar(blockName, tpe: core.BlockType.Function), targs, args)
     if DeclarationContext.findConstructor(blockName).isDefined =>
-      if(!targs.forall(isSimpleDataType)){ ErrorReporter.abort(s"Polymorphism is only supported over data types, got ${targs}.") }
+      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val variable = Variable(freshName("x"), transform(tpe.result));
       val tag = DeclarationContext.getConstructorTag(blockName)
@@ -424,13 +424,13 @@ object Transformer {
   def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
 
-  def isSimpleDataType(tpe: core.ValueType): Boolean = {
+  def requiresBoxing(tpe: core.ValueType): Boolean = {
     tpe match
-      case core.ValueType.Var(_) => true // assume by induction all type variables must be data
+      case core.ValueType.Var(_) => false // assume by induction all type variables must be data
       case core.ValueType.Data(_, args) => {
-        args.forall(isSimpleDataType)
+        args.exists(requiresBoxing)
       }
-      case _ => false
+      case _ => true
   }
 
   def freshName(baseName: String): String = baseName + "_" + symbols.Symbol.fresh.next()
