@@ -54,13 +54,14 @@ object Transformer {
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
+      noteBlockParams(name, params map transform)
       Extern(transform(name), transformedParams, transform(ret), body)
 
     case lifted.Extern.Include(contents) =>
       Include(contents)
   }
 
-  def transform(stmt: lifted.Stmt)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Statement =
+  def transform(stmt: lifted.Stmt)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Statement =
     stmt match {
       case lifted.Scope(definitions, rest) =>
 
@@ -69,14 +70,12 @@ object Transformer {
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.collect {
               case lifted.ValueParam(id, tpe) => Variable(transform(id), transform(tpe))
-              case lifted.BlockParam(id: (symbols.BlockParam | symbols.ResumeParam), tpe) =>
-                // TODO find out if this is a block parameter or a function without inspecting the symbol
-                Variable(transform(id), transform(tpe))
+              case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
+                Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe)))
+              case lifted.BlockParam(pid, tpe)
+                if !BPC.blocksParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
+                Variable(transform(pid), transform(tpe))
               case lifted.EvidenceParam(id) => Variable(transform(id), builtins.Evidence)
-              // we ignore functions since we do not "close" over them.
-
-              // TODO
-              //          case id: lifted.ScopeId => ???
             }
             val allParams = params.map(transform) ++ freeParams;
             noteBlockParams(id, allParams)
@@ -416,8 +415,7 @@ object Transformer {
   }
 
   def transform(tpe: lifted.BlockType)(using ErrorReporter): Type = tpe match {
-    case lifted.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
-    case lifted.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+    case lifted.BlockType.Function(tparams, cparams, vparams, bparams, result) => Negative("<function>")
     case lifted.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
   }
 
