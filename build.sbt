@@ -159,15 +159,18 @@ lazy val effekt: CrossProject = crossProject(JSPlatform, JVMPlatform).in(file("e
       if (ghEC != 0) {
         ghEC match {
           case 2 => {
-            log.error("Downloading the JIT binary requires the `gh` cli tool (see cli.github.com).")
+            log.warn("Downloading the JIT binary requires the `gh` cli tool (see cli.github.com) " +
+              " and is only possible for members of the effekt-lang GitHub org as of now.")
           }
           case 4 => {
-            log.error("As of now, the JIT binary is only available for members of the se-tuebingen org. ")
-            log.error("Downloading it requires a GitHub personal access token in GH_TOKEN. " +
+            log.warn("As of now, the JIT binary is only available for members of the effekt-lang github org. ")
+            log.warn("Downloading it requires a GitHub personal access token in GH_TOKEN. " +
               "Alternatively, run `gh auth login` first.")
           }
           case _ => {
-            log.error("Download failed (error=%d)".format(ghEC))
+            log.warn("Download failed (error=%d).".format(ghEC))
+            log.warn("Note that downloading the jit binary is currently only possible for members of the effekt-lang" +
+              "GitHub org.")
           }
         }
       } else {
