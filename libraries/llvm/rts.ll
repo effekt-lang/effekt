@@ -626,6 +626,11 @@ define void @eraseStack(%Stk %stk) alwaysinline {
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
     %sp = load %Sp, ptr %stksp
     call fastcc void @eraseFrames(%Sp %sp)
+
+    %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+    %backup = load %RegionBackup, ptr %backupp
+    call void @eraseBackup(%RegionBackup %backup)
+
     call void @free(%Stk %stk)
     ret void
 }
@@ -696,6 +701,33 @@ entry:
     %stringsstart = extractvalue %RegionVal %regionval, 0, 2, 1
     %stringsend = extractvalue %RegionVal %regionval, 0, 2, 0
     call void @eraseArenas(%Bounds %stringsstart, %Mem %stringsend, %Eraser @c_buffer_refcount_decrement)
+
+    ret void
+}
+
+define void @eraseBackup(ptr %backup.0) alwaysinline {
+    %isnull = icmp eq ptr %backup.0, null
+    br i1 %isnull, label %return, label %erase
+
+return:
+    ret void
+
+erase:
+    %size.0 = load i64, ptr %backup.0
+
+    %backup.1 = getelementptr i8, ptr %backup.0, i64 %size.0
+    %size.1 = load i64, ptr %backup.1
+
+    %backup.2 = getelementptr i8, ptr %backup.1, i64 %size.1
+    %size.2 = load i64, ptr %backup.2
+
+    %end = getelementptr i8, ptr %backup.2, i64 %size.2
+
+    %obj = getelementptr i64, ptr %backup.1, i64 1
+    call void @eraseObjects(ptr %obj, ptr %backup.2, %Eraser @erasePositive)
+
+    %str = getelementptr i64, ptr %backup.2, i64 1
+    call void @eraseObjects(ptr %str, ptr %end, %Eraser @c_buffer_refcount_decrement)
 
     ret void
 }
