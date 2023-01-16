@@ -102,6 +102,7 @@ extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = "infixAnd(Boolean, B
 // TODO make safe
 extern pure def infixConcat(s1: String, s2: String): String = "infixConcat(String, String): String"
 extern pure def infixEq(s1: String, s2: String): Boolean = "infixEq(String, String): Boolean"
+extern pure def infixNeq(s1: String, s2: String): Boolean = "infixEq(String, String): Boolean"
 extern pure def show(value: Int): String = "show(Int): String"
 extern pure def show(value: Double): String = "show(Double): String"
 extern pure def show(value: Boolean): String = "show(Boolean): String"
