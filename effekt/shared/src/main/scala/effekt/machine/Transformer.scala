@@ -54,7 +54,7 @@ object Transformer {
         case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
         case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
       }
-      noteBlockParams(name, params map transform)
+      noteBlockParams(name, params map transform, List.empty)
       Extern(transform(name), transformedParams, transform(ret), body)
 
     case lifted.Extern.Include(contents) =>
@@ -68,17 +68,19 @@ object Transformer {
         definitions.foreach {
           case Definition.Def(id,  block @ lifted.BlockLit(tparams, params, body)) =>
             // TODO does not work for mutually recursive local definitions
-            val freeParams = lifted.freeVariables(block).toList.collect {
-              case lifted.ValueParam(id, tpe) => Variable(transform(id), transform(tpe))
+            val freeParams = lifted.freeVariables(block).toList.flatMap {
+              case lifted.ValueParam(id, tpe) => List(Variable(transform(id), transform(tpe)))
               case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
-                Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe)))
+                List(Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe))))
               case lifted.BlockParam(pid, tpe)
-                if !BPC.blocksParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
-                Variable(transform(pid), transform(tpe))
-              case lifted.EvidenceParam(id) => Variable(transform(id), builtins.Evidence)
+                if !BPC.blockParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
+                List(Variable(transform(pid), transform(tpe)))
+              case lifted.BlockParam(pid, tpe) if BPC.freeParams.contains(pid) =>
+                BPC.freeParams(pid)
+              case lifted.EvidenceParam(id) => List(Variable(transform(id), builtins.Evidence))
+              case _ => Nil
             }
-            val allParams = params.map(transform) ++ freeParams;
-            noteBlockParams(id, allParams)
+            noteBlockParams(id, params.map(transform), freeParams)
           case _ => ()
         }
 
@@ -436,7 +438,7 @@ object Transformer {
   def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
       case Definition.Def(blockName, lifted.BlockLit(tparams, params, body)) =>
-        noteBlockParams(blockName, params.map(transform))
+        noteBlockParams(blockName, params.map(transform), Nil)
       case _ => ()
     }
 
@@ -446,18 +448,20 @@ object Transformer {
    */
 
   class BlocksParamsContext() {
-    var blocksParams: Map[Symbol, Environment] = Map()
+    var freeParams: Map[Symbol, Environment] = Map()
+    var blockParams: Map[Symbol, Environment] = Map()
   }
 
   def DeclarationContext(using DC: DeclarationContext): DeclarationContext = DC
 
-  def noteBlockParams(id: Symbol, params: Environment)(using BC: BlocksParamsContext): Unit = {
-    BC.blocksParams = BC.blocksParams + (id -> params)
+  def noteBlockParams(id: Symbol, blockParams: Environment, freeParams: Environment)(using BC: BlocksParamsContext): Unit = {
+    BC.blockParams = BC.blockParams + (id -> blockParams)
+    BC.freeParams = BC.freeParams + (id -> freeParams)
   }
 
   def getBlocksParams(id: Symbol)(using BC: BlocksParamsContext): Environment = {
     // TODO what if this is not found?
-    BC.blocksParams(id)
+    BC.blockParams(id) ++ BC.freeParams(id)
   }
 
   case class Binding[A](run: (A => Statement) => Statement) {
