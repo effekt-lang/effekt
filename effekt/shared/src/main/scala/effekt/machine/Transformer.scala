@@ -75,7 +75,7 @@ object Transformer {
               case lifted.BlockParam(pid, tpe)
                 if !BPC.blockParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
                 List(Variable(transform(pid), transform(tpe)))
-              case lifted.BlockParam(pid, tpe) if BPC.freeParams.contains(pid) =>
+              case lifted.BlockParam(pid, tpe) if BPC.freeParams.contains(pid) && id != pid =>
                 BPC.freeParams(pid)
               case lifted.EvidenceParam(id) => List(Variable(transform(id), builtins.Evidence))
               case _ => Nil
