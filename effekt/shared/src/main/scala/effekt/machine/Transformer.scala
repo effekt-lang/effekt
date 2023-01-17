@@ -282,7 +282,20 @@ object Transformer {
     }
   }
 
-  def transform(block: lifted.Block)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = block match {
+  def transform(block: lifted.Block)(using BPC: BlocksParamsContext, DC: DeclarationContext, E: ErrorReporter): Binding[Variable] = block match {
+    case lifted.BlockVar(id, tpe) if BPC.blockParams.contains(id) =>
+      // passing a function directly, so we need to eta-expand
+      // TODO cache the closure somehow to prevent it from being created on every call
+      val parameters = BPC.blockParams(id)
+      val variable = Variable(freshName(id.name.name ++ "$closure"), Negative("<function>"))
+      val environment = getBlocksParams(id)
+      Binding { k =>
+        New(variable, List(Clause(parameters,
+          // conceptually: Substitute(parameters zip parameters, Jump(...)) but the Substitute is a no-op here
+          Jump(Label(transform(id), environment))
+        )), k(variable))
+      }
+
     case lifted.BlockVar(id, tpe) =>
       pure(Variable(transform(id), transform(tpe)))
 
