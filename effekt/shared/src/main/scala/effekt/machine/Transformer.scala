@@ -253,6 +253,8 @@ object Transformer {
               transform(body))
         }
 
+      case lifted.Hole() => machine.Statement.Hole
+
       case _ =>
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
