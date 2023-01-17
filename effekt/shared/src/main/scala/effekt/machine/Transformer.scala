@@ -68,19 +68,19 @@ object Transformer {
         definitions.foreach {
           case Definition.Def(id,  block @ lifted.BlockLit(tparams, params, body)) =>
             // TODO does not work for mutually recursive local definitions
-            val freeParams = lifted.freeVariables(block).toList.flatMap {
-              case lifted.ValueParam(id, tpe) => List(Variable(transform(id), transform(tpe)))
+            val freeParams = lifted.freeVariables(block).toList.toSet.flatMap {
+              case lifted.ValueParam(id, tpe) => Set(Variable(transform(id), transform(tpe)))
               case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
-                List(Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe))))
+                Set(Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe))))
               case lifted.BlockParam(pid, tpe)
                 if !BPC.blockParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
-                List(Variable(transform(pid), transform(tpe)))
+                Set(Variable(transform(pid), transform(tpe)))
               case lifted.BlockParam(pid, tpe) if BPC.freeParams.contains(pid) && id != pid =>
-                BPC.freeParams(pid)
-              case lifted.EvidenceParam(id) => List(Variable(transform(id), builtins.Evidence))
-              case _ => Nil
+                BPC.freeParams(pid).toSet
+              case lifted.EvidenceParam(id) => Set(Variable(transform(id), builtins.Evidence))
+              case _ => Set.empty
             }
-            noteBlockParams(id, params.map(transform), freeParams)
+            noteBlockParams(id, params.map(transform), freeParams.toList)
           case _ => ()
         }
 
