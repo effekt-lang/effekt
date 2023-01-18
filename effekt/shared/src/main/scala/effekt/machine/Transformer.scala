@@ -72,6 +72,10 @@ object Transformer {
               case lifted.ValueParam(id, tpe) => Set(Variable(transform(id), transform(tpe)))
               case lifted.BlockParam(pid, lifted.BlockType.Interface(tpe, List(stTpe))) if tpe == symbols.builtins.TState.interface =>
                 Set(Variable(transform(pid) ++ "$State", Type.Reference(transform(stTpe))))
+              case lifted.BlockParam(resume: symbols.TrackedParam.ResumeParam, _) =>
+                // resume parameters are represented as Stacks in machine
+                // TODO How can we not match on the symbol here?
+                Set(Variable(transform(resume), Type.Stack()))
               case lifted.BlockParam(pid, tpe)
                 if !BPC.blockParams.contains(pid) && id != pid && DC.findConstructor(pid).isEmpty =>
                 Set(Variable(transform(pid), transform(tpe)))
