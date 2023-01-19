@@ -1,6 +1,8 @@
 package effekt
 package core
 
+import effekt.core.Block.BlockLit
+
 import scala.collection.{GenMap, mutable}
 
 def dealiasing(module: ModuleDecl)(using aliases: Map[Id, Id]): ModuleDecl =
@@ -61,7 +63,7 @@ def dealiasing(statement: Stmt)(using aliases: Map[Id, Id]): Stmt =
       State(id, dealiasing(init), region, dealiasing(body))
 
     case Try(body, handlers) =>
-      Try(dealiasing(body), handlers)
+      Try(dealiasing(body), handlers.map(dealiasing))
 
     case Region(body) =>
       Region(dealiasing(body))
@@ -89,13 +91,19 @@ def dealiasing(block: Block)(using aliases: Map[Id, Id]): Block =
     case Unbox(p) =>
       Unbox(dealiasing(p))
 
-    case n:New =>
-      n
+    case New(impl) =>
+      New(dealiasing(impl))
 
 def dealiasing(pure: Pure)(using aliases: Map[Id, Id]): Pure =
   pure match
-    case v: ValueVar =>
-      v
+    case ValueVar(id, annotatedType) =>
+      if (aliases.contains(id))
+        var og = aliases(id)
+        while (aliases.contains(og))
+          og = aliases(og)
+        ValueVar(og, annotatedType)
+
+      else pure
 
     case l: Literal =>
       l
@@ -109,10 +117,18 @@ def dealiasing(pure: Pure)(using aliases: Map[Id, Id]): Pure =
     case Box(b, annotatedCapture) =>
       Box(dealiasing(b), annotatedCapture)
 
+def dealiasing(impl: Implementation)(using aliases: Map[Id, Id]): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(dealiasing))
+
+def dealiasing(op: Operation)(using aliases: Map[Id, Id]): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, dealiasing(body))
+
 def removeUnusedFunctions(start: Tree|Definition, count: Map[Id, Int]): Tree|Definition =
   val rm = count.filter((_, n) => n == 0).keySet
-  println("\nremove:")
-  println(rm)
 
   start match
     case m: ModuleDecl =>
@@ -126,6 +142,9 @@ def removeUnusedFunctions(start: Tree|Definition, count: Map[Id, Int]): Tree|Def
 
     case s: Stmt =>
       removeUnusedFunctionsWorker(s)(using rm)
+
+    case i: Implementation =>
+      removeUnusedFunctionsWorker(i)(using rm)
 
     case d: Definition =>
       removeUnusedFunctionsWorker(d)(using rm)
@@ -200,7 +219,7 @@ def removeUnusedFunctionsWorker(statement: Stmt)(using rm: Set[Id]): Stmt =
       State(id, removeUnusedFunctionsWorker(init), region, removeUnusedFunctionsWorker(body))
 
     case Try(body, handlers) =>
-      Try(removeUnusedFunctionsWorker(body), handlers)
+      Try(removeUnusedFunctionsWorker(body), handlers.map(removeUnusedFunctionsWorker))
 
     case Region(body) =>
       Region(removeUnusedFunctionsWorker(body))
@@ -222,8 +241,8 @@ def removeUnusedFunctionsWorker(block: Block)(using rm: Set[Id]): Block =
     case Unbox(p) =>
       Unbox(removeUnusedFunctionsWorker(p))
 
-    case n: New =>
-      n
+    case New(impl) =>
+      New(removeUnusedFunctionsWorker(impl))
 
 def removeUnusedFunctionsWorker(pure: Pure)(using rm: Set[Id]): Pure =
   pure match
@@ -242,110 +261,187 @@ def removeUnusedFunctionsWorker(pure: Pure)(using rm: Set[Id]): Pure =
     case Box(b, annotatedCapture) =>
       Box(removeUnusedFunctionsWorker(b), annotatedCapture)
 
-def inlineUniqueFunctions(module: ModuleDecl, summary: Map[Id, Block], count: Map[Id, Int]): ModuleDecl =
-  var sum = summary.filter((id, _) => count.contains(id) && count(id) == 1)
-  //TODO: Remove mutually recursive functions
-  sum = for {id -> block <- sum}
-    yield id -> inlineUniqueFunctions(block)(using sum) //TODO: repeat until no changes
+def removeUnusedFunctionsWorker(impl: Implementation)(using rm: Set[Id]): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(removeUnusedFunctionsWorker))
 
+def removeUnusedFunctionsWorker(op: Operation)(using rm: Set[Id]): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, removeUnusedFunctionsWorker(body))
+
+//TODO: Static Argument Transformation
+// Look at recursive functions
+// Find static Arguments
+// if not empty: Def(id, block) => Def(id, Scope(Worker[block], App(Worker))
+/*
+def staticArgumentTransformation(start: Tree|Definition): Tree|Definition =
+  start match
+    case m: ModuleDecl =>
+      staticArgumentTransformationWorker(m)(using constructCallGraph(m).filter((id, fs) => fs.contains(id)).keySet)
+
+    case a: Argument =>
+      staticArgumentTransformationWorker(a)(using constructCallGraph(a).filter((id, fs) => fs.contains(id)).keySet)
+
+    case e: Expr =>
+      staticArgumentTransformationWorker(e)(using constructCallGraph(e).filter((id, fs) => fs.contains(id)).keySet)
+
+    case s: Stmt =>
+      staticArgumentTransformationWorker(s)(using constructCallGraph(s).filter((id, fs) => fs.contains(id)).keySet)
+
+    case i: Implementation =>
+      staticArgumentTransformationWorker(i)(using constructCallGraph(i).filter((id, fs) => fs.contains(id)).keySet)
+
+    case d: Definition =>
+      staticArgumentTransformationWorker(d)(using constructCallGraph(d).filter((id, fs) => fs.contains(id)).keySet)
+
+    case _ =>
+      start
+
+def staticArgumentTransformationWorker(module: ModuleDecl)(using recursiveFunctions: Set[Id]): ModuleDecl =
   module match
     case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-      ModuleDecl(path, imports, declarations, externs, definitions.filter{
-        case Definition.Def(id, _) => !sum.contains(id)
-        case _ => true
-      }.map(inlineUniqueFunctions(_)(using sum)), exports)
+      ModuleDecl(path, imports, declarations, externs, definitions.map(staticArgumentTransformationWorker), exports)
 
-def inlineUniqueFunctions(definition: Definition)(using summary: Map[Id, Block]): Definition =
+def staticArgumentTransformationWorker(definition: Definition)(using recursiveFunctions: Set[Id]): Definition =
   definition match
-    case Definition.Def(id, block) =>
-      Definition.Def(id, inlineUniqueFunctions(block))
+    case d@Definition.Def(id, block) => //TODO: the actual work
+      if(recursiveFunctions.contains(id))
+        val (ts, cs, vs, bs) = findStaticArguments(d)
+        if(ts.nonEmpty || cs.nonEmpty || vs.nonEmpty || bs.nonEmpty)// TODO: This is tuple
+
+          val transformed = transformStaticArguments(d, ts, cs, vs, bs)
+          transformed match
+            case Definition.Def(id, block) => Definition.Def(id, staticArgumentTransformationWorker(block))
+
+        else Definition.Def(id, staticArgumentTransformationWorker(block))
+      else Definition.Def(id, staticArgumentTransformationWorker(block))
 
     case Definition.Let(id, binding) =>
-      Definition.Let(id, inlineUniqueFunctions(binding))
+      Definition.Let(id, staticArgumentTransformationWorker(binding))
 
-def inlineUniqueFunctions(expression: Expr)(using summary: Map[Id, Block]): Expr =
-  expression match
+def staticArgumentTransformationWorker(arg: Argument)(using recursiveFunctions: Set[Id]): Argument =
+  arg match
+    case pure: Pure =>
+      staticArgumentTransformationWorker(pure)
+
+    case block: Block =>
+      staticArgumentTransformationWorker(block)
+
+def staticArgumentTransformationWorker(expr: Expr)(using recursiveFunctions: Set[Id]): Expr =
+  expr match
     case DirectApp(b, targs, vargs, bargs) =>
-      DirectApp(inlineUniqueFunctions(b), targs, vargs, bargs)
+      DirectApp(staticArgumentTransformationWorker(b), targs, vargs.map(staticArgumentTransformationWorker), bargs.map(staticArgumentTransformationWorker))
 
     case Run(s) =>
-      Run(inlineUniqueFunctions(s))
+      Run(staticArgumentTransformationWorker(s))
 
     case p: Pure =>
-      p
+      staticArgumentTransformationWorker(p)
 
-def inlineUniqueFunctions(statement: Stmt)(using summary: Map[Id, Block]): Stmt =
+def staticArgumentTransformationWorker(statement: Stmt)(using recursiveFunctions: Set[Id]): Stmt =
   statement match
     case Scope(definitions, body) =>
-      Scope(definitions.filter {
-        case Definition.Def(id, _) => !summary.contains(id)
-        case _ => true
-      }.map(inlineUniqueFunctions), inlineUniqueFunctions(body))
+      Scope(definitions.map(staticArgumentTransformationWorker), staticArgumentTransformationWorker(body))
 
-    case r: Return =>
-      r
+    case Return(expr) =>
+      Return(staticArgumentTransformationWorker(expr))
 
     case Val(id, binding, body) =>
-      Val(id, inlineUniqueFunctions(binding), inlineUniqueFunctions(body))
+      Val(id, staticArgumentTransformationWorker(binding), staticArgumentTransformationWorker(body))
 
     case App(callee, targs, vargs, bargs) =>
-      callee match
-        case BlockVar(id, _, _) =>
-          if(summary.contains(id)) summary(id) match
-            case BlockLit(tparams, cparams, vparams, bparams, body) =>
-              substitute(body, tparams, cparams, vparams, bparams, targs, vargs, bargs).asInstanceOf[Stmt]
-
-            case _ =>
-              ??? //TODO: Does summary only contain BlockLit after dealiasing? Andere Typen können auftrete, aber keine substitution
-          else App(callee, targs, vargs, bargs.map(inlineUniqueFunctions))
-
-        case _ => App(inlineUniqueFunctions(callee), targs, vargs, bargs.map(inlineUniqueFunctions))
+      App(staticArgumentTransformationWorker(callee), targs, vargs.map(staticArgumentTransformationWorker), bargs.map(staticArgumentTransformationWorker))
 
     case If(cond, thn, els) =>
-      If(cond, inlineUniqueFunctions(thn), inlineUniqueFunctions(els))
+      If(staticArgumentTransformationWorker(cond), staticArgumentTransformationWorker(thn), staticArgumentTransformationWorker(els))
 
     case Match(scrutinee, clauses, default) =>
-      Match(scrutinee, clauses.map{case (c, b) => (c, inlineUniqueFunctions(b).asInstanceOf[BlockLit])},
+      Match(staticArgumentTransformationWorker(scrutinee), clauses.map{case (id, b) => (id, staticArgumentTransformationWorker(b).asInstanceOf[BlockLit])},
         default match
-          case Some(s) => Some(inlineUniqueFunctions(s))
+          case Some(s) => Some(staticArgumentTransformationWorker(s))
           case None => None)
 
     case State(id, init, region, body) =>
-      State(id, init, region, inlineUniqueFunctions(body))
+      State(id, staticArgumentTransformationWorker(init), region, staticArgumentTransformationWorker(body))
 
     case Try(body, handlers) =>
-      Try(inlineUniqueFunctions(body), handlers)
+      Try(staticArgumentTransformationWorker(body), handlers.map(staticArgumentTransformationWorker))
 
     case Region(body) =>
-      Region(inlineUniqueFunctions(body))
+      Region(staticArgumentTransformationWorker(body))
 
     case h: Hole =>
       h
 
-def inlineUniqueFunctions(block: Block)(using summary: Map[Id, Block]): Block =
+def staticArgumentTransformationWorker(block: Block)(using recursiveFunctions: Set[Id]): Block =
   block match
     case b: BlockVar =>
       b
 
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
-      BlockLit(tparams, cparams, vparams, bparams, inlineUniqueFunctions(body))
+      BlockLit(tparams, cparams, vparams, bparams, staticArgumentTransformationWorker(body))
 
-    case Member(b, field, annotatedType) =>
-      Member(inlineUniqueFunctions(b), field, annotatedType)
+    case Member(block, field, annotatedTpe) =>
+      Member(staticArgumentTransformationWorker(block), field, annotatedTpe)
 
-    case u: Unbox =>
-      u
+    case Unbox(p) =>
+      Unbox(staticArgumentTransformationWorker(p))
 
-    case n: New =>
-      n
-// TODO: tpe and capt variables don't need to be considered right?
+    case New(impl) =>
+      New(staticArgumentTransformationWorker(impl))
+
+def staticArgumentTransformationWorker(pure: Pure)(using recursiveFunctions: Set[Id]): Pure =
+  pure match
+    case v: ValueVar =>
+      v
+
+    case l: Literal =>
+      l
+
+    case PureApp(b, targs, vargs) =>
+      PureApp(b, targs, vargs.map(staticArgumentTransformationWorker))
+
+    case Select(target, field, annotatedType) =>
+      Select(staticArgumentTransformationWorker(target), field, annotatedType)
+
+    case Box(b, annotatedCapture) =>
+      Box(staticArgumentTransformationWorker(b), annotatedCapture)
+
+def staticArgumentTransformationWorker(impl: Implementation)(using recursiveFunctions: Set[Id]): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(staticArgumentTransformationWorker))
+
+def staticArgumentTransformationWorker(op: Operation)(using recursiveFunctions: Set[Id]): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, staticArgumentTransformationWorker(body))
+
+def transformStaticArguments(definition: Definition.Def, ts: Set[Id], cs: Set[Id], vs: Set[Id], bs: Set[Id]): Definition.Def =
+  definition match
+    case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+      val workerName = symbols.TmpBlock()
+      val worker =
+        Definition.Def(workerName,
+          tparams.filter(!ts.contains),
+          cparams.filter(!cs.contains),
+          vparams.filter(!vs.contains(_.id)),
+          bparams.filter(!bs.contains(_.id)),
+          substitute(body)(using (id -> BlockVar(workerName, ...)))) //TODO: enter body and change calls to worker
+
+      Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, Scope(List(worker),App(worker.id, ???))))
+    case _ =>
+      definition
+*/
 def substitute(tree: Tree,
                tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam],
                targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Tree =
-  var tSubst = (tparams zip targs).toMap
-  var cSubst = (cparams zip bargs.map(_.capt)).toMap
-  var vSubst = (vparams.map(_.id) zip vargs).toMap
-  var bSubst = (bparams.map(_.id) zip bargs).toMap
+  val tSubst = (tparams zip targs).toMap
+  val cSubst = (cparams zip bargs.map(_.capt)).toMap
+  val vSubst = (vparams.map(_.id) zip vargs).toMap
+  val bSubst = (bparams.map(_.id) zip bargs).toMap
 
   //substitute(tree)(using tSubst, cSubst, vSubst, bSubst) TODO: is match necessary here?
   tree match
@@ -406,7 +502,7 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
       Return(substitute(expr))
 
     case Val(id, binding, body) =>
-      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst - id)) //TODO: Val id in which map? Val in cSubst
+      Val(id, substitute(binding), substitute(body)(using tSubst, cSubst, vSubst - id, bSubst))
 
     case App(callee, targs, vargs, bargs) =>
       App(substitute(callee), targs.map(Type.substitute(_, tSubst, cSubst)), vargs.map(substitute), bargs.map(substitute))
@@ -415,7 +511,7 @@ def substitute(statement: Stmt)(using tSubst: Map[Id, ValueType], cSubst: Map[Id
       If(substitute(cond), substitute(thn), substitute(els))
 
     case Match(scrutinee, clauses, default) =>
-      Match(substitute(scrutinee), clauses.map{case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])}, //TODO: clauses id replacable?
+      Match(substitute(scrutinee), clauses.map{case (id, b) => (id, substitute(b).asInstanceOf[BlockLit])},
         default match
           case Some(s) => Some(substitute(s))
           case None => None)
@@ -487,3 +583,5 @@ def substitute(arg: Argument)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, 
 
     case b: Block =>
       substitute(b)
+
+//TODO: Inlining

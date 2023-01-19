@@ -1,7 +1,6 @@
 package effekt
 package core
 
-import scala.annotation.targetName
 import scala.collection.{GenMap, mutable}
 //TODO: reorder functions
 //TODO: List().flatMap{...} ? flatMap{...}.toMap ?
@@ -15,6 +14,9 @@ def collectAliases(definition: Definition): Map[Id, Id] =
 
     case Definition.Def(_, block) =>
       collectAliases(block)
+
+    case Definition.Let(id, ValueVar(id2, _)) =>
+      Map[Id, Id](id -> id2)
 
     case Definition.Let(_, binding) =>
       collectAliases(binding)
@@ -61,8 +63,8 @@ def collectAliases(statement: Stmt): Map[Id, Id] =
     case State(_, init, _, body) =>
       collectAliases(init) ++ collectAliases(body)
 
-    case Try(body, _) =>
-      collectAliases(body)
+    case Try(body, handlers) =>
+      collectAliases(body) ++ handlers.map(collectAliases).fold(Map[Id, Id]())(_ ++ _)
 
     case Region(body) =>
       collectAliases(body)
@@ -84,8 +86,8 @@ def collectAliases(block: Block): Map[Id, Id] =
     case Unbox(p) =>
       collectAliases(p)
 
-    case _: New =>
-      Map[Id, Id]()
+    case New(impl) =>
+      collectAliases(impl)
 
 def collectAliases(pure: Pure): Map[Id, Id] =
   pure match
@@ -103,6 +105,16 @@ def collectAliases(pure: Pure): Map[Id, Id] =
 
     case Box(b, _) =>
       collectAliases(b)
+
+def collectAliases(impl: Implementation): Map[Id, Id] =
+  impl match
+    case Implementation(_, operations) =>
+      operations.map(collectAliases).fold(Map[Id, Id]())(_ ++ _)
+
+def collectAliases(op: Operation): Map[Id, Id] =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      collectAliases(body)
 
 def collectFunctionDefinitions(module: ModuleDecl): Map[Id,Block] =
   module.definitions.map(collectFunctionDefinitions).fold(Map[Id,Block]())(_ ++ _)
@@ -158,8 +170,8 @@ def collectFunctionDefinitions(statement: Stmt): Map[Id, Block] =
     case State(_, init, _, body) =>
       collectFunctionDefinitions(init) ++ collectFunctionDefinitions(body)
 
-    case Try(body, _) =>
-      collectFunctionDefinitions(body)
+    case Try(body, handlers) =>
+      collectFunctionDefinitions(body) ++ handlers.map(collectFunctionDefinitions).fold(Map[Id, Block]())(_ ++ _)
 
     case Region(body) =>
       collectFunctionDefinitions(body)
@@ -181,8 +193,8 @@ def collectFunctionDefinitions(block: Block): Map[Id, Block] =
     case Unbox(p) =>
       collectFunctionDefinitions(p)
 
-    case _: New =>
-      Map[Id, Block]()
+    case New(impl) =>
+      collectFunctionDefinitions(impl)
 
 def collectFunctionDefinitions(pure: Pure): Map[Id, Block] =
   pure match
@@ -202,6 +214,16 @@ def collectFunctionDefinitions(pure: Pure): Map[Id, Block] =
     case Box(b, _) =>
       collectFunctionDefinitions(b)
 
+def collectFunctionDefinitions(impl: Implementation): Map[Id, Block] =
+  impl match
+    case Implementation(_, operations) =>
+      operations.map(collectFunctionDefinitions).fold(Map[Id, Block]())(_ ++ _)
+
+def collectFunctionDefinitions(op: Operation): Map[Id, Block] =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      collectFunctionDefinitions(body)
+
 def countFunctionCalls(start: Tree|Definition): Map[Id, Int] =
   val res = mutable.Map[Id, Int]()
 
@@ -217,6 +239,9 @@ def countFunctionCalls(start: Tree|Definition): Map[Id, Int] =
 
     case s: Stmt =>
       countFunctionCallsWorker(s)(using res)
+
+    case i: Implementation =>
+      countFunctionCallsWorker(i)(using res)
 
     case d: Definition =>
       countFunctionCallsWorker(d)(using res)
@@ -284,8 +309,9 @@ def countFunctionCallsWorker(statement: Stmt)(using count: mutable.Map[Id, Int])
       countFunctionCallsWorker(init)
       countFunctionCallsWorker(body)
 
-    case Try(body, _) =>
+    case Try(body, handlers) =>
       countFunctionCallsWorker(body)
+      handlers.foreach(countFunctionCallsWorker)
 
     case Region(body) =>
       countFunctionCallsWorker(body)
@@ -307,7 +333,8 @@ def countFunctionCallsWorker(block: Block)(using count: mutable.Map[Id, Int]): U
     case Unbox(p) =>
       countFunctionCallsWorker(p)
 
-    case _: New =>
+    case New(impl) =>
+      countFunctionCallsWorker(impl)
 
 def countFunctionCallsWorker(arg: Argument)(using count: mutable.Map[Id, Int]): Unit =
   arg match
@@ -332,5 +359,519 @@ def countFunctionCallsWorker(pure: Pure)(using count: mutable.Map[Id, Int]): Uni
     case Box(b, _) =>
       countFunctionCallsWorker(b)
 
+def countFunctionCallsWorker(impl: Implementation)(using count: mutable.Map[Id, Int]): Unit =
+  impl match
+    case Implementation(_, operations) =>
+      operations.foreach(countFunctionCallsWorker)
 
-// TODO: Detect Mutual Recursion (call graph)
+def countFunctionCallsWorker(op: Operation)(using ocunt: mutable.Map[Id, Int]): Unit =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      countFunctionCallsWorker(body)
+
+def calledFunctions(expr: Expr): Set[Id] =
+  expr match
+    case DirectApp(b, _, vargs, bargs) =>
+      calledFunctions(b) ++
+        vargs.map(calledFunctions).fold(Set[Id]())(_ ++ _) ++
+        bargs.map(calledFunctions).fold(Set[Id]())(_ ++ _)
+
+    case Run(s) =>
+      calledFunctions(s)
+
+    case pure: Pure =>
+      calledFunctions(pure)
+
+def calledFunctions(statement: Stmt): Set[Id] =
+  statement match
+    case Scope(_, body) =>
+      calledFunctions(body)
+
+    case Return(expr) =>
+      calledFunctions(expr)
+
+    case Val(_, _, body) =>
+      calledFunctions(body)
+
+    case App(callee, _, vargs, bargs) =>
+      {callee match
+        case BlockVar(id, _, _) => Set(id)
+        case _ => calledFunctions(callee)} ++
+      vargs.map(calledFunctions).fold(Set[Id]())(_ ++ _) ++
+      bargs.map(calledFunctions).fold(Set[Id]())(_ ++ _)
+
+    case If(cond, thn, els) =>
+      calledFunctions(cond) ++ calledFunctions(thn) ++ calledFunctions(els)
+      
+    case Match(scrutinee, clauses, default) =>
+      calledFunctions(scrutinee) ++
+        clauses.map{case (_, b) => calledFunctions(b)}.fold(Set[Id]())(_ ++ _) ++
+        {default match
+          case Some(s) => calledFunctions(s)
+          case None => Set[Id]()}
+
+    case State(_, init, _, body) =>
+      calledFunctions(init) ++ calledFunctions(body)
+
+    case Try(body, handlers) =>
+      calledFunctions(body) ++
+        handlers.map(calledFunctions).fold(Set[Id]())(_ ++ _)
+
+    case Region(body) =>
+      calledFunctions(body)
+
+    case _:Hole =>
+      Set[Id]()
+
+def calledFunctions(block: Block): Set[Id] =
+  block match
+    case _: BlockVar =>
+      Set[Id]()
+
+    case BlockLit(_, _, _, _, body) =>
+      calledFunctions(body)
+
+    case Member(block, _, _) =>
+      calledFunctions(block)
+
+    case Unbox(pure) =>
+      calledFunctions(pure)
+
+    case New(impl) =>
+      calledFunctions(impl)
+
+def calledFunctions(pure: Pure): Set[Id] =
+  pure match
+    case _: ValueVar =>
+      Set[Id]()
+
+    case _: Literal=>
+      Set[Id]()
+
+    case PureApp(b, _, vargs) =>
+      calledFunctions(b) ++ vargs.map(calledFunctions).fold(Set[Id]())(_ ++ _)
+
+    case Select(target, _, _) =>
+      calledFunctions(target)
+
+    case Box(b, _) =>
+      calledFunctions(b)
+
+def calledFunctions(impl: Implementation): Set[Id] =
+  impl match
+    case Implementation(_, operations) =>
+      operations.map(calledFunctions).fold(Set[Id]())(_ ++ _)
+
+def calledFunctions(op: Operation): Set[Id] =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      calledFunctions(body)
+
+def constructCallGraph(module: ModuleDecl): Map[Id, Set[Id]] =
+  module.definitions.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+
+def constructCallGraph(definition: Definition): Map[Id, Set[Id]] =
+  definition match
+    case Definition.Def(id, block) =>
+      Map[Id, Set[Id]](id -> calledFunctions(block)) ++ constructCallGraph(block)
+
+    case Definition.Let(_, binding) =>
+      constructCallGraph(binding)
+
+def constructCallGraph(arg: Argument): Map[Id, Set[Id]] =
+  arg match
+    case pure: Pure =>
+      constructCallGraph(pure)
+
+    case block: Block =>
+      constructCallGraph(block)
+
+def constructCallGraph(expr: Expr): Map[Id, Set[Id]] =
+  expr match
+    case DirectApp(b, _, vargs, bargs) =>
+      constructCallGraph(b) ++
+        vargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++
+        bargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+
+    case Run(s) =>
+      constructCallGraph(s)
+
+    case p: Pure =>
+      constructCallGraph(p)
+
+def constructCallGraph(statement: Stmt): Map[Id, Set[Id]] =
+  statement match
+    case Scope(definitions, body) =>
+      definitions.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++ constructCallGraph(body)
+
+    case Return(expr) =>
+      constructCallGraph(expr)
+
+    case Val(_, binding, body) =>
+      constructCallGraph(binding) ++ constructCallGraph(body)
+
+    case App(callee, _, vargs, bargs) =>
+      constructCallGraph(callee) ++
+        vargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++
+        bargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+
+    case If(cond, thn, els) =>
+      constructCallGraph(cond) ++ constructCallGraph(thn) ++ constructCallGraph(els)
+
+    case Match(scrutinee, clauses, default) =>
+      constructCallGraph(scrutinee) ++
+        clauses.map{case (_, b) => constructCallGraph(b)}.fold(Map[Id, Set[Id]]())(_ ++ _) ++
+        {default match
+          case Some(s) => constructCallGraph(s)
+          case None => Map[Id, Set[Id]]()}
+
+    case State(_, init, _, body) =>
+      constructCallGraph(init) ++ constructCallGraph(body)
+
+    case Try(body, handlers) =>
+      constructCallGraph(body) ++ handlers.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+
+    case Region(body) =>
+      constructCallGraph(body)
+
+    case Hole() =>
+      Map[Id, Set[Id]]()
+
+def constructCallGraph(block: Block): Map[Id, Set[Id]] =
+  block match
+    case _: BlockVar =>
+      Map[Id, Set[Id]]()
+
+    case BlockLit(_, _, _, _, body) =>
+      constructCallGraph(body)
+
+    case Member(block, _, _) =>
+      constructCallGraph(block)
+
+    case Unbox(pure) =>
+      constructCallGraph(pure)
+
+    case New(impl) =>
+      constructCallGraph(impl)
+
+def constructCallGraph(pure: Pure): Map[Id, Set[Id]] =
+  pure match
+    case _: ValueVar =>
+      Map[Id, Set[Id]]()
+
+    case _: Literal =>
+      Map[Id, Set[Id]]()
+
+    case PureApp(b, _, vargs) =>
+      constructCallGraph(b) ++ vargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+
+    case Select(target, _, _) =>
+      constructCallGraph(target)
+
+    case Box(b, _) =>
+      constructCallGraph(b)
+
+def constructCallGraph(impl: Implementation): Map[Id, Set[Id]] =
+  impl match
+    case Implementation(_, operations) =>
+      operations.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+
+def constructCallGraph(op: Operation): Map[Id, Set[Id]] =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      constructCallGraph(body)
+
+def findStaticArguments(start: Definition.Def): (Set[Id], Set[Id], Set[Id], Set[Id]) =
+  start match
+    case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+      val ts: Array[Option[Id]] = tparams.map(x => Some(x)).toArray
+      val cs: Array[Option[Id]] = cparams.map(x => Some(x)).toArray
+      val vs: Array[Option[Id]] = vparams.map(x => Some(x.id)).toArray
+      val bs: Array[Option[Id]] = bparams.map(x => Some(x.id)).toArray
+
+      findStaticArgumentsWorker(body)(using id, ts, cs, vs, bs)
+
+      (ts.filter(_.isDefined).map(_.get).toSet[Id],
+        cs.filter(_.isDefined).map(_.get).toSet[Id],
+        vs.filter(_.isDefined).map(_.get).toSet[Id],
+        bs.filter(_.isDefined).map(_.get).toSet[Id])
+
+    case _ => (Set[Id](), Set[Id](), Set[Id](), Set[Id]())
+
+def findStaticArgumentsWorker(module: ModuleDecl)(using fname: Id,
+                                                  tparams: Array[Option[Id]],
+                                                  cparams: Array[Option[Id]],
+                                                  vparams: Array[Option[Id]],
+                                                  bparams: Array[Option[Id]]): Unit =
+  module.definitions.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+def findStaticArgumentsWorker(definition: Definition)(using fname: Id,
+                                                      tparams: Array[Option[Id]],
+                                                      cparams: Array[Option[Id]],
+                                                      vparams: Array[Option[Id]],
+                                                      bparams: Array[Option[Id]]): Unit =
+  definition match
+    case Definition.Def(_, block) =>
+      findStaticArgumentsWorker(block)(using fname, tparams, cparams, vparams, bparams)
+
+    case Definition.Let(_, binding) =>
+      findStaticArgumentsWorker(binding)(using fname, tparams, cparams, vparams, bparams)
+
+def findStaticArgumentsWorker(arg: Argument)(using fname: Id,
+                                             tparams: Array[Option[Id]],
+                                             cparams: Array[Option[Id]],
+                                             vparams: Array[Option[Id]],
+                                             bparams: Array[Option[Id]]): Unit =
+  arg match
+    case p: Pure =>
+      findStaticArgumentsWorker(p)(using fname, tparams, cparams, vparams, bparams)
+
+    case b: Block =>
+      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
+
+def findStaticArgumentsWorker(expr: Expr)(using fname: Id,
+                                          tparams: Array[Option[Id]],
+                                          cparams: Array[Option[Id]],
+                                          vparams: Array[Option[Id]],
+                                          bparams: Array[Option[Id]]): Unit =
+  expr match
+    case DirectApp(b, _, vargs, bargs) =>
+      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
+      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      bargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+    case Run(s) =>
+      findStaticArgumentsWorker(s)(using fname, tparams, cparams, vparams, bparams)
+
+    case p: Pure =>
+      findStaticArgumentsWorker(p)(using fname, tparams, cparams, vparams, bparams)
+
+def findStaticArgumentsWorker(statement: Stmt)(using fname: Id,
+                                               tparams: Array[Option[Id]],
+                                               cparams: Array[Option[Id]],
+                                               vparams: Array[Option[Id]],
+                                               bparams: Array[Option[Id]]): Unit =
+  statement match
+    case Scope(definitions, body) =>
+      definitions.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+
+    case Return(expr) =>
+      findStaticArgumentsWorker(expr)(using fname, tparams, cparams, vparams, bparams)
+
+    case Val(_, binding, body) =>
+      findStaticArgumentsWorker(binding)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+
+    case App(BlockVar(id, _, _), targs, vargs, bargs) =>
+      if(id == fname)
+        targs.zipWithIndex.foreach{
+          case (ValueType.Var(id), idx) => if(!tparams(idx).contains(id)) tparams(idx) = None
+          case (_, idx) => tparams(idx) = None}
+        vargs.zipWithIndex.foreach{
+          case (ValueVar(id, _), idx) => if(!vparams(idx).contains(id)) vparams(idx) = None
+          case (_, idx) => vparams(idx) = None}
+        bargs.zipWithIndex.foreach{
+          case (BlockVar(id, _, _), idx) =>
+            if(!bparams(idx).contains(id))
+              bparams(idx) = None
+              cparams(idx) = None
+          case (_, idx) =>
+            bparams(idx) = None
+            cparams(idx) = None}
+
+      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      bargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+    case App(callee, _, vargs, bargs) =>
+      findStaticArgumentsWorker(callee)(using fname, tparams, cparams, vparams, bparams)
+      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      bargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+    case If(cond, thn, els) =>
+      findStaticArgumentsWorker(cond)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(thn)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(els)(using fname, tparams, cparams, vparams, bparams)
+
+    case Match(scrutinee, clauses, default) =>
+      findStaticArgumentsWorker(scrutinee)(using fname, tparams, cparams, vparams, bparams)
+      clauses.foreach{(_,b) => findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)}
+      default match
+        case Some(s) => findStaticArgumentsWorker(s)(using fname, tparams, cparams, vparams, bparams)
+        case None =>
+
+    case State(_, init, _, body) =>
+      findStaticArgumentsWorker(init)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+
+    case Try(body, handlers) =>
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      handlers.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+    case Region(body) =>
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+
+    case _: Hole =>
+
+def findStaticArgumentsWorker(block: Block)(using fname: Id,
+                                            tparams: Array[Option[Id]],
+                                            cparams: Array[Option[Id]],
+                                            vparams: Array[Option[Id]],
+                                            bparams: Array[Option[Id]]): Unit =
+  block match
+    case _: BlockVar =>
+
+    case BlockLit(_, _, _, _, body) =>
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+
+    case Member(block, _, _) =>
+      findStaticArgumentsWorker(block)(using fname, tparams, cparams, vparams, bparams)
+
+    case Unbox(pure) =>
+      findStaticArgumentsWorker(pure)(using fname, tparams, cparams, vparams, bparams)
+
+    case New(impl) =>
+      findStaticArgumentsWorker(impl)(using fname, tparams, cparams, vparams, bparams)
+
+def findStaticArgumentsWorker(pure: Pure)(using fname: Id,
+                                          tparams: Array[Option[Id]],
+                                          cparams: Array[Option[Id]],
+                                          vparams: Array[Option[Id]],
+                                          bparams: Array[Option[Id]]): Unit =
+  pure match
+    case _: ValueVar =>
+
+    case _: Literal =>
+
+    case PureApp(b, _, vargs) =>
+      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
+      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+    case Select(target, _, _) =>
+      findStaticArgumentsWorker(target)(using fname, tparams, cparams, vparams, bparams)
+
+    case Box(b, _) =>
+      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
+
+def findStaticArgumentsWorker(impl: Implementation)(using fname: Id,
+                                                    tparams: Array[Option[Id]],
+                                                    cparams: Array[Option[Id]],
+                                                    vparams: Array[Option[Id]],
+                                                    bparams: Array[Option[Id]]): Unit =
+  impl match
+    case Implementation(_, operations) =>
+      operations.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+
+def findStaticArgumentsWorker(op: Operation)(using fname: Id,
+                                             tparams: Array[Option[Id]],
+                                             cparams: Array[Option[Id]],
+                                             vparams: Array[Option[Id]],
+                                             bparams: Array[Option[Id]]): Unit =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+
+/*
+Template:
+
+def constructCallGraph(module: ModuleDecl): Map[Id, Set[Id]] =
+  module match
+    case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
+      ???
+
+def constructCallGraph(definition: Definition): Map[Id, Set[Id]] =
+  definition match
+    case Definition.Def(id, block) =>
+      ???
+
+    case Definition.Let(id, binding) =>
+      ???
+
+def constructCallGraph(expr: Expr): Map[Id, Set[Id]] =
+  expr match
+    case DirectApp(b, targs, vargs, bargs) =>
+      ???
+
+    case Run(s) =>
+      ???
+
+    case pure: Pure =>
+      ???
+
+def constructCallGraph(statement: Stmt): Map[Id, Set[Id]] =
+  statement match
+    case Scope(definitions, body) =>
+      ???
+
+    case Return(expr) =>
+      ???
+
+    case Val(id, binding, body) =>
+      ???
+
+    case App(callee, targs, vargs, bargs) =>
+      ???
+
+    case If(cond, thn, els) =>
+      ???
+
+    case Match(scrutinee, clauses, default) =>
+      ???
+
+    case State(id, init, region, body) =>
+      ???
+
+    case Try(body, handlers) =>
+      ???
+
+    case Region(body) =>
+      ???
+
+    case Hole() =>
+      ???
+
+def constructCallGraph(block: Block): Map[Id, Set[Id]] =
+  block match
+    case BlockVar(id, annotatedTpe, annotatedCapt) =>
+      ???
+
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      ???
+
+    case Member(block, field, annotatedTpe) =>
+      ???
+
+    case Unbox(pure) =>
+      ???
+
+    case New(impl) =>
+      ???
+
+def constructCallGraph(pure: Pure): Map[Id, Set[Id]] =
+  pure match
+    case ValueVar(id, annotatedType) =>
+      ???
+
+    case Literal(value, annotatedType) =>
+      ???
+
+    case PureApp(b, targs, vargs) =>
+      ???
+
+    case Select(target, field, annotatedType) =>
+      ???
+
+    case Box(b, annotatedCapture) =>
+      ???
+
+def constructCallGraph(impl: Implementation): Map[Id, Set[Id]] =
+  impl match
+    case Implementation(interface, operations) =>
+      ???
+
+def constructCallGraph(op: Operation): Map[Id, Set[Id]] =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      ???
+
+*/

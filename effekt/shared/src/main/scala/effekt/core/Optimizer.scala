@@ -38,7 +38,6 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
       }
     }
 
-    //TODO: rewrites laufen auf defs. hier map auf defs von m
     m match
       case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
         val opt = definitions.map(eliminateReturnRun.rewrite(_))
@@ -48,8 +47,6 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         val dealiased = dealiasing(start)(using aliases)
 
         val calls = rmIdKey[Int](countFunctionCalls(dealiased), Set("main"))
-        println("\nCalls:")
-        println(calls)
         val unused_removed = removeUnusedFunctions(dealiased, calls).asInstanceOf[ModuleDecl]
 
         unused_removed
