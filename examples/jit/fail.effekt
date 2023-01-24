@@ -5,9 +5,8 @@ def main() = {
   try {
     println(0);
     do Fail();
-    println(2);
-    3
+    println(2)
   } with Fail { () =>
-    1
+    println(1)
   }
 }

@@ -8,14 +8,15 @@ extern io def random(): Double = "random(): Double"
 // Console ops
 // ===========
 
-extern io def println(n: Int): Unit = "println(Int): Unit"
-extern io def println(n: Double): Unit = "println(Double): Unit"
-extern io def println(b: Boolean): Unit = "println(Boolean): Unit"
-extern io def println(b: Unit): Unit = "println(Unit): Unit"
 extern io def println(s: String): Unit = "println(String): Unit"
 extern io def printlnErr(s: String): Unit = "printlnErr(String): Unit"
 extern io def readLn(): String = "readLn(): String"
 extern io def readInt(): Int = "readInt(): Int"
+
+def println(n: Int): Unit = println(show(n))
+def println(n: Double): Unit = println(show(n))
+def println(b: Boolean): Unit = println(show(b))
+def println(b: Unit): Unit = println("()")
 
 // integer primitives
 // ==================
@@ -66,11 +67,12 @@ extern pure def toDouble(x: Int): Double = "toDouble(Int): Double"
 // ===========================
 
 extern pure def infixEq(x: Int, y: Int): Boolean = "infixEq(Int, Int): Boolean"
-extern pure def infixNeq(x: Int, y: Int): Boolean = "infixNeq(Int, Int): Boolean"
 extern pure def infixLt(x: Int, y: Int): Boolean = "infixLt(Int, Int): Boolean"
-extern pure def infixLte(x: Int, y: Int): Boolean = "infixLte(Int, Int): Boolean"
 extern pure def infixGt(x: Int, y: Int): Boolean = "infixGt(Int, Int): Boolean"
-extern pure def infixGte(x: Int, y: Int): Boolean = "infixGte(Int, Int): Boolean"
+def infixNeq(x: Int, y: Int): Boolean = not(x == y)
+def infixLte(x: Int, y: Int): Boolean = (x == y) || (x < y)
+def infixGte(x: Int, y: Int): Boolean = (x == y) || (x > y)
+
 def min(x: Int, y: Int): Int = {
   if (x < y) { x } else { y }
 }
@@ -91,11 +93,11 @@ extern pure def infixGte(x: Double, y: Double): Boolean = "infixGte(Double, Doub
 // boolean algebra
 // ===============
 
-extern pure def infixEq(x: Boolean, y: Boolean): Boolean = "infixEq(Boolean, Boolean): Boolean"
-extern pure def infixNeq(x: Boolean, y: Boolean): Boolean = "infixNeq(Boolean, Boolean): Boolean"
-extern pure def not(b: Boolean): Boolean = "not(Boolean): Boolean"
-extern pure def infixOr(x: Boolean, y: Boolean): Boolean = "infixOr(Boolean, Boolean): Boolean"
-extern pure def infixAnd(x: Boolean, y: Boolean): Boolean = "infixAnd(Boolean, Boolean): Boolean"
+def infixEq(x: Boolean, y: Boolean): Boolean = if (x) y else not(y)
+def infixNeq(x: Boolean, y: Boolean): Boolean = not(infixEq(x, y))
+def not(b: Boolean): Boolean = if (b) false else true
+def infixOr(x: Boolean, y: Boolean): Boolean = if (x) true else y
+def infixAnd(x: Boolean, y: Boolean): Boolean = if (x) y else false
 
 // operations on strings
 // =====================
@@ -105,7 +107,7 @@ extern pure def infixEq(s1: String, s2: String): Boolean = "infixEq(String, Stri
 extern pure def infixNeq(s1: String, s2: String): Boolean = "infixEq(String, String): Boolean"
 extern pure def show(value: Int): String = "show(Int): String"
 extern pure def show(value: Double): String = "show(Double): String"
-extern pure def show(value: Boolean): String = "show(Boolean): String"
+def show(value: Boolean): String = if (value) "true" else "false"
 
 // Benchmarking
 // ============
