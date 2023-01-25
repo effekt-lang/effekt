@@ -522,6 +522,7 @@ copy:
 
 backupRegion:
     %newbackup = call %RegionBackup @backupRegion(%Region %region)
+    call void @shareBackup(ptr %newbackup)
     store %RegionBackup %newbackup, ptr %stkbackup
     ret %Stk %newstk
 
@@ -651,16 +652,16 @@ define fastcc void @eraseFrames(%Sp %sp) alwaysinline {
     ret void
 }
 
-define void @eraseObjects(ptr %elementp, ptr %end, %Eraser %eraser) alwaysinline {
+define void @forEachObject(ptr %elementp, ptr %end, ptr %f) alwaysinline {
     %done = icmp uge ptr %elementp, %end
     br i1 %done, label %return, label %erase
 
 erase:
     %element = load %Pos, ptr %elementp
-    call void %eraser(%Pos %element)
+    call void %f(%Pos %element)
 
     %nextelementp = getelementptr %Pos, ptr %elementp, i64 1
-    tail call void @eraseObjects(ptr %nextelementp, ptr %end, %Eraser %eraser)
+    tail call void @forEachObject(ptr %nextelementp, ptr %end, ptr %f)
     ret void
 
 return:
@@ -676,7 +677,7 @@ define void @eraseArenas(%Bounds %bounds, %Mem %mem, %Eraser %eraser) alwaysinli
     %islast = icmp eq %Base %base, %lastbase
     %end = select i1 %islast, %Sp %sp, %Limit %limit
     %start = getelementptr %Bounds, %Base %base, i64 1
-    call void @eraseObjects(ptr %start, ptr %end, %Eraser %eraser)
+    call void @forEachObject(ptr %start, ptr %end, %Eraser %eraser)
 
     br i1 %islast, label %return, label %continue
 
@@ -724,10 +725,37 @@ erase:
     %end = getelementptr i8, ptr %backup.2, i64 %size.2
 
     %obj = getelementptr i64, ptr %backup.1, i64 1
-    call void @eraseObjects(ptr %obj, ptr %backup.2, %Eraser @erasePositive)
+    call void @forEachObject(ptr %obj, ptr %backup.2, %Eraser @erasePositive)
 
     %str = getelementptr i64, ptr %backup.2, i64 1
-    call void @eraseObjects(ptr %str, ptr %end, %Eraser @c_buffer_refcount_decrement)
+    call void @forEachObject(ptr %str, ptr %end, %Eraser @c_buffer_refcount_decrement)
+
+    ret void
+}
+
+define void @shareBackup(ptr %backup.0) alwaysinline {
+    %isnull = icmp eq ptr %backup.0, null
+    br i1 %isnull, label %return, label %erase
+
+return:
+    ret void
+
+erase:
+    %size.0 = load i64, ptr %backup.0
+
+    %backup.1 = getelementptr i8, ptr %backup.0, i64 %size.0
+    %size.1 = load i64, ptr %backup.1
+
+    %backup.2 = getelementptr i8, ptr %backup.1, i64 %size.1
+    %size.2 = load i64, ptr %backup.2
+
+    %end = getelementptr i8, ptr %backup.2, i64 %size.2
+
+    %obj = getelementptr i64, ptr %backup.1, i64 1
+    call void @forEachObject(ptr %obj, ptr %backup.2, %Eraser @sharePositive)
+
+    %str = getelementptr i64, ptr %backup.2, i64 1
+    call void @forEachObject(ptr %str, ptr %end, %Eraser @c_buffer_refcount_increment)
 
     ret void
 }
