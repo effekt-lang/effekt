@@ -302,6 +302,7 @@ object Transformer {
 
       case machine.PushStack(value, rest) =>
         shareValues(List(value), freeVariables(rest));
+        emit(Call("_", VoidType(), prepareRegion, List(transform(value))))
         val newStackName = freshName("stk");
         emit(Call(newStackName, stkType, uniqueStack, List(transform(value))));
         val newStackPointerName = freshName("sp");
@@ -675,6 +676,7 @@ object Transformer {
   def popStack = ConstantGlobal(PointerType(), "popStack");
   def underflowStack = ConstantGlobal(PointerType(), "underflowStack");
   def uniqueStack = ConstantGlobal(PointerType(), "uniqueStack");
+  def prepareRegion = ConstantGlobal(PointerType(), "prepareRegion");
 
 
   /**

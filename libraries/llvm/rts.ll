@@ -371,49 +371,8 @@ continue:
 }
 
 define %Sp @pushStack(%Stk %stk, %Sp %oldsp) alwaysinline {
-
-    %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
-    %backup = load %RegionBackup, ptr %backupp
-    %isnull = icmp eq %RegionBackup %backup, null
-    br i1 %isnull, label %push, label %restore
-
-restore:
-    %regionp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
-    %region = load %Region, ptr %regionp
-
-    br label %loop
-
-loop:
-    %i = phi i64 [0, %restore], [1, %loop]
-    %ptr = phi ptr [%backup, %restore], [%nextptr, %loop]
-    %fullsize.0 = phi i64 [0, %restore], [%fullsize, %loop]
-
-    %size = load i64, ptr %ptr
-    %fullsize = add i64 %fullsize.0, %size
-
-    %backupdata = getelementptr i64, ptr %ptr, i64 1
-    %nextptr = getelementptr i8, ptr %backupdata, i64 %size
-
-    %boundsp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1
-    %bounds = load %Bounds, ptr %boundsp
-    %mem = call %Mem @restoreBackup(%Bounds %bounds, ptr %backupdata, i64 %size)
-
-    %memp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 0
-    store %Mem %mem, ptr %memp
-
-    %nexti = add i64 %i, 1
-    %cmp = icmp ult i64 %nexti, 2
-    br i1 %cmp, label %loop, label %storesize
-
-storesize:
-    %sizep = getelementptr %RegionVal, %Region %region, i64 0, i32 1
-    store i64 %fullsize, ptr %sizep
-    br label %push
-
-push:
     %newstk.0 = load %StkVal, %Stk %stk
-    %newstk.1 = insertvalue %StkVal %newstk.0, %Stk %stk, 4
-    %newstk = insertvalue %StkVal %newstk.1, %RegionBackup null, 3
+    %newstk = insertvalue %StkVal %newstk.0, %Stk %stk, 4
 
     %oldstk = call %StkVal @getStk(%Sp %oldsp)
 
@@ -459,12 +418,80 @@ define %Sp @underflowStack(%Sp %sp) alwaysinline {
     ret %Sp %newsp
 }
 
+define void @prepareRegion(%Stk %stk) alwaysinline {
+    %rcp = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
+    %regionp = getelementptr %StkVal, %Stk %stk, i64 0, i32 2
+    %backupp = getelementptr %StkVal, %Stk %stk, i64 0, i32 3
+
+    %region = load %Region, ptr %regionp
+    %backup = load %RegionBackup, ptr %backupp
+    %rc = load %Rc, ptr %rcp
+
+    %hasbackup = icmp ne %RegionBackup %backup, null
+    %needsbackup = icmp ne %Rc %rc, 0
+
+    br i1 %hasbackup, label %restoreRegion, label %continue
+
+restoreRegion:
+    br label %loop
+
+loop:
+    %i = phi i64 [0, %restoreRegion], [%nexti, %loop]
+    %ptr = phi ptr [%backup, %restoreRegion], [%nextptr, %loop]
+    %fullsize.0 = phi i64 [0, %restoreRegion], [%fullsize, %loop]
+
+    %size = load i64, ptr %ptr
+    %fullsize = add i64 %fullsize.0, %size
+
+    %backupdata = getelementptr i64, ptr %ptr, i64 1
+    %nextptr = getelementptr i8, ptr %backupdata, i64 %size
+
+    %boundsp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 1
+    %bounds = load %Bounds, ptr %boundsp
+    %mem = call %Mem @restoreBackup(%Bounds %bounds, ptr %backupdata, i64 %size)
+
+    %memp = getelementptr %RegionVal, %Region %region, i64 0, i32 0, i64 %i, i32 0
+    store %Mem %mem, ptr %memp
+
+    %nexti = add i64 %i, 1
+    %cmp = icmp ult i64 %nexti, 2
+    br i1 %cmp, label %loop, label %storesize
+
+storesize:
+    %sizep = getelementptr %RegionVal, %Region %region, i64 0, i32 1
+    store i64 %fullsize, ptr %sizep
+    br i1 %needsbackup, label %shareBackup, label %deleteBackup
+
+deleteBackup:
+    call void @free(%RegionBackup %backup)
+    ret void
+
+shareBackup:
+    call void @shareBackup(%RegionBackup %backup)
+    ret void
+
+continue:
+    br i1 %needsbackup, label %backupRegion, label %return
+
+backupRegion:
+    %newbackup = call %RegionBackup @backupRegion(%Region %region)
+    call void @shareBackup(%RegionBackup %newbackup)
+    store %RegionBackup %newbackup, ptr %backupp
+    ret void
+
+return:
+    ret void
+}
+
 define %Stk @uniqueStack(%Stk %stk) alwaysinline {
 
 entry:
     %stkrc = getelementptr %StkVal, %Stk %stk, i64 0, i32 0
     %rc = load %Rc, ptr %stkrc
     switch %Rc %rc, label %copy [%Rc 0, label %done]
+
+done:
+    ret %Stk %stk
 
 copy:
     %stksp = getelementptr %StkVal, %Stk %stk, i64 0, i32 1, i32 0
@@ -511,25 +538,13 @@ copy:
     store %Base %newbase, ptr %newstkbase
     store %Limit %newlimit, ptr %newstklimit
     store %Region %region, ptr %newstkregion
-    store %RegionBackup %backup, ptr %newstkbackup
+    store %RegionBackup null, ptr %newstkbackup
     store %Stk null, ptr %newstkrest
 
     %newoldrc = sub %Rc %rc, 1
     store %Rc %newoldrc, ptr %stkrc
 
-    %cmp = icmp eq %RegionBackup %backup, null
-    br i1 %cmp, label %backupRegion, label %done
-
-backupRegion:
-    %newbackup = call %RegionBackup @backupRegion(%Region %region)
-    call void @shareBackup(ptr %newbackup)
-    store %RegionBackup %newbackup, ptr %stkbackup
     ret %Stk %newstk
-
-done:
-    %ret = phi %Stk [%stk, %entry], [%newstk, %copy]
-    ret %Stk %ret
-
 }
 
 define %RegionBackup @backupRegion(%Region %region) {
