@@ -141,6 +141,7 @@ object Transformer {
         emitInlined(restBlock)
       }
       case machine.Invoke(value, tag, environment) => {
+        ensureEnvironment(transformParameters(environment) ++ transformParameters(List(value)))
         Invoke(transformArgument(value).id, tag, transformArguments(environment))
       }
       case machine.PushFrame(frame, rest) => {
@@ -149,6 +150,7 @@ object Transformer {
         transform(rest)
       }
       case machine.Return(environment) => {
+        ensureEnvironment(transformParameters(environment))
         Return(transformArguments(environment))
       }
       case machine.ForeignCall(out, name, ins, rest) => {
@@ -244,7 +246,7 @@ object Transformer {
     val freeParams = transformParameters(machine.analysis.freeVariables(machineClause).toList);
     val freeArgs = transformArguments(freeParams);
     val jitParams = transformParameters(machineParams);
-    val locals = freeParams ++ jitParams;
+    val locals = jitParams ++ freeParams;
     val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
     val label = emit(transform("?generated", locals, machineBody));
     (freeArgs, args, label)
@@ -258,7 +260,7 @@ object Transformer {
       val reusable = transformArguments(BC.environment) -- frees;
       BC.environment.extendedReusing(jitParams, reusable)
     } else {
-      BC.environment ++ jitParams
+      jitParams ++ BC.environment
     }
     val args = RegList(jitParams.locals.view.mapValues(_.map(locals.registerIndex)).toMap);
     val block = transform("?generated", locals, machineBody);
