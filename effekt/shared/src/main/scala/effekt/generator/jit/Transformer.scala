@@ -98,14 +98,14 @@ object Transformer {
 
         transform(typ) match {
         case Type.Datatype(adtType) =>
-          val (_, defParams, defBlock) = transformInline(defaultClause, reuse=false)
+          val (_, defParams, defBlock) = transformInline(defaultClause)
           val defLabel = emit(defBlock)
           val defaultClauseJit = Clause(defParams, defLabel)
 
           Match(adtType, transformArgument(v).id, (for (i <- 0 to clauseMap.keys.max) yield {
             if (clauseMap.contains(i)) {
               val clause = clauseMap(i)
-              val (closesOver, params, block) = transformInline(clause, reuse=false);
+              val (closesOver, params, block) = transformInline(clause);
               val label = emit(block);
               Clause(params, label)
             } else { defaultClauseJit }
