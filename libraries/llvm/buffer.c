@@ -1,6 +1,8 @@
 #ifndef EFFEKT_BUFFER_C
 #define EFFEKT_BUFFER_C
 
+#include "stdlib.h"
+#include <stdint.h>
 
 // TODO It may be performance-advantageous to implement this C file's semantics
 // in LLVM, since the linker cannot realistically be asked to satisfactorily
@@ -139,5 +141,35 @@ struct Pos c_buffer_concatenate(const struct Pos left, const struct Pos right) {
     return concatenated;
 }
 
+struct Pos c_buffer_eq(const struct Pos left, const struct Pos right) {
+    uint64_t left_len = c_buffer_length(left);
+    uint64_t right_len = c_buffer_length(right);
+    if(left_len != right_len) return BooleanFalse;
+    for(uint64_t j = 0; j < left_len; ++j) {
+        if(c_buffer_bytes(left)[j] != c_buffer_bytes(right)[j]) {
+            return BooleanFalse;
+        }
+    }
+    return BooleanTrue;
+}
+
+struct Pos c_buffer_substring(const struct Pos str, uint64_t start, uint64_t end) {
+    const struct Pos substr = c_buffer_construct_zeroed(end - start);
+    for (uint64_t j = 0; j < c_buffer_length(substr); ++j) {
+        c_buffer_bytes(substr)[j] = c_buffer_bytes(str)[start+j];
+    }
+    return substr;
+}
+
+struct Pos c_buffer_show_Int(const Int n) {
+    char str[24];
+    sprintf(str, "%" PRId64, n);
+    return c_buffer_construct_from_null_terminated_string(str);
+}
+struct Pos c_buffer_show_Double(const Double x) {
+    char str[64]; // TODO is this large enough? Possibly use snprintf first
+    sprintf(str, "%g", x);
+    return c_buffer_construct_from_null_terminated_string(str);
+}
 
 #endif

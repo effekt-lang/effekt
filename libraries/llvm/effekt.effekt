@@ -3,7 +3,6 @@ module effekt
 extern include "rts.ll"
 extern include "forward-declare-c.ll"
 
-
 // Effekt-closed stdlib facilities
 
 def min(n: Int, m: Int): Int =
@@ -42,6 +41,7 @@ extern io def println(str: String): Unit = """
     ret %Pos zeroinitializer ; Unit
 """
 
+def println(u: Unit): Unit = println("unit")
 
 // strings
 
@@ -51,7 +51,14 @@ extern pure def infixConcat(s: String, z: String): String = """
     call void @c_buffer_refcount_decrement(%Pos %z)
     ret %Pos %spz
 """
+def infixAdd(s: String, z: String): String = s ++ z // for legacy test cases
 
+extern pure def infixEq(s: String, z: String): Boolean = """
+    %spz = call %Pos @c_buffer_eq(%Pos %s, %Pos %z)
+    call void @c_buffer_refcount_decrement(%Pos %s)
+    call void @c_buffer_refcount_decrement(%Pos %z)
+    ret %Pos %spz
+"""
 
 // integer arithmetic
 
@@ -159,8 +166,49 @@ extern pure def infixAnd(adt_p: Boolean, adt_q: Boolean): Boolean = """
     ret %Pos %adt_r
 """
 
+// show
+extern pure def show(i: Int): String = """
+   %z = call %Pos @c_buffer_show_Int(%Int %i)
+   ret %Pos %z
+ """
+extern pure def show(x: Double): String = """
+   %z = call %Pos @c_buffer_show_Double(%Double %x)
+   ret %Pos %z
+ """
+def show(b: Boolean): String = {
+    if(b) { "true" } else { "false" }
+}
+def show(u: Unit): String = { "unit" }
+
 // For boxing polymorphic values
 record BoxedUnit(unboxUnit: Unit)
 record BoxedInt(unboxInt: Int)
+record BoxedBoolean(unboxBoolean: Boolean)
 record BoxedDouble(unboxDouble: Double)
 record BoxedString(unboxString: String)
+
+// Pairs
+// =====
+record Tuple2[A, B](first: A, second: B)
+record Tuple3[A, B, C](first: A, second: B, third: C)
+record Tuple4[A, B, C, D](first: A, second: B, third: C, fourth: D)
+record Tuple5[A, B, C, D, E](first: A, second: B, third: C, fourth: D, fifth: E)
+record Tuple6[A, B, C, D, E, F](first: A, second: B, third: C, fourth: D, fifth: E, sixth: F)
+
+// Exceptions
+// ==========
+effect Exception[E] {
+  def raise[A](exception: E, msg: String): A
+}
+record RuntimeError()
+
+def raise[A](msg: String): A / Exception[RuntimeError] = do raise(RuntimeError(), msg)
+
+// reports exceptions of (static) type E to the console
+def report[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = println(msg) }
+
+// ignores exceptions of (static) type E
+// TODO this should be called "ignore" but that name currently clashes with internal pattern matching names on $effekt
+def ignoring[E] { prog: => Unit / Exception[E] }: Unit =
+  try { prog() } with Exception[E] { def raise[A](exception: E, msg: String) = () }
