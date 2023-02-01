@@ -435,7 +435,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | literals ^^ { l => LiteralPattern(l) }
     | idRef ~ (`(` ~> manySep(pattern, `,`)  <~ `)`) ^^ TagPattern.apply
     | idDef ^^ AnyPattern.apply
-    | `(` ~> pattern ~ (`,` ~> some(pattern) <~ `)`) ^^ { case f ~ r =>
+    | `(` ~> pattern ~ (some(`,` ~> pattern) <~ `)`) ^^ { case f ~ r =>
         TagPattern(IdRef(s"Tuple${r.size + 1}") withPositionOf f, f :: r)
       }
     )
