@@ -2,8 +2,38 @@ package effekt
 package core
 
 import scala.collection.{GenMap, mutable}
-//TODO: reorder functions
-//TODO: List().flatMap{...} ? flatMap{...}.toMap ?
+
+class StaticParamsUnfinished(fname: Id,
+                             tparams: Array[Option[Id]],
+                             cparams: Array[Option[Id]],
+                             vparams: Array[Option[Id]],
+                             bparams: Array[Option[Id]]):
+  def unpackParams: (Array[Option[Id]], Array[Option[Id]], Array[Option[Id]], Array[Option[Id]]) =
+    (tparams, cparams, vparams, bparams)
+
+  def id: Id = fname
+
+class StaticParams(fname: Id,
+                   tparams: Set[Id],
+                   cparams: Set[Id],
+                   vparams: Set[Id],
+                   bparams: Set[Id],
+                   tIndices: List[Int],
+                   cIndices: List[Int],
+                   vIndices: List[Int],
+                   bIndices: List[Int]):
+  def id: Id = fname
+  
+  def unpackParams: (Set[Id], Set[Id], Set[Id], Set[Id]) =
+    (tparams, cparams, vparams, bparams)
+
+  def unpackIndices: (List[Int], List[Int], List[Int], List[Int]) =
+    (tIndices, cIndices, vIndices, bIndices)
+    
+  def nonEmpty: Boolean =
+    tparams.nonEmpty || cparams.nonEmpty || vparams.nonEmpty || bparams.nonEmpty
+
+
 def collectAliases(module: ModuleDecl): Map[Id, Id] =
   module.definitions.map(collectAliases).fold(Map[Id, Id]())(_ ++ _)
 
@@ -581,7 +611,7 @@ def constructCallGraph(op: Operation): Map[Id, Set[Id]] =
     case Operation(_, _, _, _, _, _, body) =>
       constructCallGraph(body)
 
-def findStaticArguments(start: Definition.Def): (Set[Id], Set[Id], Set[Id], Set[Id]) =
+def findStaticArguments(start: Definition.Def): StaticParams =
   start match
     case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
       val ts: Array[Option[Id]] = tparams.map(x => Some(x)).toArray
@@ -589,82 +619,67 @@ def findStaticArguments(start: Definition.Def): (Set[Id], Set[Id], Set[Id], Set[
       val vs: Array[Option[Id]] = vparams.map(x => Some(x.id)).toArray
       val bs: Array[Option[Id]] = bparams.map(x => Some(x.id)).toArray
 
-      findStaticArgumentsWorker(body)(using id, ts, cs, vs, bs)
-
-      (ts.filter(_.isDefined).map(_.get).toSet[Id],
+      findStaticArgumentsWorker(body)(using StaticParamsUnfinished(id, ts, cs, vs, bs))
+      StaticParams(id,
+        ts.filter(_.isDefined).map(_.get).toSet[Id],
         cs.filter(_.isDefined).map(_.get).toSet[Id],
         vs.filter(_.isDefined).map(_.get).toSet[Id],
-        bs.filter(_.isDefined).map(_.get).toSet[Id])
+        bs.filter(_.isDefined).map(_.get).toSet[Id],
+        ts.toList.zipWithIndex.map{case (p, i) => if(p.isDefined) i else None}.filter(_.isInstanceOf[Int]).asInstanceOf[List[Int]],
+        cs.toList.zipWithIndex.map{case (p, i) => if(p.isDefined) i else None}.filter(_.isInstanceOf[Int]).asInstanceOf[List[Int]],
+        vs.toList.zipWithIndex.map{case (p, i) => if(p.isDefined) i else None}.filter(_.isInstanceOf[Int]).asInstanceOf[List[Int]],
+        bs.toList.zipWithIndex.map{case (p, i) => if(p.isDefined) i else None}.filter(_.isInstanceOf[Int]).asInstanceOf[List[Int]])
 
-    case _ => (Set[Id](), Set[Id](), Set[Id](), Set[Id]())
+    case _ => StaticParams(Id("None"), Set[Id](), Set[Id](), Set[Id](), Set[Id](), List[Int](), List[Int](), List[Int](), List[Int]())
 
-def findStaticArgumentsWorker(module: ModuleDecl)(using fname: Id,
-                                                  tparams: Array[Option[Id]],
-                                                  cparams: Array[Option[Id]],
-                                                  vparams: Array[Option[Id]],
-                                                  bparams: Array[Option[Id]]): Unit =
-  module.definitions.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+def findStaticArgumentsWorker(module: ModuleDecl)(using params: StaticParamsUnfinished): Unit =
+  module.definitions.foreach(findStaticArgumentsWorker)
 
-def findStaticArgumentsWorker(definition: Definition)(using fname: Id,
-                                                      tparams: Array[Option[Id]],
-                                                      cparams: Array[Option[Id]],
-                                                      vparams: Array[Option[Id]],
-                                                      bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(definition: Definition)(using params: StaticParamsUnfinished): Unit =
   definition match
     case Definition.Def(_, block) =>
-      findStaticArgumentsWorker(block)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(block)
 
     case Definition.Let(_, binding) =>
-      findStaticArgumentsWorker(binding)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(binding)
 
-def findStaticArgumentsWorker(arg: Argument)(using fname: Id,
-                                             tparams: Array[Option[Id]],
-                                             cparams: Array[Option[Id]],
-                                             vparams: Array[Option[Id]],
-                                             bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(arg: Argument)(using params: StaticParamsUnfinished): Unit =
   arg match
     case p: Pure =>
-      findStaticArgumentsWorker(p)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(p)
 
     case b: Block =>
-      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(b)
 
-def findStaticArgumentsWorker(expr: Expr)(using fname: Id,
-                                          tparams: Array[Option[Id]],
-                                          cparams: Array[Option[Id]],
-                                          vparams: Array[Option[Id]],
-                                          bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(expr: Expr)(using params: StaticParamsUnfinished): Unit =
   expr match
     case DirectApp(b, _, vargs, bargs) =>
-      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
-      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
-      bargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      findStaticArgumentsWorker(b)
+      vargs.foreach(findStaticArgumentsWorker)
+      bargs.foreach(findStaticArgumentsWorker)
 
     case Run(s) =>
-      findStaticArgumentsWorker(s)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(s)
 
     case p: Pure =>
-      findStaticArgumentsWorker(p)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(p)
 
-def findStaticArgumentsWorker(statement: Stmt)(using fname: Id,
-                                               tparams: Array[Option[Id]],
-                                               cparams: Array[Option[Id]],
-                                               vparams: Array[Option[Id]],
-                                               bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(statement: Stmt)(using params: StaticParamsUnfinished): Unit =
   statement match
     case Scope(definitions, body) =>
-      definitions.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      definitions.foreach(findStaticArgumentsWorker)
+      findStaticArgumentsWorker(body)
 
     case Return(expr) =>
-      findStaticArgumentsWorker(expr)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(expr)
 
     case Val(_, binding, body) =>
-      findStaticArgumentsWorker(binding)(using fname, tparams, cparams, vparams, bparams)
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(binding)
+      findStaticArgumentsWorker(body)
 
     case App(BlockVar(id, _, _), targs, vargs, bargs) =>
-      if(id == fname)
+      var (tparams, cparams, vparams, bparams) = params.unpackParams
+      if(id == params.id)
         targs.zipWithIndex.foreach{
           case (ValueType.Var(id), idx) => if(!tparams(idx).contains(id)) tparams(idx) = None
           case (_, idx) => tparams(idx) = None}
@@ -680,96 +695,80 @@ def findStaticArgumentsWorker(statement: Stmt)(using fname: Id,
             bparams(idx) = None
             cparams(idx) = None}
 
-      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
-      bargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      vargs.foreach(findStaticArgumentsWorker)
+      bargs.foreach(findStaticArgumentsWorker)
 
     case App(callee, _, vargs, bargs) =>
-      findStaticArgumentsWorker(callee)(using fname, tparams, cparams, vparams, bparams)
-      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
-      bargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      findStaticArgumentsWorker(callee)
+      vargs.foreach(findStaticArgumentsWorker)
+      bargs.foreach(findStaticArgumentsWorker)
 
     case If(cond, thn, els) =>
-      findStaticArgumentsWorker(cond)(using fname, tparams, cparams, vparams, bparams)
-      findStaticArgumentsWorker(thn)(using fname, tparams, cparams, vparams, bparams)
-      findStaticArgumentsWorker(els)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(cond)
+      findStaticArgumentsWorker(thn)
+      findStaticArgumentsWorker(els)
 
     case Match(scrutinee, clauses, default) =>
-      findStaticArgumentsWorker(scrutinee)(using fname, tparams, cparams, vparams, bparams)
-      clauses.foreach{(_,b) => findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)}
+      findStaticArgumentsWorker(scrutinee)
+      clauses.foreach{(_,b) => findStaticArgumentsWorker(b)}
       default match
-        case Some(s) => findStaticArgumentsWorker(s)(using fname, tparams, cparams, vparams, bparams)
+        case Some(s) => findStaticArgumentsWorker(s)
         case None =>
 
     case State(_, init, _, body) =>
-      findStaticArgumentsWorker(init)(using fname, tparams, cparams, vparams, bparams)
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(init)
+      findStaticArgumentsWorker(body)
 
     case Try(body, handlers) =>
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
-      handlers.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      findStaticArgumentsWorker(body)
+      handlers.foreach(findStaticArgumentsWorker)
 
     case Region(body) =>
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(body)
 
     case _: Hole =>
 
-def findStaticArgumentsWorker(block: Block)(using fname: Id,
-                                            tparams: Array[Option[Id]],
-                                            cparams: Array[Option[Id]],
-                                            vparams: Array[Option[Id]],
-                                            bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(block: Block)(using params: StaticParamsUnfinished): Unit =
   block match
     case _: BlockVar =>
 
     case BlockLit(_, _, _, _, body) =>
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(body)
 
     case Member(block, _, _) =>
-      findStaticArgumentsWorker(block)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(block)
 
     case Unbox(pure) =>
-      findStaticArgumentsWorker(pure)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(pure)
 
     case New(impl) =>
-      findStaticArgumentsWorker(impl)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(impl)
 
-def findStaticArgumentsWorker(pure: Pure)(using fname: Id,
-                                          tparams: Array[Option[Id]],
-                                          cparams: Array[Option[Id]],
-                                          vparams: Array[Option[Id]],
-                                          bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(pure: Pure)(using params: StaticParamsUnfinished): Unit =
   pure match
     case _: ValueVar =>
 
     case _: Literal =>
 
     case PureApp(b, _, vargs) =>
-      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
-      vargs.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      findStaticArgumentsWorker(b)
+      vargs.foreach(findStaticArgumentsWorker)
 
     case Select(target, _, _) =>
-      findStaticArgumentsWorker(target)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(target)
 
     case Box(b, _) =>
-      findStaticArgumentsWorker(b)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(b)
 
-def findStaticArgumentsWorker(impl: Implementation)(using fname: Id,
-                                                    tparams: Array[Option[Id]],
-                                                    cparams: Array[Option[Id]],
-                                                    vparams: Array[Option[Id]],
-                                                    bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(impl: Implementation)(using params: StaticParamsUnfinished): Unit =
   impl match
     case Implementation(_, operations) =>
-      operations.foreach(findStaticArgumentsWorker(_)(using fname, tparams, cparams, vparams, bparams))
+      operations.foreach(findStaticArgumentsWorker)
 
-def findStaticArgumentsWorker(op: Operation)(using fname: Id,
-                                             tparams: Array[Option[Id]],
-                                             cparams: Array[Option[Id]],
-                                             vparams: Array[Option[Id]],
-                                             bparams: Array[Option[Id]]): Unit =
+def findStaticArgumentsWorker(op: Operation)(using params: StaticParamsUnfinished): Unit =
   op match
     case Operation(_, _, _, _, _, _, body) =>
-      findStaticArgumentsWorker(body)(using fname, tparams, cparams, vparams, bparams)
+      findStaticArgumentsWorker(body)
 
 /*
 Template:

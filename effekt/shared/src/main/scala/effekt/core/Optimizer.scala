@@ -49,6 +49,8 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         val calls = rmIdKey[Int](countFunctionCalls(dealiased), Set("main"))
         val unused_removed = removeUnusedFunctions(dealiased, calls).asInstanceOf[ModuleDecl]
 
-        unused_removed
+        val static_arguments_transformed = staticArgumentTransformation(unused_removed).asInstanceOf[ModuleDecl]
+
+        static_arguments_transformed
   }
 }
