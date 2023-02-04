@@ -1,8 +1,6 @@
 package effekt
 package core
 
-import effekt.core.Block.BlockLit
-
 import scala.collection.{GenMap, mutable}
 
 def dealiasing(module: ModuleDecl)(using aliases: Map[Id, Id]): ModuleDecl =
@@ -271,11 +269,6 @@ def removeUnusedFunctionsWorker(op: Operation)(using rm: Set[Id]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, removeUnusedFunctionsWorker(body))
 
-//TODO: Static Argument Transformation
-// Look at recursive functions
-// Find static Arguments
-// if not empty: Def(id, block) => Def(id, Scope(Worker[block], App(Worker))
-/*
 def staticArgumentTransformation(start: Tree|Definition): Tree|Definition =
   start match
     case m: ModuleDecl =>
@@ -306,12 +299,11 @@ def staticArgumentTransformationWorker(module: ModuleDecl)(using recursiveFuncti
 
 def staticArgumentTransformationWorker(definition: Definition)(using recursiveFunctions: Set[Id]): Definition =
   definition match
-    case d@Definition.Def(id, block) => //TODO: the actual work
+    case d@Definition.Def(id, block) =>
       if(recursiveFunctions.contains(id))
-        val (ts, cs, vs, bs) = findStaticArguments(d)
-        if(ts.nonEmpty || cs.nonEmpty || vs.nonEmpty || bs.nonEmpty)// TODO: This is tuple
-
-          val transformed = transformStaticArguments(d, ts, cs, vs, bs)
+        val staticPs = findStaticArguments(d)
+        if(staticPs.nonEmpty)
+          val transformed = transformStaticArguments(d, staticPs)
           transformed match
             case Definition.Def(id, block) => Definition.Def(id, staticArgumentTransformationWorker(block))
 
@@ -419,22 +411,144 @@ def staticArgumentTransformationWorker(op: Operation)(using recursiveFunctions: 
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, staticArgumentTransformationWorker(body))
 
-def transformStaticArguments(definition: Definition.Def, ts: Set[Id], cs: Set[Id], vs: Set[Id], bs: Set[Id]): Definition.Def =
+def transformStaticArguments(definition: Definition.Def, params: StaticParams): Definition.Def =
   definition match
     case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
+      val (ti, ci, vi, bi) = params.unpackIndices
       val workerName = symbols.TmpBlock()
-      val worker =
-        Definition.Def(workerName,
-          tparams.filter(!ts.contains),
-          cparams.filter(!cs.contains),
-          vparams.filter(!vs.contains(_.id)),
-          bparams.filter(!bs.contains(_.id)),
-          substitute(body)(using (id -> BlockVar(workerName, ...)))) //TODO: enter body and change calls to worker
 
-      Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, Scope(List(worker),App(worker.id, ???))))
+      val newTParams = tparams.zipWithIndex.filter(x => !ti.contains(x._2)).map(_._1)
+      val newCParams = cparams.zipWithIndex.filter(x => !ci.contains(x._2)).map(_._1)
+      val newVParams = vparams.zipWithIndex.filter(x => !vi.contains(x._2)).map(_._1)
+      val newBParams = bparams.zipWithIndex.filter(x => !bi.contains(x._2)).map(_._1)
+
+      val newBody = BlockLit(newTParams, newCParams, newVParams, newBParams, replaceCalls(body)(using workerName, params))
+
+      val worker = Definition.Def(workerName, newBody)
+
+      Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, Scope(List(worker),
+        App(BlockVar(workerName, newBody.tpe, newBody.capt),
+          newTParams.map(ValueType.Var(_)),
+          newVParams.map{case ValueParam(id, tpe) => ValueVar(id, tpe)},
+          newBParams.map{case BlockParam(id, tpe) => BlockVar(id, tpe, Set(id))}))))
     case _ =>
       definition
-*/
+
+//TODO: Muss hier nur App betrachtet werden oder auch andere BlockVariablen?
+def replaceCalls(statement: Stmt)(using newName: Id, params: StaticParams): Stmt =
+  statement match
+    case Scope(definitions, body) =>
+      Scope(definitions.map(replaceCalls), replaceCalls(body))
+
+    case Return(expr) =>
+      Return(replaceCalls(expr))
+
+    case Val(id, binding, body) =>
+      Val(id, replaceCalls(binding), replaceCalls(body))
+
+    case App(callee@BlockVar(id, BlockType.Function(tparams, cparams, vparams, bparams, result), annotatedCaptures), targs, vargs, bargs) =>
+      val (ti, ci, vi, bi) = params.unpackIndices
+      val (_, _, _, bs) = params.unpackParams
+      if(id == params.id)
+        App(BlockVar(newName,
+          BlockType.Function(tparams.zipWithIndex.filter(x => !ti.contains(x._2)).map(_._1),
+            cparams.zipWithIndex.filter(x => !ci.contains(x._2)).map(_._1),
+            vparams.zipWithIndex.filter(x => !vi.contains(x._2)).map(_._1),
+            bparams.zipWithIndex.filter(x => !bi.contains(x._2)).map(_._1),
+            result), annotatedCaptures ++ bs),
+          targs.zipWithIndex.filter(x => !ti.contains(x._2)).map(_._1),
+          vargs.zipWithIndex.filter(x => !vi.contains(x._2)).map(_._1),
+          bargs.zipWithIndex.filter(x => !bi.contains(x._2)).map(_._1))
+
+      else App(callee, targs, vargs.map(replaceCalls), bargs.map(replaceCalls))
+
+    case App(callee, targs, vargs, bargs) =>
+      App(replaceCalls(callee), targs, vargs.map(replaceCalls), bargs.map(replaceCalls))
+
+    case If(cond, thn, els) =>
+      If(replaceCalls(cond), replaceCalls(thn), replaceCalls(els))
+
+    case Match(scrutinee, clauses, default) =>
+      Match(replaceCalls(scrutinee), clauses.map{case (id, b) => (id, replaceCalls(b).asInstanceOf[BlockLit])}, default match
+        case Some(s) => Some(replaceCalls(s))
+        case None => None)
+
+    case State(id, init, region, body) =>
+      State(id, replaceCalls(init), region, replaceCalls(body))
+
+    case Try(body, handlers) =>
+      Try(replaceCalls(body), handlers.map(replaceCalls))
+
+    case Region(body) =>
+      Region(replaceCalls(body))
+
+    case h: Hole =>
+      h
+
+def replaceCalls(definition: Definition)(using newName: Id, params: StaticParams): Definition =
+  definition match
+    case Definition.Def(id, block) =>
+      Definition.Def(id, replaceCalls(block))
+
+    case Definition.Let(id, binding) =>
+      Definition.Let(id, replaceCalls(binding))
+
+def replaceCalls(expr: Expr)(using newName: Id, params: StaticParams): Expr =
+  expr match
+    case DirectApp(b, targs, vargs, bargs) =>
+      DirectApp(replaceCalls(b), targs, vargs.map(replaceCalls), bargs.map(replaceCalls))
+
+    case Run(s) =>
+      Run(replaceCalls(s))
+
+    case p: Pure =>
+      replaceCalls(p)
+
+def replaceCalls(block: Block)(using newName: Id, params: StaticParams): Block =
+  block match
+    case b:BlockVar => //TODO: Modify this also
+      b
+
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockLit(tparams, cparams, vparams, bparams, replaceCalls(body))
+
+    case Member(block, field, annotatedTpe) =>
+      Member(replaceCalls(block), field, annotatedTpe)
+
+    case Unbox(pure) =>
+      Unbox(replaceCalls(pure))
+
+    case New(impl) =>
+      New(replaceCalls(impl))
+
+def replaceCalls(pure: Pure)(using newName: Id, params: StaticParams): Pure =
+  pure match
+    case v:ValueVar =>
+      v
+
+    case l: Literal =>
+      l
+
+    case PureApp(b, targs, vargs) =>
+      PureApp(replaceCalls(b), targs, vargs.map(replaceCalls))
+
+    case Select(target, field, annotatedType) =>
+      Select(replaceCalls(target), field, annotatedType)
+
+    case Box(b, annotatedCapture) =>
+      Box(replaceCalls(b), annotatedCapture)
+
+def replaceCalls(impl: Implementation)(using newName: Id, params: StaticParams): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(replaceCalls))
+
+def replaceCalls(op: Operation)(using newName: Id, params: StaticParams): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, replaceCalls(body))
+
+/*
 def substitute(tree: Tree,
                tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam],
                targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Tree =
@@ -443,7 +557,6 @@ def substitute(tree: Tree,
   val vSubst = (vparams.map(_.id) zip vargs).toMap
   val bSubst = (bparams.map(_.id) zip bargs).toMap
 
-  //substitute(tree)(using tSubst, cSubst, vSubst, bSubst) TODO: is match necessary here?
   tree match
     case m: ModuleDecl =>
       substitute(m)(using tSubst, cSubst, vSubst, bSubst)
@@ -583,5 +696,5 @@ def substitute(arg: Argument)(using tSubst: Map[Id, ValueType], cSubst: Map[Id, 
 
     case b: Block =>
       substitute(b)
-
-//TODO: Inlining
+*/
+//TODO: Inlining, Constant Propagation, Case-of-known-case
