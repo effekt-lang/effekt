@@ -1,5 +1,6 @@
 package effekt
-package lifted.typed
+package lifted
+package typed
 
 import effekt.core.Id
 
@@ -55,7 +56,7 @@ enum Definition {
 }
 
 sealed trait Expr extends Tree {
-  val tpe: ValueType = Type.inferType(this)
+  val tpe: ValueType = ??? //Type.inferType(this)
 }
 // might use IO resources, but does not take evidence.
 case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
@@ -88,7 +89,7 @@ enum Block extends Tree {
 
   case New(impl: Implementation)
 
-  val tpe: BlockType = Type.inferType(this)
+  val tpe: BlockType = ??? //Type.inferType(this)
 }
 export Block.*
 
@@ -142,7 +143,7 @@ enum Stmt extends Tree {
   // Others
   case Hole()
 
-  val tpe: ValueType = Type.inferType(this)
+  val tpe: ValueType = ??? //Type.inferType(this)
 }
 export Stmt.*
 

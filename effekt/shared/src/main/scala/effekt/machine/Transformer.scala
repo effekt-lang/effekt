@@ -38,7 +38,7 @@ object Transformer {
     findToplevelBlocksParams(definitions)
 
     val transformedDefinitions = definitions.foldLeft(mainEntry) {
-      case (rest, lifted.Definition.Def(id, _, lifted.BlockLit(tparams, params, body))) =>
+      case (rest, lifted.Definition.Def(id, lifted.BlockLit(tparams, params, body))) =>
         Def(Label(transform(id), params.map(transform)), transform(body), rest)
       case (rest, d) =>
         ErrorReporter.abort(s"Toplevel def and let bindings not yet supported: ${d}")
@@ -48,13 +48,8 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, functionType, params, body) =>
-      val transformedParams = params.map {
-        case lifted.ValueParam(id, tpe) => Variable(id.name.name, transform(tpe))
-        case lifted.BlockParam(id, tpe) => ErrorReporter.abort("Foreign functions currently cannot take block arguments.")
-        case lifted.EvidenceParam(id) => Variable(id.name.name, builtins.Evidence)
-      }
-      Extern(transform(name), transformedParams, transform(functionType.result), body)
+    case lifted.Extern.Def(name, tps, vps, bps, ret, body) =>
+      Extern(transform(name), (vps ++ bps).map(transform), transform(ret), body)
 
     case lifted.Extern.Include(contents) =>
       Include(contents)
@@ -65,7 +60,7 @@ object Transformer {
       case lifted.Scope(definitions, rest) =>
 
         definitions.foreach {
-          case Definition.Def(id, tpe, block @ lifted.BlockLit(tparams, params, body)) =>
+          case Definition.Def(id,  block @ lifted.BlockLit(tparams, params, body)) =>
             // TODO does not work for mutually recursive local definitions
             val freeParams = lifted.freeVariables(block).toList.collect {
               case lifted.ValueParam(id, tpe) => Variable(transform(id), transform(tpe))
@@ -84,19 +79,20 @@ object Transformer {
         }
 
         definitions.foldRight(transform(rest)) {
-          case (lifted.Definition.Let(id, tpe, binding), rest) =>
+          case (lifted.Definition.Let(id, binding), rest) =>
             transform(binding).run { value =>
               // TODO consider passing the environment to [[transform]] instead of explicit substitutions here.
-              Substitute(List(Variable(transform(id), transform(tpe)) -> value), rest)
+              Substitute(List(Variable(transform(id), transform(binding.tpe)) -> value), rest)
             }
 
-          case (lifted.Definition.Def(id, tpe, block @ lifted.BlockLit(tparams, params, body)), rest) =>
+          case (lifted.Definition.Def(id, block @ lifted.BlockLit(tparams, params, body)), rest) =>
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
-          case (lifted.Definition.Def(id, tpe @ core.BlockType.Interface(ifceId, _), block @ lifted.New(impl)), rest) =>
+          case (lifted.Definition.Def(id, block @ lifted.New(impl)), rest) =>
+            val interfaceId = impl.id.name
             // TODO freeParams?
-            // TODO deal with evidenve?
-            val properties = DeclarationContext.getInterface(ifceId).properties
+            // TODO deal with evidence?
+            val properties = DeclarationContext.getInterface(interfaceId).properties
             val implTransformed = properties.map({ prop =>
               impl.operations.find(_._1 == prop.id).get
             }).map({
@@ -104,24 +100,22 @@ object Transformer {
                 // TODO we assume that there are no block params in methods
                 Clause(params.map(transform), transform(body))
             })
-            New(Variable(transform(id), transform(tpe)), implTransformed, rest)
+            New(Variable(transform(id), transform(impl.id)), implTransformed, rest)
 
-          case (d @ lifted.Definition.Def(_, _, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
+          case (d @ lifted.Definition.Def(_, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
-          case (d @ lifted.Definition.Def(_,_: core.BlockType.Function, lifted.New(_)), _) =>
-              ErrorReporter.abort(s"Interface with function type in block definition: $d")
         }
 
-      case lifted.Return(lifted.Run(stmt, tpe)) =>
+      case lifted.Return(lifted.Run(stmt)) =>
         transform(stmt)
 
       case lifted.Return(expr) =>
         transform(expr).run { value => Return(List(value)) }
 
-      case lifted.Val(id, tpe, bind, rest) =>
+      case lifted.Val(id, binding, rest) =>
         PushFrame(
-          Clause(List(transform(lifted.ValueParam(id, tpe))), transform(rest)),
-            transform(bind)
+          Clause(List(transform(lifted.ValueParam(id, binding.tpe))), transform(rest)),
+            transform(binding)
         )
       case lifted.App(lifted.BlockVar(id, tpe), targs, args) =>
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
@@ -154,7 +148,7 @@ object Transformer {
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
         val opTag = {
           tpe match
-            case core.BlockType.Interface(ifceId, _) =>
+            case lifted.BlockType.Interface(ifceId, _) =>
               DeclarationContext.getPropertyTag(op)
             case _ => ErrorReporter.abort(s"Unsupported receiver type $tpe")
         }
@@ -179,9 +173,9 @@ object Transformer {
           Switch(value, transformedClauses, transformedDefault)
         }
 
-      case lifted.Try(lifted.BlockLit(tparams, List(ev, id), body), tpe, List(handler)) =>
+      case lifted.Try(lifted.BlockLit(tparams, List(ev, id), body), List(handler)) =>
         // TODO more than one handler
-        val variable = Variable(freshName("a"), transform(tpe))
+        val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
         val regionVar = Variable(freshName("_"), Type.Region())
@@ -192,8 +186,8 @@ object Transformer {
               New(transform(id), transform(handler),
                 transform(body)))))
 
-      case lifted.Region(lifted.BlockLit(tparams, List(ev, id), body), tpe) =>
-        val variable = Variable(freshName("a"), transform(tpe))
+      case lifted.Region(lifted.BlockLit(tparams, List(ev, id), body)) =>
+        val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
         val delimiter = Variable(freshName("returnClause"), Type.Stack())
         val regionVar = Variable(transform(id.id), Type.Region())
@@ -202,7 +196,7 @@ object Transformer {
           NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter, transform(body))))
 
-      case lifted.State(id, init, stateTpe, region, body) =>
+      case lifted.State(id, init, region, body) =>
         transform(init).run { value =>
           val tpe = value.tpe;
           val name = transform(id)
@@ -301,7 +295,7 @@ object Transformer {
 
     // hardcoded translation for get and put.
     // TODO remove this when interfaces are correctly translated
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), targs, List()) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), targs, List()) =>
       if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val tpe = transform(stateType)
@@ -311,7 +305,7 @@ object Transformer {
         Load(variable, stateVariable, k(variable))
       }
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, core.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(arg)) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(arg)) =>
       if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val tpe = transform(stateType)
@@ -324,7 +318,7 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: core.BlockType.Function), targs, args) =>
+    case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>
       if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
       val variable = Variable(freshName("x"), transform(tpe.result))
@@ -334,7 +328,7 @@ object Transformer {
         }
       }
 
-    case lifted.PureApp(lifted.BlockVar(blockName, tpe: core.BlockType.Function), targs, args)
+    case lifted.PureApp(lifted.BlockVar(blockName, tpe: lifted.BlockType.Function), targs, args)
     if DeclarationContext.findConstructor(blockName).isDefined =>
       if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
 
@@ -359,9 +353,9 @@ object Transformer {
         }
       }
 
-    case lifted.Run(stmt, tpe) =>
+    case lifted.Run(stmt) =>
       // NOTE: `stmt` is guaranteed to be of type `tpe`.
-      val variable = Variable(freshName("x"), transform(tpe))
+      val variable = Variable(freshName("x"), transform(stmt.tpe))
       Binding { k =>
         PushFrame(Clause(List(variable), k(variable)), transform(stmt))
       }
@@ -404,30 +398,30 @@ object Transformer {
         Variable(transform(name), builtins.Evidence)
     }
 
-  def transform(tpe: core.ValueType)(using ErrorReporter): Type = tpe match {
-    case core.ValueType.Var(name) => Positive(name.name.name) // assume all value parameters are data
-    case core.ValueType.Boxed(tpe, capt) => ???
-    case core.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
-    case core.ValueType.Data(symbols.builtins.IntSymbol, Nil) => Type.Int()
-    case core.ValueType.Data(symbols.builtins.BooleanSymbol, Nil) => builtins.BooleanType
-    case core.ValueType.Data(symbols.builtins.DoubleSymbol, Nil) => Type.Double()
-    case core.ValueType.Data(symbols.builtins.StringSymbol, Nil) => Type.String()
-    case core.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
+  def transform(tpe: lifted.ValueType)(using ErrorReporter): Type = tpe match {
+    case lifted.ValueType.Var(name) => Positive(name.name.name) // assume all value parameters are data
+    case lifted.ValueType.Boxed(tpe) => ???
+    case lifted.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
+    case lifted.ValueType.Data(symbols.builtins.IntSymbol, Nil) => Type.Int()
+    case lifted.ValueType.Data(symbols.builtins.BooleanSymbol, Nil) => builtins.BooleanType
+    case lifted.ValueType.Data(symbols.builtins.DoubleSymbol, Nil) => Type.Double()
+    case lifted.ValueType.Data(symbols.builtins.StringSymbol, Nil) => Type.String()
+    case lifted.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
   }
 
-  def transform(tpe: core.BlockType)(using ErrorReporter): Type = tpe match {
-    case core.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
-    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
-    case core.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
+  def transform(tpe: lifted.BlockType)(using ErrorReporter): Type = tpe match {
+    case lifted.BlockType.Function(Nil, cparams, vparams, bparams, result) => Negative("<function>")
+    case lifted.BlockType.Function(tparams, cparams, vparams, bparams, result) => ???
+    case lifted.BlockType.Interface(symbol, targs) => Negative(symbol.name.name)
   }
 
   def transform(id: Symbol): String =
     s"${id.name}_${id.id}"
 
-  def requiresBoxing(tpe: core.ValueType): Boolean = {
+  def requiresBoxing(tpe: lifted.ValueType): Boolean = {
     tpe match
-      case core.ValueType.Var(_) => false // assume by induction all type variables must be data
-      case core.ValueType.Data(_, args) => {
+      case lifted.ValueType.Var(_) => false // assume by induction all type variables must be data
+      case lifted.ValueType.Data(_, args) => {
         args.exists(requiresBoxing)
       }
       case _ => true
@@ -437,7 +431,7 @@ object Transformer {
 
   def findToplevelBlocksParams(definitions: List[lifted.Definition])(using BlocksParamsContext, ErrorReporter): Unit =
     definitions.foreach {
-      case Definition.Def(blockName, tpe, lifted.BlockLit(tparams, params, body)) =>
+      case Definition.Def(blockName, lifted.BlockLit(tparams, params, body)) =>
         noteBlockParams(blockName, params.map(transform))
       case _ => ()
     }

@@ -34,14 +34,19 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def transform(declaration: core.Declaration): lifted.Declaration = ???
 
   def transform(param: core.Param): Param = param match {
-    case core.ValueParam(id, tpe) => ValueParam(id, tpe)
-    case core.BlockParam(id, tpe) => BlockParam(id, tpe)
+    case core.ValueParam(id, tpe) => ValueParam(id, transform(tpe))
+    case core.BlockParam(id, tpe) => BlockParam(id, transform(tpe))
   }
+
+  def transform(tpe: core.ValueType): lifted.ValueType = ???
+  def transform(tpe: core.BlockType): lifted.BlockType = ???
+
+  def transform(interface: core.BlockType.Interface): lifted.BlockType.Interface = ???
 
   def transform(tree: core.Block)(using Environment, ErrorReporter): lifted.Block = tree match {
     case b @ core.BlockLit(tps, cps, vps, bps, body) => liftBlockLitTo(b)
-    case core.Member(body, id, tpe) => Member(transform(body), id, tpe)
-    case core.BlockVar(b, tpe, capt) => BlockVar(b, tpe)
+    case core.Member(body, id, tpe) => Member(transform(body), id, transform(tpe))
+    case core.BlockVar(b, tpe, capt) => BlockVar(b, transform(tpe))
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
 
@@ -50,22 +55,26 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         // for now we reconstruct a block lit
         Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, cps, vps, bps ++ resume.toList, body)))
       }
-      New(Implementation(interface, transformedMethods))
+      New(Implementation(transform(interface), transformedMethods))
   }
 
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
     case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
       val funTpe: core.BlockType.Function = core.BlockType.Function(tps, cps, vps.map(_.tpe), bps.map(_.tpe), ret)
-      Extern.Def(id, funTpe, (vps ++ bps).map { p => transform(p) }, body)
+      // TODO what to do with cps?
+      Extern.Def(id, tps, vps.map(transform), bps.map(transform), transform(ret), body)
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
   }
 
+  def transform(p: core.Param.ValueParam): lifted.Param.ValueParam = ???
+  def transform(p: core.Param.BlockParam): lifted.Param.BlockParam = ???
+
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
     case core.Definition.Def(id, block) =>
-      Definition.Def(id, block.tpe, transform(block))
+      Definition.Def(id, transform(block))
     case core.Definition.Let(id, binding) =>
-      Definition.Let(id, binding.tpe, transform(binding))
+      Definition.Let(id, transform(binding))
   }
 
   def transform(tree: core.Stmt)(using Environment, ErrorReporter): Stmt = tree match {
@@ -93,7 +102,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // [[ try { {cap}... => s } with ... ]] = try { [ev]{cap}... => s } with ...
       val transformedBody = transform(body)(using environment, ErrorReporter) // lift is provided by the handler runtime
 
-      Try(lifted.BlockLit(tparams, EvidenceParam(selfEvidence) :: transformedParams, transformedBody), tpe, transformedHandler)
+      Try(lifted.BlockLit(tparams, Param.EvidenceParam(selfEvidence) :: transformedParams, transformedBody), transformedHandler)
 
     case core.Try(_, _) => ErrorReporter.panic("Should not happen. Handle always take block literals as body.")
 
@@ -112,7 +121,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
           environment = environment.bind(id)
           transform(p)
       }
-      Region(lifted.BlockLit(tparams, EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, ErrorReporter)), body.tpe)
+      Region(lifted.BlockLit(tparams, Param.EvidenceParam(selfEvidence) :: transformedParams, transform(body)(using environment, ErrorReporter)))
 
     case core.Region(_) => ErrorReporter.panic("Should not happen. Regions always take block literals as body.")
 
@@ -124,7 +133,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       val (blockEv, bargsT) = transform(bargs)
 
       // adds evidence parameters for block arguments
-      App(transform(b), targs, (ev :: blockEv) ++ vargsT ++ bargsT)
+      App(transform(b), targs.map(transform), (ev :: blockEv) ++ vargsT ++ bargsT)
 
     case core.Scope(definitions, rest) =>
       val env = pretransform(definitions)
@@ -133,10 +142,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Scope(definitions.map(d => transform(d)(using env, ErrorReporter)), body)
 
     case core.Val(id, binding, body) =>
-      Val(id, binding.tpe, transform(binding), transform(body))
+      Val(id, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
-      State(id, transform(init), init.tpe, region, transform(body))
+      State(id, transform(init), region, transform(body))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),
@@ -154,26 +163,26 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Expr)(using Environment, ErrorReporter): Expr = tree match {
     case core.Literal(value, tpe) =>
-      Literal(value, tpe)
+      Literal(value, transform(tpe))
 
     case core.ValueVar(sym, tpe) =>
-      ValueVar(sym, tpe)
+      ValueVar(sym, transform(tpe))
 
     case core.DirectApp(b: core.Block, targs, vargs, bargs) =>
       val (ev, bargsT) = transform(bargs)
-      PureApp(transform(b), targs, ev ++ vargs.map(transform) ++ bargsT)
+      PureApp(transform(b), targs.map(transform), ev ++ vargs.map(transform) ++ bargsT)
 
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
-      PureApp(transform(b), targs, args map transform)
+      PureApp(transform(b), targs.map(transform), args map transform)
 
     case core.Select(target, field, tpe) =>
-      Select(transform(target), field, tpe)
+      Select(transform(target), field, transform(tpe))
 
     case core.Box(b, _) =>
       Box(transform(b))
 
     case core.Run(s) =>
-      Run(transform(s), s.tpe)
+      Run(transform(s))
   }
 
   /**
@@ -193,12 +202,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
         case core.BlockParam(id, tpe) =>
           val ev = EvidenceSymbol()
           environment = environment.bind(id, ev)
-          EvidenceParam(ev)
+          Param.EvidenceParam(ev)
       }
 
-      val transformedParams = EvidenceParam(selfEvidence) :: evidenceParams ++ vps.map(transform) ++ bps.map(transform)
+      val transformedParams = vps.map(transform) ++ bps.map(transform)
 
-      BlockLit(tps, transformedParams, transform(body)(using environment, ErrorReporter))
+      BlockLit(tps, Param.EvidenceParam(selfEvidence) :: evidenceParams ++ transformedParams, transform(body)(using environment, ErrorReporter))
   }
 
   /**
@@ -207,6 +216,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    */
   def transformBody(tree: core.BlockLit)(using Environment, ErrorReporter): BlockLit = tree match {
     case core.BlockLit(tps, cps, vps, bps, body) =>
+      // TODO is Nil for eparams correct here?
       BlockLit(tps, (vps ++ bps) map transform, transform(body))
   }
 
@@ -215,7 +225,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     val transformedArgs = args map {
       case b: core.BlockVar =>
         evidence = env.evidenceFor(b) :: evidence
-        BlockVar(b.id, b.tpe)
+        BlockVar(b.id, transform(b.tpe))
       case b: core.Block =>
         evidence = Here() :: evidence
         transform(b)
@@ -224,11 +234,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   }
 
   def transform(h: core.Implementation)(using Environment, ErrorReporter): Implementation = h match {
-    case core.Implementation(id, clauses) =>
-      Implementation(id, clauses.map {
+    case core.Implementation(interface, clauses) =>
+      Implementation(transform(interface), clauses.map {
         // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
         // their definition context.
         case core.Operation(op, tps, cps, vps, bps, resume, body) =>
+          // TODO introduce evidence param here.
           Operation(op, BlockLit(tps, (vps ++ bps ++ resume.toList) map transform, transform(body)))
       })
   }
