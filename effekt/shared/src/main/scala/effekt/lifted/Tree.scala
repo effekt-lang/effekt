@@ -50,7 +50,7 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Symbol, tparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], ret: ValueType, body: String)
+  case Def(id: Symbol, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
   case Include(contents: String)
 }
 
@@ -60,7 +60,7 @@ enum Definition {
 }
 
 /**
- * Fine-grain CBV: Arguments can be either expressions or blocks
+ * Fine-grain CBV: Arguments can be evidence, expressions, or blocks
  */
 sealed trait Argument extends Tree
 

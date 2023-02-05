@@ -133,9 +133,9 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {
-    case Extern.Def(id, tparams, vparams, bparams, ret, body) =>
+    case Extern.Def(id, tparams, params, ret, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda( vparams.map { p => ChezName(p.id.name.name) } ++ bparams.map { p => ChezName(p.id.name.name) },
+        chez.Lambda( params.map { p => ChezName(p.id.name.name) },
           chez.RawExpr(body)))
 
     case Extern.Include(contents) =>

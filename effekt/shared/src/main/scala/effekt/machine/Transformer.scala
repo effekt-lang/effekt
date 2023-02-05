@@ -48,8 +48,8 @@ object Transformer {
   }
 
   def transform(extern: lifted.Extern)(using BlocksParamsContext, ErrorReporter): Declaration = extern match {
-    case lifted.Extern.Def(name, tps, vps, bps, ret, body) =>
-      Extern(transform(name), (vps ++ bps).map(transform), transform(ret), body)
+    case lifted.Extern.Def(name, tps, ps, ret, body) =>
+      Extern(transform(name), ps.map(transform), transform(ret), body)
 
     case lifted.Extern.Include(contents) =>
       Include(contents)

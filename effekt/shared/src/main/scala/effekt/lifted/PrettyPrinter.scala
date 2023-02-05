@@ -29,8 +29,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tparams, vparams, bparams, ret, body) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep((vparams ++ bparams) map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\""
+    case Extern.Def(id, tparams, params, ret, body) =>
+      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(params.map(toDoc), comma)) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
 
