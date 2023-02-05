@@ -117,9 +117,9 @@ object Type {
 
     case Block.BlockLit(tparams, params, body) =>
 
-      val eparams = ???
-      val vparams = ??? // vps.map { p => p.tpe }
-      val bparams = ??? // bps.map { p => p.tpe }
+      val eparams = params.collect { case Param.EvidenceParam(id) => id }
+      val vparams = params.collect { case Param.ValueParam(id, tpe) => tpe }
+      val bparams = params.collect { case Param.BlockParam(id, tpe) => tpe }
       BlockType.Function(tparams, eparams, vparams, bparams, body.tpe)
 
     case Block.Member(b, field, tpe) => tpe

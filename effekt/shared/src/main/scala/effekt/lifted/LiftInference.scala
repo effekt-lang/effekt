@@ -6,7 +6,6 @@ import effekt.context.Context
 import effekt.lifted
 import effekt.core
 import effekt.symbols.{ Symbol, builtins }
-
 import effekt.context.assertions.*
 import effekt.util.messages.ErrorReporter
 
@@ -31,17 +30,52 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     ModuleDecl(mod.path, mod.imports, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
   }
 
-  def transform(declaration: core.Declaration): lifted.Declaration = ???
+  def transform(declaration: core.Declaration): lifted.Declaration = declaration match {
+    case core.Declaration.Data(id, tparams, constructors) =>
+      Declaration.Data(id, tparams, constructors.map(transform))
+    case core.Declaration.Interface(id, tparams, properties) =>
+      Declaration.Interface(id, tparams, properties.map(transform))
+  }
+
+  def transform(prop: core.Property): lifted.Property = prop match {
+    case core.Property(id, tpe) => lifted.Property(id, transform(tpe))
+  }
+
+  def transform(prop: core.Field): lifted.Field = prop match {
+    case core.Field(id, tpe) => lifted.Field(id, transform(tpe))
+  }
+
+  def transform(constructor: core.Constructor): lifted.Constructor = constructor match {
+    case core.Constructor(id, fields) => lifted.Constructor(id, fields.map(transform))
+  }
 
   def transform(param: core.Param): Param = param match {
     case core.ValueParam(id, tpe) => ValueParam(id, transform(tpe))
     case core.BlockParam(id, tpe) => BlockParam(id, transform(tpe))
   }
 
-  def transform(tpe: core.ValueType): lifted.ValueType = ???
-  def transform(tpe: core.BlockType): lifted.BlockType = ???
+  def transform(tpe: core.ValueType): lifted.ValueType = tpe match {
+    // [[ X ]] = X
+    case core.ValueType.Var(name) => lifted.ValueType.Var(name)
+    // [[ List[Int] ]] = List[ [[Int]] ]
+    case core.ValueType.Data(name, targs) => lifted.ValueType.Data(name, targs.map(transform))
+    // Here we simply loose the capture information
+    // [[ S at C ]] = box [[ S ]]
+    case core.ValueType.Boxed(tpe, capt) => lifted.ValueType.Boxed(transform(tpe))
+  }
+  def transform(tpe: core.BlockType): lifted.BlockType = tpe match {
+    // [[ [A](Int){f: Exc} => Int ]] = [A](EV, [[Int]]){[[Exc]]} => [[Int]]
+    case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
+      // here we turn cparams into evidence parameters (not necessary, only for debugging)
+      lifted.BlockType.Function(tparams, cparams, vparams.map(transform), bparams.map(transform), transform(result))
+    // [[ State[Int] ]] = State[ [[Int]] ]
+    case core.BlockType.Interface(name, targs) =>
+      lifted.BlockType.Interface(name, targs.map(transform))
+  }
 
-  def transform(interface: core.BlockType.Interface): lifted.BlockType.Interface = ???
+  def transform(interface: core.BlockType.Interface): lifted.BlockType.Interface = interface match {
+    case core.BlockType.Interface(name, targs) => lifted.BlockType.Interface(name, targs.map(transform))
+  }
 
   def transform(tree: core.Block)(using Environment, ErrorReporter): lifted.Block = tree match {
     case b @ core.BlockLit(tps, cps, vps, bps, body) => liftBlockLitTo(b)
@@ -66,8 +100,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Extern.Include(contents)
   }
 
-  def transform(p: core.Param.ValueParam): lifted.Param.ValueParam = ???
-  def transform(p: core.Param.BlockParam): lifted.Param.BlockParam = ???
+  def transform(p: core.Param.ValueParam): lifted.Param.ValueParam = p match {
+    case core.Param.ValueParam(id, tpe) => lifted.Param.ValueParam(id, transform(tpe))
+  }
+  def transform(p: core.Param.BlockParam): lifted.Param.BlockParam = p match {
+    case core.Param.BlockParam(id, tpe) => lifted.Param.BlockParam(id, transform(tpe))
+  }
 
   def transform(tree: core.Definition)(using Environment, ErrorReporter): lifted.Definition = tree match {
     case core.Definition.Def(id, block) =>
