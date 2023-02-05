@@ -8,7 +8,7 @@ import effekt.lifted.given
 import effekt.lifted
 import effekt.lifted.{Definition, LiftInference}
 import effekt.symbols
-import effekt.symbols.{BlockSymbol, ExternFunction, ExternType, FunctionType, Module, Name, Symbol, TermSymbol, UserFunction, ValueSymbol}
+import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
 import effekt.util.messages.ErrorReporter
 

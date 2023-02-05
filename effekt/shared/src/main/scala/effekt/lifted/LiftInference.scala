@@ -64,7 +64,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.ValueType.Boxed(tpe, capt) => lifted.ValueType.Boxed(transform(tpe))
   }
   def transform(tpe: core.BlockType): lifted.BlockType = tpe match {
-    // [[ [A](Int){f: Exc} => Int ]] = [A](EV, [[Int]]){[[Exc]]} => [[Int]]
+    // [[ [A](Int){f: Exc} => Int ]] = [A](EV, EV, [[Int]]){[[Exc]]} => [[Int]]
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       // here we turn cparams into evidence parameters (not necessary, only for debugging)
       val eparams = core.Id("self") :: cparams
