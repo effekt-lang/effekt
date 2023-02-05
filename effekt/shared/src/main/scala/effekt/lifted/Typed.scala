@@ -92,9 +92,15 @@ enum Block extends Tree {
 }
 export Block.*
 
+enum Lift {
+  case Try
+  case Region
+}
+
 enum Evidence extends Tree {
   case Var(id: Id)
-  case Constant(n: Int)
+  case Constant(ev: List[Lift])
+  case Compose(ev: List[Evidence])
 }
 
 /**
@@ -130,7 +136,8 @@ enum Stmt extends Tree {
   case Region(body: Block)
 
   // e.g. shift(1) { {resume} => stmt }
-  case Shift(ev: Evidence, body: Block)
+  // while Shift is what we want eventually, for easier migration we bake it into the handler, for now.
+  //case Shift(ev: Evidence, body: Block)
 
   // Others
   case Hole()
