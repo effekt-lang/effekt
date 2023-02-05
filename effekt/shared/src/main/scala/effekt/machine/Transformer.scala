@@ -3,8 +3,8 @@ package machine
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.core.DeclarationContext
-import effekt.core.given
+import effekt.lifted.DeclarationContext
+import effekt.lifted.given
 import effekt.lifted
 import effekt.lifted.{Definition, LiftInference}
 import effekt.symbols
@@ -28,7 +28,7 @@ object Transformer {
 
     val mainName = transform(mainSymbol)
     given BC: BlocksParamsContext = BlocksParamsContext();
-    given DC: DeclarationContext = core.DeclarationContext(mod.decls)
+    given DC: DeclarationContext = lifted.DeclarationContext(mod.decls)
 
     // collect all information
     val declarations = mod.externs.map(transform)

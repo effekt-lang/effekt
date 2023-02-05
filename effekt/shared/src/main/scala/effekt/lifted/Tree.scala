@@ -4,6 +4,8 @@ package lifted
 import effekt.context.Context
 import effekt.symbols.{ Constructor, Name, Symbol }
 
+import effekt.core.Id
+
 sealed trait Tree
 /**
  * A module declaration, the path should be an Effekt include path, not a system dependent file path
@@ -11,11 +13,26 @@ sealed trait Tree
 case class ModuleDecl(
   path: String,
   imports: List[String],
-  decls: List[core.Declaration],
+  decls: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
   exports: List[Symbol]
 ) extends Tree
+
+/**
+ * Toplevel data and interface declarations
+ */
+enum Declaration extends Tree {
+  def id: Id
+
+  case Data(id: Id, tparams: List[Id], constructors: List[Constructor])
+  case Interface(id: Id, tparams: List[Id], properties: List[Property])
+}
+export Declaration.*
+
+case class Constructor(id: Id, fields: List[Field]) extends Tree
+case class Field(id: Id, tpe: typed.ValueType) extends Tree
+case class Property(id: Id, tpe: typed.BlockType) extends Tree
 
 /**
  * FFI external definitions
@@ -76,7 +93,7 @@ case class App(b: Block, targs: List[core.ValueType], args: List[Argument]) exte
 
 // Local Control Flow
 case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
+case class Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt]) extends Stmt
 
 // Effects
 case class State(id: Symbol, init: Expr, stateTpe: core.ValueType, region: Symbol, body: Stmt) extends Stmt

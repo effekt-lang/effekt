@@ -121,12 +121,12 @@ object ChezSchemeLift extends Backend {
     case other => chez.Let(Nil, toChez(other))
   }
 
-  def toChez(decl: core.Declaration): List[chez.Def] = decl match {
-    case core.Declaration.Data(did, _, ctors) =>
+  def toChez(decl: Declaration): List[chez.Def] = decl match {
+    case Declaration.Data(did, _, ctors) =>
       ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(_.id)) }
 
     // We use chez scheme records to also represent capabilities.
-    case core.Declaration.Interface(id, _, operations) =>
+    case Declaration.Interface(id, _, operations) =>
       generateConstructor(id, operations.map(_.id))
   }
 
