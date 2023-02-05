@@ -55,7 +55,7 @@ enum Definition {
 }
 
 sealed trait Expr extends Tree {
-  def tpe: ValueType = ???
+  val tpe: ValueType = Type.inferType(this)
 }
 // might use IO resources, but does not take evidence.
 case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
@@ -88,7 +88,7 @@ enum Block extends Tree {
 
   case New(impl: Implementation)
 
-  def tpe: BlockType = ???
+  val tpe: BlockType = Type.inferType(this)
 }
 export Block.*
 
@@ -135,7 +135,7 @@ enum Stmt extends Tree {
   // Others
   case Hole()
 
-  def tpe: ValueType = ???
+  val tpe: ValueType = Type.inferType(this)
 }
 export Stmt.*
 
