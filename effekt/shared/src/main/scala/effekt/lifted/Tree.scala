@@ -50,13 +50,13 @@ enum Extern {
   // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
   //   (however, if they _would_ take evidence, we could model mutable state with this)
   // TODO revisit
-  case Def(id: Symbol, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
   case Include(contents: String)
 }
 
 enum Definition {
-  case Def(id: Symbol, block: Block)
-  case Let(id: Symbol, binding: Expr)
+  case Def(id: Id, block: Block)
+  case Let(id: Id, binding: Expr)
 }
 
 /**
@@ -67,25 +67,34 @@ sealed trait Argument extends Tree
 /**
  * Expressions
  */
-sealed trait Expr extends Argument {
+enum Expr extends Argument {
+  case ValueVar(id: Id, annotatedType: ValueType)
+  case Literal(value: Any, annotatedType: ValueType)
+
+  // invariant, block b is known to be pure; does not take evidence, does not use IO resources.
+  case PureApp(b: Block, targs: List[ValueType], args: List[Argument])
+  case Select(target: Expr, field: Id, annotatedType: ValueType)
+  case Box(b: Block)
+
+  case Run(s: Stmt)
+
   def tpe: ValueType = ???
 }
-case class ValueVar(id: Symbol, annotatedType: ValueType) extends Expr
+export Expr.*
 
-case class Literal(value: Any, annotatedType: ValueType) extends Expr
-case class PureApp(b: Block, targs: List[ValueType], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol, annotatedType: ValueType) extends Expr
-case class Box(b: Block) extends Expr
-case class Run(s: Stmt) extends Expr
+
+// TODO
+//   case class DirectApp(b: Block, targs: List[ValueType], args: List[Argument]) extends Expr
+
 
 /**
  * Blocks
  */
 enum Block extends Argument  {
 
-  case BlockVar(id: Symbol, annotatedType: BlockType)
-  case BlockLit(tparams: List[Symbol], params: List[Param], body: Stmt)
-  case Member(b: Block, field: Symbol, annotatedTpe: BlockType)
+  case BlockVar(id: Id, annotatedType: BlockType)
+  case BlockLit(tparams: List[Id], params: List[Param], body: Stmt)
+  case Member(b: Block, field: Id, annotatedTpe: BlockType)
 
   // WARNING not officially supported, yet
   case Unbox(e: Expr)
@@ -103,7 +112,7 @@ enum Stmt extends Tree  {
 
   // Fine-grain CBV
   case Return(e: Expr)
-  case Val(id: Symbol, binding: Stmt, body: Stmt)
+  case Val(id: Id, binding: Stmt, body: Stmt)
   case App(b: Block, targs: List[ValueType], args: List[Argument])
 
   // Local Control Flow
@@ -111,7 +120,7 @@ enum Stmt extends Tree  {
   case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Symbol, init: Expr, region: Symbol, body: Stmt)
+  case State(id: Id, init: Expr, region: Symbol, body: Stmt)
   case Try(body: Block, handler: List[Implementation])
   case Region(body: Block)
 

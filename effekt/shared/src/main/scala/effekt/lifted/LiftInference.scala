@@ -160,16 +160,12 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     case core.Hole() => Hole()
   }
 
-  def transform(tree: core.Expr)(using Environment, ErrorReporter): Expr = tree match {
+  def transform(tree: core.Pure)(using Environment, ErrorReporter): Expr = tree match {
     case core.Literal(value, tpe) =>
       Literal(value, transform(tpe))
 
     case core.ValueVar(sym, tpe) =>
       ValueVar(sym, transform(tpe))
-
-    case core.DirectApp(b: core.Block, targs, vargs, bargs) =>
-      val (ev, bargsT) = transform(bargs)
-      PureApp(transform(b), targs.map(transform), ev ++ vargs.map(transform) ++ bargsT)
 
     case core.PureApp(b: core.Block, targs, args: List[core.Expr]) =>
       PureApp(transform(b), targs.map(transform), args map transform)
@@ -179,9 +175,17 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
     case core.Box(b, _) =>
       Box(transform(b))
+  }
+
+  def transform(tree: core.Expr)(using Environment, ErrorReporter): Expr = tree match {
+    case core.DirectApp(b: core.Block, targs, vargs, bargs) =>
+      val (ev, bargsT) = transform(bargs)
+      PureApp(transform(b), targs.map(transform), ev ++ vargs.map(transform) ++ bargsT)
 
     case core.Run(s) =>
       Run(transform(s))
+
+    case p: core.Pure => transform(p)
   }
 
   /**
