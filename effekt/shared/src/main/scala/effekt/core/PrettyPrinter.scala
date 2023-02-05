@@ -57,7 +57,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
-  // TODO print types
   def toDoc(p: ValueParam): Doc = p.id.name.toString <> ":" <+> toDoc(p.tpe)
   def toDoc(p: BlockParam): Doc = braces(p.id.name.toString)
 
