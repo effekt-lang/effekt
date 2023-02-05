@@ -78,7 +78,7 @@ enum Expr extends Argument {
 
   case Run(s: Stmt)
 
-  def tpe: ValueType = ???
+  val tpe: ValueType = Type.inferType(this)
 }
 export Expr.*
 
@@ -100,7 +100,7 @@ enum Block extends Argument  {
   case Unbox(e: Expr)
   case New(impl: Implementation)
 
-  def tpe: BlockType = ???
+  val tpe: BlockType = Type.inferType(this)
 }
 export Block.*
 
@@ -127,7 +127,7 @@ enum Stmt extends Tree  {
   // Others
   case Hole()
 
-  def tpe: ValueType = ???
+  val tpe: ValueType = Type.inferType(this)
 }
 export Stmt.*
 
@@ -136,7 +136,9 @@ export Stmt.*
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(id: BlockType.Interface, operations: List[Operation]) extends Tree
+case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
+  val tpe = interface
+}
 
 /**
  * Implementation of a method / effect operation.

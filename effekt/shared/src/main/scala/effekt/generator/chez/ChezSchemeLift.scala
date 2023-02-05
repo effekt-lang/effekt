@@ -108,7 +108,7 @@ object ChezSchemeLift extends Backend {
 
     case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.id.name)
+        val names = RecordNames(h.interface.name)
         chez.Handler(names.constructor, h.operations.map {
           // TODO handle evidence param here.
           case Operation(op, BlockLit(tparams, params, body)) =>

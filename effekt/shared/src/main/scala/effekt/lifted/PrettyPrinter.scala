@@ -75,7 +75,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(impl: Implementation): Doc = {
-    val handlerName = toDoc(impl.id.name.name)
+    val handlerName = toDoc(impl.interface.name.name)
     val clauses = impl.operations.map {
       case Operation(id, BlockLit(tparams, params, body)) =>
         "def" <+> toDoc(id.name) <> parens(params.map(toDoc)) <+> "=" <+> nested(toDoc(body))

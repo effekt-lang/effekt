@@ -89,7 +89,7 @@ object Transformer {
             Def(Label(transform(id), getBlocksParams(id)), transform(body), rest)
 
           case (lifted.Definition.Def(id, block @ lifted.New(impl)), rest) =>
-            val interfaceId = impl.id.name
+            val interfaceId = impl.interface.name
             // TODO freeParams?
             // TODO deal with evidence?
             val properties = DeclarationContext.getInterface(interfaceId).properties
@@ -100,7 +100,7 @@ object Transformer {
                 // TODO we assume that there are no block params in methods
                 Clause(params.map(transform), transform(body))
             })
-            New(Variable(transform(id), transform(impl.id)), implTransformed, rest)
+            New(Variable(transform(id), transform(impl.interface)), implTransformed, rest)
 
           case (d @ lifted.Definition.Def(_, _: lifted.BlockVar | _: lifted.Member | _: lifted.Unbox), rest) =>
             ErrorReporter.abort(s"block definition: $d")
@@ -373,7 +373,7 @@ object Transformer {
   def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] = {
     handler.operations.sortBy[Int]({
       case lifted.Operation(operationName, _) =>
-        DeclarationContext.getInterface(handler.id.name).properties.indexWhere(_.id == operationName)
+        DeclarationContext.getInterface(handler.interface.name).properties.indexWhere(_.id == operationName)
     }).map({
       case lifted.Operation(operationName, lifted.BlockLit(tparams, params :+ resume, body))=>
         // TODO we assume here that resume is the last param
