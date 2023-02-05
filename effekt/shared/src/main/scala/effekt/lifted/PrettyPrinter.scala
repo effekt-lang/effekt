@@ -152,10 +152,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def toDoc(tpe: lifted.BlockType): Doc = tpe match {
     case lifted.BlockType.Function(tparams, eparams, vparams, bparams, result) =>
       val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
-      val vps = parens(vparams.map(toDoc))
-      val bps = hcat((eparams zip bparams).map { case (id, tpe) => braces(toDoc(id) <> ":" <+> toDoc(tpe)) })
+      val eps = eparams.map { _ => string("EV") }
+      val vps = vparams.map(toDoc)
+      val bps = bparams.map(toDoc)
       val res = toDoc(result)
-      tps <> vps <> bps <+> "=>" <+> res
+      tps <> parens(eps ++ vps ++ bps) <+> "=>" <+> res
     case lifted.BlockType.Interface(symbol, Nil) => toDoc(symbol)
     case lifted.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
   }

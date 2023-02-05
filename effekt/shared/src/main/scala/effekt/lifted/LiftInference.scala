@@ -67,7 +67,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     // [[ [A](Int){f: Exc} => Int ]] = [A](EV, [[Int]]){[[Exc]]} => [[Int]]
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       // here we turn cparams into evidence parameters (not necessary, only for debugging)
-      lifted.BlockType.Function(tparams, cparams, vparams.map(transform), bparams.map(transform), transform(result))
+      val eparams = core.Id("self") :: cparams
+      lifted.BlockType.Function(tparams, eparams, vparams.map(transform), bparams.map(transform), transform(result))
     // [[ State[Int] ]] = State[ [[Int]] ]
     case core.BlockType.Interface(name, targs) =>
       lifted.BlockType.Interface(name, targs.map(transform))
