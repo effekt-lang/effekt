@@ -138,7 +138,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDoc(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <+> cs <> d
 
-    case Hole =>
+    case Hole() =>
       "<>"
   }
 

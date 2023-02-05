@@ -81,40 +81,46 @@ case class Run(s: Stmt) extends Expr
 /**
  * Blocks
  */
-sealed trait Block extends Argument  {
+enum Block extends Argument  {
+
+  case BlockVar(id: Symbol, annotatedType: BlockType)
+  case BlockLit(tparams: List[Symbol], params: List[Param], body: Stmt)
+  case Member(b: Block, field: Symbol, annotatedTpe: BlockType)
+
+  // WARNING not officially supported, yet
+  case Unbox(e: Expr)
+  case New(impl: Implementation)
+
   def tpe: BlockType = ???
 }
-case class BlockVar(id: Symbol, annotatedType: BlockType) extends Block
-case class BlockLit(tparams: List[Symbol], params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: Symbol, annotatedTpe: BlockType) extends Block
-case class Unbox(e: Expr) extends Block
-case class New(impl: Implementation) extends Block
+export Block.*
 
 /**
  * Statements
  */
-sealed trait Stmt extends Tree  {
+enum Stmt extends Tree  {
+  case Scope(definitions: List[Definition], body: Stmt)
+
+  // Fine-grain CBV
+  case Return(e: Expr)
+  case Val(id: Symbol, binding: Stmt, body: Stmt)
+  case App(b: Block, targs: List[ValueType], args: List[Argument])
+
+  // Local Control Flow
+  case If(cond: Expr, thn: Stmt, els: Stmt)
+  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
+
+  // Effects
+  case State(id: Symbol, init: Expr, region: Symbol, body: Stmt)
+  case Try(body: Block, handler: List[Implementation])
+  case Region(body: Block)
+
+  // Others
+  case Hole()
+
   def tpe: ValueType = ???
 }
-
-case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
-
-// Fine-grain CBV
-case class Return(e: Expr) extends Stmt
-case class Val(id: Symbol, binding: Stmt, body: Stmt) extends Stmt
-case class App(b: Block, targs: List[ValueType], args: List[Argument]) extends Stmt
-
-// Local Control Flow
-case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt]) extends Stmt
-
-// Effects
-case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
-case class Try(body: Block, handler: List[Implementation]) extends Stmt
-case class Region(body: Block) extends Stmt
-
-// Others
-case object Hole extends Stmt
+export Stmt.*
 
 /**
  * An instance of an interface, concretely implementing the operations.
@@ -126,7 +132,7 @@ case class Implementation(id: BlockType.Interface, operations: List[Operation]) 
 /**
  * Implementation of a method / effect operation.
  */
-case class Operation(name: symbols.Symbol, implementation: BlockLit)
+case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 
 
 
@@ -163,7 +169,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
-  case Hole => Set.empty
+  case Hole() => Set.empty
   case State(id, init, region, body) =>
     freeVariables(init) ++ freeVariables(body) --
       Set(BlockParam(id, BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
