@@ -58,8 +58,10 @@ sealed trait Expr extends Tree {
   def tpe: ValueType = ???
 }
 // might use IO resources, but does not take evidence.
-case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+case class DirectApp(b: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]) extends Expr
 
+// only inserted by the transformer if stmt is pure / io
+case class Run(s: Stmt) extends Expr
 
 enum Pure extends Expr {
   case ValueVar(id: Id, annotatedType: ValueType)
@@ -100,7 +102,9 @@ enum Evidence extends Tree {
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree
+case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
+  val tpe = interface
+}
 
 /**
  * Implementation of a method / effect operation.
@@ -114,7 +118,7 @@ enum Stmt extends Tree {
   // Fine-grain CBV
   case Return(expr: Pure)
   case Val(id: Id, binding: Stmt, body: Stmt)
-  case App(callee: Block, targs: List[ValueType], vargs: List[Pure], bargs: List[Block])
+  case App(callee: Block, targs: List[ValueType], eargs: List[Evidence], vargs: List[Pure], bargs: List[Block])
 
   // Local Control Flow
   case If(cond: Pure, thn: Stmt, els: Stmt)
