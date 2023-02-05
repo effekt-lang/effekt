@@ -126,11 +126,6 @@ def Def(id: Id, block: Block, rest: Stmt) =
 def Let(id: Id, binding: Expr, rest: Stmt) =
   addToScope(Definition.Let(id,  binding), rest)
 
-/**
- * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
- */
-sealed trait Argument extends Tree
-
 
 /**
  * Expressions (with potential IO effects)
@@ -165,7 +160,7 @@ case class Run(s: Stmt) extends Expr
  *
  * -------------------------------------------
  */
-enum Pure extends Expr with Argument {
+enum Pure extends Expr {
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
@@ -192,7 +187,7 @@ export Pure.*
  *
  * -------------------------------------------
  */
-enum Block extends Argument {
+enum Block extends Tree {
   case BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures)
   case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
   case Member(block: Block, field: Id, annotatedTpe: BlockType)
