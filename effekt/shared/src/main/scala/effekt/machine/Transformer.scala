@@ -401,11 +401,11 @@ object Transformer {
   def transform(tpe: lifted.ValueType)(using ErrorReporter): Type = tpe match {
     case lifted.ValueType.Var(name) => Positive(name.name.name) // assume all value parameters are data
     case lifted.ValueType.Boxed(tpe) => ???
-    case lifted.ValueType.Data(symbols.builtins.UnitSymbol, Nil) => builtins.UnitType
-    case lifted.ValueType.Data(symbols.builtins.IntSymbol, Nil) => Type.Int()
-    case lifted.ValueType.Data(symbols.builtins.BooleanSymbol, Nil) => builtins.BooleanType
-    case lifted.ValueType.Data(symbols.builtins.DoubleSymbol, Nil) => Type.Double()
-    case lifted.ValueType.Data(symbols.builtins.StringSymbol, Nil) => Type.String()
+    case lifted.Type.TUnit => builtins.UnitType
+    case lifted.Type.TInt => Type.Int()
+    case lifted.Type.TBoolean => builtins.BooleanType
+    case lifted.Type.TDouble => Type.Double()
+    case lifted.Type.TString => Type.String()
     case lifted.ValueType.Data(symbol, targs) => Positive(symbol.name.name)
   }
 
