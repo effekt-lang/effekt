@@ -25,7 +25,16 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
+      emptyline <> signatures(m) <>
       emptyline <> toDoc(m.definitions)
+  }
+
+  def signatures(m: ModuleDecl): Doc = {
+    val defs = m.definitions.map {
+      case Definition.Def(name, block) => "def" <+> toDoc(name) <> ":" <+> toDoc(block.tpe)
+      case Definition.Let(name, expr) => "let" <+> toDoc(name) <> ":" <+> toDoc(expr.tpe)
+    }
+    "// Signatures" <@> vcat(defs)
   }
 
   def toDoc(p: Param): Doc = p match {
