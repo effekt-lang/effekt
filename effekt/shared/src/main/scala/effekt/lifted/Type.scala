@@ -19,6 +19,8 @@ enum ValueType extends Type {
   case Boxed(tpe: BlockType) // WARNING not supported
 }
 
+case class EvidenceType() extends Type
+
 enum BlockType extends Type {
 
   //   [A, B, C] (X, Y, Z)   {  ev_f  :   S }    =>    T
@@ -32,7 +34,7 @@ enum BlockType extends Type {
   // ignoring the fact that |ev_f| = |S|
   //
   // NOTE: eparams do not occur free anywhere -- the names are used for debugging purposes only!
-  case Function(tparams: List[Id], eparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
+  case Function(tparams: List[Id], eparams: List[EvidenceType], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
   case Interface(name: effekt.core.Id, targs: List[ValueType])
 }
 
@@ -117,7 +119,7 @@ object Type {
 
     case Block.BlockLit(tparams, params, body) =>
 
-      val eparams = params.collect { case Param.EvidenceParam(id) => id }
+      val eparams = params.collect { case Param.EvidenceParam(id) => EvidenceType() }
       val vparams = params.collect { case Param.ValueParam(id, tpe) => tpe }
       val bparams = params.collect { case Param.BlockParam(id, tpe) => tpe }
       BlockType.Function(tparams, eparams, vparams, bparams, body.tpe)

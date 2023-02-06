@@ -67,7 +67,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     // [[ [A](Int){f: Exc} => Int ]] = [A](EV, EV, [[Int]]){[[Exc]]} => [[Int]]
     case core.BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       // here we turn cparams into evidence parameters (not necessary, only for debugging)
-      val eparams = core.Id("self") :: cparams
+      val eparams = EvidenceType() :: cparams.map(p => EvidenceType())
       lifted.BlockType.Function(tparams, eparams, vparams.map(transform), bparams.map(transform), transform(result))
     // [[ State[Int] ]] = State[ [[Int]] ]
     case core.BlockType.Interface(name, targs) =>
@@ -247,6 +247,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
           Param.EvidenceParam(ev)
       }
 
+      assert(evidenceParams.size == cps.size)
+
       val transformedParams = vps.map(transform) ++ bps.map(transform)
 
       BlockLit(tps, Param.EvidenceParam(selfEvidence) :: evidenceParams ++ transformedParams, transform(body)(using environment, ErrorReporter))
@@ -258,7 +260,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
    */
   def transformBody(tree: core.BlockLit)(using Environment, ErrorReporter): BlockLit = tree match {
     case core.BlockLit(tps, cps, vps, bps, body) =>
-      // TODO is Nil for eparams correct here?
       BlockLit(tps, (vps ++ bps) map transform, transform(body))
   }
 
@@ -300,6 +301,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       pretransform(rest)(using extendedEnv, E)
     case _ => env
   }
+
 
   case class Environment(env: Map[Symbol, List[EvidenceSymbol]]) {
     def bind(s: Symbol) = copy(env = env + (s -> Nil))
