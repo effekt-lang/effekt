@@ -163,7 +163,8 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
     case Stmt.Return(expr) => Stmt.Return(transform(expr))
     case Stmt.Val(id, binding, body) => Stmt.Val(id, transform(binding), transform(body))
     case Stmt.App(callee, targs, vargs, bargs) =>
-      instantiate(callee, targs).call(callee, vargs map transform, bargs map transform)
+      val calleeT = transform(callee)
+      instantiate(calleeT, targs).call(calleeT, vargs map transform, bargs map transform)
     case Stmt.If(cond, thn, els) =>
       Stmt.If(transform(cond), transform(thn), transform(els))
     case Stmt.Match(scrutinee, clauses, default) =>
