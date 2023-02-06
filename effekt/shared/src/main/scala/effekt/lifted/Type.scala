@@ -23,17 +23,9 @@ case class EvidenceType() extends Type
 
 enum BlockType extends Type {
 
-  //   [A, B, C] (X, Y, Z)   {  ev_f  :   S }    =>    T
-  //    ^^^^^^^   ^^^^^^^     ^^^^^^^^^^^^^          ^^^
-  //    tparams   vparams   eparams zip bparams   result
-  //
-  // we will render the type more often as:
-  //
-  //   [A, B, C, EV] (X, Y, Z) {S} => T
-  //
-  // ignoring the fact that |ev_f| = |S|
-  //
-  // NOTE: eparams do not occur free anywhere -- the names are used for debugging purposes only!
+  //   [A, B, C] (EV, EV, X, Y, Z, (EV, T) => T)    =>    T
+  //    ^^^^^^^   ^^^^^^  ^^^^^^^  ^^^^^^^^^^^^^         ^^^
+  //    tparams   evid.   vparams    bparams            result
   case Function(tparams: List[Id], eparams: List[EvidenceType], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
   case Interface(name: effekt.core.Id, targs: List[ValueType])
 }
@@ -93,7 +85,6 @@ object Type {
   }
 
   def substitute(tpe: BlockType, vsubst: Map[Id, ValueType]): BlockType = tpe match {
-    // eparams are just names for debugging
     case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
       // names are unique symbols so shadowing should NOT take place; we still subtract to be safe.
       val vsubstLocal = vsubst -- tparams
