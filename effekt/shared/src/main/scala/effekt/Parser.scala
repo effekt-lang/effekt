@@ -228,7 +228,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLiteral(Nil, ps, Nil, body) : BlockLiteral }
+    ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case (vps, bps) ~ body => BlockLiteral(Nil, vps, bps, body) : BlockLiteral }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
@@ -244,8 +244,12 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a block argument")
     )
 
-  lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None) : ValueParam) })
+
+  lazy val lambdaParams: P[(List[ValueParam], List[BlockParam])] =
+    ( valueParamsOpt ^^ { ps => (ps, Nil) }
+    | idDef ^^ { id => (List(ValueParam(id, None) : ValueParam), Nil) }
+    | params ^^ { case vps ~ bps => (vps, bps) }
+    )
 
   lazy val maybeValueArgs: P[List[Term]] =
     many(valueArgSection) ^^ { _.flatten }
