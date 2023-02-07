@@ -25,28 +25,43 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
+      emptyline <> signatures(m) <>
       emptyline <> toDoc(m.definitions)
   }
 
+  def signatures(m: ModuleDecl): Doc = {
+    val defs = m.definitions.map {
+      case Definition.Def(name, block) => "def" <+> toDoc(name) <> ":" <+> toDoc(block.tpe)
+      case Definition.Let(name, expr) => "let" <+> toDoc(name) <> ":" <+> toDoc(expr.tpe)
+    }
+    "// Signatures" <@> vcat(defs)
+  }
+
+  def toDoc(p: Param): Doc = p match {
+    case Param.ValueParam(id, tpe) => id.name.toString <> ":" <+> toDoc(tpe)
+    case Param.BlockParam(id, tpe) => id.name.toString <> ":" <+> toDoc(tpe)
+    case Param.EvidenceParam(id) => id.name.toString <> ": EV"
+  }
+
   def toDoc(e: Extern): Doc = e match {
-    case Extern.Def(id, tpe, ps, body) =>
-      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(ps map toDoc, comma)) <+> "=" <+> "\"" <> body <> "\""
+    case Extern.Def(id, tparams, params, ret, body) =>
+      "extern def" <+> toDoc(id.name) <+> "=" <+> parens(hsep(params.map(toDoc), comma)) <+> "=" <+> "\"" <> body <> "\""
     case Extern.Include(contents) => emptyDoc // right now, do not print includes.
   }
 
   def toDoc(b: Block): Doc = b match {
     case BlockVar(v, _) => v.name.toString
     case BlockLit(tps, ps, body) =>
-      braces { space <> parens(hsep(ps map toDoc, comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
+      braces { space <> parens(hsep(ps.map(toDoc), comma)) <+> "=>" <+> nest(line <> toDoc(body)) <> line }
     case Member(b, id, tpe) =>
       toDoc(b) <> "." <> id.name.toString
     case Unbox(e)         => parens("unbox" <+> toDoc(e))
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
-  def toDoc(p: Param): Doc = p.id.name.toString
-
   def toDoc(n: Name): Doc = n.toString
+
+  def toDoc(s: symbols.Symbol): Doc = toDoc(s.name)
 
   def toDoc(e: Expr): Doc = e match {
     case Literal((), _)          => "()"
@@ -60,7 +75,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       toDoc(b) <> "." <> toDoc(field.name)
 
     case Box(b) => parens("box" <+> toDoc(b))
-    case Run(s, _)  => "run" <+> block(toDoc(s))
+    case Run(s)  => "run" <+> block(toDoc(s))
   }
 
   def argToDoc(e: Argument): Doc = e match {
@@ -75,10 +90,10 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(impl: Implementation): Doc = {
-    val handlerName = toDoc(impl.id.symbol.name)
+    val handlerName = toDoc(impl.interface.name.name)
     val clauses = impl.operations.map {
       case Operation(id, BlockLit(tparams, params, body)) =>
-        "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <+> nested(toDoc(body))
+        "def" <+> toDoc(id.name) <> parens(params.map(toDoc)) <+> "=" <+> nested(toDoc(body))
     }
     handlerName <+> block(vsep(clauses))
   }
@@ -92,11 +107,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(d: Definition): Doc = d match {
-    case Definition.Def(id, tpe, BlockLit(tparams, params, body)) =>
-      "def" <+> toDoc(id.name) <> parens(params map toDoc) <+> "=" <> nested(toDoc(body))
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, BlockLit(tparams, params, body)) =>
+      "def" <+> toDoc(id.name) <> parens(params.map(toDoc)) <> ":" <+> toDoc(body.tpe) <+> "=" <> nested(toDoc(body))
+    case Definition.Def(id, block) =>
       "def" <+> toDoc(id.name) <+> "=" <+> toDoc(block)
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       "let" <+> toDoc(id.name) <+> "=" <+> toDoc(binding)
   }
 
@@ -107,11 +122,11 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Scope(definitions, rest) =>
       toDoc(definitions) <> emptyline <> toDoc(rest)
 
-    case Val(Wildcard(), tpe, binding, body) =>
+    case Val(Wildcard(), binding, body) =>
       toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       "val" <+> toDoc(id.name) <+> "=" <+> toDoc(binding) <> ";" <> line <>
         toDoc(body)
 
@@ -124,13 +139,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Return(e) =>
       toDoc(e)
 
-    case Try(body, tpe, hs) =>
+    case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
 
-    case State(id, init, stateTpe, region, body) =>
+    case State(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)
 
-    case Region(body, _) =>
+    case Region(body) =>
       "region" <+> toDoc(body)
 
     case Match(sc, clauses, default) =>
@@ -138,9 +153,32 @@ object PrettyPrinter extends ParenPrettyPrinter {
       val d = default.map { body => space <> "else" <+> braces(nest(line <> toDoc(body))) }.getOrElse { emptyDoc }
       toDoc(sc) <+> "match" <+> cs <> d
 
-    case Hole =>
+    case Hole() =>
       "<>"
   }
+
+
+  def toDoc(tpe: lifted.BlockType): Doc = tpe match {
+    case lifted.BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      val eps = eparams.map { _ => string("EV") }
+      val vps = vparams.map(toDoc)
+      val bps = bparams.map(toDoc)
+      val res = toDoc(result)
+      tps <> parens(eps ++ vps ++ bps) <+> "=>" <+> res
+    case lifted.BlockType.Interface(symbol, Nil) => toDoc(symbol)
+    case lifted.BlockType.Interface(symbol, targs) => toDoc(symbol) <> brackets(targs.map(toDoc))
+  }
+
+  def toDoc(tpe: lifted.ValueType): Doc = tpe match {
+    case lifted.ValueType.Var(name) => toDoc(name)
+    case lifted.ValueType.Data(symbol, targs) => toDoc(symbol, targs)
+    case lifted.ValueType.Boxed(tpe) => "box" <+> toDoc(tpe)
+  }
+
+  def toDoc(tpeConstructor: symbols.Symbol, targs: List[lifted.ValueType]): Doc =
+    if (targs.isEmpty) then toDoc(tpeConstructor)
+    else toDoc(tpeConstructor) <> brackets(targs.map(toDoc))
 
   def nested(content: Doc): Doc = group(nest(line <> content))
 

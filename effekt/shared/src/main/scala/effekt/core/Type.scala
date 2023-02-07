@@ -35,7 +35,7 @@ sealed trait Type
 
 enum ValueType extends Type {
   case Var(name: Id)
-  case Data(symbol: Id, targs: List[ValueType])
+  case Data(name: Id, targs: List[ValueType])
   case Boxed(tpe: BlockType, capt: Captures)
 }
 
@@ -45,7 +45,7 @@ enum BlockType extends Type {
   //  ^^^^^^^   ^^^^^^^     ^^^^^^^^^^^          ^^^
   //  tparams   vparams   cparams zip bparams   result
   case Function(tparams: List[Id], cparams: List[Id], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
-  case Interface(symbol: Id, targs: List[ValueType])
+  case Interface(name: Id, targs: List[ValueType])
 }
 
 object Type {

@@ -228,7 +228,7 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     )
 
   lazy val functionArg: P[BlockLiteral] =
-    ( `{` ~> lambdaArgs ~ (`=>` ~/> stmts <~ `}`) ^^ { case ps ~ body => BlockLiteral(Nil, ps, Nil, body) : BlockLiteral }
+    ( `{` ~> lambdaParams ~ (`=>` ~/> stmts <~ `}`) ^^ { case (vps, bps) ~ body => BlockLiteral(Nil, vps, bps, body) : BlockLiteral }
     | `{` ~> some(clause) <~ `}` ^^ { cs =>
       // TODO positions should be improved here and fresh names should be generated for the scrutinee
       // also mark the temp name as synthesized to prevent it from being listed in VSCode
@@ -244,8 +244,12 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
     | failure("Expected a block argument")
     )
 
-  lazy val lambdaArgs: P[List[ValueParam]] =
-    valueParamsOpt | (idDef ^^ { id => List(ValueParam(id, None) : ValueParam) })
+
+  lazy val lambdaParams: P[(List[ValueParam], List[BlockParam])] =
+    ( valueParamsOpt ^^ { ps => (ps, Nil) }
+    | idDef ^^ { id => (List(ValueParam(id, None) : ValueParam), Nil) }
+    | params ^^ { case vps ~ bps => (vps, bps) }
+    )
 
   lazy val maybeValueArgs: P[List[Term]] =
     many(valueArgSection) ^^ { _.flatten }
@@ -512,12 +516,16 @@ class EffektParsers(positions: Positions) extends EffektLexers(positions) {
   lazy val captureSet: P[CaptureSet] = `{` ~> manySep(idRef, `,`) <~ `}` ^^ CaptureSet.apply
 
   lazy val blockType: P[BlockType] =
-    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
-    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), ret, eff) }
+    ( (`(` ~> manySep(valueType, `,`) <~ `)`) ~ many(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ FunctionType.apply
+    |  some(blockTypeParam) ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case tpes ~ ret ~ eff => FunctionType(Nil, tpes, ret, eff) }
+    | primValueType ~ (`=>` ~/> primValueType) ~ maybeEffects ^^ { case t ~ ret ~ eff => FunctionType(List(t), Nil, ret, eff) }
     // TODO only allow this on parameters, not elsewhere...
     | interfaceType
-    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, ret, eff) }
+    | `=>` ~/> primValueType ~ maybeEffects ^^ { case ret ~ eff => FunctionType(Nil, Nil, ret, eff) }
     )
+
+  lazy val blockTypeParam: P[(Option[IdDef], BlockType)] =
+    `{` ~> (idDef <~ `:`).? ~ blockType <~ `}` ^^ { case id ~ tpe => (id, tpe) }
 
   lazy val interfaceType: P[BlockTypeRef] =
     ( idRef ~ maybeTypeArgs ^^ { case (id ~ targs) => BlockTypeRef(id, targs): BlockTypeRef }
