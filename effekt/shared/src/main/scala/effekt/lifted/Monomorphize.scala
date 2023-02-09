@@ -22,18 +22,6 @@ object Monomorphize {
     Evidences.last = -1;
     analyze(mod)
 
-    val defTypes = analysis.definitions.map {
-      case (id, flowType) => s"${id}: ${flowType.show}"
-    }.mkString("\n")
-
-    val interfaceTypes = analysis.interfaces.map {
-      case (id, flowType) => s"${id}: ${flowType.show}"
-    }.mkString("\n")
-
-    val treeTypes = analysis.trees.map {
-      case (t, flowType) => flowType.show
-    }.mkString("\n")
-
     val constrs = analysis.constraints.map {
       c => c.show
     }.mkString("\n")
@@ -66,18 +54,6 @@ object Monomorphize {
         |Elaborated Definitions:
         |------------------------
         |${ newDefinitions }
-        |
-        |Interfaces:
-        |-----------
-        |${interfaceTypes}
-        |
-        |Definitions:
-        |-----------
-        |${defTypes}
-        |
-        |Trees:
-        |------
-        |${treeTypes}
         |
         |Constraints:
         |-----------

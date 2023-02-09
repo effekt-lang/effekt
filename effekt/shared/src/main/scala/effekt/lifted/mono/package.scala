@@ -52,14 +52,17 @@ enum FlowType {
   case Function(evidences: Evidences, bparams: List[FlowType])
 
   // Nominal (there exists one such type for each id)
-  case Interface(id: Id, operations: Map[Id, FlowType])
+  case Interface(id: Id)
 
   def show: String = this match {
     case FlowType.Function(evs, bparams) => s"${evs.show}(${bparams.map(_.show).mkString(", ")})"
-    case FlowType.Interface(id, operations) =>
-      val prettyOperations = operations.map { case (id, tpe) => id.toString + ": " + tpe.show  }.mkString(", ")
-      s"${id.toString} { ${prettyOperations} }"
+    case FlowType.Interface(id) => id.toString
   }
 }
 
-case class InterfaceDeclaration(operations: Map[Id, FlowType])
+case class InterfaceDeclaration(operations: Map[Id, FlowType]) {
+  def show: String = {
+    val prettyOperations = operations.map { case (id, tpe) => id.toString + ": " + tpe.show  }.mkString(", ")
+    s"{ ${prettyOperations} }"
+  }
+}

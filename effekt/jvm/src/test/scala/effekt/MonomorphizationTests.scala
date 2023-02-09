@@ -33,11 +33,11 @@ class MonomorphizationTests extends munit.FunSuite {
     given a : FlowAnalysis()
     analyze(m)
 
-    val f_tpe = a.flowTypeForDefinition(f)
+    val f_ftpe = a.flowTypeForBinder(f)
 
     // α0() <: [<>]()
     val costraint = Constraint.B(
-      f_tpe,
+      f_ftpe,
       FlowType.Function(Evidences.Concrete(List(Ev(Nil))), Nil))
 
     assert(a.constraints.contains(costraint))

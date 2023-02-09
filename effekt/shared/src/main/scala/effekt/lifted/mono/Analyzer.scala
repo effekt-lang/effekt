@@ -4,86 +4,54 @@ package mono
 
 import scala.collection.immutable.ListMap
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, TODO, NOT_SUPPORTED }
+import kiama.util.Memoiser
+import scala.collection.mutable
 
-enum Provenance {
-  // e.g. def >>>foo<<<() = ...
-  case BlockDefinition(termId: Id)
-  // e.g. >>>{ () => ... }<<<
-  case BlockTree(tree: lifted.Block)
-  // e.g. interface >>>Exc<<< { ... }
-  case InterfaceDeclaration(typeId: Id)
-
-  override def equals(obj: Any): Boolean = (this, obj) match {
-    case (Provenance.BlockDefinition(id1), Provenance.BlockDefinition(id2)) => id1 == id2
-    case (Provenance.InterfaceDeclaration(id1), Provenance.InterfaceDeclaration(id2)) => id1 == id2
-    case (Provenance.BlockTree(tree1), Provenance.BlockTree(tree2)) => tree1 eq tree2
-    case _ => false
-  }
-
-  override def hashCode(): Int = this match {
-    case Provenance.BlockDefinition(id) => id.hashCode
-    case Provenance.InterfaceDeclaration(id) => id.hashCode
-    case Provenance.BlockTree(tree) => System.identityHashCode(tree)
-  }
-}
 
 class FlowAnalysis(
+
   // block binders like `def`, lambdas, or block parameters.
-  var types: ListMap[Provenance, FlowType] = ListMap.empty,
-  //  var signatures: ListMap[Id, FlowType] = ListMap.empty,
-  //  var interfaces: ListMap[Id, FlowType.Interface] = ListMap.empty,
+  binders: mutable.Map[Id, FlowType] = mutable.Map.empty,
+
+  // every (block-) subtree is annotated with its flow type
+  annotations: Memoiser[lifted.Block, FlowType] = Memoiser.makeIdMemoiser(),
+
+  interfaces: mutable.Map[Id, InterfaceDeclaration] = mutable.Map.empty,
 
   // lexical scoping: maps evidence parameters like ev104 to concrete evidence (e.g., <α17._2, Try, Try>)
-  var parameters: ListMap[Id, Ev] = ListMap.empty,
+  parameters: mutable.Map[Id, Ev] = mutable.Map.empty,
+
+  // collected constraints
   var constraints: List[Constraint] = Nil
 ) {
   def addDefinition(id: Id, tpe: FlowType): Unit =
-    val key = Provenance.BlockDefinition(id)
-    assert(!types.isDefinedAt(key), s"Cannot add signature for block twice: ${id}")
-    types += (key -> tpe)
+    assert(!binders.isDefinedAt(id), s"Cannot add signature for block twice: ${id}")
+    binders.update(id, tpe)
 
-  def addInterface(id: Id, tpe: FlowType.Interface): Unit =
-    val key = Provenance.InterfaceDeclaration(id)
-    assert(!types.isDefinedAt(key), s"Cannot add signature for interface twice: ${id}")
-    types += (key, tpe)
+  def addInterface(id: Id, decl: InterfaceDeclaration): Unit =
+    assert(!interfaces.isDefinedAt(id), s"Cannot add signature for interface twice: ${id}")
+    interfaces.update(id, decl)
 
-  def annotateTree(tree: lifted.Block, tpe: FlowType): Unit =
-    val key = Provenance.BlockTree(tree)
-    assert(!types.isDefinedAt(key), s"Cannot add signature for same tree twice: ${tree}")
-    types += (key, tpe)
+  def annotateTree(tree: lifted.Block, tpe: FlowType): Unit = annotations.put(tree, tpe)
 
   def annotatedType(tree: lifted.Block): FlowType =
-    val key = Provenance.BlockTree(tree)
-    assert(types.isDefinedAt(key), s"Cannot get signature for tree: ${tree}")
-    types(key)
+    annotations.getOrDefault(tree, INTERNAL_ERROR(s"Cannot get signature for tree: ${tree}"))
 
-  def flowTypeForDefinition(term: Id): FlowType =
-    val key = Provenance.BlockDefinition(term)
-    assert(types.isDefinedAt(key), s"Cannot find flow type for ${term}")
-    types(key)
+  def flowTypeForBinder(term: Id): FlowType =
+    binders.getOrElse(term, INTERNAL_ERROR(s"Cannot get flowtype for binder: ${term}"))
 
-  def interfaceFor(typeName: Id): FlowType.Interface =
-    val key = Provenance.InterfaceDeclaration(typeName)
-    assert(types.isDefinedAt(key), s"Cannot find interface type for ${typeName}")
-    types(key) match {
-      case f : FlowType.Function => INTERNAL_ERROR("Not an interface")
-      case i : FlowType.Interface => i
-    }
-
-  // for debugging only
-  def interfaces = types.collect { case (Provenance.InterfaceDeclaration(id), tpe) => id -> tpe }
-  def definitions = types.collect { case (Provenance.BlockDefinition(id), tpe) => id -> tpe }
-  def trees = types.toList.collect { case (Provenance.BlockTree(tree), tpe) => tree -> tpe }
+  def interfaceDeclarationFor(typeName: Id): InterfaceDeclaration =
+    interfaces.getOrElse(typeName, INTERNAL_ERROR(s"Cannot find interface type for ${typeName}"))
 
   def bindEvidence(id: Id, ev: Ev): Unit =
-    parameters = parameters + (id -> ev)
+    parameters.update(id, ev)
 
-  def addConstraint(lower: FlowType, upper: FlowType) =
+  def addConstraint(lower: FlowType, upper: FlowType): Unit =
     constraints = Constraint.B(lower, upper) :: constraints
 
   def evidenceFor(param: Id): Ev =
-    assert(parameters.isDefinedAt(param), s"Cannot find evidence for ${param}")
-    parameters(param)
+    parameters.getOrElse(param, INTERNAL_ERROR(s"Cannot find evidence for ${param}"))
+
 }
 
 enum Constraint {
@@ -132,7 +100,7 @@ def bindBlockParams(params: List[Param])(using C: ErrorReporter, F: FlowAnalysis
 
 // analyses the block, but does not go into the body to enable mutual recursion
 def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b match {
-  case Block.BlockVar(id, annotatedType) => F.flowTypeForDefinition(id)
+  case Block.BlockVar(id, annotatedType) => F.flowTypeForBinder(id)
   case Block.BlockLit(tparams, params, body) =>
     // Step 1) Map unification variables to evidence parameters:
     //   ev142 -> α17._2
@@ -151,7 +119,8 @@ def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b 
   case Block.Member(b, field, annotatedTpe) =>
     analyze(b) match {
       case FlowType.Function(evidences, bparams) => C.panic("Should not happen: member selection on function type")
-      case FlowType.Interface(id, operations) => operations(field)
+      case FlowType.Interface(id) =>
+        F.interfaceDeclarationFor(id).operations(field)
     }
 
   case Block.New(impl) => analyze(impl)
@@ -163,14 +132,14 @@ def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b 
 
 def analyze(impl: Implementation)(using C: ErrorReporter, F: FlowAnalysis): FlowType.Interface = impl match {
   case Implementation(BlockType.Interface(name, targs), operations) =>
-    val sig = F.interfaceFor(name)
+    val sig = F.interfaceDeclarationFor(name)
     operations foreach {
       case Operation(name, implementation) =>
         val declaredType = sig.operations(name)
         val implementedType = analyze(implementation)
         F.addConstraint(implementedType, declaredType)
     }
-    sig
+    FlowType.Interface(name)
 }
 
 // Actually traverses the block
@@ -267,12 +236,12 @@ def analyze(d: Declaration)(using C: ErrorReporter, F: FlowAnalysis): Unit =
       }
       assert(props.distinct.size == props.size, "duplicate definition of operation")
 
-      F.addInterface(id, FlowType.Interface(id, props.toMap))
+      F.addInterface(id, InterfaceDeclaration(props.toMap))
   }
 
 def freshFlowType(tpe: BlockType)(using C: ErrorReporter, F: FlowAnalysis): FlowType = tpe match {
   case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
     FlowType.Function(Evidences.fresh(eparams.size), bparams.map(freshFlowType))
   case BlockType.Interface(name, targs) =>
-    F.interfaceFor(name)
+    FlowType.Interface(name)
 }

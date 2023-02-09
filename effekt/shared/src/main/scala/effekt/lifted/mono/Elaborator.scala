@@ -22,11 +22,11 @@ class TransformationContext(flow: FlowAnalysis, substitution: Bisubstitution, ch
       newSpecialization
     }
 
-  def configurations(termId: Id): Set[Evidences.Concrete] = configurations(flow.flowTypeForDefinition(termId))
+  def configurations(termId: Id): Set[Evidences.Concrete] = configurations(flow.flowTypeForBinder(termId))
 
   def configurations(ftpe: FlowType): Set[Evidences.Concrete] = ftpe match {
     case FlowType.Function(evidences, bparams) => configurations(evidences)
-    case FlowType.Interface(id, operations) =>
+    case FlowType.Interface(id) =>
       INTERNAL_ERROR("Interfaces are treated nominal and do not have a set of configurations (only their operations do)")
   }
 
@@ -59,12 +59,12 @@ def elaborate(tpe: BlockType, ftpe: FlowType)(using T: TransformationContext): B
 def elaborate(d: Declaration)(using T: TransformationContext): Declaration = d match {
   case Declaration.Interface(id, tparams, properties) =>
     // e.g. Cap { op1: a17(); op2: a18() }
-    val ftpe = T.interfaceFor(id)
+    val decl = T.interfaceDeclarationFor(id)
 
     val newProps = properties.flatMap {
       case Property(id, tpe) =>
         // e.g. a17()
-        val flowType = ftpe.operations(id)
+        val flowType = decl.operations(id)
 
         // e.g. [<>], [<Try>]
         val configs = flowType match {
@@ -91,7 +91,7 @@ def elaborate(param: Param)(using T: TransformationContext): Either[Id, Param] =
   case p: Param.EvidenceParam => Left(p.id)
   case p: Param.ValueParam => Right(p)
   case Param.BlockParam(id, tpe) =>
-    Right(Param.BlockParam(id, elaborate(tpe, T.flowTypeForDefinition(id))))
+    Right(Param.BlockParam(id, elaborate(tpe, T.flowTypeForBinder(id))))
 }
 
 def elaborate(d: Definition)(using T: TransformationContext): Definition = d match {
