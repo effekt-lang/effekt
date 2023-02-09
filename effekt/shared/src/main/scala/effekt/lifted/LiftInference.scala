@@ -20,7 +20,8 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def run(input: CoreTransformed)(using Context): Option[CoreLifted] =
     given Environment = Environment(Map.empty)
     val transformed = transform(input.core)
-    Some(CoreLifted(input.source, input.tree, input.mod, transformed))
+    val monomorphized = Monomorphize.run(transformed)
+    Some(CoreLifted(input.source, input.tree, input.mod, monomorphized))
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(using Environment, ErrorReporter): ModuleDecl = {
