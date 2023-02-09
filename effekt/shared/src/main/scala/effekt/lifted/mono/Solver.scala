@@ -18,7 +18,7 @@ case class Solver(constraints: List[Constraint], seen: Set[Constraint], subst: B
       assert(i1 == i2, s"The two interfaces are not the same! ${i1} and ${i2}")
       Solver(rest, seen, subst)
 
-    case (c @ Constraint.B(FlowType.Function(ev1, bparams1), FlowType.Function(ev2, bparams2))) :: rest =>
+    case (c @ Constraint.B(FlowType.Function(ev1, _, _, bparams1, _), FlowType.Function(ev2, _, _, bparams2, _))) :: rest =>
       val evidenceFlow = Constraint.E(ev1, ev2)
       val paramsFlow = bparams2.zip(bparams1).map { case (c2, c1) => Constraint.B(c2, c1) }
       Solver(evidenceFlow :: paramsFlow ++ rest, seen + c, subst)

@@ -49,14 +49,14 @@ object Evidences {
 
 enum FlowType {
   // Structural (we ignore value parameters and return for now since we disregard boxing)
-  case Function(evidences: Evidences, bparams: List[FlowType])
+  case Function(evidences: Evidences, tparams: List[Id], vparams: List[ValueType], bparams: List[FlowType], result: ValueType)
 
   // Nominal (there exists one such type for each id)
-  case Interface(id: Id)
+  case Interface(id: Id, targs: List[ValueType])
 
   def show: String = this match {
-    case FlowType.Function(evs, bparams) => s"${evs.show}(${bparams.map(_.show).mkString(", ")})"
-    case FlowType.Interface(id) => id.toString
+    case FlowType.Function(evs, _, _, bparams, _) => s"${evs.show}(${bparams.map(_.show).mkString(", ")})"
+    case FlowType.Interface(id, _) => id.toString
   }
 }
 

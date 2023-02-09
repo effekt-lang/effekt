@@ -37,6 +37,16 @@ class FlowAnalysis(
   def annotatedType(tree: lifted.Block): FlowType =
     annotations.getOrDefault(tree, INTERNAL_ERROR(s"Cannot get signature for tree: ${tree}"))
 
+  def annotatedFunctionType(tree: lifted.Block): FlowType.Function = annotatedType(tree) match {
+    case f: FlowType.Function => f
+    case i: FlowType.Interface => INTERNAL_ERROR(s"Expected function type, but got: ${i}")
+  }
+
+  def annotatedInterfaceType(tree: lifted.Block): FlowType.Interface = annotatedType(tree) match {
+    case f: FlowType.Function => INTERNAL_ERROR(s"Expected interface type, but got: ${f}")
+    case i: FlowType.Interface => i
+  }
+
   def flowTypeForBinder(term: Id): FlowType =
     binders.getOrElse(term, INTERNAL_ERROR(s"Cannot get flowtype for binder: ${term}"))
 
@@ -48,6 +58,9 @@ class FlowAnalysis(
 
   def addConstraint(lower: FlowType, upper: FlowType): Unit =
     constraints = Constraint.B(lower, upper) :: constraints
+
+  def addConstraint(lower: Evidences, upper: Evidences): Unit =
+    constraints = Constraint.E(lower, upper) :: constraints
 
   def evidenceFor(param: Id): Ev =
     parameters.getOrElse(param, INTERNAL_ERROR(s"Cannot find evidence for ${param}"))
@@ -102,6 +115,7 @@ def bindBlockParams(params: List[Param])(using C: ErrorReporter, F: FlowAnalysis
 def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b match {
   case Block.BlockVar(id, annotatedType) => F.flowTypeForBinder(id)
   case Block.BlockLit(tparams, params, body) =>
+    val BlockType.Function(tparams, _, vparams, bparams, ret) = b.tpe : @unchecked
     // Step 1) Map unification variables to evidence parameters:
     //   ev142 -> α17._2
     val eps = params.collect { case Param.EvidenceParam(id) => id }
@@ -113,13 +127,13 @@ def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b 
     // Step 2) Create flow types for block parameters
     val bfts = bindBlockParams(params)
 
-    FlowType.Function(ev, bfts)
+    FlowType.Function(ev, tparams, vparams, bfts, ret)
 
 
   case Block.Member(b, field, annotatedTpe) =>
     analyze(b) match {
-      case FlowType.Function(evidences, bparams) => C.panic("Should not happen: member selection on function type")
-      case FlowType.Interface(id) =>
+      case f: FlowType.Function => C.panic("Should not happen: member selection on function type")
+      case FlowType.Interface(id, _) =>
         F.interfaceDeclarationFor(id).operations(field)
     }
 
@@ -139,7 +153,7 @@ def analyze(impl: Implementation)(using C: ErrorReporter, F: FlowAnalysis): Flow
         val implementedType = analyze(implementation)
         F.addConstraint(implementedType, declaredType)
     }
-    FlowType.Interface(name)
+    FlowType.Interface(name, targs)
 }
 
 // Actually traverses the block
@@ -166,20 +180,25 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
     analyze(body)
   case Stmt.App(b, targs, args) =>
     // Step 1) fully analyze block
-    val fun = analyze(b)
+    val FlowType.Function(evs, _, _, bps, _) = analyze(b) : @unchecked
 
     // Step 2) gather evidence arguments of application
     val evidenceArgs = args.collect {
       case Evidence(scopes) => Ev(scopes.flatMap(e => F.evidenceFor(e).lifts))
     }
+    F.addConstraint(evs, Evidences.Concrete(evidenceArgs))
+
+    // visit expression arguments
+    args.collect { case e: Expr => analyze(e) }
 
     // Step 3) infer types of block arguments
-    val blockArgs = args.collect {
-      case b: Block => analyze(b)
-    }
+    // TODO right now, we skip visiting the expression arguments.
+    val blockArgs = args.collect { case b: Block => analyze(b) }
+
     // Step 4) unify inferred function type with given arguments
-    val arg = FlowType.Function(Evidences.Concrete(evidenceArgs), blockArgs)
-    F.addConstraint(fun, arg)
+    (bps zip blockArgs) foreach {
+      case (bp, ba) => F.addConstraint(ba, bp)
+    }
 
   case Stmt.If(cond, thn, els) =>
     analyze(cond); analyze(thn); analyze(els)
@@ -241,7 +260,7 @@ def analyze(d: Declaration)(using C: ErrorReporter, F: FlowAnalysis): Unit =
 
 def freshFlowType(tpe: BlockType)(using C: ErrorReporter, F: FlowAnalysis): FlowType = tpe match {
   case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
-    FlowType.Function(Evidences.fresh(eparams.size), bparams.map(freshFlowType))
+    FlowType.Function(Evidences.fresh(eparams.size), tparams, vparams, bparams.map(freshFlowType), result)
   case BlockType.Interface(name, targs) =>
-    FlowType.Interface(name)
+    FlowType.Interface(name, targs)
 }

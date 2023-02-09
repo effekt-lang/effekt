@@ -33,15 +33,16 @@ object Monomorphize {
       case (x, Bounds(lower, upper)) =>  lower.map(_.show).mkString(", ") + " <: " + x.show + " <: " + upper.map(_.show).mkString(", ")
     }.mkString("\n")
 
-    given TransformationContext(analysis, cleaned, Map.empty)
+    given TransformationContext(analysis, cleaned)
 
     val newDeclarations = mod.decls.map(elaborate).map {
       d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
     }.mkString("\n")
 
-    val newDefinitions = mod.definitions.map(elaborate).map {
-      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
-    }.mkString("\n")
+    val newDefinitions = ""
+    //    mod.definitions.map(elaborate).map {
+    //      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
+    //    }.mkString("\n")
 
     C.debug(s"""|Solved:
         |-------

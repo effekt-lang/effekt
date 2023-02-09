@@ -3,13 +3,20 @@ package lifted
 package mono
 
 import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, TODO, NOT_SUPPORTED }
+import scala.collection.mutable
 
-class TransformationContext(flow: FlowAnalysis, substitution: Bisubstitution, choices: Map[Id, Ev]) {
+enum ElaboratedType {
+  case Single(tpe: BlockType)
+  // operations here maps the old id*configuration to the new operation id and its type.
+  case Multi(variants: Map[Evidences, (Id, BlockType)])
+}
+
+class TransformationContext(flow: FlowAnalysis, substitution: Bisubstitution, choices: Map[Id, Ev] = Map.empty, types: mutable.Map[FlowType, ElaboratedType] = mutable.Map.empty) {
   export flow.*
   // Mapping the old operation id to the specialized one (e.g., id * [ev] -> id)
   private var specialization: Map[(Id, Evidences.Concrete), Id] = Map.empty
 
-  def withChoices(newChoices: List[(Id, Ev)]): TransformationContext = TransformationContext(flow, substitution, choices ++ newChoices.toMap)
+  def withChoices(newChoices: List[(Id, Ev)]): TransformationContext = TransformationContext(flow, substitution, choices ++ newChoices.toMap, types)
 
   def specializationFor(id: Id, ev: Evidences.Concrete): Id =
     val key = (id, ev)
@@ -22,11 +29,32 @@ class TransformationContext(flow: FlowAnalysis, substitution: Bisubstitution, ch
       newSpecialization
     }
 
+  def elaboratedType(ftpe: FlowType): ElaboratedType = {
+    if types.isDefinedAt(ftpe) then return types(ftpe)
+
+    val elaborated = ftpe match {
+      case FlowType.Function(evidences, _, _, bparams, _) =>
+        configurations(evidences).toList map { case Evidences.Concrete(evs) =>
+          // e.g. for "f" with [<>, <Try>], we will have "f$0$1"
+          val variantName = Id("apply$" + evs.map(_.lifts.size).mkString("$"))
+          variantName
+        } match {
+          case List(one) => ElaboratedType.Single(???)
+          case _ => ElaboratedType.Multi(???)
+        }
+
+      case FlowType.Interface(id, targs) => ???
+    }
+
+    types.update(ftpe, elaborated)
+    elaborated
+  }
+
   def configurations(termId: Id): Set[Evidences.Concrete] = configurations(flow.flowTypeForBinder(termId))
 
   def configurations(ftpe: FlowType): Set[Evidences.Concrete] = ftpe match {
-    case FlowType.Function(evidences, bparams) => configurations(evidences)
-    case FlowType.Interface(id) =>
+    case FlowType.Function(evidences, _, _, bparams, _) => configurations(evidences)
+    case FlowType.Interface(id, targs) =>
       INTERNAL_ERROR("Interfaces are treated nominal and do not have a set of configurations (only their operations do)")
   }
 
@@ -49,7 +77,7 @@ class TransformationContext(flow: FlowAnalysis, substitution: Bisubstitution, ch
 
 
 def elaborate(tpe: BlockType, ftpe: FlowType)(using T: TransformationContext): BlockType = (tpe, ftpe) match {
-  case (BlockType.Function(tps, eps, vps, bps, res), FlowType.Function(ev, bps2)) =>
+  case (BlockType.Function(tps, eps, vps, bps, res), FlowType.Function(ev, _, _, bps2, _)) =>
     BlockType.Function(tps, Nil, vps, (bps zip bps2).map { case (b, f) => elaborate(b, f) }, res)
   // interfaces are nominal and don't change right now.
   case (BlockType.Interface(id, args), _) => tpe
@@ -68,9 +96,9 @@ def elaborate(d: Declaration)(using T: TransformationContext): Declaration = d m
 
         // e.g. [<>], [<Try>]
         val configs = flowType match {
-          case FlowType.Function(ev, Nil) =>
+          case FlowType.Function(ev, _, _, Nil, _) =>
             T.configurations(ev)
-          case FlowType.Function(ev, _) => NOT_SUPPORTED("monomorphization for bidirectional effects")
+          case FlowType.Function(ev, _, _, _, _) => NOT_SUPPORTED("monomorphization for bidirectional effects")
           case _: FlowType.Interface => NOT_SUPPORTED("monomorphization for nested objects / modules")
         }
 
@@ -134,11 +162,6 @@ def elaborate(d: Definition)(using T: TransformationContext): Definition = d mat
   case Definition.Let(id, binding) => Definition.Let(id, elaborate(binding))
 }
 
-enum ElaboratedType {
-  case Function(tpe: BlockType)
-  // operations here maps the old id*configuration to the new operation id and its type.
-  case Interface(id: Id, operations: Map[(Id, Evidences), (Id, BlockType)])
-}
 
 // TODO share with Def
 def elaborate(b: Block)(using T: TransformationContext): Block = b match {
@@ -197,13 +220,16 @@ def elaborate(impl: Implementation): Implementation = impl // TODO
 
 def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
 
+  // [[ b.m(ev1, n) ]] = [[b]].m$[[ev1]]([[n]])
+  case Stmt.App(Block.Member(b, field, _), targs, args) =>
+    val ftpe: FlowType.Interface = T.annotatedInterfaceType(b)
+    // ftpe.id
+    ???
+
   // [[ f(ev1, n) ]] = f(n)  if only one specialization
   // [[ f(ev1, n) ]] = f.apply$1(n)  else
   case Stmt.App(b, targs, args) =>
-    val ftpe = T.annotatedType(b) match {
-      case f: FlowType.Function => f
-      case _ => INTERNAL_ERROR("Can only call functions")
-    }
+    val ftpe = T.annotatedFunctionType(b)
 
     val (evidenceArgs, remainingArgs) = args partitionMap {
       case e: Evidence => Left(e.scopes.map(T.currentChoiceFor))
