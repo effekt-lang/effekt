@@ -1,5 +1,6 @@
 package effekt
 package lifted
+package mono
 
 import core.Id
 import effekt.source.NoSource
@@ -30,9 +31,9 @@ class MonomorphizationTests extends munit.FunSuite {
 
     val m = ModuleDecl("test", Nil, Nil, Nil, List(f_def, main_fun), Nil)
     given a : FlowAnalysis()
-    Monomorphize.analyze(m)
+    analyze(m)
 
-    val f_tpe = a.flowTypeFor(f)
+    val f_tpe = a.flowTypeForDefinition(f)
 
     // α0() <: [<>]()
     val costraint = Constraint.B(

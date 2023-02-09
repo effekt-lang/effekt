@@ -4,7 +4,7 @@ package lifted
 import effekt.context.Context
 import effekt.symbols.{ Constructor, Name, Symbol }
 
-import effekt.core.Id
+export effekt.core.Id
 
 sealed trait Tree
 /**
