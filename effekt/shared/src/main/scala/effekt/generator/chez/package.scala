@@ -32,10 +32,7 @@ case class RecordNames(sym: Symbol) {
   val typeName = ChezName(basename + "$Type" + id)
   val predicate = ChezName(name + "?")
   val matcher = ChezName("match-" + name)
-  val constructor = sym match {
-    case _: effekt.symbols.Interface => ChezName(s"make-${name}")
-    case _ => uid
-  }
+  val constructor = ChezName(s"make-${name}")
 }
 
 // https://www.scheme.com/csug8/objects.html
@@ -50,7 +47,8 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
     case r: symbols.Record => r.constructor
     // right now, we also use core.Records to represent capabilities
     case i: symbols.Interface => i
-    case other => sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
+    case other => other
+      // sys error s"Compiler error: cannot generate a scheme record for internal symbol ${other}"
   }
 
   val names = RecordNames(did)

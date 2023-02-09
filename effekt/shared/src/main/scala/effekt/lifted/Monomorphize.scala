@@ -12,6 +12,7 @@ import mono.*
 //
 // we do not deal with bidirectional effects, atm
 
+// TODO check whether evidence is actually ever used and only specialized wrt. the used evidence.
 
 object Monomorphize {
 
@@ -35,12 +36,14 @@ object Monomorphize {
 
     given TransformationContext(analysis, cleaned)
 
-    val newDeclarations = mod.decls.map(elaborate).map {
-      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
-    }.mkString("\n")
+    val elaborated = elaborate(mod)
 
-    val newDefinitions = ""
-    //    mod.definitions.map(elaborate).map {
+    //    val newDeclarations = mod.decls.map(elaborate).map {
+    //      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
+    //    }.mkString("\n")
+    //
+    //
+    //    val newDefinitions = mod.definitions.map(elaborate).map {
     //      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
     //    }.mkString("\n")
 
@@ -48,18 +51,10 @@ object Monomorphize {
         |-------
         |${subst}
         |
-        |Elaborated Declarations:
-        |------------------------
-        |${newDeclarations}
-        |
-        |Elaborated Definitions:
-        |------------------------
-        |${ newDefinitions }
-        |
         |Constraints:
         |-----------
         |${constrs}""".stripMargin)
 
-    mod
+    elaborated
   }
 }

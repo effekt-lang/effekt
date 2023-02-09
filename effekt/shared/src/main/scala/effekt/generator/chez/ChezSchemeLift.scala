@@ -27,7 +27,7 @@ object ChezSchemeLift extends Backend {
     Builtin("$then", binding, chez.Lambda(List(param), body))
 
   def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", chez.Call(main, Variable(ChezName("here"))))
+    chez.Builtin("run", chez.Call(main))
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.

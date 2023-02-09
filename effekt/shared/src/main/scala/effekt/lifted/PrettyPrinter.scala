@@ -25,7 +25,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(m: ModuleDecl): Doc = {
     "module" <+> m.path <> emptyline <> vsep(m.imports.map { im => "import" <+> im }, line) <>
-      emptyline <> signatures(m) <>
+      emptyline <> vcat(m.decls.map(toDoc)) <>
       emptyline <> toDoc(m.definitions)
   }
 
