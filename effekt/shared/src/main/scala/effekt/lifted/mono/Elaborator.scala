@@ -7,9 +7,12 @@ import scala.collection.mutable
 
 enum ElaboratedType {
   case Single()
-  // operations here maps the old id*configuration to the new operation id and its type.
-  // the interface id can be ignored for operations, only relevant for new nominal types (function types)
-  case Multi(id: Id, variants: Map[Evidences, (Id, BlockType)])
+  // id: type id of the interface (e.g. Function)
+  // tparams: value types that have been abstracted over by the interface
+  // variants: map from evidence configuration to new operation name
+  // tpe: type of a single operation (all equal for the variants)
+  // abstractedParams: names that are abstracted over b
+  case Multi(id: Id, tparams: List[Id], variants: Map[Evidences, Id], tpe: BlockType)
 }
 
 class TransformationContext(
@@ -91,20 +94,20 @@ class TransformationContext(
       val fresh = Id("B"); abtractedTParams = abtractedTParams :+ fresh; ValueType.Var(fresh)
     }
 
+    // TODO there could be differences in the blockparams that we would need to abstract over as well:
+    val abstractedType = BlockType.Function(tparams, Nil, abstractedVparams, bparams.map(elaborate), abstractedReturn)
+
     val variants = configs map { case e @ Evidences.Concrete(evs) =>
       // e.g. for "f" with [<>, <Try>], we will have "f$0$1"
       val variantName = Id("apply" + evs.map(_.lifts.size).mkString("$"))
-      // TODO there could be differences in the blockparams that we would need to abstract over as well:
-      (e, variantName, BlockType.Function(tparams, Nil, abstractedVparams, bparams.map(elaborate), abstractedReturn))
+      (e, variantName)
     }
 
     interfaces.update(interfaceName, Declaration.Interface(interfaceName, abtractedTParams, variants.map {
-      case (_, name, tpe) => Property(name, tpe)
+      case (_, name) => Property(name, abstractedType)
     }))
 
-    val elaborated = ElaboratedType.Multi(interfaceName, variants.map {
-      case (e, name, tpe) => e -> (name, tpe)
-    }.toMap)
+    val elaborated = ElaboratedType.Multi(interfaceName, abtractedTParams, variants.toMap, abstractedType)
 
     types.update(cls, elaborated)
     elaborated
@@ -116,7 +119,8 @@ class TransformationContext(
     case f @ FlowType.Function(evidences, tparams, vparams, bparams, ret) => elaboratedType(f) match {
       // we use the original type (structurally typed)
       case ElaboratedType.Single() => BlockType.Function(tparams, Nil, vparams, bparams.map(elaborate), ret)
-      case ElaboratedType.Multi(id, variants) => BlockType.Interface(id, vparams :+ ret)
+      // TODO, here we need to compute the type arguments properly!
+      case ElaboratedType.Multi(id, tparams, variants, tpe) => BlockType.Interface(id, vparams :+ ret)
     }
     case FlowType.Interface(id, targs) => BlockType.Interface(id, targs)
   }
@@ -222,11 +226,9 @@ def elaborate(b: Block)(using T: TransformationContext): Block = b match {
 
     (T.elaboratedType(ftpe), variants) match {
       case (ElaboratedType.Single(), List((config, block))) => block
-      case (ElaboratedType.Multi(id, ops), variants) =>
+      case (ElaboratedType.Multi(id, tparams, ops, tpe), variants) =>
         val operations = variants map {
-          case (ev, impl) =>
-            val (specializedVariant, tpe) = ops(ev)
-            Operation(specializedVariant, impl)
+          case (ev, impl) => Operation(ops(ev), impl)
         }
         Block.New(Implementation(BlockType.Interface(id, Nil), operations))
       case _ => INTERNAL_ERROR("should never happen")
@@ -291,9 +293,9 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
     // find configurations
     val target = T.elaboratedType(ftpe) match {
       case ElaboratedType.Single() => elaborate(b)
-      case ElaboratedType.Multi(id, variants) =>
-        val (specializedTarget, tpe) = variants(Evidences.Concrete(evidenceArgs))
-        Block.Member(elaborate(b), specializedTarget, tpe)
+      case ElaboratedType.Multi(id, tparams, variants, tpe) =>
+        // TODO here we need to choose the correct type instantation, not the abstracted one:
+        Block.Member(elaborate(b), variants(Evidences.Concrete(evidenceArgs)), tpe)
     }
 
     Stmt.App(target, targs, remainingArgs)

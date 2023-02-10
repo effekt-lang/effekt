@@ -36,6 +36,13 @@ object Monomorphize {
 
     given t: TransformationContext(analysis, cleaned, functions = cls)
 
+
+    val transposed = cls.groupMapReduce({ case (ftpe, n) => n })({ case (ftpe, n) => Set(ftpe)})(_ ++ _)
+
+    transposed foreach {
+      case (n, ftpes) => println(System.identityHashCode(n).toString + " -> " + ftpes.map(f => f.evidences.show).mkString(", "))
+    }
+
     val elaborated = elaborate(mod)
 
     //    val newDeclarations = mod.decls.map(elaborate).map {
