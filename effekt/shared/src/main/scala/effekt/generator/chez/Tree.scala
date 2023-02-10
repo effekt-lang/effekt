@@ -9,7 +9,6 @@ case class Binding(name: ChezName, expr: Expr)
 
 case class Block(definitions: List[Def], expressions: List[Expr], result: Expr)
 
-case class Handler(constructorName: ChezName, operations: List[Operation])
 case class Operation(name: ChezName, params: List[ChezName], k: ChezName, body: Expr)
 
 /**
@@ -45,7 +44,7 @@ enum Expr {
   case Variable(name: ChezName)
 
   // handle is a macro, stable across Chez variants, so we add it to the language.
-  case Handle(handlers: List[Handler], body: Expr)
+  case Handle(handlers: List[Expr], body: Expr)
 }
 export Expr.*
 
@@ -154,13 +153,6 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
       freeInBindings ++ (query(body) -- bound(bindings))
 
     case Lambda(params, body) => query(body) -- params.toSet
-
-    case Handle(handlers, body) =>
-      query(body) ++ handlers.flatMap {
-        case Handler(name, ops) => ops flatMap {
-          case Operation(name, params, k, body) => query(body) -- params.toSet - k
-        }
-      }
   }
 
   override def defn(using Unit) = {
@@ -195,7 +187,6 @@ object Tree {
 
     def rewrite(block: Block)(using Ctx): Block = rewriteStructurally(block)
     def rewrite(binding: Binding)(using Ctx): Binding = rewriteStructurally(binding)
-    def rewrite(h: Handler)(using Ctx): Handler = rewriteStructurally(h)
     def rewrite(op: Operation)(using Ctx): Operation = rewriteStructurally(op)
 
     def rewrite(e: Expr)(using Ctx): Expr = rewriteStructurally(e, expr)
@@ -233,7 +224,6 @@ object Tree {
     def query(d: Def)(using Ctx): Res = structuralQuery(d, defn)
     def query(b: Block)(using Ctx): Res = structuralQuery(b)
     def query(b: Binding)(using Ctx): Res = structuralQuery(b)
-    def query(e: Handler)(using Ctx): Res = structuralQuery(e)
     def query(e: Operation)(using Ctx): Res = structuralQuery(e)
 
     def query(clause: (Expr, Expr))(using Ctx): Res = clause match {

@@ -320,7 +320,7 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
     }
     Stmt.Try(Block.BlockLit(tparams, remainingParams, elaboratedBody), handler.map(elaborate))
 
-  case Stmt.Try(_, _) => INTERNAL_ERROR("unreachable")
+  case Stmt.Try(_, _) => INTERNAL_ERROR("unreachable, body should always be a blocklit.")
 
   case Stmt.Shift(ev, body) =>
     Stmt.Shift(translate(elaborate(ev)), elaborate(body).asInstanceOf)

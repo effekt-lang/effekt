@@ -42,6 +42,8 @@ object messages {
     val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
     throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
 
+  def FIXME[A](a: A, msg: String = ""): A = a
+
   def NOT_SUPPORTED(msg: String = ""): Nothing =
     val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
     throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))

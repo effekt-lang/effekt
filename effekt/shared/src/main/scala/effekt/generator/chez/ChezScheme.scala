@@ -118,15 +118,7 @@ trait ChezScheme {
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, handler) =>
-      val handlers: List[chez.Handler] = handler.map { h =>
-        // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
-        val names = RecordNames(h.interface.name)
-        chez.Handler(names.constructor, h.operations.map {
-          case Operation(op, tps, cps, vps, bps, resume, body) =>
-            chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
-        })
-      }
-      chez.Handle(handlers, toChez(body))
+      chez.Handle(handler.map(toChez), toChez(body))
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
@@ -197,15 +189,19 @@ trait ChezScheme {
     case Member(b, field, tpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
-    case Unbox(e) =>
-      toChez(e)
+    case Unbox(e) => toChez(e)
 
-    case New(Implementation(tpe, clauses)) =>
-      val ChezName(name) = nameRef(tpe.name)
-      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map {
-        case Operation(_, tps, cps, vps, bps, resume, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
-      })
+    case New(impl) => toChez(impl)
   }
+
+  def toChez(impl: Implementation): chez.Expr =
+    val ChezName(name) = nameRef(impl.interface.name)
+    chez.Call(Variable(ChezName(s"make-${name}")), impl.operations.map(toChez))
+
+  def toChez(op: Operation): chez.Expr = op match {
+    case Operation(name, tparams, cparams, vparams, bparams, resume, block) => ???
+  }
+
 
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("#f")

@@ -106,17 +106,7 @@ object ChezSchemeLift extends Backend {
     case State(id, init, region, body) =>
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
-    case Try(body, handler) =>
-      val handlers: List[chez.Handler] = handler.map { h =>
-        val names = RecordNames(h.interface.name)
-        chez.Handler(names.constructor, h.operations.map {
-          // TODO handle evidence param here.
-          case Operation(op, BlockLit(tparams, params, body)) =>
-            // the LAST parameter is the continuation...
-            chez.Operation(nameDef(op), params.init.map(p => nameDef(p.id)), nameDef(params.last.id), toChezExpr(body))
-        })
-      }
-      chez.Handle(handlers, toChez(body))
+    case Try(body, handler) => chez.Handle(handler.map(toChez), toChez(body))
 
     case Shift(ev, body) => chez.Builtin("shift", toChez(ev), toChez(body))
 
@@ -192,10 +182,12 @@ object ChezSchemeLift extends Backend {
     case Unbox(e) =>
       toChez(e)
 
-    case New(Implementation(id, clauses)) =>
-      val ChezName(name) = nameRef(id.name)
-      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
+    case New(impl) => toChez(impl)
   }
+
+  def toChez(impl: Implementation): chez.Expr =
+    val ChezName(name) = nameRef(impl.interface.name)
+    chez.Call(Variable(ChezName(s"make-${name}")), impl.operations.map { case Operation(_, block) => toChez(block) })
 
   def toChez(scope: Evidence): chez.Expr = toChez(scope.lifts)
 
