@@ -133,10 +133,11 @@ object Type {
     case Stmt.State(id, init, region, ev, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
     case Stmt.Region(body) => body.returnType
-    //    case Stmt.Shift(ev, body) =>
-    //      // the annotated argument type on resume is our return type here
-    //      val List(tpe) = body.functionType.vparams : @unchecked
-    //      tpe
+
+    case Stmt.Shift(ev, body) =>
+      // the annotated argument type on resume is our return type here
+      val Some(tpe: BlockType.Function) = body.params.collectFirst { case b: Param.BlockParam => b.tpe }: @unchecked
+      tpe.vparams.head
 
     case Stmt.Hole() => TBottom
   }

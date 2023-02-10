@@ -5,10 +5,8 @@ import effekt.PhaseResult.CoreLifted
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.lifted.DeclarationContext
-import effekt.lifted.given
+import effekt.lifted.{ DeclarationContext, Definition, Lift, LiftInference, given }
 import effekt.lifted
-import effekt.lifted.{ Definition, LiftInference }
 import effekt.symbols
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
@@ -215,6 +213,13 @@ object Transformer {
               New(transform(id), transform(handler),
                 transform(body)))))
 
+      // TODO what about the evidence passed to resume?
+      case lifted.Shift(ev, lifted.Block.BlockLit(tparams, List(kparam), body)) =>
+        transform(ev).run { evValue =>
+          PopStacks(Variable(transform(kparam).name, Type.Stack()), evValue,
+            transform(body))
+        }
+
       case lifted.Region(lifted.BlockLit(tparams, List(ev, id), body)) =>
         val variable = Variable(freshName("a"), transform(body.tpe))
         val returnClause = Clause(List(variable), Return(List(variable)))
@@ -252,23 +257,27 @@ object Transformer {
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
+  def transform(l: lifted.Lift): Variable = l match {
+    case Lift.Var(ev) => Variable(transform(ev), builtins.Evidence)
+    case Lift.Try() => ???
+    case Lift.Reg() => ???
+  }
+
   def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)
     case lifted.Evidence(scopes) => {
-      scopes.map({ scope =>
-        Variable(transform(scope), builtins.Evidence)
-      }).foldRight({
+      scopes.map(transform).foldRight {
         val res = Variable(freshName("ev_zero"), builtins.Evidence)
         Binding { k =>
           LiteralEvidence(res, builtins.Here, k(res))
         }: Binding[Variable]
-      })({(evi, acc) =>
+      } { (evi, acc) =>
         val res = Variable(freshName("ev_acc"), builtins.Evidence)
         acc.flatMap({accV => Binding { k =>
           ComposeEvidence(res, evi, accV, k(res))
         }})
-      })
+      }
     }
   }
 
@@ -374,22 +383,15 @@ object Transformer {
       case arg :: args => transform(arg).flatMap { value => transform(args).flatMap { values => pure(value :: values) } }
     }
 
-  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] = {
-    handler.operations.sortBy[Int]({
+  def transform(handler: lifted.Implementation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): List[Clause] =
+    handler.operations.sortBy {
       case lifted.Operation(operationName, _) =>
         DeclarationContext.getInterface(handler.interface.name).properties.indexWhere(_.id == operationName)
-    }).map({
-      case lifted.Operation(operationName, lifted.BlockLit(tparams, params :+ resume, body))=>
-        // TODO we assume here that resume is the last param
-        // TODO we assume that there are no block params in handlers
-        // TODO we assume that evidence has to be passed as first param
-        val ev = Variable(freshName("evidence"), builtins.Evidence)
-        Clause(ev +: params.map(transform),
-          PopStacks(Variable(transform(resume).name, Type.Stack()), ev,
-            transform(body)))
-      case _ =>
-        ErrorReporter.abort(s"Unsupported handler $handler")
-    })
+    }.map(transform)
+
+  def transform(op: lifted.Operation)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Clause = op match {
+    case lifted.Operation(name, lifted.BlockLit(tparams, params, body)) =>
+      Clause(params.map(transform), transform(body))
   }
 
   def transform(param: lifted.Param)(using ErrorReporter): Variable =

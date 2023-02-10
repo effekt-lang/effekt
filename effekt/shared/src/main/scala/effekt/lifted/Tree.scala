@@ -125,6 +125,9 @@ enum Stmt extends Tree  {
   case Try(body: Block, handler: List[Implementation])
   case Region(body: Block)
 
+  // e.g. shift(ev) { {resume} => ... }
+  case Shift(ev: Evidence, body: Block.BlockLit)
+
   // Others
   case Hole()
 
@@ -148,10 +151,16 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 
 
 
+enum Lift {
+  case Var(ev: EvidenceSymbol)
+  case Try()
+  case Reg()
+}
+
 /**
  * Evidence for lifts
  */
-case class Evidence(scopes: List[EvidenceSymbol]) extends Argument
+case class Evidence(lifts: List[Lift]) extends Argument
 
 def Here() = Evidence(Nil)
 
@@ -217,6 +226,7 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
+  case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }
 
@@ -252,5 +262,8 @@ def freeVariables(impl: Implementation): FreeVariables = impl match {
   case Implementation(id, operations) => operations.map(freeVariables).combineFV
 }
 
-def freeVariables(ev: Evidence): FreeVariables = ev.scopes.map{ e => EvidenceParam(e) }.toFV
-
+def freeVariables(ev: Evidence): FreeVariables = ev.lifts.flatMap {
+  case Lift.Var(ev) => List(lifted.Param.EvidenceParam(ev))
+  case Lift.Try() => List()
+  case Lift.Reg() => List()
+}.toFV

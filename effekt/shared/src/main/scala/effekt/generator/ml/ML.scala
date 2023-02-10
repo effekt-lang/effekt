@@ -206,46 +206,23 @@ object ML extends Backend {
       }
 
     case lifted.Try(body, handler) =>
-      val handlers: List[ml.Expr.Make] = handler.map {
-        case Implementation(interface, ops) =>
-          val fields = ops.map {
-            case Operation(op, lifted.Block.BlockLit(tparams, params, body)) =>
-              // TODO refactor
-              val args = params.init.map(paramToML(_))
-              val resumeName = name(params.last.id)
-              val ev = freshName("ev")
-              val evResume = freshName("ev_resume")
-              val v = freshName("v")
-              val k1 = freshName("k1")
-              val k2 = freshName("k2")
-
-              // ev (fn k1 => fn k2 => let fun resume ev_res v = ev_res k1(v); in body[[k2]] end)
-              val newBody = ml.Call(
-                ml.Expr.Variable(ev)
-              )(
-                ml.Lambda(
-                  ml.Param.Named(k1)
-                )(ml.Lambda(
-                    ml.Param.Named(k2)
-                  )(ml.mkLet(
-                    List(ml.Binding.FunBind(
-                      resumeName,
-                      List(ml.Param.Named(evResume), ml.Param.Named(v)),
-                      ml.Call(evResume)(ml.Call(k1)(ml.Expr.Variable(v)))
-                    )),
-                    toMLExpr(body)(ml.Variable(k2)))
-                  )
-                )
-              )
-              ml.Expr.Lambda(ml.Param.Named(ev) :: args, newBody)
-          }
-          ml.Expr.Make(name(interface.name), expsToTupleIsh(fields))
-      }
-      val args = ml.Consts.lift :: handlers
-
+      val args = ml.Consts.lift :: handler.map(toML)
       CPS.inline { k =>
         ml.Call(CPS.reset(ml.Call(toML(body))(args: _*)), List(k.reify))
       }
+
+    // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
+    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
+      CPS.lift(ev.lifts, CPS.inline { k1 =>
+        val a = freshName("a")
+        val ev = freshName("ev")
+        mkLet(List(
+          ml.Binding.FunBind(toML(kparam), List(ml.Param.Named(ev), ml.Param.Named(a)),
+            ml.Call(ev)(ml.Call(k1.reify)(ml.Expr.Variable(a))))),
+          toMLExpr(body).reify())
+      })
+
+    case Shift(_, _) => C.panic("Should not happen, body of shift is always a block lit with one parameter for the continuation.")
 
     case Region(body) =>
       CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
@@ -299,6 +276,11 @@ object ML extends Backend {
       ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
   }
 
+  def toML(impl: Implementation)(using Context): ml.Expr = impl match {
+    case Implementation(interface, operations) =>
+      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+  }
+
   def toML(op: Operation)(using Context): ml.Expr = {
     val Operation(_, implementation) = op
     toML(implementation)
@@ -306,9 +288,15 @@ object ML extends Backend {
 
   def toML(scope: Evidence): ml.Expr = scope match {
     case Evidence(Nil) => Consts.here
-    case Evidence(ev :: Nil) => Variable(name(ev))
+    case Evidence(ev :: Nil) => toML(ev)
     case Evidence(scopes) =>
-      scopes.map(s => ml.Variable(name(s))).reduce(ml.Call(Consts.nested)(_, _))
+      scopes.map(toML).reduce(ml.Call(Consts.nested)(_, _))
+  }
+
+  def toML(l: Lift): ml.Expr = l match {
+    case Lift.Try() => Consts.lift
+    case Lift.Var(x) => Variable(name(x))
+    case Lift.Reg() => Consts.lift // FIXME Translate to proper lift on state
   }
 
   def toML(expr: Expr)(using C: Context): ml.Expr = expr match {
@@ -384,6 +372,9 @@ object ML extends Backend {
     def flatMap(f: ml.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
     def map(f: ml.Expr => ml.Expr): CPS = flatMap(a => CPS.pure(f(a)))
     def run: ml.Expr = prog(Continuation.Static(a => a))
+    def reify(): ml.Expr =
+      val k = freshName("k")
+      ml.Lambda(ml.Param.Named(k))(this.apply(Continuation.Dynamic(ml.Expr.Variable(k))))
   }
 
   object CPS {
@@ -397,13 +388,35 @@ object ML extends Backend {
     }
 
     def reset(prog: ml.Expr): ml.Expr =
-      val a = freshName("a")
-      val k2 = freshName("k2")
-      // fn a => fn k2 => k2(a)
-      val pure = ml.Lambda(ml.Param.Named(a)) { ml.Lambda(ml.Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
       ml.Call(prog, List(pure))
 
+    // fn a => fn k2 => k2(a)
+    def pure: ml.Expr =
+      val a = freshName("a")
+      val k2 = freshName("k2")
+      ml.Lambda(ml.Param.Named(a)) { ml.Lambda(ml.Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
+
     def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
+
+    def reflect(e: ml.Expr): CPS =
+      CPS.join { k => ml.Call(e)(k.reify) }
+
+    // [[ Try() ]] = m k1 k2 => m (fn a => k1 a k2);
+    def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
+
+      // TODO implement lift for reg properly
+      case (Lift.Try() | Lift.Reg()) :: lifts =>
+        val k2 = freshName("k2")
+        lift(lifts, CPS.inline { k1 => ml.Lambda(ml.Param.Named(k2)) {
+          m.apply(a => ml.Call(k1.reify)(a, ml.Expr.Variable(k2)))
+        }})
+
+      // [[ [ev :: evs](m) ]] = ev([[ [evs](m) ]])
+      case Lift.Var(x) :: lifts =>
+        CPS.reflect(ml.Call(Variable(name(x)))(lift(lifts, m).reify()))
+
+      case Nil => m
+    }
 
     def runMain(main: MLName): ml.Expr = ml.Call(main)(id, id)
 
