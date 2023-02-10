@@ -69,7 +69,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal              => l.value.toString
     case ValueVar(id, _)         => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case PureApp(b, targs, args) =>
+      val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+      toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))
 
     case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
@@ -149,7 +151,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
         toDoc(body)
 
     case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+      val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+      toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))

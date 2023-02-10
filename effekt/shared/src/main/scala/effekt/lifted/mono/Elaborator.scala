@@ -16,7 +16,7 @@ enum ElaboratedType {
 }
 
 class TransformationContext(
-  flow: FlowAnalysis,
+  val flow: FlowAnalysis,
   substitution: Bisubstitution,
   choices: Map[Id, Ev] = Map.empty,
 
@@ -67,7 +67,7 @@ class TransformationContext(
 
     val FlowType.Function(evidences, tparams, vparams, bparams, ret) = ftpe
 
-    val configs = configurations(evidences).toList
+    val configs = configurations(ftpe).toList
 
     // 1) single specialization: nothing to do, if there is only one specialization
     if (configs.size == 1) {
@@ -231,7 +231,7 @@ def elaborate(b: Block)(using T: TransformationContext): Block = b match {
           case (ev, impl) => Operation(ops(ev), impl)
         }
         Block.New(Implementation(BlockType.Interface(id, Nil), operations))
-      case _ => INTERNAL_ERROR("should never happen")
+      case c => INTERNAL_ERROR(s"should never happen: ${c}")
     }
 
   case Block.New(impl) => Block.New(elaborate(impl))
@@ -277,7 +277,17 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
 
     val specializedTarget = T.specializationFor(field, Evidences.Concrete(evidenceArgs))
 
-    Stmt.App(Block.Member(elaborate(b), specializedTarget, T.elaborate(T.annotatedType(m))), targs, remainingArgs)
+    // TODO how do we get the proper method type?
+    //   calling `T.elaborate(T.annotatedType(m))` will potentially return an interface, not function type
+    //   since we are not supposted to elaborate method types.
+
+    val methodType = T.annotatedType(m) match {
+      case FlowType.Function(evidences, tparams, vparams, bparams, result) =>
+        BlockType.Function(tparams, Nil, vparams, bparams.map(T.elaborate), result)
+      case FlowType.Interface(id, targs) => INTERNAL_ERROR("Cannot be an interface type")
+    }
+
+    Stmt.App(Block.Member(elaborate(b), specializedTarget, methodType), targs, remainingArgs)
 
   // [[ f(ev1, n) ]] = f(n)  if only one specialization
   // [[ f(ev1, n) ]] = f.apply$1(n)  else
