@@ -199,8 +199,8 @@ object ChezSchemeLift extends Backend {
 
   def toChez(l: Lift): chez.Expr = l match {
     case Lift.Var(x) => chez.Variable(nameRef(x))
-    case Lift.Try() => Variable(ChezName("there"))
-    case Lift.Reg() => Variable(ChezName("there"))
+    case Lift.Try() => Variable(ChezName("lift"))
+    case Lift.Reg() => Variable(ChezName("lift"))
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
