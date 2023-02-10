@@ -192,10 +192,15 @@ object ChezSchemeLift extends Backend {
   def toChez(scope: Evidence): chez.Expr = toChez(scope.lifts)
 
   def toChez(lifts: List[Lift]): chez.Expr = lifts match {
-    case Lift.Var(x) :: rest => chez.Builtin("nested", chez.Variable(nameRef(x)), toChez(rest))
-    case Lift.Try() :: rest => chez.Builtin("nested", Variable(ChezName("there")), toChez(rest))
-    case Lift.Reg() :: rest => chez.Builtin("nested", Variable(ChezName("there")), toChez(rest))
+    case el :: Nil => toChez(el)
+    case el :: rest => chez.Builtin("nested", toChez(el), toChez(rest))
     case Nil => Variable(ChezName("here"))
+  }
+
+  def toChez(l: Lift): chez.Expr = l match {
+    case Lift.Var(x) => chez.Variable(nameRef(x))
+    case Lift.Try() => Variable(ChezName("there"))
+    case Lift.Reg() => Variable(ChezName("there"))
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
