@@ -86,12 +86,20 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     // TODO check whether this makes sense here.
     case core.Unbox(b) => Unbox(transform(b))
 
-    case core.New(core.Implementation(interface, clauses)) =>
-      val transformedMethods = clauses.map { case core.Operation(op, tps, cps, vps, bps, resume, body) =>
-        // for now we reconstruct a block lit
-        Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, cps, vps, bps ++ resume.toList, body)))
-      }
-      New(Implementation(transform(interface), transformedMethods))
+    case core.New(impl) => New(transform(impl))
+  }
+
+  def transform(h: core.Implementation)(using Environment, ErrorReporter): Implementation = h match {
+    case core.Implementation(interface, clauses) =>
+      Implementation(transform(interface), clauses.map {
+        case core.Operation(op, tps, cps, vps, bps, Some(resume), body) =>
+          val ev = EvidenceSymbol()
+          Operation(op, BlockLit(tps, Param.EvidenceParam(ev) :: (vps ++ bps).map(transform),
+            // TODO what about evidence for resume?
+            Stmt.Shift(Evidence(List(Lift.Var(ev))), Block.BlockLit(Nil, List(transform(resume)), transform(body)))))
+        case core.Operation(op, tps, cps, vps, bps, None, body) =>
+          Operation(op, liftBlockLitTo(core.Block.BlockLit(tps, cps, vps, bps, body)))
+      })
   }
 
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
@@ -129,7 +137,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // evidence for the region body itself
       val selfEvidence = EvidenceSymbol()
 
-      environment = environment.adapt(selfEvidence)
+      environment = environment.adapt(Lift.Var(selfEvidence))
 
       // introduce one evidence symbol per blockparam
       val transformedParams = params map {
@@ -152,7 +160,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // evidence for the region body itself
       val selfEvidence = EvidenceSymbol()
 
-      environment = environment.adapt(selfEvidence)
+      environment = environment.adapt(Lift.Var(selfEvidence))
 
       // introduce one evidence symbol per blockparam
       val transformedParams = params map {
@@ -238,13 +246,13 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // evidence for the block itself
       val selfEvidence = EvidenceSymbol()
 
-      environment = environment.adapt(selfEvidence)
+      environment = environment.adapt(Lift.Var(selfEvidence))
 
       // introduce one evidence symbol per blockparam
       val evidenceParams = bps map {
         case core.BlockParam(id, tpe) =>
           val ev = EvidenceSymbol()
-          environment = environment.bind(id, ev)
+          environment = environment.bind(id, Lift.Var(ev))
           Param.EvidenceParam(ev)
       }
 
@@ -277,17 +285,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     (evidence.reverse, transformedArgs)
   }
 
-  def transform(h: core.Implementation)(using Environment, ErrorReporter): Implementation = h match {
-    case core.Implementation(interface, clauses) =>
-      Implementation(transform(interface), clauses.map {
-        // effect operations should never take any evidence as they are guaranteed (by design) to be evaluated in
-        // their definition context.
-        case core.Operation(op, tps, cps, vps, bps, resume, body) =>
-          // TODO introduce evidence param here.
-          Operation(op, BlockLit(tps, (vps ++ bps ++ resume.toList) map transform, transform(body)))
-      })
-  }
-
   /**
    * Traverses the statement to look for function definitions.
    *
@@ -298,17 +295,17 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
   def pretransform(s: List[core.Definition])(using env: Environment, E: ErrorReporter): Environment = s match {
     case core.Definition.Def(id, block) :: rest =>
       // will this ever be non-empty???
-      val extendedEnv = env.bind(id, env.evidenceFor(block).scopes)
+      val extendedEnv = env.bind(id, env.evidenceFor(block).lifts)
       pretransform(rest)(using extendedEnv, E)
     case _ => env
   }
 
 
-  case class Environment(env: Map[Symbol, List[EvidenceSymbol]]) {
+  case class Environment(env: Map[Symbol, List[Lift]]) {
     def bind(s: Symbol) = copy(env = env + (s -> Nil))
-    def bind(s: Symbol, ev: List[EvidenceSymbol]) = copy(env = env + (s -> ev))
-    def bind(s: Symbol, init: EvidenceSymbol) = copy(env = env + (s -> List(init)))
-    def adapt(a: EvidenceSymbol) = copy(env = env.map { case (s, as) => s -> (a :: as) })
+    def bind(s: Symbol, ev: List[Lift]) = copy(env = env + (s -> ev))
+    def bind(s: Symbol, init: Lift) = copy(env = env + (s -> List(init)))
+    def adapt(a: Lift) = copy(env = env.map { case (s, as) => s -> (a :: as) })
 
     def evidenceFor(b: core.Block)(using ErrorReporter): Evidence = b match {
       case core.BlockVar(_, tpe, _) if tpe == core.Type.TRegion => Here()

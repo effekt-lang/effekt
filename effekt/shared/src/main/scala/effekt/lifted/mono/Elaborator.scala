@@ -270,7 +270,7 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
   case Stmt.App(m @ Block.Member(b, field, _), targs, args) =>
 
     val (evidenceArgs, remainingArgs) = args partitionMap {
-      case e: Evidence => Left(Ev(e.scopes.flatMap(T.currentChoiceFor(_).lifts)))
+      case e: Evidence => Left(elaborate(e))
       case e: Expr => Right(elaborate(e))
       case b: Block => Right(elaborate(b))
     }
@@ -285,7 +285,7 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
     val ftpe = T.annotatedFunctionType(b)
 
     val (evidenceArgs, remainingArgs) = args partitionMap {
-      case e: Evidence => Left(Ev(e.scopes.flatMap(T.currentChoiceFor(_).lifts)))
+      case e: Evidence => Left(elaborate(e))
       case e: Expr => Right(elaborate(e))
       case b: Block => Right(elaborate(b))
     }
@@ -312,6 +312,9 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
 
   case Stmt.Try(_, _) => INTERNAL_ERROR("unreachable")
 
+  case Stmt.Shift(ev, body) =>
+    Stmt.Shift(translate(elaborate(ev)), elaborate(body).asInstanceOf)
+
   // structural cases
   case Stmt.Scope(definitions, body) => Stmt.Scope(definitions.map(elaborate), elaborate(body))
   case Stmt.Return(e) => Stmt.Return(elaborate(e))
@@ -324,6 +327,20 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
   case Stmt.Region(body) => TODO("Support regions")
   case Stmt.Hole() => Stmt.Hole()
 }
+
+def elaborate(e: Evidence)(using T: TransformationContext): Ev = Ev(e.lifts.flatMap(elaborate))
+
+def elaborate(l: lifted.Lift)(using T: TransformationContext): List[Lift] = l match {
+  case lifted.Lift.Var(ev) => T.currentChoiceFor(ev).lifts
+  case lifted.Lift.Try() => List(Lift.Try())
+  case lifted.Lift.Reg() => List(Lift.Reg())
+}
+def translate(e: Ev): lifted.Evidence = Evidence(e.lifts map {
+  case Lift.Try() => lifted.Lift.Try()
+  case Lift.Reg() => lifted.Lift.Reg()
+  case x: Lift.Var => INTERNAL_ERROR("Should not occur anymore after monomorphization!")
+})
+
 
 def elaborate(e: Expr)(using T: TransformationContext): Expr = e match {
   case Expr.ValueVar(id, annotatedType) => e

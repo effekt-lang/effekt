@@ -3,8 +3,9 @@ package lifted
 package mono
 
 import scala.collection.immutable.ListMap
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, TODO, NOT_SUPPORTED }
+import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, NOT_SUPPORTED, TODO }
 import kiama.util.Memoiser
+
 import scala.collection.mutable
 
 
@@ -171,6 +172,12 @@ def analyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = {
 }
 
 
+def analyze(l: lifted.Lift)(using C: ErrorReporter, F: FlowAnalysis): List[Lift] = l match {
+  case lifted.Lift.Var(ev) => F.evidenceFor(ev).lifts
+  case lifted.Lift.Try() => List(Lift.Try())
+  case lifted.Lift.Reg() => List(Lift.Reg())
+}
+
 def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
   case Stmt.Scope(definitions, body) =>
     analyzeDefinitions(definitions)
@@ -184,7 +191,7 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
 
     // Step 2) gather evidence arguments of application
     val evidenceArgs = args.collect {
-      case Evidence(scopes) => Ev(scopes.flatMap(e => F.evidenceFor(e).lifts))
+      case Evidence(lifts) => Ev(lifts.flatMap(analyze))
     }
     F.addConstraint(evs, Evidences.Concrete(evidenceArgs))
 
@@ -217,6 +224,8 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
 
     analyze(body)
     handler.foreach(analyze)
+
+  case Stmt.Shift(ev, body) => analyze(body)
 
   case Stmt.Return(e) => analyze(e)
   case Stmt.Hole() => ()

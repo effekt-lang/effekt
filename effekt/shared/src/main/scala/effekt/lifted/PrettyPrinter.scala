@@ -86,7 +86,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Evidence): Doc = e match {
     case Evidence(Nil)  => "<>"
-    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev.name) }, ","))
+    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev) }, ","))
+  }
+
+  def toDoc(l: Lift): Doc = l match {
+    case Lift.Var(ev) => toDoc(ev.name)
+    case Lift.Try() => "Try"
+    case Lift.Reg() => "Reg"
   }
 
   def toDoc(impl: Implementation): Doc = {
@@ -153,6 +159,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
+
+    case Shift(ev, body) =>
+      "shift" <> parens(toDoc(ev)) <+> toDoc(body)
 
     case State(id, init, region, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)

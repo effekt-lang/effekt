@@ -124,6 +124,9 @@ enum Stmt extends Tree  {
   case Try(body: Block, handler: List[Implementation])
   case Region(body: Block)
 
+  // e.g. shift(ev) { {resume} => ... }
+  case Shift(ev: Evidence, body: Block.BlockLit)
+
   // Others
   case Hole()
 
@@ -147,10 +150,16 @@ case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 
 
 
+enum Lift {
+  case Var(ev: EvidenceSymbol)
+  case Try()
+  case Reg()
+}
+
 /**
  * Evidence for lifts
  */
-case class Evidence(scopes: List[EvidenceSymbol]) extends Argument
+case class Evidence(lifts: List[Lift]) extends Argument
 
 def Here() = Evidence(Nil)
 
@@ -186,6 +195,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
       Set(BlockParam(id, BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
+  case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }
 
@@ -221,5 +231,7 @@ def freeVariables(impl: Implementation): Set[Param] = impl match {
   case Implementation(id, operations) => operations.flatMap(freeVariables).toSet
 }
 
-def freeVariables(ev: Evidence): Set[Param] = ev.scopes.toSet.map(EvidenceParam(_))
+def freeVariables(ev: Evidence): Set[Param] = ev.lifts.toSet.collect {
+  case Lift.Var(ev) => EvidenceParam(ev)
+}
 

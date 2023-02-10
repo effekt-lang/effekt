@@ -118,6 +118,8 @@ object ChezSchemeLift extends Backend {
       }
       chez.Handle(handlers, toChez(body))
 
+    case Shift(ev, body) => chez.Builtin("shift", toChez(ev), toChez(body))
+
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
     case other => chez.Let(Nil, toChez(other))
@@ -195,9 +197,13 @@ object ChezSchemeLift extends Backend {
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
   }
 
-  def toChez(scope: Evidence): chez.Expr = scope match {
-    case Evidence(Nil) => Variable(ChezName("here"))
-    case Evidence(scopes) => chez.Builtin("nested", scopes map { s => chez.Variable(nameRef(s)) }:_*)
+  def toChez(scope: Evidence): chez.Expr = toChez(scope.lifts)
+
+  def toChez(lifts: List[Lift]): chez.Expr = lifts match {
+    case Lift.Var(x) :: rest => chez.Builtin("nested", chez.Variable(nameRef(x)), toChez(rest))
+    case Lift.Try() :: rest => chez.Builtin("nested", Variable(ChezName("there")), toChez(rest))
+    case Lift.Reg() :: rest => chez.Builtin("nested", Variable(ChezName("there")), toChez(rest))
+    case Nil => Variable(ChezName("here"))
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {

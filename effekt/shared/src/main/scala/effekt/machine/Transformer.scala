@@ -228,6 +228,8 @@ object Transformer {
         ErrorReporter.abort(s"Unsupported statement: $stmt")
     }
 
+  def transform(l: lifted.Lift) = effekt.util.messages.TODO("Implement translation of lift for machine")
+
   def transform(arg: lifted.Argument)(using BlocksParamsContext, DeclarationContext, ErrorReporter): Binding[Variable] = arg match {
     case expr: lifted.Expr => transform(expr)
     case block: lifted.Block => transform(block)

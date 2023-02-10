@@ -39,9 +39,9 @@ object Monomorphize {
 
     val transposed = cls.groupMapReduce({ case (ftpe, n) => n })({ case (ftpe, n) => Set(ftpe)})(_ ++ _)
 
-    transposed foreach {
-      case (n, ftpes) => println(System.identityHashCode(n).toString + " -> " + ftpes.map(f => f.evidences.show).mkString(", "))
-    }
+    //    transposed foreach {
+    //      case (n, ftpes) => println(System.identityHashCode(n).toString + " -> " + ftpes.map(f => f.evidences.show).mkString(", "))
+    //    }
 
     val elaborated = elaborate(mod)
 
@@ -62,7 +62,7 @@ object Monomorphize {
         |-----------
         |${constrs}""".stripMargin)
 
-    println(PrettyPrinter.format(elaborated))
+    // println(PrettyPrinter.format(elaborated))
 
     elaborated
   }
