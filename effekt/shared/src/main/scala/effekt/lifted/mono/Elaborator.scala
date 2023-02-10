@@ -145,16 +145,6 @@ class TransformationContext(
     } getOrElse { Set(Ev.zero(x.arity)) }
 }
 
-
-
-def elaborate(tpe: BlockType, ftpe: FlowType)(using T: TransformationContext): BlockType = (tpe, ftpe) match {
-  case (BlockType.Function(tps, eps, vps, bps, res), FlowType.Function(ev, _, _, bps2, _)) =>
-    BlockType.Function(tps, Nil, vps, (bps zip bps2).map { case (b, f) => elaborate(b, f) }, res)
-  // interfaces are nominal and don't change right now.
-  case (BlockType.Interface(id, args), _) => tpe
-  case _ => INTERNAL_ERROR(s"Illegal combination of types and flow-types: ${tpe} and ${ftpe}")
-}
-
 def elaborate(m: ModuleDecl)(using T: TransformationContext): ModuleDecl = {
   val decls = m.decls.map(elaborate)
   val defns = m.definitions.map(elaborate)
@@ -183,7 +173,7 @@ def elaborate(d: Declaration)(using T: TransformationContext): Declaration = d m
 
         configs.map { config =>
           val newId = T.specializationFor(id, config)
-          val newTpe = elaborate(tpe, flowType)
+          val newTpe = T.elaborate(flowType) // TODO check!
           Property(newId, newTpe)
         }
     }
@@ -198,7 +188,7 @@ def elaborate(param: Param)(using T: TransformationContext): Either[Id, Param] =
   case p: Param.EvidenceParam => Left(p.id)
   case p: Param.ValueParam => Right(p)
   case Param.BlockParam(id, tpe) =>
-    Right(Param.BlockParam(id, elaborate(tpe, T.flowTypeForBinder(id))))
+    Right(Param.BlockParam(id, T.elaborate(T.flowTypeForBinder(id))))
 }
 
 def elaborate(d: Definition)(using T: TransformationContext): Definition = d match {
@@ -250,7 +240,7 @@ def elaborate(b: Block)(using T: TransformationContext): Block = b match {
   // unsupported cases
   case Block.Member(receiver, field, annotatedTpe) =>
     // TODO check correctness (should only work with nested blocks, not methods)
-    Block.Member(elaborate(receiver), field, elaborate(annotatedTpe, T.annotatedType(b)))
+    Block.Member(elaborate(receiver), field, T.elaborate(T.annotatedType(b)))
 
   case Block.Unbox(e) =>
     INTERNAL_ERROR("Not supported: monomorphization of box / unbox")

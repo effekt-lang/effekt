@@ -23,11 +23,13 @@ case class Solver(
   subst: Bisubstitution,
   functions: Equivalences
 ) {
-  def unify(f1: FlowType.Function, f2: FlowType.Function): Map[FlowType.Function, Node] =
-    val rep1 = functions.getOrElse(f1, new Node)
-    val rep2 = functions.getOrElse(f2, new Node)
+  def nodeFor(f: FlowType.Function): Node = functions.getOrElse(f, new Node)
+
+  def unify(f1: FlowType.Function, f2: FlowType.Function): Equivalences =
+    val rep1 = nodeFor(f1)
+    val rep2 = nodeFor(f2)
     // replace all rep2 with rep1
-    functions.view.mapValues(n => if n == rep2 then rep1 else n).toMap + (f1 -> rep1) + (f2 -> rep2)
+    functions.view.mapValues(n => if n == rep2 then rep1 else n).toMap + (f1 -> rep1) + (f2 -> rep1)
 
   def step(): Solver = constraints match {
     case head :: tail if seen contains head => Solver(tail, seen, subst, functions)
