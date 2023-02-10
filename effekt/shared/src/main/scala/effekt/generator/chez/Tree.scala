@@ -45,6 +45,9 @@ enum Expr {
 
   // handle is a macro, stable across Chez variants, so we add it to the language.
   case Handle(handlers: List[Expr], body: Expr)
+
+  // handler is part of a macro used by chez-callcc and chez-monadic (not chez-lifted)
+  case Handler(constructorName: ChezName, operations: List[Operation])
 }
 export Expr.*
 
@@ -154,6 +157,9 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
 
     case Lambda(params, body) => query(body) -- params.toSet
   }
+
+  override def query(operation: Operation)(using Unit): Set[ChezName] =
+    query(operation.body) -- operation.params.toSet - operation.k
 
   override def defn(using Unit) = {
     case chez.Function(name, params, body) => query(body) -- params.toSet - name // recursive functions

@@ -187,7 +187,7 @@ object ChezSchemeLift extends Backend {
 
   def toChez(impl: Implementation): chez.Expr =
     val ChezName(name) = nameRef(impl.interface.name)
-    chez.Call(Variable(ChezName(s"make-${name}")), impl.operations.map { case Operation(_, block) => toChez(block) })
+    chez.Call(Variable(ChezName(name)), impl.operations.map { case Operation(_, block) => toChez(block) })
 
   def toChez(scope: Evidence): chez.Expr = toChez(scope.lifts)
 

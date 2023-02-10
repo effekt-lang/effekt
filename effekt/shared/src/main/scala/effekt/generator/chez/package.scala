@@ -32,7 +32,7 @@ case class RecordNames(sym: Symbol) {
   val typeName = ChezName(basename + "$Type" + id)
   val predicate = ChezName(name + "?")
   val matcher = ChezName("match-" + name)
-  val constructor = ChezName(s"make-${name}")
+  val constructor = ChezName(name)
 }
 
 // https://www.scheme.com/csug8/objects.html

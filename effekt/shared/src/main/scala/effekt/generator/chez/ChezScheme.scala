@@ -118,7 +118,14 @@ trait ChezScheme {
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, handler) =>
-      chez.Handle(handler.map(toChez), toChez(body))
+      val handlers: List[chez.Handler] = handler.map { h =>
+        val names = RecordNames(h.interface.name)
+        chez.Handler(names.constructor, h.operations.map {
+          case Operation(op, tps, cps, vps, bps, resume, body) =>
+            chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
+        })
+      }
+      chez.Handle(handlers, toChez(body))
 
     case Region(body) => chez.Builtin("with-region", toChez(body))
 
@@ -196,10 +203,11 @@ trait ChezScheme {
 
   def toChez(impl: Implementation): chez.Expr =
     val ChezName(name) = nameRef(impl.interface.name)
-    chez.Call(Variable(ChezName(s"make-${name}")), impl.operations.map(toChez))
+    chez.Call(Variable(ChezName(name)), impl.operations.map(toChez))
 
   def toChez(op: Operation): chez.Expr = op match {
-    case Operation(name, tparams, cparams, vparams, bparams, resume, block) => ???
+    case Operation(name, tps, cps, vps, bps, resume, body) =>
+      chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 
 
