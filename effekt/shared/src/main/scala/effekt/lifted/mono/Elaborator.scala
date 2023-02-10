@@ -6,7 +6,7 @@ import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, TODO, NOT_SUPPORTED
 import scala.collection.mutable
 
 enum ElaboratedType {
-  case Single(tpe: BlockType)
+  case Single()
   // operations here maps the old id*configuration to the new operation id and its type.
   // the interface id can be ignored for operations, only relevant for new nominal types (function types)
   case Multi(id: Id, variants: Map[Evidences, (Id, BlockType)])
@@ -16,16 +16,21 @@ class TransformationContext(
   flow: FlowAnalysis,
   substitution: Bisubstitution,
   choices: Map[Id, Ev] = Map.empty,
-  types: mutable.Map[FlowType, ElaboratedType] = mutable.Map.empty,
+
+  // for every class of function type, we have one elaborated type that we use.
+  var functions: Equivalences,
+  types: mutable.Map[Node, ElaboratedType] = mutable.Map.empty,
 
   // additionally generated interfaces
-  val interfaces: mutable.Map[Id, Declaration.Interface] = mutable.Map.empty
+  val interfaces: mutable.Map[Id, Declaration.Interface] = mutable.Map.empty,
+  specialization: mutable.Map[(Id, Evidences.Concrete), Id] = mutable.Map.empty
 ) {
   export flow.*
-  // Mapping the old operation id to the specialized one (e.g., id * [ev] -> id)
-  private val specialization: mutable.Map[(Id, Evidences.Concrete), Id] = mutable.Map.empty
 
-  def withChoices(newChoices: List[(Id, Ev)]): TransformationContext = TransformationContext(flow, substitution, choices ++ newChoices.toMap, types, interfaces)
+  def withChoices(newChoices: List[(Id, Ev)]): TransformationContext =
+    TransformationContext(flow, substitution, choices ++ newChoices.toMap, functions, types, interfaces, specialization)
+
+  def currentChoiceFor(evidenceParam: Id): Ev = choices.getOrElse(evidenceParam, Ev.Zero)
 
   def specializationFor(id: Id, ev: Evidences.Concrete): Id =
     val key = (id, ev)
@@ -38,52 +43,90 @@ class TransformationContext(
       newSpecialization
     }
 
-  def elaboratedType(ftpe: FlowType): ElaboratedType = {
-    if types.isDefinedAt(ftpe) then return types(ftpe)
+  private def relatedFunctions(ftpe: FlowType.Function): Set[FlowType.Function] =
+    functionsOf(classOf(ftpe))
 
-    val elaborated = ftpe match {
-      // TODO we have to be careful not to call this on operations.
-      case f @ FlowType.Function(evidences, tparams, vparams, bparams, ret) =>
-        generateVariants("apply", f) match {
-          case List((_, name, tpe)) => ElaboratedType.Single(tpe)
-          case multiple =>
-            val interfaceName = Id("Function")
-            interfaces.update(interfaceName, Declaration.Interface(interfaceName, Nil, multiple.map {
-              case (_, name, tpe) => Property(name, tpe)
-            }))
+  private def classOf(ftpe: FlowType.Function): Node =
+    functions.getOrElse(ftpe, {
+      val n = new Node
+      functions = functions + (ftpe -> n)
+      n
+    })
 
-            ElaboratedType.Multi(interfaceName, multiple.map {
-              case (e, name, tpe) => e -> (name, tpe)
-            }.toMap)
-        }
+  // TODO cache
+  private def functionsOf(cls: Node): Set[FlowType.Function] = functions.collect {
+    case (ftpe, other) if other == cls => ftpe
+  }.toSet
 
-      case FlowType.Interface(id, targs) =>
-        ElaboratedType.Single(BlockType.Interface(id, targs))
+  def elaboratedType(ftpe: FlowType.Function): ElaboratedType = {
+    val cls = classOf(ftpe)
+    if types.isDefinedAt(cls) then return types(cls)
+
+    val FlowType.Function(evidences, tparams, vparams, bparams, ret) = ftpe
+
+    val configs = configurations(evidences).toList
+
+    // 1) single specialization: nothing to do, if there is only one specialization
+    if (configs.size == 1) {
+      val elaborated = ElaboratedType.Single()
+      types.update(cls, elaborated)
+      return elaborated
     }
 
-    types.update(ftpe, elaborated)
+    // 2) multiple specializations: we have to generate a new interface
+    val interfaceName = Id("Function")
+
+    // Let's assume we have functions { Int => Int, T => Int }, then we need to abstract over
+    // the first argument: Function[A] { def apply$1(A): Int }
+    val funs = relatedFunctions(ftpe).toList
+    def allEqual(ps: List[ValueType]): Boolean = ps.toSet.size == 1
+
+
+    var abtractedTParams: List[Id] = Nil
+    val abstractedVparams = funs.map { f => f.vparams }.transpose.map {
+      case ps if allEqual(ps) => ps.head
+      case ps => val fresh = Id("A"); abtractedTParams = abtractedTParams :+ fresh; ValueType.Var(fresh)
+    }
+    val abstractedReturn = if allEqual(funs.map { f => f.result }) then ret else {
+      val fresh = Id("B"); abtractedTParams = abtractedTParams :+ fresh; ValueType.Var(fresh)
+    }
+
+    val variants = configs map { case e @ Evidences.Concrete(evs) =>
+      // e.g. for "f" with [<>, <Try>], we will have "f$0$1"
+      val variantName = Id("apply" + evs.map(_.lifts.size).mkString("$"))
+      // TODO there could be differences in the blockparams that we would need to abstract over as well:
+      (e, variantName, BlockType.Function(tparams, Nil, abstractedVparams, bparams.map(elaborate), abstractedReturn))
+    }
+
+    interfaces.update(interfaceName, Declaration.Interface(interfaceName, abtractedTParams, variants.map {
+      case (_, name, tpe) => Property(name, tpe)
+    }))
+
+    val elaborated = ElaboratedType.Multi(interfaceName, variants.map {
+      case (e, name, tpe) => e -> (name, tpe)
+    }.toMap)
+
+    types.update(cls, elaborated)
     elaborated
   }
 
-  def generateVariants(originalName: String, ftpe: FlowType.Function): List[(Evidences.Concrete, Id, BlockType)] =
-    ftpe match {
-      case FlowType.Function(evidences, tparams, vparams, bparams, ret) =>
-        configurations(evidences).toList map { case e @ Evidences.Concrete(evs) =>
-          // e.g. for "f" with [<>, <Try>], we will have "f$0$1"
-          val variantName = Id(originalName + evs.map(_.lifts.size).mkString("$"))
-          (e, variantName, BlockType.Function(tparams, Nil, vparams, bparams.map(elaborate), ret))
-        }
-    }
 
-  def elaborate(ftpe: FlowType): BlockType = elaboratedType(ftpe) match {
-    case ElaboratedType.Single(tpe) => tpe
-    case ElaboratedType.Multi(id, variants) => BlockType.Interface(id, Nil)
+  // TODO we could cache this
+  def elaborate(ftpe: FlowType): BlockType = ftpe match {
+    case f @ FlowType.Function(evidences, tparams, vparams, bparams, ret) => elaboratedType(f) match {
+      // we use the original type (structurally typed)
+      case ElaboratedType.Single() => BlockType.Function(tparams, Nil, vparams, bparams.map(elaborate), ret)
+      case ElaboratedType.Multi(id, variants) => BlockType.Interface(id, vparams :+ ret)
+    }
+    case FlowType.Interface(id, targs) => BlockType.Interface(id, targs)
   }
 
   def configurations(termId: Id): Set[Evidences.Concrete] = configurations(flow.flowTypeForBinder(termId))
 
   def configurations(ftpe: FlowType): Set[Evidences.Concrete] = ftpe match {
-    case FlowType.Function(evidences, _, _, bparams, _) => configurations(evidences)
+    case f @ FlowType.Function(evidences, _, _, bparams, _) =>
+      // find all functions of a class and union their configurations
+      functionsOf(classOf(f)).flatMap(f => configurations(f.evidences))
     case FlowType.Interface(id, targs) =>
       INTERNAL_ERROR("Interfaces are treated nominal and do not have a set of configurations (only their operations do)")
   }
@@ -93,15 +136,13 @@ class TransformationContext(
     case x : Evidences.FlowVar => solutionsFor(x)
   }
 
-  def solutionsFor(x: Evidences.FlowVar): Set[Evidences.Concrete] =
+  private def solutionsFor(x: Evidences.FlowVar): Set[Evidences.Concrete] =
     substitution.get(x).map { evs =>
       evs.upper.collect {
         case ev: Evidences.Concrete => ev
       }
     // not found in solution: use zero everywhere
     } getOrElse { Set(Ev.zero(x.arity)) }
-
-  def currentChoiceFor(evidenceParam: Id): Ev = choices.getOrElse(evidenceParam, Ev.Zero)
 }
 
 
@@ -187,10 +228,10 @@ def elaborate(b: Block)(using T: TransformationContext): Block = b match {
     // now we need to generate multiple copies of this block:
     val variants = elaborateBlockLit(b)
 
-    val ftpe = T.annotatedType(b)
+    val ftpe = T.annotatedFunctionType(b)
 
     (T.elaboratedType(ftpe), variants) match {
-      case (ElaboratedType.Single(tpe), List((config, block))) => block
+      case (ElaboratedType.Single(), List((config, block))) => block
       case (ElaboratedType.Multi(id, ops), variants) =>
         val operations = variants map {
           case (ev, impl) =>
@@ -259,7 +300,7 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
 
     // find configurations
     val target = T.elaboratedType(ftpe) match {
-      case ElaboratedType.Single(tpe) => elaborate(b)
+      case ElaboratedType.Single() => elaborate(b)
       case ElaboratedType.Multi(id, variants) =>
         val (specializedTarget, tpe) = variants(Evidences.Concrete(evidenceArgs))
         Block.Member(elaborate(b), specializedTarget, tpe)

@@ -49,7 +49,7 @@ object Evidences {
 
 enum FlowType {
   // Structural (we ignore value parameters and return for now since we disregard boxing)
-  case Function(evidences: Evidences, tparams: List[Id], vparams: List[ValueType], bparams: List[FlowType], result: ValueType)
+  case Function(evidences: Evidences.FlowVar, tparams: List[Id], vparams: List[ValueType], bparams: List[FlowType], result: ValueType)
 
   // Nominal (there exists one such type for each id)
   case Interface(id: Id, targs: List[ValueType])

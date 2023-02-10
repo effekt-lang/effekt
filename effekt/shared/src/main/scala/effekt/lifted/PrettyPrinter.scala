@@ -99,11 +99,23 @@ object PrettyPrinter extends ParenPrettyPrinter {
   }
 
   def toDoc(d: Declaration): Doc = d match {
-    case Declaration.Data(did, _, ctors) =>
-      "type" <+> toDoc(did.name) <> parens(ctors.map { ctor => toDoc(ctor.id.name) })
+    case Declaration.Data(did, tparams, ctors) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      "type" <+> toDoc(did.name) <> tps <+> braces(ctors.map(toDoc))
 
-    case Declaration.Interface(id, _, operations) =>
-      "interface" <+> toDoc(id.name) <> braces(operations.map { f => toDoc(f.id.name) })
+    case Declaration.Interface(id, tparams, operations) =>
+      val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
+      "interface" <+> toDoc(id.name) <> tps <+> braces(operations.map(toDoc))
+  }
+
+  def toDoc(c: Constructor): Doc = c match {
+    case Constructor(id, fields) => toDoc(id) <> parens(fields.map(toDoc))
+  }
+  def toDoc(f: Field): Doc = f match {
+    case Field(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
+  }
+  def toDoc(f: Property): Doc = f match {
+    case Property(name, tpe) => toDoc(name) <> ":" <+> toDoc(tpe)
   }
 
   def toDoc(d: Definition): Doc = d match {

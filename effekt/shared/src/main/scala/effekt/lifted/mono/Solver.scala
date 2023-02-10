@@ -2,6 +2,8 @@ package effekt
 package lifted
 package mono
 
+import scala.collection.mutable
+
 // {} <: _ <: { [<>], [<Try>] }
 case class Bounds(lower: Set[Evidences], upper: Set[Evidences])
 
@@ -10,29 +12,45 @@ case class Bounds(lower: Set[Evidences], upper: Set[Evidences])
 
 type Bisubstitution = Map[Evidences.FlowVar, Bounds]
 
-case class Solver(constraints: List[Constraint], seen: Set[Constraint], subst: Bisubstitution) {
+private[mono]
+class Node
+
+type Equivalences = Map[FlowType.Function, Node]
+
+case class Solver(
+  constraints: List[Constraint],
+  seen: Set[Constraint],
+  subst: Bisubstitution,
+  functions: Equivalences
+) {
+  def unify(f1: FlowType.Function, f2: FlowType.Function): Map[FlowType.Function, Node] =
+    val rep1 = functions.getOrElse(f1, new Node)
+    val rep2 = functions.getOrElse(f2, new Node)
+    // replace all rep2 with rep1
+    functions.view.mapValues(n => if n == rep2 then rep1 else n).toMap + (f1 -> rep1) + (f2 -> rep2)
+
   def step(): Solver = constraints match {
-    case head :: tail if seen contains head => Solver(tail, seen, subst)
+    case head :: tail if seen contains head => Solver(tail, seen, subst, functions)
 
     case Constraint.B(i1: FlowType.Interface, i2: FlowType.Interface) :: rest =>
       assert(i1 == i2, s"The two interfaces are not the same! ${i1} and ${i2}")
-      Solver(rest, seen, subst)
+      Solver(rest, seen, subst, functions)
 
-    case (c @ Constraint.B(FlowType.Function(ev1, _, _, bparams1, _), FlowType.Function(ev2, _, _, bparams2, _))) :: rest =>
+    case (c @ Constraint.B(f1 @ FlowType.Function(ev1, _, _, bparams1, _), f2 @ FlowType.Function(ev2, _, _, bparams2, _))) :: rest =>
       val evidenceFlow = Constraint.E(ev1, ev2)
       val paramsFlow = bparams2.zip(bparams1).map { case (c2, c1) => Constraint.B(c2, c1) }
-      Solver(evidenceFlow :: paramsFlow ++ rest, seen + c, subst)
+      Solver(evidenceFlow :: paramsFlow ++ rest, seen + c, subst, unify(f1, f2))
 
     case Constraint.E(Evidences.Concrete(evs1), Evidences.Concrete(evs2)) :: rest =>
-      Solver(rest, seen, subst)
+      Solver(rest, seen, subst, functions)
 
     case (c @ Constraint.E(x: Evidences.FlowVar, y)) :: rest =>
       val xbounds = subst.getOrElse(x, Bounds(Set.empty, Set.empty))
-      Solver(xbounds.lower.map(Constraint.E(_, y)).toList ++ rest, seen + c, subst + (x -> Bounds(xbounds.lower, xbounds.upper + y)))
+      Solver(xbounds.lower.map(Constraint.E(_, y)).toList ++ rest, seen + c, subst + (x -> Bounds(xbounds.lower, xbounds.upper + y)), functions)
 
     case (c @ Constraint.E(x, y: Evidences.FlowVar)) :: rest =>
       val ybounds = subst.getOrElse(y, Bounds(Set.empty, Set.empty))
-      Solver(ybounds.upper.map(Constraint.E(x, _)).toList ++ rest, seen + c, subst + (y -> Bounds(ybounds.lower + x, ybounds.upper)))
+      Solver(ybounds.upper.map(Constraint.E(x, _)).toList ++ rest, seen + c, subst + (y -> Bounds(ybounds.lower + x, ybounds.upper)), functions)
 
     case c :: rest =>
       sys error s"Mismatch: ${c}"
@@ -41,12 +59,12 @@ case class Solver(constraints: List[Constraint], seen: Set[Constraint], subst: B
   }
 }
 
-def solve(cs: List[Constraint]): Map[Evidences.FlowVar, Bounds] =
-  var solver = Solver(cs, Set.empty, Map.empty)
+def solve(cs: List[Constraint]): (Map[Evidences.FlowVar, Bounds], Equivalences) =
+  var solver = Solver(cs, Set.empty, Map.empty, Map.empty)
   while (solver.constraints.nonEmpty) {
     solver = solver.step()
   }
-  solver.subst
+  (solver.subst, solver.functions)
 
 // a1 <: [<a2.0>]
 // a2 <: [<>]

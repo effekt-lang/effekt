@@ -27,14 +27,14 @@ object Monomorphize {
       c => c.show
     }.mkString("\n")
 
-    val solved = solve(analysis.constraints)
+    val (solved, cls) = solve(analysis.constraints)
     val cleaned = cleanup(substitution(solved.toList))
 
     val subst = cleaned.toList.sortBy(_._1.id).map {
       case (x, Bounds(lower, upper)) =>  lower.map(_.show).mkString(", ") + " <: " + x.show + " <: " + upper.map(_.show).mkString(", ")
     }.mkString("\n")
 
-    given TransformationContext(analysis, cleaned)
+    given t: TransformationContext(analysis, cleaned, functions = cls)
 
     val elaborated = elaborate(mod)
 
@@ -54,6 +54,8 @@ object Monomorphize {
         |Constraints:
         |-----------
         |${constrs}""".stripMargin)
+
+    println(PrettyPrinter.format(elaborated))
 
     elaborated
   }
