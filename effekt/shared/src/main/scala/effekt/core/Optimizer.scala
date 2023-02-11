@@ -40,17 +40,28 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
 
     m match
       case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
-        val opt = definitions.map(eliminateReturnRun.rewrite(_))
-        val start = ModuleDecl(path, imports, declarations, externs, opt.map(directStyleVal.rewrite(_)), exports)
+        val opt = definitions.map(eliminateReturnRun.rewrite)
+        val start = ModuleDecl(path, imports, declarations, externs, opt.map(directStyleVal.rewrite), exports)
 
         val aliases = rmIdKey[Id](collectAliases(start), Set("main"))
-        val dealiased = dealiasing(start)(using aliases)
+        var optimized = dealiasing(start)(using aliases) //Dealiasing
 
-        val calls = rmIdKey[Int](countFunctionCalls(dealiased), Set("main"))
-        val unused_removed = removeUnusedFunctions(dealiased, calls).asInstanceOf[ModuleDecl]
+        var dependencyGraph = rmIdKey[Set[Id]](constructDependencyGraph(optimized), Set("main"))
+        optimized = staticArgumentTransformation(optimized, dependencyGraph) //Static Argument Transformation
 
-        val static_arguments_transformed = staticArgumentTransformation(unused_removed).asInstanceOf[ModuleDecl]
+        var occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
+        optimized = removeUnusedFunctions(optimized, occurences, dependencyGraph) //Remove Unused Functions
 
-        static_arguments_transformed
+        occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
+        var bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+        optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
+
+        bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
+        optimized = inlineGeneral(optimized, bodies, 10) // Inline General
+
+        occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
+        optimized = removeUnusedFunctions(optimized, occurences, dependencyGraph) //Remove Unused Functions
+
+        optimized
   }
 }

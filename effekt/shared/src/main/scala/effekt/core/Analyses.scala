@@ -399,6 +399,14 @@ def countFunctionCallsWorker(op: Operation)(using ocunt: mutable.Map[Id, Int]): 
     case Operation(_, _, _, _, _, _, body) =>
       countFunctionCallsWorker(body)
 
+def calledFunctions(definition: Definition): Set[Id] =
+  definition match
+    case Definition.Def(id, block) =>
+      calledFunctions(block) - id
+
+    case Definition.Let(id, binding) =>
+      calledFunctions(binding) - id
+
 def calledFunctions(expr: Expr): Set[Id] =
   expr match
     case DirectApp(b, _, vargs, bargs) =>
@@ -414,8 +422,8 @@ def calledFunctions(expr: Expr): Set[Id] =
 
 def calledFunctions(statement: Stmt): Set[Id] =
   statement match
-    case Scope(_, body) =>
-      calledFunctions(body)
+    case Scope(definitions, body) =>
+      definitions.map(calledFunctions).fold(Set[Id]())(_ ++ _) ++ calledFunctions(body)
 
     case Return(expr) =>
       calledFunctions(expr)
@@ -427,12 +435,12 @@ def calledFunctions(statement: Stmt): Set[Id] =
       {callee match
         case BlockVar(id, _, _) => Set(id)
         case _ => calledFunctions(callee)} ++
-      vargs.map(calledFunctions).fold(Set[Id]())(_ ++ _) ++
-      bargs.map(calledFunctions).fold(Set[Id]())(_ ++ _)
+        vargs.map(calledFunctions).fold(Set[Id]())(_ ++ _) ++
+        bargs.map(calledFunctions).fold(Set[Id]())(_ ++ _)
 
     case If(cond, thn, els) =>
       calledFunctions(cond) ++ calledFunctions(thn) ++ calledFunctions(els)
-      
+
     case Match(scrutinee, clauses, default) =>
       calledFunctions(scrutinee) ++
         clauses.map{case (_, b) => calledFunctions(b)}.fold(Set[Id]())(_ ++ _) ++
@@ -455,11 +463,11 @@ def calledFunctions(statement: Stmt): Set[Id] =
 
 def calledFunctions(block: Block): Set[Id] =
   block match
-    case _: BlockVar =>
-      Set[Id]()
+    case BlockVar(id, _, _) =>
+      Set[Id](id)
 
-    case BlockLit(_, _, _, _, body) =>
-      calledFunctions(body)
+    case BlockLit(_, _, _, bparams, body) =>
+      calledFunctions(body) -- bparams.map(_.id).toSet
 
     case Member(block, _, _) =>
       calledFunctions(block)
@@ -497,94 +505,86 @@ def calledFunctions(op: Operation): Set[Id] =
     case Operation(_, _, _, _, _, _, body) =>
       calledFunctions(body)
 
-def constructCallGraph(module: ModuleDecl): Map[Id, Set[Id]] =
-  module.definitions.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+def constructDependencyGraph(module: ModuleDecl): Map[Id, Set[Id]] =
+  module.definitions.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
 
-def constructCallGraph(definition: Definition): Map[Id, Set[Id]] =
+def constructDependencyGraph(definition: Definition): Map[Id, Set[Id]] =
   definition match
     case Definition.Def(id, block) =>
-      Map[Id, Set[Id]](id -> calledFunctions(block)) ++ constructCallGraph(block)
+      Map[Id, Set[Id]](id -> calledFunctions(block)) ++ constructDependencyGraph(block)
 
     case Definition.Let(_, binding) =>
-      constructCallGraph(binding)
+      constructDependencyGraph(binding)
 
-def constructCallGraph(arg: Argument): Map[Id, Set[Id]] =
-  arg match
-    case pure: Pure =>
-      constructCallGraph(pure)
-
-    case block: Block =>
-      constructCallGraph(block)
-
-def constructCallGraph(expr: Expr): Map[Id, Set[Id]] =
+def constructDependencyGraph(expr: Expr): Map[Id, Set[Id]] =
   expr match
     case DirectApp(b, _, vargs, bargs) =>
-      constructCallGraph(b) ++
-        vargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++
-        bargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+      constructDependencyGraph(b) ++
+        vargs.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++
+        bargs.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
 
     case Run(s) =>
-      constructCallGraph(s)
+      constructDependencyGraph(s)
 
     case p: Pure =>
-      constructCallGraph(p)
+      constructDependencyGraph(p)
 
-def constructCallGraph(statement: Stmt): Map[Id, Set[Id]] =
+def constructDependencyGraph(statement: Stmt): Map[Id, Set[Id]] =
   statement match
     case Scope(definitions, body) =>
-      definitions.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++ constructCallGraph(body)
+      definitions.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++ constructDependencyGraph(body)
 
     case Return(expr) =>
-      constructCallGraph(expr)
+      constructDependencyGraph(expr)
 
     case Val(_, binding, body) =>
-      constructCallGraph(binding) ++ constructCallGraph(body)
+      constructDependencyGraph(binding) ++ constructDependencyGraph(body)
 
     case App(callee, _, vargs, bargs) =>
-      constructCallGraph(callee) ++
-        vargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++
-        bargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+      constructDependencyGraph(callee) ++
+        vargs.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _) ++
+        bargs.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
 
     case If(cond, thn, els) =>
-      constructCallGraph(cond) ++ constructCallGraph(thn) ++ constructCallGraph(els)
+      constructDependencyGraph(cond) ++ constructDependencyGraph(thn) ++ constructDependencyGraph(els)
 
     case Match(scrutinee, clauses, default) =>
-      constructCallGraph(scrutinee) ++
-        clauses.map{case (_, b) => constructCallGraph(b)}.fold(Map[Id, Set[Id]]())(_ ++ _) ++
+      constructDependencyGraph(scrutinee) ++
+        clauses.map{case (_, b) => constructDependencyGraph(b)}.fold(Map[Id, Set[Id]]())(_ ++ _) ++
         {default match
-          case Some(s) => constructCallGraph(s)
+          case Some(s) => constructDependencyGraph(s)
           case None => Map[Id, Set[Id]]()}
 
     case State(_, init, _, body) =>
-      constructCallGraph(init) ++ constructCallGraph(body)
+      constructDependencyGraph(init) ++ constructDependencyGraph(body)
 
     case Try(body, handlers) =>
-      constructCallGraph(body) ++ handlers.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+      constructDependencyGraph(body) ++ handlers.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
 
     case Region(body) =>
-      constructCallGraph(body)
+      constructDependencyGraph(body)
 
     case Hole() =>
       Map[Id, Set[Id]]()
 
-def constructCallGraph(block: Block): Map[Id, Set[Id]] =
+def constructDependencyGraph(block: Block): Map[Id, Set[Id]] =
   block match
     case _: BlockVar =>
       Map[Id, Set[Id]]()
 
-    case BlockLit(_, _, _, _, body) =>
-      constructCallGraph(body)
+    case BlockLit(_, _, _, bparams, body) =>
+      constructDependencyGraph(body) -- bparams.map(_.id).toSet //This call shouldn't be necessary I think. Better safe than sorry
 
     case Member(block, _, _) =>
-      constructCallGraph(block)
+      constructDependencyGraph(block)
 
     case Unbox(pure) =>
-      constructCallGraph(pure)
+      constructDependencyGraph(pure)
 
     case New(impl) =>
-      constructCallGraph(impl)
+      constructDependencyGraph(impl)
 
-def constructCallGraph(pure: Pure): Map[Id, Set[Id]] =
+def constructDependencyGraph(pure: Pure): Map[Id, Set[Id]] =
   pure match
     case _: ValueVar =>
       Map[Id, Set[Id]]()
@@ -593,24 +593,25 @@ def constructCallGraph(pure: Pure): Map[Id, Set[Id]] =
       Map[Id, Set[Id]]()
 
     case PureApp(b, _, vargs) =>
-      constructCallGraph(b) ++ vargs.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+      constructDependencyGraph(b) ++ vargs.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
 
     case Select(target, _, _) =>
-      constructCallGraph(target)
+      constructDependencyGraph(target)
 
     case Box(b, _) =>
-      constructCallGraph(b)
+      constructDependencyGraph(b)
 
-def constructCallGraph(impl: Implementation): Map[Id, Set[Id]] =
+def constructDependencyGraph(impl: Implementation): Map[Id, Set[Id]] =
   impl match
     case Implementation(_, operations) =>
-      operations.map(constructCallGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
+      operations.map(constructDependencyGraph).fold(Map[Id, Set[Id]]())(_ ++ _)
 
-def constructCallGraph(op: Operation): Map[Id, Set[Id]] =
+def constructDependencyGraph(op: Operation): Map[Id, Set[Id]] =
   op match
     case Operation(_, _, _, _, _, _, body) =>
-      constructCallGraph(body)
+      constructDependencyGraph(body)
 
+//TODO: Refactor
 def findStaticArguments(start: Definition.Def): StaticParams =
   start match
     case Definition.Def(id, BlockLit(tparams, cparams, vparams, bparams, body)) =>
@@ -678,7 +679,7 @@ def findStaticArgumentsWorker(statement: Stmt)(using params: StaticParamsUnfinis
       findStaticArgumentsWorker(body)
 
     case App(BlockVar(id, _, _), targs, vargs, bargs) =>
-      var (tparams, cparams, vparams, bparams) = params.unpackParams
+      val (tparams, cparams, vparams, bparams) = params.unpackParams
       if(id == params.id)
         targs.zipWithIndex.foreach{
           case (ValueType.Var(id), idx) => if(!tparams(idx).contains(id)) tparams(idx) = None
@@ -769,6 +770,109 @@ def findStaticArgumentsWorker(op: Operation)(using params: StaticParamsUnfinishe
   op match
     case Operation(_, _, _, _, _, _, body) =>
       findStaticArgumentsWorker(body)
+
+def size(module: ModuleDecl): Int =
+  module match
+    case ModuleDecl(_, _, _, _, definitions, _) =>
+      1 + definitions.map(size).sum
+
+def size(definition: Definition): Int =
+  definition match
+    case Definition.Def(_, block) =>
+      1 + size(block)
+
+    case Definition.Let(_, binding) =>
+      1 + size(binding)
+
+def size(expr: Expr): Int =
+  expr match
+    case DirectApp(b, _, vargs, bargs) =>
+      1 + size(b) + vargs.map(size).sum + bargs.map(size).sum
+
+    case Run(s) =>
+      1 + size(s)
+
+    case p: Pure =>
+      size(p)
+
+def size(statement: Stmt): Int =
+  statement match
+    case Scope(definitions, body) =>
+      1 + definitions.map(size).sum + size(body)
+
+    case Return(expr) =>
+      1 + size(expr)
+
+    case Val(_, binding, body) =>
+      1 + size(binding) + size(body)
+
+    case App(callee, _, vargs, bargs) =>
+      1 + size(callee) + vargs.map(size).sum + bargs.map(size).sum
+
+    case If(cond, thn, els) =>
+      1 + size(cond) + size(thn) + size(els)
+
+    case Match(scrutinee, clauses, default) =>
+      1 + size(scrutinee) + clauses.map{case (_, b) => size(b)}.sum +
+        {default match
+          case Some(s) => size(s)
+          case None => 0}
+
+    case State(_, init, _, body) =>
+      1 + size(init) + size(body)
+
+    case Try(body, handlers) =>
+      1 + size(body) + handlers.map(size).sum
+
+    case Region(body) =>
+      1 + size(body)
+
+    case _: Hole =>
+      1
+
+def size(block: Block): Int =
+  block match
+    case _: BlockVar =>
+      1
+
+    case BlockLit(_, _, _, _, body) =>
+      1 + size(body)
+
+    case Member(block, _, _) =>
+      1 + size(block)
+
+    case Unbox(pure) =>
+      1 + size(pure)
+
+    case New(impl) =>
+      1 + size(impl)
+
+def size(pure: Pure): Int =
+  pure match
+    case _: ValueVar =>
+      1
+
+    case _: Literal =>
+      1
+
+    case PureApp(b, _, vargs) =>
+      1 + size(b) + vargs.map(size).sum
+
+    case Select(target, _, _) =>
+      1 + size(target)
+
+    case Box(b, _) =>
+      1 + size(b)
+
+def size(impl: Implementation): Int =
+  impl match
+    case Implementation(_, operations) =>
+      1 + operations.map(size).sum
+
+def size(op: Operation): Int =
+  op match
+    case Operation(_, _, _, _, _, _, body) =>
+      1 + size(body)
 
 /*
 Template:
