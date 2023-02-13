@@ -27,7 +27,9 @@ object ChezSchemeLift extends Backend {
     Builtin("$then", binding, chez.Lambda(List(param), body))
 
   def runMain(main: ChezName): chez.Expr =
-    chez.Builtin("run", chez.Call(main))
+    val monomorphized = true
+    if (monomorphized) chez.Builtin("run", chez.Call(main))
+    else chez.Builtin("run", chez.Call(main, Variable(ChezName("here"))))
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
@@ -107,6 +109,8 @@ object ChezSchemeLift extends Backend {
       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
 
     case Try(body, handler) => chez.Handle(handler.map(toChez), toChez(body))
+
+    case Reset(body) => chez.Builtin("reset", toChezExpr(body))
 
     case Shift(ev, body) => chez.Builtin("shift", toChez(ev), toChez(body))
 

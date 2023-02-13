@@ -55,7 +55,8 @@
 (define-syntax handle
   (syntax-rules ()
     [(_ (cap1 ...) body)
-     (reset (body cap1 ...))]))
+     (reset (body lift cap1 ...))]))
+
 
 (define-syntax shift
   (syntax-rules ()
@@ -74,7 +75,7 @@
             exp ...))))]))
 
 
-(define (with-region body)
+(define (with-region-non-mono body)
   (define arena (make-arena))
 
   (define (lift m) (lambda (k)
@@ -86,6 +87,11 @@
       (k a)))))
 
   (body lift arena))
+
+(define (with-region body)
+  (define arena (make-arena))
+
+  (body arena))
 
 
 ; An Arena is a pointer to a list of cells

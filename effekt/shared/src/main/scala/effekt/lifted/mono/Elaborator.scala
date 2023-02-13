@@ -2,7 +2,8 @@ package effekt
 package lifted
 package mono
 
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, TODO, NOT_SUPPORTED }
+import effekt.util.messages.{ ErrorReporter, FIXME, INTERNAL_ERROR, NOT_SUPPORTED, TODO }
+
 import scala.collection.mutable
 
 enum ElaboratedType {
@@ -152,9 +153,38 @@ class TransformationContext(
 def elaborate(m: ModuleDecl)(using T: TransformationContext): ModuleDecl = {
   val decls = m.decls.map(elaborate)
   val defns = m.definitions.map(elaborate)
+  val extns = m.externs.map(elaborate)
 
   val additionalDecls = T.interfaces.values.toList
-  ModuleDecl(m.path, m.imports, decls ++ additionalDecls, m.externs, defns, m.exports)
+  ModuleDecl(m.path, m.imports, decls ++ additionalDecls, extns, defns, m.exports)
+}
+
+def elaborate(e: Extern)(using T: TransformationContext): Extern = e match {
+  case Extern.Def(id, tparams, params, ret, body) =>
+    // We cannot monomorphize externs.
+    // So what happens if they take a block param? Monomorphization changes the calling convention
+    // of block params; but externs cannot know / account for this.
+    // We could generate bridges (like Java does for erasure).
+    //
+    // Most important use case: extern interfaces (they are fully transparent and won't be monomorphized)
+    // So eventually we do not care.
+    // So for now, we simply convert the types of parameters and drop evidence parameters
+
+    val ftpe = T.flow.flowTypeForBinder(id).asInstanceOf[FlowType.Function]
+
+    val vps = params collect {
+      case p: Param.ValueParam => p
+    }
+
+    val bids = params collect {
+      case p : Param.BlockParam => p.id
+    }
+
+    val bps = (bids zip ftpe.bparams) map {
+      case (id, tpe) => Param.BlockParam(id, T.elaborate(tpe))
+    }
+    Extern.Def(id, tparams, vps ++ bps, ret, body)
+  case i @ Extern.Include(contents) => i
 }
 
 def elaborate(d: Declaration)(using T: TransformationContext): Declaration = d match {
@@ -244,8 +274,7 @@ def elaborate(b: Block)(using T: TransformationContext): Block = b match {
     // TODO check correctness (should only work with nested blocks, not methods)
     Block.Member(elaborate(receiver), field, T.elaborate(T.annotatedType(b)))
 
-  case Block.Unbox(e) =>
-    INTERNAL_ERROR("Not supported: monomorphization of box / unbox")
+  case Block.Unbox(e) => Block.Unbox(elaborate(e)) // Not really supported
 }
 
 def elaborate(impl: Implementation)(using T: TransformationContext): Implementation = impl match {
@@ -305,7 +334,9 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
       case ElaboratedType.Single() => elaborate(b)
       case ElaboratedType.Multi(id, tparams, variants, tpe) =>
         // TODO here we need to choose the correct type instantation, not the abstracted one:
-        Block.Member(elaborate(b), variants(Evidences.Concrete(evidenceArgs)), tpe)
+        val variant = variants.getOrElse(Evidences.Concrete(evidenceArgs),
+          INTERNAL_ERROR(s"Cannot find ${id} variant for ${evidenceArgs.map(_.show)}, got variants: ${variants.keys.map(_.show).mkString(", ")}. \n\nCall: ${s}"))
+        Block.Member(elaborate(b), variant, tpe)
     }
 
     Stmt.App(target, targs, remainingArgs)
@@ -318,9 +349,14 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
       given TransformationContext = T.withChoices(evidenceIds.map(id => id -> Ev(List(Lift.Try()))))
       elaborate(body)
     }
-    Stmt.Try(Block.BlockLit(tparams, remainingParams, elaboratedBody), handler.map(elaborate))
+    val capabilities = handler.map { h => Block.New(elaborate(h)) }
+
+    val newBody = FIXME(Stmt.App(Block.BlockLit(tparams, remainingParams, elaboratedBody), Nil, capabilities), "this could be a def")
+    Stmt.Reset(newBody)
 
   case Stmt.Try(_, _) => INTERNAL_ERROR("unreachable, body should always be a blocklit.")
+
+  case Stmt.Reset(body) => Stmt.Reset(elaborate(body))
 
   case Stmt.Shift(ev, body) =>
     Stmt.Shift(translate(elaborate(ev)), elaborate(body).asInstanceOf)
@@ -333,8 +369,16 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
   case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(elaborate(scrutinee), clauses map {
       case (id, Block.BlockLit(tparams, params, body)) => (id, Block.BlockLit(tparams, params, elaborate(body)))
     }, default.map(elaborate))
-  case Stmt.State(id, init, region, body) => TODO("Support mutable state")
-  case Stmt.Region(body) => TODO("Support regions")
+  case Stmt.State(id, init, region, body) =>
+    FIXME(Stmt.State(id, elaborate(init), region, elaborate(body)), "Support mutable state")
+  case Stmt.Region(Block.BlockLit(tparams, params, body)) =>
+    val (evidenceIds, remainingParams) = params.partitionMap(elaborate)
+    val elaboratedBody = {
+      given TransformationContext = T.withChoices(evidenceIds.map(id => id -> Ev(List(Lift.Reg()))))
+      elaborate(body)
+    }
+    Stmt.Region(Block.BlockLit(Nil, remainingParams, elaboratedBody))
+  case Stmt.Region(_) => INTERNAL_ERROR("unreachable, body should always be a blocklit.")
   case Stmt.Hole() => Stmt.Hole()
 }
 
@@ -345,9 +389,10 @@ def elaborate(l: lifted.Lift)(using T: TransformationContext): List[Lift] = l ma
   case lifted.Lift.Try() => List(Lift.Try())
   case lifted.Lift.Reg() => List(Lift.Reg())
 }
-def translate(e: Ev): lifted.Evidence = Evidence(e.lifts map {
-  case Lift.Try() => lifted.Lift.Try()
-  case Lift.Reg() => lifted.Lift.Reg()
+def translate(e: Ev): lifted.Evidence = Evidence(e.lifts flatMap {
+  case Lift.Try() => List(lifted.Lift.Try())
+
+  case Lift.Reg() => FIXME(List(lifted.Lift.Reg()), "Here we need to pass Reg again, once we assign it the correct runtime semantics.") // lifted.Lift.Reg()
   case x: Lift.Var => INTERNAL_ERROR("Should not occur anymore after monomorphization!")
 })
 
@@ -356,7 +401,7 @@ def elaborate(e: Expr)(using T: TransformationContext): Expr = e match {
   case Expr.ValueVar(id, annotatedType) => e
   case Expr.Literal(value, annotatedType) => e
   case Expr.PureApp(b, targs, args) => e // we do not touch pure applications
-  case Expr.Select(target, field, annotatedType) => elaborate(target)
-  case Expr.Box(b) => NOT_SUPPORTED("Elaboration of boxed blocks not supported, yet.")
+  case Expr.Select(target, field, annotatedType) => Expr.Select(elaborate(target), field, annotatedType)
+  case Expr.Box(b) => Expr.Box(elaborate(b))
   case Expr.Run(s) => Expr.Run(elaborate(s))
 }

@@ -3,7 +3,7 @@ package lifted
 package mono
 
 import scala.collection.immutable.ListMap
-import effekt.util.messages.{ ErrorReporter, INTERNAL_ERROR, NOT_SUPPORTED, TODO }
+import effekt.util.messages.{ ErrorReporter, FIXME, INTERNAL_ERROR, NOT_SUPPORTED, TODO }
 import kiama.util.Memoiser
 
 import scala.collection.mutable
@@ -11,19 +11,23 @@ import scala.collection.mutable
 
 class FlowAnalysis(
 
-  // block binders like `def`, lambdas, or block parameters.
-  binders: mutable.Map[Id, FlowType] = mutable.Map.empty,
+  // block binders like `def` and block parameters.
+  val binders: mutable.Map[Id, FlowType] = mutable.Map.empty,
 
   // every (block-) subtree is annotated with its flow type
   annotations: Memoiser[lifted.Block, FlowType] = Memoiser.makeIdMemoiser(),
 
+  // maps interface id to the flowtypes of operations
   interfaces: mutable.Map[Id, InterfaceDeclaration] = mutable.Map.empty,
 
   // lexical scoping: maps evidence parameters like ev104 to concrete evidence (e.g., <α17._2, Try, Try>)
   parameters: mutable.Map[Id, Ev] = mutable.Map.empty,
 
   // collected constraints
-  var constraints: List[Constraint] = Nil
+  var constraints: List[Constraint] = Nil,
+
+  // generated unification variables
+  var variables: Set[Evidences.FlowVar] = Set.empty
 ) {
   def addDefinition(id: Id, tpe: FlowType): Unit =
     assert(!binders.isDefinedAt(id), s"Cannot add signature for block twice: ${id}")
@@ -66,6 +70,10 @@ class FlowAnalysis(
   def evidenceFor(param: Id): Ev =
     parameters.getOrElse(param, INTERNAL_ERROR(s"Cannot find evidence for ${param}"))
 
+  def freshVariable(arity: Int): Evidences.FlowVar =
+    val x = Evidences.fresh(arity)
+    variables = variables + x
+    x
 }
 
 enum Constraint {
@@ -82,10 +90,37 @@ enum Constraint {
 
 def analyze(mod: ModuleDecl)(using C: ErrorReporter, F: FlowAnalysis): Unit = {
   mod.decls.foreach(analyze)
+  mod.externs.foreach(analyze)
   analyzeDefinitions(mod.definitions)
 
   // TODO replace by an analysis whether evidence is used at all, or not.
   // F.addConstraint(F.flowTypeFor(main), FlowType.Function(Evidences.Concrete(List(Ev(Nil))), Nil))
+}
+
+def analyze(e: Extern)(using C: ErrorReporter, F: FlowAnalysis): Unit = e match {
+  // extern def foo(ev: EV) { f: (EV) => Unit } = ...
+  //                     |        ^
+  //                     \________/
+  // We have to assume that the evidence will flow directly into f.
+  case Extern.Def(id, tparams, params, ret, body) =>
+    // FOR NOW: we only add empty evidence
+    val x: Evidences.FlowVar = F.freshVariable(0)
+    val vparams = params.collect { case p : Param.ValueParam => p.tpe }
+    val bfts = params.collect { case p : Param.BlockParam => freshFlowType(p.tpe) }
+    val ftpe = FlowType.Function(x, tparams, vparams, bfts, ret)
+    F.addDefinition(id, ftpe)
+
+
+    //    val BlockType.Function(tparams, _, vparams, bparams, ret) = b.tpe : @unchecked
+    //    val eps = params.collect { case Param.EvidenceParam(id) => id }
+    //    val bfts = bindBlockParams(params)
+
+    // TODO continue here...
+
+    // externs do not receive evidence themselves -- maybe for their block params?
+    //val ev: Evidences.FlowVar = Evidences.fresh(eps.size)
+
+  case Extern.Include(contents) => ()
 }
 
 def preanalyze(d: Definition)(using C: ErrorReporter, F: FlowAnalysis): Unit =
@@ -120,15 +155,15 @@ def preanalyze(b: Block)(using C: ErrorReporter, F: FlowAnalysis): FlowType = b 
     // Step 1) Map unification variables to evidence parameters:
     //   ev142 -> α17._2
     val eps = params.collect { case Param.EvidenceParam(id) => id }
-    val ev: Evidences.FlowVar = Evidences.fresh(eps.size)
+    val x: Evidences.FlowVar = F.freshVariable(eps.size)
     eps.zipWithIndex.foreach { case (id, idx) =>
-      F.bindEvidence(id, Ev(List(Lift.Var(ev, idx))))
+      F.bindEvidence(id, Ev(List(Lift.Var(x, idx))))
     }
 
     // Step 2) Create flow types for block parameters
     val bfts = bindBlockParams(params)
 
-    FlowType.Function(ev, tparams, vparams, bfts, ret)
+    FlowType.Function(x, tparams, vparams, bfts, ret)
 
 
   case Block.Member(b, field, annotatedTpe) =>
@@ -230,8 +265,14 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
   case Stmt.Return(e) => analyze(e)
   case Stmt.Hole() => ()
 
-  case Stmt.Region(body) => () // TODO
-  case Stmt.State(id, init, region, body) => () // TODO
+  case Stmt.Region(Block.BlockLit(Nil, ev :: caps, body)) =>
+    F.bindEvidence(ev.id, Ev(List(Lift.Reg())))
+    bindBlockParams(caps)
+    analyze(body)
+  case Stmt.State(id, init, region, body) =>
+    analyze(init)
+    analyze(body)
+    FIXME((), "implement")
   case _ => INTERNAL_ERROR(s"Not covered: ${s}")
 }
 
@@ -269,7 +310,8 @@ def analyze(d: Declaration)(using C: ErrorReporter, F: FlowAnalysis): Unit =
 
 def freshFlowType(tpe: BlockType)(using C: ErrorReporter, F: FlowAnalysis): FlowType = tpe match {
   case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
-    FlowType.Function(Evidences.fresh(eparams.size), tparams, vparams, bparams.map(freshFlowType), result)
+    val x = F.freshVariable(eparams.size)
+    FlowType.Function(x, tparams, vparams, bparams.map(freshFlowType), result)
   case BlockType.Interface(name, targs) =>
     FlowType.Interface(name, targs)
 }

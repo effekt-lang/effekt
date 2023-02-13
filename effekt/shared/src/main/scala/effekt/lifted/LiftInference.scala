@@ -25,7 +25,6 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   // TODO either resolve and bind imports or use the knowledge that they are toplevel!
   def transform(mod: core.ModuleDecl)(using Environment, ErrorReporter): ModuleDecl = {
-    // TODO drop once we also ported lifted to use [[core.Definition]]
     val env = pretransform(mod.definitions)
     val definitions = mod.definitions.map(d => transform(d)(using env, ErrorReporter))
     ModuleDecl(mod.path, mod.imports, mod.declarations.map(transform), mod.externs.map(transform), definitions, mod.exports)
@@ -104,8 +103,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
 
   def transform(tree: core.Extern)(using Environment, ErrorReporter): lifted.Extern = tree match {
     case core.Extern.Def(id, tps, cps, vps, bps, ret, capt, body) =>
-      // TODO what to do with cps?
-      Extern.Def(id, tps, vps.map(transform) ++ bps.map(transform), transform(ret), body)
+      val self = Param.EvidenceParam(EvidenceSymbol()) // will never be used!
+      val eparams = bps map {
+        case core.BlockParam(id, tpe) => Param.EvidenceParam(EvidenceSymbol())
+      }
+      Extern.Def(id, tps, self :: eparams ++ vps.map(transform) ++ bps.map(transform), transform(ret), body)
     case core.Extern.Include(contents) =>
       Extern.Include(contents)
   }

@@ -5,20 +5,23 @@ import effekt.context.Context
 
 import mono.*
 
-// TODO in test14.effekt the following looks suspicious:
-//    α112(α113()) <: α1()
-//
-// a113 is resume! This will be fixed by adding an explicit shift.
-//
-// we do not deal with bidirectional effects, atm
+// TODO Known limitations:
+// - we do not deal with bidirectional effects, atm
+// - extern functions cannot take block arguments (see liftinference.effekt -- `fancy`)
+// - we don't want to support region polymorphic recursion (but what's with recursive functions that use local mutable state?)
 
 // TODO check whether evidence is actually ever used and only specialized wrt. the used evidence.
+//   implementation sketch: track equiv classes of evidence projections that are used as arguments to shift.
+
+// TODO mutable state:
+//   
+
 
 object Monomorphize {
 
   val phaseName = "lift-inference"
 
-  def run(mod: ModuleDecl)(using C: Context): ModuleDecl = {
+  def run(mod: ModuleDecl)(using C: Context): ModuleDecl = try {
     given analysis: FlowAnalysis()
     Evidences.last = -1;
     analyze(mod)
@@ -28,7 +31,12 @@ object Monomorphize {
     }.mkString("\n")
 
     val (solved, cls) = solve(analysis.constraints)
-    val cleaned = cleanup(substitution(solved.toList))
+
+    val allBounds = analysis.variables.toList.map {
+      x => x -> solved.getOrElse(x, Bounds(Set.empty, Set(Ev.zero(x.arity))))
+    }
+
+    val cleaned = cleanup(substitution(allBounds))
 
     val subst = cleaned.toList.sortBy(_._1.id).map {
       case (x, Bounds(lower, upper)) =>  lower.map(_.show).mkString(", ") + " <: " + x.show + " <: " + upper.map(_.show).mkString(", ")
@@ -36,12 +44,19 @@ object Monomorphize {
 
     given t: TransformationContext(analysis, cleaned, functions = cls)
 
+    val binders = analysis.binders.collect { case (id: Id, ftpe: FlowType.Function) => s"${id.name}: ${ftpe.evidences.show}" }.toList.sorted.mkString("\n")
 
-    val transposed = cls.groupMapReduce({ case (ftpe, n) => n })({ case (ftpe, n) => Set(ftpe)})(_ ++ _)
-
-    //    transposed foreach {
-    //      case (n, ftpes) => println(System.identityHashCode(n).toString + " -> " + ftpes.map(f => f.evidences.show).mkString(", "))
-    //    }
+    C.debug(s"""|Solved:
+        |-------
+        |${subst}
+        |
+        |Constraints:
+        |-----------
+        |${constrs}
+        |
+        |Binders:
+        |${binders}
+        |""".stripMargin)
 
     val elaborated = elaborate(mod)
 
@@ -54,16 +69,10 @@ object Monomorphize {
     //      d => PrettyPrinter.pretty(PrettyPrinter.toDoc(d), 20).layout
     //    }.mkString("\n")
 
-    C.debug(s"""|Solved:
-        |-------
-        |${subst}
-        |
-        |Constraints:
-        |-----------
-        |${constrs}""".stripMargin)
+
 
     // println(PrettyPrinter.format(elaborated))
 
     elaborated
-  }
+  } finally { }
 }

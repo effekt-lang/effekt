@@ -120,8 +120,12 @@ enum Stmt extends Tree  {
   case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Id, init: Expr, region: Symbol, body: Stmt)
   case Try(body: Block, handler: List[Implementation])
+
+  // after lift inference -- does not pass evidence to body
+  case Reset(body: Stmt)
+
+  case State(id: Id, init: Expr, region: Symbol, body: Stmt)
   case Region(body: Block)
 
   // e.g. shift(ev) { {resume} => ... }
@@ -195,6 +199,7 @@ def freeVariables(stmt: Stmt): Set[Param] = stmt match {
       Set(BlockParam(id, BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
+  case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }

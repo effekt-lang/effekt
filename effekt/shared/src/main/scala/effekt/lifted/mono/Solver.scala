@@ -35,7 +35,7 @@ case class Solver(
     case head :: tail if seen contains head => Solver(tail, seen, subst, functions)
 
     case Constraint.B(i1: FlowType.Interface, i2: FlowType.Interface) :: rest =>
-      assert(i1 == i2, s"The two interfaces are not the same! ${i1} and ${i2}")
+      assert(i1.id == i2.id, s"The two interfaces are not the same! ${i1} and ${i2}")
       Solver(rest, seen, subst, functions)
 
     case (c @ Constraint.B(f1 @ FlowType.Function(ev1, _, _, bparams1, _), f2 @ FlowType.Function(ev2, _, _, bparams2, _))) :: rest =>
@@ -68,11 +68,8 @@ def solve(cs: List[Constraint]): (Map[Evidences.FlowVar, Bounds], Equivalences) 
   }
   (solver.subst, solver.functions)
 
-// a1 <: [<a2.0>]
-// a2 <: [<>]
 
-
-// A very naive implementation, that is quadradic in the number of unification variables
+// A very naive implementation, that is quadratic in the number of unification variables
 // it also does not detect "stack shape polymorphic recursion", which needs to be implemented separately.
 def substitution(from: List[(Evidences.FlowVar, Bounds)]): Bisubstitution = from match {
   case (x, bounds) :: rest =>

@@ -132,6 +132,7 @@ object Type {
 
     case Stmt.State(id, init, region, body) => body.tpe
     case Stmt.Try(body, handler) => body.returnType
+    case Stmt.Reset(body) => body.tpe
     case Stmt.Region(body) => body.returnType
 
     case Stmt.Shift(ev, body) =>
