@@ -121,7 +121,7 @@ enum Stmt extends Tree  {
   case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
 
   // Effects
-  case State(id: Id, init: Expr, region: Symbol, body: Stmt)
+  case State(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
   case Try(body: Block, handler: List[Implementation])
   case Region(body: Block)
 
@@ -212,8 +212,8 @@ def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   case Return(e) => freeVariables(e)
   case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
   case Hole() => FreeVariables.empty
-  case State(id, init, region, body) =>
-    freeVariables(init) ++ freeVariables(body) --
+  case State(id, init, region, ev, body) =>
+    freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
       FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
         BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
   case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV

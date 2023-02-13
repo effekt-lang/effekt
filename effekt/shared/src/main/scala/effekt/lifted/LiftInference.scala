@@ -183,7 +183,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Val(id, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
-      State(id, transform(init), region, transform(body))
+      State(id, transform(init), region, env.evidenceFor(region), transform(body))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),
@@ -312,9 +312,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     def bind(s: Symbol, init: EvidenceSymbol) = copy(env = env + (s -> List(init)))
     def adapt(a: EvidenceSymbol) = copy(env = env.map { case (s, as) => s -> (a :: as) })
 
+    def evidenceFor(id: core.Id): Evidence = Evidence(env.getOrElse(id, Nil))
+
     def evidenceFor(b: core.Block)(using ErrorReporter): Evidence = b match {
       case core.BlockVar(_, tpe, _) if tpe == core.Type.TRegion => Here()
-      case b: core.BlockVar => Evidence(env.getOrElse(b.id, Nil)) //.map { x => Evidence(x) }
+      case b: core.BlockVar => evidenceFor(b.id) //.map { x => Evidence(x) }
       case b: core.BlockLit   => Here()
       case core.Member(b, id, tpe) => evidenceFor(b)
       // TODO check whether this makes any sense
