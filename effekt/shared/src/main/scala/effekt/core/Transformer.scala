@@ -278,7 +278,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: VarBinder =>
         val stateType = Context.blockTypeOf(sym)
         val getType = operationType(stateType, TState.get)
-        DirectApp(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil)
+        Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -365,7 +365,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = a.definition
       val stateType = Context.blockTypeOf(sym)
       val putType = operationType(stateType, TState.put)
-      DirectApp(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil)
+      Context.bind(App(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil))
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
@@ -384,12 +384,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // Do not pass type arguments for the type constructor of the receiver.
       val remainingTypeArgs = typeArgs.drop(operation.interface.tparams.size)
 
-      operation match {
-        case op if op == TState.put || op == TState.get =>
-          DirectApp(Member(rec, op, opType), remainingTypeArgs, valueArgs, blockArgs)
-        case op: Operation =>
-          Context.bind(App(Member(rec, op, opType), remainingTypeArgs, valueArgs, blockArgs))
-      }
+      Context.bind(App(Member(rec, operation, opType), remainingTypeArgs, valueArgs, blockArgs))
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
 

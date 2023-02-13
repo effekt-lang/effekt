@@ -12,11 +12,11 @@ const $runtime = (function() {
     });
     // $getOp and $putOp are auto generated from the compiler
     cell[$getOp] = function() {
-      return _value
+      return pure( _value)
     };
     cell[$putOp] = function(v) {
       _value = v;
-      return $effekt.unit;
+      return pure($effekt.unit);
     };
     return cell
   }

@@ -73,25 +73,3 @@ def generateConstructor(id: Symbol, fields: List[Symbol]): List[chez.Def] = {
 
   List(record, matcher)
 }
-
-
-// STATE
-// -----
-
-// (define (getter ref)
-//  (lambda () (unbox ref)))
-//
-// (define (setter ref)
-//  (lambda (v) (set-box! ref v)))
-def generateStateAccessors: List[chez.Function] = {
-  val ref = ChezName("ref")
-  val value = ChezName("value")
-
-  val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-    chez.Lambda(Nil, chez.Builtin("unbox", Variable(ref))))
-
-  val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-    chez.Lambda(List(value), chez.Builtin("set-box!", Variable(ref), Variable(value))))
-
-  List(getter, setter)
-}

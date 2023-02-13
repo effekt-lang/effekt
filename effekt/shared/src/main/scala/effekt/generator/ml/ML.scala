@@ -156,6 +156,12 @@ object ML extends Backend {
   def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
 
+    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), List(), List(ev)) =>
+      CPS.pure(ml.Expr.Deref(ml.Variable(name(x))))
+
+    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), List(), List(ev, arg)) =>
+      CPS.pure(ml.Expr.Assign(ml.Variable(name(x)), toML(arg)))
+
     case lifted.App(b, targs, args) => CPS.inline { k => ml.Expr.Call(ml.Expr.Call(toML(b), args map toML), List(k.reify)) }
 
     case lifted.If(cond, thn, els) =>
@@ -327,12 +333,6 @@ object ML extends Backend {
         case _ => ml.RawValue(l.value.toString)
       }
     case ValueVar(id, _) => ml.Variable(name(id))
-
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), List(), List()) =>
-      ml.Expr.Deref(ml.Variable(name(x)))
-
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), List(), List(arg)) =>
-      ml.Expr.Assign(ml.Variable(name(x)), toML(arg))
 
     case PureApp(b, _, args) =>
       val mlArgs = args map {
