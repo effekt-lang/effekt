@@ -1,6 +1,6 @@
 package effekt
 
-import effekt.PhaseResult.CoreTransformed
+import effekt.PhaseResult.{ CoreLifted, CoreTransformed }
 import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
@@ -285,7 +285,20 @@ trait Compiler {
 
     val toCore = Phase.cached("to-core") { Frontend andThen Middleend andThen core.PolymorphismBoxing }
     val allCore = allToCore(toCore) andThen Aggregate
+
+    // TODO move lift inference and machine transformations from individual backends to toplevel.
+    val lifted = allCore andThen LiftInference andThen Machine
+
     val separate = allToCore(toCore) andThen LLVM.separate
     val whole = allCore andThen LLVM.whole
+  }
+
+  object Machine extends Phase[CoreLifted, machine.Program] {
+    val phaseName = "machine"
+
+    def run(input: CoreLifted)(using C: Context) = {
+      val main = C.checkMain(input.mod);
+      Some(machine.Transformer.transform(main, input.core))
+    }
   }
 }

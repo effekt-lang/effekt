@@ -1,12 +1,14 @@
 package effekt
 package machine
 
+import effekt.PhaseResult.CoreLifted
+
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.lifted.DeclarationContext
 import effekt.lifted.given
 import effekt.lifted
-import effekt.lifted.{Definition, LiftInference}
+import effekt.lifted.{ Definition, LiftInference }
 import effekt.symbols
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
