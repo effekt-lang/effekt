@@ -88,7 +88,7 @@ object ML extends Backend {
     case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
       C.abort("higher order functions currently not supported")
     case BlockType.Interface(typeConstructor, args) =>
-      ml.Type.Tapp(ml.Type.Data(name(typeConstructor)), args.map(tpeToML))
+      ml.Type.TApp(ml.Type.Data(name(typeConstructor)), args.map(tpeToML))
   }
 
   def tpeToML(tpe: ValueType)(using Context): ml.Type = tpe match {
@@ -99,7 +99,7 @@ object ML extends Backend {
     case lifted.Type.TString => ml.Type.String
     case ValueType.Var(id) => ml.Type.Var(name(id))
     case ValueType.Data(id, Nil) => ml.Type.Data(name(id))
-    case ValueType.Data(id, args) => ml.Type.Tapp(ml.Type.Data(name(id)), args.map(tpeToML))
+    case ValueType.Data(id, args) => ml.Type.TApp(ml.Type.Data(name(id)), args.map(tpeToML))
     case ValueType.Boxed(tpe) => tpeToML(tpe)
   }
 
@@ -200,7 +200,7 @@ object ML extends Backend {
       }
 
     case lifted.Try(body, handler) =>
-      val handlers: List[ml.Expr.MakeDatatype] = handler.map {
+      val handlers: List[ml.Expr.Make] = handler.map {
         case Implementation(interface, ops) =>
           val fields = ops.map {
             case Operation(op, lifted.Block.BlockLit(tparams, params, body)) =>
@@ -233,7 +233,7 @@ object ML extends Backend {
               )
               ml.Expr.Lambda(ml.Param.Named(ev) :: args, newBody)
           }
-          ml.Expr.MakeDatatype(name(interface.name), expsToTupleIsh(fields))
+          ml.Expr.Make(name(interface.name), expsToTupleIsh(fields))
       }
       val args = ml.Consts.lift :: handlers
 
@@ -290,7 +290,7 @@ object ML extends Backend {
     case lifted.Unbox(e) => toML(e) // not sound
 
     case lifted.New(Implementation(interface, operations)) =>
-      ml.Expr.MakeDatatype(name(interface.name), expsToTupleIsh(operations map toML))
+      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
   }
 
   def toML(op: Operation)(using Context): ml.Expr = {
@@ -342,9 +342,9 @@ object ML extends Backend {
       }
       b match {
         case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.DataType(_, _, _)), _) =>
-          ml.Expr.MakeDatatype(name(id), expsToTupleIsh(mlArgs))
+          ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
         case BlockVar(id@symbols.Constructor(_, _, _, symbols.TypeConstructor.Record(_, _, _)), _) =>
-          ml.Expr.MakeDatatype(name(id), expsToTupleIsh(mlArgs))
+          ml.Expr.Make(name(id), expsToTupleIsh(mlArgs))
         case _ => ml.Call(toML(b), mlArgs)
       }
 

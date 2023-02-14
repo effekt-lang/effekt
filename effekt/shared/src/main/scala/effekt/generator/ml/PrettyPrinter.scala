@@ -76,7 +76,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Type.String => "string"
     case Type.Bool => "bool"
     case Type.Data(name) => toDoc(name)
-    case Type.Tapp(tpe, args) =>
+    case Type.TApp(tpe, args) =>
       val ap = tlistDoc(args) <+> toDoc(tpe)
       parens(ap)
     case Type.Builtin(t) => toDoc(t)
@@ -128,9 +128,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case Expr.Tuple(one :: Nil) => toDoc(one)
     case Expr.Tuple(terms) =>
       parens(hsep(terms map toDoc, ","))
-    case Expr.MakeDatatype(tag, None) =>
+    case Expr.Make(tag, None) =>
         toDoc(tag)
-    case Expr.MakeDatatype(tag, Some(arg)) =>
+    case Expr.Make(tag, Some(arg)) =>
       val mdt = toDoc(tag) <+> toDoc(arg)
       parens(mdt)
     case Expr.Sequence(Nil, rest) => toDoc(rest)

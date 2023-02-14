@@ -23,7 +23,7 @@ class MLName(n: String) {
 }
 
 enum Type {
-  case Tapp(tpe: Type, arg: List[Type])
+  case TApp(tpe: Type, arg: List[Type])
   case Builtin(n: MLName)
   case Var(n: MLName)
   case Tuple(l: List[Type])
@@ -53,8 +53,6 @@ export Binding.*
 
 case class Toplevel(bindings: List[Binding], body: Expr)
 
-//case class Handler(constructorName: MLName, operations: List[Operation])
-//case class Operation(name: MLName, params: List[MLName], k: MLName, body: Expr)
 
 /**
  * This file defines the syntax of ML as it is the image of our translation.
@@ -89,7 +87,7 @@ enum Expr {
   // e.g x
   case Variable(name: MLName)
 
-  case MakeDatatype(tag: MLName, arg: Option[Expr])
+  case Make(tag: MLName, arg: Option[Expr])
 
   case Match(scrutinee: Expr, clauses: List[MatchClause], default: Option[Expr])
 
@@ -117,8 +115,6 @@ object Consts {
   val id: Expr = ml.Lambda(ml.Param.Named(MLName("x")))(Variable(MLName("x")))
 
   // from effekt.sml
-  val bind: Expr = Variable(MLName("bind"))
-  val pure: Expr = Variable(MLName("pure"))
   val lift: Expr = Variable(MLName("lift"))
   val reset: Expr = Variable(MLName("reset"))
   val run: Expr = Variable(MLName("run"))
