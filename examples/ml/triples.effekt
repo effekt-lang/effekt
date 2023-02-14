@@ -1,5 +1,7 @@
 module triples
 
+type Nothing {}
+
 effect Flip(): Boolean
 effect Fail(): Nothing
 
@@ -18,7 +20,7 @@ def concat[A](l1: List[A], l2: List[A]): List[A] = l1 match {
 
 def choice(n : Int): Int / { Flip, Fail } =
   if (n < 1) {
-    do Fail()
+    do Fail() match {}
   } else if (do Flip()) {
     n
   } else {
