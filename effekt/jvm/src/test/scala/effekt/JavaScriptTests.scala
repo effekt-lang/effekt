@@ -43,6 +43,8 @@ class JavaScriptTests extends EffektTests {
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result()
   }
+
+  def canRun() = canRunExecutable("node", "--version")
 }
 
 object TestUtils {

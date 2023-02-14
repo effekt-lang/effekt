@@ -4,6 +4,7 @@ import java.io.File
 
 import sbt.io._
 import sbt.io.syntax._
+import scala.sys.process.*
 
 import scala.language.implicitConversions
 
@@ -22,7 +23,13 @@ trait EffektTests extends munit.FunSuite {
 
   def runTestFor(input: File, check: File, expectedResult: String): Unit
 
-  def runTests() = included.foreach(runPositiveTestsIn)
+  def canRun(): Boolean
+
+  def runTests() =
+    if canRun() then
+      included.foreach(runPositiveTestsIn)
+    else
+      test(s"${this.getClass.getName}: Binary not found!".ignore) { () }
 
   def runPositiveTestsIn(dir: File): Unit = //describe(dir.getName) {
     dir.listFiles.foreach {
@@ -47,6 +54,10 @@ trait EffektTests extends munit.FunSuite {
 
       case _ => ()
     }
+
+  // utils to check whether a command is available
+  def canRunExecutable(command: String*): Boolean =
+    try { Process(command).run(ProcessIO(out => (), in => (), err => ())).exitValue() == 0 } catch { _ => false }
 
   runTests()
 }

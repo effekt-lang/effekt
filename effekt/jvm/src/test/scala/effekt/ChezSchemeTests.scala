@@ -65,6 +65,8 @@ abstract class ChezSchemeTests extends EffektTests {
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result()
   }
+
+  def canRun() = canRunExecutable("scheme", "--help")
 }
 
 class ChezSchemeMonadicTests extends ChezSchemeTests {

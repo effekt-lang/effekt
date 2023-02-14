@@ -1,9 +1,8 @@
 package effekt
 
 import java.io.File
-
-import sbt.io._
-import sbt.io.syntax._
+import sbt.io.*
+import sbt.io.syntax.*
 
 import scala.language.implicitConversions
 
@@ -18,6 +17,7 @@ class MLTests extends EffektTests {
 
     // Broken tests
     examplesDir / "ml" / "probabilistic.effekt",
+    examplesDir / "ml" / "triples.effekt",
 
     // Tests with box
     //    examplesDir / "pos" / "capture" / "defdef.effekt",
@@ -88,6 +88,8 @@ class MLTests extends EffektTests {
     examplesDir / "pos" / "probabilistic.effekt",
     examplesDir / "pos" / "stream_pull.effekt",
   )
+//in: OutputStream => Unit, out: InputStream => Unit, err: InputStream => Unit
+  def canRun() = canRunExecutable("mlton")
 
   def runTestFor(input: java.io.File, check: File, expected: String): Unit =
     test(input.getPath + " (ml)") {

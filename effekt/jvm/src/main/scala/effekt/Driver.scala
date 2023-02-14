@@ -159,7 +159,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     val LLVM_VERSION = C.config.llvmVersion()
 
     out.emit(discoverExecutable(List("opt", s"opt-${LLVM_VERSION}", "opt-12", "opt-11"), Seq(path, "-S", "-O2", "-o", optPath)))
-    out.emit(discoverExecutable(List("llc", s"llc-${LLVM_VERSION}", "lcc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
+    out.emit(discoverExecutable(List("llc", s"llc-${LLVM_VERSION}", "llc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
 
     val gccMainFile = (C.config.libPath / "main.c").unixPath
     val executableFile = basePath

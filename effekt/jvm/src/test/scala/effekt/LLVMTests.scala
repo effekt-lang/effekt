@@ -129,4 +129,9 @@ class LLVMTests extends EffektTests {
     compiler.compileFile(f.getPath, configs)
     configs.stringEmitter.result()
   }
+
+  def canRun() =
+    canRunExecutable("llc", "--version") ||
+    canRunExecutable("llc-15", "--version") ||
+    canRunExecutable("llc-12", "--version")
 }
