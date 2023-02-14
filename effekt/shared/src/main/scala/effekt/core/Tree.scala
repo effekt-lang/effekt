@@ -1,6 +1,8 @@
 package effekt
 package core
 
+import effekt.util.Structural
+
 
 /**
  * Tree structure of programs in our internal core representation.
@@ -124,11 +126,6 @@ def Def(id: Id, block: Block, rest: Stmt) =
 def Let(id: Id, binding: Expr, rest: Stmt) =
   addToScope(Definition.Let(id,  binding), rest)
 
-/**
- * Fine-grain CBV: Arguments can be either pure expressions [[Pure]] or blocks [[Block]]
- */
-sealed trait Argument extends Tree
-
 
 /**
  * Expressions (with potential IO effects)
@@ -163,7 +160,7 @@ case class Run(s: Stmt) extends Expr
  *
  * -------------------------------------------
  */
-enum Pure extends Expr with Argument {
+enum Pure extends Expr {
   case ValueVar(id: Id, annotatedType: ValueType)
 
   case Literal(value: Any, annotatedType: ValueType)
@@ -190,7 +187,7 @@ export Pure.*
  *
  * -------------------------------------------
  */
-enum Block extends Argument {
+enum Block extends Tree {
   case BlockVar(id: Id, annotatedTpe: BlockType, annotatedCapt: Captures)
   case BlockLit(tparams: List[Id], cparams: List[Id], vparams: List[Param.ValueParam], bparams: List[Param.BlockParam], body: Stmt)
   case Member(block: Block, field: Id, annotatedTpe: BlockType)
@@ -294,90 +291,46 @@ object Tree {
     case leaf => ()
   }
 
-  // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite {
-    // Hooks to override
+  class Query extends Structural {
+    def empty: Set[Id] = Set.empty
+    def combine(r1: Set[Id], r2: Set[Id]): Set[Id] = r1 ++ r2
+
+    def query(p: Pure): Set[Id] = queryStructurally(p, empty, combine)
+    def query(e: Expr): Set[Id] = queryStructurally(e, empty, combine)
+    def query(s: Stmt): Set[Id] = queryStructurally(s, empty, combine)
+    def query(b: Block): Set[Id] = queryStructurally(b, empty, combine)
+    def query(d: Definition): Set[Id] = queryStructurally(d, empty, combine)
+    def query(d: Implementation): Set[Id] = queryStructurally(d, empty, combine)
+    def query(d: Operation): Set[Id] = queryStructurally(d, empty, combine)
+    def query(matchClause: (Id, BlockLit)): Set[Id] = matchClause match {
+      case (id, lit) => query(lit)
+    }
+  }
+
+  class Rewrite extends Structural {
+    def id: PartialFunction[Id, Id] = PartialFunction.empty
     def pure: PartialFunction[Pure, Pure] = PartialFunction.empty
     def expr: PartialFunction[Expr, Expr] = PartialFunction.empty
     def stmt: PartialFunction[Stmt, Stmt] = PartialFunction.empty
     def defn: PartialFunction[Definition, Definition] = PartialFunction.empty
     def block: PartialFunction[Block, Block] = PartialFunction.empty
     def handler: PartialFunction[Implementation, Implementation] = PartialFunction.empty
+    def param: PartialFunction[Param, Param] = PartialFunction.empty
 
-    def rewrite(p: Pure): Pure =
-      p match {
-        case e if pure.isDefinedAt(e) => pure(e)
-        case PureApp(b, targs, args) =>
-          PureApp(rewrite(b), targs, args map rewrite)
-        case Select(target, field, tpe) =>
-          Select(rewrite(target), field, tpe)
-        case v: ValueVar   => v
-        case l: Literal    => l
-        case Box(b, capt)        => Box(rewrite(b), capt)
-      }
+    def rewrite(x: Id): Id = if id.isDefinedAt(x) then id(x) else x
+    def rewrite(p: Pure): Pure = rewriteStructurally(p, pure)
+    def rewrite(e: Expr): Expr = rewriteStructurally(e, expr)
+    def rewrite(s: Stmt): Stmt = rewriteStructurally(s, stmt)
+    def rewrite(b: Block): Block = rewriteStructurally(b, block)
+    def rewrite(d: Definition): Definition = rewriteStructurally(d, defn)
+    def rewrite(e: Implementation): Implementation = rewriteStructurally(e, handler)
+    def rewrite(o: Operation): Operation = rewriteStructurally(o)
+    def rewrite(p: Param): Param = rewriteStructurally(p, param)
+    def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
+    def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
-    // Entrypoints to use the traversal on, defined in terms of the above hooks
-    def rewrite(e: Expr): Expr =
-      e match {
-        case e if expr.isDefinedAt(e) => expr(e)
-        case DirectApp(b, targs, vargs, bargs) =>
-          DirectApp(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
-        case Run(s) => Run(rewrite(s))
-        case p: Pure     => rewrite(p)
-      }
-
-    def rewrite(d: Definition): Definition = d match {
-      case d if defn.isDefinedAt(d) => defn(d)
-      case Definition.Def(id, block) =>
-        Definition.Def(id, rewrite(block))
-      case Definition.Let(id, binding) =>
-        Definition.Let(id, rewrite(binding))
-    }
-
-    def rewrite(e: Stmt): Stmt =
-      e match {
-        case e if stmt.isDefinedAt(e) => stmt(e)
-        case Scope(definitions, rest) => Scope(definitions map rewrite, rewrite(rest))
-        case Val(id, binding, body) =>
-          Val(id, rewrite(binding), rewrite(body))
-        case App(b, targs, vargs, bargs) =>
-          App(rewrite(b), targs, vargs map rewrite, bargs map rewrite)
-        case If(cond, thn, els) =>
-          If(rewrite(cond), rewrite(thn), rewrite(els))
-        case Return(e: Expr) =>
-          Return(rewrite(e))
-        case State(id, init, reg, body) =>
-          State(id, rewrite(init), reg, rewrite(body))
-        case Try(body, handler) =>
-          Try(rewrite(body), handler map rewrite)
-        case Region(body) =>
-          Region(rewrite(body))
-        case Match(scrutinee, clauses, default) =>
-          Match(rewrite(scrutinee), clauses map {
-            case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
-          }, default map rewrite)
-        case Hole() => e
-      }
-
-    def rewrite(e: Block): Block = e match {
-      case e if block.isDefinedAt(e) => block(e)
-      case BlockLit(tps, cps, vps, bps, body) =>
-        BlockLit(tps, cps, vps, bps, rewrite(body))
-      case Member(b, field, tpe) =>
-        Member(rewrite(b), field, tpe)
-      case Unbox(e) =>
-        Unbox(rewrite(e))
-      case New(impl) =>
-        New(rewrite(impl))
-      case b: BlockVar => b
-    }
-    def rewrite(e: Implementation): Implementation = e match {
-      case e if handler.isDefinedAt(e) => handler(e)
-      case Implementation(tpe, clauses) => Implementation(tpe, clauses map rewrite)
-    }
-    def rewrite(o: Operation): Operation = o match {
-      case Operation(name, tps, cps, vps, bps, resume, body) => Operation(name, tps, cps, vps, bps, resume, rewrite(body))
+    def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
+      case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
     }
   }
-
 }

@@ -2,7 +2,10 @@ package effekt
 package lifted
 
 import effekt.context.Context
-import effekt.symbols.{ BlockSymbol, BlockType, Constructor, FunctionType, Interface, InterfaceType, Name, Operation, Symbol, TermSymbol, TrackedParam, Type, ValueSymbol, ValueType }
+import effekt.symbols.{ Constructor, Name, Symbol }
+import scala.collection.immutable
+
+import effekt.core.Id
 
 sealed trait Tree
 /**
@@ -11,7 +14,7 @@ sealed trait Tree
 case class ModuleDecl(
   path: String,
   imports: List[String],
-  decls: List[Decl],
+  decls: List[Declaration],
   externs: List[Extern],
   definitions: List[Definition],
   exports: List[Symbol]
@@ -20,94 +23,128 @@ case class ModuleDecl(
 /**
  * Toplevel data and interface declarations
  */
-enum Decl {
-  case Data(id: Symbol, ctors: List[Symbol])
-  case Interface(id: Symbol, operations: List[Symbol])
+enum Declaration extends Tree {
+  def id: Id
+
+  case Data(id: Id, tparams: List[Id], constructors: List[Constructor])
+  case Interface(id: Id, tparams: List[Id], properties: List[Property])
 }
-export Decl.*
+export Declaration.*
+
+case class Constructor(id: Id, fields: List[Field]) extends Tree
+case class Field(id: Id, tpe: ValueType) extends Tree
+case class Property(id: Id, tpe: BlockType) extends Tree
+
+enum Param extends Tree {
+  def id: Id
+
+  case ValueParam(id: Id, tpe: ValueType)
+  case BlockParam(id: Id, tpe: BlockType)
+  case EvidenceParam(id: Id)
+}
+export Param.*
 
 /**
  * FFI external definitions
  */
 enum Extern {
-  case Def(id: Symbol, tpe: core.BlockType.Function, params: List[Param], body: String)
+  // WARNING: builtins do not take evidence. If they are passed as function argument, they need to be eta-expanded.
+  //   (however, if they _would_ take evidence, we could model mutable state with this)
+  // TODO revisit
+  case Def(id: Id, tparams: List[Id], params: List[Param], ret: ValueType, body: String)
   case Include(contents: String)
 }
 
 enum Definition {
-  case Def(id: Symbol, tpe: core.BlockType, block: Block)
-  case Let(id: Symbol, tpe: core.ValueType, binding: Expr)
+  case Def(id: Id, block: Block)
+  case Let(id: Id, binding: Expr)
 }
 
 /**
- * Fine-grain CBV: Arguments can be either expressions or blocks
+ * Fine-grain CBV: Arguments can be evidence, expressions, or blocks
  */
 sealed trait Argument extends Tree
 
 /**
  * Expressions
  */
-sealed trait Expr extends Argument
-case class ValueVar(id: Symbol, tpe: core.ValueType) extends Expr
+enum Expr extends Argument {
+  case ValueVar(id: Id, annotatedType: ValueType)
+  case Literal(value: Any, annotatedType: ValueType)
 
-case class Literal(value: Any, tpe: core.ValueType) extends Expr
-case class PureApp(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Expr
-case class Select(target: Expr, field: Symbol, tpe: core.ValueType) extends Expr
-case class Box(b: Block) extends Expr
-case class Run(s: Stmt, tpe: core.ValueType) extends Expr
+  // invariant, block b is known to be pure; does not take evidence, does not use IO resources.
+  case PureApp(b: Block, targs: List[ValueType], args: List[Argument])
+  case Select(target: Expr, field: Id, annotatedType: ValueType)
+  case Box(b: Block)
+
+  case Run(s: Stmt)
+
+  val tpe: ValueType = Type.inferType(this)
+}
+export Expr.*
+
+
+// TODO
+//   case class DirectApp(b: Block, targs: List[ValueType], args: List[Argument]) extends Expr
+
 
 /**
  * Blocks
  */
-sealed trait Param extends Tree { def id: Symbol }
-case class ValueParam(id: Symbol, tpe: core.ValueType) extends Param
-case class BlockParam(id: Symbol, tpe: core.BlockType) extends Param
-case class EvidenceParam(id: EvidenceSymbol) extends Param
+enum Block extends Argument  {
 
-sealed trait Block extends Argument
-case class BlockVar(id: Symbol, tpe: core.BlockType) extends Block
+  case BlockVar(id: Id, annotatedType: BlockType)
+  case BlockLit(tparams: List[Id], params: List[Param], body: Stmt)
+  case Member(b: Block, field: Id, annotatedTpe: BlockType)
 
-// TODO add type params here
-case class BlockLit(params: List[Param], body: Stmt) extends Block
-case class Member(b: Block, field: Symbol) extends Block
-case class Unbox(e: Expr) extends Block
-case class New(impl: Implementation) extends Block
+  // WARNING not officially supported, yet
+  case Unbox(e: Expr)
+  case New(impl: Implementation)
+
+  val tpe: BlockType = Type.inferType(this)
+}
+export Block.*
 
 /**
  * Statements
  */
-sealed trait Stmt extends Tree
+enum Stmt extends Tree  {
+  case Scope(definitions: List[Definition], body: Stmt)
 
-case class Scope(definitions: List[Definition], body: Stmt) extends Stmt
+  // Fine-grain CBV
+  case Return(e: Expr)
+  case Val(id: Id, binding: Stmt, body: Stmt)
+  case App(b: Block, targs: List[ValueType], args: List[Argument])
 
-// Fine-grain CBV
-case class Return(e: Expr) extends Stmt
-case class Val(id: Symbol, tpe: core.ValueType, binding: Stmt, body: Stmt) extends Stmt
-case class App(b: Block, targs: List[core.ValueType], args: List[Argument]) extends Stmt
+  // Local Control Flow
+  case If(cond: Expr, thn: Stmt, els: Stmt)
+  case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
 
-// Local Control Flow
-case class If(cond: Expr, thn: Stmt, els: Stmt) extends Stmt
-case class Match(scrutinee: Expr, clauses: List[(Constructor, BlockLit)], default: Option[Stmt]) extends Stmt
+  // Effects
+  case State(id: Id, init: Expr, region: Symbol, body: Stmt)
+  case Try(body: Block, handler: List[Implementation])
+  case Region(body: Block)
 
-// Effects
-case class State(id: Symbol, init: Expr, region: Symbol, body: Stmt) extends Stmt
-case class Try(body: Block, answerType: core.ValueType, handler: List[Implementation]) extends Stmt
-case class Region(body: Block, answerType: core.ValueType) extends Stmt
+  // Others
+  case Hole()
 
-// Others
-case object Hole extends Stmt
+  val tpe: ValueType = Type.inferType(this)
+}
+export Stmt.*
 
 /**
  * An instance of an interface, concretely implementing the operations.
  *
  * Used to represent handlers / capabilities, and objects / modules.
  */
-case class Implementation(id: symbols.Interface, operations: List[Operation]) extends Tree
+case class Implementation(interface: BlockType.Interface, operations: List[Operation]) extends Tree {
+  val tpe = interface
+}
 
 /**
  * Implementation of a method / effect operation.
  */
-case class Operation(name: symbols.Symbol, implementation: BlockLit)
+case class Operation(name: symbols.Symbol, implementation: Block.BlockLit)
 
 
 
@@ -120,72 +157,100 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-def freeVariables(d: Definition): Set[Symbol] = d match {
-  case Definition.Def(id, tpe, block) => freeVariables(block)
-  case Definition.Let(id, tpe, binding) => freeVariables(binding)
+case class FreeVariables(vars: immutable.HashMap[core.Id, lifted.Param]) {
+  def ++(o: FreeVariables): FreeVariables = {
+    FreeVariables(vars.merged(o.vars){ case ((leftId -> leftParam), (rightId -> rightParam)) =>
+      assert(leftParam == rightParam, "Same core.Id occurs free with different types.")
+      (leftId -> leftParam)
+    })
+  }
+  def --(o: FreeVariables): FreeVariables = {
+    FreeVariables(vars.filter{ case (leftId -> leftParam) =>
+      if(o.vars.contains(leftId)) {
+        assert(leftParam == o.vars(leftId), "core.Id bound with different type than it's occurences.")
+        false
+      } else { true }
+    })
+  }
+
+  def toList: List[lifted.Param] = vars.values.toList
+  // TODO add further accessors as needed
+}
+object FreeVariables {
+  def empty = FreeVariables(immutable.HashMap.empty)
+  def apply(ps: Param*): FreeVariables = ps.toFV
+  extension (i: Iterable[lifted.Param]) def toFV: FreeVariables = {
+    FreeVariables(immutable.HashMap.from(i.map { p => p.id -> p }))
+  }
+  extension(self: Iterable[FreeVariables]) def combineFV: FreeVariables = {
+      self.fold(FreeVariables.empty)(_ ++ _)
+  }
+}
+import FreeVariables.{toFV, combineFV}
+def freeVariables(d: Definition): FreeVariables = d match {
+  case Definition.Def(id, block) => freeVariables(block)
+  case Definition.Let(id, binding) => freeVariables(binding)
 }
 
-def freeVariables(stmt: Stmt): Set[Symbol] = stmt match {
+def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   // TODO fix
   case Scope(definitions, body) =>
-    var free: Set[Symbol] = Set.empty
+    var free: FreeVariables = FreeVariables.empty
     // we assume definitions can be mutually recursive, for now.
-    var bound: Set[Symbol] = definitions.collect { case Definition.Def(id, _, _) => id }.toSet
+    var bound: FreeVariables = definitions.collect { case Definition.Def(id, block) => BlockParam(id, block.tpe) }.toFV
     definitions.foreach {
-      case Definition.Def(id, tpe, block) =>
+      case Definition.Def(id, block) =>
         free ++= freeVariables(block) -- bound
-      case Definition.Let(id, tpe, binding) =>
+      case Definition.Let(id, binding) =>
         free ++= freeVariables(binding) -- bound
-        bound ++= Set(id)
+        bound ++= FreeVariables(ValueParam(id, binding.tpe))
     }
     freeVariables(body) -- bound ++ free
-  case Val(id, tpe, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(id)
-  case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- FreeVariables(ValueParam(id, binding.tpe))
+  case App(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
-  case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
-  case Hole => Set.empty
-  case State(id, init, region, body) => freeVariables(init) ++ freeVariables(body) -- Set(id, region)
-  case Try(body, tpe, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
-  case Region(body, _) => freeVariables(body)
+  case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
+  case Hole() => FreeVariables.empty
+  case State(id, init, region, body) =>
+    freeVariables(init) ++ freeVariables(body) --
+      FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
+        BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
+  case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
+  case Region(body) => freeVariables(body)
 }
 
-def freeVariables(expr: Expr): Set[Symbol] = expr match {
-  case ValueVar(id, tpe) => Set(id)
-  case Literal(value, tpe) => Set.empty
-  case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+def freeVariables(expr: Expr): FreeVariables = expr match {
+  case ValueVar(id, tpe) => FreeVariables(ValueParam(id, tpe))
+  case Literal(value, tpe) => FreeVariables.empty
+  case PureApp(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
-  case Run(s, tpe) => freeVariables(s)
+  case Run(s) => freeVariables(s)
 }
 
-def freeVariables(arg: Argument): Set[Symbol] = arg match {
+def freeVariables(arg: Argument): FreeVariables = arg match {
   case expr: Expr => freeVariables(expr)
   case block: Block => freeVariables(block)
   case ev: Evidence => freeVariables(ev)
 }
 
-def freeVariables(block: Block): Set[Symbol] = block match {
-  case BlockVar(id, _) => Set(id)
-  case BlockLit(params, body) =>
-    val bound = params.map {
-      case ValueParam(id, tpe) => id
-      case BlockParam(id, tpe) => id
-      case EvidenceParam(id) => id
-    }
-    freeVariables(body) -- bound
-  case Member(b, field) => freeVariables(b)
+def freeVariables(block: Block): FreeVariables = block match {
+  case BlockVar(id, tpe) => FreeVariables(BlockParam(id, tpe))
+  case BlockLit(tparams, params, body) =>
+    freeVariables(body) -- params.toFV
+  case Member(b, field, tpe) => freeVariables(b)
   case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case New(impl) => freeVariables(impl) // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }
 
-def freeVariables(op: Operation): Set[Symbol] = op match {
+def freeVariables(op: Operation): FreeVariables = op match {
   case Operation(name, body) => freeVariables(body)
 }
 
-def freeVariables(impl: Implementation): Set[Symbol] = impl match {
-  case Implementation(id, operations) => operations.flatMap(freeVariables).toSet
+def freeVariables(impl: Implementation): FreeVariables = impl match {
+  case Implementation(id, operations) => operations.map(freeVariables).combineFV
 }
 
-def freeVariables(ev: Evidence): Set[Symbol] = ev.scopes.toSet
+def freeVariables(ev: Evidence): FreeVariables = ev.scopes.map{ e => EvidenceParam(e) }.toFV
 

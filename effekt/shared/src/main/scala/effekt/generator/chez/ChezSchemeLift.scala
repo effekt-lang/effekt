@@ -2,6 +2,7 @@ package effekt
 package generator
 package chez
 
+import effekt.core.Id
 import effekt.context.Context
 import effekt.lifted.*
 import effekt.symbols.{ Module, Symbol, Wildcard, TermSymbol }
@@ -22,7 +23,7 @@ object ChezSchemeLift extends Backend {
   /**
    * Returns [[Compiled]], containing the files that should be written to.
    */
-  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context) =
+  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using Context) =
     LiftInference(main).map { lifted =>
       val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
       val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
@@ -42,7 +43,7 @@ object ChezSchemeLift extends Backend {
   private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
     LiftInference(in).toList.flatMap { lifted => toChez(lifted.core) }
 
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl)(implicit C: Context): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
@@ -75,14 +76,13 @@ object ChezSchemeLift extends Backend {
 
   def toChezExpr(stmt: Stmt): CPS = stmt match {
     case Return(e) => CPS.pure(toChez(e))
-
-    case App(b, _, args) => CPS.inline { k => chez.Call(chez.Call(toChez(b), args map toChez), List(k.reify)) }
+    case App(b, targs, args) => CPS.inline { k => chez.Call(chez.Call(toChez(b), args map toChez), List(k.reify)) }
 
     case If(cond, thn, els) =>
       CPS.join { k =>
         chez.If(toChez(cond), toChezExpr(thn)(k), toChezExpr(els)(k))
       }
-    case Val(id, tpe, binding, body) =>
+    case Val(id, binding, body) =>
       toChezExpr(binding).flatMap { value =>
         CPS.inline { k =>
           chez.Let(List(Binding(nameDef(id), value)), toChez(body, k))
@@ -99,7 +99,7 @@ object ChezSchemeLift extends Backend {
       chez.Cond(cls, default.map { d => toChezExpr(d)(k) })
     }
 
-    case Hole => CPS.inline { k => chez.Builtin("hole") }
+    case Hole() => CPS.inline { k => chez.Builtin("hole") }
 
     case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
@@ -111,15 +111,15 @@ object ChezSchemeLift extends Backend {
        chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }
 
-    case Try(body, tpe, handler) =>
+    case Try(body, handler) =>
       val handlers = handler.map { h =>
-        val names = RecordNames(h.id)
+        val names = RecordNames(h.interface.name)
         // (let ((OPNAME (lambda (ev args...)  ((ev (lambda k1 => lambda k2 =>
         //      (define ([[resume]] ev v) (ev (k1 v)))
         //      [[BODY]]_k2))))
         //   (CONSTRUCTOR OPNAME ...)
         val operations = h.operations.map {
-          case Operation(op, BlockLit(params, body)) =>
+          case Operation(op, BlockLit(tparams, params, body)) =>
             val opName = freshName(op.name.name)
             val resumeName = nameDef(params.last.id)
             val paramNames = params.init.map(p => nameDef(p.id))
@@ -131,7 +131,7 @@ object ChezSchemeLift extends Backend {
             val k1 = freshName("k1")
             val k2 = freshName("k2")
 
-            val Block(defs, exprs, result) = toChez(body, Continuation.Dynamic(Variable(k2)))
+            val chez.Block(defs, exprs, result) = toChez(body, Continuation.Dynamic(Variable(k2)))
 
             chez.Binding(opName, chez.Lambda(List(ev) ++ paramNames,
               chez.Call(ev, chez.Lambda(List(k1), chez.Lambda(List(k2),
@@ -152,28 +152,25 @@ object ChezSchemeLift extends Backend {
           chez.Call(CPS.reset(chez.Call(toChez(body), CPS.lift :: handlers.map(h => Variable(h.name)))), List(k.reify)))
       }
 
-    case Region(body, _) =>
+    case Region(body) =>
      CPS.inline { k => chez.Call(chez.Builtin("with-region", toChez(body)), List(k.reify)) }
 
     case other => CPS.inline { k => chez.Let(Nil, toChez(other, k)) }
   }
 
-  def toChez(decl: lifted.Decl): List[chez.Def] = decl match {
-    case Data(did, ctors) =>
-      ctors.flatMap {
-        case ctor: symbols.Constructor => generateConstructor(ctor, ctor.fields)
-        case other => sys error s"Wrong type, expected constructor but got: ${ other }"
-      }
+  def toChez(decl: Declaration): List[chez.Def] = decl match {
+    case Declaration.Data(did, _, ctors) =>
+      ctors.flatMap { ctor => generateConstructor(ctor.id, ctor.fields.map(_.id)) }
 
     // We use chez scheme records to also represent capabilities.
-    case Decl.Interface(id, operations) =>
-      generateConstructor(id, operations)
+    case Declaration.Interface(id, _, operations) =>
+      generateConstructor(id, operations.map(_.id))
   }
 
   def toChez(decl: lifted.Extern): chez.Def = decl match {
-    case Extern.Def(id, tpe, params, body) =>
+    case Extern.Def(id, tparams, params, ret, body) =>
       chez.Constant(nameDef(id),
-        chez.Lambda(params map { p => ChezName(p.id.name.name) },
+        chez.Lambda( params.map { p => ChezName(p.id.name.name) },
           chez.RawExpr(body)))
 
     case Extern.Include(contents) =>
@@ -181,10 +178,10 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(defn: Definition): Either[chez.Def, Option[chez.Expr]] = defn match {
-    case Definition.Def(id, tpe, block) =>
+    case Definition.Def(id, block) =>
       Left(chez.Constant(nameDef(id), toChez(block)))
 
-    case Definition.Let(Wildcard(), tpe, binding) =>
+    case Definition.Let(Wildcard(), binding) =>
       toChez(binding) match {
         // drop the binding altogether, if it is of the form:
         //   let _ = myVariable; BODY
@@ -194,7 +191,7 @@ object ChezSchemeLift extends Backend {
       }
 
     // we could also generate a let here...
-    case Definition.Let(id, tpe, binding) =>
+    case Definition.Let(id, binding) =>
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 
@@ -215,7 +212,7 @@ object ChezSchemeLift extends Backend {
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
-    case BlockLit(params, body) =>
+    case BlockLit(tparams, params, body) =>
       val k = freshName("k")
       chez.Lambda((params map toChez),
         chez.Lambda(List(k),
@@ -226,16 +223,16 @@ object ChezSchemeLift extends Backend {
     case BlockVar(id, tpe) =>
       Variable(nameRef(id))
 
-    case b @ BlockLit(params, body) => toChez(b)
+    case b @ BlockLit(tparams, params, body) => toChez(b)
 
-    case Member(b, field) =>
+    case Member(b, field, annotatedTpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
     case Unbox(e) =>
       toChez(e)
 
     case New(Implementation(id, clauses)) =>
-      val ChezName(name) = nameRef(id)
+      val ChezName(name) = nameRef(id.name)
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
   }
 
@@ -263,7 +260,7 @@ object ChezSchemeLift extends Backend {
 
     case Box(b) => toChez(b)
 
-    case Run(s, tpe) => toChezExpr(s).run
+    case Run(s) => toChezExpr(s).run
   }
 
   /**

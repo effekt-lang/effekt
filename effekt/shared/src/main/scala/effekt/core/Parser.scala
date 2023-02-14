@@ -137,11 +137,17 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Pure Expressions
   // ----------------
   lazy val pure: P[Pure] =
+    pureNonAccess ~ many((`.` ~> id) ~ (`:` ~> valueType)) ^^ {
+      case firstTarget ~ accesses => accesses.foldLeft(firstTarget){
+        case (target, field ~ tpe) => Pure.Select(target, field, tpe)
+      }
+    }
+
+  lazy val pureNonAccess: P[Pure] =
     ( literal
     | id ~ (`:` ~> valueType) ^^ Pure.ValueVar.apply
     | `box` ~> captures ~ block ^^ { case capt ~ block => Pure.Box(block, capt) }
     | block ~ maybeTypeArgs ~ valueArgs ^^ Pure.PureApp.apply
-    | pure ~ (`.` ~> id) ~ (`:` ~> valueType) ^^ Pure.Select.apply
     | failure("Expected a pure expression.")
     )
 
@@ -169,12 +175,20 @@ class CoreParsers(positions: Positions, names: Names) extends EffektLexers(posit
   // Blocks
   // ------
   lazy val block: P[Block] =
+    ( blockNonMember ~ many((`.` ~> id) ~ (`:` ~> blockType)) ^^ {
+          case firstReceiver ~ fields => fields.foldLeft(firstReceiver) {
+          case (receiver, field ~ tpe) => Block.Member(receiver, field, tpe)
+        }
+      }
+    | blockNonMember
+    )
+
+  lazy val blockNonMember: P[Block] =
     ( id ~ (`:` ~> blockType) ~ (`@` ~> captures) ^^ Block.BlockVar.apply
     | `unbox` ~> pure ^^ Block.Unbox.apply
     | `new` ~> implementation ^^ Block.New.apply
     | blockLit
     // TODO check left associative nesting (also for select)
-    | block ~ (`.` ~> id) ~ (`:` ~> blockType) ^^ Block.Member.apply
     | `(` ~> block <~ `)`
     )
 
@@ -304,4 +318,3 @@ object CoreParsers {
     val parsers = CoreParsers(names)
     parsers.parseAll(parsers.definition, input)
 }
-

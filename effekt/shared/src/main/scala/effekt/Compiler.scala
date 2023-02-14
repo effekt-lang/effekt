@@ -232,15 +232,27 @@ trait Compiler {
    * It does **not** generate files and write them using `saveOutput`!
    * This is achieved by `compileWhole`.
    */
-  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    (Frontend andThen Middleend andThen CoreDependencies andThen Backend.separate).apply(source)
+  def compileSeparate(source: Source)(using C: Context): Option[(CoreTransformed, Document)] = C.config.backend() match {
+    case "llvm" =>
+      (Frontend andThen Middleend andThen core.PolymorphismBoxing andThen CoreDependencies andThen Backend.separate).apply(source)
+    case _ =>
+      (Frontend andThen Middleend andThen CoreDependencies andThen Backend.separate).apply(source)
+  }
 
   /**
    * Used by [[Driver]] and by [[Repl]] to compile a file
    */
-  def compileWhole(source: Source)(using Context): Option[Compiled] =
-    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
+  def compileWhole(source: Source)(using C: Context): Option[Compiled] = C.config.backend() match {
+    case "llvm" =>
+      (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen core.PolymorphismBoxing andThen Backend.whole).apply(source)
+    case _ =>
+      (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
+  }
 
-  def compileAll(source: Source)(using Context): Option[CoreTransformed] =
-    (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
+  def compileAll(source: Source)(using C: Context): Option[CoreTransformed] = C.config.backend() match {
+    case "llvm" =>
+      (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen core.PolymorphismBoxing).apply (source)
+    case _ =>
+      (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
+  }
 }

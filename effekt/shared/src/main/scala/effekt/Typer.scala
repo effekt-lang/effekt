@@ -94,6 +94,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
     }
   }
 
+
   //<editor-fold desc="expressions">
 
   def checkExpr(expr: Term, expected: Option[ValueType])(using Context, Captures): Result[ValueType] =
@@ -775,7 +776,7 @@ object Typer extends Phase[NameResolved, Typechecked] {
           val got = sym.tpe
           matchDeclared(got, adjusted, param)
           // bind types to check body
-          Context.bind(param.symbol, got)
+          Context.bind(param.symbol, got, CaptureSet(sym.capture))
           got
       }
 

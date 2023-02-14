@@ -21,6 +21,15 @@ object PrettyPrinter extends ParenPrettyPrinter {
   def format(s: Stmt): String =
     pretty(toDoc(s), 60).layout
 
+  def format(t: ValueType): String =
+    pretty(toDoc(t), 60).layout
+
+  def format(t: BlockType): String =
+    pretty(toDoc(t), 60).layout
+
+  def format(t: Block): String =
+    pretty(toDoc(t), 60).layout
+
   val emptyline: Doc = line <> line
 
   def toDoc(m: ModuleDecl): Doc = {
@@ -48,7 +57,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case New(handler)     => "new" <+> toDoc(handler)
   }
 
-  // TODO print types
   def toDoc(p: ValueParam): Doc = p.id.name.toString <> ":" <+> toDoc(p.tpe)
   def toDoc(p: BlockParam): Doc = braces(p.id.name.toString)
 
@@ -78,11 +86,6 @@ object PrettyPrinter extends ParenPrettyPrinter {
     val vargsDoc = vargs.map(toDoc)
     val bargsDoc = bargs.map(toDoc)
     targsDoc <> parens(vargsDoc ++ bargsDoc)
-
-  def argToDoc(e: Argument): Doc = e match {
-    case e: Expr  => toDoc(e)
-    case b: Block => toDoc(b)
-  }
 
   def paramsToDoc(tps: List[symbols.Symbol], vps: List[Param.ValueParam], bps: List[Param.BlockParam]): Doc = {
     val tpsDoc = if (tps.isEmpty) emptyDoc else brackets(tps.map(toDoc))

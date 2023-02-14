@@ -1,0 +1,65 @@
+type Integer {
+   InjInt(x: Int)
+}
+
+type List[A] {
+  Nil(); Cons(a: A, tail: List[A])
+}
+
+def map[A,B](l: List[A]){ f: A => B }: List[B] = {
+  l match {
+    case Nil() => Nil()
+    case Cons(hd, tl) => Cons(f(hd), map(tl){f})
+  }
+}
+
+def show(i: Int): String = {
+  def impl_digit(i: Int): String = {
+    if(i==0){"0"} else
+    if(i==1){"1"} else
+    if(i==2){"2"} else
+    if(i==3){"3"} else
+    if(i==4){"4"} else
+    if(i==5){"5"} else
+    if(i==6){"6"} else
+    if(i==7){"7"} else
+    if(i==8){"8"} else
+    if(i==9){"9"} else
+    "?"
+  }
+  def impl(i: Int): String = {
+    if(i<10){impl_digit(i)}else{
+      impl(i/10) ++ impl_digit(mod(i,10))
+    }
+  }
+  if(i==0) {
+    "0"
+  } else {
+    impl(i)
+  }
+}
+def show(i: Integer): String = {
+  i match {
+    case InjInt(j) => show(j)
+  }
+}
+
+def show(l: List[Integer]): String = {
+  def impl(t: List[Integer]): String = {
+    t match {
+      case Nil() => "]"
+      case Cons(hd, tl) => ", " ++ show(hd) ++ impl(tl)
+    }
+  }
+
+  l match {
+    case Nil() => "[]"
+    case Cons(hd,tl) => "[" ++ show(hd) ++ impl(tl)
+  }
+}
+
+def main(): Unit = {
+  val x = [InjInt(12), InjInt(4)]
+  val y = map(x){ x => x }
+  println(show(y))
+}

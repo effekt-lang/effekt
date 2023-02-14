@@ -58,6 +58,10 @@ case class Module(
     case e: Interface => e
   }
 
+  def findPrelude: Module = {
+    dependencies.find(_.name.name == "effekt").get
+  }
+
   /**
    * It is actually possible, that exports is invoked on a single module multiple times:
    * The dependencies of a module might change, which triggers frontend on the same module

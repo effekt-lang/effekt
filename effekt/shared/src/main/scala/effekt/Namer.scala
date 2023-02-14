@@ -576,10 +576,9 @@ object Namer extends Phase[Parsed, NameResolved] {
     /**
      * TODO share code with [[typer.Typer.makeFunctionType]]
      */
-    case source.FunctionType(vparams, ret, effects) => Context scoped {
+    case source.FunctionType(vparams, bparams, ret, effects) => Context scoped {
       // as soon as we have those kinds of params in source we need this
       val tparams = List.empty[source.Id]
-      val bparams = List.empty[(Option[IdDef], source.BlockType)]
 
       val tps = tparams.map(resolve)
       val vps = vparams.map(resolve)

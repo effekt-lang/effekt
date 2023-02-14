@@ -107,7 +107,7 @@ object DeadCodeElimination extends Tree.Rewrite[Unit] {
       Let(bs, transformedBody)
   }
 
-  override def rewrite(block: Block)(using Unit): Block = visit(block) {
+  override def rewrite(block: Block)(using Unit): Block = block match {
 
     case Block(defs, exprs, result) =>
       val transformedResult = rewrite(result)
@@ -189,67 +189,34 @@ object FreeVariables extends Tree.Query[Unit, Set[ChezName]] {
 object Tree {
 
   // This solution is between a fine-grained visitor and a untyped and unsafe traversal.
-  trait Rewrite[Ctx] {
+  trait Rewrite[Ctx] extends util.Structural {
 
     // Hooks to override
     def expr(using C: Ctx): PartialFunction[Expr, Expr] = PartialFunction.empty
     def defn(using C: Ctx): PartialFunction[Def, Def] = PartialFunction.empty
 
-    /**
-     * Hook that can be overridden to perform an action at every node in the tree
-     */
-    def visit[T](source: T)(visitor: T => T)(using Ctx): T = visitor(source)
+    def rewrite(block: Block)(using Ctx): Block = rewriteStructurally(block)
+    def rewrite(binding: Binding)(using Ctx): Binding = rewriteStructurally(binding)
+    def rewrite(h: Handler)(using Ctx): Handler = rewriteStructurally(h)
+    def rewrite(op: Operation)(using Ctx): Operation = rewriteStructurally(op)
 
-    def rewrite(block: Block)(using Ctx): Block = visit(block) {
-      case Block(defs, exprs, result) => Block(defs map rewrite, exprs map rewrite, rewrite(result))
-    }
+    def rewrite(e: Expr)(using Ctx): Expr = rewriteStructurally(e, expr)
+    def rewrite(t: Def)(using C: Ctx): Def = rewriteStructurally(t, defn)
 
-    def rewrite(binding: Binding)(using Ctx): Binding = visit(binding) {
-      case Binding(name, expr) => Binding(name, rewrite(expr))
-    }
-
-    def rewrite(h: Handler)(using Ctx): Handler = visit(h) {
-      case Handler(constructorName, operations) => Handler(constructorName, operations map rewrite)
-    }
-    def rewrite(op: Operation)(using Ctx): Operation = visit(op) {
-      case Operation(name, params, k, body) => Operation(name, params, k, rewrite(body))
-    }
-
-    def rewrite(e: Expr)(using Ctx): Expr = visit(e) {
-      case e if expr.isDefinedAt(e) => expr(e)
-      case e: Variable => e
-      case e: RawExpr => e
-      case e: RawValue => e
-
-      case Call(callee, arguments) => Call(rewrite(callee), arguments map rewrite)
-      case Let(bindings, body) => Let(bindings map rewrite, rewrite(body))
-      case Let_*(bindings, body) => Let_*(bindings map rewrite, rewrite(body))
-      case Lambda(params, body) => Lambda(params, rewrite(body))
-      case If(cond, thn, els) => If(rewrite(cond), rewrite(thn), rewrite(els))
-      case Cond(clauses, default) => Cond(clauses map { case (c, t) => (rewrite(c), rewrite(t)) }, default map rewrite)
-      case Handle(handlers, body) => Handle(handlers map rewrite, rewrite(body))
-    }
-
-    def rewrite(t: Def)(using C: Ctx): Def = visit(t) {
-      case t if defn.isDefinedAt(t) => defn(t)
-      case r : RawDef => r
-      case r : Record => r
-      case Constant(name, value) => Constant(name, rewrite(value))
-      case Function(name, params, body) => Function(name, params, rewrite(body))
+    def rewrite(clause: (Expr, Expr))(using Ctx): (Expr, Expr) = clause match {
+      case (c, t) => (rewrite(c), rewrite(t))
     }
   }
 
   trait Visit[Ctx] extends Query[Ctx, Unit] {
     override def empty = ()
     override def combine = (_, _) => ()
-    override def combineAll(rs: List[Unit]): Unit = ()
   }
 
-  trait Query[Ctx, Res] {
+  trait Query[Ctx, Res] extends util.Structural {
 
     def empty: Res
     def combine: (Res, Res) => Res
-    def combineAll(rs: List[Res]): Res = rs.foldLeft(empty)(combine)
 
     // Hooks to override
     def expr(using Ctx): PartialFunction[Expr, Res] = PartialFunction.empty
@@ -260,51 +227,19 @@ object Tree {
      */
     def visit[T](t: T)(visitor: T => Res)(using Ctx): Res = visitor(t)
 
-    /**
-     * Hook that can be overridden to perform something for each new lexical scope
-     */
-    def scoped(action: => Res)(using Ctx): Res = action
-
-    def query(e: Expr)(using Ctx): Res = visit(e) {
-
-      case e if expr.isDefinedAt(e) => expr.apply(e)
-
-      case e: RawExpr => empty
-      case e: RawValue => empty
-      case e: Variable => empty
-
-      case Let(bindings, body) => combineAll(query(body) :: bindings.map(query))
-      case Let_*(bindings, body) => combineAll(query(body) :: bindings.map(query))
-      case Lambda(params, body) => query(body)
-
-      case Call(callee, arguments) => combineAll(query(callee) :: arguments.map(query))
-      case If(cond, thn, els) => combineAll(List(query(cond), query(thn), query(els)))
-      case Cond(clauses, default) => combineAll(default.toList.map(query) ++ clauses.map { case (p, e) => combine(query(p), query(e)) })
-
-      case Handle(handlers, body) =>
-        combineAll(query(body) :: handlers.map {
-          case Handler(name, ops) => combineAll(ops map {
-            case Operation(name, params, k, body) => query(body)
-          })
-        })
+    inline def structuralQuery[T](el: T, pf: PartialFunction[T, Res] = PartialFunction.empty)(using Ctx): Res = visit(el) { t =>
+      if pf.isDefinedAt(el) then pf.apply(el) else queryStructurally(t, empty, combine)
     }
 
-    def query(d: Def)(using Ctx): Res = visit(d) {
+    def query(e: Expr)(using Ctx): Res = structuralQuery(e, expr)
+    def query(d: Def)(using Ctx): Res = structuralQuery(d, defn)
+    def query(b: Block)(using Ctx): Res = structuralQuery(b)
+    def query(b: Binding)(using Ctx): Res = structuralQuery(b)
+    def query(e: Handler)(using Ctx): Res = structuralQuery(e)
+    def query(e: Operation)(using Ctx): Res = structuralQuery(e)
 
-      case d if defn.isDefinedAt(d) => defn.apply(d)
-
-      case Constant(name, value) => query(value)
-      case Function(name, params, body) => query(body)
-      case RawDef(raw) => empty
-      case Record(typeName, constructorName, predicateName, uid, fields) => empty
-    }
-
-    def query(b: Block)(using Ctx): Res = visit(b) {
-      case Block(defs, exprs, result) => scoped { combineAll(query(result) :: defs.map(query) ++ exprs.map(query)) }
-    }
-
-    def query(b: Binding)(using Ctx): Res = visit(b) {
-      case Binding(name, expr) => query(expr)
+    def query(clause: (Expr, Expr))(using Ctx): Res = clause match {
+      case (p, e) => combine(query(p), query(e))
     }
   }
 }

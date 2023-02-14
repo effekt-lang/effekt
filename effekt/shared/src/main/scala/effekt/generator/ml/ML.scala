@@ -4,7 +4,9 @@ package ml
 
 import effekt.context.Context
 import effekt.lifted.*
-import effekt.symbols.{Anon, Binder, BlockSymbol, BlockType, Module, Symbol, TermSymbol, TypeConstructor, TypeSymbol, ValueSymbol, ValueType, Wildcard}
+import effekt.core.Id
+import effekt.symbols.{ Symbol, TermSymbol, Module, Wildcard }
+
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
@@ -76,82 +78,71 @@ object ML extends Backend {
     decls ++ externs ++ rest
   }
 
-  def tpeToML(tpe: symbols.BlockType)(using C: Context): ml.Type = tpe match {
-    case BlockType.FunctionType(tparams, _, _, _, _, _) if tparams.nonEmpty =>
+  def tpeToML(tpe: BlockType)(using C: Context): ml.Type = tpe match {
+    case BlockType.Function(tparams, eparams, vparams, bparams, ret) if tparams.nonEmpty =>
       C.abort("polymorphic functions not supported")
-    case BlockType.FunctionType(Nil, Nil, Nil, Nil, resType, _) =>
+    case BlockType.Function(Nil, Nil, Nil, Nil, resType) =>
       ml.Type.Fun(List(ml.Type.Unit), tpeToML(resType))
-    case BlockType.FunctionType(Nil, Nil, vtpes, Nil, resType, _) =>
+    case BlockType.Function(Nil, Nil, vtpes, Nil, resType) =>
       ml.Type.Fun(vtpes.map(tpeToML), tpeToML(resType))
-    case BlockType.FunctionType(tparams, cparams, vparams, bparams, result, effects) =>
-      ???
-    case BlockType.InterfaceType(typeConstructor, args) =>
-        ml.Type.Tapp(ml.Type.Data(name(typeConstructor)), args.map(tpeToML))
+    case BlockType.Function(tparams, eparams, vparams, bparams, result) =>
+      C.abort("higher order functions currently not supported")
+    case BlockType.Interface(typeConstructor, args) =>
+      ml.Type.Tapp(ml.Type.Data(name(typeConstructor)), args.map(tpeToML))
   }
 
-  def tpeToML(tpe: symbols.ValueType)(using Context): ml.Type = tpe match {
-    case ValueType.BoxedType(blockType, _) =>
-      tpeToML(blockType)
-    case ValueType.ValueTypeRef(tvar) =>
-      // Note that types with generic equality needs to be `''a` which is
-      // ... annoying
-      ml.Type.Var(name(tvar))
-    case ValueType.ValueTypeApp(tc, Nil) =>
-      tcToML(tc)
-    case ValueType.ValueTypeApp(tc, args) =>
-      ml.Type.Tapp(tcToML(tc), args.map(tpeToML))
+  def tpeToML(tpe: ValueType)(using Context): ml.Type = tpe match {
+    case lifted.Type.TUnit => ml.Type.Unit
+    case lifted.Type.TInt => ml.Type.Integer
+    case lifted.Type.TDouble => ml.Type.Real
+    case lifted.Type.TBoolean => ml.Type.Bool
+    case lifted.Type.TString => ml.Type.String
+    case ValueType.Var(id) => ml.Type.Var(name(id))
+    case ValueType.Data(id, Nil) => ml.Type.Data(name(id))
+    case ValueType.Data(id, args) => ml.Type.Tapp(ml.Type.Data(name(id)), args.map(tpeToML))
+    case ValueType.Boxed(tpe) => tpeToML(tpe)
   }
 
-  def tcToML(tc: symbols.TypeConstructor): ml.Type = tc match {
-    case symbols.builtins.UnitSymbol       => ml.Type.Unit
-    case symbols.builtins.IntSymbol        => ml.Type.Integer
-    case symbols.builtins.DoubleSymbol     => ml.Type.Real
-    case symbols.builtins.BooleanSymbol    => ml.Type.Bool
-    case symbols.builtins.StringSymbol     => ml.Type.String
-    case TypeConstructor.DataType(_, _, _) => ml.Type.Data(name(tc))
-    case TypeConstructor.Record(_, _, _)   => ml.Type.Data(name(tc))
-    case TypeConstructor.ExternType(_, _)  => ml.Type.Builtin(name(tc))
-  }
+  def toML(decl: Declaration)(using C: Context): List[ml.Binding] = decl match {
+    // TODO
+    case Declaration.Data(id: symbols.TypeConstructor.Record, tparams, List(ctor)) =>
+      recordRep(id, id.constructor, ctor.fields.map { f => f.id })
 
-  def toML(decl: Decl)(using C: Context): List[ml.Binding] = decl match {
-    case Data(did: TypeConstructor.DataType, ctors) =>
-      def constructorToML(s: Symbol): (MLName, Option[ml.Type]) = s match {
-        case symbols.Constructor(_, _, fields, _) =>
-          val tpeList = fields.map(fieldSymbolType)
+    case Data(id, tparams, ctors) =>
+      def constructorToML(c: Constructor): (MLName, Option[ml.Type]) = c match {
+        case Constructor(id, fields) =>
+          val tpeList = fields.map { f => tpeToML(f.tpe) }
           val tpe = typesToTupleIsh(tpeList)
-          (name(s), tpe)
-        case _ => C.panic("Constructor's symbol is not a constructor symbol")
+          (name(id), tpe)
       }
 
-      val tvars: List[ml.Type.Var] = did.tparams.map(p => ml.Type.Var(name(p)))
-      List(ml.Binding.DataBind(name(did), tvars, ctors map constructorToML))
+      val tvars: List[ml.Type.Var] = tparams.map(p => ml.Type.Var(name(p)))
+      List(ml.Binding.DataBind(name(id), tvars, ctors map constructorToML))
 
-    case Decl.Data(id: TypeConstructor.Record, List(ctor: symbols.Constructor)) =>
-      recordRep(id, id.constructor, ctor.fields)
-    case Decl.Interface(id, operations) => recordRep(id, id, operations)
-    case Data(_, _) => C.panic("Data symbol is not DataType or Record")
+    case Declaration.Interface(id, tparams, operations) =>
+      recordRep(id, id, operations.map { op => op.id })
   }
 
-  def recordRep(typeSym: Symbol, caseSym: Symbol, terms: List[Symbol])(using Context): List[ml.Binding] = {
-    val caseName = name(caseSym)
-    val tvars: List[ml.Type.Var] = terms.map(_ => ml.Type.Var(freshName("arg")))
-    val dataDecl = ml.Binding.DataBind(name(typeSym), tvars, List((caseName, typesToTupleIsh(tvars))))
-    val accessors = terms.zipWithIndex.map {
-      case (sym, i) =>
-        val fieldName = name(sym)
-        val patterns = terms.indices.map(
-          j => if (j == i) ml.Pattern.Named(fieldName) else ml.Pattern.Wild()
-        ).toList
-        val pattern = ml.Pattern.Datatype(caseName, patterns)
+  def recordRep(typeName: Id, caseName: Id, props: List[Id])(using Context): List[ml.Binding] = {
+    // we introduce one type var for each property, in order to avoid having to translate types
+    val tvars: List[ml.Type.Var] = props.map(_ => ml.Type.Var(freshName("arg")))
+    val dataDecl = ml.Binding.DataBind(name(typeName), tvars, List((name(caseName), typesToTupleIsh(tvars))))
+    val accessors = props.zipWithIndex.map {
+      case (fieldName, i) =>
+        // _, _, _, arg, _
+        val patterns = props.indices.map {
+          j => if j == i then ml.Pattern.Named(name(fieldName)) else ml.Pattern.Wild()
+        }.toList
+        val pattern = ml.Pattern.Datatype(name(caseName), patterns)
         val args = List(ml.Param.Patterned(pattern))
-        val body = ml.Expr.Variable(fieldName)
-        ml.Binding.FunBind(dataSelectorName(caseSym, sym), args, body)
+        val body = ml.Expr.Variable(name(fieldName))
+        ml.Binding.FunBind(dataSelectorName(caseName, fieldName), args, body)
     }
     dataDecl :: accessors
   }
 
   def toML(ext: Extern)(using Context): ml.Binding = ext match {
-    case Extern.Def(id, _, params, body) =>
+    case Extern.Def(id, tparams, params, ret, body) =>
       ml.FunBind(name(id), params map (paramToML(_, false)), RawExpr(body))
     case Extern.Include(contents) =>
       RawBind(contents)
@@ -163,35 +154,27 @@ object ML extends Backend {
   }
 
   def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
-    case Return(e) => CPS.pure(toML(e))
+    case lifted.Return(e) => CPS.pure(toML(e))
 
-    case App(b, _, args) => CPS.inline { k => Expr.Call(Expr.Call(toML(b), args map toML), List(k.reify)) }
+    case lifted.App(b, targs, args) => CPS.inline { k => ml.Expr.Call(ml.Expr.Call(toML(b), args map toML), List(k.reify)) }
 
-    case If(cond, thn, els) =>
+    case lifted.If(cond, thn, els) =>
       CPS.join { k =>
         ml.If(toML(cond), toMLExpr(thn)(k), toMLExpr(els)(k))
       }
 
-    case Val(id, _, binding, body) =>
+    case lifted.Val(id, binding, body) =>
       toMLExpr(binding).flatMap { value =>
         CPS.inline { k =>
           ml.mkLet(List(ml.ValBind(name(id), value)), toMLExpr(body)(k))
         }
       }
 
-    case Match(scrutinee, clauses, default) => CPS.join { k =>
-      def clauseToML(c: (symbols.Constructor, BlockLit)): ml.MatchClause = {
-        val (constructor, b) = c
+    case lifted.Match(scrutinee, clauses, default) => CPS.join { k =>
+      def clauseToML(c: (Id, BlockLit)): ml.MatchClause = {
+        val (id, b) = c
         val binders = b.params.map(p => ml.Pattern.Named(name(p.id)))
-        val pattern = constructor.tpe match {
-          case symbols.Record(_, _, _) =>
-            val tag = name(constructor)
-            ml.Pattern.Datatype(tag, binders)
-          case symbols.DataType(_, _, _) =>
-            val tag = name(constructor)
-            ml.Pattern.Datatype(tag, binders)
-          case _: symbols.ExternType => C.abort("Match on ExternType is not supported")
-        }
+        val pattern = ml.Pattern.Datatype(name(id), binders)
         val body = toMLExpr(b.body)(k)
         ml.MatchClause(pattern, body)
       }
@@ -200,54 +183,57 @@ object ML extends Backend {
     }
 
     // TODO maybe don't drop the continuation here? Although, it is dead code.
-    case Hole => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
+    case lifted.Hole() => CPS.inline { k => ml.Expr.RawExpr("raise Hole") }
 
-    case Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
+    case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case lifted.State(id, init, region, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
-    case State(id, init, region, body) =>
+    case lifted.State(id, init, region, body) =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
-    case Try(body, _, handler) =>
-      val handlers: List[ml.Expr.MakeDatatype] = handler.map { (impl: Implementation) =>
-        val fields = impl.operations.map { case Operation(op, BlockLit(params, body)) =>
-          val args = params.init.map(paramToML(_))
-          val resumeName = name(params.last.id)
-          val ev = freshName("ev")
-          val evResume = freshName("ev_resume")
-          val v = freshName("v")
-          val k1 = freshName("k1")
-          val k2 = freshName("k2")
+    case lifted.Try(body, handler) =>
+      val handlers: List[ml.Expr.MakeDatatype] = handler.map {
+        case Implementation(interface, ops) =>
+          val fields = ops.map {
+            case Operation(op, lifted.Block.BlockLit(tparams, params, body)) =>
+              // TODO refactor
+              val args = params.init.map(paramToML(_))
+              val resumeName = name(params.last.id)
+              val ev = freshName("ev")
+              val evResume = freshName("ev_resume")
+              val v = freshName("v")
+              val k1 = freshName("k1")
+              val k2 = freshName("k2")
 
-          // ev (fn k1 => fn k2 => let fun resume ev_res v = ev_res k1(v); in body[[k2]] end)
-          val newBody = ml.Call(
-            ml.Expr.Variable(ev)
-          )(
-            ml.Lambda(
-              ml.Param.Named(k1)
-            )(ml.Lambda(
-                ml.Param.Named(k2)
-              )(ml.mkLet(
-                List(ml.Binding.FunBind(
-                  resumeName,
-                  List(ml.Param.Named(evResume), ml.Param.Named(v)),
-                  ml.Call(evResume)(ml.Call(k1)(ml.Expr.Variable(v)))
-                )),
-                toMLExpr(body)(ml.Variable(k2)))
+              // ev (fn k1 => fn k2 => let fun resume ev_res v = ev_res k1(v); in body[[k2]] end)
+              val newBody = ml.Call(
+                ml.Expr.Variable(ev)
+              )(
+                ml.Lambda(
+                  ml.Param.Named(k1)
+                )(ml.Lambda(
+                    ml.Param.Named(k2)
+                  )(ml.mkLet(
+                    List(ml.Binding.FunBind(
+                      resumeName,
+                      List(ml.Param.Named(evResume), ml.Param.Named(v)),
+                      ml.Call(evResume)(ml.Call(k1)(ml.Expr.Variable(v)))
+                    )),
+                    toMLExpr(body)(ml.Variable(k2)))
+                  )
+                )
               )
-            )
-          )
-          ml.Expr.Lambda(ml.Param.Named(ev) :: args, newBody)
-        }
-        ml.Expr.MakeDatatype(name(impl.id), expsToTupleIsh(fields))
+              ml.Expr.Lambda(ml.Param.Named(ev) :: args, newBody)
+          }
+          ml.Expr.MakeDatatype(name(interface.name), expsToTupleIsh(fields))
       }
       val args = ml.Consts.lift :: handlers
 
@@ -255,7 +241,7 @@ object ML extends Backend {
         ml.Call(CPS.reset(ml.Call(toML(body))(args: _*)), List(k.reify))
       }
 
-    case Region(body, _) =>
+    case Region(body) =>
       CPS.inline { k => ml.Call(ml.Call(ml.Consts.withRegion)(toML(body)), List(k.reify)) }
   }
 
@@ -265,7 +251,7 @@ object ML extends Backend {
 
   def createBinder(id: Symbol, binding: Block)(using Context): Binding = {
     binding match {
-      case BlockLit(params, body) =>
+      case BlockLit(tparams, params, body) =>
         val k = freshName("k")
         ml.FunBind(name(id), params.map(p => ml.Param.Named(toML(p))) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
       case _ =>
@@ -274,25 +260,25 @@ object ML extends Backend {
   }
 
   def toML(defn: Definition)(using C: Context): ml.Binding = defn match {
-    case Definition.Def(id, _, block) => createBinder(id, block)
-    case Definition.Let(Wildcard(), _, binding) => ml.Binding.AnonBind(toML(binding))
-    case Definition.Let(id, _, binding) => createBinder(id, binding)
+    case Definition.Def(id, block) => createBinder(id, block)
+    case Definition.Let(Wildcard(), binding) => ml.Binding.AnonBind(toML(binding))
+    case Definition.Let(id, binding) => createBinder(id, binding)
   }
 
   def toML(block: BlockLit)(using Context): ml.Lambda = block match {
-    case BlockLit(params, body) =>
+    case BlockLit(tparams, params, body) =>
       val k = freshName("k")
       ml.Lambda(params.map(paramToML(_)) :+ ml.Param.Named(k), toMLExpr(body)(ml.Variable(k)))
   }
 
   def toML(block: Block)(using C: Context): ml.Expr = block match {
-    case BlockVar(id, _) =>
+    case lifted.BlockVar(id, _) =>
       Variable(name(id))
 
-    case b@BlockLit(_, _) =>
+    case b @ lifted.BlockLit(_, _, _) =>
       toML(b)
 
-    case Member(b, field) =>
+    case lifted.Member(b, field, annotatedType) =>
       val selector = field match {
         case op: symbols.Operation =>
           dataSelectorName(op.interface, op)
@@ -301,10 +287,10 @@ object ML extends Backend {
       }
       ml.Call(selector)(toML(b))
 
-    case Unbox(e) => toML(e) // not sound
+    case lifted.Unbox(e) => toML(e) // not sound
 
-    case New(Implementation(id, operations)) =>
-      ml.Expr.MakeDatatype(name(id), expsToTupleIsh(operations map toML))
+    case lifted.New(Implementation(interface, operations)) =>
+      ml.Expr.MakeDatatype(name(interface.name), expsToTupleIsh(operations map toML))
   }
 
   def toML(op: Operation)(using Context): ml.Expr = {
@@ -342,10 +328,10 @@ object ML extends Backend {
       }
     case ValueVar(id, _) => ml.Variable(name(id))
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get), List(), List()) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), List(), List()) =>
       ml.Expr.Deref(ml.Variable(name(x)))
 
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put), List(), List(arg)) =>
+    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), List(), List(arg)) =>
       ml.Expr.Assign(ml.Variable(name(x)), toML(arg))
 
     case PureApp(b, _, args) =>
@@ -365,7 +351,7 @@ object ML extends Backend {
     case Select(b, field, _) =>
       ml.Call(fieldSelectorName(field))(toML(b))
 
-    case Run(s, _) => toMLExpr(s).run
+    case Run(s) => toMLExpr(s).run
 
     case Box(b) => toML(b) // not sound
   }
@@ -414,7 +400,7 @@ object ML extends Backend {
       val a = freshName("a")
       val k2 = freshName("k2")
       // fn a => fn k2 => k2(a)
-      val pure = ml.Lambda(Param.Named(a)) { ml.Lambda(Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
+      val pure = ml.Lambda(ml.Param.Named(a)) { ml.Lambda(ml.Param.Named(k2)) { ml.Call(ml.Variable(k2), List(ml.Variable(a))) }}
       ml.Call(prog, List(pure))
 
     def pure(expr: ml.Expr): CPS = CPS.inline(k => k(expr))
@@ -424,11 +410,6 @@ object ML extends Backend {
     def id =
       val a = MLName("a")
       ml.Lambda(ml.Param.Named(a))(ml.Variable(a))
-  }
-
-  def fieldSymbolType(f: Symbol)(using C: Context): ml.Type = f match {
-    case f: symbols.Field => tpeToML(f.param.tpe.getOrElse(C.panic("No type on record field")))
-    case _ => C.panic("Record fields are not actually a field")
   }
 
   def typesToTupleIsh(types: List[ml.Type]): Option[ml.Type] = types match {
@@ -449,7 +430,7 @@ object ML extends Backend {
     case _ => C.panic("Record fields are not actually a field")
   }
 
-  def dataSelectorName(data: Symbol, selection: Symbol)(using C: Context): MLName = {
+  def dataSelectorName(data: Id, selection: Id)(using C: Context): MLName = {
     val dataName = name(data)
     val selectionName = name(selection)
     MLName(dataName.name + selectionName.name)
