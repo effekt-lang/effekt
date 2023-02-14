@@ -684,24 +684,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.BlockVar(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
 
   def optimize(s: Definition)(using Context): Definition = {
-
-    // a very small and easy post processing step...
-    // reduces run-return pairs
-    object eliminateReturnRun extends core.Tree.Rewrite {
-      override def expr = {
-        case core.Run(core.Return(p)) => rewrite(p)
-      }
-    }
-
-    // rewrite (Val (Return e) s) to (Let e s)
-    object directStyleVal extends core.Tree.Rewrite {
-      override def stmt = {
-        case core.Val(id, core.Return(expr), body) =>
-          Let(id, rewrite(expr), rewrite(body))
-      }
-    }
     val opt = eliminateReturnRun.rewrite(s)
     directStyleVal.rewrite(opt)
+  }
+
+
+  // a very small and easy post processing step...
+  // reduces run-return pairs
+  object eliminateReturnRun extends core.Tree.Rewrite {
+    override def expr = {
+      case core.Run(core.Return(p)) => rewrite(p)
+    }
+  }
+
+  // rewrite (Val (Return e) s) to (Let e s)
+  object directStyleVal extends core.Tree.Rewrite {
+    override def stmt = {
+      case core.Val(id, core.Return(expr), body) =>
+        Let(id, rewrite(expr), rewrite(body))
+    }
   }
 
   def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
