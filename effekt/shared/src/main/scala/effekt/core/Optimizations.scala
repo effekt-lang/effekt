@@ -625,7 +625,6 @@ def inliningWorker(op: Operation)(using inlines: Map[Id, BlockLit]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, inliningWorker(body))
 
-//TODO: Does not substitute blocks
 def substitute(block: BlockLit, targs: List[ValueType], vargs: List[Pure], bargs: List[Block]): Stmt =
   block match
     case BlockLit(tparams, cparams, vparams, bparams, body) =>
@@ -872,6 +871,110 @@ def constantPropagation(op: Operation)(using constants: Map[Id, Literal]): Opera
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, constantPropagation(body))
 
+def betaReduction(module: ModuleDecl): ModuleDecl =
+  module match
+    case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
+      ModuleDecl(path, imports, declarations, externs, definitions.map(betaReduction), exports)
 
+def betaReduction(definition: Definition): Definition =
+  definition match
+    case Definition.Def(id, block) =>
+      Definition.Def(id, betaReduction(block))
+
+    case Definition.Let(id, binding) =>
+      Definition.Let(id, betaReduction(binding))
+
+def betaReduction(expr: Expr): Expr =
+  expr match
+    case DirectApp(b, targs, vargs, bargs) =>
+      DirectApp(betaReduction(b), targs, vargs.map(betaReduction), bargs.map(betaReduction))
+
+    case Run(s) =>
+      Run(betaReduction(s))
+
+    case p: Pure =>
+      betaReduction(p)
+
+def betaReduction(statement: Stmt): Stmt =
+  statement match
+    case Scope(definitions, body) =>
+      Scope(definitions.map(betaReduction), betaReduction(body))
+
+    case Return(expr) =>
+      Return(betaReduction(expr))
+
+    case Val(id, binding, body) =>
+      Val(id, betaReduction(binding), betaReduction(body))
+
+    case App(callee: BlockLit, targs, vargs, bargs) =>
+      substitute(callee, targs, vargs, bargs)
+
+    case App(callee, targs, vargs, bargs) =>
+      App(betaReduction(callee), targs, vargs.map(betaReduction), bargs.map(betaReduction))
+
+    case If(cond, thn, els) =>
+      If(betaReduction(cond), betaReduction(thn), betaReduction(els))
+
+    case Match(scrutinee, clauses, default) =>
+      Match(betaReduction(scrutinee), clauses.map{case (id, b) => (id, betaReduction(b).asInstanceOf[BlockLit])},
+        default match
+          case Some(s) => Some(betaReduction(s))
+          case None => None)
+
+    case State(id, init, region, body) =>
+      State(id, betaReduction(init), region, betaReduction(body))
+
+    case Try(body, handlers) =>
+      Try(betaReduction(body), handlers.map(betaReduction))
+
+    case Region(body) =>
+      Region(betaReduction(body))
+
+    case h: Hole =>
+      h
+
+def betaReduction(block: Block): Block =
+  block match
+    case b: BlockVar =>
+      b
+
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockLit(tparams, cparams, vparams, bparams, betaReduction(body))
+
+    case Member(block, field, annotatedTpe) =>
+      Member(betaReduction(block), field, annotatedTpe)
+
+    case Unbox(pure) =>
+      Unbox(betaReduction(pure))
+
+    case New(impl) =>
+      New(betaReduction(impl))
+
+def betaReduction(pure: Pure): Pure =
+  pure match
+    case v: ValueVar =>
+      v
+
+    case l: Literal =>
+      l
+
+    case PureApp(b, targs, vargs) =>
+      PureApp(betaReduction(b), targs, vargs.map(betaReduction))
+
+    case Select(target, field, annotatedType) =>
+      Select(betaReduction(target), field, annotatedType)
+
+    case Box(b, annotatedCapture) =>
+      Box(betaReduction(b), annotatedCapture)
+
+def betaReduction(impl: Implementation): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(betaReduction))
+
+def betaReduction(op: Operation): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, betaReduction(body))
 
 //TODO: Case-of-known-case
