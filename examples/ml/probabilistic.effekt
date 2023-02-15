@@ -1,0 +1,218 @@
+module probabilistic
+
+effect IndexOutOfBounds(): Unit
+
+def indexOutOfBounds[A](): A / IndexOutOfBounds = {
+  do IndexOutOfBounds(); <>
+}
+
+def lookup[A](l: List[A], idx: Int): A / IndexOutOfBounds = l match {
+  case Nil() => indexOutOfBounds()
+  case Cons(n, rest) => if (idx == 0) n else lookup(rest, idx - 1)
+}
+
+def updateAt[A](l: List[A], idx: Int, el: A): List[A] / IndexOutOfBounds = l match {
+  case Nil() => indexOutOfBounds()
+  case Cons(n, rest) => if (idx == 0) { Cons(el, rest) } else Cons(n, updateAt(rest, idx - 1, el))
+}
+
+type Var {
+  Unobserved();
+  Observed(value: Boolean)
+}
+
+def show(v: Var) = v match {
+  case Unobserved() => "Unobserved()"
+  case Observed(value) => "Observed(" ++ show(value) ++ ")"
+}
+
+type Ref { MkRef(n: Int) }
+
+effect Heap {
+  def empty(v: Var): Ref
+  def get(r: Ref): Var
+  def put(r: Ref, v: Var): Unit
+}
+
+def heap[R] { prog: => R / Heap } = {
+  var cells: List[Var] = Nil();
+  var n = 0;
+  try { prog() } with Heap {
+    def empty(v) = { cells = Cons(v, cells); val ref = MkRef(n); n = n + 1; resume(ref) }
+    def get(r) = r match {
+      case MkRef(idx) =>
+        val tmp = lookup(cells, (size(cells) - idx) - 1);
+        // passing tmp to resume causes a type error in ML, why?
+        resume(<>)
+    }
+    def put(r, v) = r match {
+      case MkRef(idx) =>
+        cells = updateAt(cells, (size(cells) - idx) - 1, v);
+        resume(())
+    }
+  }
+}
+
+effect Flip(prob: Double): Ref
+effect Disj(x: Ref, y: Ref): Ref
+effect Prior(x: Ref, prob: Double): Unit
+
+effect Score(prob: Double): Unit
+effect Fork(): Boolean
+effect Fail(): Unit
+
+def obs(r: Ref, a: Boolean) =
+  do get(r) match {
+    case Unobserved() => do put(r, Observed(a))
+    case Observed(y) => if (a == y) { () } else { do Fail() }
+  }
+
+def choose3[R] { x: => R } { y: => R } { z: => R } : R / Fork =
+  if (do Fork()) { x() } else if (do Fork()) { y() } else { z() }
+
+type Weighted[R] { MkWeighted(weight: Double, value: R) }
+
+def show(w: Weighted[Var]) = {
+  val MkWeighted(weight, value) = w;
+  "MkWeighted(" ++ show(weight) ++ ", " ++ show(value) ++ ")"
+}
+
+def show(w: Weighted[Boolean]) = {
+  val MkWeighted(weight, value) = w;
+  "MkWeighted(" ++ show(weight) ++ ", " ++ show(value) ++ ")"
+}
+
+def show(l: List[Weighted[Boolean]]): String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
+
+def show(l: List[Weighted[Var]]): String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ show(x) ++ ", " ++ show(xs) ++ ")"
+}
+
+def handleProb[R] { prog: => R / { Score, Fork, Fail } } = {
+  val empty: List[Weighted[R]] = Nil();
+  try {
+    var current = 1.0;
+    try {
+      val res = prog();
+      Cons(MkWeighted(current, res), empty)
+    } with Score { p => current = current * p; resume(()) }
+  } with Fork { () => append(resume(true), resume(false)) }
+    with Fail { () => empty }
+}
+
+def fresh(): Ref / Heap = do empty(Unobserved())
+
+// PROBLEM WITH THIS FUNCTION:
+//   We are using the evidence provided by heap at TWO answer types. This would require a
+//     rank-2 type! First time: Ref, second time: unit
+//
+// So MLton complains with:
+//   Error: probabilistic.sml 1326.4-1381.86.
+//   Function applied to incorrect argument.
+//     expects: _ -> _ -> (_, _, ((([unit] -> _) -> _) -> _) -> _) Heap_677 -> _
+//     but got: _ -> _ -> (_, _, ((([Ref_676] -> _) -> _) -> _) -> _) Heap_677 -> _
+//     in: (((heap_680 ev1641_1641) here) ev  ...  52 input_779))))))))
+def handleLang(expected: Boolean) { prog: Ref => Ref / { Flip, Disj, Prior }}: Var / {IndexOutOfBounds, Score, Fail, Fork} = heap {
+  // FIRST USAGE, AT TYPE Ref
+  val input = fresh();
+  try {
+    val t = prog(input);
+    val o = Observed(expected);
+    // SECOND USAGE, AT TYPE unit
+    do put(t, o);
+    () //do put(prog(input), Observed(expected))
+  } with Flip { p =>
+    <>
+    // val res: Ref = fresh();
+    // resume(res);
+    // do get(res) match {
+    //   case Unobserved() => ()
+    //   case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
+    // }
+  } with Disj { (x, y) =>
+    // val res: Ref = fresh();
+    // resume(res);
+    // do get(res) match {
+    //   case Unobserved() => ()
+    //   case Observed(b) => if (b) { choose3 {
+    //     obs(x, false); obs(y, true)
+    //   } {
+    //     obs(x, true); obs(y, false)
+    //   } {
+    //     obs(x, true); obs(y, true)
+    //   } } else { obs(x, false); obs(y, false) }
+    // }
+    <>
+  } with Prior { (x, p) =>
+    //resume(());
+    // do get(x) match {
+    //   case Unobserved() => ()
+    //   case Observed(b) => if (b) { do Score(p) } else { do Score(1.0 - p) }
+    // }
+    <>
+  };
+  do get(input)
+}
+
+// def test() = {
+//   if (do Fork()) {
+//     do Score(0.2);
+//     false
+//   } else {
+//     do Score(0.8);
+//     if (do Fork()) {
+//       do Score(0.6);
+//       true
+//     } else {
+//       do Score(0.4);
+//       false
+//     }
+//   }
+// }
+
+// def heapTest() = heap {
+//   val r1 = do empty(Unobserved());
+//   val r2 = do empty(Unobserved());
+//   val r3 = do empty(Unobserved());
+//   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)));
+
+//   do put(r2, Observed(true));
+//   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)));
+
+//   do put(r3, Observed(false));
+//   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)));
+
+//   do put(r2, Observed(false));
+//   println(show(do get(r1)) ++ show(do get(r2)) ++ show(do get(r3)))
+// }
+
+// def catch[R] { p: => R / IndexOutOfBounds }: Unit =
+//   try { p(); () }
+//   with IndexOutOfBounds { () => println("Index out of bounds!") }
+
+def main() = ()
+
+// {
+//   val res = handleProb {
+//     test()
+//   };
+//   println(show(res));
+
+//   catch {
+//     heapTest()
+//   };
+
+//   catch {
+//     val res = handleProb {
+//       handleLang(true) { r =>
+//         do Disj(do Flip(0.2), r)
+//       }
+//     };
+//     println(show(res))
+//   }
+
+// }

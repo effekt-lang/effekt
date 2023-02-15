@@ -7,7 +7,7 @@ import effekt.source.{ FunDef, Hole, ModuleDecl, Tree }
 import effekt.util.{ PlainMessaging, getOrElseAborting }
 import effekt.util.messages.EffektError
 
-import kiama.util.{ Position, Services, Source }
+import kiama.util.{ Filenames, Position, Services, Source }
 import kiama.output.PrettyPrinterTypes.Document
 
 import org.eclipse.lsp4j.{ Diagnostic, DocumentSymbol, SymbolKind, ExecuteCommandParams }
@@ -67,6 +67,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
           case "js" => "js"
           case "chez-monadic" | "chez-callcc" | "chez-lift" => "ss"
           case "llvm" => "ll"
+          case "ml" => "sml"
         }
         publishProduct(source, "target", extension, out)
       }
@@ -107,12 +108,22 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
   } yield info
 
   // The implementation in kiama.Server does not support file sources
+  def toURI(filename: String): String = {
+    if (filename startsWith "file://")
+      filename
+    else
+      if (filename startsWith "./")
+        "file://" ++ Filenames.cwd() ++ "/" ++ Filenames.dropPrefix(filename, ".")
+      else
+        s"file://$filename"
+  }
+
   override def locationOfNode(node: Tree): Location = {
     (positions.getStart(node), positions.getFinish(node)) match {
       case (start @ Some(st), finish @ Some(_)) =>
         val s = convertPosition(start)
         val f = convertPosition(finish)
-        new Location(st.source.name, new LSPRange(s, f))
+        new Location(toURI(st.source.name), new LSPRange(s, f))
       case _ =>
         null
     }

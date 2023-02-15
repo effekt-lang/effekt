@@ -255,10 +255,9 @@ class AnnotateCaptures(src: Source) extends Query[Unit, CaptureSet] {
     case tree @ source.FunDef(id, tps, vps, bps, ret, body) =>
       val selfRegion = Context.annotation(Annotations.SelfRegion, tree)
       query(body) -- boundCapabilities(tree) -- CaptureSet(selfRegion.capture :: bps.map(_.symbol.capture))
-//
-//    // TODO explicitly annotate the self region
-//    case tree @ VarDef(id, annot, region, binding) =>
-//      ???
+
+    case tree @ VarDef(id, annot, region, binding) =>
+      query(binding) ++ captureOf(tree.symbol.region)
   }
 
   def boundCapabilities(t: Tree)(using Context): CaptureSet =

@@ -108,6 +108,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       case gen if gen.startsWith("chez") => evalCS(path)
       case gen if gen.startsWith("llvm") => evalLLVM(path)
       case gen if gen.startsWith("jit")  => evalJIT(path)
+      case gen if gen.startsWith("ml") => evalML(path)
     }
 
   def evalJS(path: String)(implicit C: Context): Unit =
@@ -130,6 +131,19 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
       case FatalPhaseError(e) => C.report(e)
     }
 
+  def evalML(path: String)(implicit C: Context): Unit =
+    try {
+      // needs to be two steps:
+      // 1. compile with mlton
+      // 2. run resulting binary
+      val out = C.config.output()
+      val mainPath = C.config.outputPath() / "mlton-main"
+      out.emit(Process(Seq("mlton", "-output", mainPath.canonicalPath, path)).!!)
+      out.emit(Process(Seq(mainPath.canonicalPath)).!!)
+    } catch {
+      case FatalPhaseError(e) => C.report(e)
+    }
+
   /**
    * Compile the LLVM source file (`<...>.ll`) to an executable
    *
@@ -146,7 +160,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     val LLVM_VERSION = C.config.llvmVersion()
 
     out.emit(discoverExecutable(List("opt", s"opt-${LLVM_VERSION}", "opt-12", "opt-11"), Seq(path, "-S", "-O2", "-o", optPath)))
-    out.emit(discoverExecutable(List("llc", s"llc-${LLVM_VERSION}", "lcc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
+    out.emit(discoverExecutable(List("llc", s"llc-${LLVM_VERSION}", "llc-12", "llc-11"), Seq("--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)))
 
     val gccMainFile = (C.config.libPath / "main.c").unixPath
     val executableFile = basePath

@@ -70,7 +70,7 @@ trait ChezScheme {
 
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
-    chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
+    chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   /**
@@ -94,14 +94,9 @@ trait ChezScheme {
     decls ++ externs ++ defns
   }
 
-  def toChez(args: List[Argument]): List[chez.Expr] = args map {
-    case b: Block => toChez(b)
-    case e: Pure => toChez(e)
-  }
-
   def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
     case Return(e) => pure(toChez(e))
-    case App(b, targs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
+    case App(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
     case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
     case Match(scrutinee, clauses, default) =>
@@ -125,7 +120,7 @@ trait ChezScheme {
     case Try(body, handler) =>
       val handlers: List[chez.Handler] = handler.map { h =>
         // TODO we should not use the symbol here, anymore (we should look it up in the Declarations)
-        val names = RecordNames(h.interface.symbol)
+        val names = RecordNames(h.interface.name)
         chez.Handler(names.constructor, h.operations.map {
           case Operation(op, tps, cps, vps, bps, resume, body) =>
             chez.Operation(nameDef(op), (vps ++ bps).map(p => nameDef(p.id)), nameDef(resume.get.id), toChezExpr(body))
@@ -206,7 +201,7 @@ trait ChezScheme {
       toChez(e)
 
     case New(Implementation(tpe, clauses)) =>
-      val ChezName(name) = nameRef(tpe.symbol)
+      val ChezName(name) = nameRef(tpe.name)
       chez.Call(Variable(ChezName(s"make-${name}")), clauses.map {
         case Operation(_, tps, cps, vps, bps, resume, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
       })
@@ -219,7 +214,7 @@ trait ChezScheme {
     case l: Literal             => chez.RawValue(l.value.toString)
     case ValueVar(id, _)        => chez.Variable(nameRef(id))
 
-    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), toChez(vargs) ++ toChez(bargs))
+    case DirectApp(b, targs, vargs, bargs) => chez.Call(toChez(b), vargs.map(toChez) ++ bargs.map(toChez))
     case PureApp(b, targs, args) => chez.Call(toChez(b), args map toChez)
 
     case Select(b, field, _) =>
@@ -228,5 +223,27 @@ trait ChezScheme {
     case Box(b, _) => toChez(b)
 
     case Run(s) => run(toChezExpr(s))
+  }
+
+
+  // STATE
+  // -----
+
+  // (define (getter ref)
+  //  (lambda () (pure (unbox ref))))
+  //
+  // (define (setter ref)
+  //  (lambda (v) (pure (set-box! ref v))))
+  def generateStateAccessors(pure: chez.Expr => chez.Expr): List[chez.Function] = {
+    val ref = ChezName("ref")
+    val value = ChezName("value")
+
+    val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
+      chez.Lambda(Nil, pure(chez.Builtin("unbox", Variable(ref)))))
+
+    val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
+      chez.Lambda(List(value), pure(chez.Builtin("set-box!", Variable(ref), Variable(value)))))
+
+    List(getter, setter)
   }
 }

@@ -1,0 +1,39 @@
+import immutable/list
+import immutable/option
+import text/string
+import io/args
+
+effect Increment {
+  def increment(j: Int): Unit
+}
+
+
+def count(n: Int): Int = {
+
+  def abs(n: Int): Int = if (n < 0) 0 - n else n
+
+  def op(x: Int, y: Int): Int =
+    mod(abs(x - (503 * y) + 37), 1009)
+
+  def step(l: Int, s: Int): Int =
+    if (l == 0) { s }
+    else step(l - 1, try {
+      def looper(i: Int): Int / Increment =
+        if (i == 0) { s }
+        else { do increment(i); looper(i - 1) }
+      looper(n)
+    } with Increment {
+      def increment(j) = op(j, resume(()))
+    })
+
+  step(1000, 0)
+}
+
+def main() = commandLineArgs() match {
+  case Nil() => println(count(1000))
+  case Cons(x, Nil()) => toInt(x) match {
+    case Some(i) => println(count(i))
+    case _ => println("Unexpected non-integer(s) '" ++ show(x) ++ "'")
+  }
+  case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
+}

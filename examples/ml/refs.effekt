@@ -1,0 +1,9 @@
+def main() = {
+    var x in global = 2;
+    x = x + 1;
+    println(x);
+
+    var y = 2;
+    y = y + 1;
+    println(y)
+}
