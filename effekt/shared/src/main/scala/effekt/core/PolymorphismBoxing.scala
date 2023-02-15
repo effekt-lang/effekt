@@ -228,6 +228,9 @@ object PolymorphismBoxing extends Phase[CoreTransformed, CoreTransformed] {
   def transform(blockType: BlockType)(using PContext): BlockType = blockType match {
     case BlockType.Function(tparams, cparams, vparams, bparams, result) =>
       BlockType.Function(tparams, cparams, vparams map transform, bparams map transform, transform(result))
+    case BlockType.Interface(symbol @ symbols.builtins.TState.interface, targs) =>
+      // TODO do not special case this by checking the symbol
+      BlockType.Interface(symbol, targs map transform)
     case BlockType.Interface(symbol, targs) => BlockType.Interface(symbol, targs map transformArg)
   }
 
