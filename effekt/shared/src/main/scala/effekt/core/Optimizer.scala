@@ -46,7 +46,9 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         val aliases = rmIdKey[Id](collectAliases(start), Set("main"))
         var optimized = dealiasing(start)(using aliases) //Dealiasing
 
-        var dependencyGraph = rmIdKey[Set[Id]](constructDependencyGraph(optimized), Set("main"))
+        optimized = constantPropagation(optimized)
+
+        val dependencyGraph = rmIdKey[Set[Id]](constructDependencyGraph(optimized), Set("main"))
         optimized = staticArgumentTransformation(optimized, dependencyGraph) //Static Argument Transformation
 
         var occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))

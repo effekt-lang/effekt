@@ -125,7 +125,6 @@ def dealiasing(op: Operation)(using aliases: Map[Id, Id]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, dealiasing(body))
 
-// TODO: Don't remove exports
 def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], dependencyGraph: Map[Id, Set[Id]], exports: List[Id]): ModuleDecl =
   val calls = count.filter(!exports.contains(_))
   val recursiveFunctions = dependencyGraph.filter((id, fs) => fs.contains(id)).keySet -- exports
@@ -754,4 +753,125 @@ def inlineGeneral(module: ModuleDecl, bodies: Map[Id, Block], inlineThreshhold: 
   val inlines = bodies.filter((id, _) => callSizes(id) <= inlineThreshhold).asInstanceOf[Map[Id, BlockLit]]
   inliningWorker(module)(using inlines)
 
-//TODO: Constant Propagation, Case-of-known-case
+def extractConstants(definitions: List[Definition]): (List[Definition], Map[Id, Literal]) =
+  val constants = definitions.map{
+    case Definition.Let(id, binding: Literal) => Map[Id, Literal](id -> binding)
+    case _ => Map[Id, Literal]()}.fold(Map[Id, Literal]())(_ ++ _)
+
+  val newDefinitions = definitions.filter{
+    case Definition.Let(id, _) => !constants.contains(id)
+    case _ => true
+  }
+
+  (newDefinitions, constants)
+
+def constantPropagation(module: ModuleDecl): ModuleDecl =
+  module match
+    case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
+      val (defsNoConstants, constants) = extractConstants(definitions)
+      ModuleDecl(path, imports, declarations, externs, defsNoConstants.map(constantPropagation(_)(using constants)), exports)
+
+def constantPropagation(definition: Definition)(using constants: Map[Id, Literal]): Definition =
+  definition match
+    case Definition.Def(id, block) =>
+      Definition.Def(id, constantPropagation(block))
+
+    case Definition.Let(id, binding) =>
+      Definition.Let(id, constantPropagation(binding))
+
+def constantPropagation(expr: Expr)(using constants: Map[Id, Literal]): Expr =
+  expr match
+    case DirectApp(b, targs, vargs, bargs) =>
+      DirectApp(constantPropagation(b), targs, vargs.map(constantPropagation), bargs.map(constantPropagation))
+
+    case Run(s) =>
+      Run(constantPropagation(s))
+
+    case p: Pure =>
+      constantPropagation(p)
+
+def constantPropagation(statement: Stmt)(using constants: Map[Id, Literal]): Stmt =
+  statement match
+    case Scope(definitions, body) =>
+      val (defsNoConstants, extraConstants) = extractConstants(definitions)
+      val newConstants = extraConstants ++ constants
+      Scope(defsNoConstants.map(constantPropagation(_)(using newConstants)), constantPropagation(body)(using newConstants))
+
+    case Return(expr) =>
+      Return(constantPropagation(expr))
+
+    case Val(id, binding, body) =>
+      Val(id, constantPropagation(binding), constantPropagation(body))
+
+    case App(callee, targs, vargs, bargs) =>
+      App(constantPropagation(callee), targs, vargs.map(constantPropagation), bargs.map(constantPropagation))
+
+    case If(cond, thn, els) =>
+      If(constantPropagation(cond), constantPropagation(thn), constantPropagation(els))
+
+    case Match(scrutinee, clauses, default) =>
+      Match(constantPropagation(scrutinee), clauses.map{case (id, b) => (id, constantPropagation(b).asInstanceOf[BlockLit])},
+        default match
+          case Some(s) => Some(constantPropagation(s))
+          case None => None)
+
+    case State(id, init, region, body) =>
+      State(id, constantPropagation(init), region, constantPropagation(body))
+
+    case Try(body, handlers) =>
+      Try(constantPropagation(body), handlers.map(constantPropagation))
+
+    case Region(body) =>
+      Region(constantPropagation(body))
+
+    case h: Hole =>
+      h
+
+def constantPropagation(block: Block)(using constants: Map[Id, Literal]): Block =
+  block match
+    case b: BlockVar =>
+      b
+
+    case BlockLit(tparams, cparams, vparams, bparams, body) =>
+      BlockLit(tparams, cparams, vparams, bparams, constantPropagation(body))
+
+    case Member(block, field, annotatedTpe) =>
+      Member(constantPropagation(block), field, annotatedTpe)
+
+    case Unbox(pure) =>
+      Unbox(constantPropagation(pure))
+
+    case New(impl) =>
+      New(constantPropagation(impl))
+
+def constantPropagation(pure: Pure)(using constants: Map[Id, Literal]): Pure =
+  pure match
+    case ValueVar(id, annotatedType) =>
+      if(constants.contains(id)) constants(id)
+      else ValueVar(id, annotatedType)
+
+    case l: Literal =>
+      l
+
+    case PureApp(b, targs, vargs) =>
+      PureApp(constantPropagation(b), targs, vargs.map(constantPropagation))
+
+    case Select(target, field, annotatedType) =>
+      Select(constantPropagation(target), field, annotatedType)
+
+    case Box(b, annotatedCapture) =>
+      Box(constantPropagation(b), annotatedCapture)
+
+def constantPropagation(impl: Implementation)(using constants: Map[Id, Literal]): Implementation =
+  impl match
+    case Implementation(interface, operations) =>
+      Implementation(interface, operations.map(constantPropagation))
+
+def constantPropagation(op: Operation)(using constants: Map[Id, Literal]): Operation =
+  op match
+    case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
+      Operation(name, tparams, cparams, vparams, bparams, resume, constantPropagation(body))
+
+
+
+//TODO: Case-of-known-case
