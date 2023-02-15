@@ -115,35 +115,43 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
    * 2) specified in an environment variable `EFFEKT_JIT_BIN`
    * 3) relative to the current working directory
    * 4) relative to the executed JAR file (effekt.jar)
+   *
+   * If successful, returns `Right(file)`, otherwise `Left(errorMessage)`
    */
-  def findJITBinary(platform: String): effekt.util.paths.File = {
+  def findJITBinary(platform: String): Either[String, effekt.util.paths.File] = {
+    // TODO better error handling than Left(String)
     import effekt.util.paths.file
+    val supportedJITPlatforms = List("x86_64-Linux", "arm64-Darwin")
+
+    if(!supportedJITPlatforms.contains(platform)) {
+      return Left(s"Unsupported platform ${platform}. Currently supported platforms: ${supportedJITPlatforms.mkString(", ")}")
+    }
 
     val binaryName = s"${platform}/rpyeffect-jit";
 
     // 1) in config
     if(jitBinaryPath.isDefined) {
-      return jitBinaryPath()
+      return Right(jitBinaryPath())
     }
 
     // 2) iin Environment variable EFFEKT_BIN
     if (System.getenv.containsKey("EFFEKT_JIT_BIN")) {
-      return System.getenv("EFFEKT_JIT_BIN")
+      return Right(System.getenv("EFFEKT_JIT_BIN"))
     }
 
     // 3) in PWD
     val pwd = file(".")
     if((pwd / "bin" / binaryName).exists) {
-      return (pwd / "bin" / binaryName)
+      return Right(pwd / "bin" / binaryName)
     }
 
     // 4) next to JAR
     val jarPath = effekt.util.paths.file(getClass.getProtectionDomain.getCodeSource.getLocation.toURI).parent;
     if((jarPath / binaryName).exists) {
-      return (jarPath / binaryName)
+      return Right(jarPath / binaryName)
     }
 
-    sys error "Cannot find path to the JIT binary"
+    return Left("Cannot find path to the JIT binary")
   }
 
   lazy val libPath: File = findStdLib.canonicalPath.toFile

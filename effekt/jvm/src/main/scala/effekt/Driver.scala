@@ -175,16 +175,13 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
   def evalJIT(jitPath: String)(implicit C: Context): Unit = {
     val arch = Process(Seq(s"uname", "-m")).!!.trim;
     val os = Process(Seq(s"uname", "-s")).!!.trim;
-    val platform = "%s-%s".format(arch,os);
-    val platforms = List("x86_64-Linux", "arm64-Darwin");
-    if (!platforms.contains(platform)) {
-      C.error(s"Unsupported platform ${platform}. Currently supported platforms: ${platforms.mkString(", ")}");
-      return
+    val platform = "%s-%s".format(arch,os)
+    C.config.findJITBinary(platform) match {
+      case Left(errorMessage) => C.error(errorMessage)
+      case Right(jitBinary) =>
+        val runCommand = Process(Seq(jitBinary.unixPath, jitPath)) // TODO use path independent of cwd
+        C.config.output().emit(runCommand.!!)
     }
-    val jitBinary = C.config.findJITBinary(platform)
-
-    val runCommand = Process(Seq(jitBinary.unixPath, jitPath)) // TODO use path independent of cwd
-    C.config.output().emit(runCommand.!!)
   }
 
   def report(in: Source)(implicit C: Context): Unit =

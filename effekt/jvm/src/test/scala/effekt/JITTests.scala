@@ -24,16 +24,33 @@ class JITTests extends EffektTests {
       assertNoDiff(out, expected)
     }
 
-  def runJIT(f: File): String = {
-    // TODO flaky body
-    val compiler = new effekt.Driver {}
+  private def createConfig(compiler: Driver = new effekt.Driver {}): EffektConfig = {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--backend", "jit",
       "--lib", "libraries/jit"
     ))
     configs.verify()
+    configs
+  }
+
+  def runJIT(f: File): String = {
+    // TODO flaky body
+    val compiler = new effekt.Driver {}
+    val configs = createConfig(compiler)
     compiler.compileFile(f.getPath, configs)
     configs.stringEmitter.result()
+  }
+
+  def canRun(): Boolean = {
+    val arch = Process(Seq(s"uname", "-m")).!!.trim
+    val os = Process(Seq(s"uname", "-s")).!!.trim
+    val platform = "%s-%s".format(arch, os)
+    val configs = createConfig()
+    configs.findJITBinary(platform) match {
+      case Left(_) => false
+      case Right(jitBinary) =>
+        canRunExecutable(jitBinary.unixPath, "--check")
+    }
   }
 }
