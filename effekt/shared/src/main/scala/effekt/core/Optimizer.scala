@@ -50,9 +50,6 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         optimized = staticArgumentTransformation(optimized, dependencyGraph) //Static Argument Transformation
 
         var occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
-        optimized = removeUnusedFunctions(optimized, occurences, dependencyGraph) //Remove Unused Functions
-
-        occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
         var bodies = rmIdKey[Block](collectFunctionDefinitions(optimized), Set("main"))
         optimized = inlineUnique(optimized, bodies, occurences) //Inline Unique Functions
 
@@ -60,7 +57,7 @@ object Optimizer extends Phase[CoreTransformed, CoreTransformed] {
         optimized = inlineGeneral(optimized, bodies, 10) // Inline General
 
         occurences = rmIdKey[Int](countFunctionCalls(optimized), Set("main"))
-        optimized = removeUnusedFunctions(optimized, occurences, dependencyGraph) //Remove Unused Functions
+        optimized = removeUnusedFunctions(optimized, occurences, dependencyGraph, exports) //Remove Unused Functions
 
         optimized
   }
