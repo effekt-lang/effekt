@@ -125,9 +125,11 @@ def dealiasing(op: Operation)(using aliases: Map[Id, Id]): Operation =
     case Operation(name, tparams, cparams, vparams, bparams, resume, body) =>
       Operation(name, tparams, cparams, vparams, bparams, resume, dealiasing(body))
 
-
-def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], dependencyGraph: Map[Id, Set[Id]]): ModuleDecl =
-  removeUnusedFunctionsWorker(start)(using count, dependencyGraph.filter((id, fs) => fs.contains(id)).keySet)
+// TODO: Don't remove exports
+def removeUnusedFunctions(start: ModuleDecl, count: Map[Id, Int], dependencyGraph: Map[Id, Set[Id]], exports: List[Id]): ModuleDecl =
+  val calls = count.filter(!exports.contains(_))
+  val recursiveFunctions = dependencyGraph.filter((id, fs) => fs.contains(id)).keySet -- exports
+  removeUnusedFunctionsWorker(start)(using calls, recursiveFunctions)
 
 def removeUnusedFunctionsWorker(module: ModuleDecl)(using count: Map[Id, Int], recursiveFunctions: Set[Id]): ModuleDecl =
   module match
@@ -525,7 +527,7 @@ def inliningWorker(module: ModuleDecl)(using inlines: Map[Id, BlockLit]): Module
 def inliningWorker(definition: Definition)(using inlines: Map[Id, BlockLit]): Definition =
   definition match
     case Definition.Def(id, block) =>
-      Definition.Def(id, inliningWorker(block))
+      Definition.Def(id, inliningWorker(block)(using inlines - id))
 
     case Definition.Let(id, binding) =>
       Definition.Let(id, inliningWorker(binding))
