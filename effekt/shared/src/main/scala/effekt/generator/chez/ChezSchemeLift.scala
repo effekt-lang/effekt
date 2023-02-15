@@ -101,12 +101,12 @@ object ChezSchemeLift extends Backend {
 
     case Hole() => CPS.inline { k => chez.Builtin("hole") }
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body, k))
       }
 
-    case State(id, init, region, body) =>
+    case State(id, init, region, ev, body) =>
       CPS.inline { k =>
        chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
       }
@@ -330,4 +330,21 @@ object ChezSchemeLift extends Backend {
 
   def freshName(s: String): ChezName =
     ChezName(s + Symbol.fresh.next())
+
+  def generateStateAccessors: List[chez.Function] = {
+    val ref = ChezName("ref")
+    val value = ChezName("value")
+    val ev = ChezName("ev")
+
+    val k1 = freshName("k1")
+    val k2 = freshName("k2")
+
+    val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
+      chez.Lambda(List(ev), chez.Lambda(List(k1), CPS.pure(chez.Builtin("unbox", Variable(ref))).apply(chez.Expr.Variable(k1)))))
+
+    val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
+      chez.Lambda(List(ev, value), chez.Lambda(List(k2), CPS.pure(chez.Builtin("set-box!", Variable(ref), Variable(value))).apply(chez.Expr.Variable(k2)))))
+
+    List(getter, setter)
+  }
 }

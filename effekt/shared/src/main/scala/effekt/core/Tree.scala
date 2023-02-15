@@ -329,6 +329,12 @@ object Tree {
     def rewrite(p: Param.ValueParam): Param.ValueParam = rewrite(p: Param).asInstanceOf[Param.ValueParam]
     def rewrite(p: Param.BlockParam): Param.BlockParam = rewrite(p: Param).asInstanceOf[Param.BlockParam]
 
+    def rewrite(m: ModuleDecl): ModuleDecl =
+      m match {
+        case ModuleDecl(path, imports, declarations, externs, definitions, exports) =>
+          ModuleDecl(path, imports, declarations, externs, definitions.map(rewrite), exports)
+      }
+
     def rewrite(matchClause: (Id, BlockLit)): (Id, BlockLit) = matchClause match {
       case (p, b) => (p, rewrite(b).asInstanceOf[BlockLit])
     }

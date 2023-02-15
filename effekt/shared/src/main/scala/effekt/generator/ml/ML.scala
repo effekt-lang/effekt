@@ -156,6 +156,12 @@ object ML extends Backend {
   def toMLExpr(stmt: Stmt)(using C: Context): CPS = stmt match {
     case lifted.Return(e) => CPS.pure(toML(e))
 
+    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), List(), List(ev)) =>
+      CPS.pure(ml.Expr.Deref(ml.Variable(name(x))))
+
+    case lifted.App(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), List(), List(ev, arg)) =>
+      CPS.pure(ml.Expr.Assign(ml.Variable(name(x)), toML(arg)))
+
     case lifted.App(b, targs, args) => CPS.inline { k => ml.Expr.Call(ml.Expr.Call(toML(b), args map toML), List(k.reify)) }
 
     case lifted.If(cond, thn, els) =>
@@ -187,13 +193,13 @@ object ML extends Backend {
 
     case lifted.Scope(definitions, body) => CPS.inline { k => ml.mkLet(definitions.map(toML), toMLExpr(body)(k)) }
 
-    case lifted.State(id, init, region, body) if region == symbols.builtins.globalRegion =>
+    case lifted.State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Expr.Ref(toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k))
       }
 
-    case lifted.State(id, init, region, body) =>
+    case lifted.State(id, init, region, ev, body) =>
       CPS.inline { k =>
         val bind = ml.Binding.ValBind(name(id), ml.Call(ml.Consts.fresh)(ml.Variable(name(region)), toML(init)))
         ml.mkLet(List(bind), toMLExpr(body)(k))
@@ -327,12 +333,6 @@ object ML extends Backend {
         case _ => ml.RawValue(l.value.toString)
       }
     case ValueVar(id, _) => ml.Variable(name(id))
-
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.get, tpe), List(), List()) =>
-      ml.Expr.Deref(ml.Variable(name(x)))
-
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, _), symbols.builtins.TState.put, tpe), List(), List(arg)) =>
-      ml.Expr.Assign(ml.Variable(name(x)), toML(arg))
 
     case PureApp(b, _, args) =>
       val mlArgs = args map {

@@ -278,7 +278,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       case sym: VarBinder =>
         val stateType = Context.blockTypeOf(sym)
         val getType = operationType(stateType, TState.get)
-        DirectApp(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil)
+        Context.bind(App(Member(BlockVar(sym), TState.get, transform(getType)), Nil, Nil, Nil))
       case sym: ValueSymbol => ValueVar(sym)
       case sym: BlockSymbol => transformBox(tree)
     }
@@ -365,7 +365,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       val sym = a.definition
       val stateType = Context.blockTypeOf(sym)
       val putType = operationType(stateType, TState.put)
-      DirectApp(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil)
+      Context.bind(App(Member(BlockVar(sym), TState.put, transform(putType)), Nil, List(e), Nil))
 
     // methods are dynamically dispatched, so we have to assume they are `control`, hence no PureApp.
     case c @ source.MethodCall(receiver, id, targs, vargs, bargs) =>
@@ -384,12 +384,7 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
       // Do not pass type arguments for the type constructor of the receiver.
       val remainingTypeArgs = typeArgs.drop(operation.interface.tparams.size)
 
-      operation match {
-        case op if op == TState.put || op == TState.get =>
-          DirectApp(Member(rec, op, opType), remainingTypeArgs, valueArgs, blockArgs)
-        case op: Operation =>
-          Context.bind(App(Member(rec, op, opType), remainingTypeArgs, valueArgs, blockArgs))
-      }
+      Context.bind(App(Member(rec, operation, opType), remainingTypeArgs, valueArgs, blockArgs))
 
     case c @ source.Call(source.ExprTarget(source.Unbox(expr)), targs, vargs, bargs) =>
 
@@ -689,24 +684,25 @@ object Transformer extends Phase[Typechecked, CoreTransformed] {
     core.BlockVar(id, transform(Context.blockTypeOf(id)), transform(Context.captureOf(id)))
 
   def optimize(s: Definition)(using Context): Definition = {
-
-    // a very small and easy post processing step...
-    // reduces run-return pairs
-    object eliminateReturnRun extends core.Tree.Rewrite {
-      override def expr = {
-        case core.Run(core.Return(p)) => rewrite(p)
-      }
-    }
-
-    // rewrite (Val (Return e) s) to (Let e s)
-    object directStyleVal extends core.Tree.Rewrite {
-      override def stmt = {
-        case core.Val(id, core.Return(expr), body) =>
-          Let(id, rewrite(expr), rewrite(body))
-      }
-    }
     val opt = eliminateReturnRun.rewrite(s)
     directStyleVal.rewrite(opt)
+  }
+
+
+  // a very small and easy post processing step...
+  // reduces run-return pairs
+  object eliminateReturnRun extends core.Tree.Rewrite {
+    override def expr = {
+      case core.Run(core.Return(p)) => rewrite(p)
+    }
+  }
+
+  // rewrite (Val (Return e) s) to (Let e s)
+  object directStyleVal extends core.Tree.Rewrite {
+    override def stmt = {
+      case core.Val(id, core.Return(expr), body) =>
+        Let(id, rewrite(expr), rewrite(body))
+    }
   }
 
   def asConcreteCaptureSet(c: Captures)(using Context): CaptureSet = c match {
