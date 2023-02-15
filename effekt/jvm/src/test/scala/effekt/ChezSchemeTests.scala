@@ -12,12 +12,15 @@ abstract class ChezSchemeTests extends EffektTests {
   override def included: List[File] = List(
     examplesDir / "pos",
     examplesDir / "casestudies",
-    examplesDir / "chez"
+    examplesDir / "chez",
+    examplesDir / "benchmarks"
   )
 
   // Test files which are to be ignored (since features are missing or known bugs exist)
   override def ignored: List[File] = List(
     examplesDir / "llvm",
+
+    examplesDir / "ml",
 
     examplesDir / "pos" / "arrays.effekt",
     examplesDir / "pos" / "maps.effekt",
@@ -55,12 +58,15 @@ abstract class ChezSchemeTests extends EffektTests {
       "--backend", s"chez-$variant",
       "--includes", "libraries/chez/common",
       "--includes", ".",
-      "--lib", s"libraries/chez/$variant"
+      "--lib", s"libraries/chez/$variant",
+      "--out", output.getPath
     ))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result()
   }
+
+  def canRun() = canRunExecutable("scheme", "--help")
 }
 
 class ChezSchemeMonadicTests extends ChezSchemeTests {

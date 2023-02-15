@@ -4,18 +4,8 @@
       (lambda (k) (k
         (begin e ...)))]))
 
-(define (pure v)
-  (lambda (k) (k v)))
 
-
-; (then m a n) -> (lambda (k) (m (lambda (a) (n k))))
-(define-syntax then
-  (syntax-rules ()
-    [(_ m a f1 ...)
-     (lambda (k) (m (lambda (a) ((let () f1 ...) k))))]))
-
-(define ($then m f)
-  (lambda (k) (m (lambda (a) ((f a) k)))))
+;; EVIDENCE
 
 (define (here x) x)
 
@@ -31,8 +21,18 @@
     (lambda (k2)
       (m (lambda (a) ((k1 a) k2))))))
 
-(define (id x) x)
+(define-syntax nested-helper
+  (syntax-rules ()
+    [(_ (ev) acc) (ev acc)]
+    [(_ (ev1 ev2 ...) acc)
+      (nested-helper (ev2 ...) (ev1 acc))]))
 
+(define-syntax nested
+  (syntax-rules ()
+    [(_ ev1 ...) (lambda (m) (nested-helper (ev1 ...) m))]))
+
+
+;; HANDLING
 
 ; (define (reset m) (m (lambda (v) (lambda (k) (k v)))))
 
@@ -41,22 +41,10 @@
     [(_ m)
      (m (lambda (v) (lambda (k) (k v))))]))
 
-(define (run m) (m id))
-
-
-
 ; ;; EXAMPLE
 ; ; (handle ([Fail_22 (Fail_109 () resume_120 (Nil_74))])
 ; ;       (let ((tmp86_121 ((Fail_109  Fail_22))))
 ; ;         (Cons_73  tmp86_121  (Nil_74))))
-
-
-; capabilities first take evidence than require selection!
-(define-syntax handle
-  (syntax-rules ()
-    [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
-     (reset (body lift
-       (cap1 (define-effect-op ev (arg1 ...) kid exp) ...) ...))]))
 
 
 (define-syntax define-effect-op
@@ -69,6 +57,16 @@
           (let ([kid (lambda (ev v) (ev (resume v)))])
             exp ...))))]))
 
+
+; capabilities first take evidence than require selection!
+(define-syntax handle
+  (syntax-rules ()
+    [(_ ((cap1 (op1 (arg1 ...) kid exp) ...) ...) body)
+     (reset (body lift
+       (cap1 (define-effect-op ev (arg1 ...) kid exp) ...) ...))]))
+
+
+;; REGIONS
 
 (define (with-region body)
   (define arena (make-arena))
@@ -105,17 +103,3 @@
   (for-each (lambda (cell-data)
     (set-box! (car cell-data) (cdr cell-data)))
     data))
-
-(define-syntax nested-helper
-  (syntax-rules ()
-    [(_ (ev) acc) (ev acc)]
-    [(_ (ev1 ev2 ...) acc)
-      (nested-helper (ev2 ...) (ev1 acc))]))
-
-(define-syntax nested
-  (syntax-rules ()
-    [(_ ev1 ...) (lambda (m) (nested-helper (ev1 ...) m))]))
-
-; should also work for handlers / capabilities
-(define (lift-block f ev)
-  (lambda (ev2) (f (nested ev ev2))))

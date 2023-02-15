@@ -38,7 +38,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
   )
 
   val backend: ScallopOption[String] = choice(
-    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm"),
+    choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
@@ -119,6 +119,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     case "chez-callcc" => path / "libraries" / "chez" / "callcc"
     case "chez-lift" => path / "libraries" / "chez" / "lift"
     case "llvm" => path / "libraries" / "llvm"
+    case "ml" => path / "libraries" / "ml"
     case b => sys error s"Unrecognized backend ${ b }"
   }
 
@@ -129,6 +130,8 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   private def backendPrelude() = backend() match {
     case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
+      List("effekt", "immutable/option", "immutable/list")
+    case "ml" =>
       List("effekt", "immutable/option", "immutable/list")
     case b =>
       List("effekt")

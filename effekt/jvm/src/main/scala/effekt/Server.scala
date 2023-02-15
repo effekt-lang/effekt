@@ -67,6 +67,7 @@ trait LSPServer extends kiama.util.Server[Tree, ModuleDecl, EffektConfig, Effekt
           case "js" => "js"
           case "chez-monadic" | "chez-callcc" | "chez-lift" => "ss"
           case "llvm" => "ll"
+          case "ml" => "sml"
         }
         publishProduct(source, "target", extension, out)
       }

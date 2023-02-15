@@ -299,7 +299,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // will this ever be non-empty???
       val extendedEnv = env.bind(id, env.evidenceFor(block).scopes)
       pretransform(rest)(using extendedEnv, E)
-    case _ => env
+    // even if defs cannot be mutually recursive across lets, we still have to pretransform them.
+    case core.Definition.Let(id, _) :: rest =>
+      pretransform(rest)
+    case Nil => env
   }
 
 

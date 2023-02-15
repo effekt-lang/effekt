@@ -9,5 +9,5 @@ def f(x: String): Unit = {
 def main(): Unit = {
     val x = "ycks";
     f(x);
-    f(x + x);
+    f(x ++ x);
 }
