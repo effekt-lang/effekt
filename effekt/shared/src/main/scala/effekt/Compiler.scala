@@ -232,8 +232,9 @@ trait Compiler {
     CachedParser(source).map { res => res.tree }
 
   /**
-   * Called by ModuleDB (and indirectly by Namer) to run the frontend for a
-   * dependency.
+   * Used by
+   * - Namer to resolve dependencies
+   * - Server / Driver to typecheck and report type errors in VSCode
    */
   def runFrontend(source: Source)(using Context): Option[Module] =
     Frontend(source).map { res => res.mod }

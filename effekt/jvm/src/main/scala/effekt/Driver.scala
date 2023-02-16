@@ -60,7 +60,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     implicit val C = context
     C.setup(config)
 
-    def compile(): Option[String] = C.compileWhole(src) map {
+    def compile(): Option[String] = C.compiler.compileWhole(src) map {
       case Compiled(_, main, outputFiles) =>
         outputFiles.foreach {
           case (filename, doc) =>
@@ -70,7 +70,7 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
     }
 
     // type check single file -- `mod` is necessary for positions in error reporting.
-    def typecheck(): Option[Module] = C.runFrontend(src)
+    def typecheck(): Option[Module] = C.compiler.runFrontend(src)
 
     def run(main: String): Unit = typecheck() foreach {
       case mod => C.at(mod.decl) { C.checkMain(mod); eval(main) }

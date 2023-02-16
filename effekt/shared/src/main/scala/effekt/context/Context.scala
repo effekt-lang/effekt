@@ -40,8 +40,7 @@ abstract class Context(val positions: Positions)
     with TyperOps
     with ModuleDB
     with ElaborationOps
-    with TransformerOps
-    with Compiler {
+    with TransformerOps {
 
   // bring the context itself in scope
   implicit val context: Context = this
@@ -54,6 +53,9 @@ abstract class Context(val positions: Positions)
 
   var _config: EffektConfig = _
   def config = _config
+
+  var _compiler: Compiler = new Compiler {}
+  def compiler = _compiler
 
   /**
    * Clear current context to start processing a fresh unit
