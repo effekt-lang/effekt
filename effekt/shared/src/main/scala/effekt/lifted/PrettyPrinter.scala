@@ -69,7 +69,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
     case l: Literal              => l.value.toString
     case ValueVar(id, _)         => id.name.toString
 
-    case PureApp(b, targs, args) => toDoc(b) <> parens(hsep(args map argToDoc, comma))
+    case PureApp(b, targs, args) =>
+      val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+      toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))
 
     case Select(b, field, tpe) =>
       toDoc(b) <> "." <> toDoc(field.name)
@@ -86,7 +88,13 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
   def toDoc(e: Evidence): Doc = e match {
     case Evidence(Nil)  => "<>"
-    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev.name) }, ","))
+    case Evidence(list) => angles(hsep(list.map { ev => toDoc(ev) }, ","))
+  }
+
+  def toDoc(l: Lift): Doc = l match {
+    case Lift.Var(ev) => toDoc(ev.name)
+    case Lift.Try() => "Try"
+    case Lift.Reg() => "Reg"
   }
 
   def toDoc(impl: Implementation): Doc = {
@@ -131,7 +139,8 @@ object PrettyPrinter extends ParenPrettyPrinter {
         toDoc(body)
 
     case App(b, targs, args) =>
-      toDoc(b) <> parens(hsep(args map argToDoc, comma))
+      val ts = if targs.isEmpty then emptyDoc else brackets(targs.map(toDoc))
+      toDoc(b) <> ts <> parens(hsep(args map argToDoc, comma))
 
     case If(cond, thn, els) =>
       "if" <+> parens(toDoc(cond)) <+> block(toDoc(thn)) <+> "else" <+> block(toDoc(els))
@@ -141,6 +150,9 @@ object PrettyPrinter extends ParenPrettyPrinter {
 
     case Try(body, hs) =>
       "try" <+> toDoc(body) <+> "with" <+> hsep(hs.map(toDoc), " with")
+
+    case Shift(ev, body) =>
+      "shift" <> parens(toDoc(ev)) <+> toDoc(body)
 
     case State(id, init, region, ev, body) =>
       "var" <+> toDoc(id.name) <+> "in" <+> toDoc(region.name) <+> "=" <+> toDoc(init) <+> ";" <> line <> toDoc(body)

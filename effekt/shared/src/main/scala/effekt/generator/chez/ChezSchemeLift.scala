@@ -114,43 +114,24 @@ object ChezSchemeLift extends Backend {
     case Try(body, handler) =>
       val handlers = handler.map { h =>
         val names = RecordNames(h.interface.name)
-        // (let ((OPNAME (lambda (ev args...)  ((ev (lambda k1 => lambda k2 =>
-        //      (define ([[resume]] ev v) (ev (k1 v)))
-        //      [[BODY]]_k2))))
-        //   (CONSTRUCTOR OPNAME ...)
-        val operations = h.operations.map {
-          case Operation(op, BlockLit(tparams, params, body)) =>
-            val opName = freshName(op.name.name)
-            val resumeName = nameDef(params.last.id)
-            val paramNames = params.init.map(p => nameDef(p.id))
-            val ev = freshName("ev")
-
-            val resumeEv = freshName("ev")
-            val v = freshName("v")
-
-            val k1 = freshName("k1")
-            val k2 = freshName("k2")
-
-            val chez.Block(defs, exprs, result) = toChez(body, Continuation.Dynamic(Variable(k2)))
-
-            chez.Binding(opName, chez.Lambda(List(ev) ++ paramNames,
-              chez.Call(ev, chez.Lambda(List(k1), chez.Lambda(List(k2),
-                chez.Block(
-                  chez.Function(resumeName, List(resumeEv, v),
-                    chez.Call(resumeEv, chez.Call(k1, chez.Variable(v)))) :: defs,
-                  exprs,
-                  result))))))
-        }
-
         val cap = freshName(names.name)
-        Binding(cap, chez.Let(operations,
-          chez.Call(names.constructor, operations.map { fun => Variable(fun.name) } :_*)))
+        Binding(cap, toChez(h))
       }
-
       CPS.inline { k =>
         chez.Let(handlers,
           chez.Call(CPS.reset(chez.Call(toChez(body), CPS.lift :: handlers.map(h => Variable(h.name)))), List(k.reify)))
       }
+
+    // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
+    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
+      CPS.lift(ev.lifts, CPS.inline { k1 =>
+        val a = freshName("a")
+        val ev = freshName("ev")
+        chez.Let(List(
+            chez.Binding(toChez(kparam), chez.Lambda(List(ev, a),
+              chez.Call(ev, chez.Call(k1.reify, List(chez.Expr.Variable(a))))))),
+          toChezExpr(body).reify())
+      })
 
     case Region(body) =>
      CPS.inline { k => chez.Call(chez.Builtin("with-region", toChez(body)), List(k.reify)) }
@@ -228,18 +209,27 @@ object ChezSchemeLift extends Backend {
     case Member(b, field, annotatedTpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
-    case Unbox(e) =>
-      toChez(e)
+    case Unbox(e) => toChez(e)
 
-    case New(Implementation(id, clauses)) =>
-      val ChezName(name) = nameRef(id.name)
-      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map { case Operation(_, block) => toChez(block) })
+    case New(impl) => toChez(impl)
   }
 
-  def toChez(scope: Evidence): chez.Expr = scope match {
-    case Evidence(Nil) => Variable(ChezName("here"))
-    case Evidence(ev :: Nil) => chez.Variable(nameRef(ev))
-    case Evidence(scopes) => chez.Builtin("nested", scopes map { s => chez.Variable(nameRef(s)) }:_*)
+  def toChez(impl: Implementation): chez.Expr =
+    val ChezName(name) = nameRef(impl.interface.name)
+    chez.Call(Variable(ChezName(name)), impl.operations.map { case Operation(_, block) => toChez(block) })
+
+  def toChez(scope: Evidence): chez.Expr = toChez(scope.lifts)
+
+  def toChez(lifts: List[Lift]): chez.Expr = lifts match {
+    case el :: Nil => toChez(el)
+    case el :: rest => chez.Builtin("nested", toChez(el), toChez(rest))
+    case Nil => Variable(ChezName("here"))
+  }
+
+  def toChez(l: Lift): chez.Expr = l match {
+    case Lift.Var(x) => chez.Variable(nameRef(x))
+    case Lift.Try() => Variable(ChezName("lift"))
+    case Lift.Reg() => Variable(ChezName("lift"))
   }
 
   def toChez(expr: Expr): chez.Expr = expr match {
@@ -296,6 +286,9 @@ object ChezSchemeLift extends Backend {
     def flatMap(f: chez.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
     def map(f: chez.Expr => chez.Expr): CPS = flatMap(a => CPS.pure(f(a)))
     def run: chez.Expr = prog(Continuation.Static(a => a))
+    def reify(): chez.Expr =
+      val k = freshName("k")
+      chez.Lambda(List(k), this.apply(Continuation.Dynamic(chez.Expr.Variable(k))))
   }
 
   object CPS {
@@ -309,12 +302,33 @@ object ChezSchemeLift extends Backend {
           prog(Continuation.Dynamic(chez.Variable(kName))))
     }
 
+    def reflect(e: chez.Expr): CPS =
+      CPS.join { k => chez.Expr.Call(e, List(k.reify)) }
+
+    def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
+      // TODO implement lift for reg properly
+      case (Lift.Try() | Lift.Reg()) :: lifts =>
+        val k2 = freshName("k2")
+        lift(lifts, CPS.inline { k1 => chez.Lambda(List(k2),
+          m.apply(a => chez.Expr.Call(chez.Expr.Call(k1.reify, List(a)), List(chez.Expr.Variable(k2))))
+        )})
+
+      // [[ [ev :: evs](m) ]] = ev([[ [evs](m) ]])
+      case Lift.Var(x) :: lifts =>
+        CPS.reflect(chez.Call(nameRef(x), lift(lifts, m).reify()))
+
+      case Nil => m
+    }
+
     def reset(prog: chez.Expr): chez.Expr =
+      chez.Call(prog, List(pure))
+
+
+    // fn a => fn k2 => k2(a)
+    def pure: chez.Expr =
       val a = freshName("a")
       val k2 = freshName("k2")
-      // fn a => fn k2 => k2(a)
-      val pure = chez.Lambda(List(a), chez.Lambda(List(k2), chez.Call(k2, chez.Variable(a))))
-      chez.Call(prog, List(pure))
+      chez.Lambda(List(a), chez.Lambda(List(k2), chez.Call(k2, chez.Variable(a))))
 
     // TODO generate
     def lift: chez.Expr = chez.Variable(ChezName("lift"))
@@ -326,6 +340,7 @@ object ChezSchemeLift extends Backend {
     def id =
       val a = ChezName("a")
       chez.Lambda(List(a), chez.Variable(a))
+
   }
 
   def freshName(s: String): ChezName =

@@ -33,7 +33,7 @@ case class RecordNames(sym: Symbol) {
   val predicate = ChezName(name + "?")
   val matcher = ChezName("match-" + name)
   val constructor = sym match {
-    case _: effekt.symbols.Interface => ChezName(s"make-${name}")
+    case _: effekt.symbols.Interface => ChezName(name)
     case _ => uid
   }
 }

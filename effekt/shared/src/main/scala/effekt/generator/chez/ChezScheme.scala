@@ -202,7 +202,7 @@ trait ChezScheme {
 
     case New(Implementation(tpe, clauses)) =>
       val ChezName(name) = nameRef(tpe.name)
-      chez.Call(Variable(ChezName(s"make-${name}")), clauses.map {
+      chez.Call(Variable(ChezName(name)), clauses.map {
         case Operation(_, tps, cps, vps, bps, resume, body) => chez.Lambda((vps ++ bps) map toChez, toChez(body))
       })
   }
