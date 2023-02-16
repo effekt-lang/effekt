@@ -29,6 +29,7 @@ object PrettyPrinter extends ParenPrettyPrinter {
       emptyline <> vcat(m.decls.map(toDoc)) <>
       emptyline <> toDoc(m.definitions)
   }
+
   def signature(tparams: List[Id], params: List[Param], ret: ValueType): Doc =
     val tps = if tparams.isEmpty then emptyDoc else brackets(tparams.map(toDoc))
     val ps = parens(params.map(toDoc))

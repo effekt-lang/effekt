@@ -210,7 +210,6 @@ trait ChezScheme {
       chez.Lambda((vps ++ bps) map toChez, toChez(body))
   }
 
-
   def toChez(expr: Expr): chez.Expr = expr match {
     case Literal((), _)         => chez.RawValue("#f")
     case Literal(s: String, _)  => ChezString(s)

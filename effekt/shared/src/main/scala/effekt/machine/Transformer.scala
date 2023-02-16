@@ -5,10 +5,8 @@ import effekt.PhaseResult.CoreLifted
 
 import scala.collection.mutable
 import effekt.context.Context
-import effekt.lifted.DeclarationContext
-import effekt.lifted.given
-import effekt.lifted
 import effekt.lifted.{ DeclarationContext, Definition, Lift, LiftInference, given }
+import effekt.lifted
 import effekt.symbols
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState

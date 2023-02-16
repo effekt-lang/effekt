@@ -348,6 +348,7 @@ object ChezSchemeLift extends Backend {
     def id =
       val a = ChezName("a")
       chez.Lambda(List(a), chez.Variable(a))
+
   }
 
   def freshName(s: String): ChezName =

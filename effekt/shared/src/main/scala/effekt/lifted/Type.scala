@@ -1,7 +1,6 @@
 package effekt
 package lifted
 
-import effekt.core.Id
 import effekt.symbols.builtins
 
 

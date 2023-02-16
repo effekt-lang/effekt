@@ -52,7 +52,6 @@ object messages {
     val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
     throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
 
-
   /**
    * Stores messages in a mutable field
    */

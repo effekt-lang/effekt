@@ -374,7 +374,6 @@ object ML extends Backend {
     def flatMap(f: ml.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
     def map(f: ml.Expr => ml.Expr): CPS = flatMap(a => CPS.pure(f(a)))
     def run: ml.Expr = prog(Continuation.Static(a => a))
-
     def reify(): ml.Expr =
       val k = freshName("k")
       ml.Lambda(ml.Param.Named(k))(this.apply(Continuation.Dynamic(ml.Expr.Variable(k))))
