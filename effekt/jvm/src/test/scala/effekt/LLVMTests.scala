@@ -118,10 +118,16 @@ class LLVMTests extends EffektTests {
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--backend", "llvm",
-      "--lib", "libraries/llvm"
+      "--lib", "libraries/llvm",
+      "--out", output.getPath
     ))
     configs.verify()
     compiler.compileFile(f.getPath, configs)
     configs.stringEmitter.result()
   }
+
+  def canRun() =
+    canRunExecutable("llc", "--version") ||
+    canRunExecutable("llc-15", "--version") ||
+    canRunExecutable("llc-12", "--version")
 }

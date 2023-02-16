@@ -18,18 +18,10 @@ import kiama.output.PrettyPrinterTypes.Document
  */
 object ChezSchemeLift extends Backend {
 
-  def run(expr: chez.Expr): chez.Expr = chez.Builtin("run", expr)
-  def pure(expr: chez.Expr): chez.Expr = chez.Builtin("pure", expr)
-
-  // TODO we use the $then variant, for now, since the `then` variant is a macro and would
-  // require adding it to the syntax chez.Tree
-  def bind(binding: chez.Expr, param: ChezName, body: chez.Block): chez.Expr =
-    Builtin("$then", binding, chez.Lambda(List(param), body))
-
   def runMain(main: ChezName): chez.Expr =
     val monomorphized = true
-    if (monomorphized) chez.Builtin("run", chez.Call(main))
-    else chez.Builtin("run", chez.Call(main, Variable(ChezName("here"))))
+    if (monomorphized) chez.Call(chez.Call(main), List(CPS.id))
+    else chez.Call(chez.Call(main, CPS.id), List(CPS.id))
 
   /**
    * Returns [[Compiled]], containing the files that should be written to.
@@ -85,38 +77,71 @@ object ChezSchemeLift extends Backend {
     decls ++ externs ++ defns
   }
 
-  def toChezExpr(stmt: Stmt): chez.Expr = stmt match {
-    case Return(e) => pure(toChez(e))
-    case App(b, targs, args) => chez.Call(toChez(b), args map toChez)
-    case If(cond, thn, els) => chez.If(toChez(cond), toChezExpr(thn), toChezExpr(els))
-    case Val(id, binding, body) => bind(toChezExpr(binding), nameDef(id), toChez(body))
-    case Match(scrutinee, clauses, default) =>
+  def toChezExpr(stmt: Stmt): CPS = stmt match {
+    case Return(e) => CPS.pure(toChez(e))
+    case App(b, targs, args) => CPS.inline { k => chez.Call(chez.Call(toChez(b), args map toChez), List(k.reify)) }
+
+    case If(cond, thn, els) =>
+      CPS.join { k =>
+        chez.If(toChez(cond), toChezExpr(thn)(k), toChezExpr(els)(k))
+      }
+    case Val(id, binding, body) =>
+      toChezExpr(binding).flatMap { value =>
+        CPS.inline { k =>
+          chez.Let(List(Binding(nameDef(id), value)), toChez(body, k))
+        }
+      }
+    case Match(scrutinee, clauses, default) => CPS.join { k =>
       val sc = toChez(scrutinee)
       val cls = clauses.map { case (constr, branch) =>
         val names = RecordNames(constr)
         val pred = chez.Call(chez.Variable(names.predicate), List(sc))
-        val matcher = chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch)))
+        val matcher = chez.Call(chez.Call(chez.Variable(names.matcher), List(sc, toChez(branch))), List(k.reify))
         (pred, matcher)
       }
-      chez.Cond(cls, default.map(toChezExpr))
+      chez.Cond(cls, default.map { d => toChezExpr(d)(k) })
+    }
 
-    case Hole() => chez.Builtin("hole")
+    case Hole() => CPS.inline { k => chez.Builtin("hole") }
 
-    case State(id, init, region, body) if region == symbols.builtins.globalRegion =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body))
+    case State(id, init, region, ev, body) if region == symbols.builtins.globalRegion =>
+      CPS.inline { k =>
+        chez.Let(List(Binding(nameDef(id), chez.Builtin("box", toChez(init)))), toChez(body, k))
+      }
 
-    case State(id, init, region, body) =>
-      chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body))
+    case State(id, init, region, ev, body) =>
+      CPS.inline { k =>
+       chez.Let(List(Binding(nameDef(id), chez.Builtin("fresh", Variable(nameRef(region)), toChez(init)))), toChez(body, k))
+      }
 
-    case Try(body, handler) => chez.Handle(handler.map(toChez), toChez(body))
+    case Try(body, handler) =>
+      val handlers = handler.map { h =>
+        val names = RecordNames(h.interface.name)
+        val cap = freshName(names.name)
+        Binding(cap, toChez(h))
+      }
+      CPS.inline { k =>
+        chez.Let(handlers,
+          chez.Call(CPS.reset(chez.Call(toChez(body), CPS.lift :: handlers.map(h => Variable(h.name)))), List(k.reify)))
+      }
 
-    case Reset(body) => chez.Builtin("reset", toChezExpr(body))
+    // TODO continue
+    // [[ reset { body } ]] = k => [[ body ]] (pure) k
+    case Reset(body) => CPS.join { k => chez.Expr.Call(toChezExpr(body).apply(CPS.pure), List(k.reify)) }
 
-    case Shift(ev, body) => chez.Builtin("shift", toChez(ev), toChez(body))
+    // TODO deal with evidence passed to the continuation.
+    // [[ shift(ev, {k} => body) ]] = ev(k => k2 => [[ body ]] k2 )
+    case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
+      CPS.lift(ev.lifts, CPS.inline { k1 =>
+        chez.Let(List(chez.Binding(toChez(kparam), k1.reify)),
+          toChezExpr(body).reify())
+      })
 
-    case Region(body) => chez.Builtin("with-region", toChez(body))
+    // TODO properly CPS translate
+    case Region(body) =>
+     CPS.inline { k => chez.Call(chez.Builtin("with-region", toChez(body)), List(k.reify)) }
 
-    case other => chez.Let(Nil, toChez(other))
+    case other => CPS.inline { k => chez.Let(Nil, toChez(other, k)) }
   }
 
   def toChez(decl: Declaration): List[chez.Def] = decl match {
@@ -156,22 +181,28 @@ object ChezSchemeLift extends Backend {
       Left(chez.Constant(nameDef(id), toChez(binding)))
   }
 
-  def toChez(stmt: Stmt): chez.Block = stmt match {
+
+  // Scheme Blocks in CPS
+  // [[ { def foo; ...; IOEXPR ...; CPSEXPR } ]]_k = { [[def foo; ...]]; [[IOEXPR ...]]; [[CPSEXPR]]_k }
+  def toChez(stmt: Stmt, k: Continuation): chez.Block = stmt match {
 
     case Scope(definitions, body) =>
-      definitions.map(toChez).foldRight(toChez(body)) {
+      definitions.map(toChez).foldRight(toChez(body, k)) {
         case (Left(defn), chez.Block(defns, exprs, result)) => chez.Block(defn :: defns, exprs, result)
         case (Right(Some(expr)), chez.Block(Nil, exprs, result)) => chez.Block(Nil, expr :: exprs, result)
         case (Right(Some(expr)), rest) => chez.Block(Nil, expr :: Nil, chez.Let(Nil, rest))
         case (Right(None), rest) => rest
       }
 
-    case other => chez.Block(Nil, Nil, toChezExpr(other))
+    case other => chez.Block(Nil, Nil, toChezExpr(other)(k))
   }
 
   def toChez(block: BlockLit): chez.Lambda = block match {
     case BlockLit(tparams, params, body) =>
-      chez.Lambda(params.map(toChez), toChez(body))
+      val k = freshName("k")
+      chez.Lambda((params map toChez),
+        chez.Lambda(List(k),
+          toChez(body, Continuation.Dynamic(chez.Variable(k)))))
   }
 
   def toChez(block: Block): chez.Expr = block match {
@@ -225,6 +256,114 @@ object ChezSchemeLift extends Backend {
 
     case Box(b) => toChez(b)
 
-    case Run(s) => run(toChezExpr(s))
+    case Run(s) => toChezExpr(s).run
+  }
+
+  /**
+   * This is mostly copy and pasted from the ML backend [[ml.ML.CPS]]. At some point, we should
+   * add yet another intermediate representation for CPS to share this (and optimizations on it).
+   */
+  enum Continuation {
+    case Dynamic(cont: chez.Expr)
+    case Static(cont: chez.Expr => chez.Expr)
+
+    def apply(e: chez.Expr): chez.Expr = this match {
+      case Continuation.Dynamic(k) => chez.Call(k, List(e))
+      case Continuation.Static(k) => k(e)
+    }
+
+    def reify: chez.Expr = this match {
+      case Continuation.Dynamic(k) => k
+      case Continuation.Static(k) =>
+        val a = freshName("a")
+        chez.Lambda(List(a), k(chez.Variable(a)))
+    }
+
+    def reflect: chez.Expr => chez.Expr = this match {
+      case Continuation.Static(k) => k
+      case Continuation.Dynamic(k) => a => chez.Call(k, List(a))
+    }
+  }
+  class CPS(prog: Continuation => chez.Expr) {
+    def apply(k: Continuation): chez.Expr = prog(k)
+    def apply(k: chez.Expr): chez.Expr = prog(Continuation.Dynamic(k))
+    def apply(k: chez.Expr => chez.Expr): chez.Expr = prog(Continuation.Static(k))
+
+    def flatMap(f: chez.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
+    def map(f: chez.Expr => chez.Expr): CPS = flatMap(a => CPS.pure(f(a)))
+    def run: chez.Expr = prog(Continuation.Static(a => a))
+
+    def reify(): chez.Expr =
+      val k = freshName("k")
+      chez.Lambda(List(k), this.apply(Continuation.Dynamic(chez.Expr.Variable(k))))
+  }
+
+  object CPS {
+
+    def inline(prog: Continuation => chez.Expr): CPS = CPS(prog)
+    def join(prog: Continuation => chez.Expr): CPS = CPS {
+      case k: Continuation.Dynamic => prog(k)
+      case k: Continuation.Static =>
+        val kName = freshName("k")
+        chez.Let(List(Binding(kName, k.reify)),
+          prog(Continuation.Dynamic(chez.Variable(kName))))
+    }
+
+    def reflect(e: chez.Expr): CPS =
+      CPS.join { k => chez.Expr.Call(e, List(k.reify)) }
+
+    def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
+
+      // TODO implement lift for reg properly
+      case (Lift.Try() | Lift.Reg()) :: lifts =>
+        val k2 = freshName("k2")
+        lift(lifts, CPS.inline { k1 => chez.Lambda(List(k2),
+          m.apply(a => chez.Expr.Call(chez.Expr.Call(k1.reify, List(a)), List(chez.Expr.Variable(k2))))
+        )})
+
+      // [[ [ev :: evs](m) ]] = ev([[ [evs](m) ]])
+      case Lift.Var(x) :: lifts =>
+        CPS.reflect(chez.Call(nameRef(x), lift(lifts, m).reify()))
+
+      case Nil => m
+    }
+
+    def reset(prog: chez.Expr): chez.Expr =
+      chez.Call(prog, List(pure))
+
+
+    // fn a => fn k2 => k2(a)
+    def pure: chez.Expr =
+      val a = freshName("a")
+      val k2 = freshName("k2")
+      chez.Lambda(List(a), chez.Lambda(List(k2), chez.Call(k2, chez.Variable(a))))
+
+    // TODO generate
+    def lift: chez.Expr = chez.Variable(ChezName("lift"))
+
+    def pure(expr: chez.Expr): CPS = CPS.inline(k => k(expr))
+
+    def runMain(main: ChezName): chez.Expr = chez.Call(chez.Call(main, id), List(id))
+
+    def id =
+      val a = ChezName("a")
+      chez.Lambda(List(a), chez.Variable(a))
+  }
+
+  def freshName(s: String): ChezName =
+    ChezName(s + Symbol.fresh.next())
+
+  def generateStateAccessors: List[chez.Function] = {
+    val ref = ChezName("ref")
+    val value = ChezName("value")
+    val ev = ChezName("ev")
+
+    val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
+      chez.Lambda(List(ev), CPS.pure(chez.Builtin("unbox", Variable(ref))).reify()))
+
+    val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
+      chez.Lambda(List(ev, value), CPS.pure(chez.Builtin("set-box!", Variable(ref), Variable(value))).reify()))
+
+    List(getter, setter)
   }
 }

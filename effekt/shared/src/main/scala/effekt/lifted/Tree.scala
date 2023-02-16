@@ -3,6 +3,7 @@ package lifted
 
 import effekt.context.Context
 import effekt.symbols.{ Constructor, Name, Symbol }
+import scala.collection.immutable
 
 export effekt.core.Id
 
@@ -120,12 +121,11 @@ enum Stmt extends Tree  {
   case Match(scrutinee: Expr, clauses: List[(Symbol, BlockLit)], default: Option[Stmt])
 
   // Effects
+  case State(id: Id, init: Expr, region: Symbol, ev: Evidence, body: Stmt)
   case Try(body: Block, handler: List[Implementation])
 
   // after lift inference -- does not pass evidence to body
   case Reset(body: Stmt)
-
-  case State(id: Id, init: Expr, region: Symbol, body: Stmt)
   case Region(body: Block)
 
   // e.g. shift(ev) { {resume} => ... }
@@ -169,74 +169,105 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-def freeVariables(d: Definition): Set[Param] = d match {
+case class FreeVariables(vars: immutable.HashMap[core.Id, lifted.Param]) {
+  def ++(o: FreeVariables): FreeVariables = {
+    FreeVariables(vars.merged(o.vars){ case ((leftId -> leftParam), (rightId -> rightParam)) =>
+      assert(leftParam == rightParam, "Same core.Id occurs free with different types.")
+      (leftId -> leftParam)
+    })
+  }
+  def --(o: FreeVariables): FreeVariables = {
+    FreeVariables(vars.filter{ case (leftId -> leftParam) =>
+      if(o.vars.contains(leftId)) {
+        assert(leftParam == o.vars(leftId), "core.Id bound with different type than it's occurences.")
+        false
+      } else { true }
+    })
+  }
+
+  def toList: List[lifted.Param] = vars.values.toList
+  // TODO add further accessors as needed
+}
+object FreeVariables {
+  def empty = FreeVariables(immutable.HashMap.empty)
+  def apply(ps: Param*): FreeVariables = ps.toFV
+  extension (i: Iterable[lifted.Param]) def toFV: FreeVariables = {
+    FreeVariables(immutable.HashMap.from(i.map { p => p.id -> p }))
+  }
+  extension(self: Iterable[FreeVariables]) def combineFV: FreeVariables = {
+      self.fold(FreeVariables.empty)(_ ++ _)
+  }
+}
+import FreeVariables.{toFV, combineFV}
+def freeVariables(d: Definition): FreeVariables = d match {
   case Definition.Def(id, block) => freeVariables(block)
   case Definition.Let(id, binding) => freeVariables(binding)
 }
 
-def freeVariables(stmt: Stmt): Set[Param] = stmt match {
+def freeVariables(stmt: Stmt): FreeVariables = stmt match {
   // TODO fix
   case Scope(definitions, body) =>
-    var free: Set[Param] = Set.empty
+    var free: FreeVariables = FreeVariables.empty
     // we assume definitions can be mutually recursive, for now.
-    var bound: Set[Param] = definitions.collect { case Definition.Def(id, block) => BlockParam(id, block.tpe) }.toSet
+    var bound: FreeVariables = definitions.collect { case Definition.Def(id, block) => BlockParam(id, block.tpe) }.toFV
     definitions.foreach {
       case Definition.Def(id, block) =>
         free ++= freeVariables(block) -- bound
       case Definition.Let(id, binding) =>
         free ++= freeVariables(binding) -- bound
-        bound ++= Set(ValueParam(id, binding.tpe))
+        bound ++= FreeVariables(ValueParam(id, binding.tpe))
     }
     freeVariables(body) -- bound ++ free
-  case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- Set(ValueParam(id, binding.tpe))
-  case App(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+  case Val(id, binding, body) => freeVariables(binding) ++ freeVariables(body) -- FreeVariables(ValueParam(id, binding.tpe))
+  case App(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case If(cond, thn, els) => freeVariables(cond) ++ freeVariables(thn) ++ freeVariables(els)
   case Return(e) => freeVariables(e)
-  case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.flatMap { case (pattern, lit) => freeVariables(lit) } ++ default.toSet.flatMap(s => freeVariables(s))
-  case Hole() => Set.empty
-  case State(id, init, region, body) =>
-    freeVariables(init) ++ freeVariables(body) --
-      Set(BlockParam(id, BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
-        BlockParam(region, BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
-  case Try(body, handlers) => freeVariables(body) ++ handlers.flatMap(freeVariables)
+  case Match(scrutinee, clauses, default) => freeVariables(scrutinee) ++ clauses.map { case (pattern, lit) => freeVariables(lit) }.combineFV ++ default.toSet.map(s => freeVariables(s)).combineFV
+  case Hole() => FreeVariables.empty
+  case State(id, init, region, ev, body) =>
+    freeVariables(init) ++ freeVariables(ev) ++ freeVariables(body) --
+      FreeVariables(BlockParam(id, lifted.BlockType.Interface(symbols.builtins.TState.interface, List(init.tpe))),
+        BlockParam(region, lifted.BlockType.Interface(symbols.builtins.RegionSymbol, Nil)))
+  case Try(body, handlers) => freeVariables(body) ++ handlers.map(freeVariables).combineFV
   case Reset(body) => freeVariables(body)
   case Shift(ev, body) => freeVariables(ev) ++ freeVariables(body)
   case Region(body) => freeVariables(body)
 }
 
-def freeVariables(expr: Expr): Set[Param] = expr match {
-  case ValueVar(id, tpe) => Set(ValueParam(id, tpe))
-  case Literal(value, tpe) => Set.empty
-  case PureApp(b, targs, args) => freeVariables(b) ++ args.flatMap(freeVariables)
+def freeVariables(expr: Expr): FreeVariables = expr match {
+  case ValueVar(id, tpe) => FreeVariables(ValueParam(id, tpe))
+  case Literal(value, tpe) => FreeVariables.empty
+  case PureApp(b, targs, args) => freeVariables(b) ++ args.map(freeVariables).combineFV
   case Select(target, field, tpe) => freeVariables(target) // we do not count fields in...
   case Box(b) => freeVariables(b) // well, well, well...
   case Run(s) => freeVariables(s)
 }
 
-def freeVariables(arg: Argument): Set[Param] = arg match {
+def freeVariables(arg: Argument): FreeVariables = arg match {
   case expr: Expr => freeVariables(expr)
   case block: Block => freeVariables(block)
   case ev: Evidence => freeVariables(ev)
 }
 
-def freeVariables(block: Block): Set[Param] = block match {
-  case BlockVar(id, tpe) => Set(BlockParam(id, tpe))
+def freeVariables(block: Block): FreeVariables = block match {
+  case BlockVar(id, tpe) => FreeVariables(BlockParam(id, tpe))
   case BlockLit(tparams, params, body) =>
-    freeVariables(body) -- params
+    freeVariables(body) -- params.toFV
   case Member(b, field, tpe) => freeVariables(b)
   case Unbox(e) => freeVariables(e) // TODO well, well, well...
   case New(impl) => freeVariables(impl) // TODO (see also e2c5547b32e40697cafaec51f8e3c27ce639055e)
 }
 
-def freeVariables(op: Operation): Set[Param] = op match {
+def freeVariables(op: Operation): FreeVariables = op match {
   case Operation(name, body) => freeVariables(body)
 }
 
-def freeVariables(impl: Implementation): Set[Param] = impl match {
-  case Implementation(id, operations) => operations.flatMap(freeVariables).toSet
+def freeVariables(impl: Implementation): FreeVariables = impl match {
+  case Implementation(id, operations) => operations.map(freeVariables).combineFV
 }
 
-def freeVariables(ev: Evidence): Set[Param] = ev.lifts.toSet.collect {
-  case Lift.Var(ev) => EvidenceParam(ev)
-}
-
+def freeVariables(ev: Evidence): FreeVariables = ev.lifts.flatMap {
+  case Lift.Var(ev) => List(lifted.Param.EvidenceParam(ev))
+  case Lift.Try() => List()
+  case Lift.Reg() => List()
+}.toFV

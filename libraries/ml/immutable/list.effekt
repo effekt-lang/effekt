@@ -1,0 +1,118 @@
+module immutable/list
+
+import effekt
+import immutable/option
+
+record EmptyList()
+
+type List[A] {
+  Nil();
+  Cons(head: A, tail: List[A])
+}
+
+
+def isEmpty[A](l: List[A]): Boolean = l match {
+  case Nil() => true
+  case Cons(a, rest) => false
+}
+
+def foreach[A](l: List[A]) { f: A => Unit } : Unit = {
+  def loop(remainder: List[A]): Unit =
+   if (not(remainder.isEmpty)) remainder match {
+    case Nil() => ()
+    case Cons(a, as) => f(a); loop(as)
+  }
+
+  loop(l)
+}
+
+def size[A](l: List[A]): Int = {
+  def loop(lst: List[A], acc: Int): Int = lst match {
+    case Nil() => acc
+    case Cons(a, as) => loop(as, acc + 1)
+  }
+  loop(l, 0)
+}
+
+def reverse[A](l: List[A]): List[A] = {
+  def loop(lst: List[A], acc: List[A]): List[A] = lst match {
+    case Nil() => acc
+    case Cons(a, as) => loop(as, Cons(a, acc))
+  }
+  loop(l, Nil())
+}
+
+def map[A, B](l: List[A]) { f: A => B } : List[B] = {
+  def loop(lst: List[A], acc: List[B]): List[B] = lst match {
+    case Nil() => acc
+    case Cons(a, as) => loop(as, Cons(f(a), acc))
+  }
+  loop(l, Nil()).reverse
+}
+
+// [1,2,3].reverseOnto([4,5,6])
+// [3,2,1,4,5,6]
+def reverseOnto[A](l: List[A], other: List[A]): List[A] = l match {
+  case Nil() => other
+  case Cons(a, rest) => rest.reverseOnto(Cons(a, other))
+}
+
+// [1,2,3].append([4,5,6])
+// [3,2,1].reverseOnto([4,5,6])
+// [1,2,3,4,5,6]
+def append[A](l: List[A], other: List[A]): List[A] =
+  l.reverse.reverseOnto(other)
+
+// gracefully fails
+def take[A](l: List[A], n: Int): List[A] =
+  if (n == 0) {
+    Nil()
+  } else l match {
+    case Nil() => Nil()
+    case Cons(a, rest) => Cons(a, rest.take(n - 1))
+  }
+
+def drop[A](l: List[A], n: Int): List[A] =
+  if (n == 0) {
+    l
+  } else l match {
+    case Nil() => Nil()
+    case Cons(a, rest) => rest.drop(n - 1)
+  }
+
+def nonEmpty[A](l: List[A]): Boolean = l match {
+  case Nil() => false
+  case Cons(a, rest) => true
+}
+
+def head[A](l: List[A]): A / Exception[EmptyList] = l match {
+  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+  case Cons(a, rest) => a
+}
+
+def tail[A](l: List[A]): List[A] / Exception[EmptyList] = l match {
+  case Nil() => do raise(EmptyList(), "Trying to get the head of an empty list")
+  case Cons(a, rest) => rest
+}
+
+def headOption[A](l: List[A]): Option[A] = l match {
+  case Nil() => None()
+  case Cons(a, rest) => Some(a)
+}
+
+// elements that satisfy the predicate go into the left list
+def partition[A](l: List[A]) { pred: A => Boolean }: (List[A], List[A]) = {
+  var lefts: List[A] = Nil()
+  var rights: List[A] = Nil()
+  l.foreach { el =>
+    if (pred(el)) { lefts = Cons(el, lefts) }
+    else { rights = Cons(el, rights) }
+  };
+
+  (lefts.reverse, rights.reverse)
+}
+
+def show[A](l: List[A]) { showA: A => String }: String = l match {
+  case Nil() => "Nil()"
+  case Cons(x, xs) => "Cons(" ++ showA(x) ++ ", " ++ show(xs){showA} ++ ")"
+}

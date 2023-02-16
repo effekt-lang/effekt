@@ -1,12 +1,14 @@
 package effekt
 package machine
 
+import effekt.PhaseResult.CoreLifted
+
 import scala.collection.mutable
 import effekt.context.Context
 import effekt.lifted.DeclarationContext
 import effekt.lifted.given
 import effekt.lifted
-import effekt.lifted.{Definition, LiftInference}
+import effekt.lifted.{ Definition, LiftInference }
 import effekt.symbols
 import effekt.symbols.{ Symbol, TermSymbol }
 import effekt.symbols.builtins.TState
@@ -149,6 +151,28 @@ object Transformer {
             ErrorReporter.abort(s"Unsupported blocksymbol: $id")
         }
 
+
+      // hardcoded translation for get and put.
+      // TODO remove this when interfaces are correctly translated
+      case lifted.App(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), targs, List(ev)) =>
+        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+
+        val tpe = transform(stateType)
+        val variable = Variable(freshName("x"), tpe)
+        val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+        Load(variable, stateVariable, Return(List(variable)))
+
+      case lifted.App(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(ev, arg)) =>
+        if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
+
+        val tpe = transform(stateType)
+        val variable = Variable(freshName("x"), Positive("Unit"));
+        val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
+        transform(arg).run { value =>
+          Store(stateVariable, value,
+            Construct(variable, builtins.Unit, List(), Return(List(variable))))
+        }
+
       case lifted.App(lifted.Member(lifted.BlockVar(id, tpe), op, annotatedTpe), targs, args) =>
         if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
         val opTag = {
@@ -201,7 +225,7 @@ object Transformer {
           NewStack(delimiter, regionVar, returnClause,
             PushStack(delimiter, transform(body))))
 
-      case lifted.State(id, init, region, body) =>
+      case lifted.State(id, init, region, ev, body) =>
         transform(init).run { value =>
           val tpe = value.tpe;
           val name = transform(id)
@@ -298,31 +322,6 @@ object Transformer {
       val literal_binding = Variable(freshName("utf8_string_literal"), Type.String());
       Binding { k =>
         LiteralUTF8String(literal_binding, javastring.getBytes("utf-8"), k(literal_binding))
-      }
-
-    // hardcoded translation for get and put.
-    // TODO remove this when interfaces are correctly translated
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.get, annotatedTpe), targs, List()) =>
-      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-      val tpe = transform(stateType)
-      val variable = Variable(freshName("x"), tpe)
-      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
-      Binding { k =>
-        Load(variable, stateVariable, k(variable))
-      }
-
-    case lifted.PureApp(lifted.Member(lifted.BlockVar(x, lifted.BlockType.Interface(_, List(stateType))), TState.put, annotatedTpe), targs, List(arg)) =>
-      if(targs.exists(requiresBoxing)){ ErrorReporter.abort(s"Types ${targs} are used as type parameters but would require boxing.") }
-
-      val tpe = transform(stateType)
-      val variable = Variable(freshName("x"), Positive("Unit"));
-      val stateVariable = Variable(transform(x) + "$State", Type.Reference(tpe))
-      transform(arg).flatMap { value =>
-        Binding { k =>
-          Store(stateVariable, value,
-            Construct(variable, builtins.Unit, List(), k(variable)))
-        }
       }
 
     case lifted.PureApp(lifted.BlockVar(blockName: symbols.ExternFunction, tpe: lifted.BlockType.Function), targs, args) =>

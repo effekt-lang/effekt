@@ -2,6 +2,7 @@ package effekt
 package lifted
 package mono
 
+import effekt.symbols.builtins.TState
 import scala.collection.immutable.ListMap
 import effekt.util.messages.{ ErrorReporter, FIXME, INTERNAL_ERROR, NOT_SUPPORTED, TODO }
 import kiama.util.Memoiser
@@ -269,7 +270,23 @@ def analyze(s: Stmt)(using C: ErrorReporter, F: FlowAnalysis): Unit = s match {
     F.bindEvidence(ev.id, Ev(List(Lift.Reg())))
     bindBlockParams(caps)
     analyze(body)
-  case Stmt.State(id, init, region, body) =>
+
+  // def x: { def get(ev): T; def put(ev, T): Unit }
+  case Stmt.State(id, init, region, ev, body) =>
+
+    val stateType = init.tpe
+
+    // TODO maybe add a fresh interface for every cell?
+    //   Now elaboration would need to create instances of it.
+    val refId = Id("Ref")
+    val getVar = Evidences.fresh(1)
+    val getTpe = FlowType.Function(getVar, Nil, Nil, Nil, stateType)
+    val putTpe = FlowType.Function(getVar, Nil, List(stateType), Nil, lifted.Type.TUnit)
+    F.addInterface(refId, InterfaceDeclaration(Map(TState.get -> getTpe, TState.put -> putTpe)))
+
+    val bft = freshFlowType(BlockType.Interface(refId, List(init.tpe)))
+    F.addDefinition(id, bft)
+
     analyze(init)
     analyze(body)
     FIXME((), "implement")

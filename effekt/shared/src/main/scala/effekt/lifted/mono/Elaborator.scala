@@ -369,8 +369,8 @@ def elaborate(s: Stmt)(using T: TransformationContext): Stmt = s match {
   case Stmt.Match(scrutinee, clauses, default) => Stmt.Match(elaborate(scrutinee), clauses map {
       case (id, Block.BlockLit(tparams, params, body)) => (id, Block.BlockLit(tparams, params, elaborate(body)))
     }, default.map(elaborate))
-  case Stmt.State(id, init, region, body) =>
-    FIXME(Stmt.State(id, elaborate(init), region, elaborate(body)), "Support mutable state")
+  case Stmt.State(id, init, region, ev, body) =>
+    FIXME(Stmt.State(id, elaborate(init), region, ev, elaborate(body)), "Support mutable state")
   case Stmt.Region(Block.BlockLit(tparams, params, body)) =>
     val (evidenceIds, remainingParams) = params.partitionMap(elaborate)
     val elaboratedBody = {

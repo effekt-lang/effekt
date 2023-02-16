@@ -29,7 +29,7 @@ def show(i: Int): String = {
   }
   def impl(i: Int): String = {
     if(i<10){impl_digit(i)}else{
-      impl(i/10) + impl_digit(mod(i,10))
+      impl(i/10) ++ impl_digit(mod(i,10))
     }
   }
   if(i==0) {
@@ -48,13 +48,13 @@ def show(l: List[Integer]): String = {
   def impl(t: List[Integer]): String = {
     t match {
       case Nil() => "]"
-      case Cons(hd, tl) => ", " + show(hd) + impl(tl)
+      case Cons(hd, tl) => ", " ++ show(hd) ++ impl(tl)
     }
   }
 
   l match {
     case Nil() => "[]"
-    case Cons(hd,tl) => "[" + show(hd) +impl(tl)
+    case Cons(hd,tl) => "[" ++ show(hd) ++ impl(tl)
   }
 }
 

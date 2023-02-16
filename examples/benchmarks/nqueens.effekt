@@ -1,0 +1,72 @@
+import immutable/list
+import immutable/option
+import io/args
+import text/string
+
+// not used at the moment (see below).
+def range(a: Int, b: Int): List[Int] = {
+  if (a > b) Nil()
+  else Cons(a, range(a + 1, b))
+}
+
+def sum(xs: List[Int]): Int = xs match {
+  case Nil() => 0
+  case Cons(x, xs) => x + sum(xs)
+}
+
+type Solution = List[Int]
+
+effect Search {
+  def pick(size: Int): Int
+  def fail(): Nothing
+}
+
+def safe(queen: Int, diag: Int, xs: Solution): Boolean = xs match {
+  case Cons(q, qs) =>
+    // we do not have shortcutting && in Effekt, hence we encode it here.
+    val safeHere = queen != q && queen != q + diag && queen != q - diag;
+    if (safeHere) safe(queen, diag + 1, qs) else false
+  case _ => true
+}
+
+def findOneSolution(size: Int, queen: Int) : Solution / Search = {
+  if (queen == 0) {
+    Nil()
+  } else {
+    val sol = findOneSolution(size, queen-1)
+    val next = do pick(size)
+    if (safe(next, 1, sol)) {
+      Cons(next, sol)
+    } else {
+      do fail() match {}
+    }
+  }
+}
+
+def countSolutions(size: Int): Int =
+  try {
+    findOneSolution(size, size);
+    1
+  } with Search {
+    def fail() = 0
+    def pick(sz) = {
+      def loop(i: Int, acc: Int): Int = {
+        if (i == sz) {
+          resume(i) + acc
+        } else {
+          loop(i + 1, resume(i) + acc)
+        }
+      }
+      loop(1, 0)
+    }
+  }
+
+
+def main() = commandLineArgs() match {
+  case Nil() => println(countSolutions(7))
+  case Cons(x, Nil()) => toInt(x) match {
+    case None() => println("Unexpected non-integer '" ++ show(x) ++ "'")
+    case Some(i) => println(countSolutions(i))
+  }
+  case other => println("Expects zero or one argument, not '" ++ show(size(other)) ++ "'")
+}

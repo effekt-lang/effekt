@@ -194,7 +194,7 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       Val(id, transform(binding), transform(body))
 
     case core.State(id, init, region, body) =>
-      State(id, transform(init), region, transform(body))
+      State(id, transform(init), region, env.evidenceFor(region), transform(body))
 
     case core.Match(scrutinee, clauses, default) =>
       Match(transform(scrutinee),
@@ -299,7 +299,10 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
       // will this ever be non-empty???
       val extendedEnv = env.bind(id, env.evidenceFor(block).lifts)
       pretransform(rest)(using extendedEnv, E)
-    case _ => env
+    // even if defs cannot be mutually recursive across lets, we still have to pretransform them.
+    case core.Definition.Let(id, _) :: rest =>
+      pretransform(rest)
+    case Nil => env
   }
 
 
@@ -309,9 +312,11 @@ object LiftInference extends Phase[CoreTransformed, CoreLifted] {
     def bind(s: Symbol, init: Lift) = copy(env = env + (s -> List(init)))
     def adapt(a: Lift) = copy(env = env.map { case (s, as) => s -> (a :: as) })
 
+    def evidenceFor(id: core.Id): Evidence = Evidence(env.getOrElse(id, Nil))
+
     def evidenceFor(b: core.Block)(using ErrorReporter): Evidence = b match {
       case core.BlockVar(_, tpe, _) if tpe == core.Type.TRegion => Here()
-      case b: core.BlockVar => Evidence(env.getOrElse(b.id, Nil)) //.map { x => Evidence(x) }
+      case b: core.BlockVar => evidenceFor(b.id) //.map { x => Evidence(x) }
       case b: core.BlockLit   => Here()
       case core.Member(b, id, tpe) => evidenceFor(b)
       // TODO check whether this makes any sense

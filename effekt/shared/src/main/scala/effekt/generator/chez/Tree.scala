@@ -71,6 +71,8 @@ def Lambda(params: List[ChezName], body: Expr): Lambda = Lambda(params, Block(Ni
 
 def Function(name: ChezName, params: List[ChezName], body: Expr): Function = Function(name, params, Block(Nil, Nil, body))
 
+def Let(bindings: List[Binding], body: Expr): Expr = Let(bindings, Block(Nil, Nil, body))
+
 def ChezString(chezString: String): Expr = RawExpr(s"\"${chezString}\"")
 
 def Builtin(name: String, args: Expr*): Expr = Call(Variable(ChezName(name)), args.toList)

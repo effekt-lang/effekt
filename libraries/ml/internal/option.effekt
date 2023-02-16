@@ -1,0 +1,15 @@
+module internal/option
+
+import immutable/option
+
+extern type MLOption[T]
+
+extern pure def isDefined[T](opt: MLOption[T]): Boolean =
+    "case opt of NONE => false | SOME _ => true"
+
+extern pure def force[T](opt: MLOption[T]): T =
+    """case opt of NONE => raise Fail "force of option failed" | SOME v => v"""
+
+def toOption[T](opt: MLOption[T]): Option[T] = {
+    if (isDefined(opt)) Some(force(opt)) else None()
+}

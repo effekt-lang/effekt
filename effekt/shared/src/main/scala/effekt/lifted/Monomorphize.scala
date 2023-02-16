@@ -14,7 +14,7 @@ import mono.*
 //   implementation sketch: track equiv classes of evidence projections that are used as arguments to shift.
 
 // TODO mutable state:
-//   
+//
 
 
 object Monomorphize {
@@ -46,17 +46,17 @@ object Monomorphize {
 
     val binders = analysis.binders.collect { case (id: Id, ftpe: FlowType.Function) => s"${id.name}: ${ftpe.evidences.show}" }.toList.sorted.mkString("\n")
 
-    C.debug(s"""|Solved:
-        |-------
-        |${subst}
-        |
-        |Constraints:
-        |-----------
-        |${constrs}
-        |
-        |Binders:
-        |${binders}
-        |""".stripMargin)
+    //    C.debug(s"""|Solved:
+    //        |-------
+    //        |${subst}
+    //        |
+    //        |Constraints:
+    //        |-----------
+    //        |${constrs}
+    //        |
+    //        |Binders:
+    //        |${binders}
+    //        |""".stripMargin)
 
     val elaborated = elaborate(mod)
 

@@ -17,5 +17,6 @@ def state[R](init: Int) { f: => R / { State } }: Unit = {
 
 def main() = {
     with state(4);
-    println(do get())
+    val x = 2 + do get();
+    println(x)
 }

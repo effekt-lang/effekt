@@ -70,7 +70,7 @@ trait ChezScheme {
 
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
-    chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
+    chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
 
   /**
@@ -227,5 +227,27 @@ trait ChezScheme {
     case Box(b, _) => toChez(b)
 
     case Run(s) => run(toChezExpr(s))
+  }
+
+
+  // STATE
+  // -----
+
+  // (define (getter ref)
+  //  (lambda () (pure (unbox ref))))
+  //
+  // (define (setter ref)
+  //  (lambda (v) (pure (set-box! ref v))))
+  def generateStateAccessors(pure: chez.Expr => chez.Expr): List[chez.Function] = {
+    val ref = ChezName("ref")
+    val value = ChezName("value")
+
+    val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
+      chez.Lambda(Nil, pure(chez.Builtin("unbox", Variable(ref)))))
+
+    val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
+      chez.Lambda(List(value), pure(chez.Builtin("set-box!", Variable(ref), Variable(value)))))
+
+    List(getter, setter)
   }
 }
