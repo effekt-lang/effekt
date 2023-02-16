@@ -129,11 +129,14 @@ object ChezSchemeLift extends Backend {
     // [[ reset { body } ]] = k => [[ body ]] (pure) k
     case Reset(body) => CPS.join { k => chez.Expr.Call(toChezExpr(body).apply(CPS.pure), List(k.reify)) }
 
-    // TODO deal with evidence passed to the continuation.
-    // [[ shift(ev, {k} => body) ]] = ev(k => k2 => [[ body ]] k2 )
+    // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
     case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
       CPS.lift(ev.lifts, CPS.inline { k1 =>
-        chez.Let(List(chez.Binding(toChez(kparam), k1.reify)),
+        val a = freshName("a")
+        val ev = freshName("ev")
+        chez.Let(List(
+            chez.Binding(toChez(kparam), chez.Lambda(List(ev, a),
+              chez.Call(ev, chez.Call(k1.reify, List(chez.Expr.Variable(a))))))),
           toChezExpr(body).reify())
       })
 
@@ -214,8 +217,7 @@ object ChezSchemeLift extends Backend {
     case Member(b, field, annotatedTpe) =>
       chez.Call(Variable(nameRef(field)), List(toChez(b)))
 
-    case Unbox(e) =>
-      toChez(e)
+    case Unbox(e) => toChez(e)
 
     case New(impl) => toChez(impl)
   }
@@ -292,7 +294,6 @@ object ChezSchemeLift extends Backend {
     def flatMap(f: chez.Expr => CPS): CPS = CPS.inline(k => prog(Continuation.Static(a => f(a)(k))))
     def map(f: chez.Expr => chez.Expr): CPS = flatMap(a => CPS.pure(f(a)))
     def run: chez.Expr = prog(Continuation.Static(a => a))
-
     def reify(): chez.Expr =
       val k = freshName("k")
       chez.Lambda(List(k), this.apply(Continuation.Dynamic(chez.Expr.Variable(k))))
@@ -313,7 +314,6 @@ object ChezSchemeLift extends Backend {
       CPS.join { k => chez.Expr.Call(e, List(k.reify)) }
 
     def lift(lifts: List[Lift], m: CPS): CPS = lifts match {
-
       // TODO implement lift for reg properly
       case (Lift.Try() | Lift.Reg()) :: lifts =>
         val k2 = freshName("k2")

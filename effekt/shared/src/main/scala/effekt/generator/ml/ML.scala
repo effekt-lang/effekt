@@ -214,40 +214,14 @@ object ML extends Backend {
 
     case Reset(body) => CPS.join { k => ml.Call(toMLExpr(body).apply(CPS.pure), List(k.reify)) }
 
-    //      // TODO deal with evidence passed to the continuation.
-    //      val args = params.init.map(paramToML(_))
-    //      val resumeName = name(params.last.id)
-    //      val ev = freshName("ev")
-    //      val evResume = freshName("ev_resume")
-    //      val v = freshName("v")
-    //      val k1 = freshName("k1")
-    //      val k2 = freshName("k2")
-    //
-    //      // ev (fn k1 => fn k2 => let fun resume ev_res v = ev_res k1(v); in body[[k2]] end)
-    //      val newBody = ml.Call(
-    //        ml.Expr.Variable(ev)
-    //      )(
-    //        ml.Lambda(
-    //          ml.Param.Named(k1)
-    //        )(ml.Lambda(
-    //            ml.Param.Named(k2)
-    //          )(ml.mkLet(
-    //            List(ml.Binding.FunBind(
-    //              resumeName,
-    //              List(ml.Param.Named(evResume), ml.Param.Named(v)),
-    //              ml.Call(evResume)(ml.Call(k1)(ml.Expr.Variable(v)))
-    //            )),
-    //            toMLExpr(body)(ml.Variable(k2)))
-    //          )
-    //        )
-    //      )
-    //      ml.Expr.Lambda(ml.Param.Named(ev) :: args, newBody)
-
-
-    // [[ shift(ev, {k} => body) ]] = ev(k => k2 => [[ body ]] k2 )
+    // [[ shift(ev, {k} => body) ]] = ev(k1 => k2 => let k ev a = ev (k1 a) in [[ body ]] k2)
     case Shift(ev, Block.BlockLit(tparams, List(kparam), body)) =>
       CPS.lift(ev.lifts, CPS.inline { k1 =>
-        mkLet(List(ml.Binding.ValBind(toML(kparam), k1.reify)),
+        val a = freshName("a")
+        val ev = freshName("ev")
+        mkLet(List(
+          ml.Binding.FunBind(toML(kparam), List(ml.Param.Named(ev), ml.Param.Named(a)),
+            ml.Call(ev)(ml.Call(k1.reify)(ml.Expr.Variable(a))))),
           toMLExpr(body).reify())
       })
 
