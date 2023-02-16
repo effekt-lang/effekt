@@ -5,7 +5,7 @@ import effekt.context.Context
 import effekt.symbols.{ Constructor, Name, Symbol }
 import scala.collection.immutable
 
-import effekt.core.Id
+export effekt.core.Id
 
 sealed trait Tree
 /**
@@ -166,17 +166,17 @@ def Here() = Evidence(Nil)
 
 class EvidenceSymbol() extends Symbol { val name = Name.local(s"ev${id}") }
 
-case class FreeVariables(vars: immutable.HashMap[core.Id, lifted.Param]) {
+case class FreeVariables(vars: immutable.HashMap[Id, lifted.Param]) {
   def ++(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.merged(o.vars){ case ((leftId -> leftParam), (rightId -> rightParam)) =>
-      assert(leftParam == rightParam, "Same core.Id occurs free with different types.")
+      assert(leftParam == rightParam, "Same id occurs free with different types.")
       (leftId -> leftParam)
     })
   }
   def --(o: FreeVariables): FreeVariables = {
     FreeVariables(vars.filter{ case (leftId -> leftParam) =>
       if(o.vars.contains(leftId)) {
-        assert(leftParam == o.vars(leftId), "core.Id bound with different type than it's occurences.")
+        assert(leftParam == o.vars(leftId), "Id bound with different type than it's occurences.")
         false
       } else { true }
     })

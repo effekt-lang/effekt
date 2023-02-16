@@ -38,6 +38,20 @@ object messages {
     override def toString = message.toString // TODO render!
   }
 
+  def TODO(msg: String = ""): Nothing =
+    val explanation = if (msg.isEmpty) "Not implemented, yet" else s"Not implemented, yet: ${msg}"
+    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
+
+  def FIXME[A](a: A, msg: String = ""): A = a
+
+  def NOT_SUPPORTED(msg: String = ""): Nothing =
+    val explanation = if (msg.isEmpty) "Currently not supported" else s"Currently not supported: ${msg}"
+    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
+
+  def INTERNAL_ERROR(msg: String = ""): Nothing =
+    val explanation = if (msg.isEmpty) "Internal compiler error" else s"Internal compiler error: ${msg}"
+    throw CompilerPanic(PlainTextError(explanation, None, Severities.Error))
+
   /**
    * Stores messages in a mutable field
    */

@@ -1,7 +1,6 @@
 package effekt
 package lifted
 
-import effekt.core.Id
 import effekt.symbols.builtins
 
 
@@ -27,7 +26,7 @@ enum BlockType extends Type {
   //    ^^^^^^^   ^^^^^^  ^^^^^^^  ^^^^^^^^^^^^^         ^^^
   //    tparams   evid.   vparams    bparams            result
   case Function(tparams: List[Id], eparams: List[EvidenceType], vparams: List[ValueType], bparams: List[BlockType], result: ValueType)
-  case Interface(name: effekt.core.Id, targs: List[ValueType])
+  case Interface(name: Id, targs: List[ValueType])
 }
 
 object Type {
