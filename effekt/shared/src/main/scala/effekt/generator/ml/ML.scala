@@ -272,8 +272,7 @@ object ML extends Backend {
 
     case lifted.Unbox(e) => toML(e) // not sound
 
-    case lifted.New(Implementation(interface, operations)) =>
-      ml.Expr.Make(name(interface.name), expsToTupleIsh(operations map toML))
+    case lifted.New(impl) => toML(impl)
   }
 
   def toML(impl: Implementation)(using Context): ml.Expr = impl match {
@@ -296,7 +295,7 @@ object ML extends Backend {
   def toML(l: Lift): ml.Expr = l match {
     case Lift.Try() => Consts.lift
     case Lift.Var(x) => Variable(name(x))
-    case Lift.Reg() => Consts.lift // FIXME Translate to proper lift on state
+    case Lift.Reg() => effekt.util.messages.FIXME(Consts.lift, "Translate to proper lift on state")
   }
 
   def toML(expr: Expr)(using C: Context): ml.Expr = expr match {

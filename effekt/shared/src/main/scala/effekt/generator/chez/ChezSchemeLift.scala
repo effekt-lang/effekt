@@ -351,14 +351,11 @@ object ChezSchemeLift extends Backend {
     val value = ChezName("value")
     val ev = ChezName("ev")
 
-    val k1 = freshName("k1")
-    val k2 = freshName("k2")
-
     val getter = chez.Function(nameDef(symbols.builtins.TState.get), List(ref),
-      chez.Lambda(List(ev), chez.Lambda(List(k1), CPS.pure(chez.Builtin("unbox", Variable(ref))).apply(chez.Expr.Variable(k1)))))
+      chez.Lambda(List(ev), CPS.pure(chez.Builtin("unbox", Variable(ref))).reify()))
 
     val setter = chez.Function(nameDef(symbols.builtins.TState.put), List(ref),
-      chez.Lambda(List(ev, value), chez.Lambda(List(k2), CPS.pure(chez.Builtin("set-box!", Variable(ref), Variable(value))).apply(chez.Expr.Variable(k2)))))
+      chez.Lambda(List(ev, value), CPS.pure(chez.Builtin("set-box!", Variable(ref), Variable(value))).reify()))
 
     List(getter, setter)
   }
