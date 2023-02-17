@@ -100,6 +100,8 @@ trait Compiler[Executable] {
   // -----------------------
   // Used by Driver, Server, Repl and Web
 
+  def extension: String
+
   /**
    * Used by LSP server (Intelligence) to map positions to source trees
    */
@@ -264,4 +266,10 @@ trait Compiler[Executable] {
       val main = Context.checkMain(mod)
       (mod, main, machine.Transformer.transform(main, core))
   }
+
+  // Helpers
+  // -------
+  import effekt.util.paths.file
+  def path(m: symbols.Module)(using C: Context): String =
+    (C.config.outputPath() / m.path.replace('/', '_').replace('-', '_')).unixPath + extension
 }

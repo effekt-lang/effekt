@@ -18,6 +18,7 @@ class JSCompiler extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
+  def extension = ".js"
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -60,9 +61,6 @@ class JSCompiler extends Compiler[String] {
 
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)
-
-  private def path(m: symbols.Module)(using C: Context): String =
-    (C.config.outputPath() / JavaScript.jsModuleFile(m.path)).unixPath
 }
 
 
@@ -73,6 +71,8 @@ trait ChezCompiler extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
+  def extension = ".ss"
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => None
@@ -120,9 +120,6 @@ trait ChezCompiler extends Compiler[String] {
 
   def pretty(defs: List[chez.Def]): Document =
     chez.PrettyPrinter.format(defs)
-
-  def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 }
 
 class ChezMonadicCompiler extends ChezCompiler {
@@ -148,6 +145,8 @@ class ChezLiftCompiler extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
+  def extension = ".ss"
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => (Core andThen LiftInference)(source).map { res => lifted.PrettyPrinter.format(res.core) }
@@ -192,9 +191,6 @@ class ChezLiftCompiler extends Compiler[String] {
   // -------
   private def pretty(expr: chez.Expr): Document =
     chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(expr), 100)
-
-  private def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 }
 
 
@@ -204,6 +200,8 @@ class LLVMCompiler extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
+  def extension = ".ll"
+
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }
@@ -253,9 +251,6 @@ class LLVMCompiler extends Compiler[String] {
 
   // Helpers
   // -------
-  private def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
-
   private def pretty(defs: List[llvm.Definition])(using Context): Document =
     Document(effekt.llvm.PrettyPrinter.show(defs), emptyLinks)
 }
@@ -268,6 +263,7 @@ class MLCompiler extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
+  def extension = ".sml"
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
@@ -318,9 +314,6 @@ class MLCompiler extends Compiler[String] {
   // -------
   private def pretty(prog: ml.Toplevel) =
     ml.PrettyPrinter.format(ml.PrettyPrinter.toDoc(prog))
-
-  private def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".sml"
 }
 
 
