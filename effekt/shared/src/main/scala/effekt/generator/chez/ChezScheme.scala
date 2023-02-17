@@ -10,7 +10,7 @@ import scala.language.implicitConversions
 import effekt.util.paths.*
 import kiama.output.PrettyPrinterTypes.Document
 
-object ChezSchemeMonadic extends Backend with ChezScheme {
+object ChezSchemeMonadic extends ChezScheme {
 
   def run(expr: chez.Expr): chez.Expr =
     Builtin("run", expr)
@@ -25,7 +25,7 @@ object ChezSchemeMonadic extends Backend with ChezScheme {
     chez.Builtin("run", chez.Call(main))
 }
 
-object ChezSchemeCallCC extends Backend with ChezScheme {
+object ChezSchemeCallCC extends ChezScheme {
 
   def run(expr: chez.Expr): chez.Expr = expr
 

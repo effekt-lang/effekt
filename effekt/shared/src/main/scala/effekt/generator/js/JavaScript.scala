@@ -15,26 +15,16 @@ import kiama.util.Source
 
 import scala.language.implicitConversions
 
-object JavaScript extends Backend {
+object JavaScript {
 
-  /**
-   * Returns [[Compiled]], containing the files that should be written to.
-   */
-  def compileWhole(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context) = {
-
-    assert(input.core.imports.isEmpty, "All dependencies should have been inlined by now.")
-
-    val module = input.mod
-    val mainFile = path(module)
+  def compile(input: CoreTransformed, mainSymbol: symbols.TermSymbol)(using Context): js.Module =
     val exports = List(js.Export(JSName("main"), nameRef(mainSymbol)))
     given DeclarationContext = new DeclarationContext(input.core.declarations)
-
-    val result = js.PrettyPrinter.format(toJS(input.core, Nil, exports).commonjs)
-    Some(Compiled(input.source, mainFile, Map(mainFile -> result)))
-  }
+    toJS(input.core, Nil, exports)
 
   /**
-   * Entrypoint used by the LSP server to show the compiled output
+   * Entrypoint used by the LSP server to show the compiled output AND used by
+   * the website.
    */
   def compileSeparate(input: AllTransformed)(using Context) = {
     val module = input.main.mod
@@ -79,12 +69,6 @@ object JavaScript extends Backend {
     val result = toJS(input.main.core, imports, exports).virtual
     Some(js.PrettyPrinter.format(result))
   }
-
-  /**
-   * This is used for both: writing the files to and generating the `require` statements.
-   */
-  def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / jsModuleFile(m.path)).unixPath
 
   def toJS(p: Param): JSName = nameDef(p.id)
 

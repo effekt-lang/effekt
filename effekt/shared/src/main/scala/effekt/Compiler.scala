@@ -65,6 +65,8 @@ enum PhaseResult {
 }
 export PhaseResult.*
 
+enum Stage { case Core; case Lifted; case Machine; case Target; }
+
 /**
  * The compiler for the Effekt language.
  *
@@ -87,8 +89,78 @@ export PhaseResult.*
  *   differently for the JS and JVM versions.
  * - Writing to files is performed by the hook [[Compiler.saveOutput]], which is implemented
  *   differently for the JS and JVM versions.
+ *
+ *
+ * @tparam Executable information of this compilation run, which is passed to
+ *                 the corresponding backend runner (e.g. the name of the main file)
  */
-trait Compiler[Executable] { self: BackendCompiler[Executable] =>
+trait Compiler[Executable] {
+
+  // The Compiler Interface:
+  // -----------------------
+  // Used by Driver, Server, Repl and Web
+
+  /**
+   * Used by LSP server (Intelligence) to map positions to source trees
+   */
+  def getAST(source: Source)(using Context): Option[ModuleDecl] =
+    CachedParser(source).map { res => res.tree }
+
+  /**
+   * Used by
+   * - Namer to resolve dependencies
+   * - Server / Driver to typecheck and report type errors in VSCode
+   */
+  def runFrontend(source: Source)(using Context): Option[Module] =
+    Frontend(source).map { res =>
+      val mod = res.mod
+      validate(source, mod)
+      mod
+    }
+
+  /**
+   * Called after running the frontend from editor services.
+   *
+   * Can be overridden to implement backend specific checks (exclude certain
+   * syntactic constructs, etc.)
+   */
+  def validate(source: Source, mod: Module)(using Context): Unit = ()
+
+  /**
+   * Show the IR of this backend for [[source]] after [[stage]].
+   * Backends can return [[None]] if they do not support this.
+   *
+   * Used to show the IR in VSCode. For the JS Backend, also used for
+   * separate compilation in the web.
+   */
+  def prettyIR(source: Source, stage: Stage)(using Context): Option[Document]
+
+  /**
+   * Return the backend specific AST for [[source]] after [[stage]].
+   * Backends can return [[None]] if they do not support this.
+   *
+   * The AST will be pretty printed with a generic [[effekt.util.PrettyPrinter]].
+   */
+  def treeIR(source: Source, stage: Stage)(using Context): Option[Any]
+
+  /**
+   * Should compile [[source]] with this backend. Each backend can
+   * choose the representation of the executable.
+   */
+  def compile(source: Source)(using Context): Option[(Map[String, Document], Executable)]
+
+  /**
+   * Should compile [[source]] with this backend, the compilation result should only include
+   * the contents of this file, not its dependencies. Only used by the website and implemented
+   * by the JS backend. All other backends can return `None`.
+   */
+  def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] = None
+
+
+  // The Compiler Compiler Phases:
+  // -----------------------------
+  // Components that can be used by individual (backend) implementations to structure
+  // the (individual) full compiler pipeline.
 
   /**
    * @note The result of parsing needs to be cached.
@@ -190,6 +262,6 @@ trait Compiler[Executable] { self: BackendCompiler[Executable] =>
   lazy val Machine = Phase("machine") {
     case CoreLifted(source, tree, mod, core) =>
       val main = Context.checkMain(mod)
-      machine.Transformer.transform(main, core)
+      (mod, main, machine.Transformer.transform(main, core))
   }
 }

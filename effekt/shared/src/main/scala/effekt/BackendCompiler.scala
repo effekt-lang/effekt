@@ -3,91 +3,14 @@ package effekt
 import effekt.context.Context
 import effekt.core.DirectStyleMutableState
 import effekt.lifted.LiftInference
-import effekt.util.paths.{ File, file}
-import effekt.symbols.Module
+import effekt.util.paths.{ File, file }
+import effekt.symbols.{ Module, Symbol }
 import effekt.source.ModuleDecl
-import kiama.output.PrettyPrinterTypes.Document
+import kiama.output.PrettyPrinterTypes.{ Document, emptyLinks }
 import kiama.util.Source
 
-// TODO, could be backend specific in the future
-//  not all of them need to be supported by each backend
-enum Stage {
-  case Core
-  case Lifted
-  case Machine
-  case Target
-}
 
-/**
- * ...
- *
- * Every single method can use the context to report errors or throw
- * exceptions.
- *
- * @tparam Executable information of this compilation run, which is passed to
- *                 the corresponding backend runner (e.g. the name of the main file)
- */
-trait BackendCompiler[Executable] extends Compiler[Executable] {
-
-  /**
-   * Used by LSP server (Intelligence) to map positions to source trees
-   */
-  def getAST(source: Source)(using Context): Option[ModuleDecl] =
-    CachedParser(source).map { res => res.tree }
-
-  /**
-   * Used by
-   * - Namer to resolve dependencies
-   * - Server / Driver to typecheck and report type errors in VSCode
-   */
-  def runFrontend(source: Source)(using Context): Option[Module] =
-    Frontend(source).map { res =>
-      val mod = res.mod
-      validate(source, mod)
-      mod
-    }
-
-  /**
-   * Called after running the frontend from editor services.
-   *
-   * Can be overridden to implement backend specific checks (exclude certain
-   * syntactic constructs, etc.)
-   */
-  def validate(source: Source, mod: Module)(using Context): Unit = ()
-
-  /**
-   * Show the IR of this backend for [[source]] after [[stage]].
-   * Backends can return [[None]] if they do not support this.
-   *
-   * Used to show the IR in VSCode. For the JS Backend, also used for
-   * separate compilation in the web.
-   */
-  def prettyIR(source: Source, stage: Stage)(using Context): Option[Document]
-
-  /**
-   * Return the backend specific AST for [[source]] after [[stage]].
-   * Backends can return [[None]] if they do not support this.
-   *
-   * The AST will be pretty printed with a generic [[effekt.util.PrettyPrinter]].
-   */
-  def treeIR(source: Source, stage: Stage)(using Context): Option[Any]
-
-  /**
-   * Should compile [[source]] with this backend. Each backend can
-   * choose the representation of the executable.
-   */
-  def compile(source: Source)(using Context): Option[(Map[String, Document], Executable)]
-
-  /**
-   * Should compile [[source]] with this backend, the compilation result should only include
-   * the contents of this file, not its dependencies. Only used by the website and implemented
-   * by the JS backend. All other backends can return `None`.
-   */
-  def compileSeparate(source: Source)(using Context): Option[Document] = None
-}
-
-
-class JSCompiler extends BackendCompiler[String] {
+class JSCompiler extends Compiler[String] {
 
   import effekt.generator.js
   import effekt.generator.js.JavaScript
@@ -100,7 +23,7 @@ class JSCompiler extends BackendCompiler[String] {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => CompileSeparate(source)
+    case Stage.Target => CompileSeparate(source) map { case (core, doc) => doc }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
@@ -111,10 +34,10 @@ class JSCompiler extends BackendCompiler[String] {
   }
 
   override def compile(source: Source)(using C: Context) = CompileWhole(source).map {
-    case Compiled(source, main, out) => (out, main)
+    case (main, defs) => (Map(main -> pretty(defs)), main)
   }
 
-  override def compileSeparate(source: Source)(using Context): Option[Document] =
+  override def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
     CompileSeparate(source)
 
 
@@ -124,28 +47,34 @@ class JSCompiler extends BackendCompiler[String] {
   val Core = Phase.cached("core") {
     Frontend andThen Middleend andThen DirectStyleMutableState
   }
-  object Whole extends Phase[CoreTransformed, Compiled] {
-    val phaseName = "javascript-whole"
 
-    def run(in: CoreTransformed)(using C: Context) =
-      val mainSymbol = C.checkMain(in.mod)
-      JavaScript.compileWhole(in, mainSymbol)
-  }
-
-  object Separate extends Phase[AllTransformed, Document] {
+  object Separate extends Phase[AllTransformed, (CoreTransformed, Document)] {
     val phaseName = "javascript-separate"
 
     def run(in: AllTransformed)(using Context) =
-      JavaScript.compileSeparate(in)
+      JavaScript.compileSeparate(in).map { doc => (in.main, doc) }
+  }
+
+  lazy val JS = Phase("js") {
+    case input @ CoreTransformed(source, tree, mod, core) =>
+      assert(core.imports.isEmpty, "All dependencies should have been inlined by now.")
+      val mainSymbol = Context.checkMain(mod)
+      val mainFile = path(mod)
+      mainFile -> JavaScript.compile(input, mainSymbol).commonjs
   }
 
   val CompileSeparate = allToCore(Core) andThen Separate
-  val CompileWhole = allToCore(Core) andThen Aggregate andThen Whole
+  val CompileWhole = allToCore(Core) andThen Aggregate andThen JS
 
+  private def pretty(stmts: List[js.Stmt]): Document =
+    js.PrettyPrinter.format(stmts)
+
+  private def path(m: Module)(using C: Context): String =
+    (C.config.outputPath() / JavaScript.jsModuleFile(m.path)).unixPath
 }
 
 
-class ChezMonadicCompiler extends BackendCompiler[String] {
+class ChezMonadicCompiler extends Compiler[String] {
 
   import effekt.generator.chez
   import effekt.generator.chez.ChezSchemeMonadic
@@ -170,10 +99,6 @@ class ChezMonadicCompiler extends BackendCompiler[String] {
   override def compile(source: Source)(using C: Context) = CompileWhole(source).map {
     case Compiled(source, main, out) => (out, main)
   }
-
-  override def compileSeparate(source: Source)(using Context): Option[Document] =
-    CompileSeparate(source)
-
 
   // The Different Phases:
   // ---------------------
@@ -201,7 +126,7 @@ class ChezMonadicCompiler extends BackendCompiler[String] {
 }
 
 
-class ChezCallCCCompiler extends BackendCompiler[String] {
+class ChezCallCCCompiler extends Compiler[String] {
 
   import effekt.generator.chez
   import effekt.generator.chez.ChezSchemeCallCC
@@ -226,9 +151,6 @@ class ChezCallCCCompiler extends BackendCompiler[String] {
   override def compile(source: Source)(using C: Context) = CompileWhole(source).map {
     case Compiled(source, main, out) => (out, main)
   }
-
-  override def compileSeparate(source: Source)(using Context): Option[Document] =
-    CompileSeparate(source)
 
 
   // The Different Phases:
@@ -257,7 +179,7 @@ class ChezCallCCCompiler extends BackendCompiler[String] {
 }
 
 
-class ChezLiftCompiler extends BackendCompiler[String] {
+class ChezLiftCompiler extends Compiler[String] {
 
   import effekt.generator.chez
   import effekt.generator.chez.ChezSchemeLift
@@ -279,8 +201,6 @@ class ChezLiftCompiler extends BackendCompiler[String] {
   }
 
   override def compile(source: Source)(using C: Context) = Compile(source)
-
-  override def compileSeparate(source: Source)(using Context) = Separate(source)
 
 
   // The Compilation Pipeline
@@ -316,54 +236,69 @@ class ChezLiftCompiler extends BackendCompiler[String] {
 }
 
 
-class LLVMCompiler extends BackendCompiler[String] {
+class LLVMCompiler extends Compiler[String] {
 
-  import effekt.generator.llvm
-  import effekt.generator.llvm.LLVM
+  import effekt.llvm
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
-    case Stage.Lifted => (Core andThen LiftInference)(source).map { res => lifted.PrettyPrinter.format(res.core) }
-    case Stage.Machine => None
-    case Stage.Target => compileSeparate(source)
+    case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }
+    case Stage.Machine => steps.afterMachine(source).map { res => machine.PrettyPrinter.format(res.program) }
+    case Stage.Target => steps.afterLLVM(source).map { res => pretty(res) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
-    case Stage.Core => Core(source).map { res => res.core }
-    case Stage.Lifted => (Core andThen LiftInference)(source).map { res => res.core }
-    case Stage.Machine => None
-    case Stage.Target => None
+    case Stage.Core => steps.afterCore(source).map { res => res.core }
+    case Stage.Lifted => steps.afterLift(source).map { res => res.core }
+    case Stage.Machine => steps.afterMachine(source).map { res => res.program }
+    case Stage.Target => steps.afterLLVM(source)
   }
 
-  override def compile(source: Source)(using C: Context) = CompileWhole(source) map {
-    case Compiled(source, main, out) => (out, main)
-  }
+  override def compile(source: Source)(using C: Context) =
+    Compile(source) map { (mod, defs) =>
+      val mainFile = path(mod)
+      (Map(mainFile -> pretty(defs)), mainFile)
+    }
 
-  override def compileSeparate(source: Source)(using Context): Option[Document] = CompileSeparate(source) map {
-    res => res._2
-  }
 
   // The Different Phases:
   // ---------------------
 
-  val Core = Phase.cached("core") {
+  lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend andThen core.PolymorphismBoxing
   }
 
-  val AllCore = allToCore(Core) andThen Aggregate
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen Machine map {
+    case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
+  }
 
-  // TODO move lift inference and machine transformations from individual backends to toplevel.
-  val Lifted = AllCore andThen LiftInference andThen Machine
+  object steps {
+    // intermediate steps for VSCode
+    val afterCore = allToCore(Core) map { c => c.main }
+    val afterLift = afterCore andThen LiftInference
+    val afterMachine = afterLift andThen Machine map { case (mod, main, prog) => prog }
+    val afterLLVM = afterMachine map {
+      case machine.Program(decls, prog) =>
+        // we don't print declarations here.
+        llvm.Transformer.transform(machine.Program(Nil, prog))
+    }
+  }
 
-  val CompileSeparate = allToCore(Core) andThen LLVM.separate
-  val CompileWhole = allToCore(Core) andThen Aggregate andThen LLVM.whole
+  // Helpers
+  // -------
+
+  private def path(m: Module)(using C: Context): String =
+    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
+
+  private def pretty(defs: List[llvm.Definition])(using Context): Document =
+    Document(effekt.llvm.PrettyPrinter.show(defs), emptyLinks)
 }
 
 
-class MLCompiler extends BackendCompiler[String] {
+class MLCompiler extends Compiler[String] {
 
   import effekt.generator.ml
   import effekt.generator.ml.ML
@@ -372,41 +307,52 @@ class MLCompiler extends BackendCompiler[String] {
   // -----------------------------------------
 
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
-    case Stage.Lifted => (Core andThen LiftInference)(source).map { res => lifted.PrettyPrinter.format(res.core) }
+    case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }
     case Stage.Machine => None
-    case Stage.Target => compileSeparate(source)
+    case Stage.Target => steps.afterML(source).map { res => pretty(res) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
     case Stage.Lifted => (Core andThen LiftInference)(source).map { res => res.core }
     case Stage.Machine => None
-    case Stage.Target => None
+    case Stage.Target => steps.afterML(source)
   }
 
-  override def compile(source: Source)(using C: Context) = CompileWhole(source) map {
-    case Compiled(source, main, out) => (out, main)
-  }
+  override def compile(source: Source)(using C: Context) = Compile(source)
 
-  override def compileSeparate(source: Source)(using Context): Option[Document] = CompileSeparate(source) map {
-    res => res._2
-  }
 
   // The Different Phases:
   // ---------------------
 
-  val Core = Phase.cached("core") {
+  lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend
   }
 
-  val AllCore = allToCore(Core) andThen Aggregate
+  lazy val ToML = Phase("ml") {
+    case PhaseResult.CoreLifted(source, tree, mod, core) =>
+      val mainSymbol = Context.checkMain(mod)
+      val mainFile = path(mod)
+      mainFile -> ml.ML.compilationUnit(mainSymbol, core)
+  }
 
-  // TODO move lift inference and machine transformations from individual backends to toplevel.
-  val Lifted = AllCore andThen LiftInference andThen Machine
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen ToML map {
+    case (mainFile, prog) => (Map(mainFile -> pretty(prog)), mainFile)
+  }
 
-  val CompileSeparate = allToCore(Core) andThen ML.separate
-  val CompileWhole = allToCore(Core) andThen Aggregate andThen ML.whole
+  object steps {
+    // intermediate steps for VSCode
+    val afterCore = allToCore(Core) map { c => c.main }
+    val afterLift = afterCore andThen LiftInference
+    val afterML = afterLift andThen ToML map { case (f, prog) => prog }
+  }
+
+  def pretty(prog: ml.Toplevel) =
+    ml.PrettyPrinter.format(ml.PrettyPrinter.toDoc(prog))
+
+  def path(m: Module)(using C: Context): String =
+    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".sml"
 }
 
 

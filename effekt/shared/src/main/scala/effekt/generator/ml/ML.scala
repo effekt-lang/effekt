@@ -17,40 +17,9 @@ import scala.language.implicitConversions
  *
  * Difficult to share the code, since core and lifted are different IRs.
  */
-object ML extends Backend {
+object ML {
 
   def runMain(main: MLName): ml.Expr = CPS.runMain(main)
-
-  /**
-   * Returns [[Compiled]], containing the files that should be written to.
-   */
-  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using C: Context): Option[Compiled] = {
-
-    assert(main.core.imports.isEmpty, "All dependencies should have been inlined by now.")
-
-    val mainSymbol = C.checkMain(main.mod)
-
-    LiftInference(main).map { lifted =>
-      val mlModule = compilationUnit(mainSymbol, lifted.core)
-      val result = ml.PrettyPrinter.pretty(ml.PrettyPrinter.toDoc(mlModule), 100)
-      val mainFile = path(main.mod)
-      Compiled(main.source, mainFile, Map(mainFile -> result))
-    }
-  }
-
-  /**
-   * Entrypoint used by the LSP server to show the compiled output
-   */
-  def compileSeparate(input: AllTransformed)(using C: Context): Option[Document] =
-    C.using(module = input.main.mod) {
-      Some(ml.PrettyPrinter.format(ml.PrettyPrinter.toDoc(compile(input.main))))
-    }
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   */
-  private def compile(in: CoreTransformed)(using Context): List[ml.Binding] =
-    LiftInference(in).toList.flatMap { lifted => toML(lifted.core) }
 
   def compilationUnit(mainSymbol: Symbol, core: ModuleDecl)(implicit C: Context): ml.Toplevel = {
     ml.Toplevel(toML(core), runMain(name(mainSymbol)))

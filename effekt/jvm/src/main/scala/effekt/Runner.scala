@@ -14,12 +14,12 @@ case class Backend[E](
   /**
    * The compiler for this backend
    */
-  compiler: BackendCompiler[E],
+  compiler: Compiler[E],
 
   /**
    * The runner for this backend
    */
-  runner: BackendRunner[E])
+  runner: Runner[E])
 
 object Backend {
   def js = Backend("js", JSCompiler(), JSRunner)
@@ -44,7 +44,7 @@ object Backend {
  *
  * @tparam Executable the executable, as produced by [[BackendCompiler.compile]].
  */
-trait BackendRunner[Executable] {
+trait Runner[Executable] {
 
   import scala.sys.process.*
 
@@ -114,7 +114,7 @@ trait BackendRunner[Executable] {
   }
 }
 
-object JSRunner extends BackendRunner[String] {
+object JSRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "js"
@@ -132,7 +132,7 @@ object JSRunner extends BackendRunner[String] {
     exec("node", "--eval", jsScript)
 }
 
-trait ChezRunner extends BackendRunner[String] {
+trait ChezRunner extends Runner[String] {
   val extension = "ss"
 
   override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
@@ -157,7 +157,7 @@ object ChezLiftRunner extends ChezRunner {
   def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "lift"
 }
 
-object LLVMRunner extends BackendRunner[String] {
+object LLVMRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "ll"
@@ -201,7 +201,7 @@ object LLVMRunner extends BackendRunner[String] {
 }
 
 
-object MLRunner extends BackendRunner[String] {
+object MLRunner extends Runner[String] {
   import scala.sys.process.Process
 
   val extension = "sml"

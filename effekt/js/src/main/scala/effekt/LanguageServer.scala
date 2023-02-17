@@ -64,11 +64,6 @@ class LanguageServer extends Intelligence {
   object config extends EffektConfig
 
   implicit object context extends Context(positions) with VirtualModuleDB {
-    /**
-     * Don't output amdefine module declarations
-     */
-    override def Backend(implicit C: Context) = JavaScript
-
     object messaging extends PlainMessaging
   }
 
@@ -86,7 +81,7 @@ class LanguageServer extends Intelligence {
   @JSExport
   def typecheck(path: String): js.Array[lsp.Diagnostic] = {
     context.messaging.clear()
-    context.runFrontend(VirtualFileSource(path))
+    context.compiler.runFrontend(VirtualFileSource(path))
     context.messaging.buffer.distinct.map(messageToDiagnostic).toJSArray
   }
 
@@ -150,22 +145,23 @@ class LanguageServer extends Intelligence {
   /**
    * Has the side effect of saving to generated output to a file
    */
-  private def compileSingle(src: Source)(implicit C: Context): Option[(String, CoreTransformed)] =
-    context.compileSeparate(src).map {
-      case (core, doc) =>
-        val path = JavaScript.path(core.mod)
-        writeFile(path, doc.layout)
-        (path, core)
-    }
+   object compileSingle extends Phase[Source, (String, CoreTransformed)] {
+     val phaseName = "compile"
+     def run(src: Source)(using Context) =
+      context.compiler.compileSeparate(src).map {
+        case (core, doc) =>
+          val filepath = path(core.mod)
+          writeFile(filepath, doc.layout)
+          (filepath, core)
+      }
+  }
 
   // Here we cache the full pipeline for a single file, including writing the result
   // to an output file. This is important since we only want to write the file, when it
   // really changed. Writing will change the timestamp and lazy reloading of modules
   // on the JS side uses the timestamp to determine whether we need to re-eval a
   // module or not.
-  private val compileCached = Phase.cached("compile-cached") {
-    Phase("compile") { compileSingle }
-  }
+  private val compileCached = Phase.cached("compile-cached") { compileSingle }
 
   private def messageToDiagnostic(m: EffektError) = {
     val from = m.startPosition.map(toLSPPosition).orNull
@@ -191,6 +187,9 @@ class LanguageServer extends Intelligence {
     case Severities.Information => lsp.DiagnosticSeverity.Information
     case Severities.Hint        => lsp.DiagnosticSeverity.Hint
   }
+
+  private def path(m: symbols.Module)(using C: Context): String =
+    (C.config.outputPath() / JavaScript.jsModuleFile(m.path)).unixPath
 }
 
 @JSExportTopLevel("effekt")
