@@ -152,22 +152,6 @@ trait Compiler[Executable] { self: BackendCompiler[Executable] =>
     Transformer
   }
 
-  object CoreDependencies extends Phase[CoreTransformed, AllTransformed] {
-    val phaseName = "core-dependencies"
-
-    def run(input: CoreTransformed)(using Context) = {
-      val CoreTransformed(src, tree, mod, main) = input
-
-      val dependencies = mod.dependencies flatMap { dep =>
-        // We already ran the frontend on the dependencies (since they are discovered
-        // dynamically). The results are cached, so it doesn't hurt dramatically to run
-        // the frontend again. However, the indirection via dep.source is not very elegant.
-        (Frontend andThen Middleend).apply(dep.source)
-      }
-      Some(AllTransformed(input.source, input, dependencies))
-    }
-  }
-
   def allToCore(phase: Phase[Source, CoreTransformed]): Phase[Source, AllTransformed] = new Phase[Source, AllTransformed] {
     val phaseName = "core-dependencies"
 
@@ -204,6 +188,15 @@ trait Compiler[Executable] { self: BackendCompiler[Executable] =>
 
       // TODO in the future check for duplicate exports
       Some(CoreTransformed(src, tree, mod, aggregated))
+    }
+  }
+
+  object Machine extends Phase[CoreLifted, machine.Program] {
+    val phaseName = "machine"
+
+    def run(input: CoreLifted)(using C: Context) = {
+      val main = C.checkMain(input.mod);
+      Some(machine.Transformer.transform(main, input.core))
     }
   }
 }

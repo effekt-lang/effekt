@@ -52,13 +52,17 @@ abstract class ChezSchemeTests extends EffektTests {
   )
 
   def interpretCS(file: File, variant: String): String = {
+    // Reset the caches before each test. This is necessary to
+    // avoid dependencies compiled with one compiler instance to be reused when
+    // compiled with another compiler instance / config / backend.
+    //
+    // It does however slow down the tests, since the standard library has to be
+    // compiled each and every time.
+    effekt.util.Task.reset()
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
       "--Koutput", "string",
       "--backend", s"chez-$variant",
-      "--includes", "libraries/chez/common",
-      "--includes", ".",
-      "--lib", s"libraries/chez/$variant",
       "--out", output.getPath
     ))
     configs.verify()

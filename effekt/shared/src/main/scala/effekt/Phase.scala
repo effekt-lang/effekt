@@ -35,9 +35,9 @@ trait Phase[In, Out] { curr =>
 
   val phaseName: String
 
-  def run(input: In)(implicit C: Context): Option[Out]
+  def run(input: In)(using C: Context): Option[Out]
 
-  def apply(input: In)(implicit C: Context): Option[Out] = try {
+  def apply(input: In)(using C: Context): Option[Out] = try {
     run(input)
   } catch {
     case FatalPhaseError(msg) =>
@@ -45,49 +45,20 @@ trait Phase[In, Out] { curr =>
       None
   }
 
-  /**
-   * Helper method to find the currently implicit context
-   */
-  def Context(implicit ctx: Context): Context = ctx
-
   def andThen[Out2](next: Phase[Out, Out2]): Phase[In, Out2] =
     new Phase[In, Out2] {
       val phaseName = s"${curr.phaseName} -> ${next.phaseName}"
-      def run(input: In)(implicit C: Context) = curr.run(input).flatMap(out => next.run(out))
+      def run(input: In)(using C: Context) = curr.run(input).flatMap(out => next.run(out))
     }
 
-  def andThen[Out2](next: Context ?=> Out => Option[Out2]): Phase[In, Out2] =
-    andThen(Phase("anonymous")(next))
+  def map[Out2](f: Context ?=> Out => Out2): Phase[In, Out2] = new Phase[In, Out2] {
+    val phaseName = curr.phaseName
+    def run(input: In)(using C: Context) = curr.run(input).map(f)
+  }
 }
 
 object Phase {
-  def run[A](a: A, phases: List[Phase[A, A]])(implicit C: Context): Option[A] =
-    phases.foldLeft[Option[A]](Some(a)) {
-      case (prev, phase) => prev.flatMap { a => phase(a) }
-    }
-
-  /**
-   * Constructs a cached version of this phase. The
-   */
-  def cached[From, To](name: String, cacheBy: From => Long)(phase: Phase[From, To]): Phase[From, To] = {
-    object task extends Task[From, To] {
-      val taskName = name
-      def run(input: From)(implicit C: Context) = phase.run(input)
-      def fingerprint(input: From) = cacheBy(input)
-    }
-
-    // The returned phase uses task.apply to lookup the results in the cache
-    new Phase[From, To] {
-      val phaseName = name
-      def run(input: From)(implicit C: Context): Option[To] = task.apply(input)
-    }
-  }
-
-  /**
-   * The most common use case: using the lastModified timestamp on the Source as cache key.
-   */
-  def cached[To](name: String)(phase: Phase[Source, To]): Phase[Source, To] =
-    cached(name, cacheBy = paths.lastModified) { phase }
+  def apply[In, Out](impl: Context ?=> In => Out): Phase[In, Out] = apply("anonymous")(impl)
 
   /**
    * Smart constructor for creating phases.
@@ -99,8 +70,36 @@ object Phase {
    * also receives the [[Context]] as an implicit argument. Using this smart constructor has the
    * advantage that we can immediately pattern match on `From` in the block.
    */
-  def apply[From, To](name: String)(impl: Context ?=> From => Option[To]): Phase[From, To] = new Phase[From, To] {
+  def apply[In, Out](name: String)(impl: Context ?=> In => Out): Phase[In, Out] = new Phase[In, Out] {
     val phaseName = name
-    def run(input: From)(implicit C: Context) = impl(input)
+    def run(input: In)(using C: Context): Option[Out] = Some(impl(input))
   }
+
+  def run[A](a: A, phases: List[Phase[A, A]])(using C: Context): Option[A] =
+    phases.foldLeft[Option[A]](Some(a)) {
+      case (prev, phase) => prev.flatMap { a => phase(a) }
+    }
+
+  /**
+   * Constructs a cached version of this phase. The
+   */
+  def cached[From, To](name: String, cacheBy: From => Long)(phase: Phase[From, To]): Phase[From, To] = {
+    object task extends Task[From, To] {
+      val taskName = name
+      def run(input: From)(using C: Context) = phase.run(input)
+      def fingerprint(input: From) = cacheBy(input)
+    }
+
+    // The returned phase uses task.apply to lookup the results in the cache
+    new Phase[From, To] {
+      val phaseName = name
+      def run(input: From)(using C: Context): Option[To] = task.apply(input)
+    }
+  }
+
+  /**
+   * The most common use case: using the lastModified timestamp on the Source as cache key.
+   */
+  def cached[To](name: String)(phase: Phase[Source, To]): Phase[Source, To] =
+    cached(name, cacheBy = paths.lastModified) { phase }
 }

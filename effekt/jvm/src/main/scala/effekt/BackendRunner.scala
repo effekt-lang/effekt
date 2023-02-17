@@ -1,6 +1,7 @@
 package effekt
 
 import effekt.context.Context
+import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.File
 
 case class Backend[E](
@@ -21,6 +22,9 @@ case class Backend[E](
 
 object Backend {
   val js = Backend("js", JSCompiler, JSRunner)
+  val chezMonadic = Backend("chez-monadic", ChezMonadicCompiler, ChezMonadicRunner)
+  val chezCallCC = Backend("chez-callcc", ChezCallCCCompiler, ChezCallCCRunner)
+  val chezLift = Backend("chez-lift", ChezLiftCompiler, ChezLiftRunner)
 }
 
 /**
@@ -73,6 +77,16 @@ trait BackendRunner[Executable] {
     try {
       Process(command).run(ProcessIO(out => (), in => (), err => ())).exitValue() == 0
     } catch { _ => false }
+
+  /**
+   * Helper function to run an executable
+   */
+  def runExecutable(command: String*)(using C: Context): Unit = try {
+    val p = Process(command)
+    C.config.output().emit(p.!!)
+  } catch {
+    case FatalPhaseError(e) => C.report(e)
+  }
 }
 
 object JSRunner extends BackendRunner[String] {
@@ -88,13 +102,35 @@ object JSRunner extends BackendRunner[String] {
     if canRunExecutable("node", "--version") then Right(())
     else Left("Cannot find nodejs. This is required to use the JavaScript backend.")
 
-  def eval(path: String)(using C: Context): Unit =
+  def eval(path: String)(using Context): Unit =
     val jsScript = s"require('${path}').main().run()"
-    val command = Process(Seq("node", "--eval", jsScript))
-    C.config.output().emit(command.!!)
+    runExecutable("node", "--eval", jsScript)
 }
 
+trait ChezRunner extends BackendRunner[String] {
+  val extension = "ss"
 
+  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+  override def includes(path: File): List[File] = List(path / ".." / "common")
+
+  def checkSetup(): Either[String, Unit] =
+    if canRunExecutable("scheme", "--help") then Right(())
+    else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
+
+  def eval(path: String)(using C: Context): Unit =
+    runExecutable("scheme", "--script", path)
+}
+
+object ChezMonadicRunner extends ChezRunner {
+  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "monadic"
+}
+
+object ChezCallCCRunner extends ChezRunner {
+  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "callcc"
+}
+object ChezLiftRunner extends ChezRunner {
+  def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "lift"
+}
 
 
 //  private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {

@@ -44,8 +44,10 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     default = Some("js"),
     noshort = true
   ) map {
-    case "js" =>
-      Backend.js
+    case "js" => Backend.js
+    case "chez-monadic" => Backend.chezMonadic
+    case "chez-callcc" => Backend.chezCallCC
+    case "chez-lift" => Backend.chezLift
     case _ => ???
   }
 

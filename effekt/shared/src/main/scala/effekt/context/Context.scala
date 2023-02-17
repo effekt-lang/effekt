@@ -98,5 +98,9 @@ abstract class Context(val positions: Positions)
     messaging.buffer = bufferBefore
     (msgs, res)
   }
-
 }
+
+/**
+ * Helper method to find the currently implicit context
+ */
+def Context(using C: Context): C.type = C

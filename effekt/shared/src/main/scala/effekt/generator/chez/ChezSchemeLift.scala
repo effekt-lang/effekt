@@ -16,43 +16,14 @@ import kiama.output.PrettyPrinterTypes.Document
  *
  * Difficult to share the code, since core and lifted are different IRs.
  */
-object ChezSchemeLift extends Backend {
+object ChezSchemeLift {
 
   def runMain(main: ChezName): chez.Expr = CPS.runMain(main)
 
-  /**
-   * Returns [[Compiled]], containing the files that should be written to.
-   */
-  def compileWhole(main: CoreTransformed, mainSymbol: TermSymbol)(using Context) =
-    LiftInference(main).map { lifted =>
-      val chezModule = chez.Let(Nil, compilationUnit(mainSymbol, lifted.mod, lifted.core))
-      val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
-      val mainFile = path(main.mod)
-      Compiled(main.source, mainFile, Map(mainFile -> result))
-    }
-
-  /**
-   * Entrypoint used by the LSP server to show the compiled output
-   */
-  def compileSeparate(input: AllTransformed)(using C: Context) =
-    C.using(module = input.main.mod) { Some(chez.PrettyPrinter.format(compile(input.main))) }
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   */
-  private def compile(in: CoreTransformed)(using Context): List[chez.Def] =
-    LiftInference(in).toList.flatMap { lifted => toChez(lifted.core) }
-
-  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
+  def toChez(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
-
-  /**
-   * This is used for both: writing the files to and generating the `require` statements.
-   */
-  def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 
