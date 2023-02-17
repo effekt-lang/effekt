@@ -12,6 +12,8 @@ import scala.language.implicitConversions
 
 class JavaScriptTests extends EffektTests {
 
+  def backendName = "js"
+
   override def included: List[File] = List(
     examplesDir / "pos",
     examplesDir / "neg",
@@ -24,32 +26,6 @@ class JavaScriptTests extends EffektTests {
     examplesDir / "neg" / "existential_effect_leaks.effekt",
     examplesDir / "neg" / "scoped.effekt",
   )
-
-  def runTestFor(input: File, check: File, expected: String): Unit =
-    test(input.getPath) {
-      val out = interpretJS(input)
-      assertNoDiff(out, expected, s"Output running '${input.getPath}' differed from check file '${check.getPath}'.")
-    }
-
-  def interpretJS(file: File): String = {
-    // Reset the caches before each test. This is necessary to
-    // avoid dependencies compiled with one compiler instance to be reused when
-    // compiled with another compiler instance / config / backend.
-    //
-    // It does however slow down the tests, since the standard library has to be
-    // compiled each and every time.
-    effekt.util.Task.reset()
-    val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq(
-      "--backend", "js",
-      "--Koutput", "string",
-      "--out", output.getPath))
-    configs.verify()
-    compiler.compileFile(file.getPath, configs)
-    configs.stringEmitter.result()
-  }
-
-  def canRun() = JSRunner.checkSetup().isRight
 }
 
 object TestUtils {
@@ -80,7 +56,7 @@ object TestUtils {
         val shouldGenerate = regenerateAll || f.lastModified() > checkfile.lastModified()
         if (!isIgnored && shouldGenerate) {
           println(s"Writing checkfile for ${f}")
-          val out = interpretJS(f)
+          val out = run(f)
 
           // Save checkfile in source folder (e.g. examples/)
           // We remove ansi colors to make check files human-readable.

@@ -1,5 +1,6 @@
 package effekt
 
+import effekt.PhaseResult.CoreLifted
 import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
@@ -10,7 +11,6 @@ import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
 import effekt.generator.js.JavaScript
-
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -164,12 +164,9 @@ trait Compiler[Executable] { self: BackendCompiler[Executable] =>
     } yield AllTransformed(input, main, dependencies)
   }
 
-  object Aggregate extends Phase[AllTransformed, CoreTransformed] {
-    val phaseName = "aggregate"
-
-    def run(input: AllTransformed)(using Context) = {
-      val CoreTransformed(src, tree, mod, main) = input.main
-      val dependencies = input.dependencies.map(d => d.core)
+  lazy val Aggregate = Phase[AllTransformed, CoreTransformed]("aggregate") {
+    case AllTransformed(_, CoreTransformed(src, tree, mod, main), deps) =>
+      val dependencies = deps.map(d => d.core)
 
       // collect all information
       var declarations: List[core.Declaration] = Nil
@@ -187,16 +184,12 @@ trait Compiler[Executable] { self: BackendCompiler[Executable] =>
       val aggregated = core.ModuleDecl(main.path, Nil, declarations, externs, definitions, exports)
 
       // TODO in the future check for duplicate exports
-      Some(CoreTransformed(src, tree, mod, aggregated))
-    }
+      CoreTransformed(src, tree, mod, aggregated)
   }
 
-  object Machine extends Phase[CoreLifted, machine.Program] {
-    val phaseName = "machine"
-
-    def run(input: CoreLifted)(using C: Context) = {
-      val main = C.checkMain(input.mod);
-      Some(machine.Transformer.transform(main, input.core))
-    }
+  lazy val Machine = Phase("machine") {
+    case CoreLifted(source, tree, mod, core) =>
+      val main = Context.checkMain(mod)
+      machine.Transformer.transform(main, core)
   }
 }

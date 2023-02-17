@@ -31,7 +31,7 @@ import kiama.util.Source
  *       be avoided (The problem is that Typer performs backtracking; caching could potentially
  *       interact with the backtracking behavior).
  */
-trait Phase[In, Out] { curr =>
+trait Phase[-In, +Out] { curr =>
 
   val phaseName: String
 
@@ -58,8 +58,6 @@ trait Phase[In, Out] { curr =>
 }
 
 object Phase {
-  def apply[In, Out](impl: Context ?=> In => Out): Phase[In, Out] = apply("anonymous")(impl)
-
   /**
    * Smart constructor for creating phases.
    *

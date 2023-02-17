@@ -43,14 +43,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     descr = "The backend that should be used",
     default = Some("js"),
     noshort = true
-  ) map {
-    case "js" => Backend.js
-    case "chez-monadic" => Backend.chezMonadic
-    case "chez-callcc" => Backend.chezCallCC
-    case "chez-lift" => Backend.chezLift
-    case "llvm" => Backend.llvm
-    case _ => ???
-  }
+  ).map(Backend.backend)
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",

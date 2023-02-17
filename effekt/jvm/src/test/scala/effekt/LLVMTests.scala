@@ -8,6 +8,8 @@ import scala.sys.process.Process
 
 class LLVMTests extends EffektTests {
 
+  def backendName = "llvm"
+
   override lazy val included: List[File] = List(
     examplesDir / "llvm",
   )
@@ -104,36 +106,4 @@ class LLVMTests extends EffektTests {
     // Issue #207
     examplesDir / "llvm" / "polymorphism_blockparams.effekt",
   )
-
-  def runTestFor(input: File, check: File, expected: String): Unit = {
-    test(input.getPath + " (llvm)") {
-      val out = runLLVM(input)
-      assertNoDiff(out, expected)
-    }
-  }
-
-  def runLLVM(f: File): String = {
-    // Reset the caches before each test. This is necessary to
-    // avoid dependencies compiled with one compiler instance to be reused when
-    // compiled with another compiler instance / config / backend.
-    //
-    // It does however slow down the tests, since the standard library has to be
-    // compiled each and every time.
-    effekt.util.Task.reset()
-    val compiler = new effekt.Driver {}
-    val configs = compiler.createConfig(Seq(
-      "--Koutput", "string",
-      "--backend", "llvm",
-      "--lib", "libraries/llvm",
-      "--out", output.getPath
-    ))
-    configs.verify()
-    compiler.compileFile(f.getPath, configs)
-    configs.stringEmitter.result()
-  }
-
-  def canRun() =
-    canRunExecutable("llc", "--version") ||
-    canRunExecutable("llc-15", "--version") ||
-    canRunExecutable("llc-12", "--version")
 }

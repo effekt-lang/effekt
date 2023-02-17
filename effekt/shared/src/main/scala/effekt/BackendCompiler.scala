@@ -87,7 +87,7 @@ trait BackendCompiler[Executable] extends Compiler[Executable] {
 }
 
 
-object JSCompiler extends BackendCompiler[String] {
+class JSCompiler extends BackendCompiler[String] {
 
   import effekt.generator.js
   import effekt.generator.js.JavaScript
@@ -145,7 +145,7 @@ object JSCompiler extends BackendCompiler[String] {
 }
 
 
-object ChezMonadicCompiler extends BackendCompiler[String] {
+class ChezMonadicCompiler extends BackendCompiler[String] {
 
   import effekt.generator.chez
   import effekt.generator.chez.ChezSchemeMonadic
@@ -201,7 +201,7 @@ object ChezMonadicCompiler extends BackendCompiler[String] {
 }
 
 
-object ChezCallCCCompiler extends BackendCompiler[String] {
+class ChezCallCCCompiler extends BackendCompiler[String] {
 
   import effekt.generator.chez
   import effekt.generator.chez.ChezSchemeCallCC
@@ -256,7 +256,8 @@ object ChezCallCCCompiler extends BackendCompiler[String] {
   val CompileWhole = allToCore(Core) andThen Aggregate andThen Whole
 }
 
-object ChezLiftCompiler extends BackendCompiler[String] {
+
+class ChezLiftCompiler extends BackendCompiler[String] {
 
   import effekt.generator.chez
   import effekt.generator.chez.ChezSchemeLift
@@ -292,7 +293,7 @@ object ChezLiftCompiler extends BackendCompiler[String] {
 
   lazy val Core = Phase.cached("core") { Frontend andThen Middleend }
 
-  lazy val Chez = Phase[CoreLifted, (String, chez.Expr)]("chez") {
+  lazy val Chez = Phase("chez") {
     case CoreLifted(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
@@ -315,7 +316,7 @@ object ChezLiftCompiler extends BackendCompiler[String] {
 }
 
 
-object LLVMCompiler extends BackendCompiler[String] {
+class LLVMCompiler extends BackendCompiler[String] {
 
   import effekt.generator.llvm
   import effekt.generator.llvm.LLVM
@@ -345,7 +346,6 @@ object LLVMCompiler extends BackendCompiler[String] {
     res => res._2
   }
 
-
   // The Different Phases:
   // ---------------------
 
@@ -358,21 +358,57 @@ object LLVMCompiler extends BackendCompiler[String] {
   // TODO move lift inference and machine transformations from individual backends to toplevel.
   val Lifted = AllCore andThen LiftInference andThen Machine
 
-  object Whole extends Phase[CoreTransformed, Compiled] {
-    val phaseName = "chez-callcc-whole"
-
-    def run(in: CoreTransformed)(using C: Context) =
-      val mainSymbol = C.checkMain(in.mod)
-      LLVM.compileWhole(in, mainSymbol)
-  }
-
-  object Separate extends Phase[AllTransformed, Document] {
-    val phaseName = "chez-callcc-separate"
-
-    def run(in: AllTransformed)(using Context) =
-      LLVM.compileSeparate(in)
-  }
-
   val CompileSeparate = allToCore(Core) andThen LLVM.separate
   val CompileWhole = allToCore(Core) andThen Aggregate andThen LLVM.whole
 }
+
+
+class MLCompiler extends BackendCompiler[String] {
+
+  import effekt.generator.ml
+  import effekt.generator.ml.ML
+
+  // Implementation of the Compiler Interface:
+  // -----------------------------------------
+
+  override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
+    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
+    case Stage.Lifted => (Core andThen LiftInference)(source).map { res => lifted.PrettyPrinter.format(res.core) }
+    case Stage.Machine => None
+    case Stage.Target => compileSeparate(source)
+  }
+
+  override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
+    case Stage.Core => Core(source).map { res => res.core }
+    case Stage.Lifted => (Core andThen LiftInference)(source).map { res => res.core }
+    case Stage.Machine => None
+    case Stage.Target => None
+  }
+
+  override def compile(source: Source)(using C: Context) = CompileWhole(source) map {
+    case Compiled(source, main, out) => (out, main)
+  }
+
+  override def compileSeparate(source: Source)(using Context): Option[Document] = CompileSeparate(source) map {
+    res => res._2
+  }
+
+  // The Different Phases:
+  // ---------------------
+
+  val Core = Phase.cached("core") {
+    Frontend andThen Middleend
+  }
+
+  val AllCore = allToCore(Core) andThen Aggregate
+
+  // TODO move lift inference and machine transformations from individual backends to toplevel.
+  val Lifted = AllCore andThen LiftInference andThen Machine
+
+  val CompileSeparate = allToCore(Core) andThen ML.separate
+  val CompileWhole = allToCore(Core) andThen Aggregate andThen ML.whole
+}
+
+
+
+

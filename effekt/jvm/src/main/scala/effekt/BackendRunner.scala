@@ -22,11 +22,21 @@ case class Backend[E](
   runner: BackendRunner[E])
 
 object Backend {
-  val js = Backend("js", JSCompiler, JSRunner)
-  val chezMonadic = Backend("chez-monadic", ChezMonadicCompiler, ChezMonadicRunner)
-  val chezCallCC = Backend("chez-callcc", ChezCallCCCompiler, ChezCallCCRunner)
-  val chezLift = Backend("chez-lift", ChezLiftCompiler, ChezLiftRunner)
-  val llvm = Backend("llvm", LLVMCompiler, LLVMRunner)
+  def js = Backend("js", JSCompiler(), JSRunner)
+  def chezMonadic = Backend("chez-monadic", ChezMonadicCompiler(), ChezMonadicRunner)
+  def chezCallCC = Backend("chez-callcc", ChezCallCCCompiler(), ChezCallCCRunner)
+  def chezLift = Backend("chez-lift", ChezLiftCompiler(), ChezLiftRunner)
+  def llvm = Backend("llvm", LLVMCompiler(), LLVMRunner)
+  def ml = Backend("ml", MLCompiler(), MLRunner)
+
+  def backend(name: String): Backend[_] = name match {
+    case "js" => Backend.js
+    case "chez-monadic" => Backend.chezMonadic
+    case "chez-callcc" => Backend.chezCallCC
+    case "chez-lift" => Backend.chezLift
+    case "llvm" => Backend.llvm
+    case "ml" => Backend.ml
+  }
 }
 
 /**
@@ -56,7 +66,6 @@ trait BackendRunner[Executable] {
    * @param stdlibPath is the path to the standard library
    */
   def includes(stdlibPath: File): List[File] = Nil
-
 
   /**
    * Modules this backend loads by default
@@ -192,28 +201,27 @@ object LLVMRunner extends BackendRunner[String] {
 }
 
 
+object MLRunner extends BackendRunner[String] {
+  import scala.sys.process.Process
 
-//  private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {
-//      case "js" => path / "libraries" / "js"
-//      case "chez-monadic" => path / "libraries" / "chez" / "monadic"
-//      case "chez-callcc" => path / "libraries" / "chez" / "callcc"
-//      case "chez-lift" => path / "libraries" / "chez" / "lift"
-//      case "llvm" => path / "libraries" / "llvm"
-//      case "ml" => path / "libraries" / "ml"
-//      case b => sys error s"Unrecognized backend ${ b }"
-//    }
-//
-//    private def backendIncludes(path: util.paths.File): List[util.paths.File] = backend() match {
-//      case "chez-monadic" | "chez-callcc" | "chez-lift" => List(path, path / ".." / "common")
-//      case b => List(path)
-//    }
-//
-//    private def backendPrelude() = backend() match {
-//      case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
-//        List("effekt", "immutable/option", "immutable/list")
-//      case "ml" =>
-//        List("effekt", "immutable/option", "immutable/list")
-//      case b =>
-//        List("effekt")
-//    }
+  val extension = "sml"
 
+  def standardLibraryPath(root: File): File = root / "libraries" / "ml"
+
+  override def prelude: List[String] = List("effekt", "immutable/option", "immutable/list")
+
+  def checkSetup(): Either[String, Unit] =
+    if canRunExecutable("mlton") then Right(())
+    else Left("Cannot find mlton. This is required to use the ML backend.")
+
+  /**
+   * Compile the LLVM source file (`<...>.ll`) to an executable
+   *
+   * Requires LLVM and GCC to be installed on the machine.
+   * Assumes [[path]] has the format "SOMEPATH.ll".
+   */
+  def eval(path: String)(using C: Context): Unit =
+    val executable = (C.config.outputPath() / "mlton-main").canonicalPath
+    exec("mlton", "-output", executable, path)
+    exec(executable)
+}
