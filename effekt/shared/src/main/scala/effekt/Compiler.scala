@@ -1,6 +1,5 @@
 package effekt
 
-import effekt.PhaseResult.{ CoreLifted, CoreTransformed }
 import effekt.context.Context
 import effekt.core.{ DirectStyleMutableState, Transformer }
 import effekt.lifted.LiftInference
@@ -10,8 +9,8 @@ import effekt.symbols.Module
 import effekt.typer.{ PostTyper, PreTyper, Typer }
 import effekt.util.messages.FatalPhaseError
 import effekt.util.{ SourceTask, Task, VirtualSource, paths }
-import effekt.generator.Backend
 import effekt.generator.js.JavaScript
+
 import kiama.output.PrettyPrinterTypes.Document
 import kiama.util.{ Positions, Source }
 
@@ -89,7 +88,7 @@ export PhaseResult.*
  * - Writing to files is performed by the hook [[Compiler.saveOutput]], which is implemented
  *   differently for the JS and JVM versions.
  */
-trait Compiler {
+trait Compiler[Executable] { self: BackendCompiler[Executable] =>
 
   /**
    * @note The result of parsing needs to be cached.
@@ -104,12 +103,12 @@ trait Compiler {
    *       that fail in later phases (for instance type checking). This way some
    *       editor services can be provided, even in presence of errors.
    */
-  private val CachedParser = Phase.cached("cached-parser") { Parser }
+  val CachedParser = Phase.cached("cached-parser") { Parser }
 
   /**
    * Frontend
    */
-  private val Frontend = Phase.cached("frontend") {
+  val Frontend = Phase.cached("frontend") {
     /**
      * Parses a file to a syntax tree
      *   [[Source]] --> [[Parsed]]
@@ -151,18 +150,6 @@ trait Compiler {
      * [[Typechecked]] --> [[CoreTransformed]]
      */
     Transformer
-  }
-
-  /**
-   * Backend
-   */
-  def Backend(using C: Context): Backend = C.config.backend() match {
-    case "js"           => effekt.generator.js.JavaScript
-    case "chez-callcc"  => effekt.generator.chez.ChezSchemeCallCC
-    case "chez-monadic" => effekt.generator.chez.ChezSchemeMonadic
-    case "chez-lift"    => effekt.generator.chez.ChezSchemeLift
-    case "llvm"         => effekt.generator.llvm.LLVM
-    case "ml"           => effekt.generator.ml.ML
   }
 
   object CoreDependencies extends Phase[CoreTransformed, AllTransformed] {
@@ -217,89 +204,6 @@ trait Compiler {
 
       // TODO in the future check for duplicate exports
       Some(CoreTransformed(src, tree, mod, aggregated))
-    }
-  }
-
-  // Compiler Interface
-  // ==================
-  // As it is used by other parts of the language implementation.
-  // All methods return Option, the errors are reported using the compiler context [[Context]].
-
-  /**
-   * Used by LSP server (Intelligence) to map positions to source trees
-   */
-  def getAST(source: Source)(using Context): Option[ModuleDecl] =
-    CachedParser(source).map { res => res.tree }
-
-  /**
-   * Used by
-   * - Namer to resolve dependencies
-   * - Server / Driver to typecheck and report type errors in VSCode
-   */
-  def runFrontend(source: Source)(using Context): Option[Module] =
-    Frontend(source).map { res => res.mod }
-
-  /**
-   * This is used from the JS implementation ([[effekt.LanguageServer]]) and also
-   * from the LSP server ([[effekt.Server]]) after compilation.
-   *
-   * It does **not** generate files and write them using `saveOutput`!
-   * This is achieved by `compileWhole`.
-   */
-  def compileSeparate(source: Source)(using C: Context): Option[(CoreTransformed, Document)] = C.config.backend() match {
-    case "llvm" => llvm.separate(source)
-    case "js"   => js.separate(source)
-    case _      => (Frontend andThen Middleend andThen CoreDependencies andThen Backend.separate).apply(source)
-  }
-
-  /**
-   * Used by [[Driver]] and by [[Repl]] to compile a file
-   */
-  def compileWhole(source: Source)(using C: Context): Option[Compiled] = C.config.backend() match {
-    case "llvm" => llvm.whole(source)
-    case "js"   => js.whole(source)
-    case _      => (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate andThen Backend.whole).apply(source)
-  }
-
-  /**
-   * Used by [[Server]] to print the core tree of backends with whole-program compilation
-   */
-  def compileAll(source: Source)(using C: Context): Option[CoreTransformed] = C.config.backend() match {
-    case "llvm" => llvm.allCore(source)
-    case "js" => js.allCore(source)
-    case _ => (Frontend andThen Middleend andThen CoreDependencies andThen Aggregate).apply(source)
-  }
-
-  // Different Backends
-  // ==================
-  object js {
-    import effekt.generator.js.JavaScript
-
-    val toCore = Phase.cached("to-core") { Frontend andThen Middleend andThen DirectStyleMutableState }
-    val allCore = allToCore(toCore) andThen Aggregate
-    val separate = allToCore(toCore) andThen JavaScript.separate
-    val whole = allCore andThen JavaScript.whole
-  }
-
-  object llvm {
-    import effekt.generator.llvm.LLVM
-
-    val toCore = Phase.cached("to-core") { Frontend andThen Middleend andThen core.PolymorphismBoxing }
-    val allCore = allToCore(toCore) andThen Aggregate
-
-    // TODO move lift inference and machine transformations from individual backends to toplevel.
-    val lifted = allCore andThen LiftInference andThen Machine
-
-    val separate = allToCore(toCore) andThen LLVM.separate
-    val whole = allCore andThen LLVM.whole
-  }
-
-  object Machine extends Phase[CoreLifted, machine.Program] {
-    val phaseName = "machine"
-
-    def run(input: CoreLifted)(using C: Context) = {
-      val main = C.checkMain(input.mod);
-      Some(machine.Transformer.transform(main, input.core))
     }
   }
 }

@@ -54,8 +54,10 @@ abstract class Context(val positions: Positions)
   var _config: EffektConfig = _
   def config = _config
 
-  var _compiler: Compiler = new Compiler {}
-  def compiler = _compiler
+  // We assume the backend never changes
+  lazy val backend = config.backend()
+  lazy val compiler = backend.compiler
+  lazy val runner = backend.runner
 
   /**
    * Clear current context to start processing a fresh unit

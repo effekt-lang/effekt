@@ -37,13 +37,17 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     required = false
   )
 
-  val backend: ScallopOption[String] = choice(
+  val backend: ScallopOption[Backend[_]] = choice(
     choices = List("js", "chez-callcc", "chez-monadic", "chez-lift", "llvm", "ml"),
     name = "backend",
     descr = "The backend that should be used",
     default = Some("js"),
     noshort = true
-  )
+  ) map {
+    case "js" =>
+      Backend.js
+    case _ => ???
+  }
 
   val llvmVersion: ScallopOption[String] = opt[String](
     "llvm-version",
@@ -68,6 +72,9 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
    * 4) relative to to the executed JAR file (effekt.jar)
    */
   def findStdLib: util.paths.File = {
+
+    def backendStdLibPath(path: util.paths.File) =
+      backend().runner.standardLibraryPath(path)
 
     // 1) in config?
     if (stdlibPath.isDefined) {
@@ -105,37 +112,13 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
 
   lazy val libPath: File = findStdLib.canonicalPath.toFile
 
-  def includes(): List[File] = backendIncludes(libPath).map(_.toFile) ++ includePath()
+  def includes(): List[File] = libPath :: backend().runner.includes(libPath).map(_.toFile) ++ includePath()
 
-  def prelude(): List[String] = preludePath.getOrElse(backendPrelude())
+  def prelude(): List[String] = preludePath.getOrElse(backend().runner.prelude)
 
   def requiresCompilation(): Boolean = !server()
 
   def interpret(): Boolean = !server() && !compile()
-
-  private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {
-    case "js" => path / "libraries" / "js"
-    case "chez-monadic" => path / "libraries" / "chez" / "monadic"
-    case "chez-callcc" => path / "libraries" / "chez" / "callcc"
-    case "chez-lift" => path / "libraries" / "chez" / "lift"
-    case "llvm" => path / "libraries" / "llvm"
-    case "ml" => path / "libraries" / "ml"
-    case b => sys error s"Unrecognized backend ${ b }"
-  }
-
-  private def backendIncludes(path: util.paths.File): List[util.paths.File] = backend() match {
-    case "chez-monadic" | "chez-callcc" | "chez-lift" => List(path, path / ".." / "common")
-    case b => List(path)
-  }
-
-  private def backendPrelude() = backend() match {
-    case "js" | "chez-monadic" | "chez-callcc" | "chez-lift" =>
-      List("effekt", "immutable/option", "immutable/list")
-    case "ml" =>
-      List("effekt", "immutable/option", "immutable/list")
-    case b =>
-      List("effekt")
-  }
 
   validateFilesIsDirectory(includePath)
 

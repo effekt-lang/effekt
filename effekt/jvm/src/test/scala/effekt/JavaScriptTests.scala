@@ -32,19 +32,24 @@ class JavaScriptTests extends EffektTests {
     }
 
   def interpretJS(file: File): String = {
-    // this resets the caches before each test:
-    // effekt.util.Task.reset()
+    // Reset the caches before each test. This is necessary to
+    // avoid dependencies compiled with one compiler instance to be reused when
+    // compiled with another compiler instance / config / backend.
+    //
+    // It does however slow down the tests, since the standard library has to be
+    // compiled each and every time.
+    effekt.util.Task.reset()
     val compiler = new effekt.Driver {}
     val configs = compiler.createConfig(Seq(
+      "--backend", "js",
       "--Koutput", "string",
-      "--lib", "libraries/js",
       "--out", output.getPath))
     configs.verify()
     compiler.compileFile(file.getPath, configs)
     configs.stringEmitter.result()
   }
 
-  def canRun() = canRunExecutable("node", "--version")
+  def canRun() = JSRunner.checkSetup().isRight
 }
 
 object TestUtils {

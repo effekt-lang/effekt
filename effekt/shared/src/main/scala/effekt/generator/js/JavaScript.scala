@@ -76,8 +76,8 @@ object JavaScript extends Backend {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }
 
-      val result = toJS(input.main.core, imports, exports).virtual
-      Some(js.PrettyPrinter.format(result))
+    val result = toJS(input.main.core, imports, exports).virtual
+    Some(js.PrettyPrinter.format(result))
   }
 
   /**
