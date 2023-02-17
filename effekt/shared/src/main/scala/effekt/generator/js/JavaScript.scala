@@ -40,7 +40,6 @@ object JavaScript {
       case fld if D.findField(fld).isDefined => false
       // do not export effect operations, since they are translated to field selection as well.
       case op if D.findProperty(op).isDefined => false
-
       // all others are fine
       case _ => true
     }
@@ -66,8 +65,7 @@ object JavaScript {
       case sym if shouldExport(sym) => js.Export(nameDef(sym), nameRef(sym))
     }
 
-    val result = toJS(input.main.core, imports, exports).virtual
-    Some(js.PrettyPrinter.format(result))
+    toJS(input.main.core, imports, exports)
   }
 
   def toJS(p: Param): JSName = nameDef(p.id)

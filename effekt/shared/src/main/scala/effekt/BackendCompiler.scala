@@ -23,22 +23,20 @@ class JSCompiler extends Compiler[String] {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => CompileSeparate(source) map { case (core, doc) => doc }
+    case Stage.Target => CompileSeparate(source) map { case (core, prog) => pretty(prog.virtual) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => None
+    case Stage.Target => CompileSeparate(source) map { case (core, prog) => prog }
   }
 
-  override def compile(source: Source)(using C: Context) = CompileWhole(source).map {
-    case (main, defs) => (Map(main -> pretty(defs)), main)
-  }
+  override def compile(source: Source)(using C: Context) = Compile(source)
 
   override def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    CompileSeparate(source)
+    CompileSeparate(source).map { (core, prog) => (core, pretty(prog.virtual)) }
 
 
   // The Different Phases:
@@ -48,23 +46,15 @@ class JSCompiler extends Compiler[String] {
     Frontend andThen Middleend andThen DirectStyleMutableState
   }
 
-  object Separate extends Phase[AllTransformed, (CoreTransformed, Document)] {
-    val phaseName = "javascript-separate"
-
-    def run(in: AllTransformed)(using Context) =
-      JavaScript.compileSeparate(in).map { doc => (in.main, doc) }
-  }
-
-  lazy val JS = Phase("js") {
+  val Compile = allToCore(Core) andThen Aggregate map {
     case input @ CoreTransformed(source, tree, mod, core) =>
-      assert(core.imports.isEmpty, "All dependencies should have been inlined by now.")
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      mainFile -> JavaScript.compile(input, mainSymbol).commonjs
+      val doc = pretty(JavaScript.compile(input, mainSymbol).commonjs)
+      (Map(mainFile -> doc), mainFile)
   }
 
-  val CompileSeparate = allToCore(Core) andThen Separate
-  val CompileWhole = allToCore(Core) andThen Aggregate andThen JS
+  val CompileSeparate = allToCore(Core) map { in => (in.main, JavaScript.compileSeparate(in)) }
 
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)
