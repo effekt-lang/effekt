@@ -5,40 +5,6 @@ import effekt.util.messages.FatalPhaseError
 import effekt.util.paths.{ File, file }
 import effekt.util.getOrElseAborting
 
-case class Backend[E](
-  /**
-   * The name of this backend (should be identical to the --backend flag)
-   */
-  name: String,
-
-  /**
-   * The compiler for this backend
-   */
-  compiler: Compiler[E],
-
-  /**
-   * The runner for this backend
-   */
-  runner: Runner[E])
-
-object Backend {
-  def js = Backend("js", JSCompiler(), JSRunner)
-  def chezMonadic = Backend("chez-monadic", ChezMonadicCompiler(), ChezMonadicRunner)
-  def chezCallCC = Backend("chez-callcc", ChezCallCCCompiler(), ChezCallCCRunner)
-  def chezLift = Backend("chez-lift", ChezLiftCompiler(), ChezLiftRunner)
-  def llvm = Backend("llvm", LLVMCompiler(), LLVMRunner)
-  def ml = Backend("ml", MLCompiler(), MLRunner)
-
-  def backend(name: String): Backend[_] = name match {
-    case "js" => Backend.js
-    case "chez-monadic" => Backend.chezMonadic
-    case "chez-callcc" => Backend.chezCallCC
-    case "chez-lift" => Backend.chezLift
-    case "llvm" => Backend.llvm
-    case "ml" => Backend.ml
-  }
-}
-
 /**
  * Interface used by [[Driver]] and [[EffektTests]] to run a compiled program.
  *
