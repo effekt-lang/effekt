@@ -20,7 +20,7 @@ object ChezSchemeLift {
 
   def runMain(main: ChezName): chez.Expr = CPS.runMain(main)
 
-  def toChez(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
+  def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }

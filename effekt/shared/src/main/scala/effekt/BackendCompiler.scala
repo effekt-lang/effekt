@@ -178,7 +178,7 @@ class ChezLiftCompiler extends Compiler[String] {
     case CoreLifted(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
-      mainFile -> chez.Let(Nil, ChezSchemeLift.toChez(mainSymbol, mod, core))
+      mainFile -> chez.Let(Nil, ChezSchemeLift.compilationUnit(mainSymbol, mod, core))
   }
 
   // The Compilation Pipeline for VSCode
