@@ -2,7 +2,8 @@ package effekt
 
 import effekt.context.Context
 import effekt.util.messages.FatalPhaseError
-import effekt.util.paths.File
+import effekt.util.paths.{ File, file }
+import effekt.util.getOrElseAborting
 
 case class Backend[E](
   /**
@@ -25,6 +26,7 @@ object Backend {
   val chezMonadic = Backend("chez-monadic", ChezMonadicCompiler, ChezMonadicRunner)
   val chezCallCC = Backend("chez-callcc", ChezCallCCCompiler, ChezCallCCRunner)
   val chezLift = Backend("chez-lift", ChezLiftCompiler, ChezLiftRunner)
+  val llvm = Backend("llvm", LLVMCompiler, LLVMRunner)
 }
 
 /**
@@ -81,11 +83,25 @@ trait BackendRunner[Executable] {
   /**
    * Helper function to run an executable
    */
-  def runExecutable(command: String*)(using C: Context): Unit = try {
+  def exec(command: String*)(using C: Context): Unit = try {
     val p = Process(command)
     C.config.output().emit(p.!!)
   } catch {
     case FatalPhaseError(e) => C.report(e)
+  }
+
+  /**
+   * Try running a handful of names for a system executable; returns the first successful name,
+   * if any.
+   */
+  def discoverExecutable(progs0: List[String], args: Seq[String]): Option[String] = {
+    def go(progs: List[String]): Option[String] = progs match {
+      case prog :: progs =>
+        try { Process(prog +: args).!!; Some(prog) }
+        catch case ioe => go(progs)
+      case _ => None
+    }
+    go(progs0)
   }
 }
 
@@ -104,7 +120,7 @@ object JSRunner extends BackendRunner[String] {
 
   def eval(path: String)(using Context): Unit =
     val jsScript = s"require('${path}').main().run()"
-    runExecutable("node", "--eval", jsScript)
+    exec("node", "--eval", jsScript)
 }
 
 trait ChezRunner extends BackendRunner[String] {
@@ -118,7 +134,7 @@ trait ChezRunner extends BackendRunner[String] {
     else Left("Cannot find scheme. This is required to use the ChezScheme backend.")
 
   def eval(path: String)(using C: Context): Unit =
-    runExecutable("scheme", "--script", path)
+    exec("scheme", "--script", path)
 }
 
 object ChezMonadicRunner extends ChezRunner {
@@ -131,6 +147,50 @@ object ChezCallCCRunner extends ChezRunner {
 object ChezLiftRunner extends ChezRunner {
   def standardLibraryPath(root: File): File = root / "libraries" / "chez" / "lift"
 }
+
+object LLVMRunner extends BackendRunner[String] {
+  import scala.sys.process.Process
+
+  val extension = "ll"
+
+  def standardLibraryPath(root: File): File = root / "libraries" / "llvm"
+
+  lazy val gccCmd = discoverExecutable(List("cc", "clang", "gcc"), List("--version"))
+  lazy val llcCmd = discoverExecutable(List("llc", "llc-15", "llc-12"), List("--version"))
+  lazy val optCmd = discoverExecutable(List("opt", "opt-15", "opt-12"), List("--version"))
+
+  def checkSetup(): Either[String, Unit] =
+    gccCmd.getOrElseAborting { return Left("Cannot find gcc. This is required to use the LLVM backend.") }
+    llcCmd.getOrElseAborting { return Left("Cannot find llc. This is required to use the LLVM backend.") }
+    optCmd.getOrElseAborting { return Left("Cannot find opt. This is required to use the LLVM backend.") }
+    Right(())
+
+  /**
+   * Compile the LLVM source file (`<...>.ll`) to an executable
+   *
+   * Requires LLVM and GCC to be installed on the machine.
+   * Assumes [[path]] has the format "SOMEPATH.ll".
+   */
+  def eval(path: String)(using C: Context): Unit =
+    val basePath = path.stripSuffix(".ll")
+    val optPath = basePath + ".opt.ll"
+    val objPath = basePath + ".o"
+
+    def missing(cmd: String) = C.abort(s"Cannot find ${cmd}. This is required to use the LLVM backend.")
+    val gcc = gccCmd.getOrElse(missing("gcc"))
+    val llc = llcCmd.getOrElse(missing("llc"))
+    val opt = optCmd.getOrElse(missing("opt"))
+
+    exec(opt, path, "-S", "-O2", "-o", optPath)
+    exec(llc, "--relocation-model=pic", optPath, "-filetype=obj", "-o", objPath)
+
+    val gccMainFile = (C.config.libPath / "main.c").unixPath
+    val executableFile = basePath
+    exec(gcc, gccMainFile, "-o", executableFile, objPath)
+
+    exec(executableFile)
+}
+
 
 
 //  private def backendStdLibPath(path: util.paths.File): util.paths.File = backend() match {

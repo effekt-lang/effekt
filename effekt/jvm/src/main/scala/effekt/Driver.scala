@@ -117,18 +117,4 @@ trait Driver extends kiama.util.Compiler[Tree, ModuleDecl, EffektConfig, EffektE
    * Originally called by kiama, not used anymore.
    */
   override final def format(m: ModuleDecl): Document = ???
-
-  /**
-   * Try running a handful of names for a system executable
-   */
-  private def discoverExecutable(progs0: List[String], args: Seq[String])(implicit C: Context): String = {
-    def go(progs: List[String]): String = progs match {
-      case prog :: progs =>
-        try Process(prog +: args).!!
-        catch case ioe: IOException => go(progs)
-      case _ => C.abort(s"Missing system executable; searched: ${ progs0 }")
-    }
-
-    go(progs0)
-  }
 }

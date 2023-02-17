@@ -48,6 +48,7 @@ class EffektConfig(args: Seq[String]) extends REPLConfig(args) {
     case "chez-monadic" => Backend.chezMonadic
     case "chez-callcc" => Backend.chezCallCC
     case "chez-lift" => Backend.chezLift
+    case "llvm" => Backend.llvm
     case _ => ???
   }
 
