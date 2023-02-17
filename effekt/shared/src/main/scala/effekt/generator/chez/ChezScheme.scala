@@ -46,39 +46,10 @@ trait ChezScheme {
 
   def runMain(main: ChezName): chez.Expr
 
-  /**
-   * Returns [[Compiled]], containing the files that should be written to.
-   */
-  def compileWhole(main: CoreTransformed, mainSym: TermSymbol)(using C: Context): Option[Compiled] = {
-    val chezModule = cleanup(chez.Let(Nil, compilationUnit(mainSym, main.mod, main.core)))
-    val result = chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(chezModule), 100)
-    val mainFile = path(main.mod)
-    Some(Compiled(main.source, mainFile, Map(mainFile -> result)))
-  }
-
-  /**
-   * Entrypoint used by the LSP server to show the compiled output
-   */
-  def compileSeparate(input: AllTransformed)(using C: Context) =
-    C.using(module = input.main.mod) { Some(chez.PrettyPrinter.format(compile(input.main))) }
-
-  /**
-   * Compiles only the given module, does not compile dependencies
-   */
-  private def compile(in: CoreTransformed): List[chez.Def] =
-    toChez(in.core)
-
   def compilationUnit(mainSymbol: Symbol, mod: Module, core: ModuleDecl): chez.Block = {
     val definitions = toChez(core)
     chez.Block(generateStateAccessors(pure) ++ definitions, Nil, runMain(nameRef(mainSymbol)))
   }
-
-  /**
-   * This is used for both: writing the files to and generating the `require` statements.
-   */
-  def path(m: Module)(using C: Context): String =
-    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
-
 
   def toChez(p: Param): ChezName = nameDef(p.id)
 

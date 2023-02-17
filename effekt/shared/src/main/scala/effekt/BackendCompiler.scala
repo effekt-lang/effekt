@@ -23,30 +23,30 @@ class JSCompiler extends Compiler[String] {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => CompileSeparate(source) map { case (core, prog) => pretty(prog.virtual) }
+    case Stage.Target => Separate(source) map { case (core, prog) => pretty(prog.virtual) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => CompileSeparate(source) map { case (core, prog) => prog }
+    case Stage.Target => Separate(source) map { case (core, prog) => prog }
   }
 
   override def compile(source: Source)(using C: Context) = Compile(source)
 
   override def compileSeparate(source: Source)(using Context): Option[(CoreTransformed, Document)] =
-    CompileSeparate(source).map { (core, prog) => (core, pretty(prog.virtual)) }
+    Separate(source).map { (core, prog) => (core, pretty(prog.virtual)) }
 
 
-  // The Different Phases:
-  // ---------------------
-
-  val Core = Phase.cached("core") {
+  // The Compilation Pipeline
+  // ------------------------
+  // Source => Core [=> DirectStyleState] => JS
+  lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend andThen DirectStyleMutableState
   }
 
-  val Compile = allToCore(Core) andThen Aggregate map {
+  lazy val Compile = allToCore(Core) andThen Aggregate map {
     case input @ CoreTransformed(source, tree, mod, core) =>
       val mainSymbol = Context.checkMain(mod)
       val mainFile = path(mod)
@@ -54,118 +54,90 @@ class JSCompiler extends Compiler[String] {
       (Map(mainFile -> doc), mainFile)
   }
 
-  val CompileSeparate = allToCore(Core) map { in => (in.main, JavaScript.compileSeparate(in)) }
+  // The Compilation Pipeline for VSCode
+  // -----------------------------------
+  lazy val Separate = allToCore(Core) map { in => (in.main, JavaScript.compileSeparate(in)) }
 
   private def pretty(stmts: List[js.Stmt]): Document =
     js.PrettyPrinter.format(stmts)
 
-  private def path(m: Module)(using C: Context): String =
+  private def path(m: symbols.Module)(using C: Context): String =
     (C.config.outputPath() / JavaScript.jsModuleFile(m.path)).unixPath
 }
 
 
-class ChezMonadicCompiler extends Compiler[String] {
-
+trait ChezCompiler extends Compiler[String] {
   import effekt.generator.chez
-  import effekt.generator.chez.ChezSchemeMonadic
+
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
-
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => CompileSeparate(source)
+    case Stage.Target => Separate(source).map { res => pretty(res) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
     case Stage.Lifted => None
     case Stage.Machine => None
-    case Stage.Target => None
+    case Stage.Target => Separate(source)
   }
 
-  override def compile(source: Source)(using C: Context) = CompileWhole(source).map {
-    case Compiled(source, main, out) => (out, main)
-  }
+  override def compile(source: Source)(using C: Context) = Compile(source)
 
-  // The Different Phases:
-  // ---------------------
+  // The Compilation Pipeline
+  // ------------------------
+  // Source => Core => Chez
+  lazy val Compile =
+    allToCore(Core) andThen Aggregate andThen Chez map { case (main, expr) =>
+      (Map(main -> pretty(expr)), main)
+    }
 
-  val Core = Phase.cached("core") {
+  lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend
   }
-  object Whole extends Phase[CoreTransformed, Compiled] {
-    val phaseName = "chez-monadic-whole"
 
-    def run(in: CoreTransformed)(using C: Context) =
-      val mainSymbol = C.checkMain(in.mod)
-      ChezSchemeMonadic.compileWhole(in, mainSymbol)
+  lazy val Chez = Phase("chez") {
+    case CoreTransformed(source, tree, mod, core) =>
+      val mainSymbol = Context.checkMain(mod)
+      val mainFile = path(mod)
+      mainFile -> chez.Let(Nil, compilationUnit(mainSymbol, mod, core))
   }
 
-  object Separate extends Phase[AllTransformed, Document] {
-    val phaseName = "chez-monadic-separate"
+  // The Compilation Pipeline for VSCode
+  // -----------------------------------
+  lazy val Separate =
+    allToCore(Core) map { all => all.main } andThen Chez map { case (_, expr) => expr }
 
-    def run(in: AllTransformed)(using Context) =
-      ChezSchemeMonadic.compileSeparate(in)
-  }
+  // Helpers
+  // -------
+  def pretty(expr: chez.Expr): Document =
+    chez.PrettyPrinter.pretty(chez.PrettyPrinter.toDoc(expr), 100)
 
-  val CompileSeparate = allToCore(Core) andThen Separate
-  val CompileWhole = allToCore(Core) andThen Aggregate andThen Whole
+  def pretty(defs: List[chez.Def]): Document =
+    chez.PrettyPrinter.format(defs)
+
+  def path(m: Module)(using C: Context): String =
+    (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ss"
+}
+
+class ChezMonadicCompiler extends ChezCompiler {
+  import effekt.generator.chez
+
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
+    chez.ChezSchemeMonadic.compilationUnit(mainSymbol, mod, decl)
 }
 
 
-class ChezCallCCCompiler extends Compiler[String] {
-
+class ChezCallCCCompiler extends ChezCompiler {
   import effekt.generator.chez
-  import effekt.generator.chez.ChezSchemeCallCC
 
-  // Implementation of the Compiler Interface:
-  // -----------------------------------------
-
-  override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
-    case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
-    case Stage.Lifted => None
-    case Stage.Machine => None
-    case Stage.Target => CompileSeparate(source)
-  }
-
-  override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
-    case Stage.Core => Core(source).map { res => res.core }
-    case Stage.Lifted => None
-    case Stage.Machine => None
-    case Stage.Target => None
-  }
-
-  override def compile(source: Source)(using C: Context) = CompileWhole(source).map {
-    case Compiled(source, main, out) => (out, main)
-  }
-
-
-  // The Different Phases:
-  // ---------------------
-
-  val Core = Phase.cached("to-core") {
-    Frontend andThen Middleend
-  }
-  object Whole extends Phase[CoreTransformed, Compiled] {
-    val phaseName = "chez-callcc-whole"
-
-    def run(in: CoreTransformed)(using C: Context) =
-      val mainSymbol = C.checkMain(in.mod)
-      ChezSchemeCallCC.compileWhole(in, mainSymbol)
-  }
-
-  object Separate extends Phase[AllTransformed, Document] {
-    val phaseName = "chez-callcc-separate"
-
-    def run(in: AllTransformed)(using Context) =
-      ChezSchemeCallCC.compileSeparate(in)
-  }
-
-  val CompileSeparate = allToCore(Core) andThen Separate
-  val CompileWhole = allToCore(Core) andThen Aggregate andThen Whole
+  def compilationUnit(mainSymbol: Symbol, mod: Module, decl: core.ModuleDecl): chez.Block =
+    chez.ChezSchemeCallCC.compilationUnit(mainSymbol, mod, decl)
 }
 
 
@@ -180,14 +152,14 @@ class ChezLiftCompiler extends Compiler[String] {
     case Stage.Core => Core(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => (Core andThen LiftInference)(source).map { res => lifted.PrettyPrinter.format(res.core) }
     case Stage.Machine => None
-    case Stage.Target => Separate(source)
+    case Stage.Target => Separate(source).map { expr => pretty(expr) }
   }
 
   override def treeIR(source: Source, stage: Stage)(using Context): Option[Any] = stage match {
     case Stage.Core => Core(source).map { res => res.core }
     case Stage.Lifted => (Core andThen LiftInference)(source).map { res => res.core }
     case Stage.Machine => None
-    case Stage.Target => None
+    case Stage.Target => Separate(source)
   }
 
   override def compile(source: Source)(using C: Context) = Compile(source)
@@ -213,7 +185,7 @@ class ChezLiftCompiler extends Compiler[String] {
   // The Compilation Pipeline for VSCode
   // -----------------------------------
   lazy val Separate =
-    allToCore(Core) map { all => all.main } andThen LiftInference andThen Chez map { case (_, expr) => pretty(expr) }
+    allToCore(Core) map { all => all.main } andThen LiftInference andThen Chez map { case (_, expr) => expr }
 
 
   // Helpers
@@ -232,7 +204,6 @@ class LLVMCompiler extends Compiler[String] {
 
   // Implementation of the Compiler Interface:
   // -----------------------------------------
-
   override def prettyIR(source: Source, stage: Stage)(using Context): Option[Document] = stage match {
     case Stage.Core => steps.afterCore(source).map { res => core.PrettyPrinter.format(res.core) }
     case Stage.Lifted => steps.afterLift(source).map { res => lifted.PrettyPrinter.format(res.core) }
@@ -254,17 +225,20 @@ class LLVMCompiler extends Compiler[String] {
     }
 
 
-  // The Different Phases:
-  // ---------------------
+  // The Compilation Pipeline
+  // ------------------------
+  // Source => Core => Lifted => Machine => LLVM
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen Machine map {
+    case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
+  }
 
   lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend andThen core.PolymorphismBoxing
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen Machine map {
-    case (mod, main, prog) => (mod, llvm.Transformer.transform(prog))
-  }
 
+  // The Compilation Pipeline for VSCode
+  // -----------------------------------
   object steps {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) map { c => c.main }
@@ -279,7 +253,6 @@ class LLVMCompiler extends Compiler[String] {
 
   // Helpers
   // -------
-
   private def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".ll"
 
@@ -313,8 +286,12 @@ class MLCompiler extends Compiler[String] {
   override def compile(source: Source)(using C: Context) = Compile(source)
 
 
-  // The Different Phases:
-  // ---------------------
+  // The Compilation Pipeline
+  // ------------------------
+  // Source => Core => Lifted => ML
+  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen ToML map {
+    case (mainFile, prog) => (Map(mainFile -> pretty(prog)), mainFile)
+  }
 
   lazy val Core = Phase.cached("core") {
     Frontend andThen Middleend
@@ -327,10 +304,9 @@ class MLCompiler extends Compiler[String] {
       mainFile -> ml.ML.compilationUnit(mainSymbol, core)
   }
 
-  lazy val Compile = allToCore(Core) andThen Aggregate andThen LiftInference andThen ToML map {
-    case (mainFile, prog) => (Map(mainFile -> pretty(prog)), mainFile)
-  }
 
+  // The Compilation Pipeline for VSCode
+  // -----------------------------------
   object steps {
     // intermediate steps for VSCode
     val afterCore = allToCore(Core) map { c => c.main }
@@ -338,10 +314,12 @@ class MLCompiler extends Compiler[String] {
     val afterML = afterLift andThen ToML map { case (f, prog) => prog }
   }
 
-  def pretty(prog: ml.Toplevel) =
+  // Helpers
+  // -------
+  private def pretty(prog: ml.Toplevel) =
     ml.PrettyPrinter.format(ml.PrettyPrinter.toDoc(prog))
 
-  def path(m: Module)(using C: Context): String =
+  private def path(m: Module)(using C: Context): String =
     (C.config.outputPath() / m.path.replace('/', '_')).unixPath + ".sml"
 }
 
